@@ -1259,14 +1259,6 @@ pub enum ManifestTab {
     Score,
 }
 
-impl ManifestOrigin {
-    /// Whether Esc backs into a list rather than onto the map — the one
-    /// thing the manifest's footer needs to know about where it came from.
-    pub fn returns_to_list(self) -> bool {
-        !matches!(self, ManifestOrigin::Map)
-    }
-}
-
 /// Which of the character-creation wizard's nine steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
 /// being nine modes — see that variant.

@@ -180,7 +180,7 @@ pub(super) fn draw_ledger(
     for (col, rect) in columns.iter().enumerate() {
         let stacked: Vec<&Section> = sections
             .iter()
-            .filter(|s| s.column.is_some_and(|c| c.index() == col))
+            .filter(|s| s.column.index() == col)
             .collect();
         let heights: Vec<usize> = stacked
             .iter()
@@ -270,7 +270,7 @@ fn draw_section(
 ) {
     let hint = if !section.hint.is_empty() {
         section.hint.clone()
-    } else if section.column == Some(LedgerColumn::Fight) {
+    } else if section.column == LedgerColumn::Fight {
         rank_hint(section, ranks).unwrap_or_default()
     } else {
         String::new()
@@ -793,14 +793,12 @@ mod tests {
     fn only_a_section_the_roster_ranked_reserves_room() {
         let ranked = Section {
             title: "FIGHT".into(),
-            column: Some(LedgerColumn::Fight),
+            column: LedgerColumn::Fight,
             rows: vec![SectionRow::Ranked(
                 "Power".into(),
                 "9".into(),
                 RankedStat::Power,
             )],
-            full_width: false,
-            overflow: 0,
             hint: String::new(),
         };
         let some = SubjectRanks {

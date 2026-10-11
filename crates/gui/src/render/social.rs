@@ -8,7 +8,6 @@
 use super::manifest::layout::{ManifestLayout, section_row_h};
 use super::manifest::{PIPS, draw_pairs, elided_to_fit, pip_cells, subhead, wrap_to_width};
 use super::*;
-use feral_processes_app_core::ManifestTab;
 use feral_processes_engine::tuning::{BOND_CLOSE_AT, BOND_ENEMY_AT};
 use feral_processes_engine::{RelationshipRow, RosterRow, SocialView};
 
@@ -176,87 +175,10 @@ fn paint_narrow(view: &SocialView, rect: Rect, painter: &Painter, m: &Metrics) {
     );
 }
 
-const TAB_KEY: &str = "[Tab] ";
-const TAB_SEPARATOR: &str = " · ";
-const TAB_STATS: &str = "STATS";
-const TAB_SOCIAL: &str = "SOCIAL";
-const TAB_TALK: &str = "TALK";
-
-const TAB_SCORE: &str = "SCORE";
-
-/// The strip's pieces left to right, each with whether it is the open tab.
-/// The player's sheet has two faces, a program's three.
-fn strip_pieces(active: ManifestTab, player: bool) -> Vec<(&'static str, bool)> {
-    let mut pieces = vec![
-        (TAB_KEY, false),
-        (TAB_STATS, active == ManifestTab::Stats),
-        (TAB_SEPARATOR, false),
-    ];
-    if player {
-        pieces.push((TAB_SCORE, active == ManifestTab::Score));
-    } else {
-        pieces.extend([
-            (TAB_SOCIAL, active == ManifestTab::Social),
-            (TAB_SEPARATOR, false),
-            (TAB_TALK, active == ManifestTab::Talk),
-        ]);
-    }
-    pieces
-}
-
-/// A program's strip, the wider of the two.
-#[cfg(test)]
-pub(super) fn tab_strip_width(painter: &Painter, m: &Metrics) -> f32 {
-    strip_width(ManifestTab::Stats, false, painter, m)
-}
-
-fn strip_width(active: ManifestTab, player: bool, painter: &Painter, m: &Metrics) -> f32 {
-    strip_pieces(active, player)
-        .iter()
-        .map(|(text, _)| painter.measure_ui_advance(text, m.small()))
-        .sum()
-}
-
-/// Right-aligned to `right`, the open tab lit and the other dim.
-pub(super) fn draw_tab_strip(
-    active: ManifestTab,
-    player: bool,
-    right: f32,
-    baseline: f32,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let mut x = right - strip_width(active, player, painter, m);
-    for (text, open) in strip_pieces(active, player) {
-        painter.ui(
-            text,
-            x,
-            baseline,
-            m.small(),
-            if open { CYAN } else { TEXT_DIM },
-        );
-        x += painter.measure_ui_advance(text, m.small());
-    }
-}
-
 #[cfg(test)]
 pub(super) mod tests {
-    use super::super::manifest::layout::manifest_layout;
     use super::*;
-    use crate::paint::with_painter;
-    use crate::text::ui_metrics;
     use feral_processes_engine::bonds::Bond;
-
-    const WINDOWS: [(f32, f32); 8] = [
-        (1280.0, 720.0),
-        (1366.0, 768.0),
-        (1440.0, 900.0),
-        (1600.0, 900.0),
-        (1680.0, 1050.0),
-        (1920.0, 1080.0),
-        (1920.0, 1200.0),
-        (2560.0, 1440.0),
-    ];
 
     fn row(name: &str, bond: Bond, opinion: f32, gone: bool) -> RelationshipRow {
         RelationshipRow {
@@ -342,68 +264,5 @@ pub(super) mod tests {
         phrases.dedup();
         assert!(!phrases.is_empty(), "the shipped catalogue names phrases");
         phrases.into_iter().take(2).collect()
-    }
-
-    /// The strip shares the header's title line, so the widest title the
-    /// sheet can draw plus the strip has to fit what is left of the header
-    /// after the glyph, at the narrowest window.
-    #[test]
-    fn the_widest_title_and_the_strip_fit_the_header() {
-        use super::super::manifest::{header_rarity, header_title};
-        use super::super::test_support::game_with_tweaked_programs;
-        use feral_processes_engine::components::Rarity;
-
-        // The two ways a title gets long: a full custom name, or a handle
-        // that has the species appended to it. Either can be a boss of the
-        // highest tier, in a deep zone.
-        let custom = "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
-        // `subject_title` appends the species, so the fixture's first
-        // species would hide the longest-name worst case.
-        let longest_species = feral_processes_engine::Game::new(
-            11,
-            feral_processes_engine::DifficultyMode::Forgiving,
-            &super::super::test_support::test_assets_dir(),
-        )
-        .expect("the shipped asset tree builds a fresh game")
-        .species_defs()
-        .into_iter()
-        .max_by_key(|d| d.name.chars().count())
-        .expect("the shipped catalogue has species")
-        .id;
-        for (fixture, name) in [
-            ("title_custom", Some(custom.as_str())),
-            ("title_handle", None),
-        ] {
-            let mut game = game_with_tweaked_programs(fixture, 11, &[(false, "")], |c| {
-                c.custom_name = name.map(str::to_string);
-                c.species = longest_species.clone();
-                c.rarity = Rarity::Gold;
-                c.boss = true;
-                c.zone = 10;
-            });
-            let subject = game.manifest_subjects()[1];
-            let view = game.manifest(subject).expect("an owned program has a page");
-            let head = header_title(&view);
-            let tag = rarity_tag(header_rarity(&view));
-            assert!(head.contains("[BOSS]") && !tag.is_empty(), "{head:?}{tag}");
-            with_painter(|p| {
-                for (w, h) in WINDOWS {
-                    let m = ui_metrics(h);
-                    let l = manifest_layout(w, h, &[], &m);
-                    let glyph = p.measure_map("x", m.title() * 2).width + m.pad;
-                    let title = p
-                        .measure(crate::paint::Face::UiBold, &head, m.title())
-                        .width
-                        + p.measure(crate::paint::Face::UiBold, &tag, m.title()).width;
-                    let strip = tab_strip_width(p, &m);
-                    assert!(
-                        glyph + title + m.pad + strip <= l.header.w,
-                        "title {head:?}{tag} and tab strip collide at {w}x{h}: {} into {}",
-                        glyph + title + m.pad + strip,
-                        l.header.w
-                    );
-                }
-            });
-        }
     }
 }

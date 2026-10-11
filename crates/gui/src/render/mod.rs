@@ -922,7 +922,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     };
     let graph_view = app.research_graph_view;
     let pending_manifest = app.pending_manifest;
-    let manifest_origin = app.manifest_origin;
     let manifest_tab = app.manifest_tab;
     let manifest_is_own = app.manifest_is_own();
     let level_up_reopenable = app.level_up_reopenable();
@@ -1276,7 +1275,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             let nav = ManifestNav {
                 cyclable: subjects.len() > 1
                     && pending_manifest.is_some_and(|e| subjects.contains(&e)),
-                back_to_list: manifest_origin.returns_to_list(),
                 // Only advertise `w` when it will work, `cyclable`'s rule:
                 // the roster reaches every program you own, including the
                 // ones whose tile is the one they were beaten on.

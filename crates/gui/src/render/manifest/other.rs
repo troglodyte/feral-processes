@@ -12,12 +12,14 @@ use super::stats::{faces_of, keybar_state};
 use super::*;
 use crate::render::score::{ScorePage, paint_score};
 use crate::render::social::paint_social;
-use feral_processes_engine::{RosterRow, SocialView};
+use crate::render::talk::paint_talk;
+use feral_processes_engine::{ExchangeView, RosterRow, SocialView};
 
 /// What the body of the page is. A closed set, like `ManifestTab`.
 pub(super) enum Body {
     Score(ScorePage),
     Social(SocialView),
+    Talk(Vec<ExchangeView>),
 }
 
 impl Body {
@@ -25,6 +27,7 @@ impl Body {
     fn open_face(&self) -> usize {
         match self {
             Body::Score(_) | Body::Social(_) => 1,
+            Body::Talk(_) => 2,
         }
     }
 
@@ -32,7 +35,7 @@ impl Body {
     fn band(&self) -> Option<Band> {
         match self {
             Body::Score(page) => Some(Band::Total(page.total.clone())),
-            Body::Social(_) => None,
+            Body::Social(_) | Body::Talk(_) => None,
         }
     }
 }
@@ -90,6 +93,15 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
     match &f.body {
         Body::Score(page) => paint_score(page, l.body(), painter, m),
         Body::Social(view) => paint_social(view, &f.roster, &l, painter, m),
+        Body::Talk(exchanges) => {
+            // `who` on a line is the roster's label for the subject.
+            let own = f
+                .roster
+                .iter()
+                .find(|r| r.entity == f.view.entity)
+                .map_or("", |r| r.name.as_str());
+            paint_talk(exchanges, own, &l, painter, m);
+        }
     }
     if let Some(band) = &band {
         draw_bands(l.bands, band, char_w, painter, m);

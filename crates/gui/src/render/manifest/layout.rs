@@ -13,15 +13,8 @@ use feral_processes_engine::RankedStat;
 /// up — rather than the layout having to know which subject it is drawing.
 pub(in crate::render) struct Section {
     pub(in crate::render) title: String,
-    /// The ledger column this box stacks in. `None` on the faces the old
-    /// packer still lays out (SCORE, SOCIAL, TALK).
-    pub(in crate::render) column: Option<LedgerColumn>,
+    pub(in crate::render) column: LedgerColumn,
     pub(in crate::render) rows: Vec<SectionRow>,
-    /// Spans both columns, below the grid. The Moves band.
-    pub(in crate::render) full_width: bool,
-    /// Rows the box had no room for, drawn as "+N" after the title — for a
-    /// box whose cap is too small to spend a row on saying so (MOVES).
-    pub(in crate::render) overflow: usize,
     /// Keys the box answers, drawn on the title line after the title: the
     /// page's footer has no room left for them. Empty for none.
     pub(in crate::render) hint: String,
@@ -131,7 +124,7 @@ pub(in crate::render) const MAX_AFFINITY_ROWS: usize = 2;
 /// **Lowered again, from 3 to 1, to pay for POTENTIAL's two build rolls.**
 /// That is the same trade one paragraph up, made a second time and at a real
 /// cost this time: a species with two moves names only the first, and its
-/// title carries the count (`Section::overflow`) — a "+1 more" *row* would
+/// title carried the count — a "+1 more" *row* would
 /// have spent the box's only line and named neither, which it did until the
 /// count moved up. The WORK trade cost nothing shipped. Measured
 /// rather than guessed — `MAX_POTENTIAL_ROWS` at 7 clears the 10px floor at
@@ -200,15 +193,6 @@ pub(in crate::render) fn section_rows_capped(
     rows
 }
 
-/// The boxes of the faces the old packer still lays out. `sections` is index-aligned with the slice passed to
-/// `manifest_layout`.
-pub(in crate::render) struct BoxLayout {
-    pub(in crate::render) frame: Rect,
-    pub(in crate::render) header: Rect,
-    pub(in crate::render) sections: Vec<Rect>,
-    pub(in crate::render) footer: Rect,
-}
-
 /// How much of the window the sheet claims. Not the full window: the status
 /// banner (see `draw_status_banner`) lives in the bottom strip, and a refusal
 /// drawn over the footer would be unreadable.
@@ -227,142 +211,6 @@ pub(in crate::render) fn frame_rect(screen_w: f32, screen_h: f32) -> Rect {
     Rect::new((screen_w - w) / 2.0, (screen_h - h) / 2.0, w, h)
 }
 
-pub(in crate::render) fn manifest_layout(
-    screen_w: f32,
-    screen_h: f32,
-    sections: &[Section],
-    m: &Metrics,
-) -> BoxLayout {
-    let frame = frame_rect(screen_w, screen_h);
-
-    let inner_x = frame.x + m.pad;
-    let inner_w = frame.w - m.pad * 2.0;
-    let mut y = frame.y + m.pad;
-
-    let header = Rect::new(inner_x, y, inner_w, m.line_height * HEADER_ROWS);
-    y += header.h + m.gap;
-
-    let footer = Rect::new(
-        inner_x,
-        frame.y + frame.h - m.pad - m.line_height,
-        inner_w,
-        m.line_height,
-    );
-
-    let col_gap = m.pad;
-    let col_w = (inner_w - col_gap) / 2.0;
-    // `None` for a full-width band, which can't be placed until every
-    // columned box is down and the grid's true bottom is known.
-    let mut placed: Vec<Option<Rect>> = vec![None; sections.len()];
-
-    // Indices into `sections` of the columned boxes, in emission order —
-    // the partition below decides which column each lands in, but not
-    // their relative order within a column.
-    let columned: Vec<usize> = sections
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| !s.full_width)
-        .map(|(i, _)| i)
-        .collect();
-    let heights: Vec<f32> = columned
-        .iter()
-        .map(|&i| section_height(&sections[i], m) + m.gap)
-        .collect();
-    let side = best_column_split(&heights);
-
-    let mut col_y = [y, y];
-    for (slot, &i) in columned.iter().enumerate() {
-        let s = side[slot];
-        let box_h = heights[slot] - m.gap;
-        placed[i] = Some(Rect::new(
-            inner_x + s as f32 * (col_w + col_gap),
-            col_y[s],
-            col_w,
-            box_h,
-        ));
-        col_y[s] += heights[slot];
-    }
-
-    let mut band_y = col_y[0].max(col_y[1]);
-    for (i, section) in sections.iter().enumerate() {
-        if !section.full_width {
-            continue;
-        }
-        let box_h = section_height(section, m);
-        placed[i] = Some(Rect::new(inner_x, band_y, inner_w, box_h));
-        band_y += box_h + m.gap;
-    }
-
-    BoxLayout {
-        frame,
-        header,
-        sections: placed.into_iter().flatten().collect(),
-        footer,
-    }
-}
-
-/// Which column (0 or 1) each of `heights` (already each including its own
-/// trailing gap) lands in, minimising the taller column's total — an exact
-/// 2-partition, not the single-pass "assign to whichever side is currently
-/// shorter" greedy this replaced. The greedy could land measurably further
-/// from balanced than optimal: with `AFFINITIES` making the program page a
-/// fifth columned box, it left 19-38px on the table (see the git history
-/// around `MAX_MOVE_ROWS`), and on the player page — which has no mod-only
-/// box to trim, unlike the program page's `MOVES` — that gap was the whole
-/// reason `worst_case_player`'s corrected box order failed at 7 of 9 swept
-/// heights before this function existed.
-///
-/// Brute force over every subset is exact and cheap: a manifest page has at
-/// most a handful of columned boxes, so `2^n` is never more than a few
-/// dozen iterations. Do not replace this with a heuristic (LPT, sorting by
-/// descending height then greedy) — measured against this exact case, LPT
-/// produced *zero* improvement over the naive order-dependent greedy,
-/// because the greedy's failure here isn't about visitation order.
-///
-/// Ties are broken by the lowest bitmask found in ascending order (`<`, not
-/// `<=`, so the first minimum wins), with box 0 (the first emitted) weighted
-/// as the *most* significant bit — so among tied partitions, the ascending
-/// scan finds the one that keeps the earliest-emitted boxes on the left
-/// first, matching the pre-existing "fill left then right" contract
-/// `columned_sections_fill_left_then_right` pins for equal-height boxes.
-/// Not by iterating any hash-based structure, either way: this repo has
-/// shipped a flaky test before from a `HashMap`'s iteration order leaking
-/// into behavior (see the species-habitat-lookup fix), and a layout that
-/// could shuffle between runs would be that bug again, one layer up.
-fn best_column_split(heights: &[f32]) -> Vec<usize> {
-    let n = heights.len();
-    // The "a handful" in this function's doc is aspirational unless
-    // enforced: at n >= 32, `1u32 << n` panics in debug and silently
-    // evaluates to 1 in release, which would put every box in the left
-    // column. No shipped or moddable page comes remotely close — sections
-    // are hardcoded pushes, not something a mod can add to — so this
-    // should never trip; it exists to fail loudly if that assumption ever
-    // stops holding, rather than silently mis-laying out a page in release.
-    debug_assert!(
-        n < 32,
-        "best_column_split: {n} columned boxes on one page — 1u32 << n panics past 31 in \
-         debug and silently misbehaves in release; this function needs a real bitset before \
-         a page can have this many boxes"
-    );
-    let bit = |i: usize| 1u32 << (n - 1 - i);
-    let mut best_mask: u32 = 0;
-    let mut best_worst = f32::MAX;
-    for mask in 0u32..(1u32 << n) {
-        let mut total = [0.0f32; 2];
-        for (i, h) in heights.iter().enumerate() {
-            total[usize::from(mask & bit(i) != 0)] += h;
-        }
-        let worst = total[0].max(total[1]);
-        if worst < best_worst {
-            best_worst = worst;
-            best_mask = mask;
-        }
-    }
-    (0..n)
-        .map(|i| usize::from(best_mask & bit(i) != 0))
-        .collect()
-}
-
 /// A stat row's height inside a box — tighter than `m.line_height`, which is
 /// tuned for prose the eye reads left to right rather than a column of
 /// label/value pairs it scans down.
@@ -374,12 +222,6 @@ fn best_column_split(heights: &[f32]) -> Vec<usize> {
 /// height sweep exists to catch.
 pub(in crate::render) fn section_row_h(m: &Metrics) -> f32 {
     m.font_size as f32
-}
-
-/// A box's height: its title line, one `section_row_h` per row, and a gap
-/// above and below the rows.
-fn section_height(section: &Section, m: &Metrics) -> f32 {
-    m.line_height + section_row_h(m) * section.rows.len() as f32 + m.gap * 2.0
 }
 
 /// The full roster rail's width, in cells: shortcut, glyph, name, `Lv N`
@@ -431,8 +273,6 @@ impl RailGeom {
 /// the caller's measured `char_w` (see `hud::layout` for why that is a
 /// parameter), so the census tests run without a window.
 pub(in crate::render) struct ManifestLayout {
-    #[cfg_attr(not(test), expect(dead_code, reason = "the tests read it"))]
-    pub(in crate::render) frame: Rect,
     /// `None` for a wild subject, which is not on the roster.
     pub(in crate::render) rail: Option<RailGeom>,
     /// The summary band: name and tier, tags, face tabs and call to act.
@@ -540,7 +380,6 @@ impl ManifestLayout {
         });
 
         ManifestLayout {
-            frame,
             rail,
             band,
             vitals,
@@ -669,19 +508,6 @@ mod tests {
     ];
     const WINDOW_WIDTHS: [f32; 4] = [1280.0, 1600.0, 1920.0, 2560.0];
 
-    fn section(title: &'static str, rows: usize, full_width: bool) -> Section {
-        Section {
-            title: title.into(),
-            column: None,
-            rows: (0..rows)
-                .map(|i| SectionRow::Stat(format!("label {i}"), format!("{i}")))
-                .collect(),
-            full_width,
-            overflow: 0,
-            hint: String::new(),
-        }
-    }
-
     /// Boxes are expected to *touch* — stacked meters are laid out
     /// contiguously, and `y + h` of one is exactly the `y` of the next. In f32
     /// that sum can land a fraction of a pixel past the boundary, so the
@@ -707,122 +533,14 @@ mod tests {
     fn the_frame_always_fits_the_window() {
         for window_h in WINDOW_HEIGHTS {
             for window_w in WINDOW_WIDTHS {
-                let m = ui_metrics(window_h);
-                let sections = vec![section("FIGHT", 6, false)];
-                let l = manifest_layout(window_w, window_h, &sections, &m);
+                let frame = frame_rect(window_w, window_h);
                 let window = Rect::new(0.0, 0.0, window_w, window_h);
                 assert!(
-                    contains(&window, &l.frame),
-                    "at {window_w}x{window_h} the frame {:?} runs off the window",
-                    l.frame
+                    contains(&window, &frame),
+                    "at {window_w}x{window_h} the frame {frame:?} runs off the window",
                 );
             }
         }
-    }
-
-    /// A subject missing a section (a legacy program with no Potential roll)
-    /// must not leave a hole — the boxes after it move up into the space.
-    #[test]
-    fn a_missing_section_closes_the_gap_rather_than_leaving_a_hole() {
-        let m = ui_metrics(1080.0);
-        let full = vec![
-            section("COMBAT", 4, false),
-            section("POTENTIAL", 4, false),
-            section("ROUTINES", 3, false),
-            section("SPECIES", 5, false),
-        ];
-        let without_potential = vec![
-            section("COMBAT", 4, false),
-            section("ROUTINES", 3, false),
-            section("SPECIES", 5, false),
-        ];
-        let a = manifest_layout(1600.0, 1080.0, &full, &m);
-        let b = manifest_layout(1600.0, 1080.0, &without_potential, &m);
-
-        assert_eq!(a.sections.len(), 4);
-        assert_eq!(b.sections.len(), 3);
-        assert_eq!(
-            b.sections[1].y, a.sections[1].y,
-            "dropping a section must not push the survivors down"
-        );
-        let a_bottom = a.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
-        let b_bottom = b.sections.iter().map(|r| r.y + r.h).fold(0.0_f32, f32::max);
-        assert!(
-            b_bottom <= a_bottom + 0.5,
-            "three sections must not occupy more vertical space than four"
-        );
-    }
-
-    /// Two columns, so the second section sits beside the first rather than
-    /// under it.
-    #[test]
-    fn columned_sections_fill_left_then_right() {
-        let m = ui_metrics(1080.0);
-        let sections = vec![section("A", 3, false), section("B", 3, false)];
-        let l = manifest_layout(1600.0, 1080.0, &sections, &m);
-        assert_eq!(l.sections[0].y, l.sections[1].y, "equal boxes share a row");
-        assert!(
-            l.sections[1].x > l.sections[0].x,
-            "the second box goes to the right column"
-        );
-    }
-
-    /// The partition search itself, isolated from window metrics: an uneven
-    /// set of boxes must land at the true minimum taller-column height, not
-    /// whatever the old greedy (assign to whichever side is shorter so far)
-    /// happened to find.
-    #[test]
-    fn best_column_split_finds_the_true_minimum_not_a_greedy_approximation() {
-        // Hand-verifiable counterexample: the old greedy (assign each box,
-        // in order, to whichever side is currently shorter) processes
-        // 1, 1, 1, 3 as side0=1, side1=1, side0=2, side1=4 — columns of 2
-        // and 4, a taller column of 4. The true optimum groups the three
-        // 1s together against the lone 3: columns of 3 and 3, a taller
-        // column of only 3. A function that was secretly still the old
-        // greedy under a new name would fail this.
-        let heights = [1.0, 1.0, 1.0, 3.0];
-        let sides = best_column_split(&heights);
-        let mut total = [0.0f32; 2];
-        for (i, h) in heights.iter().enumerate() {
-            total[sides[i]] += h;
-        }
-        let worst = total[0].max(total[1]);
-        assert_eq!(
-            worst, 3.0,
-            "the true optimum is 3 and 3, not the greedy's 2 and 4"
-        );
-    }
-
-    /// Ties resolve deterministically and don't depend on iteration over
-    /// any hash-based structure — same input, same output, every call.
-    #[test]
-    fn best_column_split_is_deterministic_across_repeated_calls() {
-        let heights = [4.0, 4.0, 4.0, 4.0, 4.0];
-        let first = best_column_split(&heights);
-        for _ in 0..20 {
-            assert_eq!(best_column_split(&heights), first);
-        }
-    }
-
-    /// A full-width band spans both columns and sits below every columned box.
-    #[test]
-    fn a_full_width_section_spans_both_columns_below_the_grid() {
-        let m = ui_metrics(1080.0);
-        let sections = vec![
-            section("A", 3, false),
-            section("B", 3, false),
-            section("MOVES", 2, true),
-        ];
-        let l = manifest_layout(1600.0, 1080.0, &sections, &m);
-        let band = l.sections[2];
-        assert!(
-            band.y >= l.sections[0].y + l.sections[0].h,
-            "the band sits below the grid"
-        );
-        assert!(
-            band.w > l.sections[0].w * 1.5,
-            "the band spans both columns, not one"
-        );
     }
 
     /// A section longer than the cap is trimmed with a counted note, so a
@@ -963,9 +681,10 @@ mod tests {
     #[test]
     fn a_wild_subject_gets_no_rail_and_the_ledger_starts_at_the_frame() {
         let m = ui_metrics(900.0);
-        let l = ManifestLayout::new(frame_rect(1440.0, 900.0), &m, char_w(&m), Face::Stats, 0, 2);
+        let frame = frame_rect(1440.0, 900.0);
+        let l = ManifestLayout::new(frame, &m, char_w(&m), Face::Stats, 0, 2);
         assert!(l.rail.is_none());
-        assert_eq!(l.ledger[0].x, l.frame.x + m.pad);
+        assert_eq!(l.ledger[0].x, frame.x + m.pad);
     }
 
     #[test]
@@ -988,13 +707,14 @@ mod tests {
         for (w, h, m, cw) in sweep() {
             for face in [Face::Stats, Face::Other] {
                 let l = sheet(w, h, &m, cw, face);
+                let frame = frame_rect(w, h);
                 let rail = l.rail.as_ref().unwrap();
                 let mut parts = vec![rail.rect, l.band, l.bands, l.keybar];
                 parts.extend(l.ledger);
                 parts.extend(l.vitals);
                 for (i, a) in parts.iter().enumerate() {
                     assert!(
-                        contains(&l.frame, a),
+                        contains(&frame, a),
                         "{w}x{h} {face:?}: {a:?} leaves the frame"
                     );
                     for b in &parts[i + 1..] {

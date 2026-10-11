@@ -18,10 +18,8 @@ impl Section {
     fn ledger(title: impl Into<String>, column: LedgerColumn, rows: Vec<SectionRow>) -> Section {
         Section {
             title: title.into(),
-            column: Some(column),
+            column,
             rows,
-            full_width: false,
-            overflow: 0,
             hint: String::new(),
         }
     }

@@ -13,8 +13,6 @@ mod stats;
 
 use super::popup::*;
 use super::score;
-use super::social::draw_tab_strip;
-use super::talk::talk_sections;
 use super::*;
 use feral_processes_app_core::ManifestTab;
 use feral_processes_engine::components::TaskKind;
@@ -27,13 +25,6 @@ use layout::*;
 pub(in crate::render) use ledger::{PIPS, draw_pairs, pip_cells, subhead};
 use sections::*;
 
-/// How big the header glyph is drawn, relative to the UI title size — enough
-/// to read as a portrait rather than another line of text, and sized to span
-/// the header's two text lines without spilling into the meters below (the
-/// header is `HEADER_ROWS` × `line_height` tall, which is a hair over twice
-/// `m.title()`).
-const HEADER_GLYPH_SCALE: u16 = 2;
-
 /// How many memories the MEMORIES box names under its mood line.
 ///
 /// A **renderer** constant and not an engine one: `ManifestMood` carries
@@ -42,21 +33,17 @@ const HEADER_GLYPH_SCALE: u16 = 2;
 /// view where a fixture could never build a row this box does not draw.
 ///
 /// Two, because that is what the box has room for — see
-/// `manifest_layout::MAX_MOVE_ROWS` for what a third row would cost. The `R`
+/// `layout::MAX_MOVE_ROWS` for what a third row would cost. The `R`
 /// page is where the whole store is read; this is the glance.
 pub(super) const MANIFEST_MEMORY_ROWS: usize = 2;
 
-/// What the manifest's footer can offer, which depends on how the screen was
+/// What the manifest's keybar can offer, which depends on how the screen was
 /// opened. Bundled rather than passed as two loose bools, which read as
 /// `true, false` at the call site and say nothing.
 pub(super) struct ManifestNav {
     /// ←/→ page between subjects. False for a wild program, which isn't in
     /// the owned list and so has nowhere to page to.
     pub(super) cyclable: bool,
-    /// Esc returns to the list this was opened from — the manifest picker or
-    /// the roster — rather than to the map. Which of the two is app-core's
-    /// business (`ManifestOrigin`); the footer only has to know there is one.
-    pub(super) back_to_list: bool,
     /// `W` sends the map's camera to this program and goes back to the map.
     ///
     /// False for anything the sim does not walk — a party member, your
@@ -98,166 +85,27 @@ pub(super) fn draw_manifest(
     // strip: the strip never offers a face the subject does not have.
     let social = game.social(view.entity);
     let own = matches!(view.subject, ManifestSubject::Player(_));
-    let sections = match (&social, nav.tab) {
+    let owned_program = social.is_some();
+    let body = match (social, nav.tab) {
         _ if own && nav.tab == ManifestTab::Score => {
-            let body = other::Body::Score(score::page(&game.score_card()));
-            let face = other::OtherFace::gather(game, view, &nav, false, body);
-            other::draw_other(&face, painter, m);
-            return;
+            Some(other::Body::Score(score::page(&game.score_card())))
         }
-        (Some(s), ManifestTab::Social) => {
-            let face =
-                other::OtherFace::gather(game, view, &nav, true, other::Body::Social(s.clone()));
-            other::draw_other(&face, painter, m);
-            return;
-        }
-        (Some(_), ManifestTab::Talk) => {
-            let exchanges = game.conversations(view.entity).unwrap_or_default();
-            let screen = (painter.screen_w(), painter.screen_h());
-            talk_sections(&exchanges, screen, painter, m)
-        }
-        _ => {
-            let face = stats::StatsFace::gather(game, view, &nav, social.is_some());
-            stats::draw_stats(&face, painter, m);
-            return;
-        }
+        (Some(s), ManifestTab::Social) => Some(other::Body::Social(s)),
+        (Some(_), ManifestTab::Talk) => Some(other::Body::Talk(
+            game.conversations(view.entity).unwrap_or_default(),
+        )),
+        _ => None,
     };
-    let l = manifest_layout(painter.screen_w(), painter.screen_h(), &sections, m);
-
-    painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
-    painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
-
-    let escaped = game.phase_keys().story_complete;
-    draw_header(
-        &view,
-        escaped,
-        (social.is_some() || own).then_some(nav.tab),
-        l.header,
-        painter,
-        m,
-    );
-    for (rect, section) in l.sections.iter().zip(&sections) {
-        draw_section(section, *rect, painter, m);
+    match body {
+        Some(body) => {
+            let face = other::OtherFace::gather(game, view, &nav, owned_program, body);
+            other::draw_other(&face, painter, m);
+        }
+        None => {
+            let face = stats::StatsFace::gather(game, view, &nav, owned_program);
+            stats::draw_stats(&face, painter, m);
+        }
     }
-
-    let footer = footer_text(&nav, view.remembers());
-    let footer_y = l.footer.y + m.font_size as f32;
-    painter.ui(&footer, l.footer.x, footer_y, m.small(), TEXT_DIM);
-    if let Some((hint, color)) = level_up_hint(&nav) {
-        let x = l.footer.x + painter.measure_ui_advance(format!("{footer}{FOOTER_GAP}"), m.small());
-        painter.ui(hint, x, footer_y, m.small(), color);
-    }
-}
-
-/// Three spaces, not six: with all five keys offered, six ran 216px past
-/// the frame at 1280x1440 (`the_fullest_footer_fits_the_narrowest_window`).
-const FOOTER_GAP: &str = "   ";
-
-const LEVEL_UP_HINT: &str = "[L] level up";
-
-/// `[L]` trails the rest of the footer in its own run, so it alone can be
-/// greyed.
-fn level_up_hint(nav: &ManifestNav) -> Option<(&'static str, Color)> {
-    nav.level_up.map(|open| {
-        (
-            LEVEL_UP_HINT,
-            if open { TEXT_DIM } else { hud::palette::FAINT },
-        )
-    })
-}
-
-/// Every key the sheet answers, since this line is the only place any of
-/// them is advertised. `[D]` is unconditional: `Game::dossier_report`
-/// answers for any body the sheet itself can show. `[R]` is
-/// `ManifestView::remembers`, the answer app-core refuses on. `[H]` and `[S]`
-/// are not here: the DEVELOPMENT box carries its own hint.
-fn footer_text(nav: &ManifestNav, remembers: bool) -> String {
-    let mut footer = Vec::new();
-    if nav.cyclable {
-        footer.push("←/→ programs");
-    }
-    if nav.watchable {
-        footer.push("[W] watch");
-    }
-    footer.push("[D] dossier");
-    if remembers {
-        footer.push("[R] memories");
-    }
-    footer.push(if nav.back_to_list {
-        "Esc back to list"
-    } else {
-        "Esc back"
-    });
-    footer.join(FOOTER_GAP)
-}
-
-fn draw_header(
-    view: &ManifestView,
-    escaped: bool,
-    tab: Option<ManifestTab>,
-    rect: Rect,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let glyph_size = m.title() * HEADER_GLYPH_SCALE;
-    let glyph = view.glyph.to_string();
-    painter.map(
-        &glyph,
-        rect.x,
-        rect.y + glyph_size as f32 * 0.85,
-        glyph_size,
-        glyph_color(view.color),
-    );
-    let text_x = rect.x + painter.measure_map(&glyph, glyph_size).width + m.pad;
-
-    let boss = is_boss(view);
-    let rarity = header_rarity(view);
-    // Both flags, and the tier keeps its own colour claim: a boss reads red
-    // and an Overclocked spawn gold, so a program that is both would have to
-    // give one up if this were a single string in a single colour. `[BOSS]`
-    // wins the title because it is the one that decides whether to open the
-    // fight; the tier follows it, drawn in the same silver/gold the map's
-    // bar uses so the two channels agree.
-    let head = header_title(view);
-    painter.ui_bold(
-        head.clone(),
-        text_x,
-        rect.y + m.title() as f32,
-        m.title(),
-        if boss { RED } else { WHITE },
-    );
-    if let Some(tier_color) = rarity_color(rarity) {
-        painter.ui_bold(
-            rarity_tag(rarity),
-            text_x
-                + painter
-                    .measure(crate::paint::Face::UiBold, &head, m.title())
-                    .width,
-            rect.y + m.title() as f32,
-            m.title(),
-            tier_color,
-        );
-    }
-
-    if let Some(active) = tab {
-        draw_tab_strip(
-            active,
-            matches!(view.subject, ManifestSubject::Player(_)),
-            rect.x + rect.w,
-            rect.y + m.title() as f32,
-            painter,
-            m,
-        );
-    }
-
-    let tags = header_tags(view, escaped);
-    painter.ui(
-        tags.join("   "),
-        text_x,
-        rect.y + m.title() as f32 + m.line_height,
-        m.font_size,
-        TEXT_DIM,
-    );
 }
 
 /// The second line of the header: level, tier, post, and the statuses.
@@ -300,110 +148,6 @@ pub(super) fn header_tags(view: &ManifestView, escaped: bool) -> Vec<String> {
         tags.push(super::battle::status_tags_text(&view.statuses));
     }
     tags
-}
-
-fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
-    painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
-    painter.ui(
-        &section.title,
-        rect.x + m.inset,
-        rect.y + m.line_height,
-        m.small(),
-        CYAN,
-    );
-    if section.overflow > 0 {
-        let title_w = painter.measure_ui_advance(&section.title, m.small());
-        painter.ui(
-            format!(" +{}", section.overflow),
-            rect.x + m.inset + title_w,
-            rect.y + m.line_height,
-            m.small(),
-            TEXT_DIM,
-        );
-    }
-    if !section.hint.is_empty() {
-        let hint_w = painter.measure_ui_advance(&section.hint, m.small());
-        painter.ui(
-            &section.hint,
-            rect.x + rect.w - m.inset - hint_w,
-            rect.y + m.line_height,
-            m.small(),
-            TEXT_DIM,
-        );
-    }
-    let mut cy = rect.y + m.line_height + m.gap;
-    for row in &section.rows {
-        cy += section_row_h(m);
-        match row {
-            SectionRow::Stat(label, value)
-            | SectionRow::Ranked(label, value, _)
-            | SectionRow::Alert(label, value) => {
-                let fitted = fitted_stat_row(painter, label, value, rect, m);
-                painter.ui(&fitted.label, rect.x + m.inset, cy, fitted.size, TEXT_DIM);
-                painter.ui(
-                    &fitted.value,
-                    rect.x + rect.w - m.inset - fitted.value_w,
-                    cy,
-                    fitted.size,
-                    TEXT,
-                );
-            }
-            SectionRow::Note(text) | SectionRow::Callout(text) => {
-                painter.ui(text, rect.x + m.inset, cy, m.font_size, TEXT);
-            }
-        }
-    }
-}
-
-/// A stat row as `draw_section` will actually draw it — both halves already
-/// cut to the box they have to share.
-pub(super) struct FittedStatRow {
-    pub(super) label: String,
-    pub(super) value: String,
-    /// One size for the whole row. A value at the body size beside a shrunken
-    /// label reads as two rows, and the width the value gives up is exactly
-    /// what the label is short of.
-    pub(super) size: u16,
-    /// The fitted value's measured width, which is also what it is placed by.
-    pub(super) value_w: f32,
-}
-
-/// Cuts one stat row to `rect`: drawn at the body size when the pair fits, at
-/// `m.small()` when only that does, and with the **label** elided into
-/// whatever the value leaves when even that overruns.
-///
-/// The value is the half that stays whole, because it is the column a player
-/// scans *down* a box. One `m.gap` is held back between the two so they never
-/// touch.
-///
-/// Returned rather than drawn so the width census can measure the row the
-/// renderer draws instead of a restated copy of this arithmetic — the mistake
-/// `no_column_row_overflows_the_column` records for the info column.
-pub(super) fn fitted_stat_row(
-    painter: &Painter,
-    label: &str,
-    value: &str,
-    rect: Rect,
-    m: &Metrics,
-) -> FittedStatRow {
-    let room = rect.w - m.inset * 2.0;
-    let pair = |size| {
-        painter.measure_ui_advance(label, size) + painter.measure_ui_advance(value, size) + m.gap
-    };
-    let size = if pair(m.font_size) <= room {
-        m.font_size
-    } else {
-        m.small()
-    };
-    let value = elided_to_fit(painter, value, size, room);
-    let value_w = painter.measure_ui(&value, size).width;
-    let label = elided_to_fit(painter, label, size, room - value_w - m.gap);
-    FittedStatRow {
-        label,
-        value,
-        size,
-        value_w,
-    }
 }
 
 /// `text` cut to `room` at `size`: unchanged when it already fits, and
@@ -491,36 +235,11 @@ pub(super) fn header_rarity(view: &ManifestView) -> Rarity {
     }
 }
 
-/// The bold title line before the tier tag: the subject's title and, for a
-/// boss, its `[BOSS]` flag.
-pub(super) fn header_title(view: &ManifestView) -> String {
-    format!(
-        "{}{}",
-        subject_title(view),
-        if is_boss(view) { "  [BOSS]" } else { "" }
-    )
-}
-
-/// What heads the page: who this is, and in parentheses what kind of thing
-/// they are.
-///
-/// **The parenthetical answers one question for both subjects.** A program
-/// fills it with its species; the player fills it with their class, which
-/// is the same question asked of a player — and the reason the player's
-/// half exists at all is that the sheet used to head itself "You" and name
-/// no class, so the two facts a run is most identified by were readable
-/// only on the wizard screen that asked for them.
-///
-/// Neither half is guaranteed: a program whose species failed to resolve
-/// and a classless run both fall back to the name alone.
-fn subject_title(view: &ManifestView) -> String {
-    match subject_kind(view) {
-        Some(kind) => format!("{}  ({kind})", view.name),
-        None => view.name.clone(),
-    }
-}
-
-/// The parenthetical half of `subject_title`, on its own for the band.
+/// The parenthetical after the name in the band, and the one question it
+/// answers for both subjects: a program fills it with its species, the
+/// player with their class. Neither half is guaranteed: a program whose
+/// species failed to resolve and a classless run both fall back to the name
+/// alone.
 pub(super) fn subject_kind(view: &ManifestView) -> Option<String> {
     match &view.subject {
         ManifestSubject::Program(p) => p.species_name.clone(),
@@ -533,7 +252,7 @@ mod tests {
     use super::ledger::fit_ledger_row;
     use super::*;
     use crate::paint::with_painter;
-    use crate::render::manifest::layout::{ManifestLayout, frame_rect, manifest_layout};
+    use crate::render::manifest::layout::{ManifestLayout, frame_rect};
     use crate::text::ui_metrics;
     use feral_processes_engine::{ProgramPoints, RankedStat};
 
@@ -992,8 +711,7 @@ mod tests {
         sections_for(game, view)
             .iter()
             .find(|s| s.title == title)
-            .and_then(|s| s.column)
-            .map(|c| l.ledger[c.index()])
+            .map(|s| l.ledger[s.column.index()])
     }
 
     /// A rail with forty subjects and its party rule.
@@ -1409,6 +1127,32 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_talk_face_stays_in_its_frame_and_overlaps_nothing() {
+        use crate::render::talk::tests::{short, worst_exchanges};
+        use feral_processes_engine::{ExchangeView, SpokenLine};
+        let mut exchanges = worst_exchanges();
+        exchanges.extend((0..30).map(short));
+        let mut face = other_face(
+            program_view(plain_program(10, 10), Vec::new()),
+            other::Body::Talk(exchanges),
+        );
+        assert_face_fits("talk", &face, &["CONVERSATIONS"]);
+        face.body = other::Body::Talk(Vec::new());
+        assert_face_fits("an empty ring", &face, &["Nothing has been said yet."]);
+        face.body = other::Body::Talk(vec![ExchangeView {
+            lines: vec![SpokenLine {
+                who: "Kestrel".into(),
+                text: "word ".repeat(2000),
+            }],
+        }]);
+        assert_face_fits(
+            "an exchange too tall",
+            &face,
+            &["The latest exchange is too long to show here."],
+        );
+    }
+
     /// The LATELY band puts each value just past the widest label, and the
     /// widest memory label the shipped catalogue can build is never cut to
     /// do it.
@@ -1590,7 +1334,7 @@ mod tests {
         let view = program_view(program, vec![worn("WEP"), worn("ARM")]);
 
         let sections = sections_for(&game, &view);
-        let shape: Vec<(&str, Option<LedgerColumn>, usize)> = sections
+        let shape: Vec<(&str, LedgerColumn, usize)> = sections
             .iter()
             .map(|s| (s.title.as_str(), s.column, s.rows.len()))
             .collect();
@@ -1599,13 +1343,13 @@ mod tests {
         assert_eq!(
             shape,
             vec![
-                ("FIGHT", Some(Fight), 4),
-                ("MOVES", Some(Fight), 1),
-                ("DEVELOPMENT", Some(Growth), 3),
-                ("WORK", Some(Duty), 5),
-                ("SPECIES", Some(Duty), 4),
-                ("GEAR", Some(Fight), 2),
-                ("ROUTINES", Some(Fight), 1),
+                ("FIGHT", Fight, 4),
+                ("MOVES", Fight, 1),
+                ("DEVELOPMENT", Growth, 3),
+                ("WORK", Duty, 5),
+                ("SPECIES", Duty, 4),
+                ("GEAR", Fight, 2),
+                ("ROUTINES", Fight, 1),
             ],
             "the program ledger's columns, in the order they stack: {shape:?}"
         );
@@ -1721,20 +1465,20 @@ mod tests {
 
         use LedgerColumn::{Duty, Fight, Growth};
         let sections = sections_for(&game, &view);
-        let shape: Vec<(&str, Option<LedgerColumn>)> = sections
+        let shape: Vec<(&str, LedgerColumn)> = sections
             .iter()
             .map(|s| (s.title.as_str(), s.column))
             .collect();
         assert_eq!(
             shape,
             vec![
-                ("FIGHT", Some(Fight)),
-                ("GROWTH", Some(Growth)),
-                ("CLASS · Decompiler", Some(Growth)),
-                ("PERKS", Some(Growth)),
-                ("RUN", Some(Duty)),
-                ("GEAR", Some(Fight)),
-                ("ROUTINES", Some(Fight)),
+                ("FIGHT", Fight),
+                ("GROWTH", Growth),
+                ("CLASS · Decompiler", Growth),
+                ("PERKS", Growth),
+                ("RUN", Duty),
+                ("GEAR", Fight),
+                ("ROUTINES", Fight),
             ],
         );
     }
@@ -1916,53 +1660,6 @@ mod tests {
         );
     }
 
-    /// The header's tag line is one unclamped `painter.ui` call, so a run of
-    /// tags wider than the header rect runs off it rather than wrapping —
-    /// the same hazard `every_upgrade_items_description_fits_the_refactor_
-    /// picker` covers on the other screen, and this line had no test at all
-    /// until the refactor tags landed on it.
-    ///
-    /// The worst case is built here rather than sampled from a real `Game`,
-    /// because it is a program that is simultaneously high-level, excellently
-    /// rolled, maxed on both permanent ceilings, and posted to a long-named
-    /// structure — reachable, but not something a fixture would stumble into.
-    #[test]
-    fn the_widest_header_tag_line_fits_the_header() {
-        let tags = [
-            "Lv 30".to_string(),
-            "Excellent (99%)".to_string(),
-            format!("fused {MAX_FUSIONS}/{MAX_FUSIONS}"),
-            format!("upgraded {MAX_COMPANION_REFACTORS}/{MAX_COMPANION_REFACTORS}"),
-            // The longest activity string a program can report, against the
-            // longest-named structure that accepts one.
-            "hauling to Recharger Node".to_string(),
-            "STUNNED".to_string(),
-        ];
-        let line = tags.join("   ");
-
-        // Both shipped window sizes. The header is a fraction of the window,
-        // so the *small* one is the worst case — and it was the one this
-        // census did not measure at all until someone went looking for the
-        // headroom a longer tag would have needed.
-        for (w, h) in [(1280.0, 720.0), (1440.0, 900.0)] {
-            with_painter(|p| {
-                let m = ui_metrics(h);
-                let l = manifest_layout(w, h, &[], &m);
-                // The glyph portrait and a pad sit left of the text; the tag
-                // line starts there and has the rest of the header to run into.
-                let portrait = p.measure_map("@", m.title() * 2).width + m.pad;
-                let room = l.header.w - portrait;
-                let drawn = p.measure_ui_advance(&line, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "at {w}x{h} the manifest header's tags overflow it by \
-                     {:.0}px ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
-            });
-        }
-    }
-
     /// **The player's sheet is headed by their own name and their class**,
     /// and carries what that class is worth as a row of its own.
     ///
@@ -1983,7 +1680,7 @@ mod tests {
 
         let mut view = player_view(plain_player());
         view.name = "Kestrel".to_string();
-        assert_eq!(subject_title(&view), "Kestrel  (Decompiler)");
+        assert_eq!(subject_kind(&view).as_deref(), Some("Decompiler"));
 
         let growth = sections_for(&game, &view);
         let class = titled(&growth, "CLASS · Decompiler");
@@ -1998,7 +1695,7 @@ mod tests {
         plain.class = None;
         let mut view = player_view(plain);
         view.name = "You".to_string();
-        assert_eq!(subject_title(&view), "You");
+        assert_eq!(subject_kind(&view), None);
         assert!(
             sections_for(&game, &view)
                 .iter()
@@ -2174,7 +1871,6 @@ mod tests {
                     Some(subject),
                     ManifestNav {
                         cyclable: false,
-                        back_to_list: false,
                         watchable,
                         tab: ManifestTab::Stats,
                         level_up: None,
@@ -2221,7 +1917,6 @@ mod tests {
                     Some(subject),
                     ManifestNav {
                         cyclable: false,
-                        back_to_list: false,
                         watchable: false,
                         tab: ManifestTab::Stats,
                         level_up: Some(false),
@@ -2235,64 +1930,6 @@ mod tests {
         };
         assert!(sheet(true).contains("Escaped"));
         assert!(!sheet(false).contains("Escaped"));
-    }
-
-    /// `[D]` works on every sheet — `Game::dossier_report` answers for any
-    /// body still standing — so the footer offers it unconditionally, and
-    /// the footer is the only place a player can learn the page exists.
-    #[test]
-    fn the_footer_always_offers_the_dossier() {
-        for cyclable in [false, true] {
-            for back_to_list in [false, true] {
-                for watchable in [false, true] {
-                    let nav = ManifestNav {
-                        cyclable,
-                        back_to_list,
-                        watchable,
-                        tab: ManifestTab::Stats,
-                        level_up: None,
-                    };
-                    assert!(footer_text(&nav, false).contains("[D] dossier"));
-                }
-            }
-        }
-    }
-
-    /// `[L]` is drawn only on your own sheet, in the footer's colour when it
-    /// would open the page and greyed when there is nothing to spend.
-    #[test]
-    fn the_level_up_hint_greys_rather_than_hides() {
-        let nav = |level_up| ManifestNav {
-            cyclable: false,
-            back_to_list: false,
-            watchable: false,
-            tab: ManifestTab::Stats,
-            level_up,
-        };
-        assert_eq!(level_up_hint(&nav(None)), None);
-        assert_eq!(
-            level_up_hint(&nav(Some(true))),
-            Some((LEVEL_UP_HINT, TEXT_DIM))
-        );
-        assert_eq!(
-            level_up_hint(&nav(Some(false))),
-            Some((LEVEL_UP_HINT, hud::palette::FAINT))
-        );
-    }
-
-    /// `[R]` is offered exactly when `ManifestView::remembers` says there is
-    /// a page behind it, which is what app-core refuses on.
-    #[test]
-    fn the_footer_offers_memories_only_when_the_subject_remembers() {
-        let nav = ManifestNav {
-            cyclable: false,
-            back_to_list: false,
-            watchable: false,
-            tab: ManifestTab::Stats,
-            level_up: None,
-        };
-        assert!(footer_text(&nav, true).contains("[R] memories"));
-        assert!(!footer_text(&nav, false).contains("[R]"));
     }
 
     /// A seated program's DEVELOPMENT box carries its bank, says when the
@@ -2318,43 +1955,6 @@ mod tests {
         let mut wild = Vec::new();
         program_sections(&mut wild, &game, &plain_program(6, 6));
         assert!(wild.iter().all(|s| s.title != "DEVELOPMENT"));
-    }
-
-    /// The footer is one unwrapped line, so with every key offered it has to
-    /// fit the frame at the narrowest supported window and the largest font.
-    #[test]
-    fn the_fullest_footer_fits_the_narrowest_window() {
-        let program = ManifestNav {
-            cyclable: true,
-            back_to_list: true,
-            watchable: true,
-            tab: ManifestTab::Stats,
-            level_up: None,
-        };
-        // Your own sheet is the only one with `[L]`, and never has `[W]` (the
-        // player walks no base: `Game::program_role` is `None` untamed) or
-        // `[R]` (only an owned program remembers).
-        let own = ManifestNav {
-            watchable: false,
-            level_up: Some(true),
-            ..program
-        };
-        let footers = [
-            footer_text(&program, true),
-            format!("{}{FOOTER_GAP}{LEVEL_UP_HINT}", footer_text(&own, false)),
-        ];
-        for h in [720.0, 1080.0, 1440.0] {
-            let m = ui_metrics(h);
-            let l = manifest_layout(1280.0, h, &[], &m);
-            for footer in &footers {
-                let (width, _) = with_painter(|p| p.measure_ui_advance(footer, m.small()));
-                assert!(
-                    width <= l.footer.w,
-                    "at 1280x{h} `{footer}` is {width}px against {}px",
-                    l.footer.w
-                );
-            }
-        }
     }
 
     /// The POTENTIAL box names both build rolls in full, on their own rows,

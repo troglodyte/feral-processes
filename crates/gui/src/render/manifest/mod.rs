@@ -1033,7 +1033,8 @@ mod tests {
                     };
                     let row = fit_ledger_row(p, &label, &value, rect.w, false, &m);
                     assert_eq!(
-                        row.value, value,
+                        row.value(),
+                        value,
                         "the value is the half that stays whole ({:?} at {w}x{h})",
                         mv.name
                     );
@@ -1063,15 +1064,21 @@ mod tests {
                 let m = ui_metrics(h);
                 for (who, rect) in equipment_rects(&game, w, h) {
                     let row = fit_ledger_row(p, &label, &value, rect.w, false, &m);
-                    let label_w = p.measure_ui_advance(&row.label, row.size);
-                    assert!(
-                        label_w + row.value_w <= rect.w,
-                        "the widest GEAR row overflows its column by {:.0}px on the {who} \
-                         page at {w}x{h}:\n{}\n{}",
-                        label_w + row.value_w - rect.w,
-                        row.label,
-                        row.value
-                    );
+                    let char_w = p.measure_ui_advance("M", m.font_size);
+                    let lines = row
+                        .label_lines
+                        .iter()
+                        .enumerate()
+                        .map(|(i, l)| (l, if i > 0 { 2.0 * char_w } else { 0.0 }))
+                        .chain(row.value_lines.iter().map(|v| (v, 2.0 * char_w)));
+                    for (line, indent) in lines {
+                        assert!(
+                            indent + p.measure_ui_advance(line, m.font_size) <= rect.w,
+                            "a GEAR line overflows its column on the {who} page at {w}x{h}: \
+                             {line}"
+                        );
+                    }
+                    assert_eq!(row.value(), value, "the bonus stays whole");
                 }
             }
         });

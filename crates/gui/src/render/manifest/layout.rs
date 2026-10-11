@@ -387,10 +387,16 @@ fn section_height(section: &Section, m: &Metrics) -> f32 {
 const RAIL_FULL_CELLS: f32 = 30.0;
 /// The collapsed rail's width, in cells: the glyph and the `!` mark.
 const RAIL_COLLAPSED_CELLS: f32 = 4.0;
-/// The narrowest a ledger column may be for the rail to draw full. Below it
-/// a label and its value no longer sit beside each other with a compare
-/// cell, so the rail gives its width back instead.
-const LEDGER_MIN_CELLS: f32 = 32.0;
+/// The narrowest a ledger column may be for the rail to draw full. Rows wrap
+/// now, so this is a readability floor rather than the width a label, value
+/// and compare cell need side by side.
+const LEDGER_MIN_CELLS: f32 = 22.0;
+/// The narrowest frame, in pixels, that draws the full rail. In pixels and
+/// not cells because the UI font scales with window *height*: 1280x720 and
+/// 1440x900 leave the same number of cells for the columns, so only the
+/// width tells them apart. 1440 wide (a 1325px frame) is the first window
+/// the full rail is for.
+pub(in crate::render) const RAIL_FULL_MIN_FRAME_W: f32 = 1300.0;
 const LEDGER_COLUMNS: usize = 3;
 
 /// Which kind of page the frame holds. Only STATS has a vitals line and may
@@ -472,6 +478,7 @@ impl ManifestLayout {
         let row_h = section_row_h(m);
 
         let full = face == Face::Stats
+            && frame.w >= RAIL_FULL_MIN_FRAME_W
             && ledger_col_w(inner.w - RAIL_FULL_CELLS * char_w - m.pad, m)
                 >= LEDGER_MIN_CELLS * char_w;
         let rail = (rail_rows > 0).then(|| {
@@ -896,30 +903,36 @@ mod tests {
     }
 
     #[test]
-    fn the_rail_is_full_only_when_three_32_cell_columns_still_fit() {
+    fn the_rail_is_full_from_1440_wide_and_never_under_a_readable_column() {
+        let min = LEDGER_MIN_CELLS;
         let (mut full, mut collapsed) = (0, 0);
         for (w, h, m, cw) in sweep() {
             let l = sheet(w, h, &m, cw, Face::Stats);
             let rail = l.rail.as_ref().expect("an owned subject has a rail");
-            // What the three columns would each gain or lose from the other
-            // rail width: the difference in cells, shared three ways.
-            let swing = (RAIL_FULL_CELLS - RAIL_COLLAPSED_CELLS) * cw / 3.0;
-            let min = LEDGER_MIN_CELLS * cw;
+            let wide = frame_rect(w, h).w >= RAIL_FULL_MIN_FRAME_W;
+            assert!(
+                wide || !rail.full,
+                "{w}x{h}: a narrow frame has no full rail"
+            );
+            if wide && !rail.full {
+                // Only the column floor may refuse a wide frame.
+                let swing = (RAIL_FULL_CELLS - RAIL_COLLAPSED_CELLS) * cw / 3.0;
+                assert!(
+                    l.ledger[0].w - swing < min * cw,
+                    "{w}x{h}: collapsed though a full rail leaves {:.1}-cell columns",
+                    (l.ledger[0].w - swing) / cw
+                );
+            }
             if rail.full {
                 full += 1;
                 assert!(rail.title.is_some(), "{w}x{h}: a full rail is titled");
                 assert!(
-                    l.ledger[0].w >= min,
-                    "{w}x{h}: full rail but a {:.0}px column under {min:.0}px",
-                    l.ledger[0].w
+                    l.ledger[0].w >= min * cw,
+                    "{w}x{h}: full rail but a {:.1}-cell column",
+                    l.ledger[0].w / cw
                 );
             } else {
                 collapsed += 1;
-                assert!(
-                    l.ledger[0].w - swing < min,
-                    "{w}x{h}: collapsed though a full rail leaves {:.0}px columns",
-                    l.ledger[0].w - swing
-                );
             }
             let other = sheet(w, h, &m, cw, Face::Other);
             assert!(
@@ -928,6 +941,17 @@ mod tests {
             );
         }
         assert!(full > 0 && collapsed > 0, "the sweep must see both forms");
+    }
+
+    /// The two sizes the user named: 1440x900 shows the name rail, 1280x720
+    /// keeps the glyph column.
+    #[test]
+    fn the_rail_is_full_at_1440x900_and_collapsed_at_1280x720() {
+        for ((w, h), want) in [((1440.0, 900.0), true), ((1280.0, 720.0), false)] {
+            let m = ui_metrics(h);
+            let l = sheet(w, h, &m, char_w(&m), Face::Stats);
+            assert_eq!(l.rail.unwrap().full, want, "{w}x{h}");
+        }
     }
 
     #[test]

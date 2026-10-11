@@ -29,26 +29,51 @@ pub(super) fn ordinal(n: u32) -> String {
     format!("{n}{suffix}")
 }
 
-/// A row as it will be drawn: both halves already cut to the column.
+/// A row as it will be drawn: wrapped to the column.
+///
+/// The label's lines come first, the continuation ones indented. The value
+/// then either rides flush right on the label's last line (`inline`) or
+/// continues on indented lines of its own below it.
 #[derive(Debug, PartialEq)]
 pub(super) struct FittedLedgerRow {
-    pub(super) label: String,
-    pub(super) value: String,
-    pub(super) size: u16,
+    pub(super) label_lines: Vec<String>,
+    pub(super) value_lines: Vec<String>,
+    pub(super) inline: bool,
+    /// The inline value's measured width.
     pub(super) value_w: f32,
-    /// Whether the compare cell survives. When it does not, the value moves
-    /// out to the column's edge.
+    /// Whether the compare cell survives, which only a one-line row keeps.
     pub(super) compare: bool,
 }
 
-/// Cuts one row to `width`, the column's whole width.
+impl FittedLedgerRow {
+    /// Lines the row takes in the column, which `fit_column` counts.
+    pub(super) fn lines(&self) -> usize {
+        self.label_lines.len()
+            + if self.inline {
+                0
+            } else {
+                self.value_lines.len()
+            }
+    }
+
+    pub(super) fn value(&self) -> String {
+        self.value_lines.join(" ")
+    }
+}
+
+/// Cells a continuation line is indented by.
+const INDENT_CELLS: f32 = 2.0;
+
+/// Lays one row out in `width`, the column's whole width.
 ///
-/// **The value stays whole and the label gives way**, `fitted_stat_row`'s
-/// rule. The order of what goes: the compare cell first (it is the least
-/// load-bearing figure on the row), then the body size for `small()`, and
-/// only then the middle of the label. `reserve` is whether the section holds
-/// a compare cell, so every value in it lines up whether or not its own row
-/// has one.
+/// **A row that does not fit continues; it is not cut.** When the label and
+/// the value cannot share a line they stack: the label (itself wrapped if it
+/// is long), then the value on indented lines below, or flush right on the
+/// label's last line when it still fits there. Elision is the last resort,
+/// for one unbroken word wider than the column. Before any of that the
+/// compare cell goes, then the row wraps. `reserve` is whether the section
+/// holds a compare cell, so every value in it lines up whether or not its
+/// own row has one.
 pub(super) fn fit_ledger_row(
     painter: &Painter,
     label: &str,
@@ -57,26 +82,62 @@ pub(super) fn fit_ledger_row(
     reserve: bool,
     m: &Metrics,
 ) -> FittedLedgerRow {
-    let compare_w = painter.measure_ui_advance("M", m.font_size) * COMPARE_CELLS as f32;
-    let pair = |size| {
-        painter.measure_ui_advance(label, size) + painter.measure_ui_advance(value, size) + m.gap
+    let size = m.font_size;
+    let char_w = painter.measure_ui_advance("M", size);
+    let compare_w = char_w * COMPARE_CELLS as f32;
+    let adv = |t: &str| painter.measure_ui_advance(t, size);
+    let pair = adv(label) + adv(value) + m.gap;
+    if reserve && pair <= width - compare_w {
+        return FittedLedgerRow {
+            label_lines: vec![label.to_string()],
+            value_lines: vec![value.to_string()],
+            inline: true,
+            value_w: adv(value),
+            compare: true,
+        };
+    }
+    if pair <= width {
+        return FittedLedgerRow {
+            label_lines: vec![label.to_string()],
+            value_lines: vec![value.to_string()],
+            inline: true,
+            value_w: adv(value),
+            compare: false,
+        };
+    }
+    let indent = INDENT_CELLS * char_w;
+    let cols = (((width - indent) / char_w).floor() as usize).max(1);
+    let lines_of = |text: &str| -> Vec<String> {
+        let mut lines = crate::render::popup::wrap_text(text, cols);
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines
+            .into_iter()
+            .map(|l| elided_to_fit(painter, &l, size, width - indent))
+            .collect()
     };
-    let (size, room, compare) = if reserve && pair(m.font_size) <= width - compare_w {
-        (m.font_size, width - compare_w, true)
-    } else if pair(m.font_size) <= width {
-        (m.font_size, width, false)
+    let mut label_lines = lines_of(label);
+    // The label keeps the full width on its first line.
+    if label_lines.len() == 1 {
+        label_lines[0] = elided_to_fit(painter, label, size, width);
+    }
+    let value_lines = if value.is_empty() {
+        Vec::new()
     } else {
-        (m.small(), width, false)
+        lines_of(value)
     };
-    let value = elided_to_fit(painter, value, size, room);
-    let value_w = painter.measure_ui_advance(&value, size);
-    let label = elided_to_fit(painter, label, size, room - value_w - m.gap);
+    let last = label_lines.last().map_or(0.0, |l| adv(l));
+    let indented = label_lines.len() > 1;
+    let value_w = value_lines.first().map_or(0.0, |v| adv(v));
+    let inline = value_lines.len() == 1
+        && last + if indented { indent } else { 0.0 } + value_w + m.gap <= width;
     FittedLedgerRow {
-        label,
-        value,
-        size,
+        label_lines,
+        value_lines,
+        inline,
         value_w,
-        compare,
+        compare: false,
     }
 }
 
@@ -121,12 +182,15 @@ pub(super) fn draw_ledger(
             .iter()
             .filter(|s| s.column.is_some_and(|c| c.index() == col))
             .collect();
-        let heights: Vec<usize> = stacked.iter().map(|s| s.rows.len()).collect();
+        let heights: Vec<usize> = stacked
+            .iter()
+            .map(|s| section_lines(s, rect.w, ranks, painter, m))
+            .collect();
         let fit = fit_column(&heights, rect.h, m);
         let mut y = rect.y;
-        for section in &stacked[..fit.kept] {
+        for (section, lines) in stacked[..fit.kept].iter().zip(&heights) {
             draw_section(section, *rect, y, ranks, painter, m);
-            y += ledger_section_h(section.rows.len(), m);
+            y += ledger_section_h(*lines, m);
         }
         if fit.dropped > 0 {
             painter.ui(
@@ -167,6 +231,28 @@ fn subhead(title: &str, hint: &str, rect: Rect, y: f32, painter: &Painter, m: &M
     );
 }
 
+/// How many lines a section's rows take in a column `width` wide: one each
+/// unless a row wraps. The column's height budget is counted in these.
+fn section_lines(
+    section: &Section,
+    width: f32,
+    ranks: Option<&SubjectRanks>,
+    painter: &Painter,
+    m: &Metrics,
+) -> usize {
+    let reserve = reserves_compare(section, ranks);
+    section
+        .rows
+        .iter()
+        .map(|row| match row {
+            SectionRow::Stat(l, v) | SectionRow::Alert(l, v) | SectionRow::Ranked(l, v, _) => {
+                fit_ledger_row(painter, l, v, width, reserve, m).lines()
+            }
+            SectionRow::Note(_) | SectionRow::Callout(_) => 1,
+        })
+        .sum()
+}
+
 fn draw_section(
     section: &Section,
     rect: Rect,
@@ -187,6 +273,7 @@ fn draw_section(
     let mut top = y + m.line_height;
     for row in &section.rows {
         let base = top + section_row_h(m) * 0.85;
+        let mut lines = 1;
         match row {
             SectionRow::Stat(label, value) => {
                 let pair = Pair {
@@ -196,7 +283,7 @@ fn draw_section(
                     rank: None,
                     reserve,
                 };
-                draw_pair(&pair, rect, base, painter, m);
+                lines = draw_pair(&pair, rect, base, painter, m);
             }
             SectionRow::Alert(label, value) => {
                 let pair = Pair {
@@ -206,7 +293,7 @@ fn draw_section(
                     rank: None,
                     reserve,
                 };
-                draw_pair(&pair, rect, base, painter, m);
+                lines = draw_pair(&pair, rect, base, painter, m);
             }
             SectionRow::Ranked(label, value, stat) => {
                 let rank = find_rank(ranks, *stat);
@@ -217,7 +304,7 @@ fn draw_section(
                     rank,
                     reserve,
                 };
-                draw_pair(&pair, rect, base, painter, m);
+                lines = draw_pair(&pair, rect, base, painter, m);
             }
             SectionRow::Note(text) => painter.ui(
                 elided_to_fit(painter, text, m.font_size, rect.w),
@@ -234,7 +321,7 @@ fn draw_section(
                 hud::palette::ATTENTION,
             ),
         }
-        top += section_row_h(m);
+        top += section_row_h(m) * lines as f32;
     }
 }
 
@@ -249,33 +336,49 @@ struct Pair<'a> {
     reserve: bool,
 }
 
-fn draw_pair(pair: &Pair, rect: Rect, base: f32, painter: &Painter, m: &Metrics) {
-    let fitted = fit_ledger_row(painter, pair.label, pair.value, rect.w, pair.reserve, m);
-    painter.ui(
-        &fitted.label,
-        rect.x,
-        base,
-        fitted.size,
-        hud::palette::FIELD_LABEL,
-    );
-    let compare_w = painter.measure_ui_advance("M", m.font_size) * COMPARE_CELLS as f32;
-    // A reserving section keeps its values aligned; a row that gave the cell
-    // up takes the whole width back.
-    let right = if pair.reserve && fitted.compare {
-        rect.x + rect.w - compare_w
+/// Draws the row and returns the lines it took.
+fn draw_pair(pair: &Pair, rect: Rect, base: f32, painter: &Painter, m: &Metrics) -> usize {
+    let f = fit_ledger_row(painter, pair.label, pair.value, rect.w, pair.reserve, m);
+    let char_w = painter.measure_ui_advance("M", m.font_size);
+    let indent = INDENT_CELLS * char_w;
+    let line_h = section_row_h(m);
+    let at = |i: usize| base + line_h * i as f32;
+    for (i, line) in f.label_lines.iter().enumerate() {
+        let x = rect.x + if i > 0 { indent } else { 0.0 };
+        painter.ui(line, x, at(i), m.font_size, hud::palette::FIELD_LABEL);
+    }
+    let compare_w = char_w * COMPARE_CELLS as f32;
+    if f.inline {
+        // A reserving section keeps its values aligned; a row that gave the
+        // cell up takes the whole width back.
+        let right = if pair.reserve && f.compare {
+            rect.x + rect.w - compare_w
+        } else {
+            rect.x + rect.w
+        };
+        let value = f.value();
+        painter.ui(
+            &value,
+            right - f.value_w,
+            at(f.label_lines.len() - 1),
+            m.font_size,
+            pair.value_color,
+        );
     } else {
-        rect.x + rect.w
-    };
-    painter.ui(
-        &fitted.value,
-        right - fitted.value_w,
-        base,
-        fitted.size,
-        pair.value_color,
-    );
-    if let (true, Some(rank)) = (fitted.compare, pair.rank) {
+        for (i, line) in f.value_lines.iter().enumerate() {
+            painter.ui(
+                line,
+                rect.x + indent,
+                at(f.label_lines.len() + i),
+                m.font_size,
+                pair.value_color,
+            );
+        }
+    }
+    if let (true, Some(rank)) = (f.compare, pair.rank) {
         draw_compare(rank, rect.x + rect.w - compare_w, base, painter, m);
     }
+    f.lines()
 }
 
 /// Five pips (`▮` in `hud-body` over `hud-bar-trough`) and the ordinal.
@@ -528,17 +631,45 @@ mod tests {
             [roomy, snug, tight].map(|width| fit_ledger_row(p, label, value, width, true, &m))
         });
         let [roomy, snug, tight] = rows;
-        assert!(roomy.compare && roomy.label == "Mitigation");
+        assert!(roomy.compare && roomy.lines() == 1);
+        assert!(!snug.compare && snug.lines() == 1, "the cell goes first");
+        assert_eq!(snug.value(), "12%");
         assert!(
-            !snug.compare && snug.label == "Mitigation",
-            "the cell goes first"
+            !tight.compare && !tight.inline && tight.lines() == 2,
+            "then the row wraps"
         );
-        assert_eq!(snug.value, "12%");
+        assert_eq!(tight.label_lines, ["Mitigation"], "the label is not cut");
+        assert_eq!(tight.value(), "12%", "and never the value");
+    }
+
+    /// A long value continues on indented lines, whole; only a single word
+    /// wider than the column is elided.
+    #[test]
+    fn a_long_row_wraps_and_only_an_unbreakable_word_is_elided() {
+        let m = ui_metrics(720.0);
+        let (rows, _) = with_painter(|p| {
+            let cw = p.measure_ui_advance("M", m.font_size);
+            let width = 30.0 * cw;
+            (
+                fit_ledger_row(
+                    p,
+                    "Purge",
+                    "pow 24, ranged, bleed 50% for 3 rounds",
+                    width,
+                    false,
+                    &m,
+                ),
+                fit_ledger_row(p, "Habitats", &"x".repeat(40), width, false, &m),
+            )
+        });
+        let (wrapped, word) = rows;
+        assert_eq!(wrapped.label_lines, ["Purge"]);
+        assert!(wrapped.value_lines.len() >= 2 && !wrapped.inline);
+        assert_eq!(wrapped.value(), "pow 24, ranged, bleed 50% for 3 rounds");
         assert!(
-            !tight.compare && tight.label != "Mitigation",
-            "then the label"
+            word.value().contains('…'),
+            "one word past the column is the last resort"
         );
-        assert_eq!(tight.value, "12%", "and never the value");
     }
 
     #[test]

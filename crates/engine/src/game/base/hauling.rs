@@ -267,6 +267,11 @@ impl Occupancy {
         self.walls.contains(&cell) || self.bodies.contains(&cell)
     }
 
+    /// Whether a structure's anchor stands on `cell`, so no walk crosses it.
+    pub(crate) fn walls(&self, cell: (i32, i32)) -> bool {
+        self.walls.contains(&cell)
+    }
+
     /// Whether a body stands on `cell`, so stepping into it is a squeeze.
     pub(crate) fn holds_a_body(&self, cell: (i32, i32)) -> bool {
         self.bodies.contains(&cell)
@@ -301,11 +306,11 @@ impl Occupancy {
     /// wherever `arrives` answers — `None` where it may not go at all.
     ///
     /// The walker's own tile is admitted whatever stands on it.
-    /// `place_structure` checks terrain and other structures but never
-    /// whether a program is standing there, so a building can go up on top
-    /// of a hauler mid-walk; since the walk filters successors, that worker
-    /// would otherwise be absent from its own field and frozen for the rest
-    /// of the run. You may step *off* a wall, never onto one.
+    /// `Game::displace_bodies_from` moves a body off a footprint when it is
+    /// filed and again when it is raised, but leaves one with nowhere free
+    /// to go where it stands — and since the walk filters successors, that
+    /// worker would otherwise be absent from its own field and frozen for
+    /// the rest of the run. You may step *off* a wall, never onto one.
     ///
     /// **A body's cell is a throughway and never an arrival**: refused where
     /// `arrives` says the walk would stop there, priced at the squeeze

@@ -470,36 +470,33 @@ fn dropped_and_said(game: &Game) -> bool {
             .any(|m| m.text.contains("could not be rebuilt"))
 }
 
+/// A program standing on a wreck no longer holds the rebuild back: the
+/// request is filed and the program moved aside, through the same path a
+/// fresh deploy takes.
 #[test]
-fn a_program_standing_on_the_wreck_keeps_the_ruin_until_it_moves() {
+fn a_program_standing_on_the_wreck_is_moved_aside_and_the_ruin_filed() {
     let mut body = None;
-    let (mut game, filed) = files_after(2208, "shield", |game, x, y| {
+    let (game, filed) = files_after(2208, "shield", |game, x, y| {
         let b = spawn_tamed(game, 10, 3);
         *game.world.get_mut::<Position>(b).unwrap() = Position { x, y };
         body = Some(b);
     });
     let (px, py) = game.base_pos().unwrap();
-    assert!(!filed, "a body stands on the tile");
-    assert_eq!(
-        game.world.resource::<Ruins>().0,
-        vec![ruin("shield", px + 1, py)],
-        "standing is temporary: the ruin waits"
+    assert!(filed, "a body on the tile does not hold the rebuild back");
+    assert!(game.world.resource::<Ruins>().0.is_empty());
+    let at = *game.world.get::<Position>(body.unwrap()).unwrap();
+    assert_ne!(
+        (at.x, at.y),
+        (px + 1, py),
+        "the body was moved off the wreck"
     );
     assert!(
         !game
             .message_history(50)
             .iter()
             .any(|m| m.text.contains("could not be rebuilt")),
-        "no log for a retry"
+        "and nothing was dropped"
     );
-
-    game.file_ruins();
-    assert!(sites(&mut game).is_empty(), "still standing there");
-
-    *game.world.get_mut::<Position>(body.unwrap()).unwrap() = Position { x: px, y: py + 5 };
-    game.file_ruins();
-    assert_eq!(sites(&mut game).len(), 1, "filed once the tile is clear");
-    assert!(game.world.resource::<Ruins>().0.is_empty());
 }
 
 #[test]

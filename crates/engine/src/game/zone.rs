@@ -491,7 +491,7 @@ impl Game {
     /// **The `Game`-side half of `party::walks_the_base`**, which is where the
     /// rule itself lives and why this is a list rather than a predicate: the
     /// three readers want different things out of it. `blocked_tiles` takes
-    /// the cells, `Game::place_structure` looks one up, and
+    /// the cells, `Game::displace_bodies_from` moves the ones on a footprint, and
     /// `drift_idle_staff` folds them into a tally to find out who is sharing.
     ///
     /// A program whose `Position` is the surface tile it was beaten on is held

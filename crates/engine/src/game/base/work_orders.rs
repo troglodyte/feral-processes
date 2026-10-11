@@ -2347,7 +2347,11 @@ impl Game {
         // decision rather than a second opinion about it. A body may still
         // **cross** the floor — `blocked_tiles` keeps emitting anchors alone,
         // deliberately — it just may not stop there.
-        let occupied = self.structure_tiles();
+        //
+        // **A filed site counts too**, for the same reason: it is ground
+        // spoken for, and a body idling on it is one the raise has to move.
+        let mut occupied = self.structure_tiles();
+        occupied.extend(self.build_site_tiles());
         let party = match *self.world.resource::<Locale>() {
             Locale::Base { x, y } => Some((x, y)),
             _ => None,

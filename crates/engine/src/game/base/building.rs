@@ -21,15 +21,15 @@ pub struct AwaitingSite {
 
 /// Why a footprint cannot take a structure, in the order the player is told.
 /// Each is its own refusal because each leaves a different errand: demolish,
-/// let the crew catch up or cancel the request, clear a dig mark, or wait
-/// for a program to move.
+/// let the crew catch up or cancel the request, or clear a dig mark. A
+/// program standing on the footprint is not one: it is moved aside when the
+/// request is filed (`Game::displace_bodies_from`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PlacementRefusal {
     NoFloor,
     Occupied,
     SiteFiled,
     DigMark,
-    BodyStanding,
 }
 
 impl PlacementRefusal {
@@ -39,7 +39,6 @@ impl PlacementRefusal {
             Self::Occupied => "Something is already deployed there.",
             Self::SiteFiled => "Your crew is already set to build something there.",
             Self::DigMark => "There's a dig mark there — clear it before building.",
-            Self::BodyStanding => "One of your programs is standing there — give it a moment.",
         }
     }
 }
@@ -168,7 +167,7 @@ impl Game {
         // exist to be measured against yet.
         // The ladder itself is `placement_refusal`; what each rung means to
         // the player is argued in `PlacementRefusal`.
-        if let Some(refusal) = self.placement_refusal(&footprint, founding, program) {
+        if let Some(refusal) = self.placement_refusal(&footprint, founding) {
             return Err(refusal.message().into());
         }
         // Before the materials check, with the other refusals: a structure
@@ -321,8 +320,11 @@ impl Game {
 
     /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
     /// request's components are written, shared by `place_structure` and
-    /// `file_ruins` so a deploy and a rebuild cannot drift.
+    /// `file_ruins` so a deploy and a rebuild cannot drift — and so both move
+    /// a program standing on the footprint aside the same way.
     fn spawn_build_site(&mut self, site: BuildSite, x: i32, y: i32) -> Entity {
+        let side = self.structure_footprint(&site.structure);
+        self.displace_bodies_from(&crate::tactical::footprint_cells_at((x, y), side));
         self.world
             .spawn((
                 site,
@@ -355,16 +357,17 @@ impl Game {
     ///
     /// **The one placement predicate** `place_structure` and `file_ruins`
     /// both call, without `place_structure`'s locale gate (`file_ruins` files
-    /// from wherever the party stands). The floor check and the dig-mark and
-    /// body checks are skipped while `founding`: the pocket does not exist
-    /// to be measured, and every program's `Position` out on the surface only
-    /// aliases these coordinates. `program` is exempt from the body check —
-    /// it is the one being spent, and `commit_program` retires it.
+    /// from wherever the party stands). The floor and dig-mark checks are
+    /// skipped while `founding`: the pocket does not exist to be measured.
+    ///
+    /// **No body check.** Idle staff wander, so a program on the footprint
+    /// is moved aside when the request is filed (`spawn_build_site`) rather
+    /// than refused — a refusal asked the player to wait for a body the
+    /// deploy popup was drawn over.
     fn placement_refusal(
         &mut self,
         footprint: &[(i32, i32)],
         founding: bool,
-        program: Option<Entity>,
     ) -> Option<PlacementRefusal> {
         if !founding
             && footprint
@@ -394,15 +397,88 @@ impl Game {
         {
             return Some(PlacementRefusal::DigMark);
         }
-        if !founding
-            && self
-                .base_bodies()
-                .iter()
-                .any(|&(body, p)| footprint.contains(&(p.x, p.y)) && Some(body) != program)
-        {
-            return Some(PlacementRefusal::BodyStanding);
-        }
         None
+    }
+
+    /// Moves every body standing on `footprint` to the nearest free laid
+    /// floor outside it, for a structure about to claim that ground — filed
+    /// (`spawn_build_site`) or raised (`construction::raise_one_tick`).
+    ///
+    /// Free is every rule a body already keeps, read off the same sets:
+    /// laid floor (the wander's leash), no structure's footprint
+    /// (`structure_tiles`, what the wander declines), no body
+    /// (`blocked_tiles`), no filed site, and not the party's cell. The
+    /// search walks outward breadth-first through cells a walk may cross —
+    /// walkable and no structure's anchor — so the body lands somewhere it
+    /// could have walked to.
+    ///
+    /// **Only `Position` moves**, and that is safe for every walker:
+    /// `walks_the_base` bodies re-derive their next step from where they
+    /// stand each beat, and a post, a `Carrying` load or a `Task` names a
+    /// structure or site rather than a cell. A half-paid squeeze is dropped,
+    /// since it was toward a cell beside the tile the body has left.
+    ///
+    /// A body with nowhere free to go is left where it stands rather than
+    /// refusing the build: a base so full there is no free floor cell is not
+    /// one a deploy should be blocked on, and the walk admits a body's own
+    /// tile whatever stands on it.
+    pub(crate) fn displace_bodies_from(&mut self, footprint: &[(i32, i32)]) {
+        let bodies = self.base_bodies();
+        if !bodies.iter().any(|(_, p)| footprint.contains(&(p.x, p.y))) {
+            return;
+        }
+        let blocked = self.blocked_tiles();
+        let structures = self.structure_tiles();
+        let sites = self.build_site_tiles();
+        let party = match *self.world.resource::<Locale>() {
+            Locale::Base { x, y } => Some((x, y)),
+            _ => None,
+        };
+        let mut claimed = std::collections::HashSet::new();
+        for (body, at) in bodies {
+            if !footprint.contains(&(at.x, at.y)) {
+                continue;
+            }
+            let free = {
+                let grid = self.world.resource::<BaseGrid>();
+                nearest_free_floor(
+                    (at.x, at.y),
+                    |cell| {
+                        grid.is_floor(cell.0, cell.1)
+                            && !footprint.contains(&cell)
+                            && !blocked.taken(cell)
+                            && !structures.contains(&cell)
+                            && !sites.contains(&cell)
+                            && party != Some(cell)
+                            && !claimed.contains(&cell)
+                    },
+                    |cell| grid.walkable(cell.0, cell.1) && !blocked.walls(cell),
+                )
+            };
+            let Some((x, y)) = free else {
+                continue;
+            };
+            claimed.insert((x, y));
+            self.world
+                .entity_mut(body)
+                .insert(Position { x, y })
+                .remove::<crate::components::Squeezing>();
+        }
+    }
+
+    /// Every cell any filed `BuildSite`'s footprint covers —
+    /// `structure_tiles`' counterpart for ground already on order.
+    pub(crate) fn build_site_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
+        let mut query = self.world.query::<(&Position, &BuildSite)>();
+        let rows: Vec<(Position, StructureId)> = query
+            .iter(&self.world)
+            .map(|(p, b)| (*p, b.structure.clone()))
+            .collect();
+        rows.into_iter()
+            .flat_map(|(p, kind)| {
+                crate::tactical::footprint_cells_at((p.x, p.y), self.structure_footprint(&kind))
+            })
+            .collect()
     }
 
     /// Files a rebuild site for every recorded wreck, once no siege is
@@ -425,7 +501,6 @@ impl Game {
             return;
         }
         let ruins = std::mem::take(&mut self.world.resource_mut::<crate::resources::Ruins>().0);
-        let mut waiting = Vec::new();
         for ruin in ruins {
             let Some(def) = self
                 .world
@@ -440,21 +515,12 @@ impl Game {
                 continue;
             };
             let footprint = crate::tactical::footprint_cells_at((ruin.x, ruin.y), def.footprint);
-            match self.placement_refusal(&footprint, false, None) {
-                // A program standing on the wreck walks off; the ground is
-                // not taken, so keep the ruin for the next filing tick.
-                Some(PlacementRefusal::BodyStanding) => {
-                    waiting.push(ruin);
-                    continue;
-                }
-                None => {}
-                Some(_) => {
-                    self.log_base(format!(
-                        "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
-                        def.name, ruin.x, ruin.y
-                    ));
-                    continue;
-                }
+            if self.placement_refusal(&footprint, false).is_some() {
+                self.log_base(format!(
+                    "The {} wreck at ({}, {}) could not be rebuilt: the ground is taken.",
+                    def.name, ruin.x, ruin.y
+                ));
+                continue;
             }
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
@@ -464,10 +530,6 @@ impl Game {
                 def.name, ruin.x, ruin.y
             ));
         }
-        self.world
-            .resource_mut::<crate::resources::Ruins>()
-            .0
-            .extend(waiting);
     }
 
     /// Commits `program` to a rebuild site that is waiting for one,
@@ -1931,4 +1993,32 @@ pub(crate) fn build_quality(def: &StructureDef, potential: Potential, rarity: Ra
 /// program is a `CreatureSave`, not an entity.
 pub(crate) fn build_quality_of(def: &StructureDef, program: &crate::save::CreatureSave) -> f32 {
     build_quality(def, program.potential(), program.rarity)
+}
+
+/// The nearest cell to `from`, breadth-first over `world::NEIGHBOURS`, that
+/// `free` admits, searching only through cells `crossable` admits. `None`
+/// once every crossable cell reachable from `from` has been tried — the grid
+/// is finite, so the search always ends.
+fn nearest_free_floor(
+    from: (i32, i32),
+    free: impl Fn((i32, i32)) -> bool,
+    crossable: impl Fn((i32, i32)) -> bool,
+) -> Option<(i32, i32)> {
+    let mut seen = std::collections::HashSet::from([from]);
+    let mut queue = std::collections::VecDeque::from([from]);
+    while let Some(at) = queue.pop_front() {
+        for (dx, dy) in crate::world::NEIGHBOURS {
+            let next = (at.0 + dx, at.1 + dy);
+            if !seen.insert(next) {
+                continue;
+            }
+            if free(next) {
+                return Some(next);
+            }
+            if crossable(next) {
+                queue.push_back(next);
+            }
+        }
+    }
+    None
 }

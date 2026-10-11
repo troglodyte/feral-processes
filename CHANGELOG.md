@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.13
+
+**Your base crew now cuts marked rock even when there is no Blank Substrate to floor it with, and floors the cut cells later once substrate arrives.** Before, a base without a Lathe left every marked cell untouched and the staff idle. Cells already cut are floored before new rock is opened, and the dig plan's standing Blank Substrate order still covers every cell you marked. Cut ground stays bare until it is floored, and nothing can be built on it until then.
+
 ## 0.18.12
 
 **The level cap now rises by 10 levels per sector instead of 11, so sector 2 caps at 11, sector 5 at 41 and sector 10 at 91.** Sector 1 still caps at 6. Each sector's level band is narrower, so gear matters sooner and levelling alone clears fewer sectors. From sector 11 on there is almost no room to spare: by the game's own projection a fully geared party at the cap of 111 is two levels short of sector 12, a deliberate tradeoff. A character already above the new cap keeps their level and stops gaining more until the next sector.

@@ -1275,7 +1275,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             let nav = ManifestNav {
                 cyclable: subjects.len() > 1
                     && pending_manifest.is_some_and(|e| subjects.contains(&e)),
-                // Only advertise `w` when it will work, `cyclable`'s rule:
+                // Only advertise `W` when it will work, `cyclable`'s rule:
                 // the roster reaches every program you own, including the
                 // ones whose tile is the one they were beaten on.
                 watchable: pending_manifest.is_some_and(|e| game.watch_position(e).is_some()),

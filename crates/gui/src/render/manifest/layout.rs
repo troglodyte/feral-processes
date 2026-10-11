@@ -53,7 +53,7 @@ pub(in crate::render) enum SectionRow {
     /// One run of free text across the box.
     Note(String),
     /// A `Stat` the ledger also ranks against the roster
-    /// (`Game::subject_ranks`). The old packer draws it as a `Stat`.
+    /// (`Game::subject_ranks`). A plain `Stat` where there is no roster to rank against.
     Ranked(String, String, RankedStat),
     /// A `Stat` whose value is something to act on, drawn in
     /// `hud-attention`.
@@ -68,12 +68,12 @@ pub(in crate::render) enum SectionRow {
 ///
 /// 6 is what 720px (the tightest supported window, where the UI font is
 /// 19px) has room for, for the box set this constant originally protected —
-/// see `the_real_worst_case_pages_fit_the_tightest_window`. Which height
+/// see `the_stats_face_stays_in_its_frame_and_overlaps_nothing`. Which height
 /// actually binds is a property of the *current* box set, not a fixed fact
 /// about 720px: `MAX_MOVE_ROWS`'s doc records a configuration (a fifth
 /// columned box at `MOVES` = 6) where 900/1000/1080px failed while 720px
 /// passed. Don't assume 720px is always the worst case — the sweep is what
-/// decides it, for whatever `worst_case_program`/`worst_case_player`
+/// decides it, for whatever the worst-case fixtures in `manifest::tests`
 /// currently model. 6 is also the routine-slot cap, so a full kit is never
 /// trimmed.
 pub(in crate::render) const MAX_SECTION_ROWS: usize = 6;
@@ -81,8 +81,8 @@ pub(in crate::render) const MAX_SECTION_ROWS: usize = 6;
 /// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Above 2,
 /// clearance at the tightest window shrinks fast enough that a mod pushing
 /// this constant up is a real layout risk — see
-/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the
-/// current measured clearance at every value and every window size; that
+/// `manifest::tests::the_stats_face_stays_in_its_frame_and_overlaps_nothing`
+/// for the current measured clearance at every value and every window size; that
 /// test is the one place this file lets a pixel figure live, precisely so
 /// a doc comment quoting numbers can't go stale the way this one has
 /// twice already. 2 costs nothing shipped regardless of the margin: every
@@ -93,11 +93,10 @@ pub(in crate::render) const MAX_AFFINITY_ROWS: usize = 2;
 
 /// The MOVES box's own cap, separate from `MAX_SECTION_ROWS` because `MOVES`
 /// is the one box a mod can genuinely grow past what any shipped species
-/// needs, and `best_column_split`'s exact partition (see its doc) changed how
-/// much of that growth the layout can absorb before a columned box's overflow
-/// reaches the footer — see
-/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the current
-/// clearance figures rather than a restated copy here. Kept deliberately
+/// needs, and the ledger's column fit changed how much of that growth the
+/// layout can absorb before a section is dropped — see
+/// `manifest::tests::the_stats_face_stays_in_its_frame_and_overlaps_nothing`
+/// for the current clearance figures rather than a restated copy here. Kept deliberately
 /// below `MAX_SECTION_ROWS` even where the exact partition alone would clear
 /// today's shipped worst case: this is the only defence against a mod-maximal
 /// `MOVES` list regardless of packer, and the headroom has value on its own,

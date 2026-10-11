@@ -591,15 +591,14 @@ mod tests {
 
     /// Window sizes a width census is measured at.
     ///
-    /// Whole shapes, and not `manifest_layout`'s cross product of widths and
+    /// Whole shapes, and not a cross product of widths and
     /// heights: `ui_metrics` scales the font off the window's **height**
     /// alone, so pairing 1280 wide with 1440 tall puts 33px text in a frame
     /// 1177px across — an aspect ratio no display has, and one that overruns
     /// rows all over the renderer. The vertical sweep can take the cross
     /// product because a taller window only ever buys it room. This is the
     /// 16:9 and 16:10 ladder from the tightest window the game supports up,
-    /// the same geometry `no_manifest_pick_row_overflows_its_popup` measures
-    /// against — it just holds one point of it.
+    /// the same ladder the frame tests sweep — it just holds one point of it.
     const CENSUS_WINDOWS: [(f32, f32); 8] = [
         (1280.0, 720.0),
         (1366.0, 768.0),
@@ -690,7 +689,7 @@ mod tests {
     }
 
     /// The EQUIPMENT box's rect on both pages that draw one, at `w` x `h` —
-    /// the real one, off `manifest_layout`, rather than a width written down
+    /// the real one, off `ManifestLayout`, rather than a width written down
     /// here.
     ///
     /// Every `EquipmentSlot` is worn, which is the box's own worst case: its
@@ -757,7 +756,7 @@ mod tests {
     /// The PARTY table at its tallest: its head, you and a full party.
     const WORST_BAND_ROWS: usize = 2 + feral_processes_engine::tuning::MAX_PARTY_SIZE;
 
-    /// The box `manifest_layout` really gives `title` on a program's page at
+    /// The box `ManifestLayout` really gives `title` on a program's page at
     /// `w` x `h`, rather than a width written down here. `None` when the page
     /// does not draw that box at all.
     ///
@@ -803,7 +802,7 @@ mod tests {
     /// Over the real `assets/species/` catalogue rather than a hand-picked
     /// worst case — a move's width is its authored name plus its tag list,
     /// and choosing the widest by eye is how a census goes stale when a
-    /// species is added. Measured against the box `manifest_layout` really
+    /// species is added. Measured against the box `ManifestLayout` really
     /// gives MOVES, at every window in `CENSUS_WINDOWS`.
     ///
     /// The size is *not* asserted: `fitted_stat_row` drops the whole row to
@@ -1363,20 +1362,15 @@ mod tests {
         assert_eq!(rows.len(), 1 + MANIFEST_MEMORY_ROWS);
     }
 
-    /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
-    /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
+    /// A fixture could list ROUTINES before MOVES, but `sections_for` does not: `program_sections` pushes MOVES
     /// last, and EQUIPMENT and ROUTINES are appended only after
     /// `program_sections` returns (see `sections_for`'s own doc).
     ///
-    /// **That drift stopped being free when MOVES lost its `full_width`
-    /// flag.** While it was the page's band, `best_column_split` filtered it
-    /// out before packing the columned rest and its position could not change
-    /// anything. It is now one columned box among eight, so its place in the
-    /// sequence decides which column it lands in whenever two partitions tie
-    /// — which is exactly what `columned_sections_fill_left_then_right`
-    /// pins. This project has previously shipped a layout fixture that
-    /// drifted from what the renderer emits and hid a real overflow behind a
-    /// green suite; pinning the real sequence here is what catches that.
+    /// **The order is the layout.** The ledger fills its columns from the
+    /// sections in sequence, so a section's place decides which column it
+    /// lands in. A fixture that drifted from what the renderer emits once hid
+    /// a real overflow behind a green suite; pinning the real sequence here
+    /// is what catches that.
     ///
     /// The gear is what makes this a program's *worst* case rather than a
     /// typical one: EQUIPMENT was a player-only box until any program the
@@ -1862,9 +1856,8 @@ mod tests {
 
     /// Both halves in one test on purpose. The player half alone passes
     /// against a version that pushes the two rows unconditionally, and that
-    /// version overflows the program page at 1280x720 — where the fixture in
-    /// `manifest_layout` would catch it only if someone remembered to widen
-    /// `worst_case_program` to match.
+    /// version overflows the program page at 1280x720 — which a fixture
+    /// would catch only if someone remembered to widen it to match.
     #[test]
     fn the_to_hit_pair_is_on_the_player_page_and_not_the_program_page() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));

@@ -108,6 +108,44 @@ pub(super) fn draw_manifest(
     }
 }
 
+/// The dossier for `entity`, or a refusal when the body is gone.
+///
+/// **Every figure comes out of `Game::dossier_report`**: a renderer that
+/// derived a header itself would be the fifth screen in this repo to keep a
+/// private copy of something the engine already owns. The sheet around it is
+/// the manifest's own, so the rail and band name the same body the same way
+/// and paging keeps the subject in view.
+pub(in crate::render) fn draw_dossier(
+    game: &mut Game,
+    entity: Option<Entity>,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some((view, report)) =
+        entity.and_then(|e| Some((game.manifest(e)?, game.dossier_report(e)?)))
+    else {
+        draw_popup(
+            "Dossier",
+            PopupSize::Small,
+            &[text_row("That program is gone.")],
+            refusal,
+            painter,
+            m,
+        );
+        return;
+    };
+    let subjects = game.manifest_subjects();
+    let nav = ManifestNav {
+        cyclable: subjects.len() > 1 && subjects.contains(&view.entity),
+        watchable: false,
+        tab: ManifestTab::Stats,
+        level_up: None,
+    };
+    let face = other::OtherFace::gather(game, view, &nav, false, other::Body::Dossier(report));
+    other::draw_other(&face, painter, m);
+}
+
 /// The second line of the header: level, tier, post, and the statuses.
 pub(super) fn header_tags(view: &ManifestView, escaped: bool) -> Vec<String> {
     let mut tags: Vec<String> = Vec::new();
@@ -1075,13 +1113,22 @@ mod tests {
     /// Paints `face` at every census window and holds it to the frame and to
     /// overlap, then to having drawn each of `parts`.
     fn assert_face_fits(who: &str, face: &other::OtherFace, parts: &[&str]) {
+        let parts: Vec<&str> = parts.iter().copied().chain(["Tab"]).collect();
+        assert_face_fits_with(who, face, &parts, &[]);
+    }
+
+    /// `assert_face_fits`, also holding that none of `absent` was drawn.
+    fn assert_face_fits_with(who: &str, face: &other::OtherFace, parts: &[&str], absent: &[&str]) {
         for (w, h) in CENSUS_WINDOWS {
             let m = ui_metrics(h);
             let frame = frame_rect(w, h);
             let (_, shapes) = with_painter(|p| other::paint_other(frame, face, p, &m));
             let drawn = assert_in_frame_and_clear(who, (w, h), frame, &shapes);
-            for part in parts.iter().chain(&["Esc", "Tab"]) {
+            for part in parts.iter().chain(&["Esc"]) {
                 assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
+            }
+            for part in absent {
+                assert!(!drawn.contains(part), "{who} at {w}x{h} drew {part}");
             }
         }
     }
@@ -1124,6 +1171,43 @@ mod tests {
                 "The others",
                 "yet.",
             ],
+        );
+    }
+
+    /// The dossier in the manifest's frame at every window: its tallest page
+    /// (the most attributes, each the widest the catalogue has, under the
+    /// longest provenance) stays inside the frame and overlaps nothing, and
+    /// so does the empty page and the wild program's, which pages nowhere.
+    #[test]
+    fn the_dossier_fits_the_frame_at_every_window() {
+        let report = crate::render::dossier::tests::tallest_dossier();
+        let mut face = other_face(
+            program_view(plain_program(10, 10), Vec::new()),
+            other::Body::Dossier(report),
+        );
+        assert_face_fits_with(
+            "dossier",
+            &face,
+            &[
+                "PROVENANCE",
+                "ATTRIBUTES",
+                "WAS",
+                "DOSSIER",
+                "back to manifest",
+            ],
+            &[],
+        );
+        face.keys.cyclable = false;
+        assert_face_fits_with("a wild dossier", &face, &["back to manifest"], &["subject"]);
+        let mut empty = crate::render::dossier::tests::tallest_dossier();
+        empty.rows.clear();
+        empty.provenance = None;
+        face.body = other::Body::Dossier(empty);
+        assert_face_fits_with(
+            "an empty dossier",
+            &face,
+            &["Nothing on file about this one."],
+            &[],
         );
     }
 

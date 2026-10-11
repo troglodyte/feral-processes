@@ -137,7 +137,7 @@ use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
     draw_inventory_item_action, effect_lines,
 };
-use manifest::{ManifestNav, draw_manifest};
+use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
     draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
@@ -1336,9 +1336,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Dossier => {
-            crate::render::dossier::draw_dossier(game, app.pending_manifest, refusal, painter, m)
-        }
+        Mode::Dossier => draw_dossier(game, app.pending_manifest, refusal, painter, m),
         Mode::EquipSwap => draw_equip_swap(
             game,
             app.pending_swap_slot,

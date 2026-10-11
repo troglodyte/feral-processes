@@ -4,15 +4,17 @@
 
 use super::band::Tabs;
 use super::chrome::{Head, paint_chrome};
-use super::keybar::{KeybarState, draw_keybar};
+use super::keybar::{KeybarState, draw_dossier_keybar, draw_keybar};
 use super::layout::{Face, frame_rect};
 use super::ledger::draw_bands;
 use super::sections::Band;
 use super::stats::{faces_of, keybar_state};
 use super::*;
+use crate::render::dossier::paint_dossier;
 use crate::render::score::{ScorePage, paint_score};
 use crate::render::social::paint_social;
 use crate::render::talk::paint_talk;
+use feral_processes_engine::views::DossierReport;
 use feral_processes_engine::{ExchangeView, RosterRow, SocialView};
 
 /// What the body of the page is. A closed set, like `ManifestTab`.
@@ -20,14 +22,17 @@ pub(super) enum Body {
     Score(ScorePage),
     Social(SocialView),
     Talk(Vec<ExchangeView>),
+    Dossier(DossierReport),
 }
 
 impl Body {
-    /// Which of `faces_of`'s tabs this body is.
-    fn open_face(&self) -> usize {
+    /// What holds the band's right end: the open one of `faces_of`'s tabs,
+    /// or the dossier's tag.
+    fn tabs<'a>(&self, faces: &'a [&'static str]) -> Tabs<'a> {
         match self {
-            Body::Score(_) | Body::Social(_) => 1,
-            Body::Talk(_) => 2,
+            Body::Score(_) | Body::Social(_) => Tabs::Faces(faces, 1),
+            Body::Talk(_) => Tabs::Faces(faces, 2),
+            Body::Dossier(_) => Tabs::Dossier,
         }
     }
 
@@ -35,7 +40,7 @@ impl Body {
     fn band(&self) -> Option<Band> {
         match self {
             Body::Score(page) => Some(Band::Total(page.total.clone())),
-            Body::Social(_) | Body::Talk(_) => None,
+            Body::Social(_) | Body::Talk(_) | Body::Dossier(_) => None,
         }
     }
 }
@@ -84,7 +89,7 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
             view: &f.view,
             roster: &f.roster,
             tags: &f.tags,
-            tabs: Tabs::Faces(&f.faces, f.body.open_face()),
+            tabs: f.body.tabs(&f.faces),
             call: None,
         },
         painter,
@@ -93,6 +98,7 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
     match &f.body {
         Body::Score(page) => paint_score(page, l.body(), painter, m),
         Body::Social(view) => paint_social(view, &f.roster, &l, painter, m),
+        Body::Dossier(report) => paint_dossier(report, l.body(), painter, m),
         Body::Talk(exchanges) => {
             // `who` on a line is the roster's label for the subject.
             let own = f
@@ -106,7 +112,10 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
     if let Some(band) = &band {
         draw_bands(l.bands, band, char_w, painter, m);
     }
-    draw_keybar(l.keybar, &f.keys, painter, m);
+    match f.body {
+        Body::Dossier(_) => draw_dossier_keybar(l.keybar, f.keys.cyclable, painter, m),
+        _ => draw_keybar(l.keybar, &f.keys, painter, m),
+    }
 }
 
 /// The page in the frame the sheet always takes.

@@ -34,6 +34,9 @@ pub(super) enum Tabs<'a> {
     None,
     /// The faces the subject has, and which is open.
     Faces(&'a [&'static str], usize),
+    /// The dossier is a page of its own, reached by `D`, not a face Tab
+    /// cycles to.
+    Dossier,
 }
 
 impl Tabs<'_> {
@@ -41,6 +44,10 @@ impl Tabs<'_> {
         match self {
             Tabs::None => Vec::new(),
             Tabs::Faces(faces, open) => face_tab_pieces(faces, *open),
+            Tabs::Dossier => vec![
+                ("D ".to_string(), hud::palette::EMPHASIS, true),
+                ("DOSSIER".to_string(), hud::palette::PANE_TITLE, true),
+            ],
         }
     }
 }

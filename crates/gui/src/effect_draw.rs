@@ -134,6 +134,25 @@ pub(crate) fn ball_along(t: f32) -> f32 {
     (t / BALL_ARRIVE_FRACTION).clamp(0.0, 1.0)
 }
 
+/// Where a slash across the body at `at` starts and ends, for a blow swung
+/// from `from`: the swing's own bearing turned 45 degrees, so the cut runs on
+/// through the body rather than back at the swinger and still reads as a
+/// cut rather than a stab. A blow from the left is the top-left to
+/// bottom-right diagonal; one with no bearing (`from == at`) takes that too.
+pub(crate) fn slash_span(from: Px, at: Px, half: f32) -> (Px, Px) {
+    let (gx, gy) = (at.0 - from.0, at.1 - from.1);
+    let len = (gx * gx + gy * gy).sqrt();
+    let (dx, dy) = if len > f32::EPSILON {
+        (gx / len, gy / len)
+    } else {
+        (1.0, 0.0)
+    };
+    // The unit bearing turned 45 degrees and scaled by sqrt 2, which is
+    // what puts a bearing of (1, 0) on the (half, half) corner.
+    let (ox, oy) = ((dx - dy) * half, (dx + dy) * half);
+    ((at.0 - ox, at.1 - oy), (at.0 + ox, at.1 + oy))
+}
+
 /// A flash's opacity at impact progress `u` (0..1): its peak, fading to 0.
 pub(crate) fn flash_alpha(u: f32) -> f32 {
     FLASH_PEAK_ALPHA * (1.0 - u.clamp(0.0, 1.0))
@@ -271,12 +290,13 @@ pub(crate) fn draw_muzzle(painter: &Painter, cell: (i32, i32), c: Px, tile_px: f
     }
 }
 
-/// One impact on one cell, `age` seconds after arrival.
+/// One impact on one cell, `age` seconds after arrival. `from` is the
+/// centre the blow left, read only by an impact with a bearing.
 pub(crate) fn draw_impact(
     painter: &Painter,
     impact: Impact,
     cell: (i32, i32),
-    c: Px,
+    (from, c): (Px, Px),
     tile_px: f32,
     age: f64,
     color: Color,
@@ -314,15 +334,11 @@ pub(crate) fn draw_impact(
             faded(FLASH_WHITE, 1.0 - u),
         ),
         Impact::Slash => {
-            let half = tile_px * 0.4;
-            let head = lerp(
-                (c.0 - half, c.1 - half),
-                (c.0 + half, c.1 + half),
-                (u * 2.0).min(1.0),
-            );
+            let (start, end) = slash_span(from, c, tile_px * 0.4);
+            let head = lerp(start, end, (u * 2.0).min(1.0));
             painter.line(
-                c.0 - half,
-                c.1 - half,
+                start.0,
+                start.1,
                 head.0,
                 head.1,
                 BOLT_THICKNESS_PX,
@@ -385,6 +401,35 @@ mod tests {
         // An over-long hold is clamped, so the head still grows.
         assert!(beam_head(0.5, 5.0) > 0.0);
         assert_eq!(beam_head(1.0, 5.0), 1.0);
+    }
+
+    /// Bug #14: the cut ran top-left to bottom-right whatever side the blow
+    /// came from, so a swing at a body up and to the left drew a slash
+    /// sweeping back toward the swinger.
+    #[test]
+    fn a_slash_cuts_away_from_the_swinger() {
+        let at = (100.0, 100.0);
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (2, -1)] {
+            let from = (at.0 - dx as f32 * 16.0, at.1 - dy as f32 * 16.0);
+            let (start, end) = slash_span(from, at, 6.0);
+            let along = (end.0 - start.0) * dx as f32 + (end.1 - start.1) * dy as f32;
+            assert!(
+                along > 0.0,
+                "a blow along ({dx}, {dy}) cut back toward its swinger"
+            );
+        }
+    }
+
+    /// A blow from the left keeps the diagonal the slash always drew, and so
+    /// does one with no direction to read.
+    #[test]
+    fn a_slash_from_the_left_or_from_nowhere_is_the_old_diagonal() {
+        let at = (100.0, 100.0);
+        for from in [(84.0, 100.0), at] {
+            let (start, end) = slash_span(from, at, 6.0);
+            assert!((start.0 - 94.0).abs() < 1e-4 && (start.1 - 94.0).abs() < 1e-4);
+            assert!((end.0 - 106.0).abs() < 1e-4 && (end.1 - 106.0).abs() < 1e-4);
+        }
     }
 
     #[test]

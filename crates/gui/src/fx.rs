@@ -1393,7 +1393,15 @@ impl Fx {
                 };
                 for &cell in targets {
                     let (c, _) = cell_centers(&to_px, tile_px, cell, cell);
-                    effect_draw::draw_impact(painter, *impact, cell, c, tile_px, landed, color);
+                    effect_draw::draw_impact(
+                        painter,
+                        *impact,
+                        cell,
+                        (ca, c),
+                        tile_px,
+                        landed,
+                        color,
+                    );
                 }
             }
         }

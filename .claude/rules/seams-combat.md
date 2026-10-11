@@ -230,7 +230,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **The cap's constants are fitted against `balance_sim` and the lower bound
   is a correctness bound.** The cap must sit at or above the *geared* clear
   requirement — below it a fully-equipped party cannot clear the zone at any
-  level it may reach, which is a dead run, not difficulty.
+  level it may reach, which is a dead run, not difficulty; zone 12 is the one
+  exception by decision, in `ACCEPTED_GEARED_SHORTFALLS`.
 - **Two renames are load-bearing and neither would fail to compile.**
 - **XP at the cap is banked, not discarded, and banking and taxing share the
   one accumulator.** `add_xp` accumulates into `Experience::xp` and reports

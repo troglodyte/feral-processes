@@ -450,13 +450,24 @@ fn levelling_never_raises_mitigation() {
 /// A linear cap cannot sit strictly under the gear-free requirement at every
 /// zone: the two clear curves both pass near the origin and then diverge
 /// (gear-free climbs about half again as fast), so a slope steep enough to
-/// keep zone 16 clearable necessarily overshoots the gear-free requirement in
-/// the low zones. This is the largest overshoot the fitted constants actually
-/// produce, measured rather than chosen — see
-/// `docs/measurements/2026-08-27-zone-level-cap.md`. Tightening the fit
-/// lowers it; raising it to make a failing fit pass is writing the test to
-/// agree with the code.
-const GRIND_TOLERANCE_LEVELS: u32 = 6;
+/// keep the deep zones clearable necessarily overshoots the gear-free
+/// requirement in the low zones. This is the largest overshoot the shipped
+/// constants actually produce (zone 2, at `STEP = 10`), measured rather than
+/// chosen — see `docs/measurements/2026-08-27-zone-level-cap.md`. Tightening
+/// the fit lowers it; raising it to make a failing fit pass is writing the
+/// test to agree with the code.
+const GRIND_TOLERANCE_LEVELS: u32 = 5;
+
+/// Zones whose cap sits under the geared requirement **by decision**, each
+/// with its exact shortfall in levels.
+///
+/// `STEP = 10` was chosen over the fitted 11 on 2026-10-10, knowing it
+/// leaves zone 12 two levels short of what `balance_sim` says a fully geared
+/// party needs. The sim models no abilities, so this is a floor projection
+/// rather than a proof the zone is lost, but it is the one place the cap is
+/// allowed under the bound. The shortfall is exact so a balance change that
+/// widens it, or a second zone joining it, still fails here.
+const ACCEPTED_GEARED_SHORTFALLS: &[(u32, u32)] = &[(12, 2)];
 
 /// The shipped species db, for the tests that measure against the real
 /// clear curves rather than against a fixture.
@@ -537,7 +548,7 @@ fn zone_one_is_capped_at_the_floor() {
 /// - The cap must be **at or above the geared requirement** at every zone.
 ///   Below it, a fully-equipped party cannot clear the zone at any level it
 ///   is allowed to reach, which is not difficulty — it is a dead run. No
-///   tolerance.
+///   tolerance, except the zones `ACCEPTED_GEARED_SHORTFALLS` names.
 /// - The cap should sit **under the gear-free requirement**, so a zone
 ///   cannot be cleared by levelling alone. That is the design goal rather
 ///   than a correctness bound, and `GRIND_TOLERANCE_LEVELS` is how far the
@@ -568,10 +579,16 @@ fn the_zone_level_cap_is_bounded_by_both_clear_curves() {
                 "zone {zone} is not clearable at all, geared — that is a sim fault, not a cap one"
             )
         });
-        assert!(
-            cap >= geared,
-            "zone {zone} needs level {geared} fully geared but caps at {cap} — \
-             a cap under the geared requirement is a run that cannot continue"
+        let accepted = ACCEPTED_GEARED_SHORTFALLS
+            .iter()
+            .find(|&&(z, _)| z == zone)
+            .map_or(0, |&(_, short)| short);
+        assert_eq!(
+            geared.saturating_sub(cap),
+            accepted,
+            "zone {zone} needs level {geared} fully geared and caps at {cap} — \
+             a cap under the geared requirement is a run that cannot continue, \
+             and only `ACCEPTED_GEARED_SHORTFALLS` may say otherwise"
         );
         if let Some(gear_free) = required(zone, false) {
             assert!(

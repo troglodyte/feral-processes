@@ -165,8 +165,11 @@
   is a correctness bound.** The cap must sit at or above the *geared* clear
   requirement — below it a fully-equipped party cannot clear the zone at any
   level it may reach, which is a dead run, not difficulty. `STEP = 11` is the
-  smallest slope with that property out to zone 16. **No line satisfies the
-  upper bound too** — zones 2-6 stay grind-clearable by at most 6 levels,
+  smallest slope with that property out to zone 16; **`STEP = 10` ships by
+  decision (2026-10-10)** and leaves zone 12 two levels short, named in
+  `ACCEPTED_GEARED_SHORTFALLS` with its exact deficit — adding a zone there
+  is a design decision, never a way to green a retune. **No line satisfies
+  the upper bound too** — zones 2-5 stay grind-clearable by at most 5 levels,
   which is what `GRIND_TOLERANCE_LEVELS` measures and never a slack to widen.
 
 - **Two renames are load-bearing and neither would fail to compile.**

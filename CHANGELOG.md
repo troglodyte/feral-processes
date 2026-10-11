@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.17
+
+**A new base now starts 9 cells tall again, keeping its 19-cell width.** The last release meant to make the opening floor wider but made it taller as well. Bases in existing saves keep the floor they already have.
+
 ## 0.18.16
 
 **A new base now starts 19 cells across instead of 9.** The opening floor was too small to place all the beginner structures without digging first. Bases in existing saves keep the floor they already have.

@@ -4001,6 +4001,9 @@ pub struct RelationshipRow {
 pub struct SpokenLine {
     pub who: String,
     pub text: String,
+    /// The program whose page this is said it. A flag and not a comparison
+    /// of `who`, because two programs can wear the same label.
+    pub own: bool,
 }
 
 /// One conversation as the TALK tab draws it, slots already filled.

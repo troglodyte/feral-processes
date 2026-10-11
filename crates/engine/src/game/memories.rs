@@ -1166,6 +1166,7 @@ impl crate::Game {
                                 SpokenLine {
                                     who: by.clone(),
                                     text,
+                                    own: l.by == r.role,
                                 }
                             })
                             .collect()
@@ -1175,6 +1176,7 @@ impl crate::Game {
                         vec![SpokenLine {
                             who: speaker.clone(),
                             text: format!("{speaker} and {listener}: {name}"),
+                            own: r.role == Role::Speaker,
                         }]
                     });
                 ExchangeView { lines }

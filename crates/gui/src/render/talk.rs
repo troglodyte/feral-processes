@@ -33,7 +33,6 @@ pub(super) struct TalkLine {
 
 fn exchange_lines(
     exchange: &ExchangeView,
-    own: &str,
     text_w: f32,
     painter: &Painter,
     m: &Metrics,
@@ -43,7 +42,7 @@ fn exchange_lines(
         .iter()
         .map(|l| TalkLine {
             speaker: l.who.clone(),
-            own: l.who == own,
+            own: l.own,
             text: wrap_to_width(painter, &l.text, m.font_size, text_w)
                 .into_iter()
                 .map(|line| elided_to_fit(painter, &line, m.font_size, text_w))
@@ -60,7 +59,6 @@ fn rows_of(exchange: &[TalkLine]) -> usize {
 /// and the rule row between each pair.
 pub(super) fn page(
     exchanges: &[ExchangeView],
-    own: &str,
     text_w: f32,
     budget: usize,
     painter: &Painter,
@@ -69,7 +67,7 @@ pub(super) fn page(
     let mut blocks: Vec<Vec<TalkLine>> = Vec::new();
     let mut used = 0;
     for exchange in exchanges {
-        let lines = exchange_lines(exchange, own, text_w, painter, m);
+        let lines = exchange_lines(exchange, text_w, painter, m);
         let cost = rows_of(&lines) + usize::from(!blocks.is_empty());
         if used + cost > budget {
             break;
@@ -80,10 +78,9 @@ pub(super) fn page(
     blocks
 }
 
-/// The subject's own lines in `hud-pane-title`, the others' in `hud-body`.
+/// The subject's own lines (`SpokenLine::own`) in `hud-pane-title`, the others' in `hud-body`.
 pub(super) fn paint_talk(
     exchanges: &[ExchangeView],
-    own: &str,
     l: &ManifestLayout,
     painter: &Painter,
     m: &Metrics,
@@ -95,7 +92,7 @@ pub(super) fn paint_talk(
     let text_x = rect.x + (SPEAKER_CELLS + 1.0) * char_w;
     let top = rect.y + m.line_height;
     let budget = ((rect.h - m.line_height) / row_h).floor().max(0.0) as usize;
-    let blocks = page(exchanges, own, rect.x + rect.w - text_x, budget, painter, m);
+    let blocks = page(exchanges, rect.x + rect.w - text_x, budget, painter, m);
     if blocks.is_empty() {
         let note = if exchanges.is_empty() {
             NO_CONVERSATIONS
@@ -211,6 +208,7 @@ pub(super) mod tests {
                     .iter()
                     .map(|l| SpokenLine {
                         who: name.clone(),
+                        own: false,
                         text: fill(&l.text, |slot| match slot {
                             "topic" => topic.clone(),
                             _ => name.clone(),
@@ -228,10 +226,12 @@ pub(super) mod tests {
             lines: vec![
                 SpokenLine {
                     who: "Kestrel".into(),
+                    own: true,
                     text: format!("Line {n}."),
                 },
                 SpokenLine {
                     who: "Wren".into(),
+                    own: false,
                     text: "Ack.".into(),
                 },
             ],
@@ -245,7 +245,7 @@ pub(super) mod tests {
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let text_w = w * 0.8 - (SPEAKER_CELLS + 1.0) * char_w;
-            page(exchanges, "Kestrel", text_w, budget, p, &m)
+            page(exchanges, text_w, budget, p, &m)
         })
         .0
     }
@@ -257,6 +257,7 @@ pub(super) mod tests {
         let long = ExchangeView {
             lines: vec![SpokenLine {
                 who: "Kestrel".into(),
+                own: true,
                 text: "word ".repeat(120),
             }],
         };
@@ -264,7 +265,7 @@ pub(super) mod tests {
             for (w, h) in WINDOWS {
                 let m = ui_metrics(h);
                 let text_w = w * 0.6;
-                let lines = exchange_lines(&long, "Kestrel", text_w, p, &m);
+                let lines = exchange_lines(&long, text_w, p, &m);
                 assert!(lines[0].text.len() > 1, "no wrap at {w}x{h}");
                 for row in &lines[0].text {
                     assert!(p.measure_ui_advance(row, m.font_size) <= text_w, "{row:?}");
@@ -285,6 +286,7 @@ pub(super) mod tests {
         let huge = ExchangeView {
             lines: vec![SpokenLine {
                 who: "Kestrel".into(),
+                own: true,
                 text: "word ".repeat(2000),
             }],
         };

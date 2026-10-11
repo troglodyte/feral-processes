@@ -651,6 +651,32 @@ fn slots_fill_and_roles_name_the_right_side() {
 }
 
 #[test]
+fn own_lines_are_flagged_by_role_even_when_both_speakers_share_a_name() {
+    use crate::interactions::Role;
+    let (mut game, b) = established("view_own", &[TALK_SAYS]);
+    let o = id_of(&game, b[1]);
+    let me = game.creature_short_label(b[0]);
+    game.rename_companion(b[1], Some(me.clone())).unwrap();
+    assert_eq!(game.creature_short_label(b[1]), me);
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Speaker, o, None),
+    );
+    give(
+        &mut game,
+        b[0],
+        record("talk", Some(0), Role::Listener, o, None),
+    );
+
+    let views = game.conversations(b[0]).unwrap();
+
+    let own = |i: usize| views[i].lines.iter().map(|l| l.own).collect::<Vec<_>>();
+    assert_eq!(own(1), [true, false], "speaker record");
+    assert_eq!(own(0), [false, true], "listener record");
+}
+
+#[test]
 fn a_non_program_topic_is_named_from_the_catalogue_even_when_stamped_empty() {
     use crate::interactions::Role;
     let (mut game, b) = established("view_topic_kinds", &[TALK_SAYS]);

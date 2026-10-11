@@ -1227,6 +1227,7 @@ mod tests {
         face.body = other::Body::Talk(vec![ExchangeView {
             lines: vec![SpokenLine {
                 who: "Kestrel".into(),
+                own: true,
                 text: "word ".repeat(2000),
             }],
         }]);

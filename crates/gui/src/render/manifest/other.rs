@@ -100,15 +100,7 @@ pub(super) fn paint_other(frame: Rect, f: &OtherFace, painter: &Painter, m: &Met
         Body::Score(page) => paint_score(page, l.body(), painter, m),
         Body::Social(view) => paint_social(view, &f.roster, &l, painter, m),
         Body::Dossier(report) => paint_dossier(report, l.body(), painter, m),
-        Body::Talk(exchanges) => {
-            // `who` on a line is the roster's label for the subject.
-            let own = f
-                .roster
-                .iter()
-                .find(|r| r.entity == f.view.entity)
-                .map_or("", |r| r.name.as_str());
-            paint_talk(exchanges, own, &l, painter, m);
-        }
+        Body::Talk(exchanges) => paint_talk(exchanges, &l, painter, m),
     }
     if let Some(band) = &band {
         draw_bands(l.bands, band, char_w, painter, m);

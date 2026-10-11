@@ -1,11 +1,11 @@
 //! The STATS face: the roster rail, the summary band with its vitals, the
 //! three-column ledger, the band under it and the keybar, in the HUD palette.
 
-use super::band::{BandHead, draw_band, draw_vitals};
+use super::band::{Tabs, draw_vitals};
+use super::chrome::{Head, paint_chrome};
 use super::keybar::{KeybarState, draw_keybar};
-use super::layout::{Face, ManifestLayout, frame_rect};
+use super::layout::{Face, frame_rect};
 use super::ledger::{draw_bands, draw_ledger};
-use super::rail::{draw_rail, rail_rows};
 use super::sections::{Band, band_for};
 use super::*;
 use feral_processes_engine::{CallToAct, RosterRow, SubjectRanks};
@@ -39,6 +39,23 @@ pub(super) fn faces_of(own: bool, owned_program: bool) -> Vec<&'static str> {
     }
 }
 
+/// The keys the sheet offers, off the subject and how the screen was opened.
+/// The same on every face: the keys are the sheet's, not the face's.
+pub(super) fn keybar_state(
+    view: &ManifestView,
+    nav: &ManifestNav,
+    faces: &[&'static str],
+) -> KeybarState {
+    KeybarState {
+        cyclable: nav.cyclable,
+        faces: !faces.is_empty(),
+        remembers: view.remembers(),
+        watchable: nav.watchable,
+        level_up: nav.level_up,
+        points: matches!(&view.subject, ManifestSubject::Program(p) if p.points.is_some()),
+    }
+}
+
 impl StatsFace {
     pub(super) fn gather(
         game: &mut Game,
@@ -50,21 +67,13 @@ impl StatsFace {
         let faces = faces_of(own, owned_program);
         let roster = game.manifest_roster();
         let escaped = game.phase_keys().story_complete;
-        let points = matches!(&view.subject, ManifestSubject::Program(p) if p.points.is_some());
         StatsFace {
             ranks: game.subject_ranks(view.entity),
             call: game.call_to_act(view.entity),
             sections: sections_for(game, &view),
             band: band_for(&view, &roster),
             tags: header_tags(&view, escaped),
-            keys: KeybarState {
-                cyclable: nav.cyclable,
-                faces: !faces.is_empty(),
-                remembers: view.remembers(),
-                watchable: nav.watchable,
-                level_up: nav.level_up,
-                points,
-            },
+            keys: keybar_state(&view, nav, &faces),
             faces,
             roster,
             view,
@@ -75,37 +84,20 @@ impl StatsFace {
 /// Paints the face into `frame`.
 pub(super) fn paint_stats(frame: Rect, f: &StatsFace, painter: &Painter, m: &Metrics) {
     let char_w = painter.measure_ui_advance("M", m.font_size);
-    let selected = f.roster.iter().position(|r| r.entity == f.view.entity);
-    let rail_rows_n = selected.map_or(0, |_| rail_rows(&f.roster).len());
     let band_rows = f.band.as_ref().map_or(0, Band::rows);
-    let l = ManifestLayout::new(frame, m, char_w, Face::Stats, rail_rows_n, band_rows);
-
-    painter.rect(frame.x, frame.y, frame.w, frame.h, hud::palette::STATUS_BG);
-    painter.rect_lines(
-        frame.x,
-        frame.y,
-        frame.w,
-        frame.h,
-        2.0,
-        hud::palette::PANE_BORDER,
-    );
-
-    if let (Some(rail), Some(selected)) = (&l.rail, selected) {
-        draw_rail(rail, &f.roster, selected, char_w, painter, m);
-    }
-    let kind = subject_kind(&f.view);
-    draw_band(
-        l.band,
-        &BandHead {
-            glyph: f.view.glyph,
-            glyph_color: glyph_color(f.view.color),
-            name: &f.view.name,
-            kind: kind.as_deref(),
-            boss: is_boss(&f.view),
-            rarity: header_rarity(&f.view),
+    let l = paint_chrome(
+        frame,
+        Face::Stats,
+        band_rows,
+        &Head {
+            view: &f.view,
+            roster: &f.roster,
             tags: &f.tags,
-            faces: &f.faces,
-            open_face: 0,
+            tabs: if f.faces.is_empty() {
+                Tabs::None
+            } else {
+                Tabs::Faces(&f.faces, 0)
+            },
             call: f.call,
         },
         painter,

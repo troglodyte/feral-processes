@@ -213,6 +213,8 @@ pub(super) enum Band {
     Party(Vec<PartyRow>),
     /// A program's LATELY lines: the mood, then the strongest memories.
     Lately(Vec<SectionRow>),
+    /// SCORE's closing lines: the multiplier, then the run score.
+    Total(Vec<SectionRow>),
 }
 
 pub(super) struct PartyRow {
@@ -234,12 +236,13 @@ impl Band {
         match self {
             Band::Party(_) => "PARTY",
             Band::Lately(_) => "LATELY",
+            Band::Total(_) => "TOTAL",
         }
     }
 
     pub(super) fn hint(&self) -> &'static str {
         match self {
-            Band::Party(_) => "",
+            Band::Party(_) | Band::Total(_) => "",
             Band::Lately(_) => "R all memories",
         }
     }
@@ -248,7 +251,7 @@ impl Band {
     pub(super) fn rows(&self) -> usize {
         match self {
             Band::Party(rows) => 1 + rows.len(),
-            Band::Lately(rows) => rows.len(),
+            Band::Lately(rows) | Band::Total(rows) => rows.len(),
         }
     }
 }

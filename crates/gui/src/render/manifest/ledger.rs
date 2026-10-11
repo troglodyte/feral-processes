@@ -14,7 +14,7 @@ use hud::bar::bar;
 /// Cells a ranked row reserves at its right end: a space, five pips, a
 /// space and an ordinal up to four characters (`100th`).
 const COMPARE_CELLS: usize = 11;
-const PIPS: usize = 5;
+pub(in crate::render) const PIPS: usize = 5;
 const PIP: char = '▮';
 
 /// `1st`, `2nd`, `3rd`, `4th`, `11th`, `12th`, `13th`, `21st`.
@@ -205,7 +205,14 @@ pub(super) fn draw_ledger(
 }
 
 /// Subhead and its rule, then the rows.
-fn subhead(title: &str, hint: &str, rect: Rect, y: f32, painter: &Painter, m: &Metrics) {
+pub(in crate::render) fn subhead(
+    title: &str,
+    hint: &str,
+    rect: Rect,
+    y: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let base = y + m.line_height * 0.7;
     painter.ui_bold(title, rect.x, base, m.small(), hud::palette::PANE_TITLE);
     if !hint.is_empty() {
@@ -280,6 +287,7 @@ fn draw_section(
                     label,
                     value,
                     value_color: hud::palette::BODY,
+                    tail: None,
                     rank: None,
                     reserve,
                 };
@@ -290,6 +298,7 @@ fn draw_section(
                     label,
                     value,
                     value_color: hud::palette::ATTENTION,
+                    tail: None,
                     rank: None,
                     reserve,
                 };
@@ -301,6 +310,7 @@ fn draw_section(
                     label,
                     value,
                     value_color: hud::palette::BODY,
+                    tail: None,
                     rank,
                     reserve,
                 };
@@ -330,6 +340,9 @@ struct Pair<'a> {
     label: &'a str,
     value: &'a str,
     value_color: Color,
+    /// The colour of everything from ` = ` on, for a score row's
+    /// `count = points`. `None` draws the value in one colour.
+    tail: Option<Color>,
     rank: Option<feral_processes_engine::RankRow>,
     /// The section holds a compare cell, so values line up whether or not
     /// this row has one.
@@ -356,22 +369,23 @@ fn draw_pair(pair: &Pair, rect: Rect, base: f32, painter: &Painter, m: &Metrics)
         } else {
             rect.x + rect.w
         };
-        let value = f.value();
-        painter.ui(
-            &value,
+        put_value(
+            pair,
+            &f.value(),
             right - f.value_w,
             at(f.label_lines.len() - 1),
-            m.font_size,
-            pair.value_color,
+            painter,
+            m,
         );
     } else {
         for (i, line) in f.value_lines.iter().enumerate() {
-            painter.ui(
+            put_value(
+                pair,
                 line,
                 rect.x + indent,
                 at(f.label_lines.len() + i),
-                m.font_size,
-                pair.value_color,
+                painter,
+                m,
             );
         }
     }
@@ -379,6 +393,71 @@ fn draw_pair(pair: &Pair, rect: Rect, base: f32, painter: &Painter, m: &Metrics)
         draw_compare(rank, rect.x + rect.w - compare_w, base, painter, m);
     }
     f.lines()
+}
+
+/// One line of a value, split at ` = ` into two colours when the pair has a
+/// `tail`.
+fn put_value(pair: &Pair, line: &str, x: f32, base: f32, painter: &Painter, m: &Metrics) {
+    match (pair.tail, line.split_once(" = ")) {
+        (Some(tail), Some((count, points))) => {
+            let points = format!(" = {points}");
+            painter.ui_runs(
+                &[
+                    TextRun {
+                        text: count,
+                        bold: false,
+                        color: pair.value_color,
+                    },
+                    TextRun {
+                        text: &points,
+                        bold: false,
+                        color: tail,
+                    },
+                ],
+                x,
+                base,
+                m.font_size,
+            );
+        }
+        _ => painter.ui(line, x, base, m.font_size, pair.value_color),
+    }
+}
+
+/// A titled run of plain label/value rows with no compare cell, for the
+/// faces that are not the STATS ledger. `tail_color` colours what follows
+/// ` = ` in a value.
+pub(in crate::render) fn draw_pairs(
+    title: &str,
+    rows: &[(&str, String)],
+    tail_color: Option<Color>,
+    rect: Rect,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    subhead(title, "", rect, rect.y, painter, m);
+    let mut top = rect.y + m.line_height;
+    for (label, value) in rows {
+        let pair = Pair {
+            label,
+            value,
+            value_color: hud::palette::BODY,
+            tail: tail_color,
+            rank: None,
+            reserve: false,
+        };
+        let lines = draw_pair(&pair, rect, top + section_row_h(m) * 0.85, painter, m);
+        top += section_row_h(m) * lines as f32;
+    }
+}
+
+/// The ruler's lit and unlit cells: `lit` of `PIPS` pips, `▮` each. The
+/// roster compare cell and the SOCIAL opinion ruler are both this.
+pub(in crate::render) fn pip_cells(lit: usize) -> (String, String) {
+    let lit = lit.min(PIPS);
+    (
+        PIP.to_string().repeat(lit),
+        PIP.to_string().repeat(PIPS - lit),
+    )
 }
 
 /// Five pips (`▮` in `hud-body` over `hud-bar-trough`) and the ordinal.
@@ -389,9 +468,7 @@ fn draw_compare(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let lit = usize::from(rank.pips).min(PIPS);
-    let filled = PIP.to_string().repeat(lit);
-    let empty = PIP.to_string().repeat(PIPS - lit);
+    let (filled, empty) = pip_cells(usize::from(rank.pips));
     let ordinal = format!(" {}", ordinal(rank.place));
     let char_w = painter.measure_ui_advance("M", m.font_size);
     painter.ui_runs(
@@ -424,6 +501,7 @@ pub(super) fn draw_bands(rect: Rect, band: &Band, char_w: f32, painter: &Painter
     let top = rect.y + m.line_height;
     match band {
         Band::Party(rows) => draw_party(rows, rect, top, char_w, painter, m),
+        Band::Total(rows) => draw_total(rows, rect, top, char_w, painter, m),
         Band::Lately(rows) => {
             let split = lately_split(painter, rows, rect.w, char_w, m);
             for (i, row) in rows.iter().enumerate() {
@@ -445,6 +523,45 @@ pub(super) fn draw_bands(rect: Rect, band: &Band, char_w: f32, painter: &Painter
                     );
                 }
             }
+        }
+    }
+}
+
+/// SCORE's closing lines, values beside their labels as LATELY's are. The
+/// last row is the run score and the one number the page is for.
+fn draw_total(
+    rows: &[SectionRow],
+    rect: Rect,
+    top: f32,
+    char_w: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let split = lately_split(painter, rows, rect.w, char_w, m);
+    for (i, row) in rows.iter().enumerate() {
+        let SectionRow::Stat(label, value) = row else {
+            continue;
+        };
+        let base = top + section_row_h(m) * (i as f32 + 0.85);
+        let last = i + 1 == rows.len();
+        painter.ui(
+            elided_to_fit(painter, label, m.font_size, split - char_w),
+            rect.x,
+            base,
+            m.font_size,
+            hud::palette::FIELD_LABEL,
+        );
+        let value = elided_to_fit(painter, value, m.font_size, rect.w - split);
+        if last {
+            painter.ui_bold(
+                value,
+                rect.x + split,
+                base,
+                m.font_size,
+                hud::palette::EMPHASIS,
+            );
+        } else {
+            painter.ui(value, rect.x + split, base, m.font_size, hud::palette::BODY);
         }
     }
 }

@@ -404,7 +404,6 @@ const LEDGER_COLUMNS: usize = 3;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::render) enum Face {
     Stats,
-    #[cfg_attr(not(test), expect(dead_code, reason = "Phase 5's faces"))]
     Other,
 }
 
@@ -451,6 +450,13 @@ pub(in crate::render) struct ManifestLayout {
 }
 
 impl ManifestLayout {
+    /// The ledger's three columns as one rectangle, for the faces that lay
+    /// their body out by their own rule.
+    pub(in crate::render) fn body(&self) -> Rect {
+        let [first, _, last] = &self.ledger;
+        Rect::new(first.x, first.y, last.x + last.w - first.x, first.h)
+    }
+
     /// `rail_rows` is how many rows the rail would draw (subjects plus the
     /// party rule); zero means a wild subject and no rail. `band_rows` is the
     /// bands' row count under their one subhead; zero means no bands.

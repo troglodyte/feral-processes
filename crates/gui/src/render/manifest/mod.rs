@@ -2,9 +2,11 @@
 //! or a wild one.
 
 mod band;
+mod chrome;
 mod keybar;
 pub(super) mod layout;
 mod ledger;
+mod other;
 mod rail;
 mod sections;
 mod stats;
@@ -22,6 +24,7 @@ use feral_processes_engine::{
     ProgramManifest,
 };
 use layout::*;
+pub(in crate::render) use ledger::draw_pairs;
 use sections::*;
 
 /// How big the header glyph is drawn, relative to the UI title size — enough
@@ -96,7 +99,12 @@ pub(super) fn draw_manifest(
     let social = game.social(view.entity);
     let own = matches!(view.subject, ManifestSubject::Player(_));
     let sections = match (&social, nav.tab) {
-        _ if own && nav.tab == ManifestTab::Score => score::manifest_sections(&game.score_card()),
+        _ if own && nav.tab == ManifestTab::Score => {
+            let body = other::Body::Score(score::page(&game.score_card()));
+            let face = other::OtherFace::gather(game, view, &nav, false, body);
+            other::draw_other(&face, painter, m);
+            return;
+        }
         (Some(s), ManifestTab::Social) => social_sections(s),
         (Some(_), ManifestTab::Talk) => {
             let exchanges = game.conversations(view.entity).unwrap_or_default();
@@ -1084,12 +1092,14 @@ mod tests {
         });
     }
 
-    /// A `StatsFace` around `view` without a `Game`: a roster of `subjects`
-    /// rows with the view's subject first, every ranked stat placed, and the
-    /// builders' real output for the rest.
-    fn stats_face(game: &Game, view: ManifestView, subjects: usize) -> stats::StatsFace {
-        use feral_processes_engine::{CallToAct, RankRow, RosterRow, SubjectRanks};
-        let roster: Vec<RosterRow> = (0..subjects)
+    /// A roster of `subjects` rows with the view's subject first, every name
+    /// at the width the rail has to cut.
+    pub(super) fn census_roster(
+        view: &ManifestView,
+        subjects: usize,
+    ) -> Vec<feral_processes_engine::RosterRow> {
+        use feral_processes_engine::{CallToAct, RosterRow};
+        (0..subjects)
             .map(|i| RosterRow {
                 entity: if i == 0 {
                     view.entity
@@ -1103,7 +1113,57 @@ mod tests {
                 in_party: i < 3,
                 needs_you: (i % 2 == 0).then_some(CallToAct::Idle),
             })
+            .collect()
+    }
+
+    /// Every piece of ink lies inside `frame`, and no two pieces of text
+    /// overlap: what catches a label running into its value, a column
+    /// spilling into the next, or a tag line running under the call to act,
+    /// none of which a per-row measurement of the same strings can see,
+    /// because it is the *placement* that collides. Returns what was drawn.
+    pub(super) fn assert_in_frame_and_clear(
+        who: &str,
+        (w, h): (f32, f32),
+        frame: Rect,
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+    ) -> String {
+        let boxes = crate::paint::painted_text_boxes(shapes);
+        let drawn: String = boxes.iter().map(|(_, t, _)| t.as_str()).collect();
+        for (_, text, b) in &boxes {
+            assert!(
+                b.x >= frame.x - 1.0
+                    && b.y >= frame.y - 1.0
+                    && b.x + b.w <= frame.x + frame.w + 1.0
+                    && b.y + b.h <= frame.y + frame.h + 1.0,
+                "{who} at {w}x{h}: {text:?} at {b:?} leaves the frame {frame:?}"
+            );
+        }
+        // A run of `█` is a meter, and a block glyph's ink is taller than the
+        // row it sits in at the larger fonts: the PARTY table's bars touch by
+        // design, like the bars they are.
+        let boxes: Vec<_> = boxes
+            .into_iter()
+            .filter(|(_, text, _)| !text.chars().all(|c| c == '█'))
             .collect();
+        for (i, (_, a_text, a)) in boxes.iter().enumerate() {
+            for (_, b_text, b) in &boxes[i + 1..] {
+                let overlap_w = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
+                let overlap_h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
+                assert!(
+                    overlap_w <= 1.0 || overlap_h <= 1.0,
+                    "{who} at {w}x{h}: {a_text:?} and {b_text:?} overlap ({a:?} {b:?})"
+                );
+            }
+        }
+        drawn
+    }
+
+    /// A `StatsFace` around `view` without a `Game`: a roster of `subjects`
+    /// rows with the view's subject first, every ranked stat placed, and the
+    /// builders' real output for the rest.
+    fn stats_face(game: &Game, view: ManifestView, subjects: usize) -> stats::StatsFace {
+        use feral_processes_engine::{CallToAct, RankRow, SubjectRanks};
+        let roster = census_roster(&view, subjects);
         let rank = |stat| RankRow {
             stat,
             place: 17,
@@ -1222,39 +1282,64 @@ mod tests {
             let frame = frame_rect(w, h);
             for (who, face) in fullest_faces(&game) {
                 let (_, shapes) = with_painter(|p| stats::paint_stats(frame, &face, p, &m));
-                let boxes = crate::paint::painted_text_boxes(&shapes);
-                let drawn: String = boxes.iter().map(|(_, t, _)| t.as_str()).collect();
+                let drawn = assert_in_frame_and_clear(who, (w, h), frame, &shapes);
                 for part in ["FIGHT", "Esc", "INTEG", "Tab"] {
                     assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
                 }
-                for (_, text, b) in &boxes {
-                    assert!(
-                        b.x >= frame.x - 1.0
-                            && b.y >= frame.y - 1.0
-                            && b.x + b.w <= frame.x + frame.w + 1.0
-                            && b.y + b.h <= frame.y + frame.h + 1.0,
-                        "{who} at {w}x{h}: {text:?} at {b:?} leaves the frame {frame:?}"
-                    );
-                }
-                // A run of `█` is a meter, and a block glyph's ink is taller
-                // than the row it sits in at the larger fonts: the PARTY
-                // table's bars touch by design, like the bars they are.
-                let boxes: Vec<_> = boxes
-                    .into_iter()
-                    .filter(|(_, text, _)| !text.chars().all(|c| c == '█'))
-                    .collect();
-                for (i, (_, a_text, a)) in boxes.iter().enumerate() {
-                    for (_, b_text, b) in &boxes[i + 1..] {
-                        let overlap_w = (a.x + a.w).min(b.x + b.w) - a.x.max(b.x);
-                        let overlap_h = (a.y + a.h).min(b.y + b.h) - a.y.max(b.y);
-                        assert!(
-                            overlap_w <= 1.0 || overlap_h <= 1.0,
-                            "{who} at {w}x{h}: {a_text:?} and {b_text:?} overlap ({a:?} {b:?})"
-                        );
-                    }
-                }
             }
         }
+    }
+
+    /// An `OtherFace` around `view` and `body` without a `Game`: the widest
+    /// roster and the fullest keybar, so the chrome is at its worst.
+    fn other_face(view: ManifestView, body: other::Body) -> other::OtherFace {
+        let faces = stats::faces_of(
+            matches!(view.subject, ManifestSubject::Player(_)),
+            matches!(view.subject, ManifestSubject::Program(_)),
+        );
+        other::OtherFace {
+            roster: census_roster(&view, 40),
+            tags: header_tags(&view, true),
+            keys: keybar::KeybarState {
+                cyclable: true,
+                faces: !faces.is_empty(),
+                remembers: true,
+                watchable: true,
+                level_up: Some(false),
+                points: true,
+            },
+            faces,
+            view,
+            body,
+        }
+    }
+
+    /// Paints `face` at every census window and holds it to the frame and to
+    /// overlap, then to having drawn each of `parts`.
+    fn assert_face_fits(who: &str, face: &other::OtherFace, parts: &[&str]) {
+        for (w, h) in CENSUS_WINDOWS {
+            let m = ui_metrics(h);
+            let frame = frame_rect(w, h);
+            let (_, shapes) = with_painter(|p| other::paint_other(frame, face, p, &m));
+            let drawn = assert_in_frame_and_clear(who, (w, h), frame, &shapes);
+            for part in parts.iter().chain(&["Esc", "Tab"]) {
+                assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_score_face_stays_in_its_frame_and_overlaps_nothing() {
+        let card = crate::render::score::tests::widest_card();
+        let face = other_face(
+            player_view(plain_player()),
+            other::Body::Score(score::page(&card)),
+        );
+        assert_face_fits(
+            "score",
+            &face,
+            &["THE FIGHT", "THE RUN", "TOTAL", "Run score"],
+        );
     }
 
     /// The LATELY band puts each value just past the widest label, and the

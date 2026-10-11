@@ -23,11 +23,26 @@ pub(super) struct BandHead<'a> {
     pub(super) boss: bool,
     pub(super) rarity: Rarity,
     pub(super) tags: &'a [String],
-    /// The faces the subject has, and which is open. Empty for a wild
-    /// program, which has only STATS.
-    pub(super) faces: &'a [&'static str],
-    pub(super) open_face: usize,
+    pub(super) tabs: Tabs<'a>,
     pub(super) call: Option<CallToAct>,
+}
+
+/// What holds the right end of line 1.
+#[derive(Clone, Copy)]
+pub(super) enum Tabs<'a> {
+    /// A wild program, which has only STATS.
+    None,
+    /// The faces the subject has, and which is open.
+    Faces(&'a [&'static str], usize),
+}
+
+impl Tabs<'_> {
+    fn pieces(&self) -> Vec<Piece> {
+        match self {
+            Tabs::None => Vec::new(),
+            Tabs::Faces(faces, open) => face_tab_pieces(faces, *open),
+        }
+    }
 }
 
 /// The call to act as the band words it: the count, then the key that acts.
@@ -92,8 +107,8 @@ pub(super) fn draw_band(rect: Rect, head: &BandHead, painter: &Painter, m: &Metr
     let line2 = line1 + m.line_height;
 
     // The tabs hold the right end of line 1, so the name yields to them.
-    let tabs = face_tab_pieces(head.faces, head.open_face);
-    let tabs_w = if head.faces.is_empty() {
+    let tabs = head.tabs.pieces();
+    let tabs_w = if tabs.is_empty() {
         0.0
     } else {
         let w = advance(painter, &tabs, m.small());

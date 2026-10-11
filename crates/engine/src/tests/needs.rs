@@ -423,6 +423,10 @@ fn off_shift_survives_a_save_and_load() {
 use crate::base_grid::BaseGrid;
 use crate::resources::GameClock;
 
+/// Far enough past the opening pocket's edge that a wall reverted along it
+/// leaves no floor to walk round the end of.
+const SEAL_REACH: i32 = crate::tuning::STARTING_POCKET_RADIUS + 2;
+
 /// Winds the clock rather than ticking it: a thousand ticks run every
 /// background system, and what these tests are about is the drift beat.
 fn set_tick(game: &mut Game, tick: u64) {
@@ -610,8 +614,8 @@ fn an_unreachable_amenity_gives_the_errand_up_once_and_stays_given_up() {
     // and the rock between it and the body is what refuses the walk.
     {
         let mut grid = game.world.resource_mut::<BaseGrid>();
-        for y in -6..=6 {
-            for x in -6..=6 {
+        for y in -SEAL_REACH..=SEAL_REACH {
+            for x in -SEAL_REACH..=SEAL_REACH {
                 if x >= site.x - 1 {
                     continue;
                 }
@@ -841,7 +845,7 @@ fn an_unreachable_amenity_says_something_different_from_no_amenity() {
     let site = *game.world.get::<Position>(bay).unwrap();
     {
         let mut grid = game.world.resource_mut::<BaseGrid>();
-        for y in -6..=6 {
+        for y in -SEAL_REACH..=SEAL_REACH {
             grid.revert(site.x - 2, y);
         }
         grid.lay_floor(site.x - 1, site.y);

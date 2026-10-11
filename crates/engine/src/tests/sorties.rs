@@ -1648,9 +1648,10 @@ fn a_walk_bends_around_solid_rock() {
     let member = staff[0];
     // A corridor east out of the pocket and then north, ending at a cell
     // whose straight line back to the door crosses unmined rock.
-    let corridor: Vec<(i32, i32)> = (3..=8)
-        .map(|x| (x, 3))
-        .chain((-2..3).map(|y| (8, y)))
+    let r = crate::tuning::STARTING_POCKET_RADIUS;
+    let corridor: Vec<(i32, i32)> = (r - 1..=r + 4)
+        .map(|x| (x, r - 1))
+        .chain((2 - r..r - 1).map(|y| (r + 4, y)))
         .collect();
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
@@ -1658,7 +1659,7 @@ fn a_walk_bends_around_solid_rock() {
             grid.lay_floor(x, y);
         }
     }
-    let end = (8, -2);
+    let end = (r + 4, 2 - r);
     game.world
         .entity_mut(member)
         .insert(Position { x: end.0, y: end.1 });

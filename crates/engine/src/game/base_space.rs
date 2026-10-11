@@ -212,8 +212,7 @@ impl Game {
     /// from — deploying the first Home — and it is a one-for-one
     /// replacement for it, which is what keeps the opening playing as it
     /// did. The shape is the slab's, `PLATFORM_CORNER_CUT` and all, so the
-    /// base still reads as rounded rather than as a stamped square and the
-    /// buildable cell count is unchanged.
+    /// base still reads as rounded rather than as a stamped square.
     ///
     /// **It writes no `WorldMap` tile.** That is the point of the whole
     /// relocation: `Biome::Platform` stops being stamped into the zone

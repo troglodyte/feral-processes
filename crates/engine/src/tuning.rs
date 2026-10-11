@@ -2880,16 +2880,10 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// The radius the base starts at — a 9x9 pocket of ~69 buildable tiles,
-/// halved from the 15x15 it was until the Heap Pillar shipped and never
-/// grown by anything today: `Game::build_radius` and the Heap Pillar's
-/// `build_radius_bonus` that widened it both retired with
-/// `resources::Platform`, and nothing has replaced "how wide is a base" as
-/// a *derived* question yet — `Game::lay_starting_pocket` is the only
-/// reader, and it just lays this much floor once. The opening base is
-/// deliberately cramped — growth is the feature, and a base that starts at
-/// its final size can never read as a settlement that grew; slice 2's
-/// mining is what makes it grow again.
+/// The radius the surface slab had, a 9x9 box, before the base moved into
+/// its own pocket dimension. `STARTING_POCKET_RADIUS` sizes the base now;
+/// this survives only as surface geometry around the anchor, which the
+/// Stack's link placement keeps clear of.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
 /// Tiles of surface sight a character at baseline attributes has. Slightly
@@ -2907,19 +2901,15 @@ pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 /// `BaseCell::Floor` over the chamfered box this radius and
 /// `PLATFORM_CORNER_CUT` describe and writes nothing into `WorldMap` at all.
 ///
-/// **Deliberately equal to `MAX_BUILD_DISTANCE_FROM_HOME` above, and
-/// deliberately not defined as it.** The opening base has to play exactly as
-/// it did when it was a slab stamped onto the zone surface — that is the
-/// whole claim of the relocation, and the same 69 buildable cells is what
-/// makes it checkable. But the slab constant belonged to `resources::Platform`,
-/// which is deleted now, and a pocket that followed it by reference would
-/// have gone wherever that deletion left it rather than staying where it was
-/// measured.
+/// 9 gives a 19-cell-wide pocket, double the 9 it opened at when it matched
+/// `MAX_BUILD_DISTANCE_FROM_HOME`'s old slab: at 9 wide the beginner
+/// structures did not all fit, and digging out room for the first handful
+/// was a chore rather than growth.
 ///
 /// This is the *starting* size, the way the old constant was the starting
 /// radius: slice 2's mining is what makes floor space something a player
 /// buys, and this is only the ground the run opens with.
-pub const STARTING_POCKET_RADIUS: i32 = 4;
+pub const STARTING_POCKET_RADIUS: i32 = 9;
 
 /// The widest a base was ever meant to get, from when it was a slab stamped
 /// onto the zone surface: `Game::build_radius` clamped here no matter how

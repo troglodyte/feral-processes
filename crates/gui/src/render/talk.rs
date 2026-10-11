@@ -62,11 +62,12 @@ fn exchange_rows(
 
 fn conversations_section(rows: Vec<SectionRow>) -> Section {
     Section {
-        title: "CONVERSATIONS",
+        title: "CONVERSATIONS".into(),
+        column: None,
         rows,
         full_width: true,
         overflow: 0,
-        hint: "",
+        hint: String::new(),
     }
 }
 
@@ -216,6 +217,7 @@ mod tests {
             .map(|r| match r {
                 SectionRow::Note(t) => t.clone(),
                 SectionRow::Stat(a, b) => format!("{a} {b}"),
+                other => unreachable!("the talk face builds no {other:?}"),
             })
             .collect()
     }

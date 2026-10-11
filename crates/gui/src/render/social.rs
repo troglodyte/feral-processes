@@ -47,21 +47,23 @@ pub(super) fn social_sections(view: &SocialView) -> Vec<Section> {
     };
     vec![
         Section {
-            title: "RELATIONSHIPS",
+            title: "RELATIONSHIPS".into(),
+            column: None,
             rows: relationships,
             full_width: true,
             overflow: 0,
-            hint: "",
+            hint: String::new(),
         },
         Section {
-            title: "KNOWN FOR",
+            title: "KNOWN FOR".into(),
+            column: None,
             rows: vec![
                 SectionRow::Stat(SOCIABILITY_LABEL.to_string(), view.sociability.to_string()),
                 SectionRow::Note(known_for),
             ],
             full_width: true,
             overflow: 0,
-            hint: "",
+            hint: String::new(),
         },
     ]
 }

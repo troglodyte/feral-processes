@@ -74,12 +74,13 @@ pub(super) fn manifest_sections(card: &ScoreCard) -> Vec<Section> {
             .map(|l| SectionRow::Stat(l.label.to_string(), l.value()))
             .collect()
     };
-    let boxed = |title, rows| Section {
-        title,
+    let boxed = |title: &str, rows| Section {
+        title: title.into(),
+        column: None,
         rows,
         full_width: false,
         overflow: 0,
-        hint: "",
+        hint: String::new(),
     };
     vec![
         boxed("THE FIGHT", rows(0..FIRST_BOX_LINES)),
@@ -142,6 +143,7 @@ pub(super) mod tests {
             .map(|r| match r {
                 SectionRow::Stat(l, v) => format!("{l}: {v}"),
                 SectionRow::Note(n) => n.clone(),
+                other => unreachable!("the score card builds no {other:?}"),
             })
             .collect();
         let from_popup: Vec<String> = display_lines(&card)

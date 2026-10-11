@@ -1,6 +1,10 @@
 //! The manifest — one read-only stat sheet for the player, a program you own,
 //! or a wild one.
 
+// Lifted in the commit that draws the ledger: until then the builders and
+// their geometry are exercised by tests alone.
+#![cfg_attr(not(test), expect(dead_code))]
+
 pub(super) mod layout;
 mod sections;
 
@@ -341,14 +345,14 @@ fn draw_header(
 fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
     painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
     painter.ui(
-        section.title,
+        &section.title,
         rect.x + m.inset,
         rect.y + m.line_height,
         m.small(),
         CYAN,
     );
     if section.overflow > 0 {
-        let title_w = painter.measure_ui_advance(section.title, m.small());
+        let title_w = painter.measure_ui_advance(&section.title, m.small());
         painter.ui(
             format!(" +{}", section.overflow),
             rect.x + m.inset + title_w,
@@ -358,9 +362,9 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
         );
     }
     if !section.hint.is_empty() {
-        let hint_w = painter.measure_ui_advance(section.hint, m.small());
+        let hint_w = painter.measure_ui_advance(&section.hint, m.small());
         painter.ui(
-            section.hint,
+            &section.hint,
             rect.x + rect.w - m.inset - hint_w,
             rect.y + m.line_height,
             m.small(),
@@ -371,7 +375,9 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
     for row in &section.rows {
         cy += section_row_h(m);
         match row {
-            SectionRow::Stat(label, value) => {
+            SectionRow::Stat(label, value)
+            | SectionRow::Ranked(label, value, _)
+            | SectionRow::Alert(label, value) => {
                 let fitted = fitted_stat_row(painter, label, value, rect, m);
                 painter.ui(&fitted.label, rect.x + m.inset, cy, fitted.size, TEXT_DIM);
                 painter.ui(
@@ -382,7 +388,7 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
                     TEXT,
                 );
             }
-            SectionRow::Note(text) => {
+            SectionRow::Note(text) | SectionRow::Callout(text) => {
                 painter.ui(text, rect.x + m.inset, cy, m.font_size, TEXT);
             }
         }
@@ -529,7 +535,7 @@ mod tests {
     use crate::paint::with_painter;
     use crate::render::manifest::layout::manifest_layout;
     use crate::text::ui_metrics;
-    use feral_processes_engine::ProgramPoints;
+    use feral_processes_engine::{ProgramPoints, RankedStat};
 
     /// A `ProgramManifest` for a species that declares no *box-level*
     /// optionals (no POTENTIAL, no AFFINITIES), so the only boxes
@@ -650,8 +656,10 @@ mod tests {
                 .rows
                 .iter()
                 .filter_map(|r| match r {
-                    SectionRow::Stat(label, _) => Some(label.clone()),
-                    SectionRow::Note(_) => None,
+                    SectionRow::Stat(label, _) | SectionRow::Ranked(label, _, _) => {
+                        Some(label.clone())
+                    }
+                    _ => None,
                 })
                 .collect()
         };
@@ -673,10 +681,14 @@ mod tests {
         );
         assert_eq!(
             species.len(),
-            5,
-            "a non-boss species with a work_resource is SPECIES' real worst \
-             case (Habitats, Work aptitude, Decompile difficulty, Decompile \
-             chance now, Growth) — it must land below MAX_SECTION_ROWS: {species:?}"
+            4,
+            "a non-boss species is SPECIES' real worst case (Habitats, \
+             Decompile difficulty, Decompile chance now, Growth) — it must \
+             land below MAX_SECTION_ROWS: {species:?}"
+        );
+        assert!(
+            work.iter().any(|l| l == "Work aptitude"),
+            "Work aptitude is ranked among programs, so it sits in WORK: {work:?}"
         );
         assert!(
             species.len() < MAX_SECTION_ROWS,
@@ -1005,7 +1017,7 @@ mod tests {
             let sections = sections_for(game, &view);
             let l = manifest_layout(w, h, meters, &sections, &m);
             for (rect, s) in l.sections.iter().zip(&sections) {
-                if s.title == "EQUIPMENT" {
+                if s.title == "GEAR" {
                     out.push((who, *rect));
                 }
             }
@@ -1022,50 +1034,6 @@ mod tests {
             assets,
         )
         .expect("shipped assets load")
-    }
-
-    /// **Nothing on this sheet clips horizontally.** `draw_section` draws a
-    /// stat row as two plain strings — the label from the box's left inset,
-    /// the value flushed to its right one — so a row wider than its box used
-    /// to draw over the neighbouring column or off the window entirely, in
-    /// silence.
-    ///
-    /// Measured against the box `manifest_layout` really gives EQUIPMENT, on
-    /// both pages, at every window in `CENSUS_WINDOWS`. It is the widest row
-    /// on the sheet by a distance and the only one that has ever needed
-    /// cutting, which is why the census names it rather than every box.
-    #[test]
-    fn no_equipment_row_overflows_its_box() {
-        let game = census_game();
-        let (slot, _, _) = worst_equipment_row(&game);
-        let SectionRow::Stat(label, value) = equip_row(&slot) else {
-            panic!("an equipment row is a stat row");
-        };
-
-        with_painter(|p| {
-            for (w, h) in CENSUS_WINDOWS {
-                let m = ui_metrics(h);
-                for (who, rect) in equipment_rects(&game, w, h) {
-                    let row = fitted_stat_row(p, &label, &value, rect, &m);
-                    let label_end = rect.x + m.inset + p.measure_ui_advance(&row.label, row.size);
-                    let value_start = rect.x + rect.w - m.inset - row.value_w;
-                    assert!(
-                        label_end <= value_start,
-                        "the widest EQUIPMENT row's halves collide by {:.0}px on the {who} \
-                         page at {w}x{h}:\n{}\n{}",
-                        label_end - value_start,
-                        row.label,
-                        row.value
-                    );
-                    assert!(
-                        value_start >= rect.x + m.inset,
-                        "the widest EQUIPMENT row's value escapes its box on the {who} page \
-                         at {w}x{h}:\n{}",
-                        row.value
-                    );
-                }
-            }
-        });
     }
 
     /// The box `manifest_layout` really gives `title` on a program's page at
@@ -1171,68 +1139,6 @@ mod tests {
         });
     }
 
-    /// The MEMORIES box's rows are as wide as a memory def's name plus the
-    /// subject it names, both authored and joined by `mood_rows` — so the
-    /// census is `assets/memories/` crossed with the widest subject
-    /// `Game::subject_name` can render into one.
-    ///
-    /// **"Drawn whole", for `no_move_row_is_cut_to_fit_its_column`'s reason** —
-    /// read that one for why containment is not the property here. A subject
-    /// is the half of this row a player scans the column for, so a cut costs
-    /// exactly the thing the row exists to say.
-    #[test]
-    fn no_memories_row_is_cut_to_fit_its_column() {
-        let game = census_game();
-        // The widest thing `Game::subject_name` can put after a def's name:
-        // a species or structure name out of the shipped catalogues, or the
-        // base-tile phrase, whichever measures longest.
-        let mut subjects: Vec<String> = game
-            .species_defs()
-            .into_iter()
-            .map(|d| d.name.clone())
-            .chain(game.structure_defs().into_iter().map(|d| d.name.clone()))
-            .collect();
-        subjects.push("the base at (-128, -128)".to_string());
-        let widest_subject = subjects
-            .iter()
-            .max_by_key(|s| s.chars().count())
-            .expect("the shipped catalogues are not empty")
-            .clone();
-
-        let rows: Vec<MemoryRow> = game
-            .memory_defs()
-            .into_iter()
-            .map(|def| memory(&def.name, Some(&widest_subject), -99.0))
-            .collect();
-        assert!(!rows.is_empty(), "the shipped catalogue has memories");
-
-        with_painter(|p| {
-            for (w, h) in CENSUS_WINDOWS {
-                let m = ui_metrics(h);
-                for entry in &rows {
-                    let program = worst_case_owned(Vec::new(), vec![entry.clone(), entry.clone()]);
-                    let rect = program_box_rect(&game, program, "MEMORIES", w, h)
-                        .expect("an owned program draws a MEMORIES box");
-                    for row in mood_rows(&ManifestMood {
-                        sum: -99.0,
-                        band: morale_band(-99.0),
-                        memories: vec![entry.clone(), entry.clone()],
-                    }) {
-                        let SectionRow::Stat(label, value) = row else {
-                            panic!("a memories row is a stat row");
-                        };
-                        let fitted = fitted_stat_row(p, &label, &value, rect, &m);
-                        assert_eq!(
-                            (fitted.label.as_str(), fitted.value.as_str()),
-                            (label.as_str(), value.as_str()),
-                            "a MEMORIES row is cut to fit its column at {w}x{h}"
-                        );
-                    }
-                }
-            }
-        });
-    }
-
     /// **The box is gated on the store, not on ownership.** A wild program
     /// has no `Memories` component, so `Game::manifest` hands the renderer
     /// `None` and the box is absent — which is also what an install with
@@ -1241,23 +1147,17 @@ mod tests {
     /// Those two states must not collapse into one, or deleting the
     /// catalogue would silently take a box off every roster page.
     #[test]
-    fn the_memories_box_follows_the_store_and_not_the_catalogue() {
-        let game = census_game();
-
+    fn the_lately_band_follows_the_store_and_not_the_catalogue() {
         let wild = program_view(plain_program(6, 6), Vec::new());
-        let titles: Vec<&str> = sections_for(&game, &wild).iter().map(|s| s.title).collect();
         assert!(
-            !titles.contains(&"MEMORIES"),
-            "a wild program has no store and so no box: {titles:?}"
+            band_for(&wild, &[]).is_none(),
+            "a wild program has no store and so no LATELY band"
         );
 
         let empty = program_view(owned_program(Vec::new()), Vec::new());
-        let sections = sections_for(&game, &empty);
-        let box_rows = sections
-            .iter()
-            .find(|s| s.title == "MEMORIES")
-            .map(|s| s.rows.clone())
-            .expect("an owned program with an empty catalogue keeps its box");
+        let Some(Band::Lately(box_rows)) = band_for(&empty, &[]) else {
+            panic!("an owned program with an empty catalogue keeps its band");
+        };
         assert_eq!(
             box_rows,
             vec![
@@ -1273,8 +1173,7 @@ mod tests {
     /// column for. Only `MANIFEST_MEMORY_ROWS` of them are drawn, however
     /// many the view carries.
     #[test]
-    fn the_memories_box_names_the_mood_then_the_strongest_few() {
-        let game = census_game();
+    fn the_lately_band_names_the_mood_then_the_strongest_few() {
         let view = program_view(
             owned_program(vec![
                 memory("Mauled by", Some("Husk"), -8.0),
@@ -1283,12 +1182,9 @@ mod tests {
             ]),
             Vec::new(),
         );
-        let sections = sections_for(&game, &view);
-        let rows = sections
-            .iter()
-            .find(|s| s.title == "MEMORIES")
-            .map(|s| s.rows.clone())
-            .expect("an owned program draws the box");
+        let Some(Band::Lately(rows)) = band_for(&view, &[]) else {
+            panic!("an owned program draws the LATELY band");
+        };
 
         assert_eq!(
             rows,
@@ -1300,57 +1196,6 @@ mod tests {
             "the third memory is carried by the view and drawn by neither"
         );
         assert_eq!(rows.len(), 1 + MANIFEST_MEMORY_ROWS);
-    }
-
-    /// **The bug this branch was opened for.** A gear copy's name carries its
-    /// affix at *both* ends — `Game::copy_name` puts a prefix word in front
-    /// of the item name and a suffix phrase behind it — and nothing on this
-    /// sheet clipped, so an overlong row ran off the box and what a player
-    /// lost was always the tail.
-    ///
-    /// Held on **the player's page**, where the EQUIPMENT box is a band with
-    /// the whole frame to draw a name in. A program's is a half-width column
-    /// box and cannot be a band: that page clears its footer by 17.3px
-    /// against a 10px floor, so a second band on it overflows at 1280x720 —
-    /// `the_real_worst_case_pages_fit_the_tightest_window` is what measures
-    /// that. There the widest rows are still cut, and `elided_to_fit` keeping
-    /// both ends is what decides *which* characters go; the containment
-    /// itself is `no_equipment_row_overflows_its_box`.
-    #[test]
-    fn a_dropped_equipment_row_keeps_the_affix_in_its_name() {
-        let game = census_game();
-        let rows = dropped_equipment_rows(&game);
-
-        with_painter(|p| {
-            for (w, h) in CENSUS_WINDOWS {
-                let m = ui_metrics(h);
-                for (who, rect) in equipment_rects(&game, w, h) {
-                    if who != "player" {
-                        continue;
-                    }
-                    for (slot, word) in &rows {
-                        let SectionRow::Stat(label, value) = equip_row(slot) else {
-                            panic!("an equipment row is a stat row");
-                        };
-                        assert!(
-                            label.contains(word),
-                            "the row the engine hands over already has to name it: {label}"
-                        );
-                        let fitted = fitted_stat_row(p, &label, &value, rect, &m);
-                        assert!(
-                            fitted.label.contains(word),
-                            "the affix went missing at {w}x{h}:\n{}\nroom={:.1} label={:.1} \
-                             value={:.1} ({value}) size={}",
-                            fitted.label,
-                            rect.w - m.inset * 2.0,
-                            p.measure_ui_advance(&label, fitted.size),
-                            p.measure_ui_advance(&value, fitted.size),
-                            fitted.size,
-                        );
-                    }
-                }
-            }
-        });
     }
 
     /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
@@ -1409,31 +1254,156 @@ mod tests {
         let view = program_view(program, vec![worn("WEP"), worn("ARM")]);
 
         let sections = sections_for(&game, &view);
-        let shape: Vec<(&str, usize, bool)> = sections
+        let shape: Vec<(&str, Option<LedgerColumn>, usize)> = sections
             .iter()
-            .map(|s| (s.title, s.rows.len(), s.full_width))
+            .map(|s| (s.title.as_str(), s.column, s.rows.len()))
             .collect();
 
+        use LedgerColumn::{Duty, Fight, Growth};
         assert_eq!(
             shape,
             vec![
-                ("COMBAT", 4, false),
-                ("SPECIES", 5, false),
-                ("WORK", 4, false),
-                ("MEMORIES", 3, false),
-                ("DEVELOPMENT", 3, false),
-                ("MOVES", 1, false),
-                ("EQUIPMENT", 2, false),
-                ("ROUTINES", 1, false),
+                ("FIGHT", Some(Fight), 4),
+                ("MOVES", Some(Fight), 1),
+                ("DEVELOPMENT", Some(Growth), 3),
+                ("WORK", Some(Duty), 5),
+                ("SPECIES", Some(Duty), 4),
+                ("GEAR", Some(Fight), 2),
+                ("ROUTINES", Some(Fight), 1),
             ],
-            "sections_for's real emission order — the shape the layout \
-             fixture must mirror: {shape:?}"
+            "the program ledger's columns, in the order they stack: {shape:?}"
         );
     }
 
-    /// MOVES has one row, and a "+N more" note would spend it: a species
-    /// with two moves drew no move at all. The count rides the title so the
-    /// row can name the first move.
+    /// The rows the roster ranks are exactly the spec's: Damage, Attack,
+    /// Mitigation and Power over everyone, Potential and Work aptitude over
+    /// programs. A row tagged by mistake draws a pip ruler beside a number
+    /// the engine never ranked.
+    #[test]
+    fn the_ranked_rows_are_exactly_the_specs_set() {
+        let game = census_game();
+        let ranked = |view: &ManifestView| -> Vec<RankedStat> {
+            sections_for(&game, view)
+                .iter()
+                .flat_map(|s| s.rows.iter())
+                .filter_map(|r| match r {
+                    SectionRow::Ranked(_, _, stat) => Some(*stat),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            ranked(&player_view(plain_player())),
+            vec![
+                RankedStat::Damage,
+                RankedStat::Attack,
+                RankedStat::Mitigation,
+                RankedStat::Power
+            ]
+        );
+        let mut program = owned_program(vec![]);
+        program.potential = Some(feral_processes_engine::ManifestPotential {
+            label: "Fine".to_string(),
+            percent: 50,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
+        });
+        assert_eq!(
+            ranked(&program_view(program, vec![])),
+            vec![
+                RankedStat::Damage,
+                RankedStat::Attack,
+                RankedStat::Mitigation,
+                RankedStat::Power,
+                RankedStat::Potential,
+                RankedStat::WorkAptitude
+            ]
+        );
+    }
+
+    /// PARTY is yourself first, then each companion, with the glyph and level
+    /// the roster already derives — `CompanionInfo` carries neither.
+    #[test]
+    fn the_party_band_lists_you_then_the_companions_off_the_roster() {
+        let companion = Entity::from_raw_u32(7).expect("a valid entity index");
+        let mut player = plain_player();
+        player.party = vec![feral_processes_engine::CompanionInfo {
+            entity: companion,
+            name: "Scrapper".to_string(),
+            hp: 8,
+            max_hp: 10,
+            atk: 4,
+            mitigation: 2,
+            power: 12,
+            ability: "Rally".to_string(),
+            gear: String::new(),
+        }];
+        let roster = vec![feral_processes_engine::RosterRow {
+            entity: companion,
+            name: "Scrapper".to_string(),
+            glyph: 'S',
+            color: GlyphColor::Green,
+            level: 3,
+            in_party: true,
+            needs_you: None,
+        }];
+        let Some(Band::Party(rows)) = band_for(&player_view(player), &roster) else {
+            panic!("a player closes with the PARTY band");
+        };
+        let who: Vec<(&str, char, u32, bool)> = rows
+            .iter()
+            .map(|r| (r.name.as_str(), r.glyph, r.level, r.own))
+            .collect();
+        assert_eq!(
+            who,
+            vec![("You", '@', 6, true), ("Scrapper", 'S', 3, false)]
+        );
+        assert_eq!(rows[1].doing, "Rally");
+    }
+
+    /// The player's ledger: FIGHT, GEAR and ROUTINES; GROWTH, CLASS and
+    /// PERKS; RUN. PARTY is a band under the ledger and not a box.
+    #[test]
+    fn the_player_ledger_columns() {
+        let game = census_game();
+        let mut player = plain_player();
+        player.perks = vec![("Obfuscation".to_string(), 2)];
+        let mut view = player_view(player);
+        view.equipment = vec![worn("WEP")];
+        view.routines = vec![feral_processes_engine::RoutineSlotView {
+            index: 0,
+            ability: None,
+            name: "(empty)".to_string(),
+            description: String::new(),
+            fixed: false,
+            unseen: false,
+        }];
+
+        use LedgerColumn::{Duty, Fight, Growth};
+        let sections = sections_for(&game, &view);
+        let shape: Vec<(&str, Option<LedgerColumn>)> = sections
+            .iter()
+            .map(|s| (s.title.as_str(), s.column))
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                ("FIGHT", Some(Fight)),
+                ("GROWTH", Some(Growth)),
+                ("CLASS · Decompiler", Some(Growth)),
+                ("PERKS", Some(Growth)),
+                ("RUN", Some(Duty)),
+                ("GEAR", Some(Fight)),
+                ("ROUTINES", Some(Fight)),
+            ],
+        );
+    }
+
+    /// MOVES names the first move and points at the dossier for the rest.
     #[test]
     fn a_program_with_more_moves_than_rows_names_the_first_and_counts_the_rest() {
         let game = census_game();
@@ -1451,8 +1421,14 @@ mod tests {
         let sections = sections_for(&game, &view);
         let moves = sections.iter().find(|s| s.title == "MOVES").unwrap();
 
-        assert_eq!(moves.rows, vec![move_row(&mv("Strike"))]);
-        assert_eq!(moves.overflow, 1, "the second move is counted, not lost");
+        assert_eq!(
+            moves.rows,
+            vec![
+                move_row(&mv("Strike")),
+                SectionRow::Note("+1 more on the dossier".to_string())
+            ],
+            "the second move is counted, not lost"
+        );
     }
 
     /// An unseen slot draws the concealment line — never the blanked name,
@@ -1509,9 +1485,12 @@ mod tests {
 
         let sections = sections_for(&game, &program_view(plain_program(14, 12), vec![]));
         assert!(
-            !sections.iter().any(|s| s.title == "EQUIPMENT"),
+            !sections.iter().any(|s| s.title == "GEAR"),
             "an empty loadout emits no box: {:?}",
-            sections.iter().map(|s| s.title).collect::<Vec<_>>()
+            sections
+                .iter()
+                .map(|s| s.title.as_str())
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1634,11 +1613,10 @@ mod tests {
         view.name = "Kestrel".to_string();
         assert_eq!(subject_title(&view), "Kestrel  (Decompiler)");
 
-        let progression = sections_for(&game, &view);
-        assert_eq!(
-            stat_value(titled(&progression, "PROGRESSION"), "Class bonus"),
-            Some("Drain x1.25  Damage x0.85"),
-        );
+        let growth = sections_for(&game, &view);
+        let class = titled(&growth, "CLASS · Decompiler");
+        assert_eq!(stat_value(class, "Drain"), Some("x1.25"));
+        assert_eq!(stat_value(class, "Damage"), Some("x0.85"));
 
         // A classless run — every save from before character creation, and
         // every `Game::new` — heads itself with the name alone and grows
@@ -1649,12 +1627,11 @@ mod tests {
         let mut view = player_view(plain);
         view.name = "You".to_string();
         assert_eq!(subject_title(&view), "You");
-        assert_eq!(
-            stat_value(
-                titled(&sections_for(&game, &view), "PROGRESSION"),
-                "Class bonus"
-            ),
-            None,
+        assert!(
+            sections_for(&game, &view)
+                .iter()
+                .all(|s| !s.title.starts_with("CLASS")),
+            "a classless run grows no CLASS box"
         );
     }
 
@@ -1713,7 +1690,11 @@ mod tests {
 
     fn stat_value<'a>(section: &'a Section, label: &str) -> Option<&'a str> {
         section.rows.iter().find_map(|r| match r {
-            SectionRow::Stat(l, v) if l == label => Some(v.as_str()),
+            SectionRow::Stat(l, v) | SectionRow::Ranked(l, v, _) | SectionRow::Alert(l, v)
+                if l == label =>
+            {
+                Some(v.as_str())
+            }
             _ => None,
         })
     }
@@ -1741,7 +1722,7 @@ mod tests {
         .expect("shipped assets load");
 
         let player = sections_for(&game, &player_view(plain_player()));
-        let combat = titled(&player, "COMBAT");
+        let combat = titled(&player, "FIGHT");
         assert_eq!(stat_value(combat, "Accuracy"), Some("14.0"));
         assert_eq!(
             stat_value(combat, "Evasion"),
@@ -1755,7 +1736,7 @@ mod tests {
         );
 
         let program = sections_for(&game, &program_view(plain_program(14, 12), Vec::new()));
-        let combat = titled(&program, "COMBAT");
+        let combat = titled(&program, "FIGHT");
         assert_eq!(combat.rows.len(), 4);
         assert_eq!(stat_value(combat, "Accuracy"), None);
         assert_eq!(
@@ -1786,70 +1767,9 @@ mod tests {
         );
         assert_eq!(stat_value(run, "Cycle"), Some("4310"));
         assert_eq!(stat_value(run, "Contracts"), Some("2"));
-        assert_eq!(run.rows.len(), 5, "one row under the cap, and no note");
-    }
-
-    /// The player's counterpart to
-    /// `sections_for_emits_moves_before_a_programs_equipment_and_routines`.
-    /// `manifest_layout::tests::worst_case_player` is a hand-written mirror
-    /// of this shape, and a fixture that has drifted from what the renderer
-    /// emits passes the clearance sweep while the real page overflows — the
-    /// exact regression that file exists to catch.
-    #[test]
-    fn the_fullest_player_page_emits_the_boxes_its_layout_fixture_models() {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(
-            23,
-            feral_processes_engine::DifficultyMode::Forgiving,
-            assets,
-        )
-        .expect("shipped assets load");
-
-        let mut player = plain_player();
-        player.perks = vec![("Obfuscation".to_string(), 2)];
-        player.party = vec![feral_processes_engine::CompanionInfo {
-            entity: Entity::PLACEHOLDER,
-            name: "Scrapper".to_string(),
-            hp: 10,
-            max_hp: 10,
-            atk: 4,
-            mitigation: 2,
-            power: 12,
-            ability: "priority_boost".to_string(),
-            gear: String::new(),
-        }];
-        let mut view = player_view(player);
-        view.equipment = vec![worn("WEP")];
-        view.routines = vec![feral_processes_engine::RoutineSlotView {
-            index: 0,
-            ability: None,
-            name: "(empty)".to_string(),
-            description: String::new(),
-            fixed: false,
-            unseen: false,
-        }];
-
-        // `full_width` too, and not just the titles: EQUIPMENT is a band on
-        // this page and a columned box on a program's (see `sections_for`),
-        // so the flag is part of what `worst_case_player` has to mirror — a
-        // fixture that models a band as a column packs a page the renderer
-        // never draws.
-        let shape: Vec<(&str, bool)> = sections_for(&game, &view)
-            .iter()
-            .map(|s| (s.title, s.full_width))
-            .collect();
-        assert_eq!(
-            shape,
-            vec![
-                ("COMBAT", false),
-                ("PROGRESSION", false),
-                ("PERKS", false),
-                ("PARTY", false),
-                ("RUN", false),
-                ("EQUIPMENT", true),
-                ("ROUTINES", false),
-            ],
-        );
+        assert_eq!(stat_value(run, "Cargo carried"), Some("12"));
+        assert_eq!(stat_value(run, "Position"), Some("4, 9"));
+        assert_eq!(run.rows.len(), 7, "one row under the cap, and no note");
     }
 
     /// The footer is the only place `w` is advertised, so it has to be
@@ -2021,7 +1941,7 @@ mod tests {
             "{:?}",
             dev.rows
         );
-        assert_eq!(dev.hint, "[H] hold  [S] spend");
+        assert_eq!(dev.hint, "H hold · S spend");
 
         let mut wild = Vec::new();
         program_sections(&mut wild, &game, &plain_program(6, 6));

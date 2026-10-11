@@ -3,213 +3,293 @@
 
 use super::layout::*;
 use super::*;
+use feral_processes_engine::{RankedStat, RosterRow};
 
 pub(super) fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
     SectionRow::Stat(label.into(), value.into())
 }
 
-/// Builds COMBAT, dispatches to `player_sections` or `program_sections` for
-/// the subject-specific middle, then appends EQUIPMENT and ROUTINES **last**
-/// — after whichever of those two returns, not as one of their own pushes.
-/// That makes this function, not either of them, the one place that knows the
-/// page's *full* section set.
+fn ranked(label: &str, value: String, stat: RankedStat) -> SectionRow {
+    SectionRow::Ranked(label.to_string(), value, stat)
+}
+
+impl Section {
+    /// A ledger box with no hint; `with_hint` adds one.
+    fn ledger(title: impl Into<String>, column: LedgerColumn, rows: Vec<SectionRow>) -> Section {
+        Section {
+            title: title.into(),
+            column: Some(column),
+            rows,
+            full_width: false,
+            overflow: 0,
+            hint: String::new(),
+        }
+    }
+
+    fn with_hint(mut self, hint: impl Into<String>) -> Section {
+        self.hint = hint.into();
+        self
+    }
+}
+
+/// Every box the STATS ledger stacks, in the order they stack within their
+/// column: FIGHT, then the subject-specific boxes from `player_sections` or
+/// `program_sections`, then GEAR and ROUTINES **last** — appended here, not
+/// by either of those, so this function is the one place that knows the
+/// page's full section set (a wearer is a wearer, whoever carries the gear).
 ///
-/// `manifest_layout`'s column packer is an exact 2-partition
-/// (`best_column_split`), not the order-sensitive greedy it used to be, so
-/// the *set* of boxes is what decides whether a page fits — order no
-/// longer changes the tallest column's height. Order still decides which
-/// specific box lands in which column when two partitions tie (see
-/// `best_column_split`'s doc), which is what
-/// `columned_sections_fill_left_then_right` pins. Either way, every
-/// section this function or its callee pushes must have a matching entry
-/// in `manifest_layout::tests::worst_case_program` or `worst_case_player`
-/// — the branch's original regression was a missing box, not a wrong row
-/// count or a wrong order, and a fixture that omits a box passes every
-/// test while the real page still doesn't fit.
+/// The rows that are ranked against the roster carry their `RankedStat`; the
+/// draw step looks the place up in one `SubjectRanks`. Every section a
+/// builder pushes needs a matching assertion in the column census
+/// (`the_player_ledger_columns` / `the_program_ledger_columns`) — the
+/// branch's original regression was a missing box, not a wrong row count.
 pub(super) fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
-    let mut combat = vec![
-        stat("Damage", view.damage.clone()),
-        stat("Attack", view.atk.to_string()),
+    let player = matches!(&view.subject, ManifestSubject::Player(_));
+    let mut fight = vec![
+        ranked("Damage", view.damage.clone(), RankedStat::Damage),
+        ranked("Attack", view.atk.to_string(), RankedStat::Attack),
     ];
-    // The to-hit half of a fight, on the player's page alone. Not a
-    // judgement that a program's odds matter less — the program page's
-    // worst case clears its footer by 17.3px against a 10px floor, so one
-    // more row anywhere on it overflows at 1280x720. `ManifestView` carries
-    // both figures for both subjects precisely so restoring these two rows
-    // there is a layout change and not a data change.
+    // The to-hit half of a fight, on the player's page alone. A program's
+    // odds matter as much; `ManifestView` carries both figures for both
+    // subjects so restoring these two rows there is a layout change and not
+    // a data change.
     //
     // One decimal because both are halves: `ACCURACY_PER_LEVEL` is 0.5, so
     // a level-1 player reads 11.5 and an integer would quote a number the
     // attack roll does not use.
-    if matches!(&view.subject, ManifestSubject::Player(_)) {
-        combat.push(stat("Accuracy", format!("{:.1}", view.accuracy)));
-        combat.push(stat("Evasion", format!("{:.1}", view.evasion)));
+    if player {
+        fight.push(stat("Accuracy", format!("{:.1}", view.accuracy)));
+        fight.push(stat("Evasion", format!("{:.1}", view.evasion)));
     }
-    combat.push(stat("Mitigation", format!("{}%", view.mitigation)));
-    combat.push(stat("Power", view.power.to_string()));
-    let mut sections = vec![Section {
-        title: "COMBAT",
-        rows: section_rows(combat),
-        full_width: false,
-        overflow: 0,
-        hint: "",
-    }];
+    fight.push(ranked(
+        "Mitigation",
+        format!("{}%", view.mitigation),
+        RankedStat::Mitigation,
+    ));
+    fight.push(ranked("Power", view.power.to_string(), RankedStat::Power));
+    let mut sections = vec![Section::ledger(
+        "FIGHT",
+        LedgerColumn::Fight,
+        section_rows(fight),
+    )];
     match &view.subject {
-        ManifestSubject::Player(p) => player_sections(&mut sections, p),
+        ManifestSubject::Player(p) => player_sections(&mut sections, view, p),
         ManifestSubject::Program(p) => program_sections(&mut sections, game, p),
     }
-    // Both subjects, appended here rather than pushed by either arm, for the
-    // same reason ROUTINES is: a wearer is a wearer, and one function knows
-    // the page's full section set. It was `player_sections`' third push
-    // until any program the player owns could wear gear.
     if !view.equipment.is_empty() {
-        sections.push(Section {
-            title: "EQUIPMENT",
-            rows: section_rows(view.equipment.iter().map(equip_row).collect()),
-            // **A band on the player's page and a columned box on a
-            // program's**, the same split — and the same argument — as the
-            // to-hit pair above: the player page has the clearance for a band
-            // and the program page has none. A gear row is the widest row on
-            // this sheet by a distance, because `Game::copy_name` spends its
-            // width on a tier word, a prefix affix, a suffix phrase and a
-            // quality figure, and the bonus column is beside it. In a
-            // half-width box the affix at the *end* of that name is the first
-            // thing `fitted_stat_row` has to cut; across the whole frame
-            // nothing a drop can roll needs cutting at all.
-            full_width: matches!(&view.subject, ManifestSubject::Player(_)),
-            overflow: 0,
-            hint: "",
-        });
+        sections.push(Section::ledger(
+            "GEAR",
+            LedgerColumn::Fight,
+            section_rows(view.equipment.iter().map(equip_row).collect()),
+        ));
     }
     if !view.routines.is_empty() {
-        sections.push(Section {
-            title: "ROUTINES",
-            rows: section_rows(
-                view.routines
-                    .iter()
-                    .map(|r| {
-                        // `r.unseen` rather than `r.name.is_empty()`: an
-                        // empty slot's name is "(empty)", never blank, so
-                        // the flag is the only door — reading the string
-                        // instead is exactly the leak `RoutineSlotView::
-                        // unseen`'s doc warns a renderer away from.
-                        let name = if r.unseen {
-                            "??? — a routine you haven't seen".to_string()
-                        } else {
-                            r.name.clone()
-                        };
-                        stat(format!("{}", r.index + 1), name)
-                    })
-                    .collect(),
-            ),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
+        sections.push(routines_section(view));
     }
     sections
 }
 
-/// Every player box is columned — no full-width bands. Six boxes across two
-/// columns is what 720px has room for; two of them promoted to bands would
-/// cost about 180px the budget doesn't have (a band is as tall as a columned
-/// box but consumes a whole row of the grid).
-///
-/// XP is deliberately not a row here: the Experience meter above already
-/// reads `xp/to_next`.
-///
-/// Every `sections.push` here needs a matching entry in
-/// `manifest_layout::tests::worst_case_player` — see `sections_for`'s doc
-/// for why. Keep EQUIPMENT and ROUTINES **last** in that fixture too,
-/// matching the real page — not because the packer's exact-partition column
-/// split cares about order (it doesn't decide whether the page fits), but
-/// because `sections_for` appends both after this function returns, and a
-/// fixture that silently drops or reorders a box is the failure mode this
-/// whole file exists to catch.
-fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
-    sections.push(Section {
-        title: "PROGRESSION",
-        rows: section_rows(
-            p.class
-                .iter()
-                // The class *name* rides the page's title, beside the
-                // player's own — this row is what that class is worth,
-                // which the title has no room for and which is the thing
-                // a player opens a stat sheet to check.
-                .map(|c| stat("Class bonus", c.bonuses.clone()))
-                .chain([
-                    stat("Decompiler", p.decompiler.to_string()),
-                    stat("Perk points", p.perk_points.to_string()),
-                    stat("Cargo carried", p.cargo_used.to_string()),
-                    stat("Position", format!("{}, {}", p.position.0, p.position.1)),
-                ])
-                .collect(),
-        ),
-        full_width: false,
-        overflow: 0,
-        hint: "",
+/// `n of 6` in the subhead, the filled slots as rows, and the empty ones as
+/// one `N slots open` line in `hud-attention` — an empty slot is something
+/// to spend, not a row to read.
+fn routines_section(view: &ManifestView) -> Section {
+    // `r.unseen` is a filled slot whose routine the player has not met:
+    // `RoutineSlotView::unseen`'s doc warns a renderer off reading the
+    // name instead, since an empty slot's name is "(empty)", never blank.
+    let filled = |r: &&feral_processes_engine::RoutineSlotView| r.ability.is_some() || r.unseen;
+    let rows: Vec<SectionRow> = view
+        .routines
+        .iter()
+        .filter(filled)
+        .map(|r| {
+            let name = if r.unseen {
+                "??? — a routine you haven't seen".to_string()
+            } else {
+                r.name.clone()
+            };
+            stat(format!("{}", r.index + 1), name)
+        })
+        .collect();
+    let open = view.routines.len() - rows.len();
+    let n = rows.len();
+    let mut rows = rows;
+    if open > 0 {
+        rows.push(SectionRow::Callout(format!("{open} slots open")));
+    }
+    Section::ledger("ROUTINES", LedgerColumn::Fight, section_rows(rows))
+        .with_hint(format!("{n} of {}", view.routines.len()))
+}
+
+/// GROWTH, CLASS and PERKS stack in the middle column, RUN in the last.
+/// XP is a row here as well as on the vitals line: the line says how full
+/// the bar is and this says how far off the next level is.
+fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerManifest) {
+    let mut growth = Vec::new();
+    if let (Some((xp, to_next)), Some(level)) = (view.xp, view.level) {
+        growth.push(stat(
+            "Next level",
+            format!("{} xp to Lv {}", to_next.saturating_sub(xp), level + 1),
+        ));
+    }
+    growth.push(if p.perk_points > 0 {
+        SectionRow::Alert(
+            "Perk points".to_string(),
+            format!("{} unspent", p.perk_points),
+        )
+    } else {
+        stat("Perk points", "0")
     });
+    growth.push(stat("Decompiler", p.decompiler.to_string()));
+    sections.push(Section::ledger(
+        "GROWTH",
+        LedgerColumn::Growth,
+        section_rows(growth),
+    ));
+
+    if let Some(class) = &p.class {
+        sections.push(Section::ledger(
+            format!("CLASS · {}", class.name),
+            LedgerColumn::Growth,
+            // `bonuses` is `classes::format_affinity_bonuses`: one
+            // `<axis> x<mult>` term per non-neutral axis, two spaces apart.
+            section_rows(
+                class
+                    .bonuses
+                    .split("  ")
+                    .filter(|t| !t.is_empty())
+                    .map(|term| match term.rsplit_once(' ') {
+                        Some((axis, mult)) => stat(axis, mult),
+                        None => stat(term, ""),
+                    })
+                    .collect(),
+            ),
+        ));
+    }
 
     if !p.perks.is_empty() {
-        sections.push(Section {
-            title: "PERKS",
-            rows: section_rows(
+        sections.push(Section::ledger(
+            "PERKS",
+            LedgerColumn::Growth,
+            section_rows(
                 p.perks
                     .iter()
                     .map(|(name, level)| stat(name.clone(), format!("Lv {level}")))
                     .collect(),
             ),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
+        ));
     }
+
     // What this run holds, as opposed to what the player *is*. Credits and
     // Portal Fragments are `ItemDef::banked` pools and so sit outside the
-    // inventory PROGRESSION's cargo row counts — which is why that row said
-    // nothing about either, and why they are here rather than beside it.
+    // inventory the cargo row counts.
     //
     // Trace is deliberately absent: `render/stack.rs` already draws it, and
     // it is underground-only, so a second reading here would be a duplicate
     // that is blank most of the time.
-    let run = vec![
-        stat("Credits", p.credits.to_string()),
-        stat("Portal Fragments", p.portal_fragments.to_string()),
-        stat("Difficulty", difficulty_label(p.difficulty)),
-        stat("Cycle", p.cycle.to_string()),
-        stat("Contracts", p.active_contracts.to_string()),
-    ];
+    sections.push(Section::ledger(
+        "RUN",
+        LedgerColumn::Duty,
+        section_rows_capped(
+            vec![
+                stat("Credits", p.credits.to_string()),
+                stat("Portal Fragments", p.portal_fragments.to_string()),
+                stat("Contracts", p.active_contracts.to_string()),
+                stat("Cargo carried", p.cargo_used.to_string()),
+                stat("Difficulty", difficulty_label(p.difficulty)),
+                stat("Cycle", p.cycle.to_string()),
+                stat("Position", format!("{}, {}", p.position.0, p.position.1)),
+            ],
+            MAX_RUN_ROWS,
+        ),
+    ));
+}
 
-    if !p.party.is_empty() {
-        sections.push(Section {
-            title: "PARTY",
-            rows: section_rows(
-                p.party
-                    .iter()
-                    .map(|c| {
-                        stat(
-                            c.name.clone(),
-                            format!(
-                                "HP {}/{}  ATK {}  MIT {}%",
-                                c.hp, c.max_hp, c.atk, c.mitigation
-                            ),
-                        )
-                    })
-                    .collect(),
-            ),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
+/// A band under the ledger, full width.
+pub(super) enum Band {
+    /// The player's PARTY table: yourself first, then each companion.
+    Party(Vec<PartyRow>),
+    /// A program's LATELY lines: the mood, then the strongest memories.
+    Lately(Vec<SectionRow>),
+}
+
+pub(super) struct PartyRow {
+    pub(super) glyph: char,
+    pub(super) color: GlyphColor,
+    pub(super) name: String,
+    pub(super) hp: i32,
+    pub(super) max_hp: i32,
+    pub(super) atk: i32,
+    pub(super) mitigation: i32,
+    pub(super) level: u32,
+    pub(super) doing: String,
+    /// The player's own row, drawn in `hud-emphasis`.
+    pub(super) own: bool,
+}
+
+impl Band {
+    pub(super) fn title(&self) -> &'static str {
+        match self {
+            Band::Party(_) => "PARTY",
+            Band::Lately(_) => "LATELY",
+        }
     }
 
-    sections.push(Section {
-        title: "RUN",
-        rows: section_rows(run),
-        full_width: false,
-        overflow: 0,
-        hint: "",
-    });
+    pub(super) fn hint(&self) -> &'static str {
+        match self {
+            Band::Party(_) => "",
+            Band::Lately(_) => "R all memories",
+        }
+    }
+
+    /// Rows under the subhead, the PARTY table's column heads included.
+    pub(super) fn rows(&self) -> usize {
+        match self {
+            Band::Party(rows) => 1 + rows.len(),
+            Band::Lately(rows) => rows.len(),
+        }
+    }
+}
+
+/// The band this subject's STATS page closes with, `None` for a wild program
+/// (no memories) and for a player with no one in the party to tabulate.
+///
+/// A companion's glyph and level come off the roster, which is already the
+/// engine's one derivation of both for the rail; `CompanionInfo` carries
+/// neither.
+pub(super) fn band_for(view: &ManifestView, roster: &[RosterRow]) -> Option<Band> {
+    match &view.subject {
+        ManifestSubject::Player(p) => {
+            let mut rows = vec![PartyRow {
+                glyph: view.glyph,
+                color: view.color,
+                name: view.name.clone(),
+                hp: view.hp,
+                max_hp: view.max_hp,
+                atk: view.atk,
+                mitigation: view.mitigation,
+                level: view.level.unwrap_or(1),
+                doing: String::new(),
+                own: true,
+            }];
+            rows.extend(p.party.iter().filter_map(|c| {
+                let r = roster.iter().find(|r| r.entity == c.entity)?;
+                Some(PartyRow {
+                    glyph: r.glyph,
+                    color: r.color,
+                    name: c.name.clone(),
+                    hp: c.hp,
+                    max_hp: c.max_hp,
+                    atk: c.atk,
+                    mitigation: c.mitigation,
+                    level: r.level,
+                    doing: c.ability.clone(),
+                    own: false,
+                })
+            }));
+            Some(Band::Party(rows))
+        }
+        ManifestSubject::Program(p) => p.mood.as_ref().map(|mood| Band::Lately(mood_rows(mood))),
+    }
 }
 
 /// The word the difficulty picker uses, so the sheet and the screen that set
@@ -251,175 +331,48 @@ pub(super) fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     )
 }
 
-/// Every `sections.push` here needs a matching entry in
-/// `manifest_layout::tests::worst_case_program`, at its real cap not a
-/// smaller placeholder — see `sections_for`'s doc for why. The affinities
-/// regression this screen shipped with was not a wrong row count, it was a
-/// missing box: AFFINITIES existed here before the fixture knew a fifth
-/// columned box existed at all. Adding a section here without adding it
-/// there passes every test and still ships a page that doesn't fit.
+/// POTENTIAL and DEVELOPMENT stack in the middle column; MOVES joins FIGHT
+/// above GEAR; WORK, AFFINITIES and SPECIES stack in the last.
+///
+/// Every `sections.push` here needs a matching assertion in
+/// `the_program_ledger_columns`, at its real cap and not a smaller
+/// placeholder.
 pub(super) fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifest) {
+    if !p.moves.is_empty() {
+        let mut rows: Vec<SectionRow> = p.moves.iter().take(MAX_MOVE_ROWS).map(move_row).collect();
+        let more = p.moves.len().saturating_sub(MAX_MOVE_ROWS);
+        if more > 0 {
+            rows.push(SectionRow::Note(format!("+{more} more on the dossier")));
+        }
+        sections.push(Section::ledger("MOVES", LedgerColumn::Fight, rows));
+    }
+
     if let Some(q) = &p.potential {
-        sections.push(Section {
-            title: "POTENTIAL",
-            rows: section_rows_capped(
+        sections.push(Section::ledger(
+            "POTENTIAL",
+            LedgerColumn::Growth,
+            section_rows_capped(
                 vec![
+                    ranked(
+                        "Overall",
+                        format!("{} ({}%)", q.label, q.percent),
+                        RankedStat::Potential,
+                    ),
                     stat("HP roll", roll_readout(q.hp_roll)),
                     stat("Attack roll", roll_readout(q.atk_roll)),
                     stat("Defense roll", roll_readout(q.def_roll)),
                     stat("Growth roll", roll_readout(q.growth_roll)),
                     stat("Assembly roll", roll_readout(q.assembly_roll)),
                     stat("Extraction roll", roll_readout(q.extraction_roll)),
-                    stat("Overall", format!("{} ({}%)", q.label, q.percent)),
                 ],
                 MAX_POTENTIAL_ROWS,
             ),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
-    }
-
-    if !p.affinities.is_empty() {
-        sections.push(Section {
-            title: "AFFINITIES",
-            rows: section_rows_capped(
-                p.affinities
-                    .iter()
-                    .map(|&(kind, v)| stat(kind.label(), format!("{v:.2}x")))
-                    .collect(),
-                MAX_AFFINITY_ROWS,
-            ),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
-    }
-
-    let mut species = vec![stat(
-        "Habitats",
-        if p.habitats.is_empty() {
-            "unknown".to_string()
-        } else {
-            p.habitats
-                .iter()
-                .map(|b| format!("{b:?}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        },
-    )];
-    if let Some(res) = &p.work_resource {
-        species.push(stat("Work aptitude", game.item_name(res).to_string()));
-    }
-    // A boss can't be decompiled at all, so both rows are dropped rather
-    // than quoting odds that can never be rolled — and the "needs a taming
-    // catalyst" fallback below would be an outright lie about why.
-    if !p.is_boss {
-        species.push(stat(
-            "Decompile difficulty",
-            format!("{:.0}%", p.taming_difficulty * 100.0),
         ));
-        species.push(stat(
-            "Decompile chance now",
-            match p.decompile_chance {
-                Some(c) => format!("{:.0}%", c * 100.0),
-                // Which item is a catalyst is item data, not something a
-                // renderer gets to name.
-                None => "needs a taming catalyst".to_string(),
-            },
-        ));
-    }
-    species.push(stat("Growth", format!("{:.2}x", p.growth_multiplier)));
-    sections.push(Section {
-        title: "SPECIES",
-        rows: section_rows(species),
-        full_width: false,
-        overflow: 0,
-        hint: "",
-    });
-
-    // What this program is like to *post* somewhere, as opposed to what it
-    // is. Its own box rather than two more SPECIES rows because SPECIES was
-    // already sitting on `MAX_SECTION_ROWS`, and a row past that cap does
-    // not fail — it truncates to "+N more" and the reading silently
-    // disappears. Speed moved across rather than being duplicated: it means
-    // initiative in a fight and pace at a machine, and one number said twice
-    // on one page reads as two different numbers.
-    let mut work = vec![
-        stat("Speed", p.base_speed.to_string()),
-        stat("Analysis", p.analysis.to_string()),
-    ];
-    if let Some(class) = p.base_job {
-        work.push(stat("Base job", base_job_label(class)));
-    }
-    // The header already carries the post as one of a run of tags, where a
-    // worker's is the bare structure name and reads as decoration. Stated as
-    // a labelled row it reads as the assignment it is — and this is the box
-    // about what the program is like to *post*, so it is where a player
-    // looking for that answer already is.
-    if let Some((kind, structure)) = &p.post {
-        work.push(stat(post_label(*kind), structure.clone()));
-    }
-    // The reserves share this box rather than taking one of their own: the
-    // program page has the least clearance in the renderer, and a NEEDS box
-    // did not fit at 1280x720 even at two rows. They belong here anyway —
-    // this is the box about what the program is like to *post*, and a
-    // program that keeps walking off to defragment is exactly that.
-    //
-    // Trimmed to `MAX_NEED_ROWS` **before** the box's own cap, so a modded
-    // catalogue spends its "+N more" on needs rather than pushing the post
-    // row off the end. Absent entirely for a program carrying no reserves and
-    // for an install with `assets/needs/` deleted.
-    for row in p.needs.iter().take(MAX_NEED_ROWS) {
-        work.push(stat(
-            row.name.clone(),
-            match &row.servicing {
-                Some(verb) => format!("{} — {verb}", row.band),
-                None => row.band.to_string(),
-            },
-        ));
-    }
-    if p.needs.len() > MAX_NEED_ROWS {
-        work.push(stat(
-            "…",
-            format!("+{} more", p.needs.len() - MAX_NEED_ROWS),
-        ));
-    }
-
-    sections.push(Section {
-        title: "WORK",
-        rows: section_rows(work),
-        full_width: false,
-        overflow: 0,
-        hint: "",
-    });
-
-    // What this program is carrying, under what it adds up to.
-    //
-    // **Present exactly when the program has a `Memories` store**, which is
-    // every program on the roster and nothing else — so a wild one drops the
-    // box without an ownership check here, and an owned one nothing has
-    // happened to yet keeps it and says so. An install with
-    // `assets/memories/` deleted lands in that second case at every program
-    // at once, which is the supported way to play without this feature.
-    if let Some(mood) = &p.mood {
-        sections.push(Section {
-            title: "MEMORIES",
-            rows: section_rows(mood_rows(mood)),
-            full_width: false,
-            overflow: 0,
-            hint: "",
-        });
     }
 
     // Only for a program that has been developed or that has points to
     // hold and spend, the way the `fused` and `upgraded` header tags only
-    // show once they mean something: an undeveloped wild program's box would
-    // be rows of zero on a page whose column budget is already the tightest
-    // thing in the renderer. The bank lives here rather than in a box of its
-    // own because the page has no row to spare at 1280x720 (measured: one
-    // more row of any box overflows the fullest program page), so the ring
-    // and the ceiling it buys share a row.
+    // show once they mean something.
     if p.ring > 0 || p.talents_earned > 0 || p.points.is_some() {
         let mut rows = vec![
             stat(
@@ -441,40 +394,114 @@ pub(super) fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &Pro
                 },
             ));
         }
-        sections.push(Section {
-            title: "DEVELOPMENT",
-            rows: section_rows(rows),
-            full_width: false,
-            overflow: 0,
-            hint: if p.points.is_some() {
-                "[H] hold  [S] spend"
-            } else {
-                ""
-            },
+        let section = Section::ledger("DEVELOPMENT", LedgerColumn::Growth, section_rows(rows));
+        sections.push(if p.points.is_some() {
+            section.with_hint("H hold · S spend")
+        } else {
+            section
         });
     }
 
-    if !p.moves.is_empty() {
-        sections.push(Section {
-            title: "MOVES",
-            // The overflow rides the title rather than a "+N more" row:
-            // at `MAX_MOVE_ROWS` = 1 the note would *be* the box, and a
-            // species with two moves drew neither.
-            rows: p.moves.iter().take(MAX_MOVE_ROWS).map(move_row).collect(),
-            // **Columned, and it was the page's full-width band until
-            // MEMORIES arrived.** A band and two columned boxes side by side
-            // occupy the same grid row, so demoting this one paid for the new
-            // box outright — measured, the program page holds the same
-            // clearance at 1280x720 as it did before either change. The
-            // widest shipped move row is narrower than the widest gear row by
-            // a distance, which is why EQUIPMENT could not have made this
-            // trade instead; `no_move_row_is_cut_to_fit_its_column` is what holds
-            // that, rather than the arithmetic.
-            full_width: false,
-            overflow: p.moves.len().saturating_sub(MAX_MOVE_ROWS),
-            hint: "",
-        });
+    // What this program is like to *post* somewhere, as opposed to what it
+    // is. Speed lives here rather than in SPECIES: it means initiative in a
+    // fight and pace at a machine, and one number said twice on one page
+    // reads as two different numbers.
+    let mut work = Vec::new();
+    if let Some(class) = p.base_job {
+        work.push(stat("Base job", base_job_label(class)));
     }
+    // The only ranked row that is not a number on the sheet: the rank is by
+    // the two build rolls, and the value is the resource they are good at.
+    if let Some(res) = &p.work_resource {
+        work.push(ranked(
+            "Work aptitude",
+            game.item_name(res).to_string(),
+            RankedStat::WorkAptitude,
+        ));
+    }
+    work.push(stat("Speed", p.base_speed.to_string()));
+    work.push(stat("Analysis", p.analysis.to_string()));
+    // The header already carries the post as one of a run of tags, where a
+    // worker's is the bare structure name and reads as decoration. Stated as
+    // a labelled row it reads as the assignment it is.
+    if let Some((kind, structure)) = &p.post {
+        work.push(stat(post_label(*kind), structure.clone()));
+    }
+    // Trimmed to `MAX_NEED_ROWS` **before** the box's own cap, so a modded
+    // catalogue spends its "+N more" on needs rather than pushing the post
+    // row off the end. Absent entirely for a program carrying no reserves and
+    // for an install with `assets/needs/` deleted.
+    for row in p.needs.iter().take(MAX_NEED_ROWS) {
+        work.push(stat(
+            row.name.clone(),
+            match &row.servicing {
+                Some(verb) => format!("{} — {verb}", row.band),
+                None => row.band.to_string(),
+            },
+        ));
+    }
+    if p.needs.len() > MAX_NEED_ROWS {
+        work.push(stat(
+            "…",
+            format!("+{} more", p.needs.len() - MAX_NEED_ROWS),
+        ));
+    }
+    sections.push(Section::ledger(
+        "WORK",
+        LedgerColumn::Duty,
+        section_rows_capped(work, MAX_WORK_ROWS),
+    ));
+
+    if !p.affinities.is_empty() {
+        sections.push(Section::ledger(
+            "AFFINITIES",
+            LedgerColumn::Duty,
+            section_rows_capped(
+                p.affinities
+                    .iter()
+                    .map(|&(kind, v)| stat(kind.label(), format!("{v:.2}x")))
+                    .collect(),
+                MAX_AFFINITY_ROWS,
+            ),
+        ));
+    }
+
+    let mut species = vec![stat(
+        "Habitats",
+        if p.habitats.is_empty() {
+            "unknown".to_string()
+        } else {
+            p.habitats
+                .iter()
+                .map(|b| format!("{b:?}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    )];
+    // A boss can't be decompiled at all, so both rows are dropped rather
+    // than quoting odds that can never be rolled — and the "needs a taming
+    // catalyst" fallback below would be an outright lie about why.
+    if !p.is_boss {
+        species.push(stat(
+            "Decompile difficulty",
+            format!("{:.0}%", p.taming_difficulty * 100.0),
+        ));
+        species.push(stat(
+            "Decompile chance now",
+            match p.decompile_chance {
+                Some(c) => format!("{:.0}%", c * 100.0),
+                // Which item is a catalyst is item data, not something a
+                // renderer gets to name.
+                None => "needs a taming catalyst".to_string(),
+            },
+        ));
+    }
+    species.push(stat("Growth", format!("{:.2}x", p.growth_multiplier)));
+    sections.push(Section::ledger(
+        "SPECIES",
+        LedgerColumn::Duty,
+        section_rows(species),
+    ));
 }
 
 /// What a class does when its program is posted to a structure, beside the

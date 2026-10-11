@@ -7,12 +7,16 @@
 use crate::paint::Rect;
 use crate::render::bars::bar_row_height;
 use crate::text::Metrics;
+use feral_processes_engine::RankedStat;
 
 /// One titled box. Built by the draw function and handed here, so a section
 /// with no data is simply absent from the slice and the boxes after it move
 /// up — rather than the layout having to know which subject it is drawing.
 pub(in crate::render) struct Section {
-    pub(in crate::render) title: &'static str,
+    pub(in crate::render) title: String,
+    /// The ledger column this box stacks in. `None` on the faces the old
+    /// packer still lays out (SCORE, SOCIAL, TALK).
+    pub(in crate::render) column: Option<LedgerColumn>,
     pub(in crate::render) rows: Vec<SectionRow>,
     /// Spans both columns, below the grid. The Moves band.
     pub(in crate::render) full_width: bool,
@@ -21,7 +25,19 @@ pub(in crate::render) struct Section {
     pub(in crate::render) overflow: usize,
     /// Keys the box answers, drawn on the title line after the title: the
     /// page's footer has no room left for them. Empty for none.
-    pub(in crate::render) hint: &'static str,
+    pub(in crate::render) hint: String,
+}
+
+/// Which of the ledger's three columns a STATS section stacks in.
+///
+/// Data on the section, so the builders state where a box goes and the draw
+/// step never has to know which subject it is drawing. The columns are
+/// FIGHT, GROWTH and, by subject, RUN (player) or DUTY (program).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::render) enum LedgerColumn {
+    Fight,
+    Growth,
+    Duty,
 }
 
 /// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
@@ -34,6 +50,14 @@ pub(in crate::render) enum SectionRow {
     Stat(String, String),
     /// One run of free text across the box.
     Note(String),
+    /// A `Stat` the ledger also ranks against the roster
+    /// (`Game::subject_ranks`). The old packer draws it as a `Stat`.
+    Ranked(String, String, RankedStat),
+    /// A `Stat` whose value is something to act on, drawn in
+    /// `hud-attention`.
+    Alert(String, String),
+    /// A line of free text that is something to act on, in `hud-attention`.
+    Callout(String),
 }
 
 /// The most rows any one box draws. A section is bounded so the worst-case
@@ -128,6 +152,18 @@ pub(in crate::render) const MAX_NEED_ROWS: usize = 2;
 /// a full kit shows for a box that does not need the room. What paid for it
 /// is `MAX_MOVE_ROWS`; see that constant.
 pub(in crate::render) const MAX_POTENTIAL_ROWS: usize = 7;
+
+/// The player's RUN column holds seven readings (Credits, Portal Fragments,
+/// Contracts, Cargo carried, Difficulty, Cycle, Position), one more than
+/// `MAX_SECTION_ROWS`, which would swallow the last into a `+N more`.
+pub(in crate::render) const MAX_RUN_ROWS: usize = 7;
+
+/// WORK's cap: Speed, Analysis, Base job, Work aptitude, the post, and
+/// `MAX_NEED_ROWS` needs with their own `+N more` note. Wider than
+/// `MAX_SECTION_ROWS` for `MAX_POTENTIAL_ROWS`' reason: the ledger's DUTY
+/// column has the height for it, and a cap of 6 would put the `+N more` note
+/// where a reading used to be.
+pub(in crate::render) const MAX_WORK_ROWS: usize = 8;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
 /// what was dropped. A silent truncation would read as "that's all of them".
@@ -366,7 +402,6 @@ const LEDGER_COLUMNS: usize = 3;
 /// Which kind of page the frame holds. Only STATS has a vitals line and may
 /// draw the rail full; SCORE, SOCIAL, TALK and the dossier are `Other`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 pub(in crate::render) enum Face {
     Stats,
     Other,
@@ -374,7 +409,6 @@ pub(in crate::render) enum Face {
 
 /// The roster rail down the sheet's left edge. Its divider is drawn on
 /// `rect`'s right edge.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 pub(in crate::render) struct RailGeom {
     /// The 30-cell rail with names, or the 4-cell glyph column.
     pub(in crate::render) full: bool,
@@ -386,7 +420,6 @@ pub(in crate::render) struct RailGeom {
     pub(in crate::render) row_h: f32,
 }
 
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 impl RailGeom {
     /// How many rail rows `rows` holds, the overflow rows included.
     pub(in crate::render) fn fits(&self) -> usize {
@@ -397,7 +430,6 @@ impl RailGeom {
 /// Where every part of the redesigned sheet goes. Pure over `Metrics` and
 /// the caller's measured `char_w` (see `hud::layout` for why that is a
 /// parameter), so the census tests run without a window.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 pub(in crate::render) struct ManifestLayout {
     pub(in crate::render) frame: Rect,
     /// `None` for a wild subject, which is not on the roster.
@@ -416,7 +448,6 @@ pub(in crate::render) struct ManifestLayout {
     pub(in crate::render) keybar: Rect,
 }
 
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 impl ManifestLayout {
     /// `rail_rows` is how many rows the rail would draw (subjects plus the
     /// party rule); zero means a wild subject and no rail. `band_rows` is the
@@ -542,7 +573,6 @@ pub(in crate::render) struct RailWindow {
 /// selection reaches its last row. With fewer than three rows there is no
 /// room for both overflow rows and the selection, so the selection alone is
 /// returned.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 pub(in crate::render) fn rail_window(len: usize, selected: usize, fits: usize) -> RailWindow {
     let window = |start: usize, end: usize| RailWindow {
         start,
@@ -592,7 +622,6 @@ pub(in crate::render) struct ColumnFit {
 /// reads complete or is counted. **`fitting_rows`' rule:** the `+N more` row
 /// is reserved only when something is cut. The bands below the ledger are
 /// not this function's business: `ManifestLayout` places them first.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Phase 4 drawers read it"))]
 pub(in crate::render) fn fit_column(rows: &[usize], height: f32, m: &Metrics) -> ColumnFit {
     let total: f32 = rows.iter().map(|&r| ledger_section_h(r, m)).sum();
     if total <= height {
@@ -634,13 +663,14 @@ mod tests {
 
     fn section(title: &'static str, rows: usize, full_width: bool) -> Section {
         Section {
-            title,
+            title: title.into(),
+            column: None,
             rows: (0..rows)
                 .map(|i| SectionRow::Stat(format!("label {i}"), format!("{i}")))
                 .collect(),
             full_width,
             overflow: 0,
-            hint: "",
+            hint: String::new(),
         }
     }
 

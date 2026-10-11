@@ -5,7 +5,7 @@
 //! implementation. The sheet does not scroll, so the page is as many whole
 //! exchanges as the frame has rows for, newest first.
 
-use super::manifest_layout::{Section, SectionRow, manifest_layout};
+use super::manifest::layout::{Section, SectionRow, manifest_layout};
 use super::*;
 use feral_processes_engine::ExchangeView;
 

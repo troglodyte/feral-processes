@@ -58,7 +58,6 @@ mod icon_editor;
 mod inventory;
 mod level_up;
 mod manifest;
-mod manifest_layout;
 mod marks;
 mod meta;
 mod mod_copy;

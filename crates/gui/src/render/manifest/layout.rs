@@ -4,31 +4,31 @@
 //! settled in whole rows before any of it becomes pixels, and that arithmetic
 //! is then testable at every window size without a window.
 
-use super::bars::bar_row_height;
 use crate::paint::Rect;
+use crate::render::bars::bar_row_height;
 use crate::text::Metrics;
 
 /// One titled box. Built by the draw function and handed here, so a section
 /// with no data is simply absent from the slice and the boxes after it move
 /// up — rather than the layout having to know which subject it is drawing.
-pub(super) struct Section {
-    pub(super) title: &'static str,
-    pub(super) rows: Vec<SectionRow>,
+pub(in crate::render) struct Section {
+    pub(in crate::render) title: &'static str,
+    pub(in crate::render) rows: Vec<SectionRow>,
     /// Spans both columns, below the grid. The Moves band.
-    pub(super) full_width: bool,
+    pub(in crate::render) full_width: bool,
     /// Rows the box had no room for, drawn as "+N" after the title — for a
     /// box whose cap is too small to spend a row on saying so (MOVES).
-    pub(super) overflow: usize,
+    pub(in crate::render) overflow: usize,
     /// Keys the box answers, drawn on the title line after the title: the
     /// page's footer has no room left for them. Empty for none.
-    pub(super) hint: &'static str,
+    pub(in crate::render) hint: &'static str,
 }
 
 /// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
 /// and compare them whole. A census that reached into `Section` field by
 /// field would pass a box that had silently gained a row.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum SectionRow {
+pub(in crate::render) enum SectionRow {
     /// A label on the left, its value right-aligned against the box's inner
     /// edge.
     Stat(String, String),
@@ -50,7 +50,7 @@ pub(super) enum SectionRow {
 /// decides it, for whatever `worst_case_program`/`worst_case_player`
 /// currently model. 6 is also the routine-slot cap, so a full kit is never
 /// trimmed.
-pub(super) const MAX_SECTION_ROWS: usize = 6;
+pub(in crate::render) const MAX_SECTION_ROWS: usize = 6;
 
 /// The AFFINITIES box's own cap, tighter than `MAX_SECTION_ROWS`. Above 2,
 /// clearance at the tightest window shrinks fast enough that a mod pushing
@@ -63,7 +63,7 @@ pub(super) const MAX_SECTION_ROWS: usize = 6;
 /// species Task 5 gave affinities to carries exactly one strength and one
 /// weakness. A modded species naming three or more only ever loses rows
 /// to the "+N more" note below, never crashes the page.
-pub(super) const MAX_AFFINITY_ROWS: usize = 2;
+pub(in crate::render) const MAX_AFFINITY_ROWS: usize = 2;
 
 /// The MOVES box's own cap, separate from `MAX_SECTION_ROWS` because `MOVES`
 /// is the one box a mod can genuinely grow past what any shipped species
@@ -105,7 +105,7 @@ pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 /// **1** and does not at 2, and the alternative on the table was folding the
 /// two build rolls onto one line to keep MOVES at 2. The owner took the cost
 /// on MOVES so both rolls could be named in full on their own rows.
-pub(super) const MAX_MOVE_ROWS: usize = 1;
+pub(in crate::render) const MAX_MOVE_ROWS: usize = 1;
 
 /// The NEEDS box's own cap, tighter than `MAX_SECTION_ROWS` for
 /// `MAX_AFFINITY_ROWS`' reason: the program page has the least clearance of
@@ -115,7 +115,7 @@ pub(super) const MAX_MOVE_ROWS: usize = 1;
 /// that a row is traded for the "+N more" note rather than for a page that
 /// escapes the frame — `tests::the_real_worst_case_pages_fit_the_tightest_window`
 /// is what measures which values still fit.
-pub(super) const MAX_NEED_ROWS: usize = 2;
+pub(in crate::render) const MAX_NEED_ROWS: usize = 2;
 
 /// POTENTIAL's own cap, and the one per-box constant here that is **wider**
 /// than `MAX_SECTION_ROWS` rather than narrower. Seven because the box lists
@@ -127,18 +127,21 @@ pub(super) const MAX_NEED_ROWS: usize = 2;
 /// spent on its "+N more" note, so raising the shared cap would change what
 /// a full kit shows for a box that does not need the room. What paid for it
 /// is `MAX_MOVE_ROWS`; see that constant.
-pub(super) const MAX_POTENTIAL_ROWS: usize = 7;
+pub(in crate::render) const MAX_POTENTIAL_ROWS: usize = 7;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
 /// what was dropped. A silent truncation would read as "that's all of them".
-pub(super) fn section_rows(rows: Vec<SectionRow>) -> Vec<SectionRow> {
+pub(in crate::render) fn section_rows(rows: Vec<SectionRow>) -> Vec<SectionRow> {
     section_rows_capped(rows, MAX_SECTION_ROWS)
 }
 
 /// `section_rows` at an arbitrary cap, for the boxes (AFFINITIES, MOVES)
 /// whose real worst case is narrower than `MAX_SECTION_ROWS` — see
 /// `MAX_AFFINITY_ROWS` and `MAX_MOVE_ROWS`.
-pub(super) fn section_rows_capped(mut rows: Vec<SectionRow>, cap: usize) -> Vec<SectionRow> {
+pub(in crate::render) fn section_rows_capped(
+    mut rows: Vec<SectionRow>,
+    cap: usize,
+) -> Vec<SectionRow> {
     debug_assert!(
         cap >= 1,
         "a zero cap can't reserve a row for the note below"
@@ -154,12 +157,12 @@ pub(super) fn section_rows_capped(mut rows: Vec<SectionRow>, cap: usize) -> Vec<
 
 /// The manifest's boxes. `sections` is index-aligned with the slice passed to
 /// `manifest_layout`.
-pub(super) struct ManifestLayout {
-    pub(super) frame: Rect,
-    pub(super) header: Rect,
-    pub(super) meters: Vec<Rect>,
-    pub(super) sections: Vec<Rect>,
-    pub(super) footer: Rect,
+pub(in crate::render) struct ManifestLayout {
+    pub(in crate::render) frame: Rect,
+    pub(in crate::render) header: Rect,
+    pub(in crate::render) meters: Vec<Rect>,
+    pub(in crate::render) sections: Vec<Rect>,
+    pub(in crate::render) footer: Rect,
 }
 
 /// How much of the window the sheet claims. Not the full window: the status
@@ -173,7 +176,7 @@ const FRAME_H_PCT: f32 = 0.90;
 /// own — which the 720px budget needs it not to.
 const HEADER_ROWS: f32 = 2.0;
 
-pub(super) fn manifest_layout(
+pub(in crate::render) fn manifest_layout(
     screen_w: f32,
     screen_h: f32,
     meters: usize,
@@ -334,7 +337,7 @@ fn best_column_split(heights: &[f32]) -> Vec<usize> {
 /// box would be *relatively taller* at 1440px than at 720px. That inverts
 /// which window is the tight one, which is exactly the kind of thing the
 /// height sweep exists to catch.
-pub(super) fn section_row_h(m: &Metrics) -> f32 {
+pub(in crate::render) fn section_row_h(m: &Metrics) -> f32 {
     m.font_size as f32
 }
 

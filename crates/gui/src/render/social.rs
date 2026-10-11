@@ -5,7 +5,7 @@
 //! so the frame, header and footer are one implementation and the fit census
 //! here measures the boxes the renderer really draws.
 
-use super::manifest_layout::{Section, SectionRow, section_rows_capped};
+use super::manifest::layout::{Section, SectionRow, section_rows_capped};
 use super::*;
 use feral_processes_app_core::ManifestTab;
 use feral_processes_engine::{RelationshipRow, SocialView};
@@ -132,7 +132,7 @@ pub(super) fn draw_tab_strip(
 #[cfg(test)]
 mod tests {
     use super::super::manifest::fitted_stat_row;
-    use super::super::manifest_layout::manifest_layout;
+    use super::super::manifest::layout::manifest_layout;
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;

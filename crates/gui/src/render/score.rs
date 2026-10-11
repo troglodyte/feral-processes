@@ -4,7 +4,7 @@
 
 use feral_processes_engine::score::ScoreCard;
 
-use super::manifest_layout::{Section, SectionRow};
+use super::manifest::layout::{Section, SectionRow};
 use super::popup::*;
 
 const MULTIPLIER_LABEL: &str = "Difficulty multiplier";
@@ -152,7 +152,7 @@ pub(super) mod tests {
         assert!(
             manifest_sections(&card)
                 .iter()
-                .all(|s| s.rows.len() <= super::super::manifest_layout::MAX_SECTION_ROWS)
+                .all(|s| s.rows.len() <= super::super::manifest::layout::MAX_SECTION_ROWS)
         );
     }
 
@@ -181,7 +181,7 @@ pub(super) mod tests {
     #[test]
     fn the_widest_card_fits_the_manifest_at_every_window() {
         use super::super::manifest::fitted_stat_row;
-        use super::super::manifest_layout::manifest_layout;
+        use super::super::manifest::layout::manifest_layout;
         const MIN_CLEARANCE: f32 = 4.0;
         let sections = manifest_sections(&widest_card());
         with_painter(|p| {

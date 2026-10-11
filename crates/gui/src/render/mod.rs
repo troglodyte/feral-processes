@@ -138,7 +138,7 @@ use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
     draw_inventory_item_action, effect_lines,
 };
-use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
+use manifest::{ManifestNav, draw_manifest};
 use meta::{
     draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
@@ -1287,10 +1287,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             };
             draw_manifest(game, pending_manifest, nav, refusal, painter, m)
         }
-        Mode::ManifestPick => {
-            let subjects = game.manifest_subjects();
-            draw_manifest_pick(game, &subjects, selected, refusal, painter, m)
-        }
         Mode::StructureManifest => structure_manifest::draw_structure_manifest(
             game,
             app.pending_structure_manifest,
@@ -1668,7 +1664,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 137] = [
+    const ALL_MODES: [Mode; 136] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1719,7 +1715,6 @@ mod tests {
         Mode::FrameMap,
         Mode::WorldMap,
         Mode::Manifest,
-        Mode::ManifestPick,
         Mode::StructureManifest,
         Mode::CellDescribe,
         Mode::Settlement,

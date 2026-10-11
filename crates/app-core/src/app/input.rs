@@ -53,10 +53,9 @@ pub(crate) fn loudest_cue(lines: &[LogLine]) -> Option<SoundEvent> {
 /// must not have their highlight reset to the top of it. Every other mode
 /// change starts fresh — see `App::handle_key`.
 ///
-/// The first two are a screen backing out into the one that opened it, and in
-/// both the returning handler has already put `menu_selected` on the row the
-/// side-trip was about: `leave_manifest` on whoever the sheet was showing,
-/// `leave_staffing` on the structure that was staffed.
+/// The first is a screen backing out into the one that opened it, and the
+/// returning handler has already put `menu_selected` on the row the
+/// side-trip was about: `leave_staffing` on the structure that was staffed.
 ///
 /// The roster's pair is the outward leg as well, which the others don't need.
 /// `Mode::Manifest` indexes nothing with `menu_selected` — it pages with ←/→
@@ -67,8 +66,7 @@ pub(crate) fn loudest_cue(lines: &[LogLine]) -> Option<SoundEvent> {
 fn keeps_highlight(before: Mode, after: Mode) -> bool {
     matches!(
         (before, after),
-        (Mode::Manifest, Mode::ManifestPick)
-            | (Mode::StructureAssign, Mode::Structures)
+        (Mode::StructureAssign, Mode::Structures)
             | (Mode::Companion, Mode::Manifest)
             | (Mode::Manifest, Mode::Companion)
             // Esc from the memories page puts back the row it parked in
@@ -303,7 +301,6 @@ impl App {
             Mode::LevelUp => self.handle_level_up_key(key),
             Mode::AllocateStats => self.handle_allocate_stats_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
-            Mode::ManifestPick => self.handle_manifest_pick_key(key),
             Mode::Inventory => self.handle_inventory_key(key),
             Mode::EquipSwap => self.handle_equip_swap_key(key),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),

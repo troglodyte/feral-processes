@@ -1231,7 +1231,7 @@ pub fn filtered_out_count(lines: &[LogLine], filter: LogFilter) -> usize {
 /// Which screen opened `Mode::Manifest`, and so where its Esc goes back to.
 ///
 /// An enum rather than the bool this replaced because there are now three
-/// answers and two of them are lists: the manifest picker and the roster are
+/// answers and two of them are lists: the party menu and the roster are
 /// different screens indexing different sets — the roster holds programs
 /// only, so paging to the player with ←/→ has no row there to come back to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1241,8 +1241,8 @@ pub enum ManifestOrigin {
     /// play.
     #[default]
     Map,
-    /// `Mode::ManifestPick`.
-    Picker,
+    /// The party group menu's "Read a manifest" row, which opens on subject 0.
+    Menu,
     /// The roster, `Mode::Companion`, via `M`.
     Roster,
 }
@@ -1785,9 +1785,6 @@ pub enum Mode {
     /// A popup like every other list, so it does not join
     /// `needs_status_banner`.
     Dossier,
-    /// Picking whose manifest to read — you, or any program you own.
-    /// Reached from the party group menu; `d` on the map is the demolish key.
-    ManifestPick,
     /// A read-only detail sheet for one structure, opened when
     /// `Mode::InspectDirection` finds a structure nearer than any creature.
     /// `App::pending_structure_manifest` is the subject. Separate from `Mode::Manifest`
@@ -2317,8 +2314,8 @@ pub enum Mode {
     ArenaSave,
     /// One picker, four targets: a party species, an opponent species, an
     /// item to equip or an item for cargo. Which is `App::pending_arena_pick`,
-    /// following `Mode::ManifestPick` rather than being four near-identical
-    /// modes with four near-identical handlers to keep in step.
+    /// rather than four near-identical modes with four near-identical
+    /// handlers to keep in step.
     ArenaPick,
     /// What the fight cost — see `arena::Watch`. `[R]` refights the same
     /// seed, `[N]` the next one, Esc returns to the builder.
@@ -2425,7 +2422,6 @@ impl Mode {
             | Mode::InteractDirection
             | Mode::InspectDirection
             | Mode::Manifest
-            | Mode::ManifestPick
             | Mode::StructureManifest
             | Mode::CellDescribe
             // Opened from the map by a bump or by `x`. `x` never layers over

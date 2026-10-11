@@ -464,10 +464,11 @@ fn the_preview_carries_held_phase_keys() {
     assert_eq!(after, max_hp(&app));
 }
 
-/// Opens the player's own sheet through the picker, whose first row is you.
+/// Opens the player's own sheet through the party menu, whose manifest row
+/// opens on you.
 fn open_own_manifest(app: &mut App) {
-    app.mode = Mode::ManifestPick;
-    app.handle_key(GameKey::Char('1'));
+    app.mode = Mode::Playing;
+    open_via_menu(app, 'p', "Read a manifest");
     assert_eq!(app.mode, Mode::Manifest, "{:?}", app.status_line);
     let player = app.game.as_ref().unwrap().player_entity();
     assert_eq!(app.pending_manifest, Some(player));

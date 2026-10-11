@@ -328,7 +328,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     },
     GroupEntry {
         label: "Read a manifest",
-        target: Mode::ManifestPick,
+        target: Mode::Manifest,
         locality: Locality::Anywhere,
         available: |app| !app.manifest_subjects().is_empty(),
     },
@@ -490,6 +490,7 @@ impl App {
             self.menu_origin = Some(self.mode);
             match rows[idx].target {
                 Mode::Perks => self.open_perks(),
+                Mode::Manifest => self.open_menu_manifest(),
                 Mode::Build => {
                     self.build_category = None;
                     self.mode = Mode::Build;

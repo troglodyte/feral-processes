@@ -263,19 +263,16 @@ impl App {
             .unwrap_or_default()
     }
 
-    pub(crate) fn handle_manifest_pick_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.pending_manifest = None;
-            self.close_screen();
+    /// The party menu's "Read a manifest" row: the sheet opens on subject 0,
+    /// which is you, and ←/→ or a row key reaches everyone else.
+    pub(crate) fn open_menu_manifest(&mut self) {
+        let Some(&first) = self.manifest_subjects().first() else {
             return;
-        }
-        let subjects = self.manifest_subjects();
-        if let Some(idx) = self.selected_index(key, subjects.len()) {
-            self.pending_manifest = Some(subjects[idx]);
-            self.manifest_origin = ManifestOrigin::Picker;
-            self.status_line = None;
-            self.mode = Mode::Manifest;
-        }
+        };
+        self.pending_manifest = Some(first);
+        self.manifest_origin = ManifestOrigin::Menu;
+        self.status_line = None;
+        self.mode = Mode::Manifest;
     }
 
     /// Unlike the popup this replaced, the manifest doesn't close on any key
@@ -500,18 +497,14 @@ impl App {
         at
     }
 
-    /// Esc from the manifest: back to the list it was opened from, or to the
-    /// map if it was opened from there.
+    /// Esc from the manifest: back to the screen it was opened from — the
+    /// party menu, the roster, or the map.
     ///
-    /// Either list re-highlights whoever the sheet was *showing* rather than
-    /// the row originally picked — after paging with ←/→ those differ, and
-    /// the list should agree with the sheet you just left.
-    ///
-    /// The two lists differ in what they can be asked for. The picker holds
-    /// every subject the manifest can page to, so the lookup always lands;
-    /// the roster holds programs only, so a sheet paged onto the *player* has
-    /// no row there, and the highlight is left standing where it was rather
-    /// than snapped to the top — which is what `keeps_highlight` parks it for
+    /// The roster re-highlights whoever the sheet was *showing* rather than
+    /// the row originally picked — after paging with ←/→ those differ. It
+    /// holds programs only, so a sheet paged onto the *player* has no row
+    /// there, and the highlight is left standing where it was rather than
+    /// snapped to the top — which is what `keeps_highlight` parks it for
     /// across the side trip.
     fn leave_manifest(&mut self) {
         self.manifest_tab = ManifestTab::Stats;
@@ -520,13 +513,9 @@ impl App {
                 self.pending_manifest = None;
                 self.mode = Mode::Playing;
             }
-            ManifestOrigin::Picker => {
-                let subjects = self.manifest_subjects();
-                self.menu_selected = self
-                    .pending_manifest
-                    .and_then(|e| subjects.iter().position(|&s| s == e))
-                    .unwrap_or(0);
-                self.mode = Mode::ManifestPick;
+            ManifestOrigin::Menu => {
+                self.pending_manifest = None;
+                self.close_screen();
             }
             ManifestOrigin::Roster => {
                 if let Some(row) = self.roster_row_of(self.pending_manifest) {

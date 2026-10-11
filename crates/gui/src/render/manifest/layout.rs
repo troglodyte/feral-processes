@@ -420,7 +420,7 @@ pub(in crate::render) struct RailWindow {
 /// holding the selection, so moving down the rail scrolls it only once the
 /// selection reaches its last row. With fewer than three rows there is no
 /// room for both overflow rows and the selection, so the selection alone is
-/// returned.
+/// returned and no overflow row is promised: `above` and `below` are zero.
 pub(in crate::render) fn rail_window(len: usize, selected: usize, fits: usize) -> RailWindow {
     let window = |start: usize, end: usize| RailWindow {
         start,
@@ -433,7 +433,12 @@ pub(in crate::render) fn rail_window(len: usize, selected: usize, fits: usize) -
     }
     let selected = selected.min(len - 1);
     if fits < 3 {
-        return window(selected, selected + 1);
+        return RailWindow {
+            start: selected,
+            end: selected + 1,
+            above: 0,
+            below: 0,
+        };
     }
     // One row goes to `↓ N more`.
     if selected < fits - 1 {
@@ -803,6 +808,10 @@ mod tests {
     #[test]
     fn too_short_a_rail_still_shows_the_selection() {
         assert_eq!(rail_window(10, 6, 2).start, 6);
+        for fits in 0..3 {
+            let win = rail_window(10, 6, fits);
+            assert_eq!((win.above, win.below), (0, 0), "fits {fits}");
+        }
         assert_eq!(rail_window(10, 6, 0).end, 7);
         assert_eq!(rail_window(10, 99, 1).start, 9);
     }

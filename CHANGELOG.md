@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.14
+
+**Placing a structure where one of your programs is standing now goes through, and the program steps aside to the nearest free floor.** Before, the placement was refused with "one of your programs is standing there", often for a wanderer hidden behind the deploy menu. Rebuilding a wreck works the same way instead of waiting for the program to move, idle programs no longer wander onto a placed build site, and a program that ends up on one is moved off before the structure goes up rather than being left inside it.
+
 ## 0.18.13
 
 **Your base crew now cuts marked rock even when there is no Blank Substrate to floor it with, and floors the cut cells later once substrate arrives.** Before, a base without a Lathe left every marked cell untouched and the staff idle. Cells already cut are floored before new rock is opened, and the dig plan's standing Blank Substrate order still covers every cell you marked. Cut ground stays bare until it is floored, and nothing can be built on it until then.

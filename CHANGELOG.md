@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.20
+
+**On the tactical map, enemies now fight with a personality that depends on their species.** Brutes (rootkit, botnet, worm, scrapper) charge the nearest body and ignore cover; hunters (cipher, zero-day, trojan, polymorph) go after the wounded and the easy kill, and leave you for last; skirmishers (glitch, sprite) keep their distance behind cover and pick at the weakest; cautious programs (drone, construct) hang back, and back off further when hurt. Every other species fights exactly as before.
+
+**Personalities are data, so a mod can add one or give a species a different one.** Each is a file in `assets/behaviours/` that weighs things like the target's health, a kill in reach or cover, and a species names its personality with `behaviour:`. A species naming one that does not exist fights the old way and logs a warning. These four personalities are hand-tuned and come out somewhat easier than the old behaviour on the measured fights (`docs/measurements/2026-10-12-tactical-personality-training.md`).
+
 ## 0.18.19
 
 **In a group battle you can now see each blow land: a number floats off the row it hit, the row flashes, and the picture window reacts.** Damage floats red as `-N`, a critical hit floats larger in white as `CRIT -N`, healing floats green as `+N`, a miss or fumble shows a dim `miss` or `fumble`, and a kill shows `KO`. Several blows on one row spread out side by side instead of stacking. The picture shakes when the program in it is hit and gets a `KO` stamp when it falls.

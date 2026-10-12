@@ -6,6 +6,9 @@
 //!     --scenarios dev-training/ --iters 30 --pop 40 --reps 200 --seed 1
 //! ```
 //!
+//! `--tactical --profile <id>` trains a tactical behaviour profile instead;
+//! see `feral_processes::tactical_train`. The group path below is untouched.
+//!
 //! The optimiser is `feral_processes::cem`; the environment and the reward
 //! are `arena::run`, which already knows the two non-obvious parts of
 //! reading a fight's outcome. This file is the glue between them, and it is
@@ -115,6 +118,9 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    if std::env::args().any(|a| a == "--tactical") {
+        return feral_processes::tactical_train::run_cli(std::env::args().skip(1));
+    }
     let args = parse_args()?;
     let scenarios = load_scenarios(&args.scenarios, args.reps)?;
     println!(

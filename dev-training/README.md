@@ -47,3 +47,27 @@ weights, this set runs from 0.22 to 1.00. A set where the player wins
 everything gives the enemy no win-rate gradient at all and leaves the whole
 fitness resting on the HP tiebreak; a set where the player loses everything
 is the same problem from the other end.
+
+## `tactical/`
+
+The set tactical behaviour profiles are tuned on (`train --tactical`, see
+`assets/behaviours/README.md`). Every file is `model: Tactical`,
+`party_turns: AutoPlay`, so the party plays the way `[A]` does. They are
+**never** read by the group-model `train` path: point `--scenarios` at
+`dev-training/` and the directory is skipped, because only the top level is
+read.
+
+| File | Covers |
+|---|---|
+| `01-solo-early.ron` | Level 1, one hostile, no companions. |
+| `02-early-pair.ron` | Level 6 with one companion against a mixed pair. |
+| `03-midgame-group.ron` | Level 12, three companions, four mixed hostiles, flanked. |
+| `04-squad.ron` | Five rootkits folded into one 2x2 squad, geared party. |
+| `05-geared-late.ron` | Zone 5, level 20, kitted, a mixed four. |
+| `06-covered-board.ron` | A rolled surface encounter, so the board has cover nobody authored for. |
+| `07-ranged-heavy.ron` | Sprites, zero-days and a drone: hostiles that swing from range. |
+| `08-opponent-routines.ron` | Every hostile carries a routine, so `is_routine` fires. |
+
+The scenario's `behaviour` is overridden per run, so a file here never names
+one. Baseline player win rates run from 0.14 to 1.00; two files are
+walkovers (04, 05) and still move the HP-lost term.

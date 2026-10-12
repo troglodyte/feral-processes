@@ -1,74 +1,51 @@
-# Tactical personalities trained toward the `default` baseline
+# Tactical personalities against the `default` baseline
 
-**The claim.** CEM over each profile's free weights, scored against
-`2026-10-12-tactical-personality-baseline.md`, put every profile inside
-+/-10% (relative) of baseline on both set-wide HP lost and enemy win rate.
-Two of the trained results (brute, hunter) failed the profile behaviour
-tests in `crates/engine/src/tests/tactical_policy.rs` — the training erased
-the character — so those two files keep their hand-set weights. Shipped:
-skirmisher and cautious trained; brute and hunter hand-set.
+**The claim.** Against the corrected baseline
+(`2026-10-12-tactical-personality-baseline.md`, build f147dde3: HP lost
+0.4699, enemy win 0.3144), **no profile is inside the +/-10% band on both
+set-wide means**, and training did not find one that is. All four profiles
+ship hand-set; the band was not loosened. The earlier 86b219b7 training
+(which put skirmisher and cautious in band) was measured against a `default`
+that ranked targets by Integrity fraction rather than the pre-branch absolute
+Integrity, and is withdrawn.
 
 ## How to reproduce it
 
-Build 86b219b7 release, baseline and trained in the same process:
+Build f147dde3 release:
 
 ```sh
-./target/release/train --tactical --profile <id> --reps 200 --iters 15 --pop 24 --search-reps 50
 ./target/release/train --tactical --profile <id> --eval --reps 200   # a profile as on disk
+./target/release/train --tactical --profile <id> --reps 200 --iters 15 --pop 24 --search-reps 50
 ```
 
 The search moves a delta from the hand-set weights (generation 0 is the
-authored profile), 50 reps per scenario per candidate; the comparison below
-is 200 reps on the baseline's seeds.
+authored profile), 50 reps per scenario per candidate; the comparison is 200
+reps on the baseline's seeds. A trained profile is written only if in band.
 
 ## The numbers
 
-Set means, baseline HP lost 0.4193, enemy win 0.3031.
+Relative to baseline, set means.
 
-| Profile | Hand-set (HP lost / enemy win) | Trained (HP lost / enemy win) | In band | Behaviour tests |
+| Profile | Hand-set HP lost / enemy win | Trained HP lost / enemy win | In band | Shipped |
 |---|---|---|---|---|
-| brute | -3.2% / -5.4% | -3.5% / -4.1% | yes | trained FAILS; hand-set kept |
-| hunter | -11.7% / -13.0% | -8.7% / -8.5% | yes | trained FAILS; hand-set kept (out of band) |
-| skirmisher | -0.7% / -0.6% | +3.4% / -6.0% | yes | pass; trained shipped |
-| cautious | -0.9% / -0.8% | -1.0% / -1.0% | yes | pass; trained shipped |
+| brute | -14.0% / -9.7% | not retrained | no (HP lost) | hand-set |
+| hunter | -21.2% / -16.7% | not retrained (`target_hp_frac` pinned, one free weight) | no | hand-set |
+| skirmisher | -11.4% / -3.8% | -11.4% / -3.8% (`would_kill` 5.72 -> 7.34, `target_hp_frac` -3.2 pinned) | no | hand-set |
+| cautious | -11.4% / -4.4% | -11.1% / -4.2% (`target_hp_frac` -1.14 -> -0.29) | no | hand-set |
 
-Trained free weights (hand -> trained): brute `target_hp_frac` -0.5 ->
--1.64; hunter `target_hp_frac` -3.0 -> -9.34, `est_damage_frac` 1.0 ->
-3.62; skirmisher `target_hp_frac` -3.2 -> 0.0 (clamped at its sign),
-`would_kill` 4.1 -> 3.07; cautious `target_hp_frac` -1.5 -> -1.14,
-`would_kill` 1.0 -> 0.0.
-
-Brute and cautious hand-set weights were already in band; hunter's was not.
-The measured hunter band is therefore not achievable with the weights that
-keep its character, and is left open for a decision.
+Every profile is easier on the player than `default` on HP lost, by 11% to
+21%. Each personality walks to cover or closes faster and so trades fewer
+blows with the player than `default`; the free target weights cannot buy that
+back, which is why the search ends where it started (skirmisher's trained
+numbers equal its hand-set ones to three places).
 
 ## What it does not say
 
-- Skirmisher's trained `target_hp_frac` sits on its sign boundary (0) and
-  cautious's `would_kill` too: the search found the free weights worth
-  nothing for difficulty there. They pass the behaviour tests but their
-  `description` text ("picks at the weakest") no longer describes the
-  weights.
-- The hand-set column is one 200-rep run on a shared seed; differences of a
-  few percent are within run-to-run noise from a different seed.
+- The trained candidates of skirmisher and cautious bounded the search at the
+  free weights alone; the pinned character (distance, cover, `self_x_target_
+  distance`) and the cell weights were not moved. A band for these profiles
+  would need a decision about pinning, not more iterations.
+- Scenario 06 inflates under both trained candidates (rounds 31 -> 52..62):
+  the fights stall, and the rounds term of the objective is noisy there.
 - Same blind spots as the baseline note: two walkover scenarios, one noisy
   rounds term (06), every hostile on one profile.
-
-## Re-run with the character pinned (same build 86b219b7, same settings)
-
-Brute and hunter trained weights had failed the behaviour tests, and
-skirmisher's search had zeroed `target_hp_frac`. Decision: pin each profile's
-`target_hp_frac` at its hand value and retrain only the rest.
-
-- **Skirmisher** (`target_hp_frac` -3.2 pinned; free `would_kill` 4.1 -> 5.72):
-  HP lost -0.7%, enemy win -0.6%, in band. Shipped; behaviour tests pass and
-  "picks at the weakest" stays true. This replaces the table row above.
-- **Hunter** (`target_hp_frac` -3.0 pinned; free `est_damage_frac` 1.0 ->
-  3.75, the only free weight; no features added): HP lost -11.7%, enemy win
-  -12.2%, **not in band**. The only free weight cannot close the gap, so
-  hunter ships hand-set and remains about 12% easier than `default` on this
-  set. The band was not loosened.
-- **Cautious**: `would_kill` was zeroed by training. The description
-  ("when hurt it prefers far targets, cover and room") is carried by the
-  pinned `self_x_target_distance` and the cell weights, not `would_kill`,
-  so the text stays true.

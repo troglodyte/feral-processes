@@ -24,6 +24,7 @@ use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
+use crate::tactical::policy::CellWeights;
 use crate::tactical::reach;
 use crate::tactical::{Fallen, TacticalBattle};
 use crate::tuning::FORMATIONS;
@@ -457,7 +458,7 @@ impl Game {
                 reachable
                     .iter()
                     .copied()
-                    .filter(|&cell| self.walk_risk(a, cell) > 0.0)
+                    .filter(|&cell| self.walk_risk(a, cell, CellWeights::default().reaction) > 0.0)
                     .collect()
             })
             .unwrap_or_default();

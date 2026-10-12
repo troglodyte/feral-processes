@@ -1,6 +1,7 @@
 (
     id: "zero_day",
     name: "ZeroDay",
+    behaviour: Some("hunter"),
     glyph: 'z',
     color: White,
     base_hp: 106,

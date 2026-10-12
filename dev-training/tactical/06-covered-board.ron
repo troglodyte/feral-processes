@@ -1,0 +1,14 @@
+// A rolled surface encounter, so the board and the pack are ones nobody
+// authored for the profile. Cover comes from the biome's own board.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "sprite", level: 9),
+    ],
+    encounter: Some(Field(biome: Mainframe)),
+    model: Tactical,
+    party_turns: AutoPlay,
+    reps: 200,
+    seed: 206,
+)

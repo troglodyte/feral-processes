@@ -1,0 +1,19 @@
+// Opponents that can swing from range, where holding distance and picking a
+// target without closing both matter.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "construct", level: 9),
+    ],
+    opponents: [
+        (species: "sprite", count: 2),
+        (species: "zero_day", count: 2),
+        (species: "drone", count: 1),
+    ],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(West),
+    reps: 200,
+    seed: 207,
+)

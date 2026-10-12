@@ -272,7 +272,8 @@
   says so. See `seam:the-arena-chooses-its-own-model-and-stage-takes-the-one-its`.
 
 - **A headless tactical rep drives both sides through one AI, and a party
-  body swings without invoking.** `tactical_ai_actor`'s gate is `Hostile`
+  body swings without invoking unless the scenario says `party_turns:
+  AutoPlay`.** `tactical_ai_actor`'s gate is `Hostile`
   because every party body is the player's to command, so a fight with nobody
   at the keyboard cannot be resolved through that door at all —
   `tactical_drive_turn` is the second door onto the same `run_tactical_turn`,
@@ -293,7 +294,15 @@
   arena plan invokes nothing either, so the two models' numbers stay
   comparable, and driving a party body through `wild_routine_ready` would
   have run its routines free besides (a hostile holds no `PowerReserve`,
-  which is that picker's whole reason). A `PartyPlan` is **refused** for a
+  which is that picker's whole reason). **`party_turns: AutoPlay` is the other
+  mode** — `PartyTurns::Invoke` through the same `tactical_drive_turn`, the
+  `[A]` logic with its routines, Power cells and own-side blast veto, so a
+  hostile profile can be judged against a party that fires its kit;
+  `SwingOnly` stays the default so existing numbers do not move. It and the
+  scenario's `behaviour:` override (`BehaviourDb::set_override`, an unknown id
+  an `Err` at `arena::stage` because `for_species` would fall back to
+  `default` and sweep the wrong profile in silence) are refused on a
+  `model: Group` scenario. A `PartyPlan` is **refused** for a
   tactical scenario rather than ignored. The rep loop's own trap:
   `MessageLog::open_round` has one caller and it is the group model's, so
   `since_round()` on a battle map is the whole fight and `Watch::observe`

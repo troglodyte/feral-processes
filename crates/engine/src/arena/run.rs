@@ -82,13 +82,13 @@ pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> Re
 /// than ignoring it: bracing is a slot's departure from All-Attack, and a
 /// battle map has no slots. What a party body does instead is
 /// `tactical_drive_turn`'s own decision, and it is All-Attack's analogue —
-/// close, and swing.
+/// close, and swing — unless the scenario asks for `PartyTurnsSpec::AutoPlay`.
 ///
 /// The bound is `ROUND_CAP` again, and it is reached the same way: `Watch`
 /// counts a round per observation, and an observation is a round of the
 /// order coming round. A driven turn always hands the turn on, so a fight
 /// that cannot resolve spends rounds rather than spinning inside one.
-pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch) -> RepRecord {
+pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch, party: PartyTurns) -> RepRecord {
     while watch.rounds() < ROUND_CAP {
         // `run_rep`'s two reasons, unchanged: `has_active_battle` already
         // answers for both models, and a Permadeath save carried in ends the
@@ -97,7 +97,7 @@ pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch) -> RepRecord 
             break;
         }
         let round = game.fight_round().unwrap_or(0);
-        if !game.tactical_drive_turn(PartyTurns::SwingOnly) {
+        if !game.tactical_drive_turn(party) {
             break;
         }
         // The fight ending inside the turn is observed too, and counts as a

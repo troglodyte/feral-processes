@@ -445,7 +445,7 @@ fn a_walk_that_provokes_is_worth_less_than_one_that_does_not() {
     let at = cell(&game, player);
     let out = (at.0 - 1, at.1);
 
-    let risked = game.walk_risk(player, out);
+    let risked = game.walk_risk(player, out, 1.0);
     assert!(
         risked > 0.0,
         "walking out of a hostile's reach was scored as free"
@@ -455,7 +455,7 @@ fn a_walk_that_provokes_is_worth_less_than_one_that_does_not() {
         .resource_mut::<TacticalBattle>()
         .spend_reaction(hostile);
     assert_eq!(
-        game.walk_risk(player, out),
+        game.walk_risk(player, out, 1.0),
         0.0,
         "a body with no reaction left was still priced as a threat"
     );

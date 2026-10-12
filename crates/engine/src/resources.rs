@@ -2515,6 +2515,12 @@ pub struct ZoneSpawnPoint {
 #[derive(Resource, Default)]
 pub struct EnemyPolicy(pub Option<crate::policy::PolicyWeights>);
 
+/// The tactical behaviour profiles, `assets/behaviours/`. Not saved: a
+/// profile is an asset, looked up through the body's species at decision
+/// time, so retuning one reaches saves in flight.
+#[derive(Resource)]
+pub struct Behaviours(pub crate::behaviours::BehaviourDb);
+
 /// A squad of base staff currently away from the base.
 ///
 /// **The site is stored resolved, never as an id or a board index.** A

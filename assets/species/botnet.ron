@@ -1,6 +1,7 @@
 (
     id: "botnet",
     name: "Botnet",
+    behaviour: Some("brute"),
     glyph: 'b',
     color: DarkGreen,
     base_hp: 132,

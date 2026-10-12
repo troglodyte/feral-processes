@@ -1,0 +1,24 @@
+// Zone 5, level 20, fully kitted, against a mixed four.
+(
+    player: Fresh(level: 20, zone: 5),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 14),
+        (species: "sentinel", level: 14),
+        (species: "rootkit", level: 14),
+    ],
+    opponents: [
+        (species: "rootkit", count: 2),
+        (species: "cipher", count: 1),
+        (species: "drone", count: 1),
+    ],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(North),
+    reps: 200,
+    seed: 205,
+)

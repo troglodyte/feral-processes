@@ -1,6 +1,7 @@
 (
     id: "sprite",
     name: "Sprite",
+    behaviour: Some("skirmisher"),
     glyph: 's',
     color: Cyan,
     base_hp: 41,

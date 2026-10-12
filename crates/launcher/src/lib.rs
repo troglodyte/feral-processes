@@ -17,4 +17,5 @@ pub mod dev_template;
 pub mod paths;
 pub mod scratch_assets;
 pub mod soak;
+pub mod tactical_train;
 pub mod tuner;

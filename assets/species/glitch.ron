@@ -1,6 +1,7 @@
 (
     id: "glitch",
     name: "Glitch",
+    behaviour: Some("skirmisher"),
     glyph: 'g',
     color: Green,
     base_hp: 38,

@@ -6187,3 +6187,44 @@ fn every_shipped_charge_routine_is_a_multi_round_damage_with_a_node() {
         );
     }
 }
+
+#[test]
+fn the_default_behaviour_exists_and_every_shipped_species_names_a_real_profile() {
+    let (db, warnings) =
+        crate::behaviours::BehaviourDb::load_dir(&test_assets_dir().join("behaviours")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(db.default_profile().id, "default");
+    let (abilities, _) =
+        crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+    let (species, _) = SpeciesDb::load_dir(&test_assets_dir().join("species"), &abilities).unwrap();
+    let unknown = db.unknown_species_references(&species);
+    assert!(unknown.is_empty(), "{unknown:?}");
+}
+
+#[test]
+fn every_shipped_behaviour_names_only_known_features() {
+    let (_, warnings) =
+        crate::behaviours::BehaviourDb::load_dir(&test_assets_dir().join("behaviours")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn shipped_species_name_the_personalities_the_spec_assigns() {
+    let (abilities, _) =
+        crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+    let (species, _) = SpeciesDb::load_dir(&test_assets_dir().join("species"), &abilities).unwrap();
+    for (profile, ids) in [
+        (
+            "brute",
+            ["rootkit", "botnet", "worm", "scrapper"].as_slice(),
+        ),
+        ("hunter", &["cipher", "zero_day", "trojan", "polymorph"]),
+        ("skirmisher", &["glitch", "sprite"]),
+        ("cautious", &["drone", "construct"]),
+    ] {
+        for id in ids {
+            let named = species.get(id).and_then(|d| d.behaviour.as_deref());
+            assert_eq!(named, Some(profile), "{id}");
+        }
+    }
+}

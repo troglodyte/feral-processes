@@ -1,0 +1,26 @@
+// Five rootkits fold into one squad on the board (2x2 footprint walking).
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [(species: "rootkit", count: 5)],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(East),
+    reps: 200,
+    seed: 204,
+)

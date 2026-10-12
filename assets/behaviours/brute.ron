@@ -1,0 +1,9 @@
+(
+    id: "brute",
+    name: "Brute",
+    description: "Closes fast, ignores cover and reactions, hits the nearest body.",
+    pinned: { "is_routine": 1000.0, "target_distance": -8.0 },
+    signs: { "target_hp_frac": Negative },
+    weights: { "target_hp_frac": -0.5 },
+    cells: (reach: 40.0, closing: 1.5, cover: 0.0, cover_tiebreak: 0.0, crowding: 0.25, reaction: 0.0),
+)

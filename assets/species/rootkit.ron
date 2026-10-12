@@ -1,6 +1,7 @@
 (
     id: "rootkit",
     name: "Rootkit",
+    behaviour: Some("brute"),
     glyph: 'k',
     color: Red,
     base_hp: 132,

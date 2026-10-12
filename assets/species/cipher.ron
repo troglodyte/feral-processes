@@ -1,6 +1,7 @@
 (
     id: "cipher",
     name: "Cipher",
+    behaviour: Some("hunter"),
     glyph: 'c',
     color: Cyan,
     base_hp: 113,

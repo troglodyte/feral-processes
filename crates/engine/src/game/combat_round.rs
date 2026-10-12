@@ -863,7 +863,6 @@ impl Game {
             .filter_map(|(idx, group)| {
                 let front = group.front()?;
                 let mut row = self.enemy_row(
-                    group.id,
                     front,
                     idx,
                     group.members.len(),
@@ -871,6 +870,7 @@ impl Game {
                     catalyst_potency,
                     bonuses,
                 )?;
+                row.id = group.id;
                 row.charge = self.group_charge_tag(&group.members);
                 Some(row)
             })
@@ -904,7 +904,6 @@ impl Game {
     /// with the fight it is reporting.
     fn enemy_row(
         &self,
-        id: battle::GroupId,
         front: Entity,
         idx: usize,
         count: usize,
@@ -923,7 +922,9 @@ impl Game {
         let resistance = self.target_resistance(front)?;
         let is_boss = species.is_some_and(|s| s.is_boss);
         Some(EnemyGroupView {
-            id,
+            // A group model overwrites this with the group's own id; on a
+            // grid there are no groups, so the body's position stands in.
+            id: battle::GroupId::new(idx as u32),
             letter: (b'A' + idx as u8) as char,
             species_name,
             count,
@@ -1012,10 +1013,7 @@ impl Game {
         let groups: Vec<EnemyGroupView> = standing
             .into_iter()
             .enumerate()
-            .filter_map(|(idx, body)| {
-                let id = battle::GroupId::new(idx as u32);
-                self.enemy_row(id, body, idx, 1, true, catalyst_potency, bonuses)
-            })
+            .filter_map(|(idx, body)| self.enemy_row(body, idx, 1, true, catalyst_potency, bonuses))
             .collect();
 
         // Off `Party` and not off the board: a companion that fell is still

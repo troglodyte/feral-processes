@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.19
+
+**In a group battle you can now see each blow land: a number floats off the row it hit, the row flashes, and the picture window reacts.** Damage floats red as `-N`, a critical hit floats larger in white as `CRIT -N`, healing floats green as `+N`, a miss or fumble shows a dim `miss` or `fumble`, and a kill shows `KO`. Several blows on one row spread out side by side instead of stacking. The picture shakes when the program in it is hit and gets a `KO` stamp when it falls.
+
+**The numbers now match what the battle log says happened.** Before, floats were guessed from health changes between frames: they could not show a miss or a crit, a kill showed the next enemy's health, a skipped round collapsed into one number, and an enemy group's damage bar could jump to another group when the front group died. Now each log line carries the blow it describes, and the screen draws exactly that, in step with the log. Skipping a round shows every blow in it.
+
 ## 0.18.18
 
 **A program's manifest now opens straight onto you, with the whole roster in a rail down the side.** The separate picker is gone. The rail lists you, then your party in slot order, then everyone else A–Z, and puts a `!` on anyone who needs you: unspent perk or stat points, banked points, or an idle program. ↑/↓ page like ←/→, a digit or lowercase letter jumps to that row, and watching moved to `W`.

@@ -70,6 +70,7 @@ spec resolves to a release tag.
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
 | `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
 | `2026-10-11-manifest-redesign-design` | `v0.18.18`; plan `plans/2026-10-11-manifest-redesign.md` | Roster rail (retires `Mode::ManifestPick`), summary band, three-column ledger on `hud::palette`; `Game::subject_ranks`, `Game::manifest_roster`; visual target: the feral-processes design system's Manifest proposal cards |
+| `2026-10-12-battle-impact-feedback-design` | `v0.18.19`; plan `plans/2026-10-12-battle-impact-feedback.md` | `LogLine.impact` (`Impact`, `ImpactTarget`, `ImpactKind`), `battle::GroupId`; `App::take_pending_impacts`; `Fx::land` floats, row flashes and portrait reaction; ghost bars keyed by `ImpactTarget` |
 
 **The settlement ladder is finished and has no open row.** The two settlement
 specs shipped everything they scoped, and the three things they deferred *by

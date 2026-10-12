@@ -2456,14 +2456,13 @@ mod tests {
         fx.bar_ghost(ImpactTarget::Party(0), 100, 0.0);
         fx.bar_ghost(group(1000), 100, 0.0);
 
-        let party = fx.bar_ghost(ImpactTarget::Party(0), 40, 0.016);
-        let hostile = fx.bar_ghost(group(1000), 100, 0.016);
+        let hostile = fx.bar_ghost(group(1000), 10, 0.1);
+        assert!(hostile.ghost < 100.0, "the group's own ghost drains");
+        let party = fx.bar_ghost(ImpactTarget::Party(0), 50, 0.0);
 
-        assert!(
-            hostile.ghost > party.ghost,
-            "the group inherited the party slot's drain: {} vs {}",
-            hostile.ghost,
-            party.ghost
+        assert_eq!(
+            party.ghost, 100.0,
+            "the party slot inherited the group's drain"
         );
     }
 

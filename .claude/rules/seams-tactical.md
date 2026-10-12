@@ -158,6 +158,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A profiled hostile's forecast is a call into the planner its turn
   runs**: `tactical_intent`, `scored_cells` and `chosen_target`, with
   `argmax_scored` shared with `sample_scored`.
+- **Personality is per species and read through `Game::behaviour_of` (arena
+  override first), and a hostile's decision is a deterministic argmax with
+  ties to the first candidate** — the cell softmax stays the only AI draw.
 - **`AbilityEffect::tactical_only` is the group model's filter, applied at
   every chooser that is not a battle map**, and `use_ability`'s `Tamper` arm
   is `unreachable!` because of it.

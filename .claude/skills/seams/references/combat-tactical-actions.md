@@ -591,3 +591,15 @@ damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.
   than the cap said. A line of six volatile props shows exactly the cap's
   worth of blasts and leaves the rest standing; the chain test asserts the cue
   count as well as what stands.
+
+- **Personality is per species, the profile is `Game::behaviour_of`, and the
+  decision is a draw-free argmax.** `SpeciesDef::behaviour` names a profile;
+  `behaviour_of` reads it off the body's species and goes through
+  `BehaviourDb::for_species`, where the arena's forced override wins, then the
+  species' own, then the default profile. Reading a profile any other way
+  (off the entity, off a per-fight copy) lets the forecast and the turn
+  disagree. The action and aim are scored candidates sorted in reading order,
+  and `policy::first_best` takes the *first* of equals, unlike
+  `argmax_scored`, which keeps the last for the cell draw. A tie going the
+  other way, or a draw added to the decision, shifts the seeded stream under
+  every fight; the cell softmax stays the only AI draw.

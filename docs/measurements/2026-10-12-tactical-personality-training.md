@@ -53,3 +53,22 @@ keep its character, and is left open for a decision.
   few percent are within run-to-run noise from a different seed.
 - Same blind spots as the baseline note: two walkover scenarios, one noisy
   rounds term (06), every hostile on one profile.
+
+## Re-run with the character pinned (same build 86b219b7, same settings)
+
+Brute and hunter trained weights had failed the behaviour tests, and
+skirmisher's search had zeroed `target_hp_frac`. Decision: pin each profile's
+`target_hp_frac` at its hand value and retrain only the rest.
+
+- **Skirmisher** (`target_hp_frac` -3.2 pinned; free `would_kill` 4.1 -> 5.72):
+  HP lost -0.7%, enemy win -0.6%, in band. Shipped; behaviour tests pass and
+  "picks at the weakest" stays true. This replaces the table row above.
+- **Hunter** (`target_hp_frac` -3.0 pinned; free `est_damage_frac` 1.0 ->
+  3.75, the only free weight; no features added): HP lost -11.7%, enemy win
+  -12.2%, **not in band**. The only free weight cannot close the gap, so
+  hunter ships hand-set and remains about 12% easier than `default` on this
+  set. The band was not loosened.
+- **Cautious**: `would_kill` was zeroed by training. The description
+  ("when hurt it prefers far targets, cover and room") is carried by the
+  pinned `self_x_target_distance` and the cell weights, not `would_kill`,
+  so the text stays true.

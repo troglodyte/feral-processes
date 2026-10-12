@@ -5,14 +5,13 @@
     pinned: {
         "is_routine": 1000.0,
         "target_distance": 1.5,
+        "target_hp_frac": -3.2,
     },
     signs: {
-        "target_hp_frac": Negative,
         "would_kill": Positive,
     },
     weights: {
-        "target_hp_frac": 0.0,
-        "would_kill": 3.07449,
+        "would_kill": 5.721532,
     },
     cells: (
         reach: 40.0,

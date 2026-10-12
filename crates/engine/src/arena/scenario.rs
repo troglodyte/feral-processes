@@ -77,6 +77,12 @@ pub struct Scenario {
     /// opponents around the player and so has no bearing to read, and
     /// authoring one is the only way to measure what being flanked costs.
     pub approach: Option<Approach>,
+    /// `Tactical` only — what the party's bodies do on their turns.
+    pub party_turns: PartyTurnsSpec,
+    /// `Tactical` only — a behaviour profile every hostile plays, whatever
+    /// its species names, so one profile is judged on fixed fights. An id
+    /// with no profile is refused at stage time.
+    pub behaviour: Option<String>,
     pub reps: u32,
     pub seed: u64,
 }
@@ -98,6 +104,8 @@ impl Default for Scenario {
             encounter: None,
             model: CombatModel::default(),
             approach: None,
+            party_turns: PartyTurnsSpec::default(),
+            behaviour: None,
             reps: 1,
             seed: 0,
         }
@@ -144,6 +152,26 @@ pub enum CombatModel {
     Group,
     /// A battle map — `Game::open_tactical_battle_at`.
     Tactical,
+}
+
+/// What a headless tactical rep's party bodies do on their turns.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PartyTurnsSpec {
+    /// Close and swing, never invoking: `PartyPlan::AllAttack`'s parity, so
+    /// the two models' numbers stay comparable.
+    #[default]
+    SwingOnly,
+    /// The `[A]` logic: routines, Power cells and the own-side blast veto.
+    AutoPlay,
+}
+
+impl PartyTurnsSpec {
+    pub(crate) fn turns(self) -> crate::tactical::ai::PartyTurns {
+        match self {
+            Self::SwingOnly => crate::tactical::ai::PartyTurns::SwingOnly,
+            Self::AutoPlay => crate::tactical::ai::PartyTurns::Invoke,
+        }
+    }
 }
 
 /// A compass bearing, as seen from the party.
@@ -409,6 +437,17 @@ impl Scenario {
                  to seat anyone on"
                     .into(),
             );
+        }
+        for (field, set) in [
+            ("party_turns", self.party_turns != PartyTurnsSpec::default()),
+            ("behaviour", self.behaviour.is_some()),
+        ] {
+            if set && self.model != CombatModel::Tactical {
+                return Err(format!(
+                    "`{field}` applies only to `model: Tactical` — a group fight has no battle \
+                     map to play it on"
+                ));
+            }
         }
         if self.encounter.is_none() && self.opponents.is_empty() {
             return Err("`opponents` is empty — a scenario with nobody to fight is a typo".into());

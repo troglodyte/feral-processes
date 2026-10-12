@@ -113,6 +113,8 @@ run rather than quietly changing the fight.
 | `encounter` | `None` | A context to roll instead of authoring one |
 | `model` | `Group` | Which combat model fights it — see below |
 | `approach` | `None` | `Tactical` only. Which way the pack is seated |
+| `party_turns` | `SwingOnly` | `Tactical` only. `AutoPlay` drives the party with the `[A]` logic (routines, Power, own-side blast veto); `SwingOnly` closes and swings only |
+| `behaviour` | `None` | `Tactical` only. A profile id from `assets/behaviours/` every hostile plays instead of its species' own; an unknown id is refused |
 | `reps` | `1` | How many times to run it |
 | `seed` | `0` | Rep *n* runs at `seed + n` |
 

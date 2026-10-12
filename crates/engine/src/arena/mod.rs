@@ -28,7 +28,7 @@ mod watch;
 pub use report::{RepRecord, Report, Summary};
 pub use scenario::{
     Approach, CharacterSpec, CombatModel, CompanionSpec, Encounter, EquipSpec, InventorySpec,
-    OpponentSpec, PlayerSource, Scenario,
+    OpponentSpec, PartyTurnsSpec, PlayerSource, Scenario,
 };
 pub use watch::Watch;
 
@@ -299,6 +299,16 @@ pub fn stage(
         });
     }
     let mut game = setup::build_player(scenario, assets_dir)?;
+    if let Some(id) = &scenario.behaviour {
+        // Refused rather than ignored: `for_species` falls back to `default`
+        // on an id it lacks, so a typo would sweep the wrong profile in
+        // silence.
+        let mut behaviours = game.world.resource_mut::<crate::resources::Behaviours>();
+        if behaviours.0.get(id).is_none() {
+            return Err(format!("`behaviour` names no profile: `{id}`"));
+        }
+        behaviours.0.set_override(Some(id.clone()));
+    }
     // Armed here rather than by whoever installs the `Game`, because
     // `begin_battle` below is what emits `fight_start` — a game armed after
     // staging joins its own fight already in progress. `run_rep` passes
@@ -460,7 +470,11 @@ pub fn run(
         }
         reps.push(match scenario.model {
             CombatModel::Group => run::run_rep(&mut staged.game, &mut staged.watch, opts.party),
-            CombatModel::Tactical => run::run_tactical_rep(&mut staged.game, &mut staged.watch),
+            CombatModel::Tactical => run::run_tactical_rep(
+                &mut staged.game,
+                &mut staged.watch,
+                scenario.party_turns.turns(),
+            ),
         });
         if opts.telemetry {
             let fight = rep as u64 + 1;
@@ -497,7 +511,11 @@ pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
         CombatModel::Group => {
             run::run_rep(&mut staged.game, &mut staged.watch, PartyPlan::default())
         }
-        CombatModel::Tactical => run::run_tactical_rep(&mut staged.game, &mut staged.watch),
+        CombatModel::Tactical => run::run_tactical_rep(
+            &mut staged.game,
+            &mut staged.watch,
+            scenario.party_turns.turns(),
+        ),
     }
 }
 
@@ -713,6 +731,107 @@ mod tests {
             model: CombatModel::Tactical,
             approach,
             ..a_scenario(reps, seed, &[("glitch", 6)])
+        }
+    }
+
+    /// Whether the player ever invokes `routine` in a staged tactical fight
+    /// of `s`, read off the cooldown the invocation arms.
+    ///
+    /// Turn by turn through the driver `run_tactical_rep` wraps, because the
+    /// cooldown is torn down again by the time a whole rep has finished.
+    fn player_invokes(s: &Scenario, routine: &str) -> bool {
+        let mut staged = stage(s, &test_assets_dir(), 5, false, CombatModel::Tactical).unwrap();
+        let player = staged.game.player_entity();
+        staged
+            .game
+            .world
+            .entity_mut(player)
+            .insert(crate::components::Routines(vec![routine.to_string()]));
+        for _ in 0..200 {
+            if !staged.game.has_active_battle()
+                || !staged.game.tactical_drive_turn(s.party_turns.turns())
+            {
+                return false;
+            }
+            let cooling = staged
+                .game
+                .world
+                .get::<crate::components::AbilityCooldowns>(player)
+                .is_some_and(|c| c.0.contains_key(routine));
+            if cooling {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn an_auto_play_party_fires_a_ready_routine_and_swing_only_never_does() {
+        let invokes = |party_turns| {
+            let s = Scenario {
+                party_turns,
+                ..a_tactical_scenario(1, 5, None)
+            };
+            player_invokes(&s, crate::tests::support::HOSTILE_SWEEP)
+        };
+
+        assert!(
+            invokes(PartyTurnsSpec::AutoPlay),
+            "AutoPlay never invoked the routine"
+        );
+        assert!(
+            !invokes(PartyTurnsSpec::SwingOnly),
+            "SwingOnly invoked a routine"
+        );
+    }
+
+    #[test]
+    fn a_behaviour_override_makes_every_hostile_play_that_profile() {
+        let s = Scenario {
+            behaviour: Some("brute".into()),
+            ..a_tactical_scenario(1, 5, None)
+        };
+        let mut staged = stage(&s, &test_assets_dir(), 5, false, CombatModel::Tactical).unwrap();
+        let mut game = std::mem::replace(
+            &mut staged.game,
+            Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap(),
+        );
+        let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+        let pack: Vec<Entity> = query.iter(&game.world).collect();
+        assert!(!pack.is_empty());
+        let brute = game
+            .world
+            .resource::<crate::resources::Behaviours>()
+            .0
+            .get("brute")
+            .unwrap()
+            .clone();
+        for body in pack {
+            assert_eq!(game.behaviour_of(body), &brute);
+        }
+    }
+
+    #[test]
+    fn an_unknown_behaviour_id_is_refused_by_name() {
+        let s = Scenario {
+            behaviour: Some("not_a_profile".into()),
+            ..a_tactical_scenario(1, 5, None)
+        };
+        let err = match stage(&s, &test_assets_dir(), 5, false, CombatModel::Tactical) {
+            Ok(_) => panic!("a typo'd profile id staged silently"),
+            Err(e) => e,
+        };
+        assert!(err.contains("not_a_profile"), "{err}");
+    }
+
+    #[test]
+    fn auto_play_and_a_behaviour_on_a_group_scenario_are_refused() {
+        for field in ["party_turns: AutoPlay", "behaviour: Some(\"brute\")"] {
+            let err = Scenario::from_ron(&format!(
+                r#"(opponents: [(species: "glitch", count: 1)], {field})"#
+            ))
+            .unwrap_err();
+            assert!(err.contains("Tactical"), "{err}");
         }
     }
 

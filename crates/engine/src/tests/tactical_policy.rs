@@ -246,3 +246,182 @@ fn the_same_seed_and_profile_replay_the_same_blow() {
     };
     assert_eq!(blow(), blow());
 }
+
+// ---- personalities --------------------------------------------------------
+
+mod personalities {
+    use super::*;
+    use crate::components::Creature;
+    use crate::tactical::map::Board;
+    use crate::tactical::reach;
+
+    /// Plays `wild` as `species`, so it carries that species' profile and
+    /// its swing range, with no routine to fire.
+    fn become_species(game: &mut Game, wild: Entity, species: &str) {
+        game.world.get_mut::<Creature>(wild).unwrap().species = species.to_string();
+        strip_routines(game, wild);
+    }
+
+    fn override_profile(game: &mut Game, id: &str) {
+        game.world
+            .resource_mut::<Behaviours>()
+            .0
+            .set_override(Some(id.into()));
+    }
+
+    fn open_board(game: &mut Game, boulders: &[(usize, usize)]) {
+        let mut rows = vec![".".repeat(12); 12];
+        for &(x, y) in boulders {
+            rows[y].replace_range(x..=x, "#");
+        }
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        game.world.resource_mut::<TacticalBattle>().board = Board::from_rows(&rows);
+    }
+
+    fn put(game: &mut Game, body: Entity, cell: (i32, i32)) {
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, cell),
+            "{cell:?} would not take a body"
+        );
+    }
+
+    fn cell_of(game: &Game, body: Entity) -> (i32, i32) {
+        game.world
+            .resource::<TacticalBattle>()
+            .cell_of(body)
+            .expect("on the board")
+    }
+
+    /// A ranged `species` at (5,4) and the player at (8,4), a boulder on
+    /// (7,3) beside the line between them, so the cell (6,4) has partial cover
+    /// from the player and still sees them. Whether the cell its turn ends on
+    /// has cover from the player.
+    fn ranged_stand(species: &str) -> bool {
+        let mut game = game();
+        let wild = tactical_fight(&mut game, 1, 10_000)[0];
+        become_species(&mut game, wild, species);
+        assert!(game.swing_range(wild) > 1, "{species} is not ranged");
+        open_board(&mut game, &[(7, 3)]);
+        let player = game.player_entity();
+        set_hp(&mut game, player, 10_000, 10_000);
+        put(&mut game, player, (8, 4));
+        put(&mut game, wild, (5, 4));
+        assert!(wait_for_turn(&mut game, wild));
+        assert!(game.tactical_ai_turn_at(0.0));
+        let end = cell_of(&game, wild);
+        let board = &game.world.resource::<TacticalBattle>().board;
+        reach::cover_between(board, (8, 4), end)
+    }
+
+    #[test]
+    fn a_brute_walks_past_cover_and_a_skirmisher_walks_to_it() {
+        assert!(ranged_stand("glitch"), "the skirmisher took no cover");
+        assert!(!ranged_stand("rootkit"), "the brute stopped for cover");
+    }
+
+    /// A ranged `species` at (2,4) with the player at (4,4) and a companion
+    /// at (3,4); the player is the hurt one unless `companion_hp` says
+    /// otherwise. Returns the cell its blow lands on.
+    fn picks(species: &str, own_hp: i32, player_hp: i32, companion_hp: i32) -> (i32, i32) {
+        let mut game = game();
+        let companion = spawn_tamed(&mut game, 100, 3);
+        enlist(&mut game, companion);
+        let wild = tactical_fight(&mut game, 1, 100)[0];
+        become_species(&mut game, wild, species);
+        open_board(&mut game, &[]);
+        let player = game.player_entity();
+        set_hp(&mut game, player, player_hp, 100);
+        set_hp(&mut game, companion, companion_hp, 100);
+        set_hp(&mut game, wild, own_hp, 100);
+        // Parked first so no body is refused a cell another has not left.
+        put(&mut game, wild, (0, 11));
+        put(&mut game, player, (4, 4));
+        put(&mut game, companion, (3, 4));
+        put(&mut game, wild, (2, 4));
+        swing_lands_on(&mut game, wild)
+    }
+
+    #[test]
+    fn a_hunter_swings_at_the_wounded_companion_over_a_player_it_would_otherwise_pick() {
+        // The player is the weakest body, so `default` takes them; a hunter
+        // would sooner have the soft target.
+        let (player_cell, companion_cell) = ((4, 4), (3, 4));
+        assert_eq!(picks("crawler", 100, 50, 75), player_cell, "the control");
+        assert_eq!(picks("cipher", 100, 50, 75), companion_cell);
+    }
+
+    #[test]
+    fn a_brute_swings_at_the_nearest_body_not_the_weakest() {
+        let (player_cell, companion_cell) = ((4, 4), (3, 4));
+        // The player is the weaker and the farther: `default` takes them, a
+        // brute takes the companion beside it.
+        assert_eq!(picks("crawler", 100, 50, 100), player_cell, "the control");
+        assert_eq!(picks("rootkit", 100, 50, 100), companion_cell);
+    }
+
+    #[test]
+    fn a_cautious_body_prefers_the_far_target_only_when_it_is_hurt() {
+        let (player_cell, companion_cell) = ((4, 4), (3, 4));
+        assert_eq!(
+            picks("drone", 10, 100, 100),
+            player_cell,
+            "hurt: the far one"
+        );
+        assert_eq!(
+            picks("drone", 100, 100, 100),
+            companion_cell,
+            "well: the near one"
+        );
+    }
+
+    /// Nine of a kind fold into a 2x2 squad. Stood with its block just in
+    /// reach of the player, it holds still: the block reaches, though its
+    /// anchor is a cell short, and a profile that walks it anyway is
+    /// scoring the anchor.
+    #[test]
+    fn a_squad_under_a_profile_scores_its_whole_footprint() {
+        let mut game = game();
+        tactical_fight(&mut game, 9, 10);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<crate::components::Squad>(e).is_some())
+                .expect("nine of a kind seat a squad")
+        };
+        override_profile(&mut game, "skirmisher");
+        open_board(&mut game, &[]);
+        let player = game.player_entity();
+        let singles: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .filter(|&e| e != squad && e != player)
+            .collect();
+        for (i, &single) in singles.iter().enumerate() {
+            put(&mut game, single, (i as i32 * 2, 11));
+        }
+        // On the very edge of the block's reach, which the anchor alone falls
+        // one cell short of.
+        let reach_of = game.swing_range(squad) as i32;
+        put(&mut game, player, (2 + reach_of, 2));
+        put(&mut game, squad, (1, 1));
+        assert!(wait_for_turn(&mut game, squad));
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().footprint_of(squad),
+            2
+        );
+
+        assert!(game.tactical_ai_turn_at(0.0));
+
+        assert_eq!(
+            cell_of(&game, squad),
+            (1, 1),
+            "the squad walked off a reach it had"
+        );
+    }
+}

@@ -1,6 +1,7 @@
 (
     id: "polymorph",
     name: "Polymorph",
+    behaviour: Some("hunter"),
     glyph: 'y',
     color: Cyan,
     base_hp: 79,

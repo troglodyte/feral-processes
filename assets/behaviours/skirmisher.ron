@@ -1,0 +1,9 @@
+(
+    id: "skirmisher",
+    name: "Skirmisher",
+    description: "Keeps its distance, hugs cover, avoids reaction swings, picks at the weakest.",
+    pinned: { "is_routine": 1000.0, "target_distance": 1.5 },
+    signs: { "target_hp_frac": Negative, "would_kill": Positive },
+    weights: { "target_hp_frac": -3.2, "would_kill": 4.1 },
+    cells: (reach: 40.0, closing: 0.6, cover: 9.0, cover_tiebreak: 0.5, crowding: 1.5, reaction: 2.0),
+)

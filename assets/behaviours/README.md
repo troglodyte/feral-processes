@@ -61,3 +61,13 @@ unknown feature name logs a warning at load and is ignored.
 
 `default` weights `is_routine` high enough to beat any swing and
 `target_hp_frac` negative: a ready routine, otherwise the weakest body.
+
+## Shipped profiles
+
+| Profile | Character | Species |
+|---|---|---|
+| `default` | A ready routine, otherwise the weakest body in reach. | crawler, proxy, virus, sub_process, sentinel, overseer, wintermute |
+| `brute` | Closes fast, ignores cover and reactions, hits the nearest. | rootkit, botnet, worm, scrapper |
+| `hunter` | Focuses the wounded, takes kills, prefers soft targets over the player. | cipher, zero_day, trojan, polymorph |
+| `skirmisher` | Keeps its distance, hugs cover, avoids reaction swings. | glitch, sprite |
+| `cautious` | Weighs its own Integrity: when hurt, prefers far targets, cover and room. | drone, construct |

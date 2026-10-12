@@ -1,6 +1,7 @@
 (
     id: "drone",
     name: "Drone",
+    behaviour: Some("cautious"),
     glyph: 'o',
     color: Gray,
     base_hp: 48,

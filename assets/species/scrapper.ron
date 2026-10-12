@@ -1,6 +1,7 @@
 (
     id: "scrapper",
     name: "Scrapper",
+    behaviour: Some("brute"),
     glyph: 'x',
     color: Yellow,
     base_hp: 80,

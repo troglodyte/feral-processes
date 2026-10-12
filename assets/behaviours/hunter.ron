@@ -1,0 +1,8 @@
+(
+    id: "hunter",
+    name: "Hunter",
+    description: "Focuses the wounded, takes kills, prefers soft targets over the player.",
+    pinned: { "is_routine": 1000.0, "would_kill": 4.0, "target_is_player": -2.0 },
+    signs: { "target_hp_frac": Negative, "est_damage_frac": Positive },
+    weights: { "target_hp_frac": -3.0, "est_damage_frac": 1.0 },
+)

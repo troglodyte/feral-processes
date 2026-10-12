@@ -254,6 +254,16 @@ impl Game {
         }
     }
 
+    /// How `actor` walks: its profile's cell weights if it decides by one,
+    /// the global tuning otherwise.
+    pub(crate) fn cell_weights_of(&self, actor: Entity) -> CellWeights {
+        if self.decides_by_profile(actor) {
+            self.behaviour_of(actor).cells
+        } else {
+            CellWeights::default()
+        }
+    }
+
     /// Whether `actor` decides by its species' profile: a `Hostile` body,
     /// injected or not. The party's bodies keep the old fixed rules.
     pub(crate) fn decides_by_profile(&self, actor: Entity) -> bool {

@@ -1,6 +1,7 @@
 (
     id: "worm",
     name: "Worm",
+    behaviour: Some("brute"),
     glyph: 'm',
     color: Green,
     base_hp: 99,

@@ -1,0 +1,9 @@
+(
+    id: "cautious",
+    name: "Cautious",
+    description: "Weighs its own Integrity: when hurt it prefers far targets, cover and room.",
+    pinned: { "is_routine": 1000.0, "self_x_target_distance": 3.0 },
+    signs: { "target_hp_frac": Negative, "would_kill": Positive },
+    weights: { "target_hp_frac": -1.5, "would_kill": 1.0 },
+    cells: (reach: 40.0, closing: 1.0, cover: 8.0, cover_tiebreak: 0.75, crowding: 1.5, reaction: 3.0),
+)

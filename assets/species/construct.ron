@@ -1,6 +1,7 @@
 (
     id: "construct",
     name: "Construct",
+    behaviour: Some("cautious"),
     glyph: 'C',
     color: Red,
     base_hp: 49,

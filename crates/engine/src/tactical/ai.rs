@@ -488,7 +488,7 @@ impl Game {
             });
         }
 
-        let (cells, scores) = self.scored_cells(body, &intent, &sides, &CellWeights::default());
+        let (cells, scores) = self.scored_cells(body, &intent, &sides, &self.cell_weights_of(body));
         let walk = if cells.is_empty() {
             Vec::new()
         } else {
@@ -740,7 +740,8 @@ impl Game {
         if !matches!(intent, Intent::UseItem(_))
             && !self.world.resource::<TacticalBattle>().walk_planned()
         {
-            self.walk_to_best_cell(actor, &intent, &sides, temperature, &CellWeights::default());
+            let w = self.cell_weights_of(actor);
+            self.walk_to_best_cell(actor, &intent, &sides, temperature, &w);
             if self.step_along_walk(actor) {
                 return AiBeat::Stepped;
             }

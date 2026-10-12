@@ -1,6 +1,7 @@
 (
     id: "trojan",
     name: "Trojan",
+    behaviour: Some("hunter"),
     glyph: 't',
     color: Brown,
     base_hp: 85,

@@ -38,3 +38,26 @@ All four maps are optional (`#[serde(default)]`).
 
 The trainer re-serialises the whole file, so **comments in a profile are
 not preserved** by training.
+
+## Features
+
+A hostile scores each candidate (a swing at each body it fights, each ready
+routine) as the sum of weight times feature, and takes the highest; ties go
+to the first in reading order, and a swing candidate precedes a routine. An
+unknown feature name logs a warning at load and is ignored.
+
+| Feature | Meaning |
+|---|---|
+| `target_hp_frac` | target Integrity over its max |
+| `est_damage_frac` | expected damage of a swing over the target's Integrity (cover not read) |
+| `would_kill` | 1 if expected damage reaches the target's Integrity |
+| `target_is_player` | 1 for the player's body |
+| `target_stunned` | 1 if the target skips its turn |
+| `target_distance` | gap to the target over the board's side |
+| `is_routine` | 1 for a routine candidate |
+| `routine_net_recipients` | bodies the routine's best aim helps or harms, net |
+| `self_hp_frac` | the actor's Integrity over its max |
+| `self_x_target_distance` | `(1 - self_hp_frac) * target_distance` |
+
+`default` weights `is_routine` high enough to beat any swing and
+`target_hp_frac` negative: a ready routine, otherwise the weakest body.

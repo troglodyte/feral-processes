@@ -45,6 +45,25 @@ fn a_feature_both_pinned_and_free_warns_and_pinned_wins() {
 }
 
 #[test]
+fn an_unknown_feature_warns_and_is_ignored() {
+    let odd = r#"(id: "odd", name: "O", description: "d",
+        weights: {"would_kill": 2.0, "moon_phase": 9.0})"#;
+    let dir = dir_with(
+        "behaviours_unknown_feature",
+        &[("default.ron", DEFAULT), ("odd.ron", odd)],
+    );
+    let (db, warnings) = BehaviourDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&*dir);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("moon_phase"), "{warnings:?}");
+    let w = crate::tactical::policy::TacticalWeights::of(db.get("odd").unwrap());
+    let kill = crate::tactical::policy::TacticalFeature::WouldKill as usize;
+    let mut f = [0.0; crate::tactical::policy::TacticalFeature::COUNT];
+    f[kill] = 1.0;
+    assert_eq!(crate::tactical::policy::score(&w, &f), 2.0);
+}
+
+#[test]
 fn a_missing_default_profile_is_a_load_error() {
     let other = r#"(id: "brute", name: "B", description: "d")"#;
     let dir = dir_with("behaviours_no_default", &[("brute.ron", other)]);

@@ -123,6 +123,7 @@ mod stock;
 mod sulking;
 mod summons;
 mod tactical;
+mod tactical_policy;
 mod tactical_props;
 mod talents;
 mod taming;

@@ -6200,3 +6200,10 @@ fn the_default_behaviour_exists_and_every_shipped_species_names_a_real_profile()
     let unknown = db.unknown_species_references(&species);
     assert!(unknown.is_empty(), "{unknown:?}");
 }
+
+#[test]
+fn every_shipped_behaviour_names_only_known_features() {
+    let (_, warnings) =
+        crate::behaviours::BehaviourDb::load_dir(&test_assets_dir().join("behaviours")).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+}

@@ -16,7 +16,7 @@ use crate::Game;
 use crate::components::Creature;
 use crate::resources::Behaviours;
 use crate::species::SpeciesDb;
-use crate::tactical::policy::CellWeights;
+use crate::tactical::policy::{CellWeights, TacticalFeature};
 use bevy_ecs::prelude::Entity;
 
 const DEFAULT_ID: &str = "default";
@@ -87,6 +87,19 @@ impl BehaviourDb {
                         ));
                         def.weights.remove(&feature);
                     }
+                    let unknown: Vec<&String> = def
+                        .pinned
+                        .keys()
+                        .chain(def.weights.keys())
+                        .chain(def.signs.keys())
+                        .filter(|k| TacticalFeature::from_name(k).is_none())
+                        .collect();
+                    for feature in unknown {
+                        warnings.push(format!(
+                            "behaviour {:?}: unknown feature {feature:?} — ignored",
+                            def.id
+                        ));
+                    }
                     profiles.entry(def.id.clone()).or_insert(def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid behaviour file {path:?}: {e}")),
@@ -119,6 +132,12 @@ impl BehaviourDb {
 
     pub fn ids(&self) -> impl Iterator<Item = &str> {
         self.profiles.keys().map(String::as_str)
+    }
+
+    /// Adds or replaces a profile, for a test that needs one of its own.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: BehaviourDef) {
+        self.profiles.insert(def.id.clone(), def);
     }
 
     /// Makes every hostile play `id`, or lifts the override. An id with no

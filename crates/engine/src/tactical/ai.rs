@@ -66,7 +66,7 @@ pub(crate) enum PartyTurns {
 ///
 /// Decided before the walk, because `Intent::band` is the whole of what
 /// tells closing apart from holding off.
-enum Intent {
+pub(super) enum Intent {
     /// The basic attack `tactical_attack` swings, carrying the range
     /// `Game::swing_range` answered for the body about to act.
     ///
@@ -147,9 +147,9 @@ pub enum AiBeat {
 /// The two sides of a fight as the scoring reads them: where everyone the
 /// acting body is fighting stands, and where everyone standing with it does.
 #[derive(Default)]
-struct Sides {
-    targets: Vec<(i32, i32)>,
-    allies: Vec<(i32, i32)>,
+pub(super) struct Sides {
+    pub(super) targets: Vec<(i32, i32)>,
+    pub(super) allies: Vec<(i32, i32)>,
 }
 
 /// What a turn's action lands on, decided from a cell the body stands on —
@@ -839,11 +839,8 @@ impl Game {
     /// forfeited turn teaches here, and `a_hostile_carrier_with_nothing_to_
     /// raise_does_not_cast_respawn` pins the fall-through to a swing.
     fn tactical_intent(&self, actor: Entity, turns: PartyTurns) -> Intent {
-        if let Some(def) = self.wild_routine_ready(actor)
-            && self.world.get::<Hostile>(actor).is_some()
-            && self.hostile_routine_worth_choosing(actor, &def)
-        {
-            return Intent::Routine(Box::new(def));
+        if self.decides_by_profile(actor) {
+            return self.choose_hostile_intent(actor);
         }
         if turns == PartyTurns::Invoke
             && self.in_party(actor)
@@ -862,7 +859,7 @@ impl Game {
     /// through to `Intent::Swing` — `true` for every effect but Reanimate,
     /// which is skipped when `best_aim` would find no aim, so a carrier with
     /// nothing to raise swings instead of forfeiting the turn.
-    fn hostile_routine_worth_choosing(&self, actor: Entity, def: &AbilityDef) -> bool {
+    pub(super) fn hostile_routine_worth_choosing(&self, actor: Entity, def: &AbilityDef) -> bool {
         if !matches!(def.effect, AbilityEffect::Reanimate { .. }) {
             return true;
         }
@@ -1020,7 +1017,7 @@ impl Game {
     /// `Intent::choose` reads as "nothing to fight" — a whole side that
     /// stopped closing, stopped swinging and stood still until the caps
     /// expired.
-    fn tactical_sides(&self, actor: Entity) -> Sides {
+    pub(super) fn tactical_sides(&self, actor: Entity) -> Sides {
         let from = self.world.resource::<TacticalBattle>().cell_of(actor);
         self.tactical_sides_from(actor, from)
     }
@@ -1399,6 +1396,19 @@ impl Game {
         def: &AbilityDef,
         targets: &[(i32, i32)],
     ) -> Option<(i32, i32)> {
+        self.best_aim_scored(actor, from, def, targets)
+            .map(|(aim, _)| aim)
+    }
+
+    /// `best_aim` with the net recipient count it chose the aim by, which a
+    /// profile weighs as `routine_net_recipients`.
+    pub(super) fn best_aim_scored(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        def: &AbilityDef,
+        targets: &[(i32, i32)],
+    ) -> Option<((i32, i32), i32)> {
         let battle = self.world.resource::<TacticalBattle>();
         let band = def.tactical_range();
         let shape = def.tactical_shape();
@@ -1510,7 +1520,7 @@ impl Game {
                 }
             }
         }
-        best.map(|(aim, _)| aim)
+        best
     }
 
     /// Swings at the reachable target with the least Integrity left.
@@ -1574,16 +1584,23 @@ impl Game {
             })
             .map(|(cell, e)| (cell.1, cell.0, e))
             .collect();
-        // By Integrity, then by the board's reading order, so a tie is broken
-        // the same way twice in a seeded fight.
-        reachable.sort_by_key(|&(y, x, e)| {
-            (
-                self.world.get::<Stats>(e).map(|s| s.hp).unwrap_or(i32::MAX),
-                y,
-                x,
-            )
-        });
-        let body = reachable.first().map(|&(_, _, target)| target);
+        // **A hostile ranks them by its profile; everyone else takes the
+        // least Integrity.** Either way over the board's reading order, so a
+        // tie is broken the same way twice in a seeded fight.
+        let body = if self.decides_by_profile(actor) {
+            reachable.sort_by_key(|&(y, x, _)| (y, x));
+            let bodies: Vec<Entity> = reachable.iter().map(|&(_, _, e)| e).collect();
+            self.rank_swing_targets(actor, from, &bodies)
+        } else {
+            reachable.sort_by_key(|&(y, x, e)| {
+                (
+                    self.world.get::<Stats>(e).map(|s| s.hp).unwrap_or(i32::MAX),
+                    y,
+                    x,
+                )
+            });
+            reachable.first().map(|&(_, _, target)| target)
+        };
         // A prop is a candidate beside the body swing and scored on its
         // scale; `best_prop_swing` declines (and costs nothing) on a board
         // with no props, so the swing above is untouched there.

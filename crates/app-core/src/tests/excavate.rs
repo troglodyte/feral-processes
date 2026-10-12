@@ -53,6 +53,7 @@ fn app_without_floors(seed: u32) -> (App, NoFloorsAssets) {
         "achievements",
         "descriptions",
         "policies",
+        "behaviours",
         "affixes",
     ] {
         let dst = dir.join(sub);

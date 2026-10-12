@@ -363,6 +363,13 @@ pub struct SpeciesDef {
     /// species files (including mods) without this field keep parsing.
     #[serde(default)]
     pub taunts: Vec<String>,
+    /// The id of the `assets/behaviours/` profile this species' hostiles
+    /// decide by on a battle map. Absent plays as `default`; a name with no
+    /// profile is a load warning and also plays as `default`. Chosen per
+    /// species and never derived from class. `#[serde(default)]` so existing
+    /// species files (including mods) keep parsing.
+    #[serde(default)]
+    pub behaviour: Option<String>,
     /// Whether this species can spawn as a Nest — a stationary,
     /// destructible object that keeps 2-5 guardians of this species
     /// tethered around it and respawns any that are killed/tamed, until

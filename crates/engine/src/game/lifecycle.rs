@@ -511,6 +511,7 @@ impl Game {
             settlements: settlement_db,
             outposts: outpost_db,
             policy: enemy_policy,
+            behaviours,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -532,6 +533,7 @@ impl Game {
         world.insert_resource(settlement_db);
         world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
+        world.insert_resource(behaviours);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
@@ -1475,6 +1477,7 @@ impl Game {
             settlements: settlement_db,
             outposts: outpost_db,
             policy: enemy_policy,
+            behaviours,
             warnings: mut load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
@@ -1514,6 +1517,7 @@ impl Game {
         world.insert_resource(settlement_db);
         world.insert_resource(outpost_db);
         world.insert_resource(enemy_policy);
+        world.insert_resource(behaviours);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
         world.insert_resource(status_db);
@@ -3773,6 +3777,7 @@ struct AssetDbs {
     settlements: crate::settlements::SettlementDb,
     outposts: crate::outposts::OutpostDb,
     policy: crate::resources::EnemyPolicy,
+    behaviours: crate::resources::Behaviours,
     warnings: Vec<String>,
 }
 
@@ -3891,6 +3896,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (policy, policy_warnings) =
         crate::policy::load_file(&assets_dir.join("policies/enemy_battle.ron"))?;
     warnings.extend(policy_warnings);
+    // `default` must exist, so unlike its siblings an absent or empty
+    // directory is a startup error rather than an empty catalogue.
+    let (behaviours, behaviour_warnings) =
+        crate::behaviours::BehaviourDb::load_dir(&assets_dir.join("behaviours"))?;
+    warnings.extend(behaviour_warnings);
+    warnings.extend(behaviours.unknown_species_references(&species));
     let (achievements, achievement_warnings) =
         crate::achievements::AchievementDb::load_dir(&assets_dir.join("achievements"))?;
     warnings.extend(achievement_warnings);
@@ -4018,6 +4029,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         settlements,
         outposts,
         policy: crate::resources::EnemyPolicy(policy),
+        behaviours: crate::resources::Behaviours(behaviours),
         warnings,
     })
 }

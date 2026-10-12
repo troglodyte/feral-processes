@@ -1,6 +1,6 @@
 //! Per-profile weights of the tactical AI.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::tuning::{
     TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_COVER_TIEBREAK, TACTICAL_AI_COVER_WEIGHT,
@@ -9,7 +9,7 @@ use crate::tuning::{
 
 /// The weights `cell_merit`, `cell_score` and `walk_risk` read, so a
 /// personality can walk differently. `Default` is the global tuning.
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CellWeights {
     pub reach: f32,

@@ -78,6 +78,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         growth_multiplier: crate::tuning::BASELINE_GROWTH_MULTIPLIER,
         affinities: crate::species::Affinities::NEUTRAL,
         taunts: Vec::new(),
+        behaviour: None,
         can_nest: false,
         parents: None,
     }
@@ -554,6 +555,8 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // would quietly fight under the uniform baseline while the shipped
         // one fought under the weights — a difference no test would name.
         "policies",
+        // `default.ron` must exist or `Game::new` refuses to start.
+        "behaviours",
         // Same argument again: an install with no affix pool rolls every
         // drop plain, so anything about what gear
         // is worth would be measured against gear that cannot be affixed —

@@ -389,6 +389,13 @@ is skipped with a warning logged in-game rather than crashing startup.
         "circles once, unimpressed, and pings them again.",
     ],
 
+    // Optional; can be left out entirely (defaults to `default`). The id of
+    // the `assets/behaviours/` profile this species' hostiles decide by on
+    // a tactical battle map. A name with no profile logs a warning at load
+    // and plays as `default`. Chosen per species, never derived from class.
+    // Group battles ignore it.
+    behaviour: Some("brute"),
+
     // Optional. This species' own **base** for each attribute, keyed by
     // attribute id — see `assets/attributes/README.md`. An id this map
     // does not name falls through to that attribute def's own `base`, so

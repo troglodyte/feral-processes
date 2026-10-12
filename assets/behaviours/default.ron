@@ -1,0 +1,5 @@
+(
+    id: "default",
+    name: "Default",
+    description: "Fires a ready routine, otherwise swings at the weakest body in reach.",
+)

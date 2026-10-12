@@ -124,7 +124,7 @@ use feral_processes_engine::{
     AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
     DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
-    FieldRoutineTargetView, Game, HandCraftProgress, LevelUpReport, LogEntry, LogLine,
+    FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
     MESSAGE_LOG_CAP, MessageSource, OutpostReport, PerkPreview, PerkReport, ProgramSaleOption,
     RigToolView, RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
     SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
@@ -3248,6 +3248,10 @@ pub struct App {
     /// Sound cues queued up by the most recent `handle_key` calls, awaiting
     /// `take_sounds` — see `SoundEvent`.
     pending_sounds: Vec<SoundEvent>,
+    /// What each revealed battle line did, awaiting `take_pending_impacts`.
+    /// Filled as the reveal releases lines so a frontend's floats land with
+    /// the narration instead of ahead of it.
+    pending_impacts: Vec<Impact>,
     /// Paces battle narration into the log pane — see `App::advance_reveal`.
     reveal: BattleReveal,
     /// Seconds `status_line` has been on screen — see `App::advance_status`.

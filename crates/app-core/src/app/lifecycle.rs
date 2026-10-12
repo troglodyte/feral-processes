@@ -165,6 +165,7 @@ impl App {
             research_graph_view: true,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),
+            pending_impacts: Vec::new(),
             reveal: BattleReveal::default(),
             status_age: 0.0,
             realtime_ticks_carry: 0.0,
@@ -212,6 +213,13 @@ impl App {
             .collect();
         sounds.append(&mut self.pending_sounds);
         sounds
+    }
+
+    /// Drains the impacts the reveal has released since the last call, in
+    /// line order. `take_sounds`'s pattern: app-core queues, the frontend
+    /// drains once a frame.
+    pub fn take_pending_impacts(&mut self) -> Vec<Impact> {
+        std::mem::take(&mut self.pending_impacts)
     }
 
     /// Every `*.bin` file in the saves directory, newest first. Missing

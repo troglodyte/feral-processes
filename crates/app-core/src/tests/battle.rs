@@ -2043,3 +2043,21 @@ fn no_impacts_are_released_outside_a_battle_mode() {
     app.skip_reveal();
     assert!(app.take_pending_impacts().is_empty());
 }
+
+#[test]
+fn impacts_queued_in_the_frame_a_fight_ends_do_not_survive_it() {
+    let mut app = impacts_battle();
+    app.handle_key(GameKey::Esc);
+    assert!(
+        !app.pending_impacts.is_empty(),
+        "nothing queued to go stale"
+    );
+    app.mode = Mode::Playing;
+    assert!(app.take_pending_impacts().is_empty());
+
+    app.mode = Mode::Battle;
+    assert!(
+        app.take_pending_impacts().is_empty(),
+        "a stale impact reached the next fight"
+    );
+}

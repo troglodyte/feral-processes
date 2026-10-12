@@ -237,6 +237,8 @@ const FLOAT_RISE_PX: f32 = 24.0;
 /// earlier is still alive. A round resolves several blows on a row inside
 /// one float's lifetime; at one x they print over each other.
 const IMPACT_STAGGER_PX: f32 = 18.0;
+/// The `KO` stamp over the picture is the picture's side over this.
+pub(crate) const KO_STAMP_DIVISOR: u16 = 3;
 /// A crit's float is drawn this much larger than a plain hit's.
 const CRIT_FLOAT_SCALE: f32 = 1.5;
 /// A row's background tint after a hit, crit or heal fades over this long.
@@ -1758,8 +1760,6 @@ impl Fx {
     pub fn land(&mut self, impact: BattleImpact) {
         if let Some(row) = self.rows.get(&impact.target).copied() {
             self.impact(impact, row);
-        } else {
-            self.picture_reacts(impact.kind);
         }
     }
 
@@ -2573,6 +2573,7 @@ mod tests {
         battle_at(&mut fx, 0.0);
         fx.land(dmg(group(3), 7));
         assert!(fx.float_anchors().is_empty());
+        assert_eq!(fx.portrait_reaction(), PortraitReaction::default());
     }
 
     #[test]

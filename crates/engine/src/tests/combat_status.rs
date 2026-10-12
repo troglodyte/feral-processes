@@ -2157,3 +2157,26 @@ fn a_damage_tick_carries_the_damage_it_dealt_on_the_group_it_hit() {
     let expiry = log.iter().find(|l| l.text.contains("is done"));
     assert!(expiry.is_none_or(|l| l.impact.is_none()));
 }
+
+#[test]
+fn a_damage_tick_that_deals_nothing_keeps_its_line_but_carries_no_impact() {
+    let mut game = Game::new(7205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    insert_battle(&mut game, player, vec![wild]);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    game.arm_status(wild, &StatusId::from("venom"), 4, 0);
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.tick_status_effects(wild, "Wild");
+    let log = game.world.resource::<MessageLog>().lines.clone();
+    let tick = log
+        .iter()
+        .find(|l| l.text.contains("takes"))
+        .expect("the tick line");
+    assert!(tick.impact.is_none());
+}

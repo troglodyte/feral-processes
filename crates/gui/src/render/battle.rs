@@ -5,12 +5,9 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
-use crate::fx::PortraitReaction;
+use crate::fx::{KO_STAMP_DIVISOR, PortraitReaction};
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
 use feral_processes_engine::{BattleView, ChargeTag, ImpactTarget, PortraitView, StatusTagView};
-
-/// The `KO` stamp over the picture is the picture's side over this.
-const KO_STAMP_DIVISOR: u16 = 3;
 
 /// Where every roster row sits, keyed by what an impact names it by.
 /// Worked out before either roster is drawn so a blow can land on its row

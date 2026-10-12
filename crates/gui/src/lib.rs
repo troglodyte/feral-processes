@@ -925,6 +925,9 @@ fn frame(
     // visible reports the first second after F3 as a cold start every time.
     let started = std::time::Instant::now();
     render::draw(&mut fe.app, &mut fe.fx, &painter, reveal);
+    // `draw_battle` takes them in a battle; this empties what a frame that
+    // left battle queued, which no draw would ever take.
+    let _ = fe.app.take_pending_impacts();
     fe.perf.sample(
         now,
         f64::from(input.time.delta_secs()),

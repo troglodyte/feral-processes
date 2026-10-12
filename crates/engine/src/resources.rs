@@ -438,8 +438,9 @@ impl From<AttackOutcome> for SwingOutcome {
 
 /// What one narrated line did to whom, for a renderer that wants to show it
 /// rather than read it. One per line, so a killing swing carries `Damage` or
-/// `Crit` on the swing line and `Kill` on the kill line that follows: no line
-/// is added to carry it, which keeps reveal pacing and `condense` unmoved.
+/// `Crit` on the swing line and `Kill` on the kill line: after the swing for a
+/// group, but before it for a companion, whose death is announced from inside
+/// `lower_hp`. No line is added to carry it, which keeps reveal pacing and `condense` unmoved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Impact {
     pub target: ImpactTarget,

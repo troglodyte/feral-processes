@@ -45,6 +45,55 @@ fn a_feature_both_pinned_and_free_warns_and_pinned_wins() {
 }
 
 #[test]
+fn a_duplicate_id_warns_and_the_first_file_wins() {
+    let a = r#"(id: "twin", name: "A", description: "d")"#;
+    let b = r#"(id: "twin", name: "B", description: "d")"#;
+    let dir = dir_with(
+        "behaviours_duplicate",
+        &[("default.ron", DEFAULT), ("a.ron", a), ("b.ron", b)],
+    );
+    let (db, warnings) = BehaviourDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&*dir);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("b.ron"), "{warnings:?}");
+    assert_eq!(db.get("twin").unwrap().name, "A");
+}
+
+#[test]
+fn a_weight_against_its_own_sign_warns() {
+    let bad = r#"(id: "bad", name: "B", description: "d",
+        signs: {"would_kill": Positive}, weights: {"would_kill": -2.0})"#;
+    let dir = dir_with(
+        "behaviours_sign",
+        &[("default.ron", DEFAULT), ("bad.ron", bad)],
+    );
+    let (_, warnings) = BehaviourDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&*dir);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("would_kill"), "{warnings:?}");
+}
+
+#[test]
+fn a_written_profile_loads_back_unchanged() {
+    use crate::behaviours::{BehaviourDef, Sign, write_file};
+    let def = BehaviourDef {
+        id: "trip".into(),
+        name: "Trip".into(),
+        description: "d".into(),
+        pinned: [("is_routine".to_string(), 1000.0)].into(),
+        signs: [("would_kill".to_string(), Sign::Positive)].into(),
+        weights: [("would_kill".to_string(), 1.25)].into(),
+        ..BehaviourDef::default()
+    };
+    let dir = dir_with("behaviours_write", &[("default.ron", DEFAULT)]);
+    write_file(&dir.join("trip.ron"), &def).unwrap();
+    let (db, warnings) = BehaviourDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&*dir);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(db.get("trip"), Some(&def));
+}
+
+#[test]
 fn an_unknown_feature_warns_and_is_ignored() {
     let odd = r#"(id: "odd", name: "O", description: "d",
         weights: {"would_kill": 2.0, "moon_phase": 9.0})"#;

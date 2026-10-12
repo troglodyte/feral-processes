@@ -1,8 +1,8 @@
 (
     id: "default",
     name: "Default",
-    description: "Fires a ready routine, otherwise swings at the weakest body in reach.",
+    description: "Fires a ready routine, otherwise swings at the body with the fewest Integrity in reach.",
     pinned: {},
-    signs: { "target_hp_frac": Negative },
-    weights: { "is_routine": 1000.0, "target_hp_frac": -1.0 },
+    signs: { "target_hp": Negative },
+    weights: { "is_routine": 1000.0, "target_hp": -1.0 },
 )

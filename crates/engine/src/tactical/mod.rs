@@ -163,6 +163,12 @@ pub struct TacticalBattle {
     /// been planned" — read as one, the AI plans a fresh walk every beat and
     /// draws `GameRng` once per cell instead of once per turn.
     walk: Option<Vec<(i32, i32)>>,
+    /// What the acting body decided to do before it planned its walk, kept so
+    /// the beat that acts carries out the choice the walk was scored against
+    /// and the forecast named. The choice reads the distance, the body's own
+    /// Integrity and a routine's recipients, all of which a walk moves, so
+    /// asking again on arrival could pick something else. Dies with the walk.
+    intent: Option<ai::Intent>,
     /// How many times the order has come round, from 1. The results
     /// header's figure and the telemetry's alike.
     pub round: u32,
@@ -262,6 +268,7 @@ impl TacticalBattle {
             spent: 0,
             actions_left: 1,
             walk: None,
+            intent: None,
             round: 1,
             outmatched: false,
             dead_mans_switch_spent: false,
@@ -520,6 +527,7 @@ impl TacticalBattle {
         self.actions_left = actions_left;
         self.spent = 0;
         self.walk = None;
+        self.intent = None;
     }
 
     /// The turn order as it stands, fastest first.
@@ -553,6 +561,16 @@ impl TacticalBattle {
     /// is: the walk is then planned and finished at once.
     pub fn commit_walk(&mut self, path: Vec<(i32, i32)>) {
         self.walk = Some(path);
+    }
+
+    /// Keeps the intent the acting body's walk was planned against.
+    pub(in crate::tactical) fn keep_intent(&mut self, intent: ai::Intent) {
+        self.intent = Some(intent);
+    }
+
+    /// The intent kept for this walk, if one was.
+    pub(in crate::tactical) fn kept_intent(&self) -> Option<&ai::Intent> {
+        self.intent.as_ref()
     }
 
     /// Whether the acting body has already chosen where it is walking.
@@ -594,6 +612,7 @@ impl TacticalBattle {
     /// wherever this one left the body standing.
     pub(crate) fn clear_walk(&mut self) {
         self.walk = None;
+        self.intent = None;
     }
 
     /// Empties the acting body's action budget without spending anything.
@@ -635,6 +654,7 @@ impl TacticalBattle {
             .actor()
             .map_or(1, |a| self.shapes.get(&a).map_or(1, |s| s.actions));
         self.walk = None;
+        self.intent = None;
         // **Refunded at the start of its own turn, not at the round.** A
         // body that reacts early in a round gets its budget back when its
         // own turn comes round and may react again later in the same one —
@@ -1018,6 +1038,18 @@ mod tests {
 
         assert!(!battle.walk_planned());
         assert_eq!(battle.take_walk_step(), None);
+    }
+
+    /// The kept intent is the walk's own, so it too must not outlive the
+    /// turn: the next body would act on the last one's choice.
+    #[test]
+    fn handing_the_turn_on_clears_the_kept_intent() {
+        let (mut battle, _) = seated();
+        battle.keep_intent(ai::Intent::Swing { range: 1 });
+        assert!(battle.kept_intent().is_some());
+        battle.end_turn();
+
+        assert!(battle.kept_intent().is_none());
     }
 
     /// A body dying on somebody else's turn costs the order nothing: the

@@ -94,10 +94,16 @@ pub fn means(set: &SetResult) -> (f32, f32) {
     )
 }
 
-/// Whether both set-wide means sit within `BAND` of baseline, relative.
+/// Smallest tolerance the band allows, so a baseline mean of exactly zero
+/// (a profile that never loses a fight, say) is not an unreachable target.
+/// A hundredth of a fraction of the player's Integrity or of the fights won.
+const BAND_FLOOR: f32 = 0.01;
+
+/// Whether both set-wide means sit within `BAND` of baseline, relative, or
+/// within `BAND_FLOOR` absolute if that is wider.
 pub fn in_band(set: &SetResult, base: &SetResult) -> bool {
     let ((hp, win), (bhp, bwin)) = (means(set), means(base));
-    let within = |v: f32, b: f32| (v - b).abs() <= BAND * b.abs();
+    let within = |v: f32, b: f32| (v - b).abs() <= (BAND * b.abs()).max(BAND_FLOOR);
     within(hp, bhp) && within(win, bwin)
 }
 
@@ -444,6 +450,13 @@ mod tests {
         assert!(objective(&set(0.6, 0.3, 10.0), &base) > hp);
         assert!(objective(&set(0.4, 0.5, 10.0), &base) > win);
         assert!(objective(&set(0.4, 0.3, 15.0), &base) > rounds);
+    }
+
+    #[test]
+    fn a_zero_baseline_gets_the_absolute_floor() {
+        let base = set(0.0, 0.0, 10.0);
+        assert!(in_band(&set(0.005, 0.0, 10.0), &base));
+        assert!(!in_band(&set(0.05, 0.0, 10.0), &base));
     }
 
     #[test]

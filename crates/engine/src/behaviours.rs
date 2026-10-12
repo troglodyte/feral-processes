@@ -100,7 +100,30 @@ impl BehaviourDb {
                             def.id
                         ));
                     }
-                    profiles.entry(def.id.clone()).or_insert(def);
+                    let against_sign: Vec<String> = def
+                        .weights
+                        .iter()
+                        .filter(|(k, w)| match def.signs.get(*k) {
+                            Some(Sign::Positive) => **w < 0.0,
+                            Some(Sign::Negative) => **w > 0.0,
+                            None => false,
+                        })
+                        .map(|(k, _)| k.clone())
+                        .collect();
+                    for feature in against_sign {
+                        warnings.push(format!(
+                            "behaviour {:?}: {feature:?} is weighted against its own sign",
+                            def.id
+                        ));
+                    }
+                    if profiles.contains_key(&def.id) {
+                        warnings.push(format!(
+                            "behaviour {:?} in {path:?}: id already defined — first file wins",
+                            def.id
+                        ));
+                    } else {
+                        profiles.insert(def.id.clone(), def);
+                    }
                 }
                 Err(e) => warnings.push(format!("skipped invalid behaviour file {path:?}: {e}")),
             }

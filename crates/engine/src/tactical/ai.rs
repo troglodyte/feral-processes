@@ -66,6 +66,7 @@ pub(crate) enum PartyTurns {
 ///
 /// Decided before the walk, because `Intent::band` is the whole of what
 /// tells closing apart from holding off.
+#[derive(Clone)]
 pub(super) enum Intent {
     /// The basic attack `tactical_attack` swings, carrying the range
     /// `Game::swing_range` answered for the body about to act.
@@ -726,12 +727,17 @@ impl Game {
             return AiBeat::Stepped;
         }
 
-        // Asked again on the beat that acts rather than carried across the
-        // walk: it reads cooldowns and a routine list, neither of which a
-        // walk moves, so the answer is the one the walk was scored against
-        // and storing an `AbilityDef` on the fight would be a second copy of
-        // it.
-        let intent = self.tactical_intent(actor, turns);
+        // Carried across the walk rather than asked again on the beat that
+        // acts: a profiled hostile's choice reads its distance to the target,
+        // which the walk changes, so a second ask could name a different
+        // action than the one the walk was scored against and the forecast
+        // named.
+        let kept = self
+            .world
+            .resource::<TacticalBattle>()
+            .kept_intent()
+            .cloned();
+        let intent = kept.unwrap_or_else(|| self.tactical_intent(actor, turns));
         // **No walk for `UseItem`.** A cell is drunk where the body already
         // stands — `Intent::band`'s "any distance" is what makes every cell
         // `scored_cells` would offer read as no better than staying put, so
@@ -742,6 +748,9 @@ impl Game {
         {
             let w = self.cell_weights_of(actor);
             self.walk_to_best_cell(actor, &intent, &sides, temperature, &w);
+            self.world
+                .resource_mut::<TacticalBattle>()
+                .keep_intent(intent.clone());
             if self.step_along_walk(actor) {
                 return AiBeat::Stepped;
             }
@@ -1875,19 +1884,6 @@ mod tests {
     /// Crowding is a tie-break and nothing more: it separates two cells that
     /// both hit, and it must never outweigh hitting at all.
     #[test]
-    fn a_profile_that_weighs_crowding_double_ranks_a_crowded_cell_lower() {
-        let board = open(12);
-        let targets = [(6, 6)];
-        let allies = [(4, 6), (5, 5), (4, 5)];
-        let heavier = CellWeights {
-            crowding: CellWeights::default().crowding * 2.0,
-            ..CellWeights::default()
-        };
-        let score = |w: &CellWeights| cell_score(&board, &[(5, 6)], MELEE, &targets, &allies, w);
-        assert!(score(&heavier) < score(&CellWeights::default()));
-    }
-
-    #[test]
     fn crowding_separates_two_cells_that_both_reach_and_never_outranks_reaching() {
         let board = open(12);
         let targets = [(6, 6)];
@@ -1920,6 +1916,19 @@ mod tests {
             packed > missing,
             "a crowded cell that hits still beats a clear one that does not"
         );
+    }
+
+    #[test]
+    fn a_profile_that_weighs_crowding_double_ranks_a_crowded_cell_lower() {
+        let board = open(12);
+        let targets = [(6, 6)];
+        let allies = [(4, 6), (5, 5), (4, 5)];
+        let heavier = CellWeights {
+            crowding: CellWeights::default().crowding * 2.0,
+            ..CellWeights::default()
+        };
+        let score = |w: &CellWeights| cell_score(&board, &[(5, 6)], MELEE, &targets, &allies, w);
+        assert!(score(&heavier) < score(&CellWeights::default()));
     }
 
     /// Cover is read only of a cell already in band, so a body behind it is

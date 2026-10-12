@@ -58,15 +58,18 @@ unknown feature name logs a warning at load and is ignored.
 | `routine_net_recipients` | bodies the routine's best aim helps or harms, net |
 | `self_hp_frac` | the actor's Integrity over its max |
 | `self_x_target_distance` | `(1 - self_hp_frac) * target_distance` |
+| `target_hp` | target's raw Integrity (not a fraction; weigh it with a small magnitude, or sign it Negative and read it as an argmax only — `default` does) |
 
 `default` weights `is_routine` high enough to beat any swing and
-`target_hp_frac` negative: a ready routine, otherwise the weakest body.
+`target_hp` negative: its first ready routine, otherwise the body with the
+fewest Integrity points (not the lowest fraction, which is what the
+personality profiles use).
 
 ## Shipped profiles
 
 | Profile | Character | Species |
 |---|---|---|
-| `default` | A ready routine, otherwise the weakest body in reach. | crawler, proxy, virus, sub_process, sentinel, overseer, wintermute |
+| `default` | Its first ready routine, otherwise the body with the fewest Integrity in reach. | crawler, proxy, virus, sub_process, sentinel, overseer, wintermute |
 | `brute` | Closes fast, ignores cover and reactions, hits the nearest. | rootkit, botnet, worm, scrapper |
 | `hunter` | Focuses the wounded, takes kills, prefers soft targets over the player. | cipher, zero_day, trojan, polymorph |
 | `skirmisher` | Keeps its distance, hugs cover, avoids reaction swings. | glitch, sprite |

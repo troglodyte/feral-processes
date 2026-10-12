@@ -61,10 +61,11 @@ pub enum TacticalFeature {
     RoutineNetRecipients,
     SelfHpFrac,
     SelfXTargetDistance,
+    TargetHp,
 }
 
 impl TacticalFeature {
-    pub const COUNT: usize = 10;
+    pub const COUNT: usize = 11;
     pub const ALL: [TacticalFeature; Self::COUNT] = [
         Self::TargetHpFrac,
         Self::EstDamageFrac,
@@ -76,6 +77,7 @@ impl TacticalFeature {
         Self::RoutineNetRecipients,
         Self::SelfHpFrac,
         Self::SelfXTargetDistance,
+        Self::TargetHp,
     ];
 
     pub fn name(self) -> &'static str {
@@ -90,6 +92,7 @@ impl TacticalFeature {
             Self::RoutineNetRecipients => "routine_net_recipients",
             Self::SelfHpFrac => "self_hp_frac",
             Self::SelfXTargetDistance => "self_x_target_distance",
+            Self::TargetHp => "target_hp",
         }
     }
 
@@ -174,6 +177,8 @@ impl Game {
         let self_frac = hp_frac(self, actor);
         let mut f = [0.0; TacticalFeature::COUNT];
         f[TacticalFeature::TargetHpFrac as usize] = hp_frac(self, target);
+        f[TacticalFeature::TargetHp as usize] =
+            self.world.get::<Stats>(target).map_or(0.0, |s| s.hp as f32);
         f[TacticalFeature::EstDamageFrac as usize] = expected / target_hp;
         f[TacticalFeature::WouldKill as usize] = f32::from(expected >= target_hp);
         f[TacticalFeature::TargetIsPlayer as usize] = f32::from(target == self.player_entity());
@@ -217,10 +222,13 @@ impl Game {
         let swing = Intent::Swing {
             range: self.swing_range(actor),
         };
+        // Only the first ready routine is a candidate, as `wild_routine_ready`
+        // always made it: a later one is never reached past a first that is
+        // not worth choosing.
         let routines: Vec<AbilityDef> = self
-            .ready_routines(actor)
-            .into_iter()
+            .wild_routine_ready(actor)
             .filter(|def| self.hostile_routine_worth_choosing(actor, def))
+            .into_iter()
             .collect();
         if routines.is_empty() {
             return swing;

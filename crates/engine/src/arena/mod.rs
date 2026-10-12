@@ -785,6 +785,51 @@ mod tests {
         );
     }
 
+    /// `party_turns` reaches the rep through both `run` and `test_fight`, not
+    /// just the driver: a glitch companion invokes under `AutoPlay` and the
+    /// two transcripts part ways, so a call site that hard-codes either
+    /// plan matches one half of this and not the other.
+    #[test]
+    fn party_turns_reaches_the_rep_through_run_and_test_fight() {
+        let scenario = |party_turns| Scenario {
+            model: CombatModel::Tactical,
+            player: PlayerSource::Fresh { level: 12, zone: 2 },
+            party: vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 12,
+                ..Default::default()
+            }],
+            party_turns,
+            opponents: vec![OpponentSpec {
+                species: "sub_process".into(),
+                count: 3,
+            }],
+            seed: 5,
+            ..Scenario::default()
+        };
+        let ran = |party_turns| {
+            run(
+                &scenario(party_turns),
+                &test_assets_dir(),
+                RunOptions::default(),
+            )
+            .unwrap()
+            .0
+            .reps
+            .remove(0)
+            .transcript
+        };
+        let fought = |party_turns| test_fight(&scenario(party_turns), 5).transcript;
+        let (swing, auto) = (PartyTurnsSpec::SwingOnly, PartyTurnsSpec::AutoPlay);
+        assert_ne!(
+            fought(swing),
+            fought(auto),
+            "test_fight ignores party_turns"
+        );
+        assert_eq!(ran(swing), fought(swing), "run ignores party_turns");
+        assert_eq!(ran(auto), fought(auto), "run ignores party_turns");
+    }
+
     #[test]
     fn a_behaviour_override_makes_every_hostile_play_that_profile() {
         let s = Scenario {

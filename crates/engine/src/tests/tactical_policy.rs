@@ -48,6 +48,13 @@ fn set_hp(game: &mut Game, body: Entity, hp: i32, max: i32) {
     stats.max_hp = max;
 }
 
+/// Lets `forecast` read `body`'s intent, as a Profile tamper does.
+fn profiled(game: &mut Game, body: Entity) {
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Profiled, 5, false);
+    game.world.entity_mut(body).insert(tampered);
+}
+
 /// The cell `actor`'s next action lands on, with its walk pinned where it
 /// stands, read off the bolt it cues.
 fn swing_lands_on(game: &mut Game, actor: Entity) -> (i32, i32) {
@@ -89,7 +96,6 @@ fn duel(def: BehaviourDef, companion_hp: i32, companion_max: i32) -> Duel {
     }
 }
 
-const PLAYER_CELL: (i32, i32) = (4, 4);
 const COMPANION_CELL: (i32, i32) = (3, 3);
 
 #[test]
@@ -101,7 +107,7 @@ fn a_profile_with_every_weight_zero_still_takes_its_turn_and_ties_go_to_reading_
 }
 
 /// The shipped `default` profile, which must reproduce the fixed rule it
-/// replaced: swing at the weakest body in reach.
+/// replaced: swing at the body with the fewest absolute Integrity in reach.
 #[test]
 fn the_shipped_default_swings_at_the_weakest_body_in_reach() {
     let mut d = duel(profile(&[]), 40, 40);
@@ -110,8 +116,9 @@ fn the_shipped_default_swings_at_the_weakest_body_in_reach() {
         .resource_mut::<Behaviours>()
         .0
         .set_override(Some("default".into()));
-    // The player is at half, the companion at full.
-    assert_eq!(swing_lands_on(&mut d.game, d.wild), PLAYER_CELL);
+    // The companion is at full fraction but 40 Integrity; the player is at
+    // half of 10 000. The old rule read the raw figure, not the fraction.
+    assert_eq!(swing_lands_on(&mut d.game, d.wild), COMPANION_CELL);
 }
 
 #[test]
@@ -126,6 +133,65 @@ fn a_profile_that_rewards_would_kill_swings_at_the_body_it_can_finish() {
     );
     assert_eq!(swing_lands_on(&mut d.game, d.wild), COMPANION_CELL);
     let _ = d.companion;
+}
+
+/// The old rule considered only the *first* ready routine, and swung when it
+/// was not worth choosing — a Reanimate with nothing to raise. A later
+/// routine is never a candidate.
+#[test]
+fn only_the_first_ready_routine_is_a_candidate() {
+    let mut d = duel(profile(&[("is_routine", 5.0)]), 40, 40);
+    d.game
+        .world
+        .entity_mut(d.wild)
+        .insert(Routines(vec!["respawn".into(), "acid_wash".into()]));
+    profiled(&mut d.game, d.wild);
+    assert!(wait_for_turn(&mut d.game, d.wild));
+    let forecast = d
+        .game
+        .tactical_forecast(d.wild)
+        .expect("a profiled hostile");
+    assert_eq!(forecast.action, ForecastAction::Swing);
+    d.game.tactical_ai_turn();
+    assert!(
+        d.game
+            .world
+            .get::<AbilityCooldowns>(d.wild)
+            .is_none_or(|c| c.0.is_empty()),
+        "the second routine fired past a first that was not worth choosing"
+    );
+}
+
+/// The routine-or-swing choice is made once and carried over the walk. Here
+/// the swing wins from afar (it wants distance) and the routine from beside
+/// the target, so a choice re-asked on arrival would fire the routine the
+/// forecast never named.
+#[test]
+fn the_routine_or_swing_choice_survives_the_walk() {
+    let mut game = game();
+    let wild = tactical_fight(&mut game, 1, 10_000)[0];
+    only_routine(&mut game, wild, "acid_wash");
+    open_ground(&mut game, &[wild], &[(0, 4)]);
+    play_as(
+        &mut game,
+        profile(&[("is_routine", 3.0), ("target_distance", 10.0)]),
+    );
+    profiled(&mut game, wild);
+    assert!(wait_for_turn(&mut game, wild));
+    let forecast = game.tactical_forecast(wild).expect("a profiled hostile");
+    assert_eq!(forecast.action, ForecastAction::Swing);
+    game.take_bolts();
+    game.tactical_ai_turn();
+    assert_ne!(
+        game.world.resource::<TacticalBattle>().cell_of(wild),
+        Some((0, 4)),
+        "fixture: the hostile must have walked before it acted"
+    );
+    assert_eq!(
+        game.take_bolts().len(),
+        1,
+        "the hostile did not swing the turn the forecast named"
+    );
 }
 
 #[test]

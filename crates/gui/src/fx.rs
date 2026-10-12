@@ -1828,7 +1828,7 @@ impl Fx {
             .filter(|f| f.target == target)
             .max_by(|a, b| a.start.total_cmp(&b.start))?;
         let t = ((self.now - flash.start) / ROW_FLASH_SECONDS) as f32;
-        (t < 1.0).then(|| (flash.color, ROW_FLASH_PEAK_ALPHA * (1.0 - t)))
+        (t < 1.0).then_some((flash.color, ROW_FLASH_PEAK_ALPHA * (1.0 - t)))
     }
 
     pub fn portrait_reaction(&self) -> PortraitReaction {

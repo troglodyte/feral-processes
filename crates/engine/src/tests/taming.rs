@@ -714,7 +714,9 @@ fn attempts_against_one_group_do_not_help_against_another() {
     // zone 1, and would drop the second group this test is entirely about.
     let groups: Vec<battle::EnemyGroup> = [first, second]
         .iter()
-        .map(|&e| battle::EnemyGroup {
+        .enumerate()
+        .map(|(i, &e)| battle::EnemyGroup {
+            id: crate::battle::GroupId::new(i as u32),
             species: game.world.get::<Creature>(e).unwrap().species.clone(),
             members: vec![e],
         })
@@ -986,6 +988,7 @@ fn area_fight(seed: u32, n: usize, catalysts: u32) -> (Game, Vec<Entity>) {
         &mut game,
         player,
         vec![crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species,
             members: members.clone(),
         }],

@@ -295,6 +295,7 @@ fn group_of(game: &mut Game, count: usize) -> Vec<Entity> {
         game,
         player,
         vec![crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species,
             members: members.clone(),
         }],

@@ -409,10 +409,13 @@ impl Game {
                         group.members.push(entity);
                     }
                 }
-                None => groups.push(EnemyGroup {
+                // Formation only ever appends, so the length is a fresh id
+                // even after the truncations below leave gaps.
+                None => groups.push(EnemyGroup::new(
+                    battle::GroupId::new(groups.len() as u32),
                     species,
-                    members: vec![entity],
-                }),
+                    vec![entity],
+                )),
             }
         }
         // `sort_by_key` is stable, so equal-sized groups keep

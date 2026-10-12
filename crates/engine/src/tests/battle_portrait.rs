@@ -196,6 +196,7 @@ fn a_cloaked_front_member_is_not_the_one_shown() {
         &mut game,
         player,
         vec![crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species,
             members: vec![cloaked, visible],
         }],

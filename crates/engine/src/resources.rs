@@ -436,6 +436,33 @@ impl From<AttackOutcome> for SwingOutcome {
     }
 }
 
+/// What one narrated line did to whom, for a renderer that wants to show it
+/// rather than read it. One per line, so a killing swing carries `Damage` or
+/// `Crit` on the swing line and `Kill` on the kill line that follows: no line
+/// is added to carry it, which keeps reveal pacing and `condense` unmoved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Impact {
+    pub target: ImpactTarget,
+    pub kind: ImpactKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ImpactTarget {
+    /// A `BattleState::planned` slot; slots cannot reorder mid-battle.
+    Party(usize),
+    Group(crate::battle::GroupId),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImpactKind {
+    Damage(i32),
+    Crit(i32),
+    Heal(i32),
+    Miss,
+    Fumble,
+    Kill,
+}
+
 /// One line as stored. A struct rather than the `(kind, text)` tuple it grew
 /// from: with a third field the positional form stops reading, and every
 /// consumer already wanted to name what it was reaching for.
@@ -445,6 +472,9 @@ pub struct LogLine {
     pub source: MessageSource,
     pub text: String,
     pub outcome: Option<SwingOutcome>,
+    /// `None` for every line with no target: a round header, a status
+    /// expiry, anything that is not narrating a blow, heal or fall.
+    pub impact: Option<Impact>,
 }
 
 /// Where a battle's narration begins, as a count of lines ever pushed.
@@ -542,6 +572,7 @@ impl MessageLog {
             source,
             text: text.into(),
             outcome,
+            impact: None,
         });
         self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {

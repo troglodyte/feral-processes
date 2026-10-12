@@ -391,6 +391,7 @@ fn a_skipped_round_is_heard_as_its_loudest_band() {
         source: MessageSource::Field,
         text: String::new(),
         outcome,
+        impact: None,
     };
     assert_eq!(
         loudest_cue(&[

@@ -12,6 +12,7 @@ fn line(kind: MessageKind, source: MessageSource, text: &str) -> LogLine {
         source,
         text: text.to_string(),
         outcome: None,
+        impact: None,
     }
 }
 

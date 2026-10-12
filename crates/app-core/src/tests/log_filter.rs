@@ -11,6 +11,7 @@ fn field(text: &str) -> LogLine {
         source: MessageSource::Field,
         text: text.to_string(),
         outcome: None,
+        impact: None,
     }
 }
 
@@ -20,6 +21,7 @@ fn base(text: &str) -> LogLine {
         source: MessageSource::Base,
         text: text.to_string(),
         outcome: None,
+        impact: None,
     }
 }
 
@@ -29,6 +31,7 @@ fn outcome(text: &str) -> LogLine {
         source: MessageSource::Field,
         text: text.to_string(),
         outcome: None,
+        impact: None,
     }
 }
 

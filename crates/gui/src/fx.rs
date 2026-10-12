@@ -2157,6 +2157,7 @@ mod tests {
                 source: feral_processes_engine::MessageSource::Base,
                 text: format!("{kind:?}"),
                 outcome: None,
+                impact: None,
             }
         }
 

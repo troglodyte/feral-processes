@@ -47,6 +47,7 @@ fn two_deep_group(game: &mut Game, player: Entity, at: Position) -> (Entity, Ent
         game,
         player,
         vec![crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species,
             members: vec![front, behind],
         }],

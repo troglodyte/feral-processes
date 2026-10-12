@@ -176,6 +176,7 @@ fn two_entities_gaining_the_same_stat_stay_two_history_rows() {
         source: MessageSource::Field,
         text: text.to_string(),
         outcome: None,
+        impact: None,
     };
     // Built through the shipping formatter, not from hand-written strings: a
     // format that went back to a bare "+1 DEF" has to fail here, and it only

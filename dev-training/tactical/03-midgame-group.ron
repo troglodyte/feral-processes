@@ -1,0 +1,20 @@
+// Level 12, zone 3, three companions, four mixed hostiles, flanked from the
+// south-west.
+(
+    player: Fresh(level: 12, zone: 3),
+    party: [
+        (species: "scrapper", level: 9),
+        (species: "construct", level: 9),
+        (species: "sentinel", level: 9),
+    ],
+    opponents: [
+        (species: "scrapper", count: 2),
+        (species: "glitch", count: 1),
+        (species: "trojan", count: 1),
+    ],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(SouthWest),
+    reps: 200,
+    seed: 203,
+)

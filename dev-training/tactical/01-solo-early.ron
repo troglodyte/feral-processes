@@ -1,0 +1,11 @@
+// Level 1, zone 1, no companions, one hostile. Nothing to choose between,
+// so a trained profile cannot make the opening unwinnable here.
+(
+    player: Fresh(level: 1, zone: 1),
+    opponents: [(species: "scrapper", count: 1)],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(East),
+    reps: 200,
+    seed: 201,
+)

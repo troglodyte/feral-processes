@@ -1,0 +1,12 @@
+// Every opponent carries a routine, so the is_routine door fires.
+(
+    player: Fresh(level: 8, zone: 2),
+    party: [(species: "scrapper", level: 7)],
+    opponents: [(species: "sub_process", count: 2), (species: "glitch", count: 1)],
+    opponent_routines: ["haymaker"],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(East),
+    reps: 200,
+    seed: 208,
+)

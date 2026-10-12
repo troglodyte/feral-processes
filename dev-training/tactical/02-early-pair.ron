@@ -1,0 +1,12 @@
+// Level 6 with one companion against a mixed pair: the smallest board where
+// who to hit is a real question.
+(
+    player: Fresh(level: 6, zone: 2),
+    party: [(species: "scrapper", level: 5)],
+    opponents: [(species: "glitch", count: 1), (species: "scrapper", count: 1)],
+    model: Tactical,
+    party_turns: AutoPlay,
+    approach: Some(East),
+    reps: 200,
+    seed: 202,
+)

@@ -448,10 +448,12 @@ impl App {
             self.reveal.accumulated -= 1.0;
             // The group model's screens alone: a battle map hears its blows
             // off `take_sounds`, and this would sound each one again, late.
-            if self.mode.is_battle()
-                && let Some(outcome) = lines[self.reveal.revealed].outcome
-            {
-                self.pending_sounds.push(swing_sound(outcome));
+            if self.mode.is_battle() {
+                let line = &lines[self.reveal.revealed];
+                if let Some(outcome) = line.outcome {
+                    self.pending_sounds.push(swing_sound(outcome));
+                }
+                self.pending_impacts.extend(line.impact);
             }
             self.reveal.revealed += 1;
         }
@@ -768,11 +770,20 @@ impl App {
     /// that screen appears would be a sound with nothing on screen to
     /// explain it.
     pub(crate) fn skip_reveal(&mut self) {
-        let start = self.reveal.revealed;
+        // Not `reveal.revealed`: that counts the previous round until
+        // `advance_reveal` notices the new generation.
+        let start = self.revealed_count();
         let cue = self
             .game
             .as_ref()
             .and_then(|game| game.battle_log().get(start..).and_then(loudest_cue));
+        if self.mode.is_battle()
+            && let Some(game) = &self.game
+            && let Some(skipped) = game.battle_log().get(start..)
+        {
+            self.pending_impacts
+                .extend(skipped.iter().filter_map(|l| l.impact));
+        }
         self.finish_reveal();
         if let Some(cue) = cue {
             self.pending_sounds.push(cue);

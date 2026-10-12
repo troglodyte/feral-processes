@@ -165,6 +165,7 @@ impl App {
             research_graph_view: true,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),
+            pending_impacts: Vec::new(),
             reveal: BattleReveal::default(),
             status_age: 0.0,
             realtime_ticks_carry: 0.0,
@@ -212,6 +213,21 @@ impl App {
             .collect();
         sounds.append(&mut self.pending_sounds);
         sounds
+    }
+
+    /// Drains the impacts the reveal has released since the last call, in
+    /// line order. `take_sounds`'s pattern: app-core queues, the frontend
+    /// drains once a frame. Outside a battle mode the queue is emptied and
+    /// nothing returned: a key can leave the fight in the frame the reveal
+    /// queued a blow, and group ids restart at 0 per fight, so a survivor
+    /// would land on the next fight's rows.
+    pub fn take_pending_impacts(&mut self) -> Vec<Impact> {
+        let impacts = std::mem::take(&mut self.pending_impacts);
+        if self.mode.is_battle() {
+            impacts
+        } else {
+            Vec::new()
+        }
     }
 
     /// Every `*.bin` file in the saves directory, newest first. Missing

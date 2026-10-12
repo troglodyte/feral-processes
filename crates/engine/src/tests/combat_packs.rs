@@ -2,6 +2,7 @@
 //! groups, initiative order, and what happens as groups fall.
 
 use super::support::*;
+use crate::battle::GroupId;
 use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, MAX_PACK_BODIES};
 use crate::*;
 
@@ -646,10 +647,12 @@ fn begin_battle_opens_a_battle_around_pre_built_groups_without_capping_them() {
     members.extend((0..5).map(|_| spawn_wild_on_player_tile(&mut game)));
     let groups = vec![
         EnemyGroup {
+            id: GroupId::new(0),
             species: species_id.clone(),
             members: members[..3].to_vec(),
         },
         EnemyGroup {
+            id: GroupId::new(1),
             species: species_id,
             members: members[3..].to_vec(),
         },
@@ -738,4 +741,28 @@ fn bumping_the_boss_itself_still_starts_the_boss_fight() {
         .id();
 
     assert_eq!(game.gather_pack(boss), vec![boss]);
+}
+
+/// The roster re-letters when a front group falls, so a renderer that keys
+/// a row by letter or index follows the wrong group. The id is what stays.
+#[test]
+fn a_group_keeps_its_id_when_the_group_in_front_of_it_falls() {
+    let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let first = spawn_wild_on_player_tile(&mut game);
+    let second = spawn_wild_on_player_tile(&mut game);
+    let species = game.world.get::<Creature>(first).unwrap().species.clone();
+    game.begin_battle(vec![
+        EnemyGroup::new(GroupId::new(0), species.clone(), vec![first]),
+        EnemyGroup::new(GroupId::new(1), species, vec![second]),
+    ]);
+    let survivor = game.world.resource::<BattleState>().groups[1].id;
+
+    game.remove_member(0, 0);
+
+    let state = game.world.resource::<BattleState>();
+    assert_eq!(state.groups.len(), 1);
+    assert_eq!(state.groups[0].id, survivor, "the id follows the group");
+    let (rows, _) = game.battle_rows().unwrap();
+    assert_eq!(rows[0].letter, 'A', "the letter shifted");
+    assert_eq!(rows[0].id, survivor, "the id did not");
 }

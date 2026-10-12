@@ -178,10 +178,12 @@ fn a_gone_aim_retargets_the_hit_to_the_front_group() {
     let species = game.world.get::<Creature>(second).unwrap().species.clone();
     let groups = vec![
         crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species: species.clone(),
             members: vec![first],
         },
         crate::battle::EnemyGroup {
+            id: crate::battle::GroupId::new(1),
             species,
             members: vec![second],
         },

@@ -409,10 +409,13 @@ impl Game {
                         group.members.push(entity);
                     }
                 }
-                None => groups.push(EnemyGroup {
+                // Formation only ever appends, so the length is a fresh id
+                // even after the truncations below leave gaps.
+                None => groups.push(EnemyGroup::new(
+                    battle::GroupId::new(groups.len() as u32),
                     species,
-                    members: vec![entity],
-                }),
+                    vec![entity],
+                )),
             }
         }
         // `sort_by_key` is stable, so equal-sized groups keep
@@ -759,6 +762,29 @@ impl Game {
             .groups
             .iter()
             .position(|g| g.members.contains(&entity))
+    }
+
+    /// The roster row `entity` is drawn on in a group battle, keyed by what
+    /// stays put: a party slot, or a `GroupId` rather than a letter. `None`
+    /// off the abstract model, which is what keeps a battle map's lines
+    /// impact-free.
+    pub(crate) fn impact_on(&self, entity: Entity, kind: ImpactKind) -> Option<Impact> {
+        let battle = self.world.get_resource::<BattleState>()?;
+        let target = if entity == self.player_entity() {
+            ImpactTarget::Party(0)
+        } else if let Some(i) = self
+            .world
+            .resource::<Party>()
+            .0
+            .iter()
+            .position(|&e| e == entity)
+        {
+            ImpactTarget::Party(i + 1)
+        } else {
+            let group = battle.groups.iter().find(|g| g.members.contains(&entity))?;
+            ImpactTarget::Group(group.id)
+        };
+        Some(Impact { target, kind })
     }
 
     /// `entity`'s species `base_speed`, or the roster default if it has no

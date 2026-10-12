@@ -2058,6 +2058,8 @@ pub struct Assignee {
 /// one that can be hit (see `battle::EnemyGroup`).
 #[derive(Clone)]
 pub struct EnemyGroupView {
+    /// Stable for the fight, unlike `letter`: see `battle::GroupId`.
+    pub id: crate::battle::GroupId,
     /// Display letter, 'A'.. — how the player addresses this group.
     pub letter: char,
     pub species_name: String,

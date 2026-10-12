@@ -433,11 +433,33 @@ pub fn threat_ratio(foe: DuelSide, side: DuelSide) -> f64 {
 /// `resources::BattleState::groups`, which promotes whatever sat behind it.
 #[derive(Debug, Clone)]
 pub struct EnemyGroup {
+    pub id: GroupId,
     pub species: SpeciesId,
     pub members: Vec<Entity>,
 }
 
+/// A group's identity for the length of one fight. Unlike the roster letter
+/// or `BattleState::groups` index, both of which shift when a group in front
+/// of it falls, it is minted when the group is formed and never reused, so a
+/// renderer can follow a group across a re-letter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct GroupId(u32);
+
+impl GroupId {
+    pub fn new(n: u32) -> Self {
+        Self(n)
+    }
+}
+
 impl EnemyGroup {
+    pub fn new(id: GroupId, species: SpeciesId, members: Vec<Entity>) -> Self {
+        Self {
+            id,
+            species,
+            members,
+        }
+    }
+
     pub fn front(&self) -> Option<Entity> {
         self.members.first().copied()
     }

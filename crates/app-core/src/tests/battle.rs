@@ -391,6 +391,7 @@ fn a_skipped_round_is_heard_as_its_loudest_band() {
         source: MessageSource::Field,
         text: String::new(),
         outcome,
+        impact: None,
     };
     assert_eq!(
         loudest_cue(&[
@@ -1952,5 +1953,111 @@ fn a_refusal_inside_a_fight_stays_off_the_log() {
             .len(),
         before,
         "a refusal must not enter the log mid-fight"
+    );
+}
+
+/// The impacts of every raw log line, in order, skipping lines with none.
+fn logged_impacts(app: &App) -> Vec<Impact> {
+    app.game
+        .as_ref()
+        .unwrap()
+        .battle_log()
+        .iter()
+        .filter_map(|l| l.impact)
+        .collect()
+}
+
+/// A battle whose just-committed round carries `min` or more impacts,
+/// found by fighting rounds through (the first often holds only one blow).
+fn impacts_battle_with(min: usize) -> App {
+    let mut app = battling_app();
+    for _ in 0..40 {
+        app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+        if logged_impacts(&app).len() >= min {
+            let _ = app.take_pending_impacts();
+            return app;
+        }
+        assert!(app.mode.is_battle(), "fight ended before {min} impacts");
+        app.finish_reveal();
+    }
+    panic!("no round carried {min} impacts");
+}
+
+fn impacts_battle() -> App {
+    impacts_battle_with(1)
+}
+
+#[test]
+fn an_impact_arrives_when_its_own_line_is_revealed() {
+    let mut app = impacts_battle();
+    let lines = app.game.as_ref().unwrap().battle_log();
+    let first = lines
+        .iter()
+        .position(|l| l.impact.is_some())
+        .expect("a resolved attack always carries an impact");
+    let expected = lines[first].impact.unwrap();
+
+    for _ in 0..first {
+        app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+        assert!(app.take_pending_impacts().is_empty(), "released early");
+    }
+    app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+    assert_eq!(app.take_pending_impacts(), vec![expected]);
+    assert!(app.take_pending_impacts().is_empty(), "take must drain");
+}
+
+#[test]
+fn skipping_a_reveal_releases_every_skipped_impact_in_order() {
+    let mut app = impacts_battle_with(2);
+    let expected = logged_impacts(&app);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.take_pending_impacts(), expected);
+}
+
+#[test]
+fn a_partly_revealed_round_skips_only_the_remaining_impacts() {
+    let mut app = impacts_battle_with(2);
+    app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+    let first = app.take_pending_impacts();
+    let all = logged_impacts(&app);
+    app.handle_key(GameKey::Esc);
+    let mut got = first;
+    got.extend(app.take_pending_impacts());
+    assert_eq!(got, all);
+}
+
+#[test]
+fn releasing_a_reveal_without_the_skip_gesture_releases_no_impacts() {
+    let mut app = impacts_battle();
+    app.finish_reveal();
+    assert!(app.take_pending_impacts().is_empty());
+}
+
+#[test]
+fn no_impacts_are_released_outside_a_battle_mode() {
+    let mut app = impacts_battle();
+    app.mode = Mode::Playing;
+    app.advance_reveal(1_000.0);
+    app.skip_reveal();
+    assert!(app.take_pending_impacts().is_empty());
+}
+
+#[test]
+fn impacts_queued_in_the_frame_a_fight_ends_do_not_survive_it() {
+    let mut app = impacts_battle();
+    app.handle_key(GameKey::Esc);
+    assert!(
+        !app.pending_impacts.is_empty(),
+        "nothing queued to go stale"
+    );
+    app.mode = Mode::Playing;
+    assert!(app.take_pending_impacts().is_empty());
+
+    app.mode = Mode::Battle;
+    assert!(
+        app.take_pending_impacts().is_empty(),
+        "a stale impact reached the next fight"
     );
 }

@@ -1084,6 +1084,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         player,
         round_targets: vec![vec![e1, e2]],
         groups: vec![EnemyGroup {
+            id: crate::battle::GroupId::new(0),
             species,
             members: vec![e1, e2],
         }],

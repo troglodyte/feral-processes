@@ -599,7 +599,7 @@ impl Game {
             // rolls per body because a wide swing is a sloppy swing.
             let outcome = self.resolve_and_apply_attack(entity, body, battle::Swing::plain(range));
             let line = self.party_swing_line(entity, &move_name, outcome);
-            self.log_swing(MessageKind::PartyDamage, outcome, line);
+            self.log_swing(MessageKind::PartyDamage, outcome, body, line);
         }
 
         if wide.is_some() {
@@ -870,6 +870,7 @@ impl Game {
                     catalyst_potency,
                     bonuses,
                 )?;
+                row.id = group.id;
                 row.charge = self.group_charge_tag(&group.members);
                 Some(row)
             })
@@ -921,6 +922,9 @@ impl Game {
         let resistance = self.target_resistance(front)?;
         let is_boss = species.is_some_and(|s| s.is_boss);
         Some(EnemyGroupView {
+            // A group model overwrites this with the group's own id; on a
+            // grid there are no groups, so the body's position stands in.
+            id: battle::GroupId::new(idx as u32),
             letter: (b'A' + idx as u8) as char,
             species_name,
             count,
@@ -1224,8 +1228,10 @@ impl Game {
         player: Entity,
         overkill: f32,
     ) {
-        self.log_kind(
+        self.log_impact(
             MessageKind::Outcome,
+            victim,
+            ImpactKind::Kill,
             "The rogue program crashes and deletes itself!",
         );
         let earned = self.kill_xp(victim);
@@ -1713,10 +1719,12 @@ impl Game {
                         band.roll(&mut rng.0)
                     };
                     let restored = self.restore_hp(recipient, rolled);
-                    self.log_kind(
-                        heal_kind,
-                        format!("{name} patches {on} for {restored} Integrity."),
-                    );
+                    let line = format!("{name} patches {on} for {restored} Integrity.");
+                    if restored > 0 {
+                        self.log_impact(heal_kind, recipient, ImpactKind::Heal(restored), line);
+                    } else {
+                        self.log_kind(heal_kind, line);
+                    }
                 }
                 AbilityEffect::Debuff {
                     kind,
@@ -1769,7 +1777,7 @@ impl Game {
                             self.fumble_line_for_other(name, "the routine", rung)
                         }
                     };
-                    self.log_swing(hit_kind, outcome, line);
+                    self.log_swing(hit_kind, outcome, recipient, line);
                     // The rider lands on a hit only. This branch cannot live
                     // inside `apply_damage`, which has no notion of a miss.
                     if outcome.damage_to_defender() > 0
@@ -1811,7 +1819,7 @@ impl Game {
                             // the two read as one another's outcomes.
                             _ => format!("{name} siphons nothing from {on}."),
                         };
-                        self.log_swing(hit_kind, outcome, line);
+                        self.log_swing(hit_kind, outcome, recipient, line);
                         continue;
                     }
                     // Off the damage actually dealt, not the authored power:
@@ -1828,6 +1836,7 @@ impl Game {
                     self.log_swing(
                         heal_kind,
                         outcome,
+                        recipient,
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),
                     );
                 }

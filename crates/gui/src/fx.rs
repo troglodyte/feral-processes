@@ -14,13 +14,14 @@ use std::collections::HashMap;
 
 use crate::effect_draw;
 use crate::effects::{EffectDef, EffectLibrary, Impact, Travel};
+use crate::paint::Rect;
 use crate::paint::{Color, Painter};
 use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::{
-    BoltCue, EffectKind, Entity, Game, LogLine, MessageKind, RoutineCue, SpeechCue, TacticalFxCue,
-    TacticalFxKind, TransitCue, VisualEffect,
+    BoltCue, EffectKind, Entity, Game, Impact as BattleImpact, ImpactKind, ImpactTarget, LogLine,
+    MessageKind, RoutineCue, SpeechCue, TacticalFxCue, TacticalFxKind, TransitCue, VisualEffect,
 };
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -231,6 +232,31 @@ const TRANSIT_STAGGER_SECONDS: f64 = 0.18;
 
 const FLOAT_SECONDS: f64 = 0.6;
 const FLOAT_RISE_PX: f32 = 24.0;
+
+/// How far apart, in x, two impact floats on one row are drawn while the
+/// earlier is still alive. A round resolves several blows on a row inside
+/// one float's lifetime; at one x they print over each other.
+const IMPACT_STAGGER_PX: f32 = 18.0;
+/// The `KO` stamp over the picture is the picture's side over this.
+pub(crate) const KO_STAMP_DIVISOR: u16 = 3;
+/// A crit's float is drawn this much larger than a plain hit's.
+const CRIT_FLOAT_SCALE: f32 = 1.5;
+/// A row's background tint after a hit, crit or heal fades over this long.
+const ROW_FLASH_SECONDS: f64 = 0.3;
+const ROW_FLASH_PEAK_ALPHA: f32 = 0.35;
+/// The picture window's reaction to a blow: a sideways shake that dies
+/// away, with a tint that fades alongside it.
+const PORTRAIT_NUDGE_SECONDS: f64 = 0.25;
+const PORTRAIT_NUDGE_PX: f32 = 6.0;
+const PORTRAIT_NUDGE_CYCLES: f32 = 2.0;
+const PORTRAIT_FLASH_PEAK_ALPHA: f32 = 0.5;
+/// The `KO` stamp over the picture fades out over this long.
+const PORTRAIT_KO_SECONDS: f64 = 1.0;
+
+const IMPACT_HIT_COLOR: Color = Color::new(0.9, 0.25, 0.25, 1.0);
+const IMPACT_CRIT_COLOR: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+const IMPACT_HEAL_COLOR: Color = Color::new(0.35, 0.85, 0.4, 1.0);
+const IMPACT_DIM_COLOR: Color = Color::new(0.6, 0.6, 0.65, 1.0);
 
 const LOG_FLASH_SECONDS: f64 = 0.35;
 /// How long a battle map's `ROUND N` banner takes to fade out. It never
@@ -817,6 +843,28 @@ struct FloatingNumber {
     y: f32,
     color: Color,
     start: f64,
+    /// Multiplier on the label size; 1.0 for everything but a crit.
+    scale: f32,
+    /// The row an impact float belongs to, for staggering. `None` for
+    /// floats not tied to a roster row.
+    target: Option<ImpactTarget>,
+}
+
+struct RowFlash {
+    target: ImpactTarget,
+    color: Color,
+    start: f64,
+}
+
+/// The picture window's reaction this frame, handed to the portrait draw.
+/// `Default` is the window at rest.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PortraitReaction {
+    pub nudge_x: f32,
+    /// Tint colour (rgb) and its alpha.
+    pub flash: Option<(Color, f32)>,
+    /// Alpha of the `KO` stamp.
+    pub ko: Option<f32>,
 }
 
 /// What `Fx::bar_ghost` hands back for one frame of one HP bar.
@@ -824,13 +872,10 @@ pub struct BarFx {
     /// The trailing value the ghost band is drawn at, easing toward the
     /// real one.
     pub ghost: f32,
-    /// Value lost since the previous frame, for spawning a floating number.
-    pub damage: i32,
 }
 
 #[derive(Clone, Copy)]
 struct BarTracking {
-    value: i32,
     ghost: f32,
 }
 
@@ -851,7 +896,14 @@ pub struct Fx {
     pub(crate) library: EffectLibrary,
     shake_energy: f32,
     floats: Vec<FloatingNumber>,
-    bars: HashMap<u64, BarTracking>,
+    row_flashes: Vec<RowFlash>,
+    /// Where each roster row was last drawn. A row whose group has died is
+    /// gone from the view, but the blow that killed it can still be waiting
+    /// to land; it falls back to this.
+    rows: HashMap<ImpactTarget, Rect>,
+    portrait_hit: Option<(f64, bool)>,
+    portrait_ko: Option<f64>,
+    bars: HashMap<ImpactTarget, BarTracking>,
     camera: Option<(f32, f32)>,
     camera_hold: Option<CameraHold>,
     log_flash_until: f64,
@@ -901,6 +953,10 @@ impl Fx {
             library: EffectLibrary::default(),
             shake_energy: 0.0,
             floats: Vec::new(),
+            row_flashes: Vec::new(),
+            rows: HashMap::new(),
+            portrait_hit: None,
+            portrait_ko: None,
             bars: HashMap::new(),
             camera: None,
             camera_hold: None,
@@ -1070,6 +1126,8 @@ impl Fx {
             .retain(|b| now - b.start < effect_draw::blow_seconds(&b.def).max(BOLT_SECONDS));
         self.speech.retain(|s| now - s.start < SPEECH_SECONDS);
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
+        self.row_flashes
+            .retain(|f| now - f.start < ROW_FLASH_SECONDS);
         if !in_battle {
             self.clear_bars();
             // A battle map's own flashes and marks, cleared with the bars
@@ -1082,6 +1140,12 @@ impl Fx {
             // A blow still in flight would shake the base map's camera on
             // arrival, after the battle it was fired in has ended.
             self.bolts.clear();
+            // Rows are keyed by group ids that only mean something inside
+            // their own fight.
+            self.rows.clear();
+            self.row_flashes.clear();
+            self.portrait_hit = None;
+            self.portrait_ko = None;
         }
     }
 
@@ -1529,21 +1593,22 @@ impl Fx {
     /// — animates independently. A shared tracker would make every bar jump
     /// whenever any one of them changed.
     ///
-    /// Callers pick the key; `render` uses the group index for enemies and
-    /// `PARTY_BAR_KEY_BASE + slot` for the party, which cannot collide.
-    pub fn bar_ghost(&mut self, key: u64, value: i32, dt: f32) -> BarFx {
+    /// Keyed by `ImpactTarget`, the same name an impact uses for its row, so
+    /// a party slot and an enemy group can never share a tracker however
+    /// high the group-id counter climbs, and a group keeps its ghost when a
+    /// dead one ahead of it re-letters the rest.
+    pub fn bar_ghost(&mut self, key: ImpactTarget, value: i32, dt: f32) -> BarFx {
         // A first frame with no prior reading seeds the ghost at the real
         // value, so entering a battle doesn't animate a drain from zero.
         let previous = self.bars.get(&key).copied();
-        let damage = previous.map_or(0, |prev| prev.value - value).max(0);
         let mut ghost = previous.map_or(value as f32, |prev| prev.ghost);
         ghost = if self.enabled {
             ghost_step(ghost, value as f32, dt)
         } else {
             value as f32
         };
-        self.bars.insert(key, BarTracking { value, ghost });
-        BarFx { ghost, damage }
+        self.bars.insert(key, BarTracking { ghost });
+        BarFx { ghost }
     }
 
     /// How far the camera currently sits from the player, in tiles, for the
@@ -1675,31 +1740,136 @@ impl Fx {
     }
 
     /// Drops every bar tracker, so the next battle seeds its ghosts fresh
-    /// rather than easing down from the last fight's numbers. Group indices
+    /// rather than easing down from the last fight's numbers. Party slots
     /// are reused between battles, which is exactly when stale state would
     /// show.
     pub fn clear_bars(&mut self) {
         self.bars.clear();
     }
 
-    pub fn spawn_float(&mut self, text: String, x: f32, y: f32, color: Color) {
+    /// Records where a roster row is drawn this frame. Called for every row
+    /// before the frame's impacts land, so an impact finds its row by
+    /// target and a row that has just left the view is still found at the
+    /// place it was last drawn.
+    pub fn note_row(&mut self, target: ImpactTarget, rect: Rect) {
+        self.rows.insert(target, rect);
+    }
+
+    /// Lands an impact on its row's last known rect. Dropped when the row
+    /// was never drawn, which is a target from a fight not yet on screen.
+    pub fn land(&mut self, impact: BattleImpact) {
+        if let Some(row) = self.rows.get(&impact.target).copied() {
+            self.impact(impact, row);
+        }
+    }
+
+    /// One impact: a styled float over `row`, a flash behind it for a hit,
+    /// crit or heal, and the picture window's reaction.
+    pub fn impact(&mut self, impact: BattleImpact, row: Rect) {
+        self.picture_reacts(impact.kind);
         if !self.enabled {
             return;
         }
+        let (text, color, scale) = match impact.kind {
+            ImpactKind::Damage(n) => (format!("-{n}"), IMPACT_HIT_COLOR, 1.0),
+            ImpactKind::Crit(n) => (format!("CRIT -{n}"), IMPACT_CRIT_COLOR, CRIT_FLOAT_SCALE),
+            ImpactKind::Heal(n) => (format!("+{n}"), IMPACT_HEAL_COLOR, 1.0),
+            ImpactKind::Miss => ("miss".to_string(), IMPACT_DIM_COLOR, 1.0),
+            ImpactKind::Fumble => ("fumble".to_string(), IMPACT_DIM_COLOR, 1.0),
+            ImpactKind::Kill => ("KO".to_string(), IMPACT_HIT_COLOR, 1.0),
+        };
+        let alive = self
+            .floats
+            .iter()
+            .filter(|f| f.target == Some(impact.target))
+            .count();
         self.floats.push(FloatingNumber {
             text,
-            x,
-            y,
+            x: row.x + row.w / 2.0 + alive as f32 * IMPACT_STAGGER_PX,
+            y: row.y + row.h / 2.0,
             color,
             start: self.now,
+            scale,
+            target: Some(impact.target),
         });
+        let flash = match impact.kind {
+            ImpactKind::Damage(_) => Some(IMPACT_HIT_COLOR),
+            ImpactKind::Crit(_) => Some(IMPACT_CRIT_COLOR),
+            ImpactKind::Heal(_) => Some(IMPACT_HEAL_COLOR),
+            ImpactKind::Miss | ImpactKind::Fumble | ImpactKind::Kill => None,
+        };
+        if let Some(color) = flash {
+            self.row_flashes.push(RowFlash {
+                target: impact.target,
+                color,
+                start: self.now,
+            });
+        }
+    }
+
+    fn picture_reacts(&mut self, kind: ImpactKind) {
+        if !self.enabled {
+            return;
+        }
+        match kind {
+            ImpactKind::Damage(_) => self.portrait_hit = Some((self.now, false)),
+            ImpactKind::Crit(_) => self.portrait_hit = Some((self.now, true)),
+            ImpactKind::Kill => self.portrait_ko = Some(self.now),
+            ImpactKind::Heal(_) | ImpactKind::Miss | ImpactKind::Fumble => {}
+        }
+    }
+
+    /// The newest flash on a row: its colour and the alpha to tint the
+    /// row's background with, or `None` once it has faded.
+    pub fn row_flash(&self, target: ImpactTarget) -> Option<(Color, f32)> {
+        let flash = self
+            .row_flashes
+            .iter()
+            .filter(|f| f.target == target)
+            .max_by(|a, b| a.start.total_cmp(&b.start))?;
+        let t = ((self.now - flash.start) / ROW_FLASH_SECONDS) as f32;
+        (t < 1.0).then_some((flash.color, ROW_FLASH_PEAK_ALPHA * (1.0 - t)))
+    }
+
+    pub fn portrait_reaction(&self) -> PortraitReaction {
+        let mut reaction = PortraitReaction::default();
+        if let Some((start, crit)) = self.portrait_hit {
+            let t = ((self.now - start) / PORTRAIT_NUDGE_SECONDS) as f32;
+            if (0.0..1.0).contains(&t) {
+                reaction.nudge_x = (t * PORTRAIT_NUDGE_CYCLES * std::f32::consts::TAU).sin()
+                    * PORTRAIT_NUDGE_PX
+                    * (1.0 - t);
+                let color = if crit {
+                    IMPACT_CRIT_COLOR
+                } else {
+                    IMPACT_HIT_COLOR
+                };
+                reaction.flash = Some((color, PORTRAIT_FLASH_PEAK_ALPHA * (1.0 - t)));
+            }
+        }
+        if let Some(start) = self.portrait_ko {
+            let t = ((self.now - start) / PORTRAIT_KO_SECONDS) as f32;
+            if (0.0..1.0).contains(&t) {
+                reaction.ko = Some(1.0 - t);
+            }
+        }
+        reaction
+    }
+
+    #[cfg(test)]
+    pub(crate) fn float_anchors(&self) -> Vec<(String, f32, f32)> {
+        self.floats
+            .iter()
+            .map(|f| (f.text.clone(), f.x, f.y))
+            .collect()
     }
 
     pub fn draw_floats(&self, painter: &Painter, m: &Metrics) {
         for f in &self.floats {
             let t = ((self.now - f.start) / FLOAT_SECONDS) as f32;
             let color = Color::new(f.color.r, f.color.g, f.color.b, 1.0 - t);
-            painter.ui(&f.text, f.x, f.y - FLOAT_RISE_PX * t, m.label(), color);
+            let size = (m.label() as f32 * f.scale) as u16;
+            painter.ui(&f.text, f.x, f.y - FLOAT_RISE_PX * t, size, color);
         }
     }
 
@@ -2157,6 +2327,7 @@ mod tests {
                 source: feral_processes_engine::MessageSource::Base,
                 text: format!("{kind:?}"),
                 outcome: None,
+                impact: None,
             }
         }
 
@@ -2258,14 +2429,12 @@ mod tests {
     #[test]
     fn bar_ghosts_are_tracked_independently_per_key() {
         let mut fx = Fx::new();
-        fx.bar_ghost(1, 100, 0.0);
-        fx.bar_ghost(2, 100, 0.0);
+        fx.bar_ghost(group(1), 100, 0.0);
+        fx.bar_ghost(group(2), 100, 0.0);
 
-        let a = fx.bar_ghost(1, 40, 0.016);
-        let b = fx.bar_ghost(2, 100, 0.016);
+        let a = fx.bar_ghost(group(1), 40, 0.016);
+        let b = fx.bar_ghost(group(2), 100, 0.016);
 
-        assert_eq!(a.damage, 60, "key 1 took the hit");
-        assert_eq!(b.damage, 0, "key 2 was untouched and must not inherit it");
         assert!(
             b.ghost > a.ghost,
             "the two ghosts must not share state: {} vs {}",
@@ -2274,24 +2443,188 @@ mod tests {
         );
     }
 
+    fn group(n: u32) -> ImpactTarget {
+        ImpactTarget::Group(feral_processes_engine::battle::GroupId::new(n))
+    }
+
+    /// The party and the groups share one tracker map. A group-id counter
+    /// has no upper bound, so a fixed offset between the two ranges would
+    /// eventually meet; the key is the target itself.
+    #[test]
+    fn a_high_group_id_does_not_share_a_ghost_with_a_party_slot() {
+        let mut fx = Fx::new();
+        fx.bar_ghost(ImpactTarget::Party(0), 100, 0.0);
+        fx.bar_ghost(group(1000), 100, 0.0);
+
+        let hostile = fx.bar_ghost(group(1000), 10, 0.1);
+        assert!(hostile.ghost < 100.0, "the group's own ghost drains");
+        let party = fx.bar_ghost(ImpactTarget::Party(0), 50, 0.0);
+
+        assert_eq!(
+            party.ghost, 100.0,
+            "the party slot inherited the group's drain"
+        );
+    }
+
+    fn battle_at(fx: &mut Fx, now: f64) {
+        fx.begin_frame(now, FrameCues::default(), true);
+    }
+
+    const A_ROW: Rect = Rect::new(10.0, 100.0, 400.0, 20.0);
+
+    fn dmg(target: ImpactTarget, n: i32) -> BattleImpact {
+        BattleImpact {
+            target,
+            kind: ImpactKind::Damage(n),
+        }
+    }
+
+    /// Several blows land on one row inside one float's lifetime; at one x
+    /// they would print over each other.
+    #[test]
+    fn two_impacts_on_one_row_do_not_share_an_x() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        fx.impact(dmg(group(1), 4), A_ROW);
+        battle_at(&mut fx, FLOAT_SECONDS * 0.5);
+        fx.impact(dmg(group(1), 5), A_ROW);
+        let anchors = fx.float_anchors();
+        assert_eq!(anchors.len(), 2);
+        assert!(
+            (anchors[0].1 - anchors[1].1).abs() >= IMPACT_STAGGER_PX,
+            "{anchors:?}"
+        );
+    }
+
+    #[test]
+    fn a_stagger_resets_once_the_earlier_float_is_gone() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        fx.impact(dmg(group(1), 4), A_ROW);
+        battle_at(&mut fx, FLOAT_SECONDS + 0.1);
+        fx.impact(dmg(group(1), 5), A_ROW);
+        let anchors = fx.float_anchors();
+        assert_eq!(anchors.len(), 1);
+        assert_eq!(anchors[0].1, A_ROW.x + A_ROW.w / 2.0);
+    }
+
+    #[test]
+    fn a_row_flash_fades_to_nothing_after_its_duration() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        fx.impact(dmg(group(1), 4), A_ROW);
+        let (_, alpha) = fx.row_flash(group(1)).expect("a hit flashes its row");
+        assert!(alpha > 0.0);
+        assert!(fx.row_flash(group(2)).is_none(), "other rows are untouched");
+        battle_at(&mut fx, ROW_FLASH_SECONDS + 0.01);
+        assert!(fx.row_flash(group(1)).is_none());
+    }
+
+    #[test]
+    fn crit_and_heal_flash_but_miss_fumble_and_kill_do_not() {
+        for (kind, flashes) in [
+            (ImpactKind::Crit(9), true),
+            (ImpactKind::Heal(3), true),
+            (ImpactKind::Miss, false),
+            (ImpactKind::Fumble, false),
+            (ImpactKind::Kill, false),
+        ] {
+            let mut fx = Fx::new();
+            battle_at(&mut fx, 0.0);
+            fx.impact(
+                BattleImpact {
+                    target: group(1),
+                    kind,
+                },
+                A_ROW,
+            );
+            assert_eq!(fx.row_flash(group(1)).is_some(), flashes, "{kind:?}");
+            assert_eq!(fx.float_anchors().len(), 1, "{kind:?} still draws a mark");
+        }
+    }
+
+    /// The blow that killed a group can reach the screen after the group's
+    /// row has left the view (and, for a companion, before the swing's own
+    /// damage), so any impact whose row is gone lands where the row was.
+    #[test]
+    fn an_impact_on_a_vanished_row_lands_at_its_last_known_rect() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        fx.note_row(group(3), A_ROW);
+        // The row is no longer noted by the view this frame; the memory stays.
+        fx.land(BattleImpact {
+            target: group(3),
+            kind: ImpactKind::Kill,
+        });
+        fx.land(dmg(group(3), 7));
+        let anchors = fx.float_anchors();
+        assert_eq!(anchors.len(), 2);
+        let centre = A_ROW.x + A_ROW.w / 2.0;
+        assert_eq!(anchors[0].1, centre);
+        assert_eq!(anchors[1].1, centre + IMPACT_STAGGER_PX);
+        for (_, _, y) in anchors {
+            assert_eq!(y, A_ROW.y + A_ROW.h / 2.0);
+        }
+    }
+
+    #[test]
+    fn an_impact_on_a_row_never_drawn_is_dropped() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        fx.land(dmg(group(3), 7));
+        assert!(fx.float_anchors().is_empty());
+        assert_eq!(fx.portrait_reaction(), PortraitReaction::default());
+    }
+
+    #[test]
+    fn the_picture_nudges_on_a_blow_and_stamps_ko_on_a_kill() {
+        let mut fx = Fx::new();
+        battle_at(&mut fx, 0.0);
+        assert_eq!(fx.portrait_reaction(), PortraitReaction::default());
+        fx.impact(dmg(group(1), 4), A_ROW);
+        battle_at(&mut fx, PORTRAIT_NUDGE_SECONDS * 0.1);
+        let hit = fx.portrait_reaction();
+        assert!(hit.flash.is_some() && hit.nudge_x != 0.0, "{hit:?}");
+        assert!(hit.ko.is_none());
+        fx.impact(
+            BattleImpact {
+                target: group(1),
+                kind: ImpactKind::Kill,
+            },
+            A_ROW,
+        );
+        assert!(fx.portrait_reaction().ko.is_some());
+        battle_at(&mut fx, PORTRAIT_KO_SECONDS + 1.0);
+        assert_eq!(fx.portrait_reaction(), PortraitReaction::default());
+    }
+
+    #[test]
+    fn effects_off_draws_no_impact_cues() {
+        let mut fx = Fx::new();
+        fx.enabled = false;
+        battle_at(&mut fx, 0.0);
+        fx.impact(dmg(group(1), 4), A_ROW);
+        assert!(fx.float_anchors().is_empty());
+        assert!(fx.row_flash(group(1)).is_none());
+        assert_eq!(fx.portrait_reaction(), PortraitReaction::default());
+    }
+
     /// Entering a battle must not animate a drain from zero, and group
     /// indices are reused between fights — so a stale tracker would show
     /// the next battle draining from the last one's numbers.
     #[test]
     fn a_bars_first_frame_seeds_its_ghost_rather_than_draining_from_zero() {
         let mut fx = Fx::new();
-        let first = fx.bar_ghost(7, 250, 0.016);
+        let first = fx.bar_ghost(group(7), 250, 0.016);
         assert_eq!(first.ghost, 250.0);
-        assert_eq!(first.damage, 0);
 
-        fx.bar_ghost(7, 10, 0.016);
+        fx.bar_ghost(group(7), 10, 0.016);
         fx.clear_bars();
-        let fresh = fx.bar_ghost(7, 250, 0.016);
+        let fresh = fx.bar_ghost(group(7), 250, 0.016);
         assert_eq!(
             fresh.ghost, 250.0,
             "a cleared tracker must seed fresh, not ease down from the old fight"
         );
-        assert_eq!(fresh.damage, 0);
     }
 
     #[test]

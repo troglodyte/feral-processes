@@ -533,7 +533,7 @@ impl Game {
                 routines.join(", ")
             )
         };
-        self.log_kind(MessageKind::Outcome, line);
+        self.log_impact(MessageKind::Outcome, program, ImpactKind::Kill, line);
     }
 
     pub(crate) fn creature_alive(&self, e: Entity) -> bool {

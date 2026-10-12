@@ -2121,3 +2121,62 @@ fn a_tactical_body_view_carries_its_statuses() {
     let player = view.bodies.iter().find(|b| b.is_player).unwrap();
     assert!(player.statuses.is_empty());
 }
+
+#[test]
+fn a_damage_tick_carries_the_damage_it_dealt_on_the_group_it_hit() {
+    use crate::resources::{Impact, ImpactKind, ImpactTarget};
+    let mut game = Game::new(7205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    insert_battle(&mut game, player, vec![wild]);
+    let id = game.world.resource::<BattleState>().groups[0].id;
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    game.arm_status(wild, &StatusId::from("venom"), 4, 2);
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    let hp = game.world.get::<Stats>(wild).unwrap().hp;
+    game.tick_status_effects(wild, "Wild");
+    let dealt = hp - game.world.get::<Stats>(wild).unwrap().hp;
+    assert!(dealt > 0);
+    let log = game.world.resource::<MessageLog>().lines.clone();
+    let tick = log
+        .iter()
+        .find(|l| l.text.contains("takes"))
+        .expect("the tick line");
+    assert_eq!(
+        tick.impact,
+        Some(Impact {
+            target: ImpactTarget::Group(id),
+            kind: ImpactKind::Damage(dealt)
+        })
+    );
+    let expiry = log.iter().find(|l| l.text.contains("is done"));
+    assert!(expiry.is_none_or(|l| l.impact.is_none()));
+}
+
+#[test]
+fn a_damage_tick_that_deals_nothing_keeps_its_line_but_carries_no_impact() {
+    let mut game = Game::new(7205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    insert_battle(&mut game, player, vec![wild]);
+    define_status(
+        &mut game,
+        "venom",
+        StatusStacking::Stack { max: 5 },
+        StatusBehaviour::DamagePerRound,
+    );
+    game.arm_status(wild, &StatusId::from("venom"), 4, 0);
+    game.tick_status_effects(wild, "Wild"); // landing round, exempt
+    game.tick_status_effects(wild, "Wild");
+    let log = game.world.resource::<MessageLog>().lines.clone();
+    let tick = log
+        .iter()
+        .find(|l| l.text.contains("takes"))
+        .expect("the tick line");
+    assert!(tick.impact.is_none());
+}

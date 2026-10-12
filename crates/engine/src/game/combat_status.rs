@@ -229,8 +229,17 @@ impl Game {
                 && def.has_behaviour(|b| matches!(b, StatusBehaviour::DamagePerRound))
             {
                 let n = entry.power * entry.stacks as i32;
-                self.apply_damage(entity, n);
-                self.log(def.tick_line(label, n));
+                let dealt = self.apply_damage(entity, n);
+                let line = def.tick_line(label, n);
+                // A tick that dealt nothing keeps its line but draws no "-0".
+                if dealt > 0 {
+                    self.log_impact(MessageKind::Info, entity, ImpactKind::Damage(dealt), line);
+                } else {
+                    self.world
+                        .resource_mut::<MessageLog>()
+                        .push_kind(MessageKind::Info, line);
+                    self.snapshot_roster();
+                }
             }
             entry.remaining = entry.remaining.saturating_sub(1);
             if entry.remaining > 0 {

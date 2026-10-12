@@ -724,7 +724,9 @@ fn a_group_that_falls_mid_round_neither_lends_nor_steals_a_turn() {
         let groups = [a, b, c]
             .into_iter()
             .zip(members)
-            .map(|(species, member)| crate::battle::EnemyGroup {
+            .enumerate()
+            .map(|(i, (species, member))| crate::battle::EnemyGroup {
+                id: crate::battle::GroupId::new(i as u32),
                 species,
                 members: vec![member],
             })

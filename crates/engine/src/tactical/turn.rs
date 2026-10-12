@@ -474,7 +474,7 @@ impl Game {
                 true => crate::resources::MessageKind::EnemyAttack,
                 false => crate::resources::MessageKind::PartyDamage,
             };
-            self.log_swing(kind, outcome, line);
+            self.log_swing(kind, outcome, mover, line);
         }
         // A reaction can put the mover down, and a body left standing on the
         // board at zero Integrity would keep its place in the order.
@@ -684,7 +684,12 @@ impl Game {
             let outcome =
                 self.resolve_and_apply_attack(actor, body, crate::battle::Swing::plain(range));
             let line = self.party_swing_line(actor, &move_name, outcome);
-            self.log_swing(crate::resources::MessageKind::PartyDamage, outcome, line);
+            self.log_swing(
+                crate::resources::MessageKind::PartyDamage,
+                outcome,
+                body,
+                line,
+            );
         }
         self.world.resource_mut::<TacticalBattle>().spend_action();
 

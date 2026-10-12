@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::scenario::{OpponentSpec, PlayerSource, Scenario};
 use super::{set_player_level, spawn_companion, spawn_companion_spending};
-use crate::battle::EnemyGroup;
+use crate::battle::{EnemyGroup, GroupId};
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
@@ -224,10 +224,11 @@ pub(crate) fn build_opponents(
             }
             members.push(member);
         }
-        groups.push(EnemyGroup {
-            species: row.species.clone(),
+        groups.push(EnemyGroup::new(
+            GroupId::new(groups.len() as u32),
+            row.species.clone(),
             members,
-        });
+        ));
     }
     Ok((groups, warnings))
 }

@@ -31,13 +31,12 @@ use crate::items::ItemId;
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
+use crate::tactical::policy::CellWeights;
 use crate::tactical::reach::{cover_between, line_of_sight};
 use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
-    ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_COVER_TIEBREAK,
-    TACTICAL_AI_COVER_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT, TACTICAL_AI_REACH_SCORE,
-    TACTICAL_AI_REACTION_WEIGHT, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
+    ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
     TACTICAL_MELEE_RANGE,
 };
 
@@ -229,6 +228,7 @@ fn cell_score(
     band: AbilityRange,
     targets: &[(i32, i32)],
     allies: &[(i32, i32)],
+    w: &CellWeights,
 ) -> f32 {
     let crowd = allies
         .iter()
@@ -241,11 +241,11 @@ fn cell_score(
     // filter exists to prevent. Here it only chooses between cells that were
     // already worth walking to.
     let shelter = if band.max <= TACTICAL_MELEE_RANGE {
-        TACTICAL_AI_COVER_TIEBREAK * cover_share(board, cells, targets)
+        w.cover_tiebreak * cover_share(board, cells, targets)
     } else {
         0.0
     };
-    cell_merit(board, cells, band, targets) + shelter - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+    cell_merit(board, cells, band, targets, w) + shelter - w.crowding * crowd as f32
 }
 
 /// The fraction of `targets` that a body standing at `cell` would have cover
@@ -286,6 +286,7 @@ fn cell_merit(
     cells: &[(i32, i32)],
     band: AbilityRange,
     targets: &[(i32, i32)],
+    w: &CellWeights,
 ) -> f32 {
     // Line of sight is asked only of a cell that is already in band, so a
     // cell behind cover scores as one that has closed but cannot fire —
@@ -303,13 +304,12 @@ fn cell_merit(
     // A ranged body has a reason to walk for cover; a melee one does not,
     // and its half of the term is `cell_score`'s.
     let shelter = if band.max > TACTICAL_MELEE_RANGE {
-        TACTICAL_AI_COVER_WEIGHT * cover_share(board, cells, targets)
+        w.cover * cover_share(board, cells, targets)
     } else {
         0.0
     };
 
-    (if hits { TACTICAL_AI_REACH_SCORE } else { 0.0 }) - TACTICAL_AI_CLOSING_WEIGHT * gap as f32
-        + shelter
+    (if hits { w.reach } else { 0.0 }) - w.closing * gap as f32 + shelter
 }
 
 impl Game {
@@ -488,7 +488,7 @@ impl Game {
             });
         }
 
-        let (cells, scores) = self.scored_cells(body, &intent, &sides);
+        let (cells, scores) = self.scored_cells(body, &intent, &sides, &CellWeights::default());
         let walk = if cells.is_empty() {
             Vec::new()
         } else {
@@ -740,7 +740,7 @@ impl Game {
         if !matches!(intent, Intent::UseItem(_))
             && !self.world.resource::<TacticalBattle>().walk_planned()
         {
-            self.walk_to_best_cell(actor, &intent, &sides, temperature);
+            self.walk_to_best_cell(actor, &intent, &sides, temperature, &CellWeights::default());
             if self.step_along_walk(actor) {
                 return AiBeat::Stepped;
             }
@@ -1093,6 +1093,7 @@ impl Game {
         intent: &Intent,
         sides: &Sides,
         temperature: f32,
+        w: &CellWeights,
     ) {
         // Committed on every path out, empty ones included: an unplanned walk
         // is re-planned by the next beat, and a body that found nowhere worth
@@ -1100,7 +1101,7 @@ impl Game {
         self.world
             .resource_mut::<TacticalBattle>()
             .commit_walk(Vec::new());
-        let (cells, scores) = self.scored_cells(actor, intent, sides);
+        let (cells, scores) = self.scored_cells(actor, intent, sides, w);
         if cells.is_empty() {
             return;
         }
@@ -1130,6 +1131,7 @@ impl Game {
         actor: Entity,
         intent: &Intent,
         sides: &Sides,
+        w: &CellWeights,
     ) -> (Vec<(i32, i32)>, Vec<f32>) {
         let allowance = self.movement_allowance(actor);
         let battle = self.world.resource::<TacticalBattle>();
@@ -1157,7 +1159,7 @@ impl Game {
         // The hold still goes through the draw, so a turn spends one draw
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
-        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets);
+        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w);
         // **A party routine walks only where it can be aimed.** Band alone
         // would hold a body whose every aim from here covers a companion;
         // `party_routine_intent` chose the routine because some cell in reach
@@ -1183,8 +1185,8 @@ impl Game {
             .filter(|&cell| {
                 aimable(cell)
                     && (!hold_is_aimable
-                        || cell_merit(&battle.board, &block(cell), band, &sides.targets)
-                            - self.walk_risk(actor, cell)
+                        || cell_merit(&battle.board, &block(cell), band, &sides.targets, w)
+                            - self.walk_risk(actor, cell, w.reaction)
                             > standing)
             })
             .collect();
@@ -1204,7 +1206,8 @@ impl Game {
                     band,
                     &sides.targets,
                     &sides.allies,
-                ) - self.walk_risk(actor, cell)
+                    w,
+                ) - self.walk_risk(actor, cell, w.reaction)
             })
             .collect();
         (cells, scores)
@@ -1222,7 +1225,7 @@ impl Game {
     /// rule `balance_sim` has been bitten by four times. It is an
     /// expectation and not a roll, so this spends no `GameRng` and
     /// `tactical_ai_turn_at(0.0)` is still stream-neutral.
-    pub(crate) fn walk_risk(&self, actor: Entity, to: (i32, i32)) -> f32 {
+    pub(crate) fn walk_risk(&self, actor: Entity, to: (i32, i32), reaction: f32) -> f32 {
         let path = self.path_for(actor, to);
         if path.is_empty() {
             return 0.0;
@@ -1238,7 +1241,7 @@ impl Game {
             risk += self.provocation(actor, at, step);
             at = step;
         }
-        risk * TACTICAL_AI_REACTION_WEIGHT
+        risk * reaction
     }
 
     /// The Integrity `actor` can expect to lose to reactions if it steps
@@ -1593,6 +1596,10 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tuning::{
+        TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_COVER_TIEBREAK, TACTICAL_AI_CROWDING_WEIGHT,
+        TACTICAL_AI_REACH_SCORE,
+    };
 
     fn open(side: usize) -> Board {
         let row = ".".repeat(side);
@@ -1624,8 +1631,20 @@ mod tests {
     #[test]
     fn a_ranged_cell_with_cover_outscores_an_equal_one_without() {
         let board = one_boulder();
-        let sheltered = cell_merit(&board, &[COVERED], STANDOFF, &TARGET);
-        let open = cell_merit(&board, &[EXPOSED], STANDOFF, &TARGET);
+        let sheltered = cell_merit(
+            &board,
+            &[COVERED],
+            STANDOFF,
+            &TARGET,
+            &CellWeights::default(),
+        );
+        let open = cell_merit(
+            &board,
+            &[EXPOSED],
+            STANDOFF,
+            &TARGET,
+            &CellWeights::default(),
+        );
         assert!(
             sheltered > open,
             "the covered cell scored {sheltered}, the exposed one {open}"
@@ -1639,8 +1658,19 @@ mod tests {
     #[test]
     fn cover_is_worth_less_than_reach_and_more_than_a_step_of_closing() {
         let board = one_boulder();
-        let gained = cell_merit(&board, &[COVERED], STANDOFF, &TARGET)
-            - cell_merit(&board, &[EXPOSED], STANDOFF, &TARGET);
+        let gained = cell_merit(
+            &board,
+            &[COVERED],
+            STANDOFF,
+            &TARGET,
+            &CellWeights::default(),
+        ) - cell_merit(
+            &board,
+            &[EXPOSED],
+            STANDOFF,
+            &TARGET,
+            &CellWeights::default(),
+        );
         assert!(
             gained < TACTICAL_AI_REACH_SCORE,
             "cover worth {gained} would buy a cell that cannot fire"
@@ -1660,13 +1690,26 @@ mod tests {
     fn a_melee_bands_cover_is_a_tie_break_and_not_a_reason_to_walk() {
         let board = one_boulder();
         assert_eq!(
-            cell_merit(&board, &[COVERED], MELEE, &TARGET),
-            cell_merit(&board, &[EXPOSED], MELEE, &TARGET),
+            cell_merit(&board, &[COVERED], MELEE, &TARGET, &CellWeights::default()),
+            cell_merit(&board, &[EXPOSED], MELEE, &TARGET, &CellWeights::default()),
             "a boulder opened a candidate cell for a melee body"
         );
         assert!(
-            cell_score(&board, &[COVERED], MELEE, &TARGET, &[])
-                > cell_score(&board, &[EXPOSED], MELEE, &TARGET, &[]),
+            cell_score(
+                &board,
+                &[COVERED],
+                MELEE,
+                &TARGET,
+                &[],
+                &CellWeights::default()
+            ) > cell_score(
+                &board,
+                &[EXPOSED],
+                MELEE,
+                &TARGET,
+                &[],
+                &CellWeights::default()
+            ),
             "between two cells it was already walking to, the covered one wins"
         );
         const _: () = assert!(
@@ -1709,8 +1752,8 @@ mod tests {
         let board = open(8);
         let targets = [(2, 1)];
         let block = crate::tactical::footprint_cells_at((0, 0), 2);
-        let as_a_block = cell_merit(&board, &block, MELEE, &targets);
-        let as_an_anchor = cell_merit(&board, &[(0, 0)], MELEE, &targets);
+        let as_a_block = cell_merit(&board, &block, MELEE, &targets, &CellWeights::default());
+        let as_an_anchor = cell_merit(&board, &[(0, 0)], MELEE, &targets, &CellWeights::default());
         assert!(
             as_a_block >= TACTICAL_AI_REACH_SCORE,
             "a block already in reach scored {as_a_block} and took no reach bonus"
@@ -1746,8 +1789,22 @@ mod tests {
     fn a_standoff_carrier_scores_its_band_above_the_target_s_doorstep() {
         let board = open(12);
         let target = [(8, 4)];
-        let held = cell_score(&board, &[(4, 4)], STANDOFF, &target, &[]);
-        let closed = cell_score(&board, &[(7, 4)], STANDOFF, &target, &[]);
+        let held = cell_score(
+            &board,
+            &[(4, 4)],
+            STANDOFF,
+            &target,
+            &[],
+            &CellWeights::default(),
+        );
+        let closed = cell_score(
+            &board,
+            &[(7, 4)],
+            STANDOFF,
+            &target,
+            &[],
+            &CellWeights::default(),
+        );
         assert!(
             held > closed,
             "holding the band scored {held}, the doorstep {closed}"
@@ -1762,9 +1819,30 @@ mod tests {
         let board = open(crate::tuning::TACTICAL_BOARD_LARGE as usize);
         let far = crate::tuning::TACTICAL_BOARD_LARGE - 1;
         let targets = [(1, 1)];
-        let hitting = cell_score(&board, &[(2, 1)], MELEE, &targets, &[]);
-        let nearest_miss = cell_score(&board, &[(3, 1)], MELEE, &targets, &[]);
-        let across_the_board = cell_score(&board, &[(far, far)], MELEE, &targets, &[]);
+        let hitting = cell_score(
+            &board,
+            &[(2, 1)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
+        let nearest_miss = cell_score(
+            &board,
+            &[(3, 1)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
+        let across_the_board = cell_score(
+            &board,
+            &[(far, far)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
         assert!(hitting > nearest_miss, "{hitting} vs {nearest_miss}");
         assert!(
             nearest_miss > across_the_board,
@@ -1779,6 +1857,19 @@ mod tests {
     /// Crowding is a tie-break and nothing more: it separates two cells that
     /// both hit, and it must never outweigh hitting at all.
     #[test]
+    fn a_profile_that_weighs_crowding_double_ranks_a_crowded_cell_lower() {
+        let board = open(12);
+        let targets = [(6, 6)];
+        let allies = [(4, 6), (5, 5), (4, 5)];
+        let heavier = CellWeights {
+            crowding: CellWeights::default().crowding * 2.0,
+            ..CellWeights::default()
+        };
+        let score = |w: &CellWeights| cell_score(&board, &[(5, 6)], MELEE, &targets, &allies, w);
+        assert!(score(&heavier) < score(&CellWeights::default()));
+    }
+
+    #[test]
     fn crowding_separates_two_cells_that_both_reach_and_never_outranks_reaching() {
         let board = open(12);
         let targets = [(6, 6)];
@@ -1788,6 +1879,7 @@ mod tests {
             MELEE,
             &targets,
             &[(4, 6), (5, 5), (4, 5)],
+            &CellWeights::default(),
         );
         let clear = cell_score(
             &board,
@@ -1795,9 +1887,17 @@ mod tests {
             MELEE,
             &targets,
             &[(4, 6), (5, 5), (4, 5)],
+            &CellWeights::default(),
         );
         assert!(clear > packed, "clear {clear}, packed {packed}");
-        let missing = cell_score(&board, &[(9, 6)], MELEE, &targets, &[]);
+        let missing = cell_score(
+            &board,
+            &[(9, 6)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
         assert!(
             packed > missing,
             "a crowded cell that hits still beats a clear one that does not"
@@ -1810,8 +1910,22 @@ mod tests {
     fn a_cell_in_band_but_behind_cover_does_not_count_as_reaching() {
         let board = Board::from_rows(&["......", "......", "..#...", "......", "......", "......"]);
         let targets = [(2, 1)];
-        let blocked = cell_score(&board, &[(2, 3)], MELEE, &targets, &[]);
-        let clear = cell_score(&board, &[(1, 1)], MELEE, &targets, &[]);
+        let blocked = cell_score(
+            &board,
+            &[(2, 3)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
+        let clear = cell_score(
+            &board,
+            &[(1, 1)],
+            MELEE,
+            &targets,
+            &[],
+            &CellWeights::default(),
+        );
         assert!(clear > blocked, "clear {clear}, blocked {blocked}");
     }
 }

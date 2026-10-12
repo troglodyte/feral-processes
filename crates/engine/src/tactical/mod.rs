@@ -16,6 +16,7 @@
 pub mod ai;
 pub mod deploy;
 pub mod map;
+pub mod policy;
 pub mod prop_fight;
 pub mod props;
 pub mod reach;

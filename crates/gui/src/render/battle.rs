@@ -5,13 +5,82 @@ use super::bars::*;
 use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
+use crate::fx::PortraitReaction;
 use feral_processes_engine::battle::{ActionOption, PartyCommand, SpecialOption};
-use feral_processes_engine::{ChargeTag, PortraitView, StatusTagView};
+use feral_processes_engine::{BattleView, ChargeTag, ImpactTarget, PortraitView, StatusTagView};
 
-/// Offset that keeps party-slot bar keys clear of the enemy-group keys they
-/// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
-/// two ranges can never meet.
-const PARTY_BAR_KEY_BASE: u64 = 1000;
+/// The `KO` stamp over the picture is the picture's side over this.
+const KO_STAMP_DIVISOR: u16 = 3;
+
+/// Where every roster row sits, keyed by what an impact names it by.
+/// Worked out before either roster is drawn so a blow can land on its row
+/// (and a row can be tinted) in the same frame the line is revealed.
+struct RosterLayout {
+    /// `Rect.y` is the row's top, one label's ascent above `bar_y`.
+    groups: Vec<(ImpactTarget, Rect)>,
+    party: Vec<(ImpactTarget, Rect)>,
+    party_top: f32,
+    /// Where the hostile block ends and the log pane begins.
+    groups_end: f32,
+}
+
+impl RosterLayout {
+    /// `y` is the top of the first hostile row; `log_bottom` is the line the
+    /// bottom-anchored party block rests on.
+    fn of(view: &BattleView, y: f32, log_bottom: f32, margin: f32, w: f32, m: &Metrics) -> Self {
+        let stride = bar_row_height(m);
+        let row_w = w - margin * 2.0;
+        let row = |top: f32, target| {
+            (
+                target,
+                Rect::new(
+                    margin,
+                    top - m.label() as f32,
+                    row_w,
+                    stride - m.inset + m.label() as f32,
+                ),
+            )
+        };
+        let groups: Vec<_> = view
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| row(y + i as f32 * stride, ImpactTarget::Group(g.id)))
+            .collect();
+        let groups_end = y + view.groups.len() as f32 * stride + m.inset;
+        // Two line heights, not one: the block's title *and* its column
+        // header sit above the first bar. Getting this wrong shifts the whole
+        // party block, since it is bottom-anchored off this figure.
+        let party_height = m.line_height * 2.0 + view.party.len() as f32 * stride + m.inset;
+        let party_top = (log_bottom - party_height).max(groups_end);
+        let first_party = party_top + m.line_height * 2.0;
+        let party = view
+            .party
+            .iter()
+            .enumerate()
+            .map(|(i, p)| row(first_party + i as f32 * stride, ImpactTarget::Party(p.slot)))
+            .collect();
+        Self {
+            groups,
+            party,
+            party_top,
+            groups_end,
+        }
+    }
+}
+
+/// The label baseline a row's bar is drawn from.
+fn row_bar_y(row: Rect, m: &Metrics) -> f32 {
+    row.y + m.label() as f32
+}
+
+/// Tints a row's background under its label and bar while an impact's
+/// flash is live.
+fn draw_row_flash(fx: &Fx, target: ImpactTarget, row: Rect, painter: &Painter) {
+    if let Some((c, alpha)) = fx.row_flash(target) {
+        painter.rect(row.x, row.y, row.w, row.h, Color::new(c.r, c.g, c.b, alpha));
+    }
+}
 
 /// The bar drawn at the foot of the roster once narration has finished
 /// revealing and the fight is still open — every offered action, then every
@@ -340,13 +409,26 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     painter.ui(hostile_header(), margin, y, m.label(), TEXT_DIM);
     y += m.line_height;
 
-    for (idx, g) in view.groups.iter().enumerate() {
+    // Before either roster is drawn, so a row's flash sits under it and a
+    // blow lands on the row the same frame its line is revealed. Impacts
+    // name rows by id, so this is also where a re-letter stops mattering.
+    let log_bottom = painter.screen_h() - m.line_height * 2.0;
+    let layout = RosterLayout::of(&view, y, log_bottom, margin, w, m);
+    for (target, rect) in layout.groups.iter().chain(&layout.party) {
+        fx.note_row(*target, *rect);
+    }
+    for impact in app.take_pending_impacts() {
+        fx.land(impact);
+    }
+
+    for (g, &(target, row)) in view.groups.iter().zip(&layout.groups) {
+        draw_row_flash(fx, target, row, painter);
         let bar = BarGeometry {
             x: margin,
-            y,
-            w: w - margin * 2.0,
+            y: row_bar_y(row, m),
+            w: row.w,
         };
-        let ghost = fx.bar_ghost(idx as u64, g.front_hp, dt);
+        let ghost = fx.bar_ghost(target, g.front_hp, dt);
         let name = if g.count > 1 {
             format!("{} {}s", g.count, g.species_name)
         } else {
@@ -361,7 +443,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         } else {
             RED
         };
-        y = draw_bar(
+        draw_bar(
             bar,
             &roster_row(
                 &format!("{}  ", g.letter),
@@ -414,29 +496,16 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
             painter,
             m,
         );
-        // Damage is inferred from the HP the view reports rather than from
-        // a dedicated engine event — a round resolves entirely between two
-        // frames, so the drop is unambiguous. Floats spawn at their own
-        // row now that there is more than one bar to attribute them to.
-        if ghost.damage > 0 {
-            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, RED);
-        }
-        y += m.inset;
     }
 
-    y += m.inset;
+    y = layout.groups_end;
 
     // Hostiles on top, your party on the bottom, with the log between them —
     // the two rosters read as opposing sides with the narration of what
     // passed between them in the middle. The party block is bottom-anchored
     // above the action bar so the log can take exactly the slack left over,
     // which is why its height has to be computed rather than accumulated.
-    let log_bottom = painter.screen_h() - m.line_height * 2.0;
-    // Two line heights, not one: the block's title *and* its column header
-    // sit above the first bar. Getting this wrong shifts the whole party
-    // block, since it is bottom-anchored off this figure.
-    let party_height = m.line_height * 2.0 + view.party.len() as f32 * bar_row_height(m) + m.inset;
-    let party_top = (log_bottom - party_height).max(y);
+    let party_top = layout.party_top;
 
     // The party title is drawn on its baseline at `party_top`, so its ink
     // rises a line into whatever is above; the pane stops short of it or its
@@ -455,7 +524,15 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     {
         let log = Rect::new(margin, y, log_w, log_height);
         let split = split_log(log, side, m);
-        draw_battle_portrait(portrait, split.picture_x, split.picture_y, side, painter, m);
+        draw_battle_portrait(
+            portrait,
+            split.picture_x,
+            split.picture_y,
+            side,
+            fx.portrait_reaction(),
+            painter,
+            m,
+        );
         // The pane border's own weight, so the rule reads as the frame
         // continuing rather than something drawn inside it.
         painter.line(
@@ -516,15 +593,15 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     );
     y += m.line_height;
     painter.ui(party_header(), margin, y, m.label(), TEXT_DIM);
-    y += m.line_height;
 
-    for p in &view.party {
+    for (p, &(target, row)) in view.party.iter().zip(&layout.party) {
+        draw_row_flash(fx, target, row, painter);
         let bar = BarGeometry {
             x: margin,
-            y,
-            w: w - margin * 2.0,
+            y: row_bar_y(row, m),
+            w: row.w,
         };
-        let ghost = fx.bar_ghost(PARTY_BAR_KEY_BASE + p.slot as u64, p.hp, dt);
+        let ghost = fx.bar_ghost(target, p.hp, dt);
         let active = view.active_slot == Some(p.slot);
         // Danger outranks the active-slot cue: the `>` prefix and the bold
         // face already mark who is acting, and nothing else on this screen
@@ -536,7 +613,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         } else {
             GREEN
         };
-        y = draw_bar(
+        draw_bar(
             bar,
             &roster_row(
                 &format!("{}{} ", if active { ">" } else { " " }, p.slot + 1),
@@ -584,10 +661,6 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
             painter,
             m,
         );
-        if ghost.damage > 0 {
-            fx.spawn_float(format!("-{}", ghost.damage), w / 2.0, bar.y, TEXT);
-        }
-        y += m.inset;
     }
 
     // Hidden while narration is still scrolling in: a key pressed then
@@ -882,27 +955,45 @@ fn draw_battle_portrait(
     x: f32,
     y: f32,
     side: f32,
+    reaction: PortraitReaction,
     painter: &Painter,
     m: &Metrics,
 ) {
     let color = hud::palette::glyph(portrait.color);
+    // The nudge moves the body only; the frame, caption and tint stay put so
+    // the window reads as a picture being jolted rather than a pane moving.
+    let body_x = x + reaction.nudge_x;
     // The drawn icon is the one untinted sprite — see `drawing-seam.md`.
     let drew_sprite = (portrait.drawn_icon
-        && painter.sprite(crate::sprites::DRAWN_ICON_KEY, x, y, side, WHITE, 0))
+        && painter.sprite(crate::sprites::DRAWN_ICON_KEY, body_x, y, side, WHITE, 0))
         || portrait
             .sprite
             .as_deref()
-            .is_some_and(|name| painter.sprite(name, x, y, side, color, 0));
+            .is_some_and(|name| painter.sprite(name, body_x, y, side, color, 0));
     if !drew_sprite {
         let glyph = portrait.glyph.to_string();
         let size = side as u16;
         let dims = painter.measure_map(&glyph, size);
         painter.map(
             &glyph,
-            x + (side - dims.width) / 2.0,
+            body_x + (side - dims.width) / 2.0,
             y + (side + dims.height) / 2.0,
             size,
             color,
+        );
+    }
+    if let Some((c, alpha)) = reaction.flash {
+        painter.rect(x, y, side, side, Color::new(c.r, c.g, c.b, alpha));
+    }
+    if let Some(alpha) = reaction.ko {
+        let size = side as u16 / KO_STAMP_DIVISOR;
+        let dims = painter.measure_ui("KO", size);
+        painter.ui_bold(
+            "KO",
+            x + (side - dims.width) / 2.0,
+            y + (side + dims.height) / 2.0,
+            size,
+            Color::new(RED.r, RED.g, RED.b, alpha),
         );
     }
     // Centred when it fits; a longer name keeps its start and is cut at the
@@ -955,7 +1046,15 @@ mod tests {
     ) -> Vec<egui::epaint::ClippedShape> {
         let m = ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_sprites(table, |p| {
-            draw_battle_portrait(portrait, 20.0, 40.0, 128.0, p, &m)
+            draw_battle_portrait(
+                portrait,
+                20.0,
+                40.0,
+                128.0,
+                PortraitReaction::default(),
+                p,
+                &m,
+            )
         });
         shapes
     }
@@ -1699,6 +1798,93 @@ mod tests {
             "the seeded hostile did not open a fight"
         );
         app
+    }
+
+    /// A view of the live fight with its hostile groups replaced by clones
+    /// carrying the given ids, lettered in order.
+    fn view_with_group_ids(base: &BattleView, ids: &[u32]) -> BattleView {
+        let template = base.groups[0].clone();
+        BattleView {
+            groups: ids
+                .iter()
+                .zip('A'..)
+                .map(|(&id, letter)| {
+                    let mut g = template.clone();
+                    g.id = feral_processes_engine::battle::GroupId::new(id);
+                    g.letter = letter;
+                    g
+                })
+                .collect(),
+            party: base.party.clone(),
+            active_slot: base.active_slot,
+            options: base.options.clone(),
+            round: base.round,
+            player_decompiler: base.player_decompiler,
+            portrait: base.portrait.clone(),
+        }
+    }
+
+    fn a_group(id: u32) -> ImpactTarget {
+        ImpactTarget::Group(feral_processes_engine::battle::GroupId::new(id))
+    }
+
+    fn layout_for(view: &BattleView, m: &Metrics) -> RosterLayout {
+        RosterLayout::of(view, 80.0, 800.0, m.inset * 2.0, 1000.0, m)
+    }
+
+    fn blow(
+        target: ImpactTarget,
+        kind: feral_processes_engine::ImpactKind,
+    ) -> feral_processes_engine::Impact {
+        feral_processes_engine::Impact { target, kind }
+    }
+
+    /// Rows are named by id, not by letter or index: when the front group
+    /// dies and the rest re-letter, a blow on group 5 still lands on group
+    /// 5's row, and a blow on the dead group lands where its row was.
+    #[test]
+    fn a_float_lands_on_the_row_its_target_names_after_a_re_letter() {
+        use feral_processes_engine::ImpactKind;
+        let m = ui_metrics(900.0);
+        let base = a_battling_app().battle_view().expect("a fight is open");
+        let mut fx = crate::fx::Fx::new();
+        fx.begin_frame(0.0, crate::fx::FrameCues::default(), true);
+
+        // Ids deliberately out of index order.
+        let before = view_with_group_ids(&base, &[7, 2, 5]);
+        let layout = layout_for(&before, &m);
+        let row_of = |layout: &RosterLayout, id: u32| {
+            layout
+                .groups
+                .iter()
+                .find(|(t, _)| *t == a_group(id))
+                .expect("row present")
+                .1
+        };
+        for (t, r) in &layout.groups {
+            fx.note_row(*t, *r);
+        }
+        fx.land(blow(a_group(5), ImpactKind::Damage(3)));
+        let first = row_of(&layout, 5);
+        assert_eq!(fx.float_anchors()[0].2, first.y + first.h / 2.0);
+
+        // Group 7 dies; 2 and 5 become A and B.
+        let after = view_with_group_ids(&base, &[2, 5]);
+        let relaid = layout_for(&after, &m);
+        for (t, r) in &relaid.groups {
+            fx.note_row(*t, *r);
+        }
+        let moved = row_of(&relaid, 5);
+        assert_ne!(first.y, moved.y, "the re-letter must move group 5's row");
+        fx.land(blow(a_group(5), ImpactKind::Miss));
+        // The dead group's blows, in either order, fall back to its last rect.
+        fx.land(blow(a_group(7), ImpactKind::Kill));
+        fx.land(blow(a_group(7), ImpactKind::Damage(9)));
+        let ys: Vec<f32> = fx.float_anchors().iter().map(|a| a.2).collect();
+        let dead = row_of(&layout, 7);
+        assert_eq!(ys[1], moved.y + moved.h / 2.0);
+        assert_eq!(ys[2], dead.y + dead.h / 2.0);
+        assert_eq!(ys[3], dead.y + dead.h / 2.0);
     }
 
     /// The window is drawn by `draw_battle` itself, for the body the engine

@@ -463,6 +463,17 @@ pub enum ImpactKind {
     Kill,
 }
 
+impl From<AttackOutcome> for ImpactKind {
+    fn from(outcome: AttackOutcome) -> Self {
+        match outcome {
+            AttackOutcome::Crit { dmg } => ImpactKind::Crit(dmg),
+            AttackOutcome::Hit { dmg } => ImpactKind::Damage(dmg),
+            AttackOutcome::Miss => ImpactKind::Miss,
+            AttackOutcome::Fumble(_) => ImpactKind::Fumble,
+        }
+    }
+}
+
 /// One line as stored. A struct rather than the `(kind, text)` tuple it grew
 /// from: with a third field the positional form stops reading, and every
 /// consumer already wanted to name what it was reaching for.
@@ -536,16 +547,16 @@ impl MessageLog {
     }
 
     pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
-        self.push_line(kind, MessageSource::Field, None, line);
+        self.push_line(kind, MessageSource::Field, None, None, line);
     }
 
     /// News from the base rather than from wherever the party is standing.
     pub fn push_base(&mut self, line: impl Into<String>) {
-        self.push_line(MessageKind::Info, MessageSource::Base, None, line);
+        self.push_line(MessageKind::Info, MessageSource::Base, None, None, line);
     }
 
     pub fn push_base_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
-        self.push_line(kind, MessageSource::Base, None, line);
+        self.push_line(kind, MessageSource::Base, None, None, line);
     }
 
     /// Narrates one resolved swing, tagging the line with the band it
@@ -555,9 +566,17 @@ impl MessageLog {
         &mut self,
         kind: MessageKind,
         outcome: SwingOutcome,
+        impact: Option<Impact>,
         line: impl Into<String>,
     ) {
-        self.push_line(kind, MessageSource::Field, Some(outcome), line);
+        self.push_line(kind, MessageSource::Field, Some(outcome), impact, line);
+    }
+
+    /// Narrates something that landed on a body without being a swing: a
+    /// heal, a status tick, a fall. The same `impact` slot `push_swing`
+    /// fills, so a renderer reads both through one field.
+    pub fn push_impact(&mut self, kind: MessageKind, impact: Impact, line: impl Into<String>) {
+        self.push_line(kind, MessageSource::Field, None, Some(impact), line);
     }
 
     fn push_line(
@@ -565,6 +584,7 @@ impl MessageLog {
         kind: MessageKind,
         source: MessageSource,
         outcome: Option<SwingOutcome>,
+        impact: Option<Impact>,
         text: impl Into<String>,
     ) {
         self.lines.push(LogLine {
@@ -572,7 +592,7 @@ impl MessageLog {
             source,
             text: text.into(),
             outcome,
-            impact: None,
+            impact,
         });
         self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {

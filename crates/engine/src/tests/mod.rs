@@ -18,6 +18,7 @@ mod base_grid;
 mod base_ledger;
 mod base_space;
 mod basin;
+mod battle_impact;
 mod battle_portrait;
 mod battle_timeline;
 mod bonds;

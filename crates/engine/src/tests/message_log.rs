@@ -256,9 +256,11 @@ fn swing_outcome_reduces_every_attack_outcome_band() {
 #[test]
 fn log_swing_stamps_the_line_with_its_outcome() {
     let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
     game.log_swing(
         MessageKind::PartyDamage,
         crate::battle::AttackOutcome::Crit { dmg: 12 },
+        player,
         "you tear it clean through",
     );
     let last = game.message_log(1);

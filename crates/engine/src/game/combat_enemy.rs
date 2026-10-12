@@ -322,7 +322,7 @@ impl Game {
                     self.fumble_line_for_other("The rogue program", &mv.name, rung)
                 }
             };
-            self.log_swing(kind, outcome, line);
+            self.log_swing(kind, outcome, target, line);
             if !self.creature_alive(target) {
                 self.log(format!("{name} is knocked offline and stands down."));
                 // It leaves `Party` at the end of the battle, not here —
@@ -349,7 +349,7 @@ impl Game {
                     self.fumble_line_for_other("The rogue program", &mv.name, rung)
                 }
             };
-            self.log_swing(kind, outcome, line);
+            self.log_swing(kind, outcome, target, line);
             if self.creature_alive(target)
                 && let Some(effect) = &status
             {

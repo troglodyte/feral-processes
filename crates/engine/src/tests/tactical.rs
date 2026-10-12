@@ -3056,9 +3056,11 @@ fn a_swing_is_heard_however_full_the_log_is() {
 #[test]
 fn a_swing_off_the_board_queues_no_cue() {
     let mut game = game();
+    let player = game.player_entity();
     game.log_swing(
         crate::resources::MessageKind::PartyDamage,
         crate::battle::AttackOutcome::Crit { dmg: 12 },
+        player,
         "you tear it clean through",
     );
     assert!(game.take_swing_cues().is_empty());

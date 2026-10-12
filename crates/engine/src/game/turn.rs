@@ -46,6 +46,27 @@ impl Game {
         self.snapshot_roster();
     }
 
+    /// Narrates a line that did `what` to `target` without being a swing — a
+    /// heal, a status tick, a fall. Falls back to a plain line when `target`
+    /// has no row on the battle screen (no group battle is open), so a
+    /// caller never has to ask which model is holding the fight.
+    pub(crate) fn log_impact(
+        &mut self,
+        kind: MessageKind,
+        target: Entity,
+        what: ImpactKind,
+        s: impl Into<String>,
+    ) {
+        match self.impact_on(target, what) {
+            Some(impact) => self
+                .world
+                .resource_mut::<MessageLog>()
+                .push_impact(kind, impact, s),
+            None => self.world.resource_mut::<MessageLog>().push_kind(kind, s),
+        }
+        self.snapshot_roster();
+    }
+
     pub(crate) fn log_kind(&mut self, kind: MessageKind, s: impl Into<String>) {
         self.world.resource_mut::<MessageLog>().push_kind(kind, s);
         self.snapshot_roster();
@@ -63,16 +84,22 @@ impl Game {
     /// the player, and reading the round's range by position went silent
     /// once `MESSAGE_LOG_CAP` pinned that range's length. See
     /// `SwingCueQueue`.
+    ///
+    /// `target` is the body on the receiving end, and its `Impact` is
+    /// derived from `outcome` here so no caller can describe a swing one
+    /// way in the line and another in the impact.
     pub(crate) fn log_swing(
         &mut self,
         kind: MessageKind,
         outcome: battle::AttackOutcome,
+        target: Entity,
         s: impl Into<String>,
     ) {
+        let impact = self.impact_on(target, outcome.into());
         let outcome = outcome.into();
         self.world
             .resource_mut::<MessageLog>()
-            .push_swing(kind, outcome, s);
+            .push_swing(kind, outcome, impact, s);
         if self
             .world
             .contains_resource::<crate::tactical::TacticalBattle>()

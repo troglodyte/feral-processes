@@ -668,11 +668,16 @@ fn an_unreachable_dig_site_posts_a_site_cut_off_alert_once() {
     let (mut game, _staff) = alert_base_with_crew(19401, 1);
     // A cut the base could pay to floor, so the route is what stalls it
     // rather than a dry base dropping the want before the route matters.
-    give(
-        &mut game,
-        &ItemId::from(ids::CORE_FRAGMENT),
-        crate::tuning::FLOOR_TILE_COST,
-    );
+    // On a base shelf, since the crew never pays out of the pack.
+    let shelf = spawn_machine_at(&mut game, "depot", -2, 2);
+    game.world
+        .get_mut::<crate::components::Stock>(shelf)
+        .unwrap()
+        .output
+        .insert(
+            ItemId::from(ids::CORE_FRAGMENT),
+            crate::tuning::FLOOR_TILE_COST,
+        );
     let tick = game.current_tick();
     game.world.resource_mut::<base_grid::BaseGrid>().open(
         ALERT_STRANDED_STATION.0,

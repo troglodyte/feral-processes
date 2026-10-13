@@ -169,7 +169,9 @@
   *asks* for every tile it will spend. **Two budgets, one per item**
   (tiles moved off the Lathe because a 12-tick press per cell made
   growing the base too slow): a tile job claims `FLOOR_TILE_COST` Core
-  Fragments, an `Apply` claims `FLOOR_FINISH_COST` Blank Substrate, a
+  Fragments from **base stores only** — the user chose no pack fallback,
+  because fragments are the player's currency and a fallback would quietly
+  spend a marked corridor's worth of them during a sortie with no dry line, an `Apply` claims `FLOOR_FINISH_COST` Blank Substrate, a
   `Strip` nothing — while a solid cell adds its future tile to the
   fragment `need` but not to the budget. Claimed in want order, and
   **open cells sort ahead of solid ones** inside the `finish: None` block,

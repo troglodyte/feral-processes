@@ -309,7 +309,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::dig_wants`.
 - **A tile costs `FLOOR_TILE_COST` Core Fragments and a finish
   `FLOOR_FINISH_COST` Blank Substrate — two budgets in
-  `drop_dry_dig_wants`, one per item**, hand and crew alike.
+  `drop_dry_dig_wants`, one per item**, hand and crew alike — and the
+  crew's tile is paid from base stores **only**, never the pack (fragments
+  are the player's currency); a finish still falls back on the pack.
 - **The dig plan asks for its own tiles and finishes, through
   `Game::sync_dig_order`** — at most two standing orders flagged
   `WorkOrder::for_dig`, keyed by flag *and* item (fragments sized to every

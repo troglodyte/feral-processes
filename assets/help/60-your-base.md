@@ -35,8 +35,9 @@ Everything past that first pocket is solid, and you cut it out yourself.
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a
 spare body digs and a needed one does not. Marking a corridor can never stall production. The crew
-cuts a marked wall even with nothing to floor it, and lays the tile once the base has the Core
-Fragments to spare, saying once if it is waiting. Cells already cut and waiting on their floor are
+cuts a marked wall even with nothing to floor it, and lays the tile once the base's own storage has
+the Core Fragments to spare, saying once if it is waiting. The crew never spends the fragments in
+your pack. Cells already cut and waiting on their floor are
 served first. The plan asks for what it needs: while anything is marked, a standing Core Fragment
 order for the tiles, and a Blank Substrate one for any finishes, sit in your work order queue, sized
 to what the plan will spend. They are filed

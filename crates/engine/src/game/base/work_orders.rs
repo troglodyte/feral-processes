@@ -2111,8 +2111,9 @@ impl Game {
     /// dry until they arrive.
     ///
     /// **Two budgets, one per item.** A tile job claims `FLOOR_TILE_COST`
-    /// Core Fragments; an `Apply` claims `FLOOR_FINISH_COST` Blank
-    /// Substrate, a `Strip` nothing. Each is claimed in want order, so open
+    /// Core Fragments from the base's stores alone — `crew_lays_tile`'s rule;
+    /// an `Apply` claims `FLOOR_FINISH_COST` Blank Substrate from the stores
+    /// and then the pack, a `Strip` nothing. Each is claimed in want order, so open
     /// cells — sorted first by `dig_wants` — take the fragments before a
     /// later tile does, and a finish can never starve a tile or the reverse.
     ///
@@ -2145,7 +2146,8 @@ impl Game {
     /// `Errand::Dry` rule: this pass already said the bulk of what there was
     /// to say, from the one place that can see every site every tick.
     fn drop_dry_dig_wants(&mut self, wanted: &mut Vec<(Entity, TaskKind)>) {
-        let mut fragments = self.stores_hold(&ItemId::from(crate::items::ids::CORE_FRAGMENT));
+        // Base stores alone: the crew never pays a tile out of the pack.
+        let mut fragments = base_holding(self, &ItemId::from(crate::items::ids::CORE_FRAGMENT));
         let mut substrate = self.stores_hold(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE));
         let (mut need_fragments, mut need_substrate) = (0, 0);
         let mut dry: Vec<Entity> = Vec::new();
@@ -2295,8 +2297,8 @@ impl Game {
         self.log_base(line);
     }
 
-    /// How many of `item` a floor or finish job could spend without moving
-    /// any of them — the base's own stores, then the player's pack.
+    /// How many of `item` a finish job could spend without moving any of
+    /// them — the base's own stores, then the player's pack.
     /// `drop_dry_dig_wants`' read, kept separate from
     /// `Game::spend_from_stores` because that one has to remove what it
     /// finds and this one must not.

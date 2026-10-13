@@ -936,15 +936,16 @@ impl Game {
     /// The crew's half of `Game::lay_tile`: `tuning::FLOOR_TILE_COST` Core
     /// Fragments, and the cell is floor.
     ///
-    /// **Out of the base's own stores first, the player's pack second.** The
+    /// **Out of the base's own stores and never the player's pack.** The
     /// crew is base labour, and the store it spends from is the one the base
     /// fills — `stock::spend_from_base` over the same buffers the stock block
     /// counts, so a strip showing fragments is a strip saying the crew can
-    /// pave. The pack is the fallback rather than the source: what the player
-    /// is carrying stays theirs to lay by hand, and this is a cost the base
-    /// incurs while the party is somewhere else entirely. `Game::lay_tile` is
-    /// unchanged and still pays from the pack alone — a player verb, paid the
-    /// way every other player verb is.
+    /// pave. Core Fragments are the player's currency and cross a breach in
+    /// the pack, so a pack fallback would spend a marked corridor's worth
+    /// while the party is away, with no dry line because the pack covered
+    /// it. `Game::lay_tile` pays from the pack alone — a player verb, paid
+    /// the way every other player verb is. A finish still falls back on the
+    /// pack (`spend_from_stores`): Blank Substrate is nobody's currency.
     ///
     /// **A dry attempt here is silent**, `run_build_crew`'s `Errand::Dry`
     /// rule. `Game::dig_wants` decides whether a body is even posted to a
@@ -961,18 +962,25 @@ impl Game {
     /// way, so the job is simply retried.
     fn crew_lays_tile(&mut self, x: i32, y: i32) {
         let fragment = ItemId::from(crate::items::ids::CORE_FRAGMENT);
-        if !self.spend_from_stores(&fragment, crate::tuning::FLOOR_TILE_COST) {
+        let cost = crate::tuning::FLOOR_TILE_COST;
+        if crate::game::base::work_orders::base_holding(self, &fragment) < cost {
             return;
         }
+        crate::game::base::stock::spend_from_base(
+            self,
+            &fragment,
+            cost,
+            crate::base_ledger::ConsumeSource::Base,
+        );
         self.floor_cell(x, y);
         self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
     }
 
     /// Spends `count` of `item`, base stores before the player's pack,
     /// refusing — and moving nothing — unless `stores_hold` already covers
-    /// the whole count. `crew_lays_tile` calls it with
-    /// `tuning::FLOOR_TILE_COST` Core Fragments; the finish arm above with
-    /// `tuning::FLOOR_FINISH_COST` Blank Substrate.
+    /// the whole count. The finish arm above calls it with
+    /// `tuning::FLOOR_FINISH_COST` Blank Substrate; a tile never does, since
+    /// the crew pays for tiles out of the base alone.
     pub(crate) fn spend_from_stores(&mut self, item: &ItemId, count: u32) -> bool {
         if self.stores_hold(item) < count {
             return false;

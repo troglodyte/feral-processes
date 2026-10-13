@@ -2832,14 +2832,57 @@ const CUT_OFF: &str = "marked cell at";
 /// cell open and has no Blank Substrate anywhere to floor it with.
 const NO_FRAGMENTS: &str = "nothing to floor";
 
-/// Exactly enough Core Fragments in the party's pack to floor `tiles`
-/// cells — `0` is the dry crew.
+/// Exactly enough Core Fragments on a base shelf to floor `tiles` cells,
+/// and none in the pack — `0` is the dry crew. The crew pays for tiles out
+/// of base stores only, so the pack is emptied rather than left holding
+/// `game_at_the_frontier`'s change, which would otherwise hide a crew that
+/// reached into it.
 ///
 /// A cut needs none — the crew cuts with nothing in store and floors later
 /// — so this is for the tests that expect the cell floored, or that want
 /// the crew's next job to be something other than a dry tile.
 fn fragments_for(game: &mut Game, tiles: u32) {
-    set_fragments(game, tiles * crate::tuning::FLOOR_TILE_COST);
+    set_fragments(game, 0);
+    let shelf = fragment_shelf(game);
+    let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    match tiles * crate::tuning::FLOOR_TILE_COST {
+        0 => {
+            stock.output.remove(&fragment);
+        }
+        n => {
+            stock.output.insert(fragment, n);
+        }
+    }
+}
+
+/// The one Depot `fragments_for` stocks, spawned on first use at the
+/// starting pocket's west edge, clear of `WALL` and the exit cell.
+fn fragment_shelf(game: &mut Game) -> Entity {
+    let at = Position {
+        x: -crate::tuning::STARTING_POCKET_HALF_WIDTH,
+        y: crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+    };
+    let mut query = game.world.query::<(Entity, &Structure, &Position)>();
+    if let Some((e, ..)) = query
+        .iter(&game.world)
+        .find(|(_, s, p)| s.kind == "depot" && **p == at)
+    {
+        return e;
+    }
+    spawn_machine_at(game, "depot", at.x, at.y)
+}
+
+/// Core Fragments left on `fragments_for`'s shelf.
+fn shelf_fragments(game: &mut Game) -> u32 {
+    let shelf = fragment_shelf(game);
+    game.world
+        .get::<Stock>(shelf)
+        .unwrap()
+        .output
+        .get(&ItemId::from(ids::CORE_FRAGMENT))
+        .copied()
+        .unwrap_or(0)
 }
 
 /// The whole claim of the feature: the base grows while you are somewhere
@@ -2915,7 +2958,7 @@ fn a_crew_tile_costs_the_same_fragments_as_a_hand_laid_one() {
 
     assert_eq!(cell(&game, WALL), Some(base_grid::BaseCell::Floor));
     assert_eq!(
-        fragments_held(&game),
+        shelf_fragments(&mut game),
         2 * crate::tuning::FLOOR_TILE_COST,
         "a laid tile costs exactly FLOOR_TILE_COST Core Fragments, whoever lays it"
     );
@@ -2963,21 +3006,18 @@ fn a_crew_pays_for_its_tile_out_of_the_base_stock() {
     );
 }
 
-/// The stores are spent before the pack, so what the player is carrying
-/// stays theirs to lay by hand — and the fallback is what keeps a base with
-/// no machine holding any fragments paving at all.
+/// **The crew never spends the player's fragments.** Core Fragments are
+/// what the player builds and trades with, and they cross a breach in the
+/// pack: a crew that fell back on the pack would quietly spend a marked
+/// corridor's worth while the party is away, and the dry line would never
+/// fire because the pack covered it. Laying a tile out of the pack is the
+/// player's own verb, `Game::lay_tile`.
 #[test]
-fn a_crew_falls_back_to_the_player_s_pack() {
+fn a_crew_never_spends_the_player_s_fragments() {
     let (mut game, _) = base_with_a_crew(3281, 1);
     open_wall(&mut game);
-    let cost = crate::tuning::FLOOR_TILE_COST;
-    let depot = spawn_machine_at(&mut game, "depot", 2, 0);
-    game.world
-        .get_mut::<Stock>(depot)
-        .unwrap()
-        .output
-        .insert(ItemId::from(ids::CORE_FRAGMENT), cost - 1);
-    fragments_for(&mut game, 2);
+    fragments_for(&mut game, 0);
+    set_fragments(&mut game, 3 * crate::tuning::FLOOR_TILE_COST);
     mark(&mut game, WALL);
 
     pass(
@@ -2985,24 +3025,15 @@ fn a_crew_falls_back_to_the_player_s_pack() {
         4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
     );
 
-    assert_eq!(
-        cell(&game, WALL),
-        Some(base_grid::BaseCell::Floor),
-        "the crew never floored the cell"
-    );
     assert!(
-        !game
-            .world
-            .get::<Stock>(depot)
-            .unwrap()
-            .output
-            .contains_key(&ItemId::from(ids::CORE_FRAGMENT)),
-        "the shelf is spent first — the pack is the fallback, not the other way round"
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the crew floored the cell out of the player's pack"
     );
+    assert_eq!(fragments_held(&game), 3 * crate::tuning::FLOOR_TILE_COST);
     assert_eq!(
-        fragments_held(&game),
-        2 * cost - 1,
-        "the pack paid only what the shelf was short"
+        lines_saying(&game, NO_FRAGMENTS),
+        1,
+        "with the base dry the crew says so, whatever the pack holds"
     );
 }
 
@@ -3066,8 +3097,6 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
         .resource_mut::<base_grid::BaseGrid>()
         .open(WALL.0, WALL.1, tick);
     mark(&mut game, WALL);
-    let fragment = ItemId::from(ids::CORE_FRAGMENT);
-    let cost = crate::tuning::FLOOR_TILE_COST;
 
     let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
     pass(&mut game, wait);
@@ -3081,13 +3110,9 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
     // A source exists for one tick — long enough for the scheduler to see
     // it and clear the latch — and is gone again before this site's own
     // cycle comes back around to spend it.
-    give(&mut game, &fragment, cost);
+    fragments_for(&mut game, 1);
     game.tick();
-    let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .take(fragment.clone(), cost);
+    fragments_for(&mut game, 0);
 
     pass(
         &mut game,
@@ -3182,7 +3207,12 @@ fn a_crew_cuts_with_no_fragments_and_floors_once_they_arrive() {
 fn a_crew_one_fragment_short_of_a_tile_is_dry() {
     let (mut game, _) = base_with_a_crew(3291, 1);
     open_wall(&mut game);
-    set_fragments(&mut game, crate::tuning::FLOOR_TILE_COST - 1);
+    fragments_for(&mut game, 0);
+    let shelf = fragment_shelf(&mut game);
+    game.world.get_mut::<Stock>(shelf).unwrap().output.insert(
+        ItemId::from(ids::CORE_FRAGMENT),
+        crate::tuning::FLOOR_TILE_COST - 1,
+    );
     mark(&mut game, WALL);
 
     pass(
@@ -3195,7 +3225,10 @@ fn a_crew_one_fragment_short_of_a_tile_is_dry() {
         Some(base_grid::BaseCell::Open { .. })
     ));
     assert_eq!(lines_saying(&game, NO_FRAGMENTS), 1);
-    assert_eq!(fragments_held(&game), crate::tuning::FLOOR_TILE_COST - 1);
+    assert_eq!(
+        shelf_fragments(&mut game),
+        crate::tuning::FLOOR_TILE_COST - 1
+    );
 }
 
 /// **The budget is shared, and one tile's fragments floor one cell.** Both
@@ -5188,6 +5221,7 @@ fn with_one_worker_the_tile_site_is_worked_before_the_finish_site() {
         Some(&FinishOrder::Apply(FloorId::from("cobalt_carpet"))),
     );
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
+    fragments_for(&mut game, 1);
 
     // One tick is enough for `schedule_base_labour` to post the one body —
     // it writes the assignment outright, and the walk it takes to reach the

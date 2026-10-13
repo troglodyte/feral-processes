@@ -191,6 +191,32 @@ fn an_unstaffed_nodes_output_stays_put() {
 }
 
 #[test]
+fn a_dark_nodes_output_stays_put() {
+    let mut game = Game::new(9015, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // No grid supply stood, so the worked node draws power it cannot get.
+    let depot = spawn_machine_at(&mut game, "depot", 41, 40);
+    game.set_depot_filter(depot, &[frag()], true);
+    let node = spawn_machine_at(&mut game, "mining_node", 40, 40);
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(frag(), 10);
+    post(&mut game, node);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert!(
+        game.world.resource::<crate::resources::PowerGrid>().is_dark(node),
+        "precondition"
+    );
+    assert_eq!(output_of(&game, depot, &frag()), 0);
+    assert_eq!(output_of(&game, node, &frag()), 10);
+}
+
+#[test]
 fn a_full_depot_stops_pulling_and_the_buffer_stays() {
     let mut game = Game::new(9012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let depot = depot_for_fragments(&mut game, 41, 40);

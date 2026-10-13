@@ -1564,12 +1564,15 @@ impl Game {
                 let feeds = db
                     .get(neighbour_kind)
                     .is_some_and(|made| crate::systems::feeds_ingredient(made, def, items));
-                // A Depot is joined to a producer it would pull from, which
-                // is `depot_takes_from`, built from the same `produced_item`
-                // and `filter_accepts` the intake asks, so the drawn line and
-                // the pull agree on what a Depot takes.
+                // A Depot is joined to a producer it would pull from
+                // (`depot_takes_from`, the intake's own rule) and to a
+                // machine that could pull an ingredient from it
+                // (`depot_supplies`, over the assembler's own recipe), so the
+                // drawn line agrees with both pulls.
                 let stocks = self.depot_takes_from(*entity, *neighbour)
-                    || self.depot_takes_from(*neighbour, *entity);
+                    || self.depot_takes_from(*neighbour, *entity)
+                    || self.depot_supplies(*entity, *neighbour)
+                    || self.depot_supplies(*neighbour, *entity);
                 if !feeds && !stocks {
                     continue;
                 }

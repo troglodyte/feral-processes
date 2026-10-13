@@ -316,3 +316,27 @@ fn a_depot_that_refuses_the_output_is_not_drawn_joined() {
     assert!(edges_of(&mut game, depot).is_empty());
     assert!(edges_of(&mut game, node).is_empty());
 }
+
+#[test]
+fn a_depot_is_drawn_joined_to_a_consumer_whose_ingredient_it_accepts() {
+    let mut game = Game::new(9032, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = node(&mut game, 40, 40, 0, false);
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    game.set_depot_filter(depot, &[ItemId::from("blank_substrate")], false);
+    let lathe = machine(&mut game, "lathe", 42, 40);
+
+    assert_eq!(edges_of(&mut game, depot), vec![(-1, 0), (1, 0)]);
+    assert_eq!(edges_of(&mut game, node), vec![(1, 0)]);
+    assert_eq!(edges_of(&mut game, lathe), vec![(-1, 0)]);
+}
+
+#[test]
+fn a_depot_that_refuses_everything_is_not_joined_to_a_consumer() {
+    let mut game = Game::new(9033, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    game.set_all_depot_filters(depot, false);
+    let lathe = machine(&mut game, "lathe", 42, 40);
+
+    assert!(edges_of(&mut game, depot).is_empty());
+    assert!(edges_of(&mut game, lathe).is_empty());
+}

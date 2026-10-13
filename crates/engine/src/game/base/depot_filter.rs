@@ -183,6 +183,25 @@ impl Game {
                 .is_some()
     }
 
+    /// Whether `depot` could hand `consumer` an ingredient: it is a Depot, the
+    /// consumer assembles something, and the filter lets at least one of that
+    /// recipe's ingredients in. `assembler_system` pulls any recipe item out
+    /// of any neighbour's output buffer, so a Depot beside a machine feeds it
+    /// whatever the Depot holds of the recipe, and the filter is what decides
+    /// whether it can ever hold any. Not gated on stock, worker or power, for
+    /// `depot_takes_from`'s reason.
+    pub(crate) fn depot_supplies(&self, depot: Entity, consumer: Entity) -> bool {
+        let items = self.world.resource::<ItemDb>();
+        self.is_depot(depot)
+            && self
+                .structure_def(consumer)
+                .and_then(|def| crate::systems::assembly_recipe(def, items))
+                .is_some_and(|recipe| {
+                    let filter = self.world.get::<DepotFilter>(depot);
+                    recipe.iter().any(|(item, _)| filter_accepts(filter, item))
+                })
+    }
+
     fn structure_def(&self, structure: Entity) -> Option<&StructureDef> {
         let kind = &self.world.get::<Structure>(structure)?.kind;
         self.world.resource::<StructureDb>().get(kind)

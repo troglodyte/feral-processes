@@ -224,6 +224,19 @@ pub(super) fn keybar_groups(mode: Mode, page: usize) -> Vec<Vec<hud::strip::Piec
         Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
             vec![keycap("↑/↓", "scroll")]
         }
+        Mode::WorkOrders => vec![
+            keycap("↑/↓", "select"),
+            keycap("Enter", "queue"),
+            keycap("Bksp", "drop"),
+            keycap("< >", "move"),
+        ],
+        Mode::BaseStaff => vec![
+            keycap("↑/↓ ←/→", "cell"),
+            keycap("Space", "toggle"),
+            keycap("A", "column"),
+            keycap("< >", "move"),
+        ],
+        Mode::Structures => vec![keycap("↑/↓", "select"), keycap("Enter", "staff")],
         _ => Vec::new(),
     };
     [acts, nav, vec![keycap("Esc", "close")]]
@@ -300,6 +313,9 @@ mod tests {
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
             Mode::BaseOutput,
+            Mode::WorkOrders,
+            Mode::BaseStaff,
+            Mode::Structures,
             Mode::Alerts,
         ] {
             let page = base_page_of(mode).unwrap().0;

@@ -118,10 +118,9 @@ use battle::{
 };
 use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
-    build_commit, draw_base_staff, draw_build_direction, draw_build_menu, draw_build_program,
-    draw_pin_prisoner, draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon,
-    draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
-    draw_work_order_quantity, draw_work_orders,
+    build_commit, draw_build_direction, draw_build_menu, draw_build_program, draw_pin_prisoner,
+    draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon, draw_staffing_menu,
+    draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
@@ -983,7 +982,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // these lists itself would be right until the first hidden row and then
     // draw a different one from the one under the highlight.
     let work_orders = match app.mode {
-        Mode::WorkOrders => app.work_order_rows(),
+        Mode::WorkOrders | Mode::WorkOrderPick | Mode::WorkOrderQuantity => app.work_order_rows(),
         _ => Vec::new(),
     };
     let orderable = match app.mode {
@@ -993,6 +992,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let base_staff = match app.mode {
         Mode::BaseStaff => Some(app.base_staff_table()),
         _ => None,
+    };
+    let app_screens = base_report::AppScreens {
+        work_orders: &work_orders,
+        base_staff: base_staff.as_ref(),
+        work_column: app.work_column,
     };
     // The row's two holdings and the amount the basket is asking for, taken
     // here because `game` below borrows `&mut app.game` and these read the
@@ -1192,28 +1196,21 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::WorkOrders => draw_work_orders(
-            &work_orders,
-            game.labour_demand(),
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, refusal, painter, m),
-        Mode::WorkOrderQuantity => draw_work_order_quantity(
-            game,
-            app.pending_order.clone(),
-            &app.order_quantity_input,
-            app.standing_order,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::BaseStaff => {
-            if let Some(table) = &base_staff {
-                draw_base_staff(game, table, selected, app.work_column, refusal, painter, m);
-            }
+        Mode::WorkOrderPick => {
+            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
+            draw_work_order_pick(&orderable, selected, refusal, painter, m)
+        }
+        Mode::WorkOrderQuantity => {
+            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
+            draw_work_order_quantity(
+                game,
+                app.pending_order.clone(),
+                &app.order_quantity_input,
+                app.standing_order,
+                refusal,
+                painter,
+                m,
+            )
         }
         Mode::WorkStructure => draw_structure_menu(
             &scanned,
@@ -1581,12 +1578,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         mode if base_page_of(mode).is_some() => {
-            base_report::draw_base_report(game, mode, selected, refusal, painter, m)
+            base_report::draw_base_report(game, mode, selected, &app_screens, refusal, painter, m)
         }
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
-        Mode::Structures => draw_structures(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
+            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
             if let Some(staffing) = &staffing {
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }

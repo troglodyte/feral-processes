@@ -1058,10 +1058,10 @@ pub(super) fn draw_staffing_menu(
     );
 }
 
-/// The list is the priority, so the keys line says so: nothing else on the
-/// screen tells a player that moving an order changes what the base works.
-const WORK_ORDERS_KEYS: &str =
-    "Top is worked first. < > move, Enter queues, Backspace drops, Esc closes";
+/// The list is the priority, so the screen says so: nothing else on it
+/// tells a player that moving an order changes what the base works. The
+/// keys themselves are the hub keybar's.
+const WORK_ORDERS_NOTE: &str = "The top order is worked first.";
 
 /// The work order queue and its status: what the base has been told to
 /// hold, how close it is, and which machine each order is waiting on.
@@ -1070,19 +1070,16 @@ const WORK_ORDERS_KEYS: &str =
 /// is the scheduler's own `wants` walk — so what is on screen is what the
 /// base believes by construction rather than by a comment claiming the two
 /// agree.
-pub(super) fn draw_work_orders(
+pub(super) fn work_order_screen_rows(
     rows_in: &[WorkOrderRow],
     demand: LabourDemand,
     selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+) -> Vec<Row> {
     let mut rows = Vec::new();
     if let Some(header) = labour_header(demand) {
         rows.push(text_row(header));
     }
-    rows.push(text_row(WORK_ORDERS_KEYS));
+    rows.push(text_row(WORK_ORDERS_NOTE));
     if rows_in.is_empty() {
         rows.push(text_row("(nothing the base can make yet)"));
     }
@@ -1093,7 +1090,7 @@ pub(super) fn draw_work_orders(
         }
         rows.extend(lines.map(text_row));
     }
-    draw_popup("Work Orders", PopupSize::Large, &rows, refusal, painter, m);
+    rows
 }
 
 /// How many bodies short the base is, or `None` when it has enough.
@@ -1132,6 +1129,12 @@ fn labour_header(demand: LabourDemand) -> Option<String> {
 /// so a headless test can measure how wide the widest of them runs.
 /// `draw_row` clamps a row vertically and never horizontally, so nothing
 /// else would catch a line that runs off the body.
+/// This screen's continuation lines: wrapped to the hub's content rect, not
+/// a popup body.
+fn hub_lines(text: &str) -> Vec<String> {
+    continuation_lines_within(text, HUB_WRAP_COLUMNS)
+}
+
 fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<String> {
     let Some(order) = &row.order else {
         return vec![format!("[{}] New work order...", menu_shortcut(index))];
@@ -1148,14 +1151,14 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
     // stalled order's reason is a whole sentence and a machine line carries
     // three names, and either can outrun the popup body.
     if let Some(why) = &order.blocked_by {
-        lines.extend(continuation_lines(why));
+        lines.extend(hub_lines(why));
         return lines;
     }
     if order.machines.is_empty() {
         // Three ways to want nobody, and the tag alone does not say which:
         // the base is holding the level, the line broke (handled above), or
         // every machine in it is momentarily busy or clogged.
-        lines.extend(continuation_lines(match order.state {
+        lines.extend(hub_lines(match order.state {
             OrderState::Dormant => "holding — the base has this, so nothing is being made",
             _ => "waiting — nothing to do here yet",
         }));
@@ -1170,10 +1173,7 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
             .as_ref()
             .map(|s| format!(", short of {s}"))
             .unwrap_or_default();
-        lines.extend(continuation_lines(&format!(
-            "{} — {who}{short}",
-            machine.label
-        )));
+        lines.extend(hub_lines(&format!("{} — {who}{short}", machine.label)));
     }
     lines
 }
@@ -1287,29 +1287,6 @@ fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<Str
     ]
 }
 
-/// The key hint row — the screen's whole key list, since there is no
-/// digit/letter row-jump here (see `App::handle_base_staff_key`'s doc).
-const BASE_STAFF_KEYS: &str =
-    "Up/Down row  Left/Right column  Space toggle  < > move row  A toggle column  Esc closes";
-
-/// The roster as the base sees it, and the table the player edits: every
-/// program the player owns, the role it is in, what it is doing, and one
-/// checkbox column per `Duty` — `Game::work_table` is the one derivation
-/// both this and `App::handle_base_staff_key` read.
-pub(super) fn draw_base_staff(
-    game: &mut Game,
-    table: &WorkTable,
-    selected: usize,
-    column: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let pets = game.owned_pets();
-    let rows = base_staff_menu_rows(table, &pets, selected, column);
-    draw_popup("Base Staff", PopupSize::Large, &rows, refusal, painter, m);
-}
-
 /// The header line's three counts — `WorkTable::on_shift`/`jobs`/
 /// `unworked_total` — in `labour_header`'s plain-sentence shape one screen
 /// over, since a restriction that leaves work undone is exactly what this
@@ -1365,6 +1342,20 @@ const ROW_LEAD: &str = "     ";
 /// own cell even when nothing left a `!` on the header.
 const DUTY_CELL_WIDTH: usize = 3;
 
+/// The widest the DOING column grows. The table sits beside the hub's rail,
+/// where the longest shipped activity ("guarding the Contract Broker") plus
+/// five duty columns and a POD column ran past the content rect at 1280x720.
+const DOING_MAX_CHARS: usize = 20;
+
+/// `text` cut to `DOING_MAX_CHARS` with an ellipsis, or whole if it fits.
+fn clipped_chars(text: &str) -> String {
+    if text.chars().count() <= DOING_MAX_CHARS {
+        return text.to_string();
+    }
+    let kept: String = text.chars().take(DOING_MAX_CHARS - 1).collect();
+    format!("{kept}…")
+}
+
 /// The Base staff table's column widths, measured from the rows actually
 /// listed rather than fixed — `transfer.rs`'s `Columns`, widened from three
 /// columns to `#`/`PROGRAM`/`DOING` plus one per `Duty`.
@@ -1390,7 +1381,9 @@ impl Columns {
         for (i, row) in table.rows.iter().enumerate() {
             cols.rank = cols.rank.max((i + 1).to_string().len());
             cols.program = cols.program.max(row.program.label.chars().count());
-            cols.doing = cols.doing.max(row.doing.chars().count());
+            cols.doing = cols
+                .doing
+                .max(row.doing.chars().count().min(DOING_MAX_CHARS));
         }
         cols
     }
@@ -1425,7 +1418,7 @@ impl Columns {
         out.push_str(COLUMN_GAP);
         out.push_str(&format!("{:<1$}", row.program.label, self.program));
         out.push_str(COLUMN_GAP);
-        out.push_str(&format!("{:<1$}", row.doing, self.doing));
+        out.push_str(&format!("{:<1$}", clipped_chars(&row.doing), self.doing));
         for (i, width) in self.duty.iter().enumerate() {
             out.push_str(COLUMN_GAP);
             let checked = row.cells.get(i).copied().unwrap_or(true);
@@ -1452,12 +1445,14 @@ fn away_divider(cols: &Columns) -> String {
     )
 }
 
-/// The Base staff table's rows: the header counts, the column header, one
-/// row per program (Staff first, then an **away** divider and section), and
-/// the key hint line.
+/// The Base staff table's rows: the header counts, the column header, and
+/// one row per program (Staff first, then an **away** divider and section) —
+/// every program the player owns, the role it is in, what it is doing, and
+/// one checkbox column per `Duty`. `Game::work_table` is the one derivation
+/// both this and `App::handle_base_staff_key` read.
 ///
-/// Split out of `draw_base_staff` so the layout is reachable without a
-/// `Game`, which is what the width and height censuses below need.
+/// Takes the table rather than a `Game` so the width and height censuses
+/// below can state their worst case.
 pub(super) fn base_staff_menu_rows(
     table: &WorkTable,
     pets: &[PetInfo],
@@ -1501,7 +1496,6 @@ pub(super) fn base_staff_menu_rows(
             glyph_color(row.program.color),
         ));
     }
-    rows.push(text_row(BASE_STAFF_KEYS));
     rows
 }
 
@@ -1636,13 +1630,7 @@ pub(super) fn draw_remove_confirm(
 /// An idle workable structure is drawn in yellow and says so in words: it is
 /// the only thing on this screen the player can act on, and the point of
 /// looking is usually to find it.
-pub(super) fn draw_structures(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+pub(super) fn structures_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     let Roster {
         reports: report,
         lines,
@@ -1710,16 +1698,7 @@ pub(super) fn draw_structures(
             rows.push(colored_item_row(line, false, color));
         }
     }
-    rows.push(text_row(""));
-    // Enter is surface-only, matching `App::handle_structures_key` — the
-    // roster still reads underground, so the hint has to stop advertising a
-    // key that would only be refused down there.
-    rows.push(text_row(if game.is_underground() {
-        "Up/Down to scroll, Esc to close."
-    } else {
-        "Up/Down to scroll, Enter to staff, Esc to close."
-    }));
-    draw_popup("Structures", PopupSize::Large, &rows, refusal, painter, m);
+    rows
 }
 
 /// A production line's roster row: its machines in feed order, then what the
@@ -2944,24 +2923,45 @@ mod tests {
         );
     }
 
-    /// `draw_structures` is a `PopupSize::Large` box and, per the
-    /// `popup row width IS testable headlessly` memory, `draw_row` never
-    /// clips a row horizontally — an overlong row just runs off the edge.
-    /// The grid header is short and fixed, so this confirms that rather
-    /// than assuming it: worst-case four-digit numbers on both sides still
-    /// fit comfortably inside the roster.
+    /// The roster is drawn into the base report's content rect, and
+    /// `draw_row` never clips a row horizontally — an overlong row just runs
+    /// off the edge. Every row a structure can draw at its widest (tier,
+    /// durability, a stall sentence, a charged pod, a four-digit grid
+    /// header) is held against the room the hub gives it at three window
+    /// sizes.
     #[test]
-    fn the_grid_header_row_fits_the_structure_roster() {
-        let m = crate::text::ui_metrics(900.0);
-        let row = grid_header_row(9999, 9999);
-        let line = row_text(&row);
+    fn no_roster_row_overflows_the_content_rect() {
+        let mut worst = structure_report(MachineStatus::Unpowered);
+        worst.label = "Reconstruction Foundry".to_string();
+        worst.pos = (-9999, -9999);
+        worst.tier = Some(9);
+        worst.durability = Some((9999, 9999));
+        worst.pod = Some(PodState::Recharging { percent: 99 });
+        let mut lines = vec![
+            row_text(&grid_header_row(9999, 9999)).to_string(),
+            structure_headline(&worst),
+        ];
+        lines.extend(
+            structure_detail_lines(&worst, None, true)
+                .into_iter()
+                .map(|(line, _)| line),
+        );
         crate::paint::with_painter(|p| {
-            let box_w = p.screen_w() * 0.88;
-            let text_w = p.measure_ui_advance(line, m.font_size);
-            assert!(
-                text_w + 2.0 * m.pad < box_w,
-                "the grid header is {text_w}px inside an {box_w}px roster: {line:?}"
-            );
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = crate::text::ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for line in &lines {
+                    // The selection prefix and icon slot an item row carries.
+                    let drawn = p.measure_ui_advance(format!("     {line}"), m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a roster row overflows by {:.0}px at {w}x{h}:\n{line}",
+                        drawn - room
+                    );
+                }
+            }
         });
     }
 }
@@ -3693,9 +3693,31 @@ mod work_order_tests {
             }
         }
 
+        // The hub's content rect is narrower than the popup these lines were
+        // wrapped for, so the columns budget is not the whole answer.
+        crate::paint::with_painter(|p| {
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = crate::text::ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for row in &rows {
+                    for line in work_order_lines(row, 0, false) {
+                        let drawn = p.measure_ui_advance(format!("     {line}"), m.font_size);
+                        assert!(
+                            drawn <= room,
+                            "a work order row overflows the content rect by {:.0}px at \
+                             {w}x{h}:\n{line}",
+                            drawn - room
+                        );
+                    }
+                }
+            }
+        });
+
         assert!(
-            WORK_ORDERS_KEYS.chars().count() <= ROW_WRAP_COLUMNS,
-            "the keys line runs past the {ROW_WRAP_COLUMNS} column body"
+            WORK_ORDERS_NOTE.chars().count() <= ROW_WRAP_COLUMNS,
+            "the note line runs past the {ROW_WRAP_COLUMNS} column body"
         );
 
         // The shortfall header, measured here rather than in its own test
@@ -3856,7 +3878,7 @@ mod base_staff_tests {
     /// With the Drop Trooper column drawn, since a base with a terminal is the
     /// widest the table gets.
     #[test]
-    fn the_widest_base_staff_row_stays_inside_the_popup() {
+    fn the_widest_base_staff_row_stays_inside_the_content_rect() {
         let mut row = widest_row();
         row.cells.push(true);
         let mut t = table(vec![row]);
@@ -3878,23 +3900,25 @@ mod base_staff_tests {
             );
         }
         with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // 0.88 is `PopupSize::Large`'s width fraction, against the
-            // 1440x900 geometry `ui_metrics` is calibrated for.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
             let rows = base_staff_menu_rows(&t, &[], 0, 0);
-            for row in &rows {
-                let text = match row {
-                    Row::Text(text) | Row::TextColored(text, _) => text.clone(),
-                    Row::Item { text, .. } => format!("     {text}"),
-                };
-                let drawn = p.measure_ui_advance(&text, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "the widest Base Staff row overflows its popup by {:.0}px \
-                     ({drawn:.0} into {room:.0}):\n{text}",
-                    drawn - room
-                );
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for row in &rows {
+                    let text = match row {
+                        Row::Text(text) | Row::TextColored(text, _) => text.clone(),
+                        Row::Item { text, .. } => format!("     {text}"),
+                    };
+                    let drawn = p.measure_ui_advance(&text, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "the widest Base Staff row overflows the content rect by \
+                         {:.0}px at {w}x{h} ({drawn:.0} into {room:.0}):\n{text}",
+                        drawn - room
+                    );
+                }
             }
         });
     }

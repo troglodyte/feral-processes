@@ -1025,6 +1025,11 @@ pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
 /// would have been fine.
 pub(super) const ROW_WRAP_COLUMNS: usize = 100;
 
+/// The same budget for a screen drawn in the base report's content rect,
+/// which has the rail to its left. Measured in pixels by the screens'
+/// censuses; `ROW_WRAP_COLUMNS` is for popups.
+pub(super) const HUB_WRAP_COLUMNS: usize = 80;
+
 /// How wide a refusal may run inside a popup of `size` before it wraps.
 ///
 /// Derived from `ROW_WRAP_COLUMNS` and the popup's own width fraction
@@ -1070,7 +1075,13 @@ const ROW_CONTINUATION_INDENT: &str = "       ";
 /// Empty text yields no lines at all, so a caller with nothing to add gets
 /// no blank continuation.
 pub(super) fn continuation_lines(text: &str) -> Vec<String> {
-    wrap_text(text, ROW_WRAP_COLUMNS - ROW_CONTINUATION_INDENT.len())
+    continuation_lines_within(text, ROW_WRAP_COLUMNS)
+}
+
+/// `continuation_lines` for a screen narrower than a popup: the base report's
+/// content rect is a popup's width less its rail.
+pub(super) fn continuation_lines_within(text: &str, columns: usize) -> Vec<String> {
+    wrap_text(text, columns - ROW_CONTINUATION_INDENT.len())
         .into_iter()
         .map(|line| format!("{ROW_CONTINUATION_INDENT}{line}"))
         .collect()

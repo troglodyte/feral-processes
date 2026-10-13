@@ -26,7 +26,7 @@ fn bar(fraction: f32) -> String {
 }
 
 /// `name` cut to `width` cells with an ellipsis, never clipped silently.
-fn elide(name: &str, width: usize) -> String {
+pub(super) fn elide(name: &str, width: usize) -> String {
     if name.chars().count() <= width {
         return name.to_string();
     }
@@ -166,6 +166,7 @@ pub(super) fn discontent_rows(report: &[DiscontentRow], selected: usize) -> Vec<
 
 #[cfg(test)]
 mod tests {
+    use super::super::fit::{assert_rows_fit, text_of};
     use super::*;
     use feral_processes_engine::{BoxedInAmenity, Entity, GrudgeRow};
 
@@ -184,13 +185,6 @@ mod tests {
             }],
             activity: StaffActivity::Waiting,
             grievance: None,
-        }
-    }
-
-    fn text_of(row: &Row) -> &str {
-        match row {
-            Row::Text(t) | Row::TextColored(t, _) => t,
-            Row::Item { text, .. } => text,
         }
     }
 
@@ -246,31 +240,6 @@ mod tests {
         let rows = discontent_rows(&[row], 0);
         assert!(text_of(&rows[0]).contains("downed tools"));
         assert!(text_of(&rows[1]).contains("Mauled by (a Wolf)"));
-    }
-
-    /// `draw_row` clips a row vertically and never horizontally, so a line
-    /// past the right edge is lost. Held at the smallest supported window,
-    /// where the content rect is narrowest in characters.
-    fn assert_rows_fit(rows: &[Row], what: &str) {
-        crate::paint::with_painter(|p| {
-            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
-                let m = crate::text::ui_metrics(h);
-                let char_w = p.measure_ui_advance("M", m.font_size);
-                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
-                let room = content.w - m.pad * 2.0;
-                for row in rows {
-                    // `draw_row` prefixes every `Row::Item` with two spaces.
-                    let line = format!("  {}", text_of(row));
-                    let drawn = p.measure_ui_advance(&line, m.font_size);
-                    assert!(
-                        drawn <= room,
-                        "a {what} row overflows by {:.0}px at {w}x{h} \
-                         ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                        drawn - room
-                    );
-                }
-            }
-        });
     }
 
     #[test]

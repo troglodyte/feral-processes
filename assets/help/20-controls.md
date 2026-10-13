@@ -58,7 +58,7 @@ Reading and housekeeping:
   are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
   needs you.
 - L — history
-- B — the base report: a rail of pages down the left (Overview, Staff, Production, Work orders, Staffing, Alerts) and the page
+- B — the base report: a rail of pages down the left (Overview, Staff, Production, Stock, Work orders, Staffing, Build orders, Alerts) and the page
   beside it. [ and ] move between pages, Tab cycles a page's screens, and Esc leaves for wherever you
   opened it from. B reopens the page you left. The Overview shows where the base is short, and Enter
   opens the highlighted page.

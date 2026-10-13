@@ -2210,6 +2210,26 @@ pub enum Mode {
     /// Staff page, third screen: programs with a grievance and the memories
     /// behind it — see `Game::discontent`. Scrolls by cursor.
     StaffDiscontent,
+    /// Production page, second screen: structures that are not running, by
+    /// status, and the ones that are hurt - see `Game::machine_report`.
+    /// Scrolls by cursor.
+    BaseMachines,
+    /// Production page, third screen: the grid's supply against draw, and
+    /// what each structure adds to either - see `Game::power_report`.
+    /// Scrolls by cursor.
+    BasePower,
+    /// The Stock page: what the base holds against the work-order targets,
+    /// short rows first - see `Game::stock_report`. Scrolls by cursor.
+    BaseStock,
+    /// Build orders page, first screen: every structure on order - see
+    /// `Game::build_order_report`. Scrolls by cursor.
+    BuildOrders,
+    /// Build orders page, second screen: cells marked for digging - see
+    /// `Game::dig_marks`. Scrolls by cursor.
+    DigOrders,
+    /// Build orders page, third screen: cells marked for a floor finish or
+    /// a strip - see `Game::floor_marks`. Scrolls by cursor.
+    FloorOrders,
     /// Every conversion a structure runs, expanded back to raw inputs — see
     /// `Game::recipe_chains`. Read-only, and reference data rather than a
     /// view of the base, so it reads the same underground as it does on the
@@ -2523,6 +2543,12 @@ impl Mode {
             | Mode::StaffWellbeing
             | Mode::StaffCoverage
             | Mode::StaffDiscontent
+            | Mode::BaseMachines
+            | Mode::BasePower
+            | Mode::BaseStock
+            | Mode::BuildOrders
+            | Mode::DigOrders
+            | Mode::FloorOrders
             | Mode::Help
             | Mode::HelpPage
             | Mode::FrameMap
@@ -2699,7 +2725,11 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
     },
     BasePage {
         title: "Production",
-        screens: &[Mode::BaseOutput],
+        screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
+    },
+    BasePage {
+        title: "Stock",
+        screens: &[Mode::BaseStock],
     },
     BasePage {
         title: "Work orders",
@@ -2708,6 +2738,10 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
     BasePage {
         title: "Staffing",
         screens: &[Mode::BaseStaff, Mode::Structures],
+    },
+    BasePage {
+        title: "Build orders",
+        screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
     },
     BasePage {
         title: "Alerts",

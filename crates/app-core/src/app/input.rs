@@ -372,6 +372,12 @@ impl App {
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }
+            Mode::BaseMachines
+            | Mode::BasePower
+            | Mode::BaseStock
+            | Mode::BuildOrders
+            | Mode::DigOrders
+            | Mode::FloorOrders => self.handle_base_list_key(key),
             Mode::Help => self.handle_help_key(key),
             Mode::HelpPage => self.handle_help_page_key(key),
             Mode::FrameMap => self.handle_frame_map_key(),

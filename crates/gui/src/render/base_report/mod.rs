@@ -10,8 +10,11 @@ mod frame;
 pub(in crate::render) use frame::RAIL_CELLS;
 #[cfg(test)]
 pub(in crate::render) use frame::content_rect_at;
+mod orders;
 mod overview;
+mod production;
 mod staff;
+mod stock;
 
 use super::popup::*;
 use super::*;
@@ -85,6 +88,12 @@ fn screen_rows(
         Mode::StaffCoverage => staff::coverage_rows(&game.need_coverage(), selected),
         Mode::StaffDiscontent => staff::discontent_rows(&game.discontent(), selected),
         Mode::BaseOutput => building::base_output_rows(&game.base_output_report()),
+        Mode::BaseMachines => production::machine_rows(&game.machine_report(), selected),
+        Mode::BasePower => production::power_rows(&game.power_report(), selected),
+        Mode::BaseStock => stock::stock_rows(&game.stock_report(), selected),
+        Mode::BuildOrders => orders::build_rows(&game.build_order_report(), selected),
+        Mode::DigOrders => orders::dig_rows(&game.dig_marks(), selected),
+        Mode::FloorOrders => orders::floor_rows(&game.floor_marks(), selected),
         Mode::WorkOrders => building::work_order_screen_rows(
             app_screens.work_orders,
             game.labour_demand(),
@@ -114,9 +123,49 @@ pub(super) fn page_flag(
     match BASE_REPORT_PAGES[page].screens[0] {
         Mode::StaffWellbeing => flags.staff.as_deref(),
         Mode::BaseOutput => flags.production.as_deref(),
+        Mode::BaseStock => flags.stock.as_deref(),
+        Mode::BuildOrders => flags.build_orders.as_deref(),
         Mode::WorkOrders => flags.work_orders.as_deref(),
         Mode::BaseStaff => flags.staffing.as_deref(),
         Mode::Alerts => flags.alerts.as_deref(),
         _ => None,
+    }
+}
+
+/// What every screen's width census shares.
+#[cfg(test)]
+mod fit {
+    use super::*;
+
+    pub(super) fn text_of(row: &Row) -> &str {
+        match row {
+            Row::Text(t) | Row::TextColored(t, _) => t,
+            Row::Item { text, .. } => text,
+        }
+    }
+
+    /// `draw_row` clips a row vertically and never horizontally, so a line
+    /// past the right edge is lost. Held at the smallest supported window,
+    /// where the content rect is narrowest in characters.
+    pub(super) fn assert_rows_fit(rows: &[Row], what: &str) {
+        crate::paint::with_painter(|p| {
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = crate::text::ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for row in rows {
+                    // `draw_row` prefixes every `Row::Item` with two spaces.
+                    let line = format!("  {}", text_of(row));
+                    let drawn = p.measure_ui_advance(&line, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a {what} row overflows by {:.0}px at {w}x{h} \
+                         ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                        drawn - room
+                    );
+                }
+            }
+        });
     }
 }

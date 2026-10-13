@@ -79,6 +79,17 @@ machine draws whether or not anybody is posted to it, which makes an idle machin
 real expense. This is the Power Grid and it is not your Power — the two are separate resources that happen
 to share a word.
 
+The base report (B) has a page for each of these. Production has three screens, Tab to walk them:
+Output, Machines (every structure that is not running, worst first, with the reason, and any that are
+damaged) and Power (supply against draw, and what each structure adds to either; a machine the grid
+cut is marked dark). The rail marks Production with a ! while a machine is starved, unstaffed, cut off
+or dark, or while the grid cannot carry its draw. Stock lists what the base holds against the targets
+of your work orders, short rows first, and is marked ! when a target is short and its order cannot
+move. Build orders has three screens: Builds (each request with its percent, who is on it or
+"pending", and what is still to fetch), Digging (cells marked for cutting) and Floors (cells marked for
+a finish or a strip); a rebuild still waiting for you to choose a program marks the page. All of them
+scroll with the arrow keys.
+
 The base staffs itself. Any program you own that is not out fighting with you is staff, and the
 scheduler decides the whole assignment every tick by priority: pending builds first, then keeping a
 Recharger Node or a Line Driver fuelled, then the research project, then work orders, then standing

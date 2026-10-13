@@ -64,4 +64,21 @@ impl App {
         };
         self.scroll(key, rows);
     }
+
+    /// The Machines, Power, Stock and Build-order screens: a cursor over the
+    /// rows the renderer draws from the same engine report, read-only.
+    pub(crate) fn handle_base_list_key(&mut self, key: GameKey) {
+        let Some(game) = self.game.as_ref() else {
+            return;
+        };
+        let rows = match self.mode {
+            Mode::BaseMachines => game.machine_report().len(),
+            Mode::BasePower => game.power_report().lines.len(),
+            Mode::BaseStock => game.stock_report().len(),
+            Mode::BuildOrders => game.build_order_report().len(),
+            Mode::DigOrders => game.dig_marks().len(),
+            _ => game.floor_marks().len(),
+        };
+        self.scroll(key, rows);
+    }
 }

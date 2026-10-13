@@ -16,20 +16,24 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_runs_overview_staff_production_orders_staffing_alerts() {
+fn the_rail_runs_all_eight_pages_in_order() {
     assert_eq!(
         page_modes(),
         vec![
             Mode::BaseOverview,
             Mode::StaffWellbeing,
             Mode::BaseOutput,
+            Mode::BaseStock,
             Mode::WorkOrders,
             Mode::BaseStaff,
+            Mode::BuildOrders,
             Mode::Alerts
         ]
     );
     assert_eq!(base_page_of(Mode::BaseOutput), Some((2, 0)));
-    assert_eq!(base_page_of(Mode::Structures), Some((4, 1)));
+    assert_eq!(base_page_of(Mode::BasePower), Some((2, 2)));
+    assert_eq!(base_page_of(Mode::Structures), Some((5, 1)));
+    assert_eq!(base_page_of(Mode::FloorOrders), Some((6, 2)));
     assert_eq!(base_page_of(Mode::WorkOrderPick), None);
     assert_eq!(base_page_of(Mode::WorkOrderQuantity), None);
     assert_eq!(base_page_of(Mode::StructureAssign), None);
@@ -103,7 +107,7 @@ fn a_digit_on_alerts_stays_on_alerts() {
     let mut app = seeded(30006, alerts);
     app.handle_key(GameKey::Char('N'));
     app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Char('5'));
+    app.handle_key(GameKey::Char('7'));
     assert_eq!(app.mode, Mode::Alerts);
     assert_eq!(
         app.menu_selected, 1,
@@ -205,7 +209,7 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 fn a_digit_on_the_overview_reaches_its_handler() {
     let mut app = test_app(30014);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('5'));
+    app.handle_key(GameKey::Char('7'));
     assert_eq!(app.mode, Mode::Alerts);
 }
 
@@ -460,4 +464,92 @@ fn the_roster_keeps_its_highlight_across_the_staffing_popup_after_a_tab() {
 
     assert_eq!(app.mode, Mode::Structures);
     assert_eq!(app.menu_selected, 1);
+}
+
+/// `]` from Overview walks every page once and wraps; `[` walks it back.
+#[test]
+fn the_full_rail_walks_forward_and_back() {
+    let mut app = test_app(30017);
+    app.handle_key(GameKey::Char('B'));
+    let mut seen = vec![app.mode];
+    for _ in 1..BASE_REPORT_PAGES.len() {
+        app.handle_key(GameKey::Char(']'));
+        seen.push(app.mode);
+    }
+    assert_eq!(seen, page_modes());
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    for page in page_modes().into_iter().rev() {
+        app.handle_key(GameKey::Char('['));
+        assert_eq!(app.mode, page);
+    }
+}
+
+#[test]
+fn tab_cycles_production_and_build_orders_screens() {
+    let mut app = test_app(30018);
+    app.mode = Mode::BaseOutput;
+    let production: Vec<Mode> = (0..4)
+        .map(|_| {
+            let mode = app.mode;
+            app.handle_key(GameKey::Tab);
+            mode
+        })
+        .collect();
+    assert_eq!(
+        production,
+        vec![
+            Mode::BaseOutput,
+            Mode::BaseMachines,
+            Mode::BasePower,
+            Mode::BaseOutput
+        ]
+    );
+    app.mode = Mode::BuildOrders;
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::DigOrders);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::FloorOrders);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::BuildOrders);
+}
+
+/// The cursor stops at the last row of the report the screen draws, and
+/// moves no further on an empty one; no key costs game time.
+#[test]
+fn the_list_screens_scroll_over_their_report_and_cost_no_time() {
+    let mut app = test_app(30019);
+    let before = app.game.as_ref().unwrap().current_tick();
+    for mode in [
+        Mode::BaseMachines,
+        Mode::BasePower,
+        Mode::BaseStock,
+        Mode::BuildOrders,
+        Mode::DigOrders,
+        Mode::FloorOrders,
+    ] {
+        app.mode = mode;
+        app.menu_selected = 0;
+        let rows = {
+            let game = app.game.as_ref().unwrap();
+            match mode {
+                Mode::BaseMachines => game.machine_report().len(),
+                Mode::BasePower => game.power_report().lines.len(),
+                Mode::BaseStock => game.stock_report().len(),
+                Mode::BuildOrders => game.build_order_report().len(),
+                Mode::DigOrders => game.dig_marks().len(),
+                _ => game.floor_marks().len(),
+            }
+        };
+        for _ in 0..rows + 3 {
+            app.handle_key(GameKey::Down);
+        }
+        assert_eq!(app.mode, mode);
+        assert_eq!(
+            app.menu_selected,
+            rows.saturating_sub(1),
+            "{mode:?} cursor ends on its last row"
+        );
+    }
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
 }

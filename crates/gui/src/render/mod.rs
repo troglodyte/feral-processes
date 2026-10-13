@@ -1659,7 +1659,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 140] = [
+    const ALL_MODES: [Mode; 146] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1780,6 +1780,12 @@ mod tests {
         Mode::StaffWellbeing,
         Mode::StaffCoverage,
         Mode::StaffDiscontent,
+        Mode::BaseMachines,
+        Mode::BasePower,
+        Mode::BaseStock,
+        Mode::BuildOrders,
+        Mode::DigOrders,
+        Mode::FloorOrders,
         Mode::Achievements,
         Mode::Options,
         Mode::Help,

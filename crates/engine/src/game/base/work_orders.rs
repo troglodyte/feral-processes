@@ -3175,14 +3175,12 @@ impl Game {
 
     /// The name of whoever holds a `GatherResource` post at `machine`.
     fn posted_worker_name(&self, machine: Entity) -> Option<String> {
-        let holder = self
-            .world
-            .iter_entities()
-            .find(|e| {
-                e.get::<Task>()
-                    .is_some_and(|t| t.target == machine && t.kind == TaskKind::GatherResource)
-            })?
-            .id();
+        let holder = crate::systems::worker_of(
+            self.world
+                .iter_entities()
+                .filter_map(|e| Some((e.id(), e.get::<Task>()?))),
+            machine,
+        )?;
         Some(self.creature_label(holder))
     }
 

@@ -196,6 +196,35 @@ fn a_posted_worker_does_not_claim_a_place() {
     );
 }
 
+/// Posting an incumbent gives its place up: a body back at work beside the
+/// bay must not sit on a place until full while off-duty programs wait.
+#[test]
+fn an_incumbent_posted_back_to_work_gives_up_its_place() {
+    let (mut game, site, staff) = crowded_bay(77, 1);
+    let who = staff[0];
+    let before = reserve(&game, who);
+    game.tick();
+    assert!(reserve(&game, who) > before, "off shift, it holds a place");
+
+    let node = spawn_machine_at(&mut game, "mining_node", site.x, site.y + 2);
+    game.world
+        .entity_mut(who)
+        .remove::<crate::components::OffShift>();
+    let (critical, content) = threshold(&game, &coherence());
+    set_reserve(&mut game, who, &coherence(), content);
+    game.assign_guard(who, node).unwrap();
+    put(&mut game, who, site.x + 1, site.y + 1);
+    set_reserve(&mut game, who, &coherence(), (critical + content) / 2.0);
+    let held = reserve(&game, who);
+    game.tick();
+
+    assert!(
+        game.world.get::<crate::components::Task>(who).is_some(),
+        "still posted"
+    );
+    assert!(reserve(&game, who) < held, "posted, it keeps no place");
+}
+
 /// Newcomers queue by how empty they are, then distance, then entity: the
 /// lowest reserve gets the one free place whatever its entity order.
 #[test]

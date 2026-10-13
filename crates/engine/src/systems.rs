@@ -211,7 +211,7 @@ pub fn needs_drain_system(
                     held: needs.serviced_at(&def.id),
                     wants: level < def.content && !posted,
                     reserve: level,
-                    keeps: level < crate::needs::NEED_MAX,
+                    keeps: level < crate::needs::NEED_MAX && !posted,
                 })
             })
             .collect();

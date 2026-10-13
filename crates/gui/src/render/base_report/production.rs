@@ -84,7 +84,11 @@ pub(super) fn power_rows(report: &PowerReport, selected: usize) -> Vec<Row> {
                 l.pos.1
             ),
             i == selected,
-            if l.dark { RED } else { TEXT },
+            if l.dark {
+                crate::render::hud::palette::ATTENTION
+            } else {
+                TEXT
+            },
         )
     }));
     rows

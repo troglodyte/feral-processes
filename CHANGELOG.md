@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.24
+
+**A Depot placed beside a machine that makes something now accepts what that machine makes and fills itself from it while a program works the machine, with no carrier.** Before, a Depot took anything and the crew had to carry a machine's output over to it. Now a Depot with no list becomes allow-only for that output, and one you have already set up only gains the item. Building a machine beside a Depot that already stands leaves its list alone, so a Depot you use to stock a machine keeps working.
+
+**A Depot can stand in the middle of a production line.** A machine on another side that takes the item pulls it out of the Depot, as it always could, and the map now draws the Depot joined to both machines. The crew leaves a machine's output alone while an accepting Depot sits beside it, so a full Depot backs the machine up instead of starting a carry.
+
 ## 0.18.23
 
 **`B` opens the base report: one screen with a page rail for everything about the base — what it made, its machines and power, stock, build orders, work orders, staffing, staff health and alerts.** These used to be separate popups scattered over the base menu, and some (staff health, power per machine, stock against orders, dig and floor marks) had no screen at all. `[` and `]` turn pages, `Tab` flips between a page's screens, `Esc` leaves, and a page with something wrong carries a `!` on the rail. `B` reopens the page you last read; `N` still opens Alerts, and reaching Alerts any way now marks them read. Inside the report `[` and `]` no longer change the volume.

@@ -102,8 +102,9 @@ pub struct WorkOrder {
     /// `Game::sync_dig_order`.
     ///
     /// Provenance, `for_research`'s rule and its save half: the plan
-    /// resizes and withdraws its own line by this flag and never by the
-    /// item, so a player's own Blank Substrate order is left alone, and a
+    /// resizes and withdraws its own lines by this flag and the item
+    /// together, never the item alone, so a player's own Core Fragment or
+    /// Blank Substrate order is left alone, and a
     /// reload that dropped the flag would leave the plan filing a second
     /// line beside an orphan it can no longer touch.
     #[serde(default)]
@@ -2115,11 +2116,14 @@ impl Game {
     /// cells — sorted first by `dig_wants` — take the fragments before a
     /// later tile does, and a finish can never starve a tile or the reverse.
     ///
-    /// **The plan asks the Lathe for its finishes, and only those**: the
-    /// substrate every `Apply` will claim is handed to `Game::sync_dig_order`
-    /// from here, because this is the one pass that has priced every site
-    /// the crew can reach. Tiles add nothing to it — fragments come out of
-    /// the rock and the Mining Node, and no work order makes them.
+    /// **The plan asks for every tile and finish it will spend**, one
+    /// standing order per item through `Game::sync_dig_order`: the Mining
+    /// Node for the tiles' fragments — a solid cell's future tile included,
+    /// though it claims nothing from the budget yet — and the Lathe for the
+    /// finishes' substrate. It is handed over from here because this is the
+    /// one pass that has priced every site the crew can reach. A cut cell
+    /// waiting on a shelf nobody is told to fill would stay bare for the
+    /// rest of the run.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
     /// and before the matching**, and that placement is the budget's half
@@ -2141,11 +2145,9 @@ impl Game {
     /// `Errand::Dry` rule: this pass already said the bulk of what there was
     /// to say, from the one place that can see every site every tick.
     fn drop_dry_dig_wants(&mut self, wanted: &mut Vec<(Entity, TaskKind)>) {
-        let mut fragments =
-            self.stores_hold(&ItemId::from(crate::items::ids::CORE_FRAGMENT));
-        let mut substrate =
-            self.stores_hold(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE));
-        let mut need = 0;
+        let mut fragments = self.stores_hold(&ItemId::from(crate::items::ids::CORE_FRAGMENT));
+        let mut substrate = self.stores_hold(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE));
+        let (mut need_fragments, mut need_substrate) = (0, 0);
         let mut dry: Vec<Entity> = Vec::new();
         let sites: Vec<Entity> = wanted
             .iter()
@@ -2161,9 +2163,12 @@ impl Game {
                 .get::<DigSite>(site)
                 .and_then(|d| d.finish.clone());
             let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
-            // Which budget the site draws on, and what it claims from it
-            // now. Only a finish adds to the plan's order: a tile is paid in
-            // Core Fragments, which no machine on the queue can make.
+            // Which budget the site draws on and what it claims from it now;
+            // `claim` is also what it adds to that item's plan order, except
+            // for a cut, which claims nothing yet but asks for its tile.
+            if finish.is_none() {
+                need_fragments += crate::tuning::FLOOR_TILE_COST;
+            }
             let (budget, claim, reason) = match &finish {
                 None if solid => (&mut fragments, 0, DigDryReason::Tile),
                 None => (
@@ -2179,7 +2184,7 @@ impl Game {
                 Some(FinishOrder::Strip) => (&mut substrate, 0, DigDryReason::Finish),
             };
             if finish.is_some() {
-                need += claim;
+                need_substrate += claim;
             }
             if *budget < claim {
                 self.announce_dig_dry(site, at.x, at.y, reason);
@@ -2192,12 +2197,14 @@ impl Game {
             }
         }
         wanted.retain(|(site, kind)| *kind != TaskKind::Excavate || !dry.contains(site));
-        self.sync_dig_order(need);
+        self.sync_dig_order(crate::items::ids::CORE_FRAGMENT, need_fragments);
+        self.sync_dig_order(crate::items::ids::BLANK_SUBSTRATE, need_substrate);
     }
 
-    /// Keeps the dig plan's own standing Blank Substrate order at `need`,
-    /// filing it when the plan first needs something and withdrawing it when
-    /// it needs nothing.
+    /// Keeps the dig plan's own standing order for `item` at `need`, filing
+    /// it when the plan first needs some and withdrawing it when it needs
+    /// none. There are at most two: Core Fragments for the tiles, Blank
+    /// Substrate for the finishes.
     ///
     /// **A level, not a batch**: the crew spends the stock as it floors, and
     /// `need` falls by the same unit, so "hold what the plan will spend" is
@@ -2213,14 +2220,14 @@ impl Game {
     ///
     /// Filing is news; resizing and withdrawing are bookkeeping the player
     /// asked for by marking and unmarking, and say nothing.
-    fn sync_dig_order(&mut self, need: u32) {
-        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+    fn sync_dig_order(&mut self, item: &str, need: u32) {
+        let item = ItemId::from(item);
         let at = self
             .world
             .resource::<resources::WorkOrders>()
             .0
             .iter()
-            .position(|order| order.for_dig);
+            .position(|order| order.for_dig && order.item == item);
         match at {
             Some(index) if need == 0 => {
                 self.world
@@ -2233,16 +2240,16 @@ impl Game {
             }
             None if need == 0 => {}
             None => {
-                if chain_break(self, &substrate).is_some() {
+                if chain_break(self, &item).is_some() {
                     return;
                 }
-                let name = self.item_name(&substrate).to_string();
+                let name = self.item_name(&item).to_string();
                 self.world
                     .resource_mut::<resources::WorkOrders>()
                     .0
-                    .push(WorkOrder::level(substrate, need).with_dig());
+                    .push(WorkOrder::level(item, need).with_dig());
                 self.log_base(format!(
-                    "Your dig plan filed a standing work order: hold {need} x {name} to finish its floors."
+                    "Your dig plan filed a standing work order: hold {need} x {name} to floor it."
                 ));
             }
         }

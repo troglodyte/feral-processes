@@ -2908,7 +2908,10 @@ fn a_crew_tile_costs_the_same_fragments_as_a_hand_laid_one() {
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 2);
     mark(&mut game, WALL);
 
-    pass(&mut game, 4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize);
+    pass(
+        &mut game,
+        4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
+    );
 
     assert_eq!(cell(&game, WALL), Some(base_grid::BaseCell::Floor));
     assert_eq!(
@@ -2943,7 +2946,10 @@ fn a_crew_pays_for_its_tile_out_of_the_base_stock() {
         .insert(ItemId::from(ids::CORE_FRAGMENT), 3 * cost);
     mark(&mut game, WALL);
 
-    pass(&mut game, 4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize);
+    pass(
+        &mut game,
+        4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
+    );
 
     assert_eq!(
         cell(&game, WALL),
@@ -2974,7 +2980,10 @@ fn a_crew_falls_back_to_the_player_s_pack() {
     fragments_for(&mut game, 2);
     mark(&mut game, WALL);
 
-    pass(&mut game, 4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize);
+    pass(
+        &mut game,
+        4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
+    );
 
     assert_eq!(
         cell(&game, WALL),
@@ -5400,10 +5409,13 @@ fn a_finish_plan_files_a_standing_substrate_order_below_the_players() {
     );
 }
 
-/// A tile is paid in Core Fragments, and no machine on the queue makes
-/// those, so a plan of plain cuts and tiles asks the Lathe for nothing.
+/// **The fix for a base that cut 112 cells and floored none**: nothing asked
+/// for the tiles a plan needs, so no body ever went to make them. A tile is
+/// paid in Core Fragments, so a plan of cuts and tiles files a standing
+/// Core Fragment order — a cut cell's future tile included — and asks the
+/// Lathe for nothing.
 #[test]
-fn a_tile_plan_files_no_substrate_order() {
+fn a_tile_plan_files_a_fragment_order_and_no_substrate_order() {
     let (mut game, _staff) = base_with_a_crew(3405, 1);
     lay_substrate_line(&mut game);
     fragments_for(&mut game, 0);
@@ -5416,10 +5428,13 @@ fn a_tile_plan_files_no_substrate_order() {
 
     pass(&mut game, 2);
 
-    assert!(
-        dig_orders(&game).is_empty(),
-        "a tile plan filed an order: {:?}",
-        game.work_orders()
+    let orders = dig_orders(&game);
+    assert_eq!(orders.len(), 1, "one plan order, for fragments: {orders:?}");
+    assert_eq!(orders[0].item, ItemId::from(ids::CORE_FRAGMENT));
+    assert_eq!(
+        orders[0].qty,
+        2 * crate::tuning::FLOOR_TILE_COST,
+        "one tile's fragments per marked cell, open or still solid"
     );
 }
 

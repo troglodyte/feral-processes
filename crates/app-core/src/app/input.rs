@@ -394,6 +394,15 @@ impl App {
         if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
             self.menu_selected = self.opening_row();
         }
+        // Entering the board by any door is reading it — `N`, `B` onto the
+        // last page, a page turn or the Overview — so the rail's `!` and the
+        // status bar's badge never stay lit over the page they point at.
+        if self.mode != mode_before
+            && self.mode == Mode::Alerts
+            && let Some(game) = self.game.as_mut()
+        {
+            game.mark_alerts_read();
+        }
         // Every hub screen is reopened from where the player last was.
         if base_page_of(self.mode).is_some() {
             self.base_report_last = Some(self.mode);

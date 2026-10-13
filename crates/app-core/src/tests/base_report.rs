@@ -140,6 +140,23 @@ fn n_lands_on_alerts_with_everything_marked_read() {
 }
 
 #[test]
+fn paging_onto_alerts_marks_everything_read() {
+    let mut app = seeded(
+        30015,
+        vec![alert(
+            AlertKind::DepotsFull,
+            "depots",
+            "Every Depot is full.",
+        )],
+    );
+    app.handle_key(GameKey::Char('B'));
+    assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 1);
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.mode, Mode::Alerts);
+    assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 0);
+}
+
+#[test]
 fn the_base_output_row_is_gone_and_the_report_row_is_offered() {
     let mut app = test_app(30010);
     app.handle_key(GameKey::Char('b'));

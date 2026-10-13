@@ -115,3 +115,144 @@ fn the_filter_is_set_once_and_a_later_edit_stands() {
 
     assert!(!takes(&game, depot, &frag()));
 }
+
+// ---- the intake -------------------------------------------------------
+
+/// A machine of `kind` at an absolute tile, on a lit grid.
+fn machine(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    stand_ample_grid_supply(game);
+    spawn_machine_at(game, kind, x, y)
+}
+
+/// A node holding `qty` fragments, worked or not.
+fn node(game: &mut Game, x: i32, y: i32, qty: u32, worked: bool) -> Entity {
+    let node = machine(game, "mining_node", x, y);
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(frag(), qty);
+    if worked {
+        post(game, node);
+    }
+    node
+}
+
+fn post(game: &mut Game, machine: Entity) {
+    let worker = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 1_000_000,
+    });
+}
+
+/// A Depot that lets fragments in, standing at an absolute tile.
+fn depot_for_fragments(game: &mut Game, x: i32, y: i32) -> Entity {
+    let depot = machine(game, "depot", x, y);
+    game.set_depot_filter(depot, &[frag()], true);
+    depot
+}
+
+fn output_of(game: &Game, e: Entity, item: &ItemId) -> u32 {
+    game.world
+        .get::<Stock>(e)
+        .unwrap()
+        .output
+        .get(item)
+        .copied()
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_worked_nodes_output_moves_into_the_depot() {
+    let mut game = Game::new(9010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    node(&mut game, 40, 40, 10, true);
+
+    game.tick();
+
+    assert!(output_of(&game, depot, &frag()) > 0);
+}
+
+#[test]
+fn an_unstaffed_nodes_output_stays_put() {
+    let mut game = Game::new(9011, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    let node = node(&mut game, 40, 40, 10, false);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert_eq!(output_of(&game, depot, &frag()), 0);
+    assert_eq!(output_of(&game, node, &frag()), 10);
+}
+
+#[test]
+fn a_full_depot_stops_pulling_and_the_buffer_stays() {
+    let mut game = Game::new(9012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    let node = node(&mut game, 40, 40, 30, true);
+    let cap = game.world.get::<Stock>(depot).unwrap().capacity;
+    // Three units of room, then none.
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), cap - 3);
+
+    game.tick();
+    let after_one = output_of(&game, depot, &frag());
+    assert_eq!(after_one, 3, "the pull stops at the room the Depot has");
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert_eq!(
+        output_of(&game, depot, &frag()),
+        3,
+        "a full Depot pulls nothing more"
+    );
+    assert_eq!(game.world.get::<Stock>(depot).unwrap().output_room(), 0);
+    assert!(
+        output_of(&game, node, &frag()) >= 27,
+        "the producer keeps what the Depot could not take"
+    );
+}
+
+#[test]
+fn an_item_the_filter_refuses_is_not_pulled() {
+    let mut game = Game::new(9013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    game.set_depot_filter(depot, &[frag()], false);
+    let node = node(&mut game, 40, 40, 10, true);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert_eq!(output_of(&game, depot, &frag()), 0);
+    assert!(output_of(&game, node, &frag()) >= 10);
+}
+
+#[test]
+fn fragments_reach_a_lathe_through_a_depot_with_no_carrier() {
+    let mut game = Game::new(9014, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    node(&mut game, 40, 40, 100, true);
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    game.set_depot_filter(depot, &[ItemId::from("blank_substrate")], true);
+    let lathe = machine(&mut game, "lathe", 42, 40);
+    post(&mut game, lathe);
+
+    for _ in 0..10 {
+        game.tick();
+    }
+
+    let fed = game.world.get::<Stock>(lathe).unwrap();
+    assert!(
+        fed.input.get(&frag()).copied().unwrap_or(0) > 0 || !fed.output.is_empty(),
+        "the Lathe drew fragments out of the Depot the node filled"
+    );
+}

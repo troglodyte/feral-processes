@@ -2003,6 +2003,88 @@ pub struct AssemblerLookups<'w> {
     board: ResMut<'w, AlertBoard>,
 }
 
+/// A Depot fills itself from the producers beside it: each tick, every Depot
+/// (in `(x, y)` order) draws from each orthogonal neighbour whose output it
+/// accepts, while that neighbour is worked and lit, up to the Depot's room.
+///
+/// Runs after `assembler_system`, so a consumer touching the producer
+/// directly has first pick of its output. The reach is the assembler's own —
+/// `collect::ORTHOGONAL` over `feeders_by_tile` — and "worked" is
+/// `worker_of`, so a Depot never pulls from a machine nobody is running.
+///
+/// Planned against a snapshot and then applied, per Depot, for
+/// `assembler_system`'s reason: reading a neighbour's `output` and writing the
+/// Depot's are the same `Query<&mut Stock>`.
+pub fn depot_intake_system(
+    structures: Query<(Entity, &Structure, &Position), With<Stock>>,
+    mut stocks: Query<&mut Stock>,
+    tasks: Query<(Entity, &Task)>,
+    filters: Query<&crate::components::DepotFilter>,
+    structure_db: Res<StructureDb>,
+    grid: Res<PowerGrid>,
+) {
+    let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
+    let mut depots: Vec<(i32, i32, Entity)> = structures
+        .iter()
+        .filter(|(_, s, _)| structure_db.get(&s.kind).is_some_and(|d| d.stores))
+        .map(|(e, _, p)| (p.x, p.y, e))
+        .collect();
+    depots.sort_unstable();
+
+    for (x, y, depot) in depots {
+        let filter = filters.get(depot).ok();
+        let mut room = stocks.get(depot).map_or(0, |s| s.output_room());
+        let mut plan: Vec<(Entity, ItemId, u32)> = Vec::new();
+        for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
+            if room == 0 {
+                break;
+            }
+            let Some(&producer) = by_tile.get(&(x + dx, y + dy)) else {
+                continue;
+            };
+            let Some(item) = structures
+                .get(producer)
+                .ok()
+                .and_then(|(_, s, _)| structure_db.get(&s.kind))
+                .and_then(produced_item)
+            else {
+                continue;
+            };
+            if !crate::game::base::depot_filter::filter_accepts(filter, item)
+                || grid.is_dark(producer)
+                || worker_of(tasks.iter(), producer).is_none()
+            {
+                continue;
+            }
+            let held = stocks
+                .get(producer)
+                .ok()
+                .and_then(|s| s.output.get(item).copied())
+                .unwrap_or(0);
+            let take = held.min(room);
+            if take == 0 {
+                continue;
+            }
+            room -= take;
+            plan.push((producer, item.clone(), take));
+        }
+        for (producer, item, qty) in plan {
+            let taken = match stocks.get_mut(producer) {
+                Ok(mut src) => crate::game::base::hauling::take_from(&mut src, &item, qty),
+                Err(_) => 0,
+            };
+            if taken > 0 {
+                *stocks
+                    .get_mut(depot)
+                    .expect("planned against this Depot's own stock")
+                    .output
+                    .entry(item)
+                    .or_default() += taken;
+            }
+        }
+    }
+}
+
 /// One tick of every assembler, in two phases: pull ingredients out of the
 /// neighbours, then work a staged batch into one unit of product.
 ///

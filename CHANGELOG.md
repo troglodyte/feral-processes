@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.23
+
+**`B` opens the base report: one screen with a page rail for everything about the base — what it made, its machines and power, stock, build orders, work orders, staffing, staff health and alerts.** These used to be separate popups scattered over the base menu, and some (staff health, power per machine, stock against orders, dig and floor marks) had no screen at all. `[` and `]` turn pages, `Tab` flips between a page's screens, `Esc` leaves, and a page with something wrong carries a `!` on the rail. `B` reopens the page you last read; `N` still opens Alerts, and reaching Alerts any way now marks them read. Inside the report `[` and `]` no longer change the volume.
+
+**A Defrag Bay or Sandbox now serves at most two programs at a time; a third waits in reach, still draining, or walks to an amenity with a free place.** Before, one amenity refilled every program standing beside it at once, so a single bay could carry any crew. A program already being served keeps its place until full, places go to the emptiest program first, and a program posted at a job beside an amenity takes no place at all. The Staff page's Coverage screen says how close each need is to having enough amenities.
+
 ## 0.18.22
 
 **A base floor tile now costs two Core Fragments instead of one Blank Substrate, so the base grows without waiting on a Lathe.** Each tile used to wait on a Lathe turning four fragments into a Blank Substrate, which made expanding the base slow. The crew pays from the base's own storage and never from your pack; you can still lay a tile from your pack with `v`. While cells are marked, the plan keeps a standing Core Fragment order in your work order queue, and a Blank Substrate order only for floor finishes, which still cost 3 Blank Substrate each.

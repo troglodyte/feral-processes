@@ -362,6 +362,39 @@ fn work_orders_refuse_edits_outside_base_space() {
 }
 
 #[test]
+fn queued_orders_cannot_be_cancelled_or_reordered_outside_base_space() {
+    let mut app = app_inside_a_small_base(30026, false);
+    let item = app.orderable_items()[0].0.clone();
+    let game = app.game.as_mut().unwrap();
+    for qty in [1, 2] {
+        game.queue_work_order(WorkOrder::batch(item.clone(), qty))
+            .unwrap();
+    }
+    game.leave_base().unwrap();
+    open_hub_screen(&mut app, Mode::WorkOrders);
+    let quantities = |app: &App| -> Vec<u32> {
+        app.game
+            .as_ref()
+            .unwrap()
+            .work_orders()
+            .iter()
+            .map(|o| o.qty)
+            .collect()
+    };
+
+    for key in [GameKey::Char('>'), GameKey::Char('<'), GameKey::Backspace] {
+        app.status_line = None;
+        app.handle_key(key);
+        assert_eq!(
+            app.status_line.as_deref(),
+            Some(crate::app::building::OUT_OF_BASE),
+            "{key:?}"
+        );
+        assert_eq!(quantities(&app), vec![1, 2], "{key:?} must not edit");
+    }
+}
+
+#[test]
 fn the_duty_table_refuses_edits_outside_base_space() {
     let mut app = app_owning_distant_programs(30023, 1);
     open_hub_screen(&mut app, Mode::BaseStaff);

@@ -132,7 +132,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   door**, read by the player's own put and the crew's haul alike, an absent
   `components::DepotFilter` meaning the shelf takes anything.
 - **A Depot pulls only what it accepts, only from a worked producer, and
-  `Game::auto_filter_depots` fires once, from `Game::spawn_structure`.**
+  `Game::auto_filter_depots` fires once, from `Game::spawn_structure` and only for the Depot.**
 - **Taking and putting are one screen, one basket and one commit** —
   `Mode::Transfer`, opened with `c`.
 - **The put side is one budget and the take side is per row, and the screen

@@ -15,7 +15,7 @@ No schema field, no save-format change, no app-core or gui change.
 |---|---|
 | Consumer side | Already shipped: `assembler_system` (`systems.rs:2083`) pulls a recipe's ingredients from any orthogonal neighbour's `Stock.output`, a Depot included, and only while a worker is posted. Untouched. |
 | Pull gating | The Depot pulls from a producer only while that producer is worked (a `GatherResource` task targets it), the same test as the consumer side. |
-| Filter timing | Set once, when a Depot and a producer first touch, whichever was built second. After that the filter is the player's. |
+| Filter timing | Set once, when the Depot is placed beside a producer. Building a producer beside an existing Depot leaves its filter alone (user decision after review: an existing Depot may be an input shelf). After that the filter is the player's. |
 | Existing filter | A Depot with no filter becomes allow-only for the producer's output. A Depot that already has a filter only gains that output; a player's filter is never narrowed. |
 | Two producers | The Depot allows both outputs and pulls from both. |
 | Producer that also consumes | Included. A Depot between a Mining Node and a Lathe allows fragments and blank substrate; the Lathe pulls fragments out and the Depot pulls blank substrate in. |
@@ -40,7 +40,6 @@ right after `spawn_structure` finishes a crew build. (The only other caller,
 
 - If `built` is a Depot: for each orthogonal neighbour with an `output_item`,
   apply that item to `built`.
-- If `built` has an `output_item`: apply it to each orthogonal Depot.
 - Apply = if the Depot has no `DepotFilter`, `set_all_depot_filters(false)`
   then `set_depot_filter(&[item], true)`; otherwise `set_depot_filter(&[item], true)`.
   Both go through the existing writers, which keep "an empty denied set
@@ -89,7 +88,7 @@ machine pair. This keeps the drawn line and the pull from disagreeing.
 ## Tests (each written failing first, engine `tests/`)
 
 1. A Depot built beside a Mining Node gets an allow-only `core_fragment` filter.
-2. A Mining Node built beside an existing unfiltered Depot: the same result.
+2. A Mining Node built beside an existing unfiltered Depot leaves it unfiltered.
 3. A Depot with a manual filter only gains the producer's item; its other
    entries are unchanged.
 4. A Depot between two producers allows both outputs.

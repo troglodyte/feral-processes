@@ -556,6 +556,8 @@
   `depot_beside_accepting` and the map's `Game::depot_takes_from`, so the
   drawn join and the pull cannot disagree. `Game::auto_filter_depots` sits at
   the end of `Game::spawn_structure`, not `construction.rs`, because
-  `place_now` skips construction; it only ever widens a filter, and skips a
+  `place_now` skips construction; it fires only when the *Depot* is the
+  structure built (a producer built beside a standing Depot leaves it alone,
+  so an input shelf is never narrowed), only ever widens a filter, and skips a
   banked output, which never reaches `Stock.output`. A Depot never joins a
   production line.

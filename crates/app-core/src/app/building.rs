@@ -290,33 +290,6 @@ impl App {
         }
     }
 
-    /// Every tamed program the player owns — the candidates for a cronjob or
-    /// a guard posting.
-    ///
-    /// The whole roster rather than what is within `MENU_SCAN_RADIUS`, for
-    /// the reason `handle_fuse_key` draws from `owned_pets`: a companion's
-    /// `Position` is the tile it was captured on and is never written again,
-    /// so a distance filter hides programs by where they were beaten. It hid
-    /// them from the *row* too — `base_menu_rows` drops a row whose screen
-    /// would be empty, so a player whose only program was tamed 40 tiles ago
-    /// lost the Cronjob row entirely and never learned posting exists.
-    /// Neither `assign_cronjob` (which now starts the program from the
-    /// player's own tile) nor `assign_guard` asks anything about where the
-    /// program is standing.
-    ///
-    /// This and the three lists below exist because each was written twice:
-    /// once in the handler that picks from it, once in the renderer that
-    /// draws it. The base menu's row-availability check (see
-    /// `App::base_menu_rows`) would have been a third copy, and a menu that
-    /// offers a row leading to an empty screen is exactly the drift that
-    /// invites.
-    pub fn nearby_programs(&mut self) -> Vec<EntityView> {
-        let Some(game) = &mut self.game else {
-            return Vec::new();
-        };
-        game.owned_program_views()
-    }
-
     /// Nearby structures that accept a posted program. The same list whether
     /// the work is done by a program (`Mode::CronjobStructure`) or by the
     /// player themselves (`Mode::WorkStructure`) — it is the same job either

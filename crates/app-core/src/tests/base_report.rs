@@ -514,11 +514,24 @@ fn tab_cycles_production_and_build_orders_screens() {
     assert_eq!(app.mode, Mode::BuildOrders);
 }
 
-/// The cursor stops at the last row of the report the screen draws, and
-/// moves no further on an empty one; no key costs game time.
+/// The cursor walks the report each screen draws and wraps at its ends, and
+/// no key costs game time. Digging and Builds are filled to different
+/// lengths so an arm reading the other's list wraps on the wrong row.
 #[test]
-fn the_list_screens_scroll_over_their_report_and_cost_no_time() {
-    let mut app = test_app(30019);
+fn the_list_cursor_wraps_over_each_screens_own_report_and_costs_no_time() {
+    let mut app = app_inside_a_small_base(30020, false);
+    {
+        let game = app.game.as_mut().unwrap();
+        let r = feral_processes_engine::tuning::STARTING_POCKET_HALF_HEIGHT + 1;
+        // Four cells in a row: four dig marks.
+        game.toggle_mark_box((0, r), (3, r), None);
+        // Three requests that cost no program.
+        for dy in [1, 2, 3] {
+            game.place_structure("depot", 0, dy, None).unwrap();
+        }
+        assert_eq!(game.dig_marks().len(), 4, "precondition");
+        assert_eq!(game.build_order_report().len(), 3, "precondition");
+    }
     let before = app.game.as_ref().unwrap().current_tick();
     for mode in [
         Mode::BaseMachines,
@@ -541,15 +554,20 @@ fn the_list_screens_scroll_over_their_report_and_cost_no_time() {
                 _ => game.floor_marks().len(),
             }
         };
-        for _ in 0..rows + 3 {
+        if rows == 0 {
+            app.handle_key(GameKey::Down);
+            assert_eq!(app.menu_selected, 0, "{mode:?} has nowhere to go");
+            continue;
+        }
+        for _ in 1..rows {
             app.handle_key(GameKey::Down);
         }
+        assert_eq!(app.menu_selected, rows - 1, "{mode:?} reaches its last row");
+        app.handle_key(GameKey::Down);
+        assert_eq!(app.menu_selected, 0, "{mode:?} wraps to the top");
+        app.handle_key(GameKey::Up);
+        assert_eq!(app.menu_selected, rows - 1, "{mode:?} wraps to the bottom");
         assert_eq!(app.mode, mode);
-        assert_eq!(
-            app.menu_selected,
-            rows.saturating_sub(1),
-            "{mode:?} cursor ends on its last row"
-        );
     }
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
 }

@@ -77,7 +77,8 @@ impl App {
             Mode::BaseStock => game.stock_report().len(),
             Mode::BuildOrders => game.build_order_report().len(),
             Mode::DigOrders => game.dig_marks().len(),
-            _ => game.floor_marks().len(),
+            Mode::FloorOrders => game.floor_marks().len(),
+            _ => unreachable!("guarded by handle_key's list-screen pattern"),
         };
         self.scroll(key, rows);
     }

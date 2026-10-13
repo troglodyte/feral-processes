@@ -19,16 +19,12 @@ fn l_opens_the_history_and_esc_returns_to_the_map() {
 }
 
 #[test]
-fn the_base_menu_opens_the_structure_roster_and_esc_backs_into_it() {
-    // A deployed structure, because the row is hidden when the roster would
-    // be empty (see `App::base_menu_rows`).
+fn the_hub_opens_the_structure_roster_and_esc_leaves_to_the_map() {
     let mut app = app_owning_a_program_and_a_compiler(91, &[]);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.mode, Mode::Structures);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::Playing, "Esc leaves the hub in one press");
 }
 
 /// Up/Down are the scroll, and the popup's window follows the highlighted
@@ -108,7 +104,7 @@ fn repeated_lines_are_one_scrollable_row() {
 #[test]
 fn up_and_down_scroll_the_roster_without_leaving_it() {
     let mut app = app_owning_a_program_and_a_compiler(93, &[]);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.menu_selected, 0, "the roster opens at its first row");
     app.handle_key(GameKey::Down);
     assert_eq!(app.mode, Mode::Structures);
@@ -127,15 +123,8 @@ fn up_and_down_scroll_the_roster_without_leaving_it() {
 fn scrolling_a_list_does_not_advance_the_game() {
     let mut app = app_owning_a_program_and_a_compiler(94, &[]);
     let before = app.game.as_ref().unwrap().current_tick();
-    app.handle_key(GameKey::Char('L'));
-    open_via_menu(&mut app, 'b', "Structure roster");
-    for key in [
-        GameKey::Down,
-        GameKey::Down,
-        GameKey::Up,
-        GameKey::Esc,
-        GameKey::Esc,
-    ] {
+    open_hub_screen(&mut app, Mode::Structures);
+    for key in [GameKey::Down, GameKey::Down, GameKey::Up, GameKey::Esc] {
         app.handle_key(key);
     }
     assert_eq!(app.mode, Mode::Playing);
@@ -243,38 +232,26 @@ fn app_with_base_output(seed: u32) -> App {
 }
 
 #[test]
-fn the_base_menu_opens_the_output_page_and_esc_backs_into_it() {
+fn the_hub_opens_the_output_page_and_esc_leaves_to_the_map() {
     let mut app = app_with_base_output(101);
-    open_via_menu(&mut app, 'b', "Base output");
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOutput);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// The group menu's contract: a row is offered only when the screen behind
-/// it has something to show. A run that has produced nothing has an empty
-/// ledger, and an empty page reads as a broken one.
-#[test]
-fn a_base_that_has_made_nothing_is_not_offered_the_page() {
-    let mut app = test_app(102);
-    app.handle_key(GameKey::Char('b'));
-    assert!(
-        !app.base_menu_rows()
-            .iter()
-            .any(|r| r.label == "Base output"),
-        "the row is offered before the base has made anything"
-    );
-}
-
-/// Reading is free, and nothing but Esc is bound — the page has no scroll,
-/// so an arrow must not quietly move a highlight that is never drawn.
+/// Reading is free, and only the hub's own keys are bound — the page has no
+/// scroll, so an arrow must not quietly move a highlight that is never
+/// drawn.
 #[test]
 fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
     let mut app = app_with_base_output(103);
     let before = app.game.as_ref().unwrap().current_tick();
-    open_via_menu(&mut app, 'b', "Base output");
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(']'));
     for key in [
         GameKey::Down,
         GameKey::Up,
@@ -284,7 +261,6 @@ fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
         app.handle_key(key);
         assert_eq!(app.mode, Mode::BaseOutput, "{key:?} should do nothing here");
     }
-    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.game.as_ref().unwrap().current_tick(),

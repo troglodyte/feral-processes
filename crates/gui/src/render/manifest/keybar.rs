@@ -30,7 +30,7 @@ fn dim(key: &str, verb: &str) -> Vec<Piece> {
     ]
 }
 
-fn group(chips: Vec<Vec<Piece>>) -> Vec<Piece> {
+pub(in crate::render) fn group(chips: Vec<Vec<Piece>>) -> Vec<Piece> {
     let mut out = Vec::new();
     for chip in chips {
         if !out.is_empty() {
@@ -102,7 +102,12 @@ pub(super) fn draw_dossier_keybar(rect: Rect, cyclable: bool, painter: &Painter,
     draw_groups(rect, &dossier_groups(cyclable), painter, m);
 }
 
-fn draw_groups(rect: Rect, groups: &[Vec<Piece>], painter: &Painter, m: &Metrics) {
+pub(in crate::render) fn draw_groups(
+    rect: Rect,
+    groups: &[Vec<Piece>],
+    painter: &Painter,
+    m: &Metrics,
+) {
     painter.rect(
         rect.x,
         rect.y - m.gap / 2.0,

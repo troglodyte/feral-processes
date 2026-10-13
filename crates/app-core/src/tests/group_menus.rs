@@ -31,7 +31,6 @@ fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
     stand_in_base(&mut app);
     let rows = labels(&app.base_menu_rows());
     for absent in [
-        "Base staff",
         "Work a structure yourself",
         "Upgrade a structure",
         "Demolish a structure",
@@ -53,7 +52,6 @@ fn a_program_in_range_brings_back_the_rows_that_need_one() {
     let mut app = app_owning_a_program_and_a_compiler(4003, &[]);
     stand_in_base(&mut app);
     let rows = labels(&app.base_menu_rows());
-    assert!(rows.contains(&"Base staff"), "{rows:?}");
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
@@ -63,10 +61,8 @@ fn a_program_in_range_brings_back_the_rows_that_need_one() {
 /// screen whose every action is refused on the far side. The flag used to be
 /// `surface_only` and used to ask `is_underground()`, which was the same
 /// question only while there were two locales.
-const GUARDED: [&str; 6] = [
+const GUARDED: [&str; 4] = [
     "Deploy a structure",
-    "Work orders",
-    "Base staff",
     "Work a structure yourself",
     "Upgrade a structure",
     "Demolish a structure",
@@ -82,7 +78,7 @@ const GUARDED: [&str; 6] = [
 /// the party is standing is the only thing that can explain a difference.
 ///
 /// Returns what it found so the caller can prove the fixtures between them
-/// exercise all six rows. A row no fixture ever makes available inside is a
+/// exercise all four rows. A row no fixture ever makes available inside is a
 /// row whose flag has no coverage at all — flipping it to `base_only: false`
 /// would leave the suite green, which is exactly the hole this returns a
 /// value to close.
@@ -312,18 +308,18 @@ fn esc_from_a_group_menu_returns_to_the_map() {
     }
 }
 
-/// Twelve of the thirteen keys the group menus replaced. Kept as aliases they
+/// Eleven of the thirteen keys the group menus replaced. Kept as aliases they
 /// would have meant the flat surface never actually shrank, and the help
 /// screen would have had two systems to document.
 ///
-/// `d` is the thirteenth and has left this list: it was the manifest picker's
-/// key, and is now the direct demolish (`the_demolish_key_*` in
+/// `B` has left this list, reissued as the base report. `d` has too: it was
+/// the manifest picker's key, and is now the direct demolish (`the_demolish_key_*` in
 /// `tests/building.rs`). A retired key is free to be *reissued* — what this
 /// census forbids is an old binding surviving as a silent alias, which is a
 /// different thing from the key being used again deliberately.
 #[test]
 fn the_retired_map_keys_do_nothing() {
-    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'B', 'T', 'f', 'm', 'M', 'v'] {
+    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'T', 'f', 'm', 'M', 'v'] {
         let mut app = test_app(4012);
         app.handle_key(GameKey::Char(key));
         assert_eq!(
@@ -465,39 +461,11 @@ fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
 
     assert!(!rows.contains(&"Assign a cronjob"), "{rows:?}");
     assert!(!rows.contains(&"Post a guard"), "{rows:?}");
-    assert!(rows.contains(&"Base staff"), "{rows:?}");
+    assert!(!rows.contains(&"Base staff"), "{rows:?}");
+    assert!(!rows.contains(&"Work orders"), "{rows:?}");
     assert!(
         rows.contains(&"Work a structure yourself"),
         "the player is not staff, and that flow is untouched: {rows:?}"
-    );
-}
-
-/// The Work orders row asks the same question its screen does — a base with
-/// nothing orderable would open on an empty list, which is the drift the
-/// `available` closure exists to prevent.
-#[test]
-fn the_work_orders_row_appears_once_something_is_orderable() {
-    let mut app = test_app(4031);
-    // Inside the base, where the row is legal at all: `base_only` drops it
-    // before `available` is ever consulted, so on the open grid the
-    // assertion below would pass at the locale guard rather than at the
-    // rule it names. Which locale hides the row is
-    // `the_base_menu_offers_its_base_rows_only_inside_base_space`'s job.
-    stand_in_base(&mut app);
-    assert!(
-        !labels(&app.base_menu_rows()).contains(&"Work orders"),
-        "nothing is deployed, so nothing can be ordered"
-    );
-
-    // A Mining Node makes Core Fragments out of nothing on a timer, so it
-    // is orderable the moment it is standing. An assembler with no feeder
-    // beside it deliberately is not — `chain_break` refuses a line that can
-    // never be fed, and this row asks the same question the queue does.
-    let mut app = app_inside_a_small_base_with_programs(4032, false, 1);
-    assert!(
-        labels(&app.base_menu_rows()).contains(&"Work orders"),
-        "a deployed extractor makes its product orderable: {:?}",
-        labels(&app.base_menu_rows())
     );
 }
 

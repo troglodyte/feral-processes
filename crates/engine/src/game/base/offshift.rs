@@ -7,7 +7,7 @@
 //! need may pull a body off a post, and failing that gate *is* acting out** —
 //! there is no third state where a program is stalled but content.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::base_grid::BaseGrid;
 use crate::components::{Needs, OffShift, Position, Structure};
@@ -37,6 +37,10 @@ pub(crate) struct Amenities {
     /// morale errand walks to a *building*, not to a service. Deduped by
     /// tile and sorted by it, `by_need`'s reason exactly.
     sites: Vec<(Position, StructureId, i32)>,
+    /// `(need, tile) -> places still free`, filled by `Game::amenities` from
+    /// what the staff hold. Empty for a system's own build, which allocates
+    /// places itself and never routes; an absent entry reads as free.
+    free: BTreeMap<(NeedId, (i32, i32)), usize>,
 }
 
 impl Amenities {
@@ -82,7 +86,46 @@ impl Amenities {
         Self {
             by_need,
             sites: sites.into_values().collect(),
+            free: BTreeMap::new(),
         }
+    }
+
+    /// The same index with each amenity's free places recorded, for routing.
+    pub(crate) fn with_free_places(mut self, free: BTreeMap<(NeedId, (i32, i32)), usize>) -> Self {
+        self.free = free;
+        self
+    }
+
+    /// Every amenity servicing `need`, sorted by tile: `(tile, rate, radius)`.
+    pub(crate) fn servicing(&self, need: &NeedId) -> &[(Position, f32, i32)] {
+        self.by_need.get(need).map_or(&[], Vec::as_slice)
+    }
+
+    /// Where an `OffShift(need)` program at `from` should head: the amenity
+    /// whose place it already holds, else the nearest with a free place, else
+    /// the nearest at all, where it waits in reach still draining.
+    ///
+    /// `nearest`'s total order decides every tie.
+    pub(crate) fn route(
+        &self,
+        need: &NeedId,
+        from: Position,
+        held: Option<(i32, i32)>,
+    ) -> Option<(Position, f32, i32)> {
+        let list = self.by_need.get(need)?;
+        if let Some(own) = held.and_then(|h| list.iter().find(|(p, _, _)| (p.x, p.y) == h)) {
+            return Some(*own);
+        }
+        let distance = |p: &Position| (p.x - from.x).abs().max((p.y - from.y).abs());
+        list.iter()
+            .filter(|(p, _, _)| {
+                self.free
+                    .get(&(need.clone(), (p.x, p.y)))
+                    .is_none_or(|free| *free > 0)
+            })
+            .min_by_key(|(p, _, _)| (distance(p), p.x, p.y))
+            .copied()
+            .or_else(|| self.nearest(need, from))
     }
 
     /// Whether the base has anywhere to unwind at all — the morale errand's
@@ -124,6 +167,113 @@ impl Amenities {
             .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
             .copied()
     }
+}
+
+/// How many programs an amenity can serve at once: the capacity, or fewer
+/// when fewer tiles are open to stand on. **One function, called by the sim
+/// and by `need_coverage`**, so a boxed-in amenity reads the same on the
+/// coverage screen as it behaves in the tick.
+pub(crate) fn effective_places(open_tiles: usize) -> usize {
+    open_tiles.min(crate::tuning::AMENITY_CAPACITY)
+}
+
+/// Tiles in reach of an amenity that a program could stand on: walkable
+/// ground holding no structure (`taken` is every structure's footprint,
+/// `Game::structure_tiles`' set). Reach is `in_reach`'s: Chebyshev
+/// `max(radius, 1)`. A body standing there does not close the tile; bodies
+/// squeeze past.
+pub(crate) fn open_tiles(
+    grid: &BaseGrid,
+    site: Position,
+    radius: i32,
+    taken: &HashSet<(i32, i32)>,
+) -> usize {
+    let reach = radius.max(1);
+    (site.x - reach..=site.x + reach)
+        .flat_map(|x| (site.y - reach..=site.y + reach).map(move |y| (x, y)))
+        .filter(|&(x, y)| grid.walkable(x, y) && !taken.contains(&(x, y)))
+        .count()
+}
+
+/// `effective_places` over the ground, for a world that has no base grid
+/// (a hand-built fixture) reading the bare capacity.
+pub(crate) fn places_of(
+    grid: Option<&BaseGrid>,
+    site: Position,
+    radius: i32,
+    taken: &HashSet<(i32, i32)>,
+) -> usize {
+    grid.map_or(crate::tuning::AMENITY_CAPACITY, |g| {
+        effective_places(open_tiles(g, site, radius, taken))
+    })
+}
+
+/// One staff program as the place allocation sees it.
+pub(crate) struct Contender {
+    pub who: Entity,
+    pub at: Position,
+    /// The amenity tile that held this program's place last tick.
+    pub held: Option<(i32, i32)>,
+    /// Below `content` and off duty: may claim a place it does not hold. A
+    /// program posted at a job never claims one, so it cannot hold a place
+    /// against an off-shift program that walked there for it.
+    pub wants: bool,
+    /// The reserve, which ranks newcomers: the emptiest is served first.
+    pub reserve: f32,
+    /// Short of a full reserve: may keep a place it holds.
+    pub keeps: bool,
+}
+
+/// Who holds a place at which amenity this tick, for one need. `sites` are
+/// `(tile, places, radius)` in tile order.
+///
+/// **Incumbents first, across every amenity, and only then the newcomers.**
+/// A program in reach keeps the place it holds whatever walks up beside it —
+/// entity order breaks ties among incumbents only when places shrank — and a
+/// free place goes to the emptiest waiting program, then the nearest, then
+/// entity order.
+/// Deciding incumbents for all amenities before any newcomer is what stops a
+/// program in reach of two from walking out of the place it holds.
+pub(crate) fn allocate(
+    sites: &[(Position, usize, i32)],
+    contenders: &[Contender],
+) -> BTreeMap<Entity, (i32, i32)> {
+    let mut order: Vec<&Contender> = contenders.iter().collect();
+    order.sort_by_key(|c| c.who);
+    let mut granted: BTreeMap<Entity, (i32, i32)> = BTreeMap::new();
+    let mut left: Vec<usize> = sites.iter().map(|(_, places, _)| *places).collect();
+    for (i, (site, _, radius)) in sites.iter().enumerate() {
+        for c in &order {
+            if left[i] == 0 {
+                break;
+            }
+            if c.keeps
+                && c.held == Some((site.x, site.y))
+                && in_reach(c.at, *site, *radius)
+                && !granted.contains_key(&c.who)
+            {
+                granted.insert(c.who, (site.x, site.y));
+                left[i] -= 1;
+            }
+        }
+    }
+    for (i, (site, _, radius)) in sites.iter().enumerate() {
+        let mut waiting: Vec<&&Contender> = order
+            .iter()
+            .filter(|c| c.wants && !granted.contains_key(&c.who) && in_reach(c.at, *site, *radius))
+            .collect();
+        waiting.sort_by(|a, b| {
+            let dist = |c: &Contender| (c.at.x - site.x).abs().max((c.at.y - site.y).abs());
+            a.reserve
+                .total_cmp(&b.reserve)
+                .then_with(|| dist(a).cmp(&dist(b)))
+                .then_with(|| a.who.cmp(&b.who))
+        });
+        for c in waiting.into_iter().take(left[i]) {
+            granted.insert(c.who, (site.x, site.y));
+        }
+    }
+    granted
 }
 
 /// The need furthest below its own `critical`, or `None` if none is.
@@ -277,17 +427,42 @@ impl Game {
         })
     }
 
-    /// Builds this pass's amenity index off the world's own structures.
+    /// Builds this pass's amenity index off the world's own structures, with
+    /// each amenity's free places read off what the staff hold.
     pub(crate) fn amenities(&mut self) -> Amenities {
         let mut query = self.world.query::<(&Structure, &Position)>();
         let sites: Vec<(StructureId, Position)> = query
             .iter(&self.world)
             .map(|(s, p)| (s.kind.clone(), *p))
             .collect();
-        Amenities::build(
+        let amenities = Amenities::build(
             sites.iter().map(|(kind, p)| (kind, p)),
             self.world.resource::<StructureDb>(),
-        )
+        );
+        let taken = self.structure_tiles();
+        let mut held: BTreeMap<(NeedId, (i32, i32)), usize> = BTreeMap::new();
+        let mut needs = self.world.query::<&Needs>();
+        for n in needs.iter(&self.world) {
+            for (need, tile) in n.serviced() {
+                *held.entry((need.clone(), tile)).or_default() += 1;
+            }
+        }
+        let grid = self.world.get_resource::<BaseGrid>();
+        let mut free = BTreeMap::new();
+        for (need, list) in &amenities.by_need {
+            for (site, _, radius) in list {
+                let places = places_of(grid, *site, *radius, &taken);
+                let used = held
+                    .get(&(need.clone(), (site.x, site.y)))
+                    .copied()
+                    .unwrap_or(0);
+                free.insert(
+                    (need.clone(), (site.x, site.y)),
+                    places.saturating_sub(used),
+                );
+            }
+        }
+        amenities.with_free_places(free)
     }
 
     /// Inserts, keeps or removes `OffShift` for each of `staff`.
@@ -412,7 +587,11 @@ impl Game {
             .get::<Position>(worker)
             .copied()
             .ok_or(NoPost::NoRoute)?;
-        let (site, _, radius) = amenities.nearest(&need, here).ok_or(NoPost::NoRoute)?;
+        let held = self
+            .world
+            .get::<Needs>(worker)
+            .and_then(|n| n.serviced_at(&need));
+        let (site, _, radius) = amenities.route(&need, here, held).ok_or(NoPost::NoRoute)?;
         if in_reach(here, site, radius) {
             // Arrived. It stands here until it is content — the drift's other
             // shape would walk it straight back off again.

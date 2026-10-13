@@ -290,33 +290,6 @@ impl App {
         }
     }
 
-    /// Every tamed program the player owns — the candidates for a cronjob or
-    /// a guard posting.
-    ///
-    /// The whole roster rather than what is within `MENU_SCAN_RADIUS`, for
-    /// the reason `handle_fuse_key` draws from `owned_pets`: a companion's
-    /// `Position` is the tile it was captured on and is never written again,
-    /// so a distance filter hides programs by where they were beaten. It hid
-    /// them from the *row* too — `base_menu_rows` drops a row whose screen
-    /// would be empty, so a player whose only program was tamed 40 tiles ago
-    /// lost the Cronjob row entirely and never learned posting exists.
-    /// Neither `assign_cronjob` (which now starts the program from the
-    /// player's own tile) nor `assign_guard` asks anything about where the
-    /// program is standing.
-    ///
-    /// This and the three lists below exist because each was written twice:
-    /// once in the handler that picks from it, once in the renderer that
-    /// draws it. The base menu's row-availability check (see
-    /// `App::base_menu_rows`) would have been a third copy, and a menu that
-    /// offers a row leading to an empty screen is exactly the drift that
-    /// invites.
-    pub fn nearby_programs(&mut self) -> Vec<EntityView> {
-        let Some(game) = &mut self.game else {
-            return Vec::new();
-        };
-        game.owned_program_views()
-    }
-
     /// Nearby structures that accept a posted program. The same list whether
     /// the work is done by a program (`Mode::CronjobStructure`) or by the
     /// player themselves (`Mode::WorkStructure`) — it is the same job either
@@ -834,6 +807,8 @@ impl App {
     }
 }
 
+pub(crate) const OUT_OF_BASE: &str = "Not from out here — that's back at the base.";
+
 /// One row on `Mode::WorkOrders` — either a queued order or the trailing
 /// row that starts a new one.
 ///
@@ -854,8 +829,7 @@ impl App {
     /// queues another.
     ///
     /// The trailing row is dropped when nothing is orderable, so the screen
-    /// never offers a picker that would open empty — the same question
-    /// `BASE_ROWS`'s `available` closure asks one level up.
+    /// never offers a picker that would open empty.
     pub fn work_order_rows(&mut self) -> Vec<WorkOrderRow> {
         let Some(game) = &self.game else {
             return Vec::new();
@@ -883,10 +857,6 @@ impl App {
     /// to release, so the next tick simply derives a different answer and
     /// re-queueing costs a keypress.
     pub(crate) fn handle_work_orders_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         let rows = self.work_order_rows();
         let shift = match key {
             GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
@@ -894,6 +864,9 @@ impl App {
             _ => None,
         };
         if let Some(shift) = shift {
+            if self.refuse_outside_base() {
+                return;
+            }
             let index = self.menu_selected;
             if rows.get(index).is_some_and(|row| row.order.is_some())
                 && let Some(game) = &mut self.game
@@ -909,6 +882,9 @@ impl App {
             return;
         }
         if key == GameKey::Backspace {
+            if self.refuse_outside_base() {
+                return;
+            }
             if self.menu_selected < rows.len() && rows[self.menu_selected].order.is_some() {
                 let index = self.menu_selected;
                 if let Some(game) = &mut self.game {
@@ -922,11 +898,27 @@ impl App {
             return;
         };
         if rows[idx].order.is_none() {
+            if self.refuse_outside_base() {
+                return;
+            }
             self.pending_order = None;
             self.order_quantity_input.clear();
             self.mode = Mode::WorkOrderPick;
             self.menu_selected = 0;
         }
+    }
+
+    /// Refuses, and says so, when the party is not in base space. Work
+    /// orders and the duty table used to be base-menu rows hidden outside
+    /// it (`Locality::Base`); reached from the hub they are visible from
+    /// anywhere, so the refusal moves to the keys that change something.
+    /// Reading stays open.
+    fn refuse_outside_base(&mut self) -> bool {
+        let outside = self.game.as_ref().is_some_and(|g| !g.in_base());
+        if outside {
+            self.refuse(OUT_OF_BASE);
+        }
+        outside
     }
 
     /// What the base could be told to make — `Game::orderable_items`, which
@@ -1030,8 +1022,7 @@ impl App {
     /// lowercase letter here does nothing, which is what keeps it from
     /// colliding with a screen action bound to its upper-case twin.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
+        if matches!(key, GameKey::Char(' ' | '<' | '>' | 'A')) && self.refuse_outside_base() {
             return;
         }
         let table = self.base_staff_table();

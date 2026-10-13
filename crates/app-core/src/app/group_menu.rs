@@ -104,29 +104,6 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Base-only for the reason every scan row is, and the engine
-        // agrees rather than trusting the flag: `queue_work_order` calls
-        // `Game::require_base`. The screen is read-only but it *claims
-        // something about where the base is*, which is the test
-        // `find_target_in_direction` established — a report answered from a
-        // `Position` that is pinned somewhere else would describe a base the
-        // party is nowhere near.
-        label: "Work orders",
-        target: Mode::WorkOrders,
-        locality: Locality::Base,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.work_orders().is_empty() || !g.orderable_items().is_empty())
-        },
-    },
-    GroupEntry {
-        label: "Base staff",
-        target: Mode::BaseStaff,
-        locality: Locality::Base,
-        available: |app| !app.nearby_programs().is_empty(),
-    },
-    GroupEntry {
         label: "Work a structure yourself",
         target: Mode::WorkStructure,
         locality: Locality::Base,
@@ -149,16 +126,6 @@ const BASE_ROWS: &[GroupEntry] = &[
         target: Mode::Remove,
         locality: Locality::Base,
         available: |app| !app.nearby_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Structure roster",
-        target: Mode::Structures,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| !g.structure_report().is_empty())
-        },
     },
     GroupEntry {
         label: "Research",
@@ -275,19 +242,12 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not base-only, and for the Recipes row's reason one notch further:
-        // the ledger is *history*, so it reads the same wherever the party
-        // is standing — and the base keeps producing while they are in the
-        // Stack, which is exactly when the question is worth asking.
-        //
-        // `has_base_output` rather than the report itself, which is the trap
-        // the Contracts row records: this closure runs every frame the menu
-        // is open and the report resolves a def per item and walks every
-        // structure before it can answer.
-        label: "Base output",
-        target: Mode::BaseOutput,
+        // Readable anywhere, as the screens it absorbed were: the ledger is
+        // history and the alert board is not a scan around the party.
+        label: "Base report",
+        target: Mode::BaseOverview,
         locality: Locality::Anywhere,
-        available: |app| app.game.as_ref().is_some_and(|g| g.has_base_output()),
+        available: |_| true,
     },
     GroupEntry {
         // Not base-only: the chains come off the loaded assets, not off a
@@ -450,11 +410,11 @@ impl App {
     /// and when the screen it opens would have at least one row of its own.
     ///
     /// That second clause deliberately asks only the *first* screen a row
-    /// opens. "Work orders" can therefore open on a queue and then land on
-    /// an empty item picker — a cheap mistake rather than a dead end, since
-    /// Esc backs out into the menu (see `App::close_screen`).
-    /// Asking the whole chain would need a bespoke predicate per row, which
-    /// is the duplication this table exists to avoid.
+    /// opens. A row can therefore open on a screen whose own next step is
+    /// empty — a cheap mistake rather than a dead end, since Esc backs out
+    /// into the menu (see `App::close_screen`). Asking the whole chain would
+    /// need a bespoke predicate per row, which is the duplication this table
+    /// exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {
         // The locality pass is resolved up front rather than chained into
         // the same iterator as `available`: both read `self`, and only the
@@ -495,6 +455,7 @@ impl App {
                     self.build_category = None;
                     self.mode = Mode::Build;
                 }
+                Mode::BaseOverview => self.open_base_report(),
                 target => self.mode = target,
             }
         }

@@ -429,7 +429,7 @@ impl Game {
     /// is a Station's own floor cell is refused here even though
     /// `blocked_tiles` would let a body stand on it, because this set counts
     /// that floor cell taken.
-    pub(crate) fn structure_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
+    pub(crate) fn structure_tiles(&self) -> std::collections::HashSet<(i32, i32)> {
         let rows = self.structure_footprints();
         crate::game::base::hauling::footprint_tiles(rows.into_iter().map(|(_, p, side)| (p, side)))
     }
@@ -576,16 +576,16 @@ impl Game {
     /// Every standing structure, with its footprint's side resolved —
     /// `find_blocking_structure_at`, `structure_tiles` and `blocked_tiles`
     /// all read these same rows rather than each building their own.
-    pub(crate) fn structure_footprints(&mut self) -> Vec<(Entity, Position, u8)> {
-        let mut query = self.world.query::<(Entity, &Position, &Structure)>();
-        let rows: Vec<(Entity, Position, StructureId)> = query
-            .iter(&self.world)
-            .map(|(e, p, s)| (e, *p, s.kind.clone()))
-            .collect();
-        rows.into_iter()
-            .map(|(e, p, kind)| {
-                let side = self.structure_footprint(&kind);
-                (e, p, side)
+    pub(crate) fn structure_footprints(&self) -> Vec<(Entity, Position, u8)> {
+        self.world
+            .iter_entities()
+            .filter_map(|e| {
+                let kind = &e.get::<Structure>()?.kind;
+                Some((
+                    e.id(),
+                    *e.get::<Position>()?,
+                    self.structure_footprint(kind),
+                ))
             })
             .collect()
     }

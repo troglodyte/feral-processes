@@ -14,7 +14,11 @@ working. The manifest names the reserve as steady, fraying, strained or critical
 - Slack is restored at a Sandbox, which costs 10 Core Fragments. The program goes and idles.
 
 When a reserve runs low the program leaves its post, walks to the nearest machine that restores it,
-and goes back to work once it is well restored. Until then it works a little worse. Neither building
+and goes back to work once it is well restored. A machine restores two programs at a time. A third
+that arrives stands in reach and waits for a place, still running down, so a program heads for a
+machine with a free place when there is one. A program working a post beside a machine takes no
+place; places go to programs off duty, the most run down first. A machine with only one open tile around it, because
+other structures or rock crowd it, restores only one. Until then it works a little worse. Neither building
 takes a program to build, and both can stand inside a room; see [rooms](rooms) for how a room's
 quality speeds the refill. A reserve that drops low (below 20 Coherence or 25 Slack) with nothing in the base to restore it, or with
 the machine walled off, is logged. Once the base has 8 staff and 8 structures, that also leaves the
@@ -53,10 +57,25 @@ lashing out takes worse. The exceptions are being left past your roster slots an
 Power Siphon, either of which can do it alone if left long enough. Both are fixed by you: build a
 Data Cache, or release the program from the siphon.
 
+The Staff page
+
+Press B for the base report, then [ or ] along the rail to the Staff page. Tab flips between its three screens.
+
+- Wellbeing lists every staff program, worst mood first: its mood, Integrity, a bar for each need
+  with a ! under the critical line, and what it is doing, including waiting for a place.
+- Coverage lists each need with how many machines are built, the places they offer out of the
+  places they could, how many are needed, and how many programs are low. It is approximate, because
+  it ignores walking time. A machine boxed in is listed under its need.
+- Discontent lists the programs with a grievance, the worst first, and the memories behind it.
+
+The Staff entry on the rail shows a ! when someone is critical or downed, when a need has too few
+machines, or when a program has stopped working.
+
 What you can do about it
 
 - Build a Log Analyzer Bay and a Sandbox early, near where the crew works, and keep them reachable.
-  A base with neither offers a bad mood nowhere to go.
+  A base with neither offers a bad mood nowhere to go. Build more of each as the staff grows, and
+  leave open ground around them: the Coverage screen says how many you need.
 - Lay a comfortable floor finish in rooms where programs idle.
 - Keep a program away from a machine it resents, or from a rival, by posting it elsewhere. The base
   staff table lets you uncheck jobs for a program.

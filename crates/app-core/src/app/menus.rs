@@ -2,7 +2,7 @@
 //! game-over page. The creation wizard the main menu opens is its own
 //! module, `app/creation.rs`.
 
-use crate::app::building::Roster;
+use crate::app::building::{OUT_OF_BASE, Roster};
 use crate::*;
 
 impl App {
@@ -279,10 +279,6 @@ impl App {
     /// would resolve to. Everything else — Up/Down, digits, other letters —
     /// goes through `selected_index` like an ordinary menu.
     pub(crate) fn handle_alerts_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         if matches!(key, GameKey::Char('x') | GameKey::Char('d')) {
             let Some(game) = self.game.as_mut() else {
                 return;
@@ -347,10 +343,6 @@ impl App {
     /// a row that takes no worker says so instead of opening a picker that
     /// could only be refused on the far side.
     pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         let Some(roster) = self.game.as_mut().map(Roster::of) else {
             return;
         };
@@ -374,10 +366,9 @@ impl App {
         //
         // Refused at the keypress like the demolish key, rather than opening
         // a picker whose every row is a dead end — the roster itself still
-        // reads fine from anywhere, which is why it carries no `base_only`
-        // flag in `BASE_ROWS`.
+        // reads fine from anywhere.
         if self.game.as_ref().is_some_and(|g| !g.in_base()) {
-            self.refuse("Not from out here — that's back at the base.");
+            self.refuse(OUT_OF_BASE);
             return;
         }
         let Some(target) = roster.target_of(roster.rows[idx]) else {
@@ -407,15 +398,6 @@ impl App {
             .map(|g| g.recipe_chains().len())
             .unwrap_or(0);
         self.scroll(key, rows);
-    }
-
-    /// What the base has made. Esc and nothing else: the page has no scroll
-    /// — `Game::base_output_report` caps its own rows — so there is no
-    /// highlight for the arrows to move.
-    pub(crate) fn handle_base_output_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-        }
     }
 
     /// The map closes on any key, like the help screen: it is something you

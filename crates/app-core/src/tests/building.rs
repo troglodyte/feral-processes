@@ -246,35 +246,6 @@ fn working_a_structure_yourself_opens_the_same_structure_list() {
     assert_eq!(app.mode, Mode::BaseMenu, "Esc backs into the base menu");
 }
 
-/// A companion's `Position` is the tile it was captured on and is never
-/// written again, so the posting picker must offer the whole roster rather
-/// than a window onto the map. It used to scan `MENU_SCAN_RADIUS`, which hid
-/// every program tamed further out than that — and because `base_menu_rows`
-/// drops a row whose first screen would be empty, a player whose only
-/// program was tamed that far away lost the Cronjob row with it.
-#[test]
-fn the_posting_picker_offers_programs_parked_far_from_the_player() {
-    // The fixture parks both of these beyond `MENU_SCAN_RADIUS`.
-    let mut app = app_owning_distant_programs(741, 2);
-    let roster = app.game.as_mut().unwrap().owned_pets().len();
-    assert!(
-        roster >= 2,
-        "fixture should hand the player at least the two distant programs"
-    );
-
-    let offered = app.nearby_programs();
-
-    assert_eq!(
-        offered.len(),
-        roster,
-        "the picker must offer every program the player owns, wherever it was tamed"
-    );
-    assert!(
-        offered.iter().all(|v| v.is_tamed),
-        "and still list only tamed programs"
-    );
-}
-
 /// `d` + a direction demolishes what is on the neighbouring tile, without
 /// going through the base menu's picker at all.
 #[test]
@@ -403,7 +374,7 @@ fn the_demolish_key_opens_outside_the_base_and_the_direction_refuses() {
 #[test]
 fn enter_on_a_roster_row_is_refused_outside_base_space() {
     let mut outside = app_owning_a_program_and_a_compiler(2432, &[]);
-    open_via_menu(&mut outside, 'b', "Structure roster");
+    open_hub_screen(&mut outside, Mode::Structures);
     assert_eq!(
         outside.mode,
         Mode::Structures,
@@ -425,7 +396,7 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
     // The same row, the same key, from the one locale the engine accepts.
     let mut inside = app_owning_a_program_and_a_compiler(2432, &[]);
     stand_in_base(&mut inside);
-    open_via_menu(&mut inside, 'b', "Structure roster");
+    open_hub_screen(&mut inside, Mode::Structures);
     let workable = inside
         .game
         .as_mut()
@@ -451,7 +422,7 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
 #[test]
 fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
     let mut app = app_inside_a_small_base_with_programs(244, false, 1);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
     assert_eq!(
         node_row(&mut app),
@@ -469,7 +440,7 @@ fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
 #[test]
 fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
     let mut app = app_inside_a_small_base_with_programs(245, false, 1);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
     let row = app.menu_selected;
     app.handle_key(GameKey::Enter);
@@ -498,7 +469,7 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
 #[test]
 fn esc_from_the_staffing_picker_returns_to_the_roster() {
     let mut app = app_inside_a_small_base_with_programs(246, false, 1);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
@@ -515,7 +486,7 @@ fn esc_from_the_staffing_picker_returns_to_the_roster() {
 #[test]
 fn enter_on_a_row_that_takes_no_worker_says_so() {
     let mut app = app_inside_a_small_base_with_programs(247, false, 1);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     assert!(
         app.game.as_mut().unwrap().structure_report()[app.menu_selected].is_home,
         "precondition: the roster opens on the Home"
@@ -537,7 +508,7 @@ fn enter_on_a_row_that_takes_no_worker_says_so() {
 #[test]
 fn working_it_yourself_is_offered_only_from_the_next_tile() {
     let mut app = app_inside_a_small_base_with_programs(248, false, 1);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert!(
@@ -553,7 +524,7 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
     // question asked of a structure the player is nowhere near.
     let mut far = app_owning_a_program_and_a_compiler(249, &[]);
     stand_in_base(&mut far);
-    open_via_menu(&mut far, 'b', "Structure roster");
+    open_hub_screen(&mut far, Mode::Structures);
     let compiler = far
         .game
         .as_mut()
@@ -586,7 +557,7 @@ fn the_roster_does_not_staff_anything_underground() {
         app.game.as_ref().is_some_and(|g| g.is_underground()),
         "precondition: the fixture really went down"
     );
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
 
     app.handle_key(GameKey::Enter);
@@ -645,6 +616,7 @@ fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
 #[test]
 fn the_staff_screen_does_not_change_a_role() {
     let mut app = app_owning_distant_programs(743, 2);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 0;
     let before: Vec<Option<ProgramRole>> =
@@ -670,6 +642,7 @@ fn the_staff_screen_does_not_change_a_role() {
 #[test]
 fn space_toggles_the_highlighted_cell() {
     let mut app = app_owning_distant_programs(760, 1);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 0;
     app.work_column = 2; // Dig
@@ -731,6 +704,7 @@ fn with_a_drop_pod(mut app: App, seed: u32) -> App {
 #[test]
 fn space_and_a_toggle_the_drop_trooper_column() {
     let mut app = with_a_drop_pod(app_owning_distant_programs(765, 2), 765);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 0;
     for _ in 0..10 {
@@ -767,6 +741,7 @@ fn space_and_a_toggle_the_drop_trooper_column() {
 #[test]
 fn right_moves_the_column_cursor_and_clamps_at_the_end() {
     let mut app = app_owning_distant_programs(761, 1);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.work_column = 0;
 
@@ -785,6 +760,7 @@ fn right_moves_the_column_cursor_and_clamps_at_the_end() {
 #[test]
 fn a_toggles_the_whole_highlighted_column() {
     let mut app = app_owning_distant_programs(762, 2);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.work_column = 1; // Guard
 
@@ -806,6 +782,7 @@ fn a_toggles_the_whole_highlighted_column() {
 #[test]
 fn moving_a_row_keeps_the_selection_on_the_moved_program() {
     let mut app = app_owning_distant_programs(763, 2);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 1;
     let moved = app.base_staff_table().rows[1].program.entity;
@@ -898,6 +875,7 @@ fn an_away_row_is_editable() {
 #[test]
 fn lowercase_a_does_nothing() {
     let mut app = app_owning_distant_programs(765, 1);
+    stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
     app.menu_selected = 0;
     app.work_column = 1;
@@ -997,7 +975,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
 /// quantity page with the first orderable item pending — the two-page shape
 /// the compile flow uses, one screen over.
 fn open_order_quantity_page(app: &mut App) {
-    open_via_menu(app, 'b', "Work orders");
+    open_hub_screen(app, Mode::WorkOrders);
     assert_eq!(app.mode, Mode::WorkOrders);
     // The trailing row is the one that queues another order.
     let last = app.work_order_rows().len() - 1;
@@ -1063,7 +1041,7 @@ fn app_with_two_orders(seed: u32) -> App {
         game.queue_work_order(WorkOrder::batch(item.clone(), qty))
             .unwrap();
     }
-    open_via_menu(&mut app, 'b', "Work orders");
+    open_hub_screen(&mut app, Mode::WorkOrders);
     assert_eq!(app.mode, Mode::WorkOrders);
     app
 }
@@ -1824,7 +1802,7 @@ fn a_line_of_one_keeps_the_rows_it_had() {
 #[test]
 fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
     let mut app = app_inside_a_base_with_a_production_line(262);
-    open_via_menu(&mut app, 'b', "Structure roster");
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign, "{:?}", app.status_line);

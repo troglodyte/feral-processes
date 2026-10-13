@@ -926,6 +926,18 @@ fn set_duty_reschedules_so_the_table_updates_without_a_tick() {
     );
 }
 
+/// The Staffing page's rail flag is `unworked_total` and nothing else.
+#[test]
+fn the_staffing_flag_follows_the_unworked_total() {
+    let (mut game, _node, worker) = a_quiet_base_with_one_post(20261026);
+    assert_eq!(game.base_report_flags().staffing, None);
+
+    game.set_duty(worker, Duty::Operate, false).unwrap();
+
+    assert!(game.work_table().unworked_total > 0);
+    assert!(game.base_report_flags().staffing.is_some());
+}
+
 /// The `[A]` whole-column toggle carries the same obligation, and reassigns
 /// once for the whole column rather than once per row.
 #[test]

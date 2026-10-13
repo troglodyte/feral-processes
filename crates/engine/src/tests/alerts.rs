@@ -1096,3 +1096,17 @@ fn the_message_does_not_claim_every_depot_is_full_when_one_merely_refuses_the_it
         alert.text
     );
 }
+
+#[test]
+fn an_unread_alert_flags_the_alerts_page_and_reading_it_clears_the_flag() {
+    let mut game = Game::new(19090, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.base_report_flags().alerts, None);
+
+    game.post_alert(AlertKind::DepotsFull, "depots", "Every depot is full.");
+    let flags = game.base_report_flags();
+    assert!(flags.alerts.is_some(), "an unread alert must flag the page");
+    assert_eq!(flags.production, None, "Output has no gap to flag");
+
+    game.mark_alerts_read();
+    assert_eq!(game.base_report_flags().alerts, None);
+}

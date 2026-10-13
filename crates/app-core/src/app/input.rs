@@ -247,7 +247,9 @@ impl App {
         };
         let carried = self.status_line.clone();
         let mode_before = self.mode;
+        let hub_took_it = self.handle_base_report_nav(key);
         match self.mode {
+            _ if hub_took_it => {}
             Mode::MainMenu => self.handle_main_menu_key(key),
             Mode::Achievements => self.handle_achievements_key(key),
             Mode::Options => self.handle_options_key(key),
@@ -365,7 +367,17 @@ impl App {
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),
             Mode::Recipes => self.handle_recipes_key(key),
-            Mode::BaseOutput => self.handle_base_output_key(key),
+            Mode::BaseOutput => {}
+            Mode::BaseOverview => self.handle_base_overview_key(key),
+            Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
+                self.handle_staff_key(key)
+            }
+            Mode::BaseMachines
+            | Mode::BasePower
+            | Mode::BaseStock
+            | Mode::BuildOrders
+            | Mode::DigOrders
+            | Mode::FloorOrders => self.handle_base_list_key(key),
             Mode::Help => self.handle_help_key(key),
             Mode::HelpPage => self.handle_help_page_key(key),
             Mode::FrameMap => self.handle_frame_map_key(),
@@ -390,6 +402,19 @@ impl App {
         // row happened to be highlighted on a previous, unrelated menu.
         if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
             self.menu_selected = self.opening_row();
+        }
+        // Entering the board by any door is reading it — `N`, `B` onto the
+        // last page, a page turn or the Overview — so the rail's `!` and the
+        // status bar's badge never stay lit over the page they point at.
+        if self.mode != mode_before
+            && self.mode == Mode::Alerts
+            && let Some(game) = self.game.as_mut()
+        {
+            game.mark_alerts_read();
+        }
+        // Every hub screen is reopened from where the player last was.
+        if base_page_of(self.mode).is_some() {
+            self.base_report_last = Some(self.mode);
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no

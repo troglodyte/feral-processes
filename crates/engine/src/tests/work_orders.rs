@@ -1789,6 +1789,22 @@ fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
     );
 }
 
+/// The Work orders page's rail flag is the report's own `Stalled` state, so a
+/// broken line lights it and an intact one does not.
+#[test]
+fn the_work_orders_flag_follows_a_stalled_order() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+    assert_eq!(game.base_report_flags().work_orders, None);
+
+    game.world.entity_mut(press).despawn();
+
+    assert!(game.base_report_flags().work_orders.is_some());
+}
+
 /// A base with nobody in it and a base with a broken line are different
 /// errands, and the screen must not conflate them: the first reports its
 /// orders normally, and the fact that nothing is happening is answered by
@@ -3875,4 +3891,55 @@ fn a_posted_passer_does_not_knock_a_pinned_subject_off_its_pen() {
 
     let p = *game.world.get::<Position>(subject).unwrap();
     assert_eq!((p.x, p.y), pen, "the subject was knocked off its pen");
+}
+
+/// A stock row carries the target of the order that asks for it, and a row
+/// short of its target sorts above one that is not.
+#[test]
+fn stock_report_joins_orders_and_sorts_short_rows_first() {
+    let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    let depot = spawn_machine_at(&mut game, "depot", 6, 0);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 5))
+        .unwrap();
+    put_output(&mut game, depot, "routine_disk", 2);
+
+    let rows = game.stock_report();
+
+    let disk = rows
+        .iter()
+        .find(|r| r.item.as_str() == "routine_disk")
+        .expect("an ordered item has a row");
+    assert_eq!((disk.qty, disk.order.map(|o| o.0)), (2, Some(5)));
+    assert!(disk.is_short());
+    assert_eq!(rows[0].item, disk.item, "short rows lead");
+    let core = rows
+        .iter()
+        .find(|r| r.item.as_str() == ids::CORE_FRAGMENT)
+        .unwrap();
+    assert_eq!(core.order, None);
+    assert!(!core.is_short());
+}
+
+/// The Stock flag is a short target whose order is stalled, no other kind
+/// of shortfall: a short target with a moving order is the base working.
+#[test]
+fn the_stock_flag_needs_a_short_target_and_a_stalled_order() {
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+    assert!(game.stock_report().iter().any(|r| r.is_short()));
+    assert_eq!(
+        game.base_report_flags().stock,
+        None,
+        "short but moving is not a gap"
+    );
+
+    game.world.entity_mut(press).despawn();
+
+    assert!(game.base_report_flags().stock.is_some());
 }

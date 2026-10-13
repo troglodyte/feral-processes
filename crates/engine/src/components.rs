@@ -1100,6 +1100,21 @@ impl MachineStatus {
         MachineStatus::Dry,
     ];
 
+    /// Why a machine in this state is not producing, as a screen words it.
+    /// `Running` has nothing to say.
+    pub fn reason(self) -> &'static str {
+        match self {
+            MachineStatus::Running => "",
+            MachineStatus::Starved => "nothing is feeding it",
+            MachineStatus::Clogged => "its output buffer is full",
+            MachineStatus::Unstaffed => "its program is away",
+            MachineStatus::Stranded => "its program can't reach it",
+            MachineStatus::Idle => "no program is assigned",
+            MachineStatus::Unpowered => "the grid is short",
+            MachineStatus::Dry => "no Power Cells beside it",
+        }
+    }
+
     /// The name a `telemetry::Record::MachineStall` carries.
     ///
     /// Its own match rather than `{:?}`, `cell_mark`'s rule turned at the
@@ -2141,9 +2156,34 @@ pub struct Needs {
     /// said. **Never saved** — a reload should say it again, `DigSite`'s
     /// `announced_stuck` rule.
     stalled_announced: std::collections::BTreeSet<NeedId>,
+    /// Which amenity tile holds this program's place, per need. **Never
+    /// saved** and re-claimed on the first tick after a load, the latch's
+    /// rule. Lives here rather than in a component of its own because
+    /// inserting one moves every staff program to a new archetype, which
+    /// shifts query iteration order across the whole engine.
+    serviced_at: std::collections::BTreeMap<NeedId, (i32, i32)>,
 }
 
 impl Needs {
+    /// The amenity tile holding this program's place for `id`, if any.
+    pub(crate) fn serviced_at(&self, id: &NeedId) -> Option<(i32, i32)> {
+        self.serviced_at.get(id).copied()
+    }
+
+    /// Every `(need, amenity tile)` this program holds a place at.
+    pub(crate) fn serviced(&self) -> impl Iterator<Item = (&NeedId, (i32, i32))> {
+        self.serviced_at.iter().map(|(id, tile)| (id, *tile))
+    }
+
+    /// Replaces every held place at once: the allocation is recomputed whole
+    /// each tick, so a place not re-granted is released.
+    pub(crate) fn set_serviced_at(
+        &mut self,
+        places: std::collections::BTreeMap<NeedId, (i32, i32)>,
+    ) {
+        self.serviced_at = places;
+    }
+
     pub fn get(&self, id: &NeedId) -> Option<f32> {
         self.reserves.get(id).copied()
     }

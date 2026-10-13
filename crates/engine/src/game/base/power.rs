@@ -32,6 +32,18 @@ pub(crate) struct PowerLedger {
     pub supply: u32,
     pub draw: u32,
     pub dark: HashSet<Entity>,
+    /// What each structure that touches the grid contributes to `supply` and
+    /// `draw`, summed in the same pass: the per-structure list the Power
+    /// page prints cannot disagree with the totals because it is where they
+    /// come from. A supplier that is dry or unsiphoned is listed at zero.
+    pub entries: Vec<PowerEntry>,
+}
+
+/// One structure's share of the grid — see `PowerLedger::entries`.
+pub(crate) struct PowerEntry {
+    pub entity: Entity,
+    pub supply: u32,
+    pub draw: u32,
 }
 
 /// Whether a supplier is currently paying whatever `StructureDef::power_upkeep`
@@ -143,6 +155,7 @@ pub(crate) fn grid_rung(def: &StructureDef, chain: &HashMap<ItemId, u32>) -> Opt
 pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLedger {
     let chain = fuel_chain(items);
     let mut supply = 0u32;
+    let mut entries: Vec<PowerEntry> = Vec::new();
     // (entity, rung, (x, y), draw) for every deployed machine, collected
     // before the cut runs so the sort sees the whole base at once.
     let mut machines: Vec<(Entity, u32, (i32, i32), u32)> = Vec::new();
@@ -165,10 +178,21 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
         // siphon additionally supplies only while a program holds it; that
         // gate lives here, not in `is_fuelled`, because a siphon has no
         // `power_regen` for the regen system to ask about.
-        if is_fuelled(def, entity_ref.get::<PowerFuel>())
+        let supplied = if is_fuelled(def, entity_ref.get::<PowerFuel>())
             && (!def.siphons || occupied.contains(&entity_ref.id()))
         {
-            supply += def.power_supply;
+            def.power_supply
+        } else {
+            0
+        };
+        supply += supplied;
+        let drawn = if def.runs_a_job() { def.power_draw } else { 0 };
+        if def.power_supply > 0 || drawn > 0 {
+            entries.push(PowerEntry {
+                entity: entity_ref.id(),
+                supply: supplied,
+                draw: drawn,
+            });
         }
         if def.runs_a_job() {
             let pos = entity_ref
@@ -208,5 +232,10 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
         }
     }
 
-    PowerLedger { supply, draw, dark }
+    PowerLedger {
+        supply,
+        draw,
+        dark,
+        entries,
+    }
 }

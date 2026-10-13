@@ -520,3 +520,68 @@ fn a_ruin_whose_structure_no_longer_loads_is_dropped_and_said() {
                 .any(|m| m.text.contains("no longer loads"))
     );
 }
+
+/// The Build orders flag is `build_order_report`'s own `awaiting_program`:
+/// a wreck waiting for a program lights it, committing one puts it out.
+#[test]
+fn the_build_orders_flag_follows_a_site_awaiting_a_program() {
+    let mut game = base(2208);
+    assert_eq!(game.base_report_flags().build_orders, None);
+    let (px, py) = game.base_pos().unwrap();
+    game.world
+        .resource_mut::<Ruins>()
+        .0
+        .push(ruin("mining_node", px + 1, py));
+    game.file_ruins();
+    assert!(
+        game.build_order_report().iter().any(|b| b.awaiting_program),
+        "precondition: the wreck waits for a program"
+    );
+
+    assert!(game.base_report_flags().build_orders.is_some());
+
+    let (site, _) = sites(&mut game)[0];
+    let program = tame_at_zone(&mut game, 1);
+    let spare = tame_at_zone(&mut game, 1);
+    game.world.resource_mut::<Party>().0.push(spare);
+    game.commit_rebuild_program(site, program).unwrap();
+
+    assert_eq!(game.base_report_flags().build_orders, None);
+}
+
+/// A request the crew has announced dry or cut off is a Build orders gap
+/// too, read through the one row derivation.
+#[test]
+fn the_build_orders_flag_follows_a_blocked_site() {
+    let mut game = base(2209);
+    let (px, py) = game.base_pos().unwrap();
+    game.world
+        .resource_mut::<Ruins>()
+        .0
+        .push(ruin("mining_node", px + 1, py));
+    game.file_ruins();
+    let (site, _) = sites(&mut game)[0];
+    let program = tame_at_zone(&mut game, 1);
+    let spare = tame_at_zone(&mut game, 1);
+    game.world.resource_mut::<Party>().0.push(spare);
+    game.commit_rebuild_program(site, program).unwrap();
+    assert_eq!(game.base_report_flags().build_orders, None);
+
+    game.world.get_mut::<BuildSite>(site).unwrap().announced_dry = true;
+    assert_eq!(
+        game.build_order_row(site).unwrap().blocked,
+        Some(BuildBlock::Dry)
+    );
+    assert!(game.base_report_flags().build_orders.is_some());
+
+    {
+        let mut b = game.world.get_mut::<BuildSite>(site).unwrap();
+        b.announced_dry = false;
+        b.announced_stuck = true;
+    }
+    assert_eq!(
+        game.build_order_row(site).unwrap().blocked,
+        Some(BuildBlock::Unreachable)
+    );
+    assert!(game.base_report_flags().build_orders.is_some());
+}

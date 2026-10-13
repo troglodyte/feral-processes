@@ -3,7 +3,7 @@
 
 mod band;
 mod chrome;
-mod keybar;
+pub(in crate::render) mod keybar;
 pub(super) mod layout;
 mod ledger;
 mod other;

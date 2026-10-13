@@ -10,8 +10,9 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
-    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_page_of, equip_preview_tag,
+    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column,
+    stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -33,6 +34,7 @@ mod alerts;
 mod arena;
 mod bars;
 mod base;
+mod base_report;
 mod battle;
 mod breeding;
 mod building;
@@ -116,10 +118,9 @@ use battle::{
 };
 use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
-    build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
-    draw_build_program, draw_pin_prisoner, draw_pin_subject, draw_remove_confirm, draw_remove_menu,
-    draw_siphon, draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
-    draw_work_order_quantity, draw_work_orders,
+    build_commit, draw_build_direction, draw_build_menu, draw_build_program, draw_pin_prisoner,
+    draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon, draw_staffing_menu,
+    draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
@@ -992,6 +993,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BaseStaff => Some(app.base_staff_table()),
         _ => None,
     };
+    let app_screens = base_report::AppScreens {
+        work_orders: &work_orders,
+        base_staff: base_staff.as_ref(),
+        work_column: app.work_column,
+    };
     // The row's two holdings and the amount the basket is asking for, taken
     // here because `game` below borrows `&mut app.game` and these read the
     // rest of the `App`. The screen projects the holdings against the amount
@@ -1190,28 +1196,21 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::WorkOrders => draw_work_orders(
-            &work_orders,
-            game.labour_demand(),
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, refusal, painter, m),
-        Mode::WorkOrderQuantity => draw_work_order_quantity(
-            game,
-            app.pending_order.clone(),
-            &app.order_quantity_input,
-            app.standing_order,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::BaseStaff => {
-            if let Some(table) = &base_staff {
-                draw_base_staff(game, table, selected, app.work_column, refusal, painter, m);
-            }
+        Mode::WorkOrderPick => {
+            base_report::draw_popup_parent(game, app.mode, painter, m);
+            draw_work_order_pick(&orderable, selected, refusal, painter, m)
+        }
+        Mode::WorkOrderQuantity => {
+            base_report::draw_popup_parent(game, app.mode, painter, m);
+            draw_work_order_quantity(
+                game,
+                app.pending_order.clone(),
+                &app.order_quantity_input,
+                app.standing_order,
+                refusal,
+                painter,
+                m,
+            )
         }
         Mode::WorkStructure => draw_structure_menu(
             &scanned,
@@ -1578,17 +1577,18 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Alerts => alerts::draw_alerts(game, selected, refusal, painter, m),
+        mode if base_page_of(mode).is_some() => {
+            base_report::draw_base_report(game, mode, selected, &app_screens, refusal, painter, m)
+        }
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
-        Mode::Structures => draw_structures(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
+            base_report::draw_popup_parent(game, app.mode, painter, m);
             if let Some(staffing) = &staffing {
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }
         }
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
-        Mode::BaseOutput => draw_base_output(game, refusal, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
@@ -1659,7 +1659,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 136] = [
+    const ALL_MODES: [Mode; 146] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1776,6 +1776,16 @@ mod tests {
         Mode::StructureAssign,
         Mode::Recipes,
         Mode::BaseOutput,
+        Mode::BaseOverview,
+        Mode::StaffWellbeing,
+        Mode::StaffCoverage,
+        Mode::StaffDiscontent,
+        Mode::BaseMachines,
+        Mode::BasePower,
+        Mode::BaseStock,
+        Mode::BuildOrders,
+        Mode::DigOrders,
+        Mode::FloorOrders,
         Mode::Achievements,
         Mode::Options,
         Mode::Help,

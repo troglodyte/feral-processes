@@ -3548,21 +3548,20 @@ pub enum StaffActivity {
     Servicing(String),
     /// Off shift and standing in reach of the amenity, which has no place
     /// free: still draining.
-    Waiting(String),
+    Waiting,
     /// Benched and recovering in a Repair Bay.
     Downed,
     /// Off shift for no need: a respite, or tools downed.
     Break,
 }
 
-/// One need on a Wellbeing row: the raw level against the def's thresholds,
-/// so the renderer draws the bar and the critical mark without a formula.
+/// One need on a Wellbeing row, ready to draw: the reserve as a fraction of
+/// a full one, and whether it is under the def's `critical`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WellbeingNeed {
     pub name: String,
-    pub level: f32,
-    pub critical: f32,
-    pub content: f32,
+    pub fraction: f32,
+    pub below_critical: bool,
 }
 
 /// One Staff-role program on the Wellbeing page - see `Game::staff_wellbeing`.
@@ -3586,7 +3585,7 @@ impl WellbeingRow {
     /// Whether any need is below its own `critical`. The flag and the page
     /// both ask this.
     pub fn is_critical(&self) -> bool {
-        self.needs.iter().any(|n| n.level < n.critical)
+        self.needs.iter().any(|n| n.below_critical)
     }
 }
 

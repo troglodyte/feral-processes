@@ -16,12 +16,18 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_is_overview_production_alerts() {
+fn the_rail_is_overview_staff_production_alerts() {
     assert_eq!(
         page_modes(),
-        vec![Mode::BaseOverview, Mode::BaseOutput, Mode::Alerts]
+        vec![
+            Mode::BaseOverview,
+            Mode::StaffWellbeing,
+            Mode::BaseOutput,
+            Mode::Alerts
+        ]
     );
-    assert_eq!(base_page_of(Mode::BaseOutput), Some((1, 0)));
+    assert_eq!(base_page_of(Mode::BaseOutput), Some((2, 0)));
+    assert_eq!(base_page_of(Mode::StaffDiscontent), Some((1, 2)));
     assert_eq!(base_page_of(Mode::Playing), None);
 }
 
@@ -43,13 +49,14 @@ fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview, "] wraps last -> first");
     app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::BaseOutput);
+    assert_eq!(app.mode, Mode::StaffWellbeing);
 }
 
 #[test]
 fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
     let mut app = test_app(30003);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::Alerts);
@@ -106,7 +113,7 @@ fn b_reopens_the_last_page() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(GameKey::Char('B'));
-    assert_eq!(app.mode, Mode::BaseOutput);
+    assert_eq!(app.mode, Mode::StaffWellbeing);
 }
 
 #[test]
@@ -172,12 +179,13 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     app.handle_key(GameKey::Enter);
     assert_eq!(
         app.mode,
-        Mode::BaseOutput,
+        Mode::StaffWellbeing,
         "row 0 is the page after Overview"
     );
 
     let mut app = test_app(30013);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Alerts);
@@ -190,7 +198,7 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 fn a_digit_on_the_overview_reaches_its_handler() {
     let mut app = test_app(30014);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('3'));
     assert_eq!(app.mode, Mode::Alerts);
 }
 
@@ -205,4 +213,42 @@ fn the_screens_inside_the_hub_cost_no_game_time() {
     }
     app.handle_key(GameKey::Esc);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}
+
+#[test]
+fn tab_cycles_the_three_staff_screens_and_wraps() {
+    let mut app = test_app(30015);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
+    let seen: Vec<Mode> = (0..4)
+        .map(|_| {
+            let mode = app.mode;
+            app.handle_key(GameKey::Tab);
+            mode
+        })
+        .collect();
+    assert_eq!(
+        seen,
+        vec![
+            Mode::StaffWellbeing,
+            Mode::StaffCoverage,
+            Mode::StaffDiscontent,
+            Mode::StaffWellbeing
+        ]
+    );
+}
+
+#[test]
+fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
+    let mut app = test_app(30016);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
+    let rows = app.game.as_ref().unwrap().need_coverage().len();
+    assert!(rows >= 2, "the shipped catalogue has two needs");
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::StaffCoverage);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.menu_selected, 0, "a new screen starts at the top");
 }

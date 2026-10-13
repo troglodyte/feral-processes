@@ -10,6 +10,7 @@ mod frame;
 #[cfg(test)]
 pub(in crate::render) use frame::content_rect_at;
 mod overview;
+mod staff;
 
 use super::popup::*;
 use super::*;
@@ -44,6 +45,9 @@ fn screen_rows(
 ) -> Vec<Row> {
     match mode {
         Mode::BaseOverview => overview::overview_rows(flags, selected),
+        Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),
+        Mode::StaffCoverage => staff::coverage_rows(&game.need_coverage(), selected),
+        Mode::StaffDiscontent => staff::discontent_rows(&game.discontent(), selected),
         Mode::BaseOutput => building::base_output_rows(&game.base_output_report()),
         Mode::Alerts => alerts::alert_rows(&game.alerts(), selected),
         other => vec![text_row(format!("No report for {other:?}."))],
@@ -57,6 +61,7 @@ pub(super) fn page_flag(
     page: usize,
 ) -> Option<&str> {
     match BASE_REPORT_PAGES[page].screens[0] {
+        Mode::StaffWellbeing => flags.staff.as_deref(),
         Mode::BaseOutput => flags.production.as_deref(),
         Mode::Alerts => flags.alerts.as_deref(),
         _ => None,

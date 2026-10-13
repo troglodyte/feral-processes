@@ -35,19 +35,18 @@ impl Game {
             .base_staff()
             .into_iter()
             .map(|who| {
-                let needs: Vec<WellbeingNeed> = self
-                    .need_levels(who)
-                    .into_iter()
+                let levels = self.need_levels(who);
+                let needs: Vec<WellbeingNeed> = levels
+                    .iter()
                     .map(|n| WellbeingNeed {
                         name: db
                             .get(&n.id.as_str().into())
                             .map_or_else(|| n.id.clone(), |d| d.name.clone()),
-                        level: n.level,
-                        critical: n.critical,
-                        content: n.content,
+                        fraction: n.level / crate::needs::NEED_MAX,
+                        below_critical: n.level < n.critical,
                     })
                     .collect();
-                let lowest = needs
+                let lowest = levels
                     .iter()
                     .map(|n| n.level / n.critical.max(f32::EPSILON))
                     .fold(f32::INFINITY, f32::min);
@@ -70,7 +69,7 @@ impl Game {
                         .and_then(|n| n.serviced_at(&off.need))
                         .is_some();
                     if in_a_bay && !held {
-                        StaffActivity::Waiting(verb)
+                        StaffActivity::Waiting
                     } else {
                         StaffActivity::Servicing(verb)
                     }

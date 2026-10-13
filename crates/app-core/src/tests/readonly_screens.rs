@@ -247,6 +247,7 @@ fn the_hub_opens_the_output_page_and_esc_leaves_to_the_map() {
     let mut app = app_with_base_output(101);
     app.handle_key(GameKey::Char('B'));
     app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOutput);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -260,6 +261,7 @@ fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
     let mut app = app_with_base_output(103);
     let before = app.game.as_ref().unwrap().current_tick();
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Char(']'));
     for key in [
         GameKey::Down,

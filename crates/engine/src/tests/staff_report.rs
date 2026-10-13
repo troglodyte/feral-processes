@@ -83,7 +83,7 @@ fn an_off_shift_program_in_reach_of_a_full_bay_is_waiting() {
     let waiting = game
         .staff_wellbeing()
         .into_iter()
-        .filter(|r| matches!(r.activity, StaffActivity::Waiting(_)))
+        .filter(|r| matches!(r.activity, StaffActivity::Waiting))
         .count();
 
     assert_eq!(waiting, 1, "two hold places, one waits");

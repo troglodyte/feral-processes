@@ -2199,6 +2199,17 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
+    /// The Staff page's first screen: every staff program, worst morale
+    /// first, with its mood, health, needs and what it is doing — see
+    /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
+    /// program's manifest page is out of scope.
+    StaffWellbeing,
+    /// Staff page, second screen: per need, amenities built against needed
+    /// — see `Game::need_coverage`. Scrolls by cursor.
+    StaffCoverage,
+    /// Staff page, third screen: programs with a grievance and the memories
+    /// behind it — see `Game::discontent`. Scrolls by cursor.
+    StaffDiscontent,
     /// Every conversion a structure runs, expanded back to raw inputs — see
     /// `Game::recipe_chains`. Read-only, and reference data rather than a
     /// view of the base, so it reads the same underground as it does on the
@@ -2509,6 +2520,9 @@ impl Mode {
             // Opened from the map with `B` or the base menu, `BaseOutput`'s
             // reason — never layers over a fight.
             | Mode::BaseOverview
+            | Mode::StaffWellbeing
+            | Mode::StaffCoverage
+            | Mode::StaffDiscontent
             | Mode::Help
             | Mode::HelpPage
             | Mode::FrameMap
@@ -2674,6 +2688,14 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
     BasePage {
         title: "Overview",
         screens: &[Mode::BaseOverview],
+    },
+    BasePage {
+        title: "Staff",
+        screens: &[
+            Mode::StaffWellbeing,
+            Mode::StaffCoverage,
+            Mode::StaffDiscontent,
+        ],
     },
     BasePage {
         title: "Production",

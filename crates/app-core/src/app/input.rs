@@ -369,6 +369,9 @@ impl App {
             Mode::Recipes => self.handle_recipes_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
+            Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
+                self.handle_staff_key(key)
+            }
             Mode::Help => self.handle_help_key(key),
             Mode::HelpPage => self.handle_help_page_key(key),
             Mode::FrameMap => self.handle_frame_map_key(),

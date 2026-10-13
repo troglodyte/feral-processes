@@ -49,4 +49,19 @@ impl App {
             self.mode = BASE_REPORT_PAGES[row + 1].screens[0];
         }
     }
+
+    /// The three Staff screens: a cursor over the screen's own rows, which
+    /// is the scroll position. The row counts are the engine reports the
+    /// renderer draws, so the cursor cannot run past what is shown.
+    pub(crate) fn handle_staff_key(&mut self, key: GameKey) {
+        let Some(game) = self.game.as_ref() else {
+            return;
+        };
+        let rows = match self.mode {
+            Mode::StaffWellbeing => game.staff_wellbeing().len(),
+            Mode::StaffCoverage => game.need_coverage().len(),
+            _ => game.discontent().len(),
+        };
+        self.scroll(key, rows);
+    }
 }

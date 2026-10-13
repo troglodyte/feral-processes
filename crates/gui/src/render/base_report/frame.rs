@@ -221,6 +221,9 @@ pub(super) fn keybar_groups(mode: Mode, page: usize) -> Vec<Vec<hud::strip::Piec
     let acts = match mode {
         Mode::BaseOverview => vec![keycap("↑/↓", "select"), keycap("Enter", "open")],
         Mode::Alerts => vec![keycap("↑/↓", "select"), keycap("x/d", "dismiss")],
+        Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
+            vec![keycap("↑/↓", "scroll")]
+        }
         _ => Vec::new(),
     };
     [acts, nav, vec![keycap("Esc", "close")]]
@@ -291,7 +294,14 @@ mod tests {
 
     #[test]
     fn the_keybar_names_page_nav_and_close_on_every_screen() {
-        for mode in [Mode::BaseOverview, Mode::BaseOutput, Mode::Alerts] {
+        for mode in [
+            Mode::BaseOverview,
+            Mode::StaffWellbeing,
+            Mode::StaffCoverage,
+            Mode::StaffDiscontent,
+            Mode::BaseOutput,
+            Mode::Alerts,
+        ] {
             let page = base_page_of(mode).unwrap().0;
             let text: String = keybar_groups(mode, page)
                 .iter()

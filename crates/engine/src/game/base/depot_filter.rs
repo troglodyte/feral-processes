@@ -24,6 +24,33 @@
 
 use crate::*;
 
+/// The rule itself, over a Depot's filter rather than the Depot: the crew's
+/// haul and the intake system hold a `DepotFilter` from a query and have no
+/// `Game` to ask. `None` is the absent component, which takes anything.
+pub(crate) fn filter_accepts(filter: Option<&DepotFilter>, item: &ItemId) -> bool {
+    filter.is_none_or(|f| !f.denied.contains(item))
+}
+
+/// What a producer of kind `def` puts into its own output buffer, or `None`
+/// when it makes nothing or makes a banked product, which reaches no buffer.
+pub(crate) fn buffered_item<'a>(def: &'a StructureDef, items: &ItemDb) -> Option<&'a ItemId> {
+    let item = crate::systems::produced_item(def)?;
+    let banked = items.get(item.as_str()).is_some_and(|d| d.banked);
+    (!banked).then_some(item)
+}
+
+/// The one rule for "a Depot takes from this producer": the item a producer of
+/// kind `def` would hand over, if the Depot's `filter` lets it in. The pull
+/// (`depot_intake_system`) and the drawn join (`Game::depot_takes_from`) both
+/// ask it, so the picture cannot show a line the pull would refuse.
+pub(crate) fn item_depot_takes<'a>(
+    def: &'a StructureDef,
+    items: &ItemDb,
+    filter: Option<&DepotFilter>,
+) -> Option<&'a ItemId> {
+    buffered_item(def, items).filter(|item| filter_accepts(filter, item))
+}
+
 impl Game {
     /// Whether `depot` will take `item` in.
     ///
@@ -31,9 +58,7 @@ impl Game {
     /// makes this safe to ask of a Mining Node's buffer or of a structure
     /// spawned by a test fixture.
     pub(crate) fn depot_accepts(&self, depot: Entity, item: &ItemId) -> bool {
-        self.world
-            .get::<DepotFilter>(depot)
-            .is_none_or(|f| !f.denied.contains(item))
+        filter_accepts(self.world.get::<DepotFilter>(depot), item)
     }
 
     /// Denies or allows one row's items at one Depot — a single item, or
@@ -109,6 +134,96 @@ impl Game {
             .filter(|def| !def.banked && def.id != currency)
             .map(|def| def.id.clone())
             .collect()
+    }
+
+    /// Lets the producers beside a Depot's output into it, once, when the
+    /// Depot is placed — called from `spawn_structure`, the one place a
+    /// structure comes into being, so a filter the player edits afterwards is
+    /// never re-derived. A producer built later beside an existing Depot
+    /// leaves it alone: the player has had the chance to set it.
+    ///
+    /// A Depot with no filter becomes allow-only for each item; one that
+    /// already has a filter only gains them, so the player's denials are never
+    /// widened or narrowed beyond that. A banked product reaches no buffer, so
+    /// it is skipped rather than written as a filter nothing could use.
+    pub(crate) fn auto_filter_depots(&mut self, built: Entity) {
+        if !self.is_depot(built) {
+            return;
+        }
+        let Some(&Position { x, y }) = self.world.get::<Position>(built) else {
+            return;
+        };
+        let items: Vec<ItemId> = crate::game::base::collect::ORTHOGONAL
+            .iter()
+            .filter_map(|(dx, dy)| self.buffered_output(self.structure_at_tile((x + dx, y + dy))?))
+            .collect();
+        for item in items {
+            if self.world.get::<DepotFilter>(built).is_none() {
+                self.set_all_depot_filters(built, false);
+            }
+            self.set_depot_filter(built, &[item], true);
+        }
+    }
+
+    /// Whether `depot` would pull `producer`'s output: it is a Depot, the
+    /// producer makes something that reaches a buffer, and the filter lets it
+    /// in. The worked and lit gates are the pull's alone — the drawn join is
+    /// about the layout, as the machine-to-machine one is.
+    pub(crate) fn depot_takes_from(&self, depot: Entity, producer: Entity) -> bool {
+        self.is_depot(depot)
+            && self
+                .structure_def(producer)
+                .and_then(|def| {
+                    item_depot_takes(
+                        def,
+                        self.world.resource::<ItemDb>(),
+                        self.world.get::<DepotFilter>(depot),
+                    )
+                })
+                .is_some()
+    }
+
+    /// Whether `depot` could hand `consumer` an ingredient: it is a Depot, the
+    /// consumer assembles something, and the filter lets at least one of that
+    /// recipe's ingredients in. `assembler_system` pulls any recipe item out
+    /// of any neighbour's output buffer, so a Depot beside a machine feeds it
+    /// whatever the Depot holds of the recipe, and the filter is what decides
+    /// whether it can ever hold any. Not gated on stock, worker or power, for
+    /// `depot_takes_from`'s reason.
+    pub(crate) fn depot_supplies(&self, depot: Entity, consumer: Entity) -> bool {
+        let items = self.world.resource::<ItemDb>();
+        self.is_depot(depot)
+            && self
+                .structure_def(consumer)
+                .and_then(|def| crate::systems::assembly_recipe(def, items))
+                .is_some_and(|recipe| {
+                    let filter = self.world.get::<DepotFilter>(depot);
+                    recipe.iter().any(|(item, _)| filter_accepts(filter, item))
+                })
+    }
+
+    fn structure_def(&self, structure: Entity) -> Option<&StructureDef> {
+        let kind = &self.world.get::<Structure>(structure)?.kind;
+        self.world.resource::<StructureDb>().get(kind)
+    }
+
+    /// What `structure` puts into its own output buffer, or `None` when it
+    /// makes nothing or makes a banked product.
+    fn buffered_output(&self, structure: Entity) -> Option<ItemId> {
+        buffered_item(
+            self.structure_def(structure)?,
+            self.world.resource::<ItemDb>(),
+        )
+        .cloned()
+    }
+
+    fn structure_at_tile(&self, tile: (i32, i32)) -> Option<Entity> {
+        self.world
+            .iter_entities()
+            .find(|e| {
+                e.contains::<Structure>() && e.get::<Position>().is_some_and(|p| (p.x, p.y) == tile)
+            })
+            .map(|e| e.id())
     }
 
     pub(crate) fn is_depot(&self, entity: Entity) -> bool {

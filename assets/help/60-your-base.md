@@ -120,6 +120,11 @@ The rest of what a base does:
 - Extractors produce on a timer. Assemblers pull their input out of whatever is touching them, so a
   chain is a line of machines laid next to each other. A Depot gives a machine with nothing
   downstream somewhere to empty into, and gives a worker somewhere to fetch from.
+- A Depot beside a machine that makes something fills itself from that machine while a program
+  works it, so no carrier is needed. A Depot you place beside such a machine is set to accept what
+  the machine makes; one with a list already only gains that item. Building a machine beside a Depot
+  that already stands leaves its list alone, and the list is yours after that. A machine on another side of the Depot that takes the item pulls it out,
+  so a Depot can stand in the middle of a line.
 - c opens a window listing everything the machines touching you are holding, pooled into one row per
   item. Set an amount on the rows you want — type it, or nudge it with the arrow keys, where Left
   adds and Right removes. Hold Shift to jump to one end of that row — all of it, or none. Hold Ctrl

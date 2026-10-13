@@ -1,7 +1,7 @@
 (
     id: "depot_mk5",
     name: "Depot Mk5",
-    description: "Storage, 800 units, Walk up to it and press c to access.",
+    description: "Storage, 800 units, Walk up to it and press c to access. Fills itself from a working machine beside it.",
     glyph: 'D',
     sprite: Some("depot"),
     color: Cyan,

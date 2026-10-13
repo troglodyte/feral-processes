@@ -295,10 +295,13 @@ impl Game {
     /// predicate `assembler_system` and `step_teardown_rig` staff on, a
     /// `TaskKind::GatherResource` aimed at the structure.
     pub(crate) fn cell_has_warden(&self, cell: Entity) -> bool {
-        self.world.iter_entities().any(|e| {
-            e.get::<Task>()
-                .is_some_and(|t| t.target == cell && matches!(t.kind, TaskKind::GatherResource))
-        })
+        crate::systems::worker_of(
+            self.world
+                .iter_entities()
+                .filter_map(|e| Some((e.id(), e.get::<Task>()?))),
+            cell,
+        )
+        .is_some()
     }
 
     /// Whether `cell` is making progress this beat: warded and lit. The brackets

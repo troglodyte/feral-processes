@@ -2609,3 +2609,49 @@ fn the_player_steps_onto_a_door() {
     spawn_structure_at(&mut game, "door", 4, 0);
     assert!(!game.base_step_blocked(4, 0));
 }
+
+/// A node with a Depot touching it and a second, distant Depot for a carrier
+/// to deliver to. The near Depot is full of something else, so the intake
+/// cannot move anything and the only question left is whether the carrier
+/// lifts the node's output. Returns `(node, near, far)`.
+fn node_with_near_and_far_depot(game: &mut Game) -> (Entity, Entity, Entity) {
+    let node = deploy(game, "mining_node", 1, 0);
+    let near = deploy(game, "depot", 2, 0);
+    let far = deploy(game, "depot", 6, 0);
+    fill_to_capacity(game, near, ids::POWER_CELL);
+    let worker = hauler(game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(game, worker, node);
+    fill_output(game, node, ids::CORE_FRAGMENT, 3);
+    (node, near, far)
+}
+
+#[test]
+fn a_depot_that_accepts_the_output_beside_a_node_keeps_the_carrier_off_it() {
+    let mut game = base(9020);
+    let (_, near, far) = node_with_near_and_far_depot(&mut game);
+    assert!(game.depot_accepts(near, &ItemId::from(ids::CORE_FRAGMENT)));
+
+    for _ in 0..30 {
+        game.tick();
+    }
+
+    assert_eq!(
+        node_output(&game, far, ids::CORE_FRAGMENT),
+        0,
+        "the node's output belongs to the Depot beside it, not to a carrier"
+    );
+}
+
+#[test]
+fn a_depot_that_refuses_the_output_beside_a_node_does_not_hold_the_carrier_back() {
+    let mut game = base(9021);
+    let (_, near, far) = node_with_near_and_far_depot(&mut game);
+    game.set_depot_filter(near, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+
+    tick_until(&mut game, 60, |g| {
+        node_output(g, far, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(node_output(&game, far, ids::CORE_FRAGMENT) > 0);
+}

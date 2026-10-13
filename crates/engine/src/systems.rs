@@ -816,6 +816,18 @@ pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&It
     def.assembles.as_ref().map(|a| &a.item)
 }
 
+/// The program posted to work `machine`: the holder of a `GatherResource` task
+/// aimed at it. The one definition of "is worked", read by the assembler, the
+/// idle pass, the Teardown Rig, the Prison Cell and the Depot's intake alike.
+pub(crate) fn worker_of<'a>(
+    mut tasks: impl Iterator<Item = (Entity, &'a Task)>,
+    machine: Entity,
+) -> Option<Entity> {
+    tasks
+        .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
+        .map(|(e, _)| e)
+}
+
 /// True when `a`'s product is one of `b`'s assembly ingredients. The one
 /// definition of an ingredient edge: the map's drawn links and a production
 /// line's membership both call it, so they cannot disagree.
@@ -1238,7 +1250,7 @@ fn burn_grid_upkeep(world: &mut World) {
 #[allow(clippy::too_many_arguments)]
 pub fn idle_machine_system(
     mut machines: Query<(Entity, &Structure, &Position, &mut MachineStatus)>,
-    tasks: Query<&Task>,
+    tasks: Query<(Entity, &Task)>,
     structure_db: Res<StructureDb>,
     grid: Res<PowerGrid>,
     clock: Res<GameClock>,
@@ -1275,10 +1287,7 @@ pub fn idle_machine_system(
         if def.is_some_and(|d| !d.runs_a_job()) {
             continue;
         }
-        let worked = tasks
-            .iter()
-            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
-        if worked {
+        if worker_of(tasks.iter(), machine).is_some() {
             continue;
         }
         set_machine_status(
@@ -1994,6 +2003,88 @@ pub struct AssemblerLookups<'w> {
     board: ResMut<'w, AlertBoard>,
 }
 
+/// A Depot fills itself from the producers beside it: each tick, every Depot
+/// (in `(x, y)` order) draws from each orthogonal neighbour whose output it
+/// accepts, while that neighbour is worked and lit, up to the Depot's room.
+///
+/// Runs after `assembler_system`, so a consumer touching the producer
+/// directly has first pick of its output. The reach is the assembler's own —
+/// `collect::ORTHOGONAL` over `feeders_by_tile` — and "worked" is
+/// `worker_of`, so a Depot never pulls from a machine nobody is running.
+///
+/// Planned against a snapshot and then applied, per Depot, for
+/// `assembler_system`'s reason: reading a neighbour's `output` and writing the
+/// Depot's are the same `Query<&mut Stock>`.
+pub fn depot_intake_system(
+    structures: Query<(Entity, &Structure, &Position), With<Stock>>,
+    mut stocks: Query<&mut Stock>,
+    tasks: Query<(Entity, &Task)>,
+    filters: Query<&crate::components::DepotFilter>,
+    structure_db: Res<StructureDb>,
+    items: Res<ItemDb>,
+    grid: Res<PowerGrid>,
+) {
+    let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
+    let mut depots: Vec<(i32, i32, Entity)> = structures
+        .iter()
+        .filter(|(_, s, _)| structure_db.get(&s.kind).is_some_and(|d| d.stores))
+        .map(|(e, _, p)| (p.x, p.y, e))
+        .collect();
+    depots.sort_unstable();
+
+    for (x, y, depot) in depots {
+        let filter = filters.get(depot).ok();
+        let mut room = stocks.get(depot).map_or(0, |s| s.output_room());
+        let mut plan: Vec<(Entity, ItemId, u32)> = Vec::new();
+        for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
+            if room == 0 {
+                break;
+            }
+            let Some(&producer) = by_tile.get(&(x + dx, y + dy)) else {
+                continue;
+            };
+            let Some(item) = structures
+                .get(producer)
+                .ok()
+                .and_then(|(_, s, _)| structure_db.get(&s.kind))
+                .and_then(|def| {
+                    crate::game::base::depot_filter::item_depot_takes(def, &items, filter)
+                })
+            else {
+                continue;
+            };
+            if grid.is_dark(producer) || worker_of(tasks.iter(), producer).is_none() {
+                continue;
+            }
+            let held = stocks
+                .get(producer)
+                .ok()
+                .and_then(|s| s.output.get(item).copied())
+                .unwrap_or(0);
+            let take = held.min(room);
+            if take == 0 {
+                continue;
+            }
+            room -= take;
+            plan.push((producer, item.clone(), take));
+        }
+        for (producer, item, qty) in plan {
+            let taken = match stocks.get_mut(producer) {
+                Ok(mut src) => crate::game::base::hauling::take_from(&mut src, &item, qty),
+                Err(_) => 0,
+            };
+            if taken > 0 {
+                *stocks
+                    .get_mut(depot)
+                    .expect("planned against this Depot's own stock")
+                    .output
+                    .entry(item)
+                    .or_default() += taken;
+            }
+        }
+    }
+}
+
 /// One tick of every assembler, in two phases: pull ingredients out of the
 /// neighbours, then work a staged batch into one unit of product.
 ///
@@ -2083,11 +2174,7 @@ pub fn assembler_system(
         // `Idle` is `idle_machine_system`'s to announce, for every kind of
         // machine rather than only the ones that assemble. This branch just
         // has nothing to pull.
-        let Some(worker) = tasks
-            .iter()
-            .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
-            .map(|(e, _)| e)
-        else {
+        let Some(worker) = worker_of(tasks.iter(), machine) else {
             continue;
         };
 

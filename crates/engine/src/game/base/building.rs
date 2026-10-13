@@ -927,7 +927,9 @@ impl Game {
         if let Some(quality) = quality {
             entity.insert(crate::components::BuildQuality(quality));
         }
-        entity.id()
+        let built = entity.id();
+        self.auto_filter_depots(built);
+        built
     }
 
     /// Posts `worker` to raise `site`, standing it down from the party

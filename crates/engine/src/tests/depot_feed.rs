@@ -110,7 +110,7 @@ fn the_filter_is_set_once_and_a_later_edit_stands() {
     build(&mut game, "mining_node", 2, 0);
     let depot = build(&mut game, "depot", 1, 0);
     game.set_depot_filter(depot, &[frag()], false);
-    // An upgrade or any later tick must not re-derive it.
+    // A later tick must not re-derive it. (A Depot has no upgrade path.)
     game.tick();
 
     assert!(!takes(&game, depot, &frag()));

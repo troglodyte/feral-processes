@@ -9,7 +9,7 @@ use feral_processes_engine::BaseReportFlags;
 use hud::log_frame::keycap;
 
 /// The rail's width in cells: a caret, the longest page title and the `!`.
-const RAIL_CELLS: f32 = 22.0;
+pub(in crate::render) const RAIL_CELLS: usize = 22;
 
 /// Where the parts of the frame go. Pure over the metrics so a test can
 /// check it without a window.
@@ -34,7 +34,12 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
         m.line_height,
     );
     let body_bottom = keybar.y - m.gap;
-    let rail_rect = Rect::new(inner.x, inner.y, RAIL_CELLS * char_w, body_bottom - inner.y);
+    let rail_rect = Rect::new(
+        inner.x,
+        inner.y,
+        RAIL_CELLS as f32 * char_w,
+        body_bottom - inner.y,
+    );
     let title_row = Rect::new(rail_rect.x, rail_rect.y, rail_rect.w, m.line_height);
     let rail = RailGeom {
         full: true,
@@ -60,12 +65,12 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
     }
 }
 
-/// Paints the frame and returns the content rect, already shortened by a
+/// Paints the frame (its keybar only when `keybar_mode` is given) and returns the content rect, already shortened by a
 /// red refusal line when one is up.
 pub(super) fn paint_frame(
     page: usize,
     screen: usize,
-    mode: Mode,
+    keybar_mode: Option<Mode>,
     flags: &BaseReportFlags,
     refusal: Option<&str>,
     painter: &Painter,
@@ -86,7 +91,9 @@ pub(super) fn paint_frame(
     );
     draw_rail(&l.rail, page, flags, char_w, painter, m);
     draw_title(&l.title, page, screen, painter, m);
-    draw_groups(l.keybar, &keybar_groups(mode, page), painter, m);
+    if let Some(mode) = keybar_mode {
+        draw_groups(l.keybar, &keybar_groups(mode, page), painter, m);
+    }
 
     let mut content = l.content;
     if let Some(text) = refusal {

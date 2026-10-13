@@ -1026,9 +1026,9 @@ pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
 pub(super) const ROW_WRAP_COLUMNS: usize = 100;
 
 /// The same budget for a screen drawn in the base report's content rect,
-/// which has the rail to its left. Measured in pixels by the screens'
-/// censuses; `ROW_WRAP_COLUMNS` is for popups.
-pub(super) const HUB_WRAP_COLUMNS: usize = 80;
+/// which has the rail to its left: the popup budget less the rail's cells.
+/// The screens' censuses hold it against the real pixels.
+pub(super) const HUB_WRAP_COLUMNS: usize = ROW_WRAP_COLUMNS - super::base_report::RAIL_CELLS;
 
 /// How wide a refusal may run inside a popup of `size` before it wraps.
 ///

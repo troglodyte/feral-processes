@@ -7,6 +7,7 @@
 //! popup: the frame owns the chrome, the screen owns its rows.
 
 mod frame;
+pub(in crate::render) use frame::RAIL_CELLS;
 #[cfg(test)]
 pub(in crate::render) use frame::content_rect_at;
 mod overview;
@@ -42,12 +43,12 @@ pub(super) fn draw_base_report(
     };
     let flags = game.base_report_flags();
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
-    let content = frame::paint_frame(page, screen, mode, &flags, refusal, painter, m);
+    let content = frame::paint_frame(page, screen, Some(mode), &flags, refusal, painter, m);
     draw_rows_in(content, &rows, painter, m);
 }
 
-/// A popup child's parent page, drawn as the frame behind it: rail, title
-/// and keybar, but not the screen's rows. The popup panel is not quite
+/// A popup child's parent page, drawn as the frame behind it: rail and title,
+/// but not the screen's rows or its keybar (the child carries its own hints). The popup panel is not quite
 /// opaque and lets whatever lies under it through, which over the map is
 /// the point and over a screen of text is unreadable, so the rows wait
 /// until the popup is gone. The child owns the cursor and the refusal line.
@@ -61,7 +62,7 @@ pub(super) fn draw_popup_parent(game: &Game, child: Mode, painter: &Painter, m: 
     frame::paint_frame(
         page,
         screen,
-        parent,
+        None,
         &game.base_report_flags(),
         None,
         painter,

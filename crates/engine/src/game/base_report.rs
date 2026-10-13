@@ -17,7 +17,7 @@ impl Game {
         }
     }
 
-    /// The first stalled order's reason, or `None` when every order is
+    /// How many orders are stalled ("N stalled"), or `None` when every order is
     /// either moving, waiting its turn or satisfied.
     fn work_orders_flag(&self) -> Option<String> {
         let stalled = self

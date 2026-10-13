@@ -982,7 +982,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // these lists itself would be right until the first hidden row and then
     // draw a different one from the one under the highlight.
     let work_orders = match app.mode {
-        Mode::WorkOrders | Mode::WorkOrderPick | Mode::WorkOrderQuantity => app.work_order_rows(),
+        Mode::WorkOrders => app.work_order_rows(),
         _ => Vec::new(),
     };
     let orderable = match app.mode {

@@ -410,11 +410,11 @@ impl App {
     /// and when the screen it opens would have at least one row of its own.
     ///
     /// That second clause deliberately asks only the *first* screen a row
-    /// opens. "Work orders" can therefore open on a queue and then land on
-    /// an empty item picker — a cheap mistake rather than a dead end, since
-    /// Esc backs out into the menu (see `App::close_screen`).
-    /// Asking the whole chain would need a bespoke predicate per row, which
-    /// is the duplication this table exists to avoid.
+    /// opens. A row can therefore open on a screen whose own next step is
+    /// empty — a cheap mistake rather than a dead end, since Esc backs out
+    /// into the menu (see `App::close_screen`). Asking the whole chain would
+    /// need a bespoke predicate per row, which is the duplication this table
+    /// exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {
         // The locality pass is resolved up front rather than chained into
         // the same iterator as `available`: both read `self`, and only the

@@ -366,8 +366,7 @@ impl App {
         //
         // Refused at the keypress like the demolish key, rather than opening
         // a picker whose every row is a dead end — the roster itself still
-        // reads fine from anywhere, which is why it carries no `base_only`
-        // flag in `BASE_ROWS`.
+        // reads fine from anywhere.
         if self.game.as_ref().is_some_and(|g| !g.in_base()) {
             self.refuse(OUT_OF_BASE);
             return;

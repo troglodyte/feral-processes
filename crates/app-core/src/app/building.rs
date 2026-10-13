@@ -856,8 +856,7 @@ impl App {
     /// queues another.
     ///
     /// The trailing row is dropped when nothing is orderable, so the screen
-    /// never offers a picker that would open empty — the same question
-    /// `BASE_ROWS`'s `available` closure asks one level up.
+    /// never offers a picker that would open empty.
     pub fn work_order_rows(&mut self) -> Vec<WorkOrderRow> {
         let Some(game) = &self.game else {
             return Vec::new();

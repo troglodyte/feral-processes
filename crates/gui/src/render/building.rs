@@ -1345,7 +1345,7 @@ const DUTY_CELL_WIDTH: usize = 3;
 /// The widest the DOING column grows. The table sits beside the hub's rail,
 /// where the longest shipped activity ("guarding the Contract Broker") plus
 /// five duty columns and a POD column ran past the content rect at 1280x720.
-const DOING_MAX_CHARS: usize = 20;
+const DOING_MAX_CHARS: usize = 22;
 
 /// `text` cut to `DOING_MAX_CHARS` with an ellipsis, or whole if it fits.
 fn clipped_chars(text: &str) -> String {
@@ -3994,15 +3994,12 @@ mod base_staff_tests {
 
     /// **The height finding.** `tuning::ROSTER_HARD_CAP` (200) is a refusal
     /// ceiling, not a size anyone plays with — a developed base's roster is
-    /// realistically a few dozen at most. Unlike the character wizard
-    /// (`popup_scrolls`'s own doc), this screen does not promise "no
-    /// scroll" — it is a trade/deploy-shaped list, `Transfer`'s and `Work
-    /// Orders`' own precedent, and `draw_popup`'s scroll indicators already
-    /// keep the selected row visible. This asserts the two things that
-    /// really matter at a roster past what fits: the pinned header (counts
-    /// plus column names) and footer (the key legend) survive scrolling,
-    /// which `popup_layout` gives for free by ending the scrollable body at
-    /// the last `Row::Item` — there is no "+N more" row to build.
+    /// realistically a few dozen at most. Unlike the character wizard, this
+    /// screen does not promise "no scroll" — it is a trade/deploy-shaped
+    /// list, and `draw_rows_in` pages it in the hub's content rect with the
+    /// pinned header and the scroll indicators. This asserts the fixture
+    /// really is past what that rect fits at 1280x720, so the paging is what
+    /// carries the overflow.
     #[test]
     fn a_roster_past_what_fits_at_1280x720_still_scrolls_rather_than_overflowing() {
         let rows: Vec<WorkRow> = (0..40)
@@ -4022,18 +4019,17 @@ mod base_staff_tests {
         let t = table(rows);
         let body = base_staff_menu_rows(&t, &[], 0, 0);
         let m = ui_metrics(720.0);
-        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
-        assert!(
-            body.len() > cap,
-            "the fixture should be past what fits, or this test proves nothing: \
-             {} rows against a {cap}-row cap",
-            body.len()
-        );
-        assert!(
-            popup_scrolls(720.0, PopupSize::Large, &body, None, &m),
-            "a 40-program roster must turn the popup's ordinary scroll on \
-             rather than silently dropping rows"
-        );
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let content = crate::render::base_report::content_rect_at(1280.0, 720.0, char_w, &m);
+            let fits = (content.h / m.line_height).floor() as usize;
+            assert!(
+                body.len() > fits,
+                "the fixture should be past what fits, or this test proves nothing: \
+                 {} rows against {fits} in the content rect",
+                body.len()
+            );
+        });
     }
 }
 

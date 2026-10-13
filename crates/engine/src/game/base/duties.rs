@@ -74,6 +74,13 @@ impl Game {
             .map_or(0, |max| max + 1)
     }
 
+    /// Posts the last scheduling pass left with nobody on them, summed over
+    /// every duty column — the Duties header's third figure and the
+    /// Staffing page's rail flag.
+    pub(crate) fn unworked_total(&self) -> usize {
+        self.labour_demand().unworked.values().sum()
+    }
+
     /// The Base staff screen's one derivation: every column's unworked
     /// count, every row in table order (Staff first, then Away, rank order
     /// held within each), and the header's three figures. Nothing here
@@ -163,7 +170,7 @@ impl Game {
             rows,
             on_shift: demand.staff,
             jobs: demand.wanted,
-            unworked_total: demand.unworked.values().sum(),
+            unworked_total: self.unworked_total(),
         }
     }
 

@@ -3535,6 +3535,8 @@ pub struct StockRow {
 pub struct BaseReportFlags {
     pub production: Option<String>,
     pub staff: Option<String>,
+    pub work_orders: Option<String>,
+    pub staffing: Option<String>,
     pub alerts: Option<String>,
 }
 

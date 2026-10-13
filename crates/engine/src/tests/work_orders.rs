@@ -1789,6 +1789,22 @@ fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
     );
 }
 
+/// The Work orders page's rail flag is the report's own `Stalled` state, so a
+/// broken line lights it and an intact one does not.
+#[test]
+fn the_work_orders_flag_follows_a_stalled_order() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+    assert_eq!(game.base_report_flags().work_orders, None);
+
+    game.world.entity_mut(press).despawn();
+
+    assert!(game.base_report_flags().work_orders.is_some());
+}
+
 /// A base with nobody in it and a base with a broken line are different
 /// errands, and the screen must not conflate them: the first reports its
 /// orders normally, and the fact that nothing is happening is answered by

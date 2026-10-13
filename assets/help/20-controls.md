@@ -83,7 +83,7 @@ Reading and housekeeping:
 - s — save
 - q — main menu, which confirms first
 - +/- — zoom
-- [/] — volume
+- [/] — volume (they turn pages in the base report instead)
 - \ — visual effects
 - F3 — frame timings
 

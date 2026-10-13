@@ -327,16 +327,18 @@ impl App {
                 self.mode = Mode::History;
                 return;
             }
+            // The base report, before the underground hand-off for `N`'s
+            // reason below, so it opens from the Stack as well.
+            GameKey::Char('B') => {
+                self.open_base_report();
+                return;
+            }
             // Bound up here, beside `L`/`u`/`f` and for their reason: this
             // match runs before the `is_underground()` hand-off below, so
             // the board opens on the surface, in base space and in the
             // Stack alike with no second arm down there to drift from this
             // one. Reading the board is not an action, hence the `return`,
             // and opening it is the one thing that marks every alert read.
-            GameKey::Char('B') => {
-                self.open_base_report();
-                return;
-            }
             GameKey::Char('N') => {
                 if let Some(game) = self.game.as_mut() {
                     game.mark_alerts_read();

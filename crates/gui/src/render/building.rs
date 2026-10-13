@@ -1965,19 +1965,6 @@ fn assignee_vitals(a: &Assignee) -> String {
     format!("{level}{hp}")
 }
 
-/// What the base has made — the base report's Production page.
-///
-/// **Every figure comes out of `Game::base_output_report`**,
-/// `draw_companion_memories`' rule: the sector/run split, which section an
-/// item belongs in and which rows survive the cap are all decided in the
-/// engine, so this page cannot disagree with the ledger a retune was done
-/// from. `Game::attention` is reached the same way — through the report,
-/// which *calls* it rather than restating what needs the player.
-///
-/// The page does not scroll — the hub pages a `Row::Item` span and there are
-/// none here — so its height is held by
-/// `the_tallest_base_output_page_fits_its_content_rect` rather than by a
-/// scrollbar.
 /// How wide the item column is. A name longer than this is cut rather than
 /// allowed to push the four figures out of their columns: the page is read
 /// down a column, and one modded name would otherwise skew every row under

@@ -166,6 +166,17 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     assert_eq!(app.mode, Mode::Alerts);
 }
 
+/// The nav layer must let a digit through to the screen under it — Alerts
+/// discards its row pick, so only a screen that acts on one can catch a nav
+/// that swallows digits.
+#[test]
+fn a_digit_on_the_overview_reaches_its_handler() {
+    let mut app = test_app(30014);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(app.mode, Mode::Alerts);
+}
+
 #[test]
 fn the_screens_inside_the_hub_cost_no_game_time() {
     let mut app = test_app(30012);

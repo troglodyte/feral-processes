@@ -82,12 +82,13 @@ to share a word.
 The base report (B) has a page for each of these. Production has three screens, Tab to walk them:
 Output, Machines (every structure that is not running, worst first, with the reason, and any that are
 damaged) and Power (supply against draw, and what each structure adds to either; a machine the grid
-cut is marked dark). The rail marks Production with a ! while a machine is starved, unstaffed, cut off
-or dark, or while the grid cannot carry its draw. Stock lists what the base holds against the targets
+cut is marked dark). The rail marks Production with a ! while a machine is starved, unstaffed, cut off,
+dry of fuel or dark, or while the grid cannot carry its draw. Stock lists what the base holds against the targets
 of your work orders, short rows first, and is marked ! when a target is short and its order cannot
 move. Build orders has three screens: Builds (each request with its percent, who is on it or
-"pending", and what is still to fetch), Digging (cells marked for cutting) and Floors (cells marked for
-a finish or a strip); a rebuild still waiting for you to choose a program marks the page. All of them
+"pending", and what is still to fetch), Digging (cells marked for cutting, or open ones waiting to be tiled) and Floors (cells marked for
+a finish or a strip); a rebuild still waiting for you to choose a program, or a request the crew has
+said it cannot go on with, marks the page. All of them
 scroll with the arrow keys.
 
 The base staffs itself. Any program you own that is not out fighting with you is staff, and the
@@ -100,7 +101,7 @@ stay on. With no cell on any shelf, that program goes to a Power Conduit and mak
 the base works out which machines make it, who stands on each, and what has to be fetched. The queue
 is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
 and > move the highlighted order up and down. Cancelling one unwinds nothing. Orders live on the
-Work orders page of the base report (B, then ] until it is highlighted); Enter on the last row queues
+Work orders page of the base report (B, then 4 on the Overview); Enter on the last row queues
 another, and Backspace drops the highlighted one. Orders and the duty table are edited from the base itself,
 not from out on the open grid, and the rail marks the page with a ! while an order is stalled.
 

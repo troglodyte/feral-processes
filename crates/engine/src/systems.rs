@@ -239,10 +239,7 @@ pub fn needs_drain_system(
                 let rooms = rooms.get_or_insert_with(|| {
                     rooms_of_inputs(&room_inputs, &structure_db, sites.iter())
                 });
-                rooms
-                    .room_at(site.x, site.y)
-                    .filter(|r| r.role.is_some())
-                    .map_or(1.0, |r| crate::rooms::room_service_scale(r.band))
+                crate::rooms::service_scale_at(rooms, site.x, site.y)
             };
             needs.set(need, current + rate * scale);
         }

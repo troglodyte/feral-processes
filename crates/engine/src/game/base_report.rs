@@ -10,6 +10,7 @@ impl Game {
         let unread = self.unread_alerts();
         BaseReportFlags {
             production: None,
+            staff: self.staff_flag(),
             alerts: (unread > 0).then(|| format!("{unread} unread")),
         }
     }

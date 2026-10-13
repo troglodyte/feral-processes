@@ -3534,7 +3534,116 @@ pub struct StockRow {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BaseReportFlags {
     pub production: Option<String>,
+    pub staff: Option<String>,
     pub alerts: Option<String>,
+}
+
+/// What a staff program is doing right now, as the Wellbeing page words it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StaffActivity {
+    /// May be handed a job: `Game::on_shift`.
+    OnShift,
+    /// Off shift and on its way to, or being served at, an amenity for the
+    /// need whose `servicing` verb this holds.
+    Servicing(String),
+    /// Off shift and standing in reach of the amenity, which has no place
+    /// free: still draining.
+    Waiting(String),
+    /// Benched and recovering in a Repair Bay.
+    Downed,
+    /// Off shift for no need: a respite, or tools downed.
+    Break,
+}
+
+/// One need on a Wellbeing row: the raw level against the def's thresholds,
+/// so the renderer draws the bar and the critical mark without a formula.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WellbeingNeed {
+    pub name: String,
+    pub level: f32,
+    pub critical: f32,
+    pub content: f32,
+}
+
+/// One Staff-role program on the Wellbeing page - see `Game::staff_wellbeing`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WellbeingRow {
+    pub entity: Entity,
+    pub name: String,
+    /// The morale sum, `Game::morale`.
+    pub morale: f32,
+    /// `morale_band` of it.
+    pub mood: &'static str,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub needs: Vec<WellbeingNeed>,
+    pub activity: StaffActivity,
+    /// The grievance rung's wire name, `Game::grievance`.
+    pub grievance: Option<&'static str>,
+}
+
+impl WellbeingRow {
+    /// Whether any need is below its own `critical`. The flag and the page
+    /// both ask this.
+    pub fn is_critical(&self) -> bool {
+        self.needs.iter().any(|n| n.level < n.critical)
+    }
+}
+
+/// An amenity with fewer open standing tiles than the capacity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoxedInAmenity {
+    pub label: String,
+    pub x: i32,
+    pub y: i32,
+    pub open_tiles: usize,
+}
+
+/// One need's line on the Coverage page - see `Game::need_coverage`.
+/// **Approximate**: the share ignores walking time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoverageRow {
+    pub name: String,
+    pub built: usize,
+    /// Effective places summed over the built amenities.
+    pub places: usize,
+    /// Places the whole capacity would give: `built` times the capacity.
+    pub capacity: usize,
+    pub needed: usize,
+    pub below_critical: usize,
+    pub below_content: usize,
+    /// The share of staff time expected to be spent off shift for this
+    /// need, 0..=1.
+    pub lost_share: f32,
+    pub boxed_in: Vec<BoxedInAmenity>,
+}
+
+impl CoverageRow {
+    /// Short of amenities: none, or fewer than the staff need.
+    pub fn is_short(&self) -> bool {
+        self.built == 0 || self.built < self.needed
+    }
+}
+
+/// One memory on the Discontent page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GrudgeRow {
+    pub name: String,
+    pub subject: Option<String>,
+    pub intensity: f32,
+}
+
+/// One disgruntled program - see `Game::discontent`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DiscontentRow {
+    pub entity: Entity,
+    pub name: String,
+    pub rung: &'static str,
+    /// At `DownedTools` or worse: the page's gap flag.
+    pub stopped_work: bool,
+    pub mood: &'static str,
+    /// The three most negative memories, worst first.
+    pub grudges: Vec<GrudgeRow>,
 }
 
 /// One item's line on the base output page — see `Game::base_output_report`.

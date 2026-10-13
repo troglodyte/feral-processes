@@ -132,6 +132,16 @@ pub fn room_service_scale(band: RoomBand) -> f32 {
     ROOM_SERVICE_SCALE[band as usize]
 }
 
+/// `room_service_scale` for the amenity at `(x, y)`: the commons, and a room
+/// no `RoomDef` matches, read 1.0. The tick and the coverage report both ask
+/// this.
+pub fn service_scale_at(rooms: &Rooms, x: i32, y: i32) -> f32 {
+    rooms
+        .room_at(x, y)
+        .filter(|r| r.role.is_some())
+        .map_or(1.0, |r| room_service_scale(r.band))
+}
+
 /// Multiplier on work ticks from the workshop room a machine stands in.
 pub fn room_work_scale(band: RoomBand) -> f64 {
     ROOM_WORK_SCALE[band as usize]

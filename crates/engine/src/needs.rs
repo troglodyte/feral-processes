@@ -86,6 +86,30 @@ pub struct NeedDef {
     pub morale_weight: f32,
 }
 
+/// The share of its time a program spends off shift for this need, at
+/// steady state, with `service` the amenity's net refill per tick (the
+/// def's `per_tick` already scaled by its room) and `working_share` the
+/// fraction of time it holds a `Task`.
+///
+/// A cycle is working down from `content` to `critical` (`T_work`) and then
+/// being serviced back up (`T_serv`); the share is `T_serv / (T_work +
+/// T_serv)`. **Walking time is ignored**, so a screen showing it says
+/// "approx.". A service that does not outpace the drain never finishes, so
+/// the whole of the time is lost; a need that does not drain loses none.
+pub fn off_shift_share(def: &NeedDef, service: f32, working_share: f32) -> f32 {
+    let span = def.content - def.critical;
+    let average_drain = def.drain_per_tick * (1.0 + working_share * (def.working_multiplier - 1.0));
+    if span <= 0.0 || average_drain <= 0.0 {
+        return 0.0;
+    }
+    let net = service - def.drain_per_tick;
+    if net <= 0.0 {
+        return 1.0;
+    }
+    let (work, serve) = (span / average_drain, span / net);
+    serve / (work + serve)
+}
+
 /// Every need the game knows about, loaded from `assets/needs/`.
 ///
 /// See the module doc for why an empty database is a supported state rather
@@ -241,5 +265,46 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         let ids: Vec<&str> = db.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids, vec!["coherence", "slack"]);
+    }
+
+    fn coherence_def() -> NeedDef {
+        NeedDef {
+            id: NeedId::from("coherence"),
+            name: "Coherence".into(),
+            blurb: String::new(),
+            servicing: "Defragmenting".into(),
+            drain_per_tick: 0.02,
+            working_multiplier: 2.0,
+            critical: 20.0,
+            content: 60.0,
+            morale_weight: -4.0,
+        }
+    }
+
+    /// Hand-computed: d-bar = 0.02 * (1 + 1 * (2 - 1)) = 0.04, T_work =
+    /// 40 / 0.04 = 1000, T_serv = 40 / (0.6 - 0.02) = 68.9655, so the share
+    /// is 68.9655 / 1068.9655 = 0.064516.
+    #[test]
+    fn the_off_shift_share_matches_a_hand_computed_case() {
+        let share = off_shift_share(&coherence_def(), 0.6, 1.0);
+        assert!((share - 0.064516).abs() < 1e-5, "{share}");
+    }
+
+    /// Less time spent working means a slower drain, so less of the time is
+    /// spent being serviced.
+    #[test]
+    fn an_idler_base_loses_less_time_to_the_amenity() {
+        let def = coherence_def();
+        assert!(off_shift_share(&def, 0.6, 0.5) < off_shift_share(&def, 0.6, 1.0));
+    }
+
+    /// An amenity that does not outpace the drain never finishes, and a need
+    /// that does not drain never asks.
+    #[test]
+    fn the_degenerate_ends_of_the_share() {
+        let mut def = coherence_def();
+        assert_eq!(off_shift_share(&def, 0.02, 1.0), 1.0);
+        def.drain_per_tick = 0.0;
+        assert_eq!(off_shift_share(&def, 0.6, 1.0), 0.0);
     }
 }

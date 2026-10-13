@@ -9,11 +9,11 @@ use crate::components::{Needs, Task, TaskKind};
 use crate::needs::{NEED_MAX, NEED_MIN, NeedDb, NeedId};
 use crate::*;
 
-fn coherence() -> NeedId {
+pub(super) fn coherence() -> NeedId {
     NeedId::from("coherence")
 }
 
-fn reserve(game: &Game, who: Entity) -> f32 {
+pub(super) fn reserve(game: &Game, who: Entity) -> f32 {
     game.world
         .get::<Needs>(who)
         .expect("a roster program carries a store")
@@ -230,7 +230,7 @@ use crate::components::OffShift;
 use crate::game::base::offshift::Amenities;
 
 /// A Home, a Defrag Bay beside it, and `n` staff standing on laid floor.
-fn a_base_with_an_amenity(game: &mut Game, n: usize) -> Vec<Entity> {
+pub(super) fn a_base_with_an_amenity(game: &mut Game, n: usize) -> Vec<Entity> {
     stand_in_base(game);
     place_home(game);
     give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
@@ -246,12 +246,12 @@ fn a_base_with_an_amenity(game: &mut Game, n: usize) -> Vec<Entity> {
 }
 
 /// Drops `who`'s reserve to `value` without running a thousand ticks.
-fn set_reserve(game: &mut Game, who: Entity, need: &NeedId, value: f32) {
+pub(super) fn set_reserve(game: &mut Game, who: Entity, need: &NeedId, value: f32) {
     let mut store = game.world.get_mut::<Needs>(who).unwrap();
     store.set(need, value);
 }
 
-fn threshold(game: &Game, need: &NeedId) -> (f32, f32) {
+pub(super) fn threshold(game: &Game, need: &NeedId) -> (f32, f32) {
     let def = game.world.resource::<NeedDb>().get(need).expect("shipped");
     (def.critical, def.content)
 }
@@ -429,7 +429,7 @@ const SEAL_REACH: i32 = crate::tuning::STARTING_POCKET_HALF_WIDTH + 2;
 
 /// Winds the clock rather than ticking it: a thousand ticks run every
 /// background system, and what these tests are about is the drift beat.
-fn set_tick(game: &mut Game, tick: u64) {
+pub(super) fn set_tick(game: &mut Game, tick: u64) {
     game.world.resource_mut::<GameClock>().tick = tick;
 }
 
@@ -467,7 +467,7 @@ fn establish(game: &mut Game) {
     }
 }
 
-fn drift(game: &mut Game, staff: &[Entity]) {
+pub(super) fn drift(game: &mut Game, staff: &[Entity]) {
     let amenities = game.amenities();
     let bays = game.repair_bays();
     game.update_off_shift(staff, &amenities);

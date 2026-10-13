@@ -134,6 +134,7 @@ pub fn needs_drain_system(
     roles: crate::game::party::Roles,
     room_inputs: RoomInputs,
 ) {
+    use crate::game::base::offshift::{Contender, allocate, places_of};
     // Detected at most once a tick, and only if somebody is actually
     // standing at an amenity: most ticks nobody is.
     let mut rooms: Option<crate::rooms::Rooms> = None;
@@ -141,10 +142,16 @@ pub fn needs_drain_system(
         sites.iter().map(|(s, p)| (&s.kind, p)),
         &structure_db,
     );
+    let mut staff: Vec<(Entity, Position)> = Vec::new();
     for (entity, mut needs, task, tamed, at, disposition) in &mut programs {
         if roles.of(entity, tamed.owner) != Some(crate::game::party::ProgramRole::Staff) {
+            // A program that left the staff keeps no place at an amenity.
+            if needs.serviced().next().is_some() {
+                needs.set_serviced_at(Default::default());
+            }
             continue;
         }
+        staff.push((entity, *at));
         needs.seed_missing(&db);
         for def in db.iter() {
             let Some(current) = needs.get(&def.id) else {
@@ -163,20 +170,71 @@ pub fn needs_drain_system(
             };
             needs.set(&def.id, current - rate);
         }
-        // Standing in reach of an amenity refills, whatever brought the
-        // program here — a body posted beside a Sandbox is being serviced
-        // too, and a rule that only paid off-shift bodies would make that
-        // read as the amenity being broken.
-        for def in db.iter() {
-            let Some((site, rate, radius)) = amenities.nearest(&def.id, *at) else {
+    }
+    if staff.is_empty() {
+        return;
+    }
+    // Standing in reach of an amenity refills, whatever brought the program
+    // here — a body posted beside a Sandbox is being serviced too, and a rule
+    // that only paid off-shift bodies would make that read as the amenity
+    // being broken. But an amenity has only so many places: who holds one is
+    // decided whole each tick by `allocate`.
+    let taken = crate::game::base::hauling::footprint_tiles(sites.iter().map(|(s, p)| {
+        (
+            *p,
+            structure_db.get(&s.kind).map_or(1, |d| d.footprint.max(1)),
+        )
+    }));
+    let grid = room_inputs.0.as_deref();
+    let mut granted: std::collections::BTreeMap<
+        Entity,
+        std::collections::BTreeMap<crate::needs::NeedId, (i32, i32)>,
+    > = std::collections::BTreeMap::new();
+    for def in db.iter() {
+        let places: Vec<(Position, usize, i32)> = amenities
+            .servicing(&def.id)
+            .iter()
+            .map(|(site, _, radius)| (*site, places_of(grid, *site, *radius, &taken), *radius))
+            .collect();
+        if places.is_empty() {
+            continue;
+        }
+        let contenders: Vec<Contender> = staff
+            .iter()
+            .filter_map(|&(who, at)| {
+                let (_, needs, ..) = programs.get(who).ok()?;
+                let level = needs.get(&def.id)?;
+                Some(Contender {
+                    who,
+                    at,
+                    held: needs.serviced_at(&def.id),
+                    wants: level < def.content,
+                    keeps: level < crate::needs::NEED_MAX,
+                })
+            })
+            .collect();
+        for (who, tile) in allocate(&places, &contenders) {
+            granted.entry(who).or_default().insert(def.id.clone(), tile);
+        }
+    }
+    for &(who, _) in &staff {
+        let Ok((_, mut needs, ..)) = programs.get_mut(who) else {
+            continue;
+        };
+        let held = granted.remove(&who).unwrap_or_default();
+        for (need, tile) in &held {
+            let Some(rate) = amenities
+                .servicing(need)
+                .iter()
+                .find(|(p, _, _)| (p.x, p.y) == *tile)
+                .map(|(p, rate, _)| (*p, *rate))
+            else {
                 continue;
             };
-            if !crate::game::base::offshift::in_reach(*at, site, radius) {
-                continue;
-            }
-            let Some(current) = needs.get(&def.id) else {
+            let Some(current) = needs.get(need) else {
                 continue;
             };
+            let (site, rate) = rate;
             let scale = {
                 let rooms = rooms.get_or_insert_with(|| {
                     rooms_of_inputs(&room_inputs, &structure_db, sites.iter())
@@ -186,8 +244,9 @@ pub fn needs_drain_system(
                     .filter(|r| r.role.is_some())
                     .map_or(1.0, |r| crate::rooms::room_service_scale(r.band))
             };
-            needs.set(&def.id, current + rate * scale);
+            needs.set(need, current + rate * scale);
         }
+        needs.set_serviced_at(held);
     }
 }
 

@@ -2605,6 +2605,13 @@ pub const HAUL_WALK_MAX_TILES: i32 = 60;
 /// clear corridor the preferred one.
 pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
 
+/// How many programs one amenity refills per tick. **A placeholder**: the
+/// number is a hard-coded two until a later session decides whether it is a
+/// per-structure field, a tier scaling or a room bonus. Boxed in by
+/// structures and rock, an amenity serves fewer
+/// (`offshift::effective_places`).
+pub const AMENITY_CAPACITY: usize = 2;
+
 /// How long a carrier stands `Stranded` holding a load before it drops the
 /// load on its own tile as a `FloorPile`.
 ///

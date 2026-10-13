@@ -953,8 +953,10 @@ fn frame(
         sounds.play(&mut commands, SoundEvent::RoundEnd, fe.volume);
     }
     // Not during a fight in the base: battle cues want the room to
-    // themselves.
-    if let Some(blip) = fe.ambience.tick(now, in_base && !in_battle) {
+    // themselves. Nor over a death in it, which keeps `base_pos` until the
+    // game-over screen is dismissed.
+    let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver;
+    if let Some(blip) = fe.ambience.tick(now, ambient) {
         sounds.play_blip(&mut commands, blip, fe.volume * ambience::BLIP_MIX);
     }
 

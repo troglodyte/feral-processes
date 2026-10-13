@@ -16,6 +16,9 @@ batch is still wanted, it finishes that batch before moving to another machine.
 
 - An ingredient that no machine in the line makes comes from a Depot. The worker fetches it, so
 keep the Depot stocked and in reach.
+- A Depot between two machines buffers the line. It fills itself from the machine that makes the
+item, and the machine on its other side pulls the item out. A Depot never joins a line, so each
+side keeps its own worker.
 - If the line is stuck on such an ingredient, its row says which machine needs what.
 - Teardown Rigs always stand alone. A rig is never part of a line, even when it touches one.
 

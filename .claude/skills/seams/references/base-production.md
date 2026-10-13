@@ -548,3 +548,14 @@
   Piles merge one per tile and come home through `Errand::Pickup`, which
   lifts only what an accepting depot the walk can reach will take, trying
   every pile nearest first.
+- **A Depot pulls only what it accepts, only from a worked producer, and the
+  auto-filter fires once, at spawn.** `depot_intake_system` (chained after
+  `assembler_system`, so a direct consumer picks first) asks
+  `systems::worker_of`, `depot_filter::filter_accepts`, the dark guard and
+  `Stock::output_room` — the same calls as the assembler, the haulers'
+  `depot_beside_accepting` and the map's `Game::depot_takes_from`, so the
+  drawn join and the pull cannot disagree. `Game::auto_filter_depots` sits at
+  the end of `Game::spawn_structure`, not `construction.rs`, because
+  `place_now` skips construction; it only ever widens a filter, and skips a
+  banked output, which never reaches `Stock.output`. A Depot never joins a
+  production line.

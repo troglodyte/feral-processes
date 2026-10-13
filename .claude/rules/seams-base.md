@@ -131,6 +131,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A Depot's filter is the *denied* set and `Game::depot_accepts` is the one
   door**, read by the player's own put and the crew's haul alike, an absent
   `components::DepotFilter` meaning the shelf takes anything.
+- **A Depot pulls only what it accepts, only from a worked producer, and
+  `Game::auto_filter_depots` fires once, from `Game::spawn_structure`.**
 - **Taking and putting are one screen, one basket and one commit** —
   `Mode::Transfer`, opened with `c`.
 - **The put side is one budget and the take side is per row, and the screen

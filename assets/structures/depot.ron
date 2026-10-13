@@ -1,7 +1,7 @@
 (
     id: "depot",
     name: "Depot",
-    description: "The smallest storage, fifty units, Walk up to it and press c to access.",
+    description: "The smallest storage, fifty units, Walk up to it and press c to access. Fills itself from a working machine beside it.",
     glyph: 'D',
     color: Cyan,
     build_cost: [("core_fragment", 12)],

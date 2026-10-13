@@ -834,6 +834,8 @@ impl App {
     }
 }
 
+pub(crate) const OUT_OF_BASE: &str = "Not from out here — that's back at the base.";
+
 /// One row on `Mode::WorkOrders` — either a queued order or the trailing
 /// row that starts a new one.
 ///
@@ -883,10 +885,6 @@ impl App {
     /// to release, so the next tick simply derives a different answer and
     /// re-queueing costs a keypress.
     pub(crate) fn handle_work_orders_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         let rows = self.work_order_rows();
         let shift = match key {
             GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
@@ -894,6 +892,9 @@ impl App {
             _ => None,
         };
         if let Some(shift) = shift {
+            if self.refuse_outside_base() {
+                return;
+            }
             let index = self.menu_selected;
             if rows.get(index).is_some_and(|row| row.order.is_some())
                 && let Some(game) = &mut self.game
@@ -909,6 +910,9 @@ impl App {
             return;
         }
         if key == GameKey::Backspace {
+            if self.refuse_outside_base() {
+                return;
+            }
             if self.menu_selected < rows.len() && rows[self.menu_selected].order.is_some() {
                 let index = self.menu_selected;
                 if let Some(game) = &mut self.game {
@@ -922,11 +926,27 @@ impl App {
             return;
         };
         if rows[idx].order.is_none() {
+            if self.refuse_outside_base() {
+                return;
+            }
             self.pending_order = None;
             self.order_quantity_input.clear();
             self.mode = Mode::WorkOrderPick;
             self.menu_selected = 0;
         }
+    }
+
+    /// Refuses, and says so, when the party is not in base space. Work
+    /// orders and the duty table used to be base-menu rows hidden outside
+    /// it (`Locality::Base`); reached from the hub they are visible from
+    /// anywhere, so the refusal moves to the keys that change something.
+    /// Reading stays open.
+    fn refuse_outside_base(&mut self) -> bool {
+        let outside = self.game.as_ref().is_some_and(|g| !g.in_base());
+        if outside {
+            self.refuse(OUT_OF_BASE);
+        }
+        outside
     }
 
     /// What the base could be told to make — `Game::orderable_items`, which
@@ -1030,8 +1050,7 @@ impl App {
     /// lowercase letter here does nothing, which is what keeps it from
     /// colliding with a screen action bound to its upper-case twin.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
+        if matches!(key, GameKey::Char(' ' | '<' | '>' | 'A')) && self.refuse_outside_base() {
             return;
         }
         let table = self.base_staff_table();

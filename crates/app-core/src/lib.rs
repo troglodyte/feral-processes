@@ -2702,6 +2702,14 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
         screens: &[Mode::BaseOutput],
     },
     BasePage {
+        title: "Work orders",
+        screens: &[Mode::WorkOrders],
+    },
+    BasePage {
+        title: "Staffing",
+        screens: &[Mode::BaseStaff, Mode::Structures],
+    },
+    BasePage {
         title: "Alerts",
         screens: &[Mode::Alerts],
     },
@@ -2716,6 +2724,17 @@ pub fn base_page_of(mode: Mode) -> Option<(usize, usize)> {
             .position(|&s| s == mode)
             .map(|screen| (p, screen))
     })
+}
+
+/// The hub screen a popup is drawn over, for the popups that are children of
+/// one: they are not in `BASE_REPORT_PAGES`, so the nav never sees their
+/// keys, but the renderer keeps the frame up behind them.
+pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
+    match mode {
+        Mode::WorkOrderPick | Mode::WorkOrderQuantity => Some(Mode::WorkOrders),
+        Mode::StructureAssign => Some(Mode::Structures),
+        _ => None,
+    }
 }
 
 pub struct App {

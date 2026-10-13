@@ -2,7 +2,7 @@
 //! game-over page. The creation wizard the main menu opens is its own
 //! module, `app/creation.rs`.
 
-use crate::app::building::Roster;
+use crate::app::building::{OUT_OF_BASE, Roster};
 use crate::*;
 
 impl App {
@@ -343,10 +343,6 @@ impl App {
     /// a row that takes no worker says so instead of opening a picker that
     /// could only be refused on the far side.
     pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         let Some(roster) = self.game.as_mut().map(Roster::of) else {
             return;
         };
@@ -373,7 +369,7 @@ impl App {
         // reads fine from anywhere, which is why it carries no `base_only`
         // flag in `BASE_ROWS`.
         if self.game.as_ref().is_some_and(|g| !g.in_base()) {
-            self.refuse("Not from out here — that's back at the base.");
+            self.refuse(OUT_OF_BASE);
             return;
         }
         let Some(target) = roster.target_of(roster.rows[idx]) else {

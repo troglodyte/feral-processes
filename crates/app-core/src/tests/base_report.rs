@@ -16,17 +16,23 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_is_overview_staff_production_alerts() {
+fn the_rail_runs_overview_staff_production_orders_staffing_alerts() {
     assert_eq!(
         page_modes(),
         vec![
             Mode::BaseOverview,
             Mode::StaffWellbeing,
             Mode::BaseOutput,
+            Mode::WorkOrders,
+            Mode::BaseStaff,
             Mode::Alerts
         ]
     );
     assert_eq!(base_page_of(Mode::BaseOutput), Some((2, 0)));
+    assert_eq!(base_page_of(Mode::Structures), Some((4, 1)));
+    assert_eq!(base_page_of(Mode::WorkOrderPick), None);
+    assert_eq!(base_page_of(Mode::WorkOrderQuantity), None);
+    assert_eq!(base_page_of(Mode::StructureAssign), None);
     assert_eq!(base_page_of(Mode::StaffDiscontent), Some((1, 2)));
     assert_eq!(base_page_of(Mode::Playing), None);
 }
@@ -56,9 +62,9 @@ fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
 fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
     let mut app = test_app(30003);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Char(']'));
+    for _ in 0..BASE_REPORT_PAGES.len() - 1 {
+        app.handle_key(GameKey::Char(']'));
+    }
     assert_eq!(app.mode, Mode::Alerts);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -97,7 +103,7 @@ fn a_digit_on_alerts_stays_on_alerts() {
     let mut app = seeded(30006, alerts);
     app.handle_key(GameKey::Char('N'));
     app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Char('5'));
     assert_eq!(app.mode, Mode::Alerts);
     assert_eq!(
         app.menu_selected, 1,
@@ -185,8 +191,9 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 
     let mut app = test_app(30013);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Down);
+    for _ in 0..BASE_REPORT_PAGES.len() - 2 {
+        app.handle_key(GameKey::Down);
+    }
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Alerts);
 }
@@ -198,7 +205,7 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 fn a_digit_on_the_overview_reaches_its_handler() {
     let mut app = test_app(30014);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Char('5'));
     assert_eq!(app.mode, Mode::Alerts);
 }
 
@@ -251,4 +258,173 @@ fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
     assert_eq!(app.menu_selected, 1);
     app.handle_key(GameKey::Tab);
     assert_eq!(app.menu_selected, 0, "a new screen starts at the top");
+}
+
+/// Popup children are not in `BASE_REPORT_PAGES`, so the nav must hand every
+/// key — page keys, `Tab`, `Esc` — to the popup's own handler.
+#[test]
+fn page_keys_inside_a_work_order_popup_do_not_change_page() {
+    let mut app = app_inside_a_small_base(30020, false);
+    open_hub_screen(&mut app, Mode::WorkOrders);
+    let last = app.work_order_rows().len() - 1;
+    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    assert_eq!(app.mode, Mode::WorkOrderPick);
+
+    for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
+        app.handle_key(key);
+        assert_eq!(
+            app.mode,
+            Mode::WorkOrderPick,
+            "{key:?} must not turn a page"
+        );
+    }
+
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::WorkOrderQuantity);
+    for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
+        app.handle_key(key);
+        assert_eq!(
+            app.mode,
+            Mode::WorkOrderQuantity,
+            "{key:?} must not turn a page"
+        );
+    }
+    app.handle_key(GameKey::Char('7'));
+    assert_eq!(app.order_quantity_input, "7", "text entry still lands");
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::WorkOrderPick, "Esc steps back one popup");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::WorkOrders,
+        "and then onto the parent screen"
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "whose Esc leaves the hub");
+}
+
+#[test]
+fn page_keys_inside_the_staffing_popup_do_not_change_page() {
+    let mut app = app_inside_a_small_base_with_programs(30021, false, 1);
+    open_hub_screen(&mut app, Mode::Structures);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureAssign);
+
+    for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
+        app.handle_key(key);
+        assert_eq!(
+            app.mode,
+            Mode::StructureAssign,
+            "{key:?} must not turn a page"
+        );
+    }
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Structures, "Esc returns to the roster");
+    assert_eq!(app.menu_selected, 1, "on the row that was staffed");
+}
+
+#[test]
+fn each_popup_child_names_the_hub_screen_it_draws_over() {
+    assert_eq!(
+        base_popup_parent(Mode::WorkOrderPick),
+        Some(Mode::WorkOrders)
+    );
+    assert_eq!(
+        base_popup_parent(Mode::WorkOrderQuantity),
+        Some(Mode::WorkOrders)
+    );
+    assert_eq!(
+        base_popup_parent(Mode::StructureAssign),
+        Some(Mode::Structures)
+    );
+    assert_eq!(base_popup_parent(Mode::WorkOrders), None);
+    assert_eq!(base_popup_parent(Mode::Playing), None);
+}
+
+/// The base-menu rows were `Locality::Base`; the screens now open from
+/// anywhere, so the keys that change something carry the refusal.
+#[test]
+fn work_orders_refuse_edits_outside_base_space() {
+    let mut app = app_inside_a_small_base(30022, false);
+    app.game.as_mut().unwrap().leave_base().unwrap();
+    open_hub_screen(&mut app, Mode::WorkOrders);
+    let last = app.work_order_rows().len() - 1;
+
+    app.handle_key(GameKey::Char(menu_shortcut(last)));
+
+    assert_eq!(app.mode, Mode::WorkOrders, "the picker must not open");
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some(crate::app::building::OUT_OF_BASE)
+    );
+}
+
+#[test]
+fn the_duty_table_refuses_edits_outside_base_space() {
+    let mut app = app_owning_distant_programs(30023, 1);
+    open_hub_screen(&mut app, Mode::BaseStaff);
+    let before = app.base_staff_table().rows[0].cells.clone();
+
+    for key in [
+        GameKey::Char(' '),
+        GameKey::Char('A'),
+        GameKey::Char('<'),
+        GameKey::Char('>'),
+    ] {
+        app.status_line = None;
+        app.handle_key(key);
+        assert_eq!(
+            app.status_line.as_deref(),
+            Some(crate::app::building::OUT_OF_BASE),
+            "{key:?}"
+        );
+    }
+
+    assert_eq!(app.base_staff_table().rows[0].cells, before);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.work_column, 1, "moving the cursors is still reading");
+}
+
+/// `work_column` is reset by the mode change, not by which key made it, so
+/// entering the duty table through `Tab` must clear it too.
+#[test]
+fn tabbing_into_the_duty_table_resets_its_column_cursor() {
+    let mut app = app_owning_distant_programs(30024, 1);
+    stand_in_base(&mut app);
+    open_hub_screen(&mut app, Mode::BaseStaff);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.work_column, 2);
+
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::Structures);
+    app.handle_key(GameKey::Tab);
+
+    assert_eq!(app.mode, Mode::BaseStaff);
+    assert_eq!(
+        app.work_column, 0,
+        "a fresh entry starts at the first column"
+    );
+}
+
+/// The roster's `keeps_highlight` pair: the staffing popup's Esc lands on
+/// the row it was opened from even though the roster was entered by `Tab`.
+#[test]
+fn the_roster_keeps_its_highlight_across_the_staffing_popup_after_a_tab() {
+    let mut app = app_inside_a_small_base_with_programs(30025, false, 1);
+    open_hub_screen(&mut app, Mode::BaseStaff);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::Structures);
+    assert_eq!(app.menu_selected, 0, "entered at the top");
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureAssign);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Structures);
+    assert_eq!(app.menu_selected, 1);
 }

@@ -104,29 +104,6 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Base-only for the reason every scan row is, and the engine
-        // agrees rather than trusting the flag: `queue_work_order` calls
-        // `Game::require_base`. The screen is read-only but it *claims
-        // something about where the base is*, which is the test
-        // `find_target_in_direction` established — a report answered from a
-        // `Position` that is pinned somewhere else would describe a base the
-        // party is nowhere near.
-        label: "Work orders",
-        target: Mode::WorkOrders,
-        locality: Locality::Base,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.work_orders().is_empty() || !g.orderable_items().is_empty())
-        },
-    },
-    GroupEntry {
-        label: "Base staff",
-        target: Mode::BaseStaff,
-        locality: Locality::Base,
-        available: |app| !app.nearby_programs().is_empty(),
-    },
-    GroupEntry {
         label: "Work a structure yourself",
         target: Mode::WorkStructure,
         locality: Locality::Base,
@@ -149,16 +126,6 @@ const BASE_ROWS: &[GroupEntry] = &[
         target: Mode::Remove,
         locality: Locality::Base,
         available: |app| !app.nearby_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Structure roster",
-        target: Mode::Structures,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| !g.structure_report().is_empty())
-        },
     },
     GroupEntry {
         label: "Research",

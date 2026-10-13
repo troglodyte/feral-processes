@@ -2195,6 +2195,10 @@ pub enum Mode {
     /// party is in the Stack, which is the thing this page is best placed
     /// to teach.
     BaseOutput,
+    /// The base report's landing page: one line per page of the hub, each
+    /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
+    /// the highlighted page's first screen.
+    BaseOverview,
     /// Every conversion a structure runs, expanded back to raw inputs — see
     /// `Game::recipe_chains`. Read-only, and reference data rather than a
     /// view of the base, so it reads the same underground as it does on the
@@ -2502,6 +2506,9 @@ impl Mode {
             | Mode::StructureAssign
             | Mode::Recipes
             | Mode::BaseOutput
+            // Opened from the map with `B` or the base menu, `BaseOutput`'s
+            // reason — never layers over a fight.
+            | Mode::BaseOverview
             | Mode::Help
             | Mode::HelpPage
             | Mode::FrameMap
@@ -2653,6 +2660,42 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
     }
 }
 
+/// One page of the base report hub: a rail entry, and the screens `Tab`
+/// cycles through on it.
+pub struct BasePage {
+    pub title: &'static str,
+    pub screens: &'static [Mode],
+}
+
+/// The hub's one table: the rail, the `Tab` order and "is this mode in the
+/// hub" are all read off it, so a page cannot be on the rail and missing
+/// from the nav. Rail order is the order here; `[` and `]` walk it.
+pub const BASE_REPORT_PAGES: &[BasePage] = &[
+    BasePage {
+        title: "Overview",
+        screens: &[Mode::BaseOverview],
+    },
+    BasePage {
+        title: "Production",
+        screens: &[Mode::BaseOutput],
+    },
+    BasePage {
+        title: "Alerts",
+        screens: &[Mode::Alerts],
+    },
+];
+
+/// Where `mode` sits in `BASE_REPORT_PAGES` as `(page, screen)`, or `None`
+/// for a mode outside the hub.
+pub fn base_page_of(mode: Mode) -> Option<(usize, usize)> {
+    BASE_REPORT_PAGES.iter().enumerate().find_map(|(p, page)| {
+        page.screens
+            .iter()
+            .position(|&s| s == mode)
+            .map(|screen| (p, screen))
+    })
+}
+
 pub struct App {
     pub mode: Mode,
     pub game: Option<Game>,
@@ -2729,6 +2772,9 @@ pub struct App {
     /// origin somebody else was still holding — `etch_return`'s trap, one
     /// field down.
     menu_origin: Option<Mode>,
+    /// The hub screen last on screen, so `B` reopens where the player left
+    /// off. `None` until the hub has been opened, which lands on Overview.
+    base_report_last: Option<Mode>,
     /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
     /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
     /// the player is still holding open. `None` when the etch screen was

@@ -1,0 +1,52 @@
+//! The base report hub's navigation. `BASE_REPORT_PAGES` is the only list of
+//! pages; everything here is read off it.
+
+use crate::*;
+
+impl App {
+    /// Runs ahead of every hub screen's own handler and answers whether it
+    /// took the key. `[`/`]` walk the pages (wrapping), `Tab` walks the
+    /// current page's screens (wrapping), `Esc` leaves to wherever the hub
+    /// was opened from. Everything else — digits, lowercase, Enter — falls
+    /// through, because Alerts and the later list screens already spend
+    /// those on row jumps.
+    ///
+    /// `Esc` leaves the hub rather than stepping back a page: the rail is a
+    /// set of siblings, not a history.
+    pub(crate) fn handle_base_report_nav(&mut self, key: GameKey) -> bool {
+        let Some((page, screen)) = base_page_of(self.mode) else {
+            return false;
+        };
+        let pages = BASE_REPORT_PAGES.len();
+        match key {
+            GameKey::Char(']') => {
+                self.mode = BASE_REPORT_PAGES[(page + 1) % pages].screens[0];
+            }
+            GameKey::Char('[') => {
+                self.mode = BASE_REPORT_PAGES[(page + pages - 1) % pages].screens[0];
+            }
+            GameKey::Tab => {
+                let screens = BASE_REPORT_PAGES[page].screens;
+                self.mode = screens[(screen + 1) % screens.len()];
+            }
+            GameKey::Esc => self.close_screen(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Opens the hub where the player left it, or on Overview the first
+    /// time. `menu_origin` is whatever the caller already set (a group menu)
+    /// or `None` from the map, so `Esc` goes back the way it came.
+    pub(crate) fn open_base_report(&mut self) {
+        self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
+    }
+
+    /// Overview: a cursor over the pages. `Enter`, or a row's own shortcut,
+    /// jumps to that page's first screen.
+    pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {
+        if let Some(page) = self.selected_index(key, BASE_REPORT_PAGES.len()) {
+            self.mode = BASE_REPORT_PAGES[page].screens[0];
+        }
+    }
+}

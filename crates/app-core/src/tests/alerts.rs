@@ -14,7 +14,7 @@ use feral_processes_engine::save::{self};
 use crate::tests::support::*;
 use crate::*;
 
-fn seeded(seed: u32, alerts: Vec<Alert>) -> App {
+pub(super) fn seeded(seed: u32, alerts: Vec<Alert>) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("alerts_seed", seed);
@@ -27,7 +27,7 @@ fn seeded(seed: u32, alerts: Vec<Alert>) -> App {
     app
 }
 
-fn alert(kind: AlertKind, subject: &str, text: &str) -> Alert {
+pub(super) fn alert(kind: AlertKind, subject: &str, text: &str) -> Alert {
     Alert {
         kind,
         subject: subject.to_string(),

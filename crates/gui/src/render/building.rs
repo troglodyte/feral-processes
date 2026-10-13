@@ -4202,9 +4202,8 @@ mod base_output_tests {
         assert!(line.contains("60") && line.contains("30"), "{line}");
     }
 
-    /// A base that has made nothing says so. The row is hidden from the
-    /// menu in that state (`Game::has_base_output`), but a run can spend its
-    /// last produced unit and open the page from a menu already on screen.
+    /// A base that has made nothing says so: the page is always reachable
+    /// from the hub, so an empty ledger must not read as a broken one.
     #[test]
     fn an_empty_ledger_draws_a_sentence_rather_than_a_blank_page() {
         let rows = base_output_rows(&BaseOutputReport {

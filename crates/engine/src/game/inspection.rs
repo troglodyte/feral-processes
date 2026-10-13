@@ -1788,22 +1788,6 @@ impl Game {
         }
     }
 
-    /// Whether the base has ever made anything, which is what decides
-    /// whether the base menu offers the page at all.
-    ///
-    /// Its own predicate rather than `!base_output_report().mined.is_empty()`
-    /// because a group-menu `available` closure runs **every frame the menu
-    /// is open** — the trap the Contracts and Caravan rows already record —
-    /// and the report resolves a def per item and walks every structure
-    /// through `attention` before it can answer.
-    pub fn has_base_output(&self) -> bool {
-        self.world
-            .resource::<crate::base_ledger::BaseLedger>()
-            .lifetime
-            .values()
-            .any(|t| t.produced() > 0)
-    }
-
     /// What `entity` is asking of the player, for the manifest's rail and
     /// band: the first of `calls_to_act`.
     ///

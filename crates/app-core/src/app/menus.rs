@@ -279,10 +279,6 @@ impl App {
     /// would resolve to. Everything else — Up/Down, digits, other letters —
     /// goes through `selected_index` like an ordinary menu.
     pub(crate) fn handle_alerts_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         if matches!(key, GameKey::Char('x') | GameKey::Char('d')) {
             let Some(game) = self.game.as_mut() else {
                 return;
@@ -407,15 +403,6 @@ impl App {
             .map(|g| g.recipe_chains().len())
             .unwrap_or(0);
         self.scroll(key, rows);
-    }
-
-    /// What the base has made. Esc and nothing else: the page has no scroll
-    /// — `Game::base_output_report` caps its own rows — so there is no
-    /// highlight for the arrows to move.
-    pub(crate) fn handle_base_output_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-        }
     }
 
     /// The map closes on any key, like the help screen: it is something you

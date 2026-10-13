@@ -333,6 +333,10 @@ impl App {
             // Stack alike with no second arm down there to drift from this
             // one. Reading the board is not an action, hence the `return`,
             // and opening it is the one thing that marks every alert read.
+            GameKey::Char('B') => {
+                self.open_base_report();
+                return;
+            }
             GameKey::Char('N') => {
                 if let Some(game) = self.game.as_mut() {
                     game.mark_alerts_read();

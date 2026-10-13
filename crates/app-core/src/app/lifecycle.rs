@@ -67,6 +67,7 @@ impl App {
             pending_build: None,
             pending_post_structure: None,
             menu_origin: None,
+            base_report_last: None,
             etch_return: None,
             pending_remove_structure: None,
             watching: None,

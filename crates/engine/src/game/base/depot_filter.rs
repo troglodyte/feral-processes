@@ -116,6 +116,65 @@ impl Game {
             .collect()
     }
 
+    /// Lets a producer's output into the Depots beside it, once, when the
+    /// later of the two is raised — called from `spawn_structure`, the one
+    /// place a structure comes into being, so a filter the player edits
+    /// afterwards is never re-derived.
+    ///
+    /// A Depot just built is paired with each producer beside it, and a
+    /// producer just built with each Depot beside it. A Depot with no filter
+    /// becomes allow-only for the item; one that already has a filter only
+    /// gains it, so the player's denials are never widened or narrowed
+    /// beyond that one item. A banked product reaches no buffer, so it is
+    /// skipped rather than written as a filter nothing could use.
+    pub(crate) fn auto_filter_depots(&mut self, built: Entity) {
+        let Some(&Position { x, y }) = self.world.get::<Position>(built) else {
+            return;
+        };
+        let built_is_depot = self.is_depot(built);
+        let pairs: Vec<(Entity, ItemId)> = crate::game::base::collect::ORTHOGONAL
+            .iter()
+            .filter_map(|(dx, dy)| {
+                let neighbour = self.structure_at_tile((x + dx, y + dy))?;
+                if built_is_depot {
+                    Some((built, self.buffered_output(neighbour)?))
+                } else {
+                    let item = self.buffered_output(built)?;
+                    self.is_depot(neighbour).then_some((neighbour, item))
+                }
+            })
+            .collect();
+        for (depot, item) in pairs {
+            if self.world.get::<DepotFilter>(depot).is_none() {
+                self.set_all_depot_filters(depot, false);
+            }
+            self.set_depot_filter(depot, &[item], true);
+        }
+    }
+
+    /// What `structure` puts into its own output buffer, or `None` when it
+    /// makes nothing or makes a banked product.
+    fn buffered_output(&self, structure: Entity) -> Option<ItemId> {
+        let kind = &self.world.get::<Structure>(structure)?.kind;
+        let def = self.world.resource::<StructureDb>().get(kind)?;
+        let item = crate::systems::produced_item(def)?;
+        let banked = self
+            .world
+            .resource::<ItemDb>()
+            .get(item.as_str())
+            .is_some_and(|d| d.banked);
+        (!banked).then(|| item.clone())
+    }
+
+    fn structure_at_tile(&self, tile: (i32, i32)) -> Option<Entity> {
+        self.world
+            .iter_entities()
+            .find(|e| {
+                e.contains::<Structure>() && e.get::<Position>().is_some_and(|p| (p.x, p.y) == tile)
+            })
+            .map(|e| e.id())
+    }
+
     pub(crate) fn is_depot(&self, entity: Entity) -> bool {
         let Some(structure) = self.world.get::<Structure>(entity) else {
             return false;

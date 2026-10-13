@@ -158,29 +158,35 @@
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
   crossed over**, and **a cut is never dry.** Cutting spends nothing, so a
   solid cell claims `0` from the budget and is never dropped: the crew mines
-  the cell now and floors it later, once substrate exists. The cut cell keeps
-  its mark and becomes an ordinary tile job, which *is* dropped as dry until
-  a unit arrives. **This reverses a reversal.** 0.13.239 first made a cut
+  the cell now and floors it later, once the fragments exist. The cut cell
+  keeps its mark and becomes an ordinary tile job, which *is* dropped as dry
+  until they arrive. **This reverses a reversal.** 0.13.239 first made a cut
   claim `0` and shipped a base that cut 112 cells and floored none, so a cut
   was made to claim the tile that would hold it; the user later chose
   cut-now, floor-later instead, because holding every cut left a base with
   no Lathe yet unable to dig at all. What keeps the 112-cell base from
   coming back is the other half of that old fix, which stays: the plan
-  *asks* for every tile it will spend. The substrate is a **budget**
-  claimed in want order — a tile job claims `1`, an `Apply` claims
-  `FLOOR_FINISH_COST`, a `Strip` claims nothing — while a solid cell adds
-  its future `1` to the plan's `need` but not to the budget. **Open cells
-  sort ahead of solid ones** inside the `finish: None` block, so the units
-  there are go to flooring what is already cut. The same pass sums every
-  ask and hands it to `Game::sync_dig_order`, which keeps one
-  standing order flagged `WorkOrder::for_dig` at that level — filed at the
+  *asks* for every tile it will spend. **Two budgets, one per item**
+  (tiles moved off the Lathe because a 12-tick press per cell made
+  growing the base too slow): a tile job claims `FLOOR_TILE_COST` Core
+  Fragments from **base stores only** — the user chose no pack fallback,
+  because fragments are the player's currency and a fallback would quietly
+  spend a marked corridor's worth of them during a sortie with no dry line, an `Apply` claims `FLOOR_FINISH_COST` Blank Substrate, a
+  `Strip` nothing — while a solid cell adds its future tile to the
+  fragment `need` but not to the budget. Claimed in want order, and
+  **open cells sort ahead of solid ones** inside the `finish: None` block,
+  so the fragments there are go to flooring what is already cut. The same
+  pass sums each item's ask and hands it to `Game::sync_dig_order`, which
+  keeps one standing order per item flagged `WorkOrder::for_dig` at that
+  level — looked up by flag **and** item, or the fragment and substrate
+  lines resize each other — filed at the
   bottom only where `chain_break` passes, resized silently, withdrawn at
   zero, and refused by `cancel_work_order` because a hand-cancelled one is
   filed again next tick. The flag is provenance (`for_research`'s rule),
   `#[serde(default)]` and not skipped, or a reload orphans the line and the
   plan files a second. The deadlock rule still holds in the direction that matters — a
   dropped tile job frees the body, which is what sends it to the Mining
-  Node and the Lathe that make the substrate (dig wants sit last in
+  Node and the Lathe that make the fragments and substrate (dig wants sit last in
   `base_wants`, so a cut never outranks production). `Game::drop_dry_dig_wants`
   is the one writer of `DigSite::announced_dry`, both the set and the
   clear, and it owns both wordings (`DigDryReason::Tile`, `Finish`); neither

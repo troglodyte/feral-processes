@@ -22,8 +22,8 @@ Everything past that first pocket is solid, and you cut it out yourself.
   compacted rock at least three and fused rock at least four, and your level shortens the count down
   to that floor and no further. The rock comes in patches, so thickness varies from cell to cell,
   not from zone to zone. A cell that opens sometimes shakes a Core Fragment loose.
-- A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for one
-  Blank Substrate, and only laid tile is buildable. Bare cut ground stays open, but nothing can
+- A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for two
+  Core Fragments, and only laid tile is buildable. Bare cut ground stays open, but nothing can
   stand on it until it is floored.
 - m opens the Excavation plan. The cursor costs no time at all: space drops one corner, moving
   previews a rectangle, and space again commits it. Starting the box on a cell that is already
@@ -35,12 +35,14 @@ Everything past that first pocket is solid, and you cut it out yourself.
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a
 spare body digs and a needed one does not. Marking a corridor can never stall production. The crew
-will not start a cut it cannot hold, either: a marked wall waits until the base has a Blank
-Substrate spare for the tile that follows it, and says so once. Cells already cut and waiting on
-their floor are served first. The plan asks for its own tiles: while anything is marked, a standing
-Blank Substrate order sits in your work order queue, sized to what the plan will spend. It is filed
-at the bottom, so move it up if the floor matters more than what you are making. Clearing the marks
-is how it goes away. Your own swings are never held back this way — with your cutting
+cuts a marked wall even with nothing to floor it, and lays the tile once the base's own storage has
+the Core Fragments to spare, saying once if it is waiting. The crew never spends the fragments in
+your pack. Cells already cut and waiting on their floor are
+served first. The plan asks for what it needs: while anything is marked, a standing Core Fragment
+order for the tiles, and a Blank Substrate one for any finishes, sit in your work order queue, sized
+to what the plan will spend. They are filed
+at the bottom, so move them up if the floor matters more than what you are making. Clearing the marks
+is how they go away. Your own swings are never held back this way — with your cutting
 tools out, walking into a wall still cuts it, whatever the shelves hold.
 
 Building works the same way, and the Home is the one exception. Every other structure you pick out

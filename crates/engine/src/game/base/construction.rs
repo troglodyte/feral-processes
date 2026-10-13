@@ -669,7 +669,7 @@ impl Game {
     /// where the units were *taken* from: a unit pushed into a machine's
     /// output buffer reads as something that machine produced, and would be
     /// hauled off and counted as a cycle's yield. The asymmetry is the same
-    /// one the dig crew's substrate draw already carries.
+    /// one the dig crew's tile and finish draw already carries.
     ///
     /// Anything that fits nowhere is **logged rather than dropped in
     /// silence**. It is reachable — a base with no Depot, the party away and

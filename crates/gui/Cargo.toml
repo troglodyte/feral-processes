@@ -17,7 +17,7 @@ feral-processes-engine = { workspace = true }
 # `bevy_gilrs`, whose `libudev-sys` needs a system libudev this game has no
 # use for — it has no gamepad support and reads the keyboard only.
 # `bevy_audio` + `wav` rather than `audio`, which would add vorbis for
-# formats the six embedded cues don't use.
+# formats the embedded cues and ambience don't use.
 bevy = { version = "0.19", default-features = false, features = [
     "std",
     "async_executor",

@@ -30,7 +30,17 @@ pub struct SoundBank {
     mine: Handle<AudioSource>,
     reaction: Handle<AudioSource>,
     round_end: Handle<AudioSource>,
+    ambient_drone: Handle<AudioSource>,
+    ambient_blips: [Handle<AudioSource>; AMBIENT_BLIPS],
 }
+
+/// How many one-shot ambient clips `Ambience` chooses between.
+pub const AMBIENT_BLIPS: usize = 6;
+
+/// The base's looping hum; at most one exists, kept in step with
+/// `Ambience::is_active` by `sync_drone`.
+#[derive(Component)]
+pub struct AmbientDrone;
 
 impl SoundBank {
     pub fn load(sources: &mut Assets<AudioSource>) -> Self {
@@ -51,6 +61,19 @@ impl SoundBank {
             mine: add(include_bytes!("../../../assets/sounds/mine.wav")),
             reaction: add(include_bytes!("../../../assets/sounds/reaction.wav")),
             round_end: add(include_bytes!("../../../assets/sounds/round_end.wav")),
+            ambient_drone: add(include_bytes!("../../../assets/sounds/ambient_drone.wav")),
+            ambient_blips: [
+                add(include_bytes!("../../../assets/sounds/ambient_beep.wav")),
+                add(include_bytes!("../../../assets/sounds/ambient_chirp.wav")),
+                add(include_bytes!(
+                    "../../../assets/sounds/ambient_warble_up.wav"
+                )),
+                add(include_bytes!(
+                    "../../../assets/sounds/ambient_warble_down.wav"
+                )),
+                add(include_bytes!("../../../assets/sounds/ambient_ping.wav")),
+                add(include_bytes!("../../../assets/sounds/ambient_trill.wav")),
+            ],
         }
     }
 
@@ -76,11 +99,31 @@ impl SoundBank {
             SoundEvent::Reaction => &self.reaction,
             SoundEvent::RoundEnd => &self.round_end,
         };
+        self.play_clip(commands, source, volume);
+    }
+
+    /// `blip` is an index from `Ambience::tick`.
+    pub fn play_blip(&self, commands: &mut Commands, blip: usize, volume: f32) {
+        self.play_clip(commands, &self.ambient_blips[blip], volume);
+    }
+
+    fn play_clip(&self, commands: &mut Commands, source: &Handle<AudioSource>, volume: f32) {
         commands.spawn((
             AudioPlayer::new(source.clone()),
             PlaybackSettings {
                 volume: Volume::Linear(volume),
                 ..PlaybackSettings::DESPAWN
+            },
+        ));
+    }
+
+    pub fn spawn_drone(&self, commands: &mut Commands, volume: f32) {
+        commands.spawn((
+            AmbientDrone,
+            AudioPlayer::new(self.ambient_drone.clone()),
+            PlaybackSettings {
+                volume: Volume::Linear(volume),
+                ..PlaybackSettings::LOOP
             },
         ));
     }

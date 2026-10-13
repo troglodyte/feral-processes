@@ -302,15 +302,19 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   hauler uses, over the same buffers the stock block counts.
 - **A dry dig job is not a want either — `build_wants`' deadlock rule
   crossed over**, and `Game::drop_dry_dig_wants` is where it is asked.
-- **A cut is never dry: a solid cell claims nothing from the substrate
+- **A cut is never dry: a solid cell claims nothing from the fragment
   budget, so the crew cuts now and floors later**, and the cut cell is a tile
   job that is — the budget claimed in want order, open cells before solid
   ones, settled *after* the unreachable drop rather than inside
   `Game::dig_wants`.
-- **The dig plan asks for its own tiles, through `Game::sync_dig_order`** —
-  one standing order flagged `WorkOrder::for_dig`, sized to every tile the
-  plan will spend (a solid cell's included), filed at the bottom and never
-  cancellable by hand.
+- **A tile costs `FLOOR_TILE_COST` Core Fragments and a finish
+  `FLOOR_FINISH_COST` Blank Substrate — two budgets in
+  `drop_dry_dig_wants`, one per item**, hand and crew alike.
+- **The dig plan asks for its own tiles and finishes, through
+  `Game::sync_dig_order`** — at most two standing orders flagged
+  `WorkOrder::for_dig`, keyed by flag *and* item (fragments sized to every
+  tile the plan will spend, a solid cell's included; substrate to every
+  finish), filed at the bottom and never cancellable by hand.
 - **What a program needs is a catalogue, and `assets/needs/` deleted is the
   pre-needs game.** `needs::NeedDb` is `MemoryDb`'s seam again — nine
   required fields, an absent directory loading silently empty, `iter` sorted

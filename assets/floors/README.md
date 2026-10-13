@@ -35,7 +35,8 @@ Drop a file in, restart, and it is in the world. Nothing else to edit.
 
 There is no `cost` field: every finish costs
 `crate::tuning::FLOOR_FINISH_COST` Blank Substrate, a fixed tuning constant,
-on top of the one the tile itself already spent to be floor at all.
+on top of the `FLOOR_TILE_COST` Core Fragments the tile itself already spent
+to be floor at all.
 
 ## The fifteen shades
 

@@ -30,7 +30,6 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 | `social.png` | `--template bonds --keys "p Enter M Tab"` |
 | `manifest.png` | `--template bonds --keys "p Enter M"` |
 | `report-overview.png` | `--template chains --keys "B"` |
-| `report-staff.png` | `--template chains --keys "B ] Tab"` |
 | `memories.png` | `--template bonds --keys "p Enter R"` |
 | `roster.png` | `--template bonds --keys "p Enter"` |
 | `downed.png` | `--template bonds --keys "D"` |

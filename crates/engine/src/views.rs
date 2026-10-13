@@ -3527,6 +3527,16 @@ pub struct StockRow {
     pub qty: u32,
 }
 
+/// Why each base report page deserves a look, or `None` when it does not.
+/// One field per page that can be flagged; the rail's `!` and the Overview
+/// read this and nothing else. A page with no gap to report (Output) holds
+/// a field anyway so a later phase fills it without reshaping the rail.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BaseReportFlags {
+    pub production: Option<String>,
+    pub alerts: Option<String>,
+}
+
 /// One item's line on the base output page — see `Game::base_output_report`.
 ///
 /// Every figure is carried as a number rather than pre-rendered text: none

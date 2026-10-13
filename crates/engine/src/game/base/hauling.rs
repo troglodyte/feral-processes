@@ -155,6 +155,22 @@ fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> 
         .any(|(pos, recipe)| touching(*pos, machine) && recipe.iter().any(|(want, _)| want == item))
 }
 
+/// Whether a Depot touching `machine` takes `item` in. The Depot's intake
+/// pulls a worked producer's output into it (`systems::depot_intake_system`),
+/// so a buffer with such a shelf beside it is fed rather than a pile, and
+/// the crew leaves it be. Asked of *every* Depot, full ones included: a full
+/// shelf backs the producer up rather than turning the crew onto it.
+fn depot_beside_accepting(
+    machine: Position,
+    item: &ItemId,
+    stores: &[(Entity, Position)],
+    accepts: impl Fn(Entity, &ItemId) -> bool,
+) -> bool {
+    stores
+        .iter()
+        .any(|&(depot, pos)| touching(pos, machine) && accepts(depot, item))
+}
+
 fn chebyshev(a: Position, b: Position) -> i32 {
     (a.x - b.x).abs().max((a.y - b.y).abs())
 }
@@ -1506,9 +1522,10 @@ pub(crate) fn haul_step_system(
                         Ok(MachineStatus::Clogged | MachineStatus::Stranded)
                     );
                     let attached = structures.get(machine).ok().is_some_and(|(_, p, _, s)| {
-                        db.get(&s.kind)
-                            .and_then(produced_item)
-                            .is_some_and(|item| consumer_beside(*p, item, &consumers))
+                        db.get(&s.kind).and_then(produced_item).is_some_and(|item| {
+                            consumer_beside(*p, item, &consumers)
+                                || depot_beside_accepting(*p, item, &stores, accepts)
+                        })
                     });
                     if !clogged && attached {
                         continue;

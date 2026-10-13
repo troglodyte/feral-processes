@@ -88,9 +88,12 @@ almost anything else — on a base short of hands, that means a machine stands i
 stay on. With no cell on any shelf, that program goes to a Power Conduit and makes some instead. A work order is an item and a quantity and nothing else — say what you want and
 the base works out which machines make it, who stands on each, and what has to be fetched. The queue
 is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
-and > move the highlighted order up and down. Cancelling one unwinds nothing.
+and > move the highlighted order up and down. Cancelling one unwinds nothing. Orders live on the
+Work orders page of the base report (B, then ] until it is highlighted); Enter on the last row queues
+another, and Backspace drops the highlighted one. Orders and the duty table are edited from the base itself,
+not from out on the open grid, and the rail marks the page with a ! while an order is stalled.
 
-The base staff row on the base menu opens a table, one row per program and one column per kind of
+The Staffing page of the base report opens a table, one row per program and one column per kind of
 job — Operate, Guard, Dig, Build. Space unchecks or rechecks the highlighted cell, [A] does the
 whole column at once, and an unchecked column is a program that will never be handed that kind of
 job, however short-handed the base gets; leave every box checked (the default for a program you

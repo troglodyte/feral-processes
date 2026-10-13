@@ -20,9 +20,8 @@ Moving and living:
 
 Your menus and stores:
 
-- b — base menu: deploy, compile, work orders, base staff, work it yourself, upgrade, demolish,
-  structure roster, research, study a program, routine and affix research, contracts, caravan,
-  dispatch, base report, recipes
+- b — base menu: deploy, compile, work it yourself, upgrade, demolish, research, study a program,
+  routine and affix research, contracts, caravan, dispatch, base report, recipes
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
   develop, perks, tools
 - ? — this manual
@@ -59,7 +58,7 @@ Reading and housekeeping:
   are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
   needs you.
 - L — history
-- B — the base report: a rail of pages down the left (Overview, Staff, Production, Alerts) and the page
+- B — the base report: a rail of pages down the left (Overview, Staff, Production, Work orders, Staffing, Alerts) and the page
   beside it. [ and ] move between pages, Tab cycles a page's screens, and Esc leaves for wherever you
   opened it from. B reopens the page you left. The Overview shows where the base is short, and Enter
   opens the highlighted page.

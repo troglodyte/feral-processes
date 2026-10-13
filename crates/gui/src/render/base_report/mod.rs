@@ -46,18 +46,27 @@ pub(super) fn draw_base_report(
     draw_rows_in(content, &rows, painter, m);
 }
 
-/// A popup child's parent screen, drawn as the frame behind it. The child
-/// owns the cursor and the refusal line, so the parent shows neither.
-pub(super) fn draw_popup_parent(
-    game: &mut Game,
-    child: Mode,
-    app_screens: &AppScreens,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    if let Some(parent) = base_popup_parent(child) {
-        draw_base_report(game, parent, usize::MAX, app_screens, None, painter, m);
-    }
+/// A popup child's parent page, drawn as the frame behind it: rail, title
+/// and keybar, but not the screen's rows. The popup panel is not quite
+/// opaque and lets whatever lies under it through, which over the map is
+/// the point and over a screen of text is unreadable, so the rows wait
+/// until the popup is gone. The child owns the cursor and the refusal line.
+pub(super) fn draw_popup_parent(game: &Game, child: Mode, painter: &Painter, m: &Metrics) {
+    let Some(parent) = base_popup_parent(child) else {
+        return;
+    };
+    let Some((page, screen)) = base_page_of(parent) else {
+        return;
+    };
+    frame::paint_frame(
+        page,
+        screen,
+        parent,
+        &game.base_report_flags(),
+        None,
+        painter,
+        m,
+    );
 }
 
 /// The rows of one hub screen. Every figure comes from the engine; this only

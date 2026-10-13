@@ -1197,11 +1197,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::WorkOrderPick => {
-            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
+            base_report::draw_popup_parent(game, app.mode, painter, m);
             draw_work_order_pick(&orderable, selected, refusal, painter, m)
         }
         Mode::WorkOrderQuantity => {
-            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
+            base_report::draw_popup_parent(game, app.mode, painter, m);
             draw_work_order_quantity(
                 game,
                 app.pending_order.clone(),
@@ -1583,7 +1583,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
-            base_report::draw_popup_parent(game, app.mode, &app_screens, painter, m);
+            base_report::draw_popup_parent(game, app.mode, painter, m);
             if let Some(staffing) = &staffing {
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }

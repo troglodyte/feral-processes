@@ -190,7 +190,7 @@ pub(crate) fn spend_bill_from_base(
 /// would spend is a block lying about the base. A *refund* goes to Depots
 /// alone: a unit pushed into a Mining Node's output buffer is
 /// indistinguishable from a unit that node produced, and would be hauled
-/// away and counted as a cycle's yield. The dig crew's substrate draw
+/// away and counted as a cycle's yield. The dig crew's tile and finish draw
 /// already carries this same asymmetry.
 ///
 /// Filled in tile order, `spend_from_base`'s reason: bevy's iteration order

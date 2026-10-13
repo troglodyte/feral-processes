@@ -2095,8 +2095,8 @@ impl Game {
             .collect()
     }
 
-    /// Drops every dig want the base has no Blank Substrate left to floor,
-    /// and says so once per site.
+    /// Drops every dig want the base cannot pay for — Core Fragments for a
+    /// tile, Blank Substrate for a finish — and says so once per site.
     ///
     /// **A dry job is not a want**, `build_is_workable`'s rule crossed over:
     /// a body pinned to a job it cannot afford is a body that cannot go run

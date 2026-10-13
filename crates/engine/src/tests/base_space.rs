@@ -3175,6 +3175,29 @@ fn a_crew_cuts_with_no_fragments_and_floors_once_they_arrive() {
     );
 }
 
+/// A base one fragment short of a tile is dry, not half-paid: the budget
+/// claims the whole `FLOOR_TILE_COST`, so the job is dropped and said once
+/// rather than posted to a body that cannot lay it.
+#[test]
+fn a_crew_one_fragment_short_of_a_tile_is_dry() {
+    let (mut game, _) = base_with_a_crew(3291, 1);
+    open_wall(&mut game);
+    set_fragments(&mut game, crate::tuning::FLOOR_TILE_COST - 1);
+    mark(&mut game, WALL);
+
+    pass(
+        &mut game,
+        4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
+    );
+
+    assert!(matches!(
+        cell(&game, WALL),
+        Some(base_grid::BaseCell::Open { .. })
+    ));
+    assert_eq!(lines_saying(&game, NO_FRAGMENTS), 1);
+    assert_eq!(fragments_held(&game), crate::tuning::FLOOR_TILE_COST - 1);
+}
+
 /// **The budget is shared, and one tile's fragments floor one cell.** Both
 /// cells are opened by hand: a crew cut can shake a fragment loose, and two
 /// of those would pay for the second tile and make the count luck.
@@ -5489,6 +5512,48 @@ fn the_plans_order_cannot_be_cancelled_by_hand() {
 fn a_plan_with_no_lathe_files_nothing() {
     let (mut game, _staff) = base_with_a_crew(3403, 1);
     mark_finish(&mut game, WALL);
+
+    pass(&mut game, 2);
+
+    assert!(game.work_orders().is_empty(), "{:?}", game.work_orders());
+}
+
+/// A tile and a finish at once file two plan orders, each tracked by its
+/// own item: withdrawing the finish's substrate must leave the tile's
+/// fragment order standing.
+#[test]
+fn a_tile_and_a_finish_keep_two_plan_orders_apart() {
+    let (mut game, _staff) = base_with_a_crew(3406, 1);
+    lay_substrate_line(&mut game);
+    fragments_for(&mut game, 0);
+    open_wall(&mut game);
+    mark(&mut game, WALL);
+    let finished = (WALL.0, WALL.1 + 1);
+    mark_finish(&mut game, finished);
+    pass(&mut game, 2);
+
+    let items: Vec<ItemId> = dig_orders(&game).into_iter().map(|o| o.item).collect();
+    assert_eq!(
+        items.len(),
+        2,
+        "one fragment order and one substrate order: {items:?}"
+    );
+
+    game.toggle_mark_box(finished, finished, None);
+    pass(&mut game, 2);
+
+    let orders = dig_orders(&game);
+    assert_eq!(orders.len(), 1, "{orders:?}");
+    assert_eq!(orders[0].item, ItemId::from(ids::CORE_FRAGMENT));
+    assert_eq!(orders[0].qty, crate::tuning::FLOOR_TILE_COST);
+}
+
+/// No Mining Node, no fragment order — the tile half of
+/// `a_plan_with_no_lathe_files_nothing`.
+#[test]
+fn a_tile_plan_with_no_mining_node_files_nothing() {
+    let (mut game, _staff) = base_with_a_crew(3407, 1);
+    mark(&mut game, WALL);
 
     pass(&mut game, 2);
 

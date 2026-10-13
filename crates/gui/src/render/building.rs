@@ -1965,7 +1965,7 @@ fn assignee_vitals(a: &Assignee) -> String {
     format!("{level}{hp}")
 }
 
-/// What the base has made — the base menu's "Base output" row.
+/// What the base has made — the base report's Production page.
 ///
 /// **Every figure comes out of `Game::base_output_report`**,
 /// `draw_companion_memories`' rule: the sector/run split, which section an
@@ -1974,20 +1974,10 @@ fn assignee_vitals(a: &Assignee) -> String {
 /// from. `Game::attention` is reached the same way — through the report,
 /// which *calls* it rather than restating what needs the player.
 ///
-/// The page does not scroll — `draw_popup` pages a `Row::Item` span and
-/// there are none here — so its height is held by
-/// `the_tallest_base_output_page_fits_its_popup` rather than by a scrollbar.
-pub(super) fn draw_base_output(
-    game: &mut Game,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let report = game.base_output_report();
-    let rows = base_output_rows(&report);
-    draw_popup("Base Output", PopupSize::Large, &rows, refusal, painter, m);
-}
-
+/// The page does not scroll — the hub pages a `Row::Item` span and there are
+/// none here — so its height is held by
+/// `the_tallest_base_output_page_fits_its_content_rect` rather than by a
+/// scrollbar.
 /// How wide the item column is. A name longer than this is cut rather than
 /// allowed to push the four figures out of their columns: the page is read
 /// down a column, and one modded name would otherwise skew every row under
@@ -2053,7 +2043,7 @@ pub(super) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
     // placed to teach than any other screen: without it, a sector total that
     // grew while the party was underground reads as a counting bug.
     rows.push(text_row(
-        "The base works while you are away — the sector total counts that time. Esc to go back.",
+        "The base works while you are away — the sector total counts that time.",
     ));
     rows
 }
@@ -4088,8 +4078,8 @@ mod base_output_tests {
         })
     }
 
-    /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span and
-    /// this page has none, so a row past the bottom is dropped in silence —
+    /// **The page has no scroll.** The hub pages a `Row::Item` span and this
+    /// page has none, so a row past the bottom is dropped in silence —
     /// `the_tallest_memory_page_fits_its_popup`'s trap. Raising
     /// `BASE_OUTPUT_MAX_ROWS` past what fits means giving the page a scroll
     /// first.
@@ -4098,16 +4088,26 @@ mod base_output_tests {
     /// clamps the font at both ends, so below the clamp the box keeps
     /// shrinking while the line height stops.
     #[test]
-    fn the_tallest_base_output_page_fits_its_popup() {
+    fn the_tallest_base_output_page_fits_its_content_rect() {
         let rows = tallest_base_output_page().len();
-        for h in (600..=2160).step_by(60) {
-            let m = crate::text::ui_metrics(h as f32);
-            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
-            assert!(
-                rows + REFUSAL_MAX_LINES <= cap,
-                "a full base builds a {rows}-row page into a {cap}-row popup at {h}px"
-            );
-        }
+        crate::paint::with_painter(|p| {
+            for h in (600..=2160).step_by(60) {
+                let m = crate::text::ui_metrics(h as f32);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(
+                    h as f32 * 16.0 / 9.0,
+                    h as f32,
+                    char_w,
+                    &m,
+                );
+                // One line is the refusal, when there is one.
+                let cap = (content.h / m.line_height).floor() as usize - 1;
+                assert!(
+                    rows <= cap,
+                    "a full base builds a {rows}-row page into a {cap}-row content rect at {h}px"
+                );
+            }
+        });
     }
 
     /// The other axis, and the one nothing clamps at all: `draw_row` clips a
@@ -4115,25 +4115,27 @@ mod base_output_tests {
     /// is simply lost — and on this page the tail of a row is the run total
     /// and the sparkline.
     #[test]
-    fn no_base_output_row_overflows_its_popup() {
+    fn no_base_output_row_overflows_its_content_rect() {
         let rows = tallest_base_output_page();
         crate::paint::with_painter(|p| {
-            let m = crate::text::ui_metrics(900.0);
-            // 0.88 is `PopupSize::Large`'s width fraction, against the
-            // 1440x900 geometry `ui_metrics` is calibrated for.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for row in &rows {
-                let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) => t,
-                    _ => continue,
-                };
-                let drawn = p.measure_ui_advance(line, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "a base output row overflows the page by {:.0}px \
-                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = crate::text::ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for row in &rows {
+                    let line = match row {
+                        Row::Text(t) | Row::TextColored(t, _) => t,
+                        _ => continue,
+                    };
+                    let drawn = p.measure_ui_advance(line, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a base output row overflows the page by {:.0}px at {w}x{h} \
+                         ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                        drawn - room
+                    );
+                }
             }
         });
     }

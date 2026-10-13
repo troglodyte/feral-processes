@@ -42,11 +42,11 @@ impl App {
         self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
     }
 
-    /// Overview: a cursor over the pages. `Enter`, or a row's own shortcut,
-    /// jumps to that page's first screen.
+    /// Overview: a cursor over the pages after itself. `Enter`, or a row's
+    /// own shortcut, jumps to that page's first screen.
     pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {
-        if let Some(page) = self.selected_index(key, BASE_REPORT_PAGES.len()) {
-            self.mode = BASE_REPORT_PAGES[page].screens[0];
+        if let Some(row) = self.selected_index(key, BASE_REPORT_PAGES.len() - 1) {
+            self.mode = BASE_REPORT_PAGES[row + 1].screens[0];
         }
     }
 }

@@ -152,9 +152,18 @@ fn the_base_output_row_is_gone_and_the_report_row_is_offered() {
 fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     let mut app = test_app(30011);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.mode,
+        Mode::BaseOutput,
+        "row 0 is the page after Overview"
+    );
+
+    let mut app = test_app(30013);
+    app.handle_key(GameKey::Char('B'));
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::BaseOutput);
+    assert_eq!(app.mode, Mode::Alerts);
 }
 
 #[test]

@@ -575,7 +575,14 @@ fn popup_layout<'a>(
         .max(0.0) as usize;
     let rows_shown = (rows.len() + status).min(max_rows).max(MIN_POPUP_ROWS);
     let h = rows_shown as f32 * m.line_height + chrome;
+    page_rows(rows, rows_shown, status, h)
+}
 
+/// Splits `rows` around its `Row::Item` span and works out which slice of
+/// that span `rows_shown` lines (refusal lines included) can hold, keeping
+/// the selected row in view. The one paging rule: a popup and a hub content
+/// rect both call it, so they cannot scroll differently.
+fn page_rows<'a>(rows: &'a [Row], rows_shown: usize, status: usize, h: f32) -> PopupLayout<'a> {
     let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
     let last_item = rows.iter().rposition(|r| matches!(r, Row::Item { .. }));
     let (header, body, footer): (&[Row], &[Row], &[Row]) = match (first_item, last_item) {
@@ -697,9 +704,50 @@ pub(super) fn draw_popup(
         BORDER,
     );
 
-    let mut cy = y + m.line_height * 2.0;
-    let max_y = y + h - m.inset;
-    for row in &status_lines {
+    draw_layout_rows(
+        &layout,
+        &status_lines,
+        x,
+        w,
+        y + m.line_height * 2.0,
+        y + h - m.inset,
+        painter,
+        m,
+    );
+}
+
+/// Draws `rows` into `rect` with the popup's paging — pinned header and
+/// footer, a body that scrolls to keep the selected row visible — but none
+/// of its chrome. For screens that live inside a frame of their own.
+pub(super) fn draw_rows_in(rect: Rect, rows: &[Row], painter: &Painter, m: &Metrics) {
+    let shown = (rect.h / m.line_height).floor().max(0.0) as usize;
+    let layout = page_rows(rows, shown, 0, rect.h);
+    draw_layout_rows(
+        &layout,
+        &[],
+        rect.x,
+        rect.w,
+        rect.y + m.font_size as f32,
+        rect.y + rect.h,
+        painter,
+        m,
+    );
+}
+
+/// The row-drawing half of `draw_popup`: refusal lines, header, the body
+/// window with its "N more" indicators, then the footer.
+#[allow(clippy::too_many_arguments)]
+fn draw_layout_rows(
+    layout: &PopupLayout,
+    status_lines: &[Row],
+    x: f32,
+    w: f32,
+    mut cy: f32,
+    max_y: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    for row in status_lines {
         cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
     for row in layout.header {

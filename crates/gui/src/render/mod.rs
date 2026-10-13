@@ -10,8 +10,9 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
-    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_page_of, equip_preview_tag,
+    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column,
+    stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -33,6 +34,7 @@ mod alerts;
 mod arena;
 mod bars;
 mod base;
+mod base_report;
 mod battle;
 mod breeding;
 mod building;
@@ -116,9 +118,9 @@ use battle::{
 };
 use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
-    build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
-    draw_build_program, draw_pin_prisoner, draw_pin_subject, draw_remove_confirm, draw_remove_menu,
-    draw_siphon, draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
+    build_commit, draw_base_staff, draw_build_direction, draw_build_menu, draw_build_program,
+    draw_pin_prisoner, draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon,
+    draw_staffing_menu, draw_structure_menu, draw_structures, draw_work_order_pick,
     draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
@@ -1578,7 +1580,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Alerts => alerts::draw_alerts(game, selected, refusal, painter, m),
+        mode if base_page_of(mode).is_some() => {
+            base_report::draw_base_report(game, mode, selected, refusal, painter, m)
+        }
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::Structures => draw_structures(game, selected, refusal, painter, m),
@@ -1588,7 +1592,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }
         }
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
-        Mode::BaseOutput => draw_base_output(game, refusal, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
@@ -1659,7 +1662,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 136] = [
+    const ALL_MODES: [Mode; 137] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1776,6 +1779,7 @@ mod tests {
         Mode::StructureAssign,
         Mode::Recipes,
         Mode::BaseOutput,
+        Mode::BaseOverview,
         Mode::Achievements,
         Mode::Options,
         Mode::Help,

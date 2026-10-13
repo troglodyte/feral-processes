@@ -1,26 +1,10 @@
-//! The alert board (`Mode::Alerts`), opened with `N` — a popup list over
-//! `Game::alerts`, scrolled by `draw_popup`/`popup_layout` like every other
-//! long list (correction 4 in the plan: the popup already scrolls, so this
-//! file writes no scroll arithmetic of its own).
+//! The alert board (`Mode::Alerts`), opened with `N` — its rows over
+//! `Game::alerts`, drawn into the base report's content rect, which pages
+//! them like every other long list: this file writes no scroll arithmetic.
 
 use feral_processes_engine::alerts::AlertKind;
 
 use super::*;
-
-pub(super) fn draw_alerts(
-    game: &Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let mut rows = alert_rows(&game.alerts(), selected);
-    rows.push(text_row(""));
-    rows.push(text_row(
-        "[\u{2191}\u{2193}] select  [x/d] dismiss  [Esc] close",
-    ));
-    draw_popup("Alerts", PopupSize::Large, &rows, refusal, painter, m);
-}
 
 /// The stall palette for `MachineStalled`, `THREAT` for a sweep or a siege —
 /// hostility and inbound harm, the same red the map reserves it for — and

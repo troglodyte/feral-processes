@@ -22,7 +22,7 @@ Your menus and stores:
 
 - b — base menu: deploy, compile, work orders, base staff, work it yourself, upgrade, demolish,
   structure roster, research, study a program, routine and affix research, contracts, caravan,
-  dispatch, base output, recipes
+  dispatch, base report, recipes
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
   develop, perks, tools
 - ? — this manual
@@ -59,8 +59,12 @@ Reading and housekeeping:
   are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
   needs you.
 - L — history
-- N — the alert board: production blockers and program events, capped and dismissed with x or d.
-  Opening it marks everything read.
+- B — the base report: a rail of pages down the left (Overview, Production, Alerts) and the page
+  beside it. [ and ] move between pages, Tab cycles a page's screens, and Esc leaves for wherever you
+  opened it from. B reopens the page you left. The Overview shows where the base is short, and Enter
+  opens the highlighted page.
+- N — the base report on its Alerts page: production blockers and program events, capped and
+  dismissed with x or d. Opening it marks everything read.
 - u — the compass: home, the settlements and the Stack entrances you know of, each with its
   heading and distance. Enter points the compass at the highlighted place, and the zone map keeps
   that heading in view; X clears it. It reads the zone surface only, and costs no time.

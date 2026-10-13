@@ -816,6 +816,18 @@ pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&It
     def.assembles.as_ref().map(|a| &a.item)
 }
 
+/// The program posted to work `machine`: the holder of a `GatherResource` task
+/// aimed at it. The one definition of "is worked", read by the assembler, the
+/// idle pass, the Teardown Rig, the Prison Cell and the Depot's intake alike.
+pub(crate) fn worker_of<'a>(
+    mut tasks: impl Iterator<Item = (Entity, &'a Task)>,
+    machine: Entity,
+) -> Option<Entity> {
+    tasks
+        .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
+        .map(|(e, _)| e)
+}
+
 /// True when `a`'s product is one of `b`'s assembly ingredients. The one
 /// definition of an ingredient edge: the map's drawn links and a production
 /// line's membership both call it, so they cannot disagree.
@@ -1238,7 +1250,7 @@ fn burn_grid_upkeep(world: &mut World) {
 #[allow(clippy::too_many_arguments)]
 pub fn idle_machine_system(
     mut machines: Query<(Entity, &Structure, &Position, &mut MachineStatus)>,
-    tasks: Query<&Task>,
+    tasks: Query<(Entity, &Task)>,
     structure_db: Res<StructureDb>,
     grid: Res<PowerGrid>,
     clock: Res<GameClock>,
@@ -1275,10 +1287,7 @@ pub fn idle_machine_system(
         if def.is_some_and(|d| !d.runs_a_job()) {
             continue;
         }
-        let worked = tasks
-            .iter()
-            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
-        if worked {
+        if worker_of(tasks.iter(), machine).is_some() {
             continue;
         }
         set_machine_status(
@@ -2083,11 +2092,7 @@ pub fn assembler_system(
         // `Idle` is `idle_machine_system`'s to announce, for every kind of
         // machine rather than only the ones that assemble. This branch just
         // has nothing to pull.
-        let Some(worker) = tasks
-            .iter()
-            .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
-            .map(|(e, _)| e)
-        else {
+        let Some(worker) = worker_of(tasks.iter(), machine) else {
             continue;
         };
 

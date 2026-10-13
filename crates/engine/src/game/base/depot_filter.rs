@@ -24,6 +24,13 @@
 
 use crate::*;
 
+/// The rule itself, over a Depot's filter rather than the Depot: the crew's
+/// haul and the intake system hold a `DepotFilter` from a query and have no
+/// `Game` to ask. `None` is the absent component, which takes anything.
+pub(crate) fn filter_accepts(filter: Option<&DepotFilter>, item: &ItemId) -> bool {
+    filter.is_none_or(|f| !f.denied.contains(item))
+}
+
 impl Game {
     /// Whether `depot` will take `item` in.
     ///
@@ -31,9 +38,7 @@ impl Game {
     /// makes this safe to ask of a Mining Node's buffer or of a structure
     /// spawned by a test fixture.
     pub(crate) fn depot_accepts(&self, depot: Entity, item: &ItemId) -> bool {
-        self.world
-            .get::<DepotFilter>(depot)
-            .is_none_or(|f| !f.denied.contains(item))
+        filter_accepts(self.world.get::<DepotFilter>(depot), item)
     }
 
     /// Denies or allows one row's items at one Depot — a single item, or

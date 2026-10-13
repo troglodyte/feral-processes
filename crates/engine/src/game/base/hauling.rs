@@ -1069,9 +1069,7 @@ pub(crate) fn haul_step_system(
     // a full shelf everywhere below, which is what lets the whole feature
     // be two `filter` calls rather than a state a worker has to carry.
     let accepts = |depot: Entity, item: &ItemId| {
-        filters
-            .get(depot)
-            .map_or(true, |f| !f.denied.contains(item))
+        crate::game::base::depot_filter::filter_accepts(filters.get(depot).ok(), item)
     };
     let HaulLookups {
         structures: db,

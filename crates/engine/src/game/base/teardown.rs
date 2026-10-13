@@ -14,9 +14,7 @@
 
 use crate::alerts::AlertBoard;
 use crate::base_grid::BaseGrid;
-use crate::components::{
-    CarryingProgram, Hopper, MachineStatus, Position, Stock, Structure, Task, TaskKind,
-};
+use crate::components::{CarryingProgram, Hopper, MachineStatus, Position, Stock, Structure, Task};
 use crate::resources::{BattleTelemetry, GameClock, MessageKind, MessageLog, PowerGrid};
 use crate::structures::StructureDb;
 use crate::systems::{StallSite, set_machine_status};
@@ -75,10 +73,7 @@ impl Game {
         // rather than a system's query — the shape `run_repair_bays` takes.
         let staffed = {
             let mut posted = self.world.query::<(Entity, &Task)>();
-            posted
-                .iter(&self.world)
-                .find(|(_, t)| t.target == rig && matches!(t.kind, TaskKind::GatherResource))
-                .map(|(worker, _)| worker)
+            crate::systems::worker_of(posted.iter(&self.world), rig)
         };
         let Some(worker) = staffed else {
             return;

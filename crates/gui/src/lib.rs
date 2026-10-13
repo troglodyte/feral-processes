@@ -14,6 +14,7 @@
 //! that rule exists to prevent. Bevy is here for its window, input, audio and
 //! render pipeline; the game loop stays a loop.
 
+mod ambience;
 mod capture;
 mod effect_draw;
 mod effects;
@@ -35,6 +36,8 @@ use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
 };
 
+use ambience::Ambience;
+use bevy::audio::Volume;
 pub use capture::Capture;
 use feral_processes_app_core::{
     App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
@@ -42,7 +45,7 @@ use feral_processes_app_core::{
 use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
-use sounds::SoundBank;
+use sounds::{AMBIENT_BLIPS, AmbientDrone, SoundBank};
 pub use sprites::install_library as install_sprite_library;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
@@ -194,6 +197,7 @@ struct Frontend {
     map_pointer: MapPointer,
     /// `smooth_scroll_delta` not yet spent on a zoom step — see `wheel_steps`.
     wheel_acc: f32,
+    ambience: Ambience,
 }
 
 /// Frame-to-frame pointer state for `Mode::SpriteEditor` — the first mouse
@@ -664,6 +668,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             sprite_pointer: SpritePointer::default(),
             map_pointer: MapPointer::default(),
             wheel_acc: 0.0,
+            ambience: Ambience::new(ambience_seed(), AMBIENT_BLIPS),
         })
         .init_resource::<sprites::Sprites>()
         .add_systems(Startup, (setup, sprites::load, effects::load))
@@ -683,7 +688,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
                 sync_drawn_icon,
             ),
         )
-        .add_systems(EguiPrimaryContextPass, frame);
+        .add_systems(EguiPrimaryContextPass, (frame, sync_drone).chain());
     add_font_install(&mut bevy_app);
     match capture {
         Some(capture) => capture::install(&mut bevy_app, capture),
@@ -770,6 +775,33 @@ fn setup(mut commands: Commands, mut sources: ResMut<Assets<AudioSource>>) {
     // sees, so spawning one is the whole of the context's setup.
     commands.spawn(Camera2d);
     commands.insert_resource(SoundBank::load(&mut sources));
+}
+
+/// A different blip sequence each launch. Only the gui's ambience reads it,
+/// so the wall clock here can't reach the sim or a test.
+fn ambience_seed() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64)
+}
+
+/// Starts, stops and re-levels the base's drone to match what `frame` just
+/// decided. Its own system because `frame` is at clippy's argument limit and
+/// the drone needs a query; the sink only exists from the frame after the
+/// spawn, so a volume change in that one frame is picked up on the next.
+fn sync_drone(
+    mut commands: Commands,
+    frontend: Res<Frontend>,
+    sounds: Res<SoundBank>,
+    mut drones: Query<(Entity, Option<&mut AudioSink>), With<AmbientDrone>>,
+) {
+    let volume = Volume::Linear(frontend.volume * ambience::DRONE_MIX);
+    match (frontend.ambience.is_active(), drones.iter_mut().next()) {
+        (true, None) => sounds.spawn_drone(&mut commands, frontend.volume * ambience::DRONE_MIX),
+        (true, Some((_, Some(mut sink)))) if sink.volume() != volume => sink.set_volume(volume),
+        (false, Some((entity, _))) => commands.entity(entity).despawn(),
+        _ => {}
+    }
 }
 
 /// What the frame reads about the player and the clock.
@@ -919,6 +951,13 @@ fn frame(
     let round = fe.app.game.as_ref().and_then(|g| g.tactical_round());
     if fe.fx.observe_round(round) {
         sounds.play(&mut commands, SoundEvent::RoundEnd, fe.volume);
+    }
+    // Not during a fight in the base: battle cues want the room to
+    // themselves. Nor over a death in it, which keeps `base_pos` until the
+    // game-over screen is dismissed.
+    let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver;
+    if let Some(blip) = fe.ambience.tick(now, ambient) {
+        sounds.play_blip(&mut commands, blip, fe.volume * ambience::BLIP_MIX);
     }
 
     // Timed whether or not the readout is on: a meter fed only while it is

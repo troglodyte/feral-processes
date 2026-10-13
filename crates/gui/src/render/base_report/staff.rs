@@ -7,10 +7,14 @@ use feral_processes_engine::{
 };
 
 /// Cells in a need's bar.
-const BAR_CELLS: usize = 6;
+const BAR_CELLS: usize = 5;
 
 /// The widest a program's name column grows.
-const NAME_CHARS: usize = 26;
+const NAME_CHARS: usize = 20;
+
+/// The widest a need's name column grows on the Coverage screen, whose rows
+/// carry six counts after it.
+const NEED_NAME_CHARS: usize = 14;
 
 /// Letters of a need's name kept in front of its bar.
 const NEED_TAG_CHARS: usize = 4;
@@ -41,7 +45,7 @@ fn activity_text(activity: &StaffActivity) -> String {
     match activity {
         StaffActivity::OnShift => "on shift".to_string(),
         StaffActivity::Servicing(verb) => verb.to_lowercase(),
-        StaffActivity::Waiting => "waiting for a place".to_string(),
+        StaffActivity::Waiting => "waiting".to_string(),
         StaffActivity::Downed => "downed".to_string(),
         StaffActivity::Break => "on a break".to_string(),
     }
@@ -57,6 +61,11 @@ pub(super) fn wellbeing_rows(report: &[WellbeingRow], selected: usize) -> Vec<Ro
         .max()
         .unwrap_or(0)
         .min(NAME_CHARS);
+    let mood_w = report
+        .iter()
+        .map(|r| r.mood.chars().count())
+        .max()
+        .unwrap_or(0);
     report
         .iter()
         .enumerate()
@@ -64,7 +73,7 @@ pub(super) fn wellbeing_rows(report: &[WellbeingRow], selected: usize) -> Vec<Ro
             let needs: Vec<String> = r.needs.iter().map(need_cell).collect();
             let name = elide(&r.name, name_w);
             let text = format!(
-                "{name:<name_w$}  {:<9} {:>3}/{:<3}  {}  {}",
+                "{name:<name_w$}  {:<mood_w$} {:>3}/{:<3}  {}  {}",
                 r.mood,
                 r.hp,
                 r.max_hp,
@@ -91,7 +100,8 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
         .iter()
         .map(|r| r.name.chars().count())
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .min(NEED_NAME_CHARS);
     let mut rows = vec![Row::TextColored(
         "Approximate: walking time is not counted.".to_string(),
         TEXT_DIM,
@@ -99,8 +109,8 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
     for (i, r) in report.iter().enumerate() {
         let short = if r.is_short() { " !" } else { "" };
         let text = format!(
-            "{:<name_w$}  built {} · places {}/{} · needed {}{short}   below critical {} · below content {}   lost ~{}%",
-            r.name,
+            "{:<name_w$}  built {} · places {}/{} · needed {}{short}  critical {} · low {}  lost ~{}%",
+            elide(&r.name, name_w),
             r.built,
             r.places,
             r.capacity,
@@ -191,7 +201,7 @@ mod tests {
         assert!(t.starts_with("Ada"), "{t}");
         assert!(t.contains("12/30") && t.contains("Cohe █"), "{t}");
         assert!(t.contains("!"), "a need under critical is marked: {t}");
-        assert!(t.contains("waiting for a place"), "{t}");
+        assert!(t.contains("waiting"), "{t}");
     }
 
     #[test]
@@ -236,6 +246,70 @@ mod tests {
         let rows = discontent_rows(&[row], 0);
         assert!(text_of(&rows[0]).contains("downed tools"));
         assert!(text_of(&rows[1]).contains("Mauled by (a Wolf)"));
+    }
+
+    /// `draw_row` clips a row vertically and never horizontally, so a line
+    /// past the right edge is lost. Held at the smallest supported window,
+    /// where the content rect is narrowest in characters.
+    fn assert_rows_fit(rows: &[Row], what: &str) {
+        crate::paint::with_painter(|p| {
+            for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+                let m = crate::text::ui_metrics(h);
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+                let room = content.w - m.pad * 2.0;
+                for row in rows {
+                    // `draw_row` prefixes every `Row::Item` with two spaces.
+                    let line = format!("  {}", text_of(row));
+                    let drawn = p.measure_ui_advance(&line, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a {what} row overflows by {:.0}px at {w}x{h} \
+                         ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                        drawn - room
+                    );
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn the_widest_wellbeing_row_fits_the_content_rect() {
+        let mut worst = wellbeing(true);
+        worst.name = "N".repeat(40);
+        worst.mood = "devoted";
+        worst.hp = 9999;
+        worst.max_hp = 9999;
+        worst.needs = ["Coherence", "Slack", "Warmth"]
+            .iter()
+            .map(|n| WellbeingNeed {
+                name: (*n).into(),
+                fraction: 0.5,
+                below_critical: true,
+            })
+            .collect();
+        assert_rows_fit(&wellbeing_rows(&[worst], 0), "Wellbeing");
+    }
+
+    #[test]
+    fn the_widest_coverage_row_fits_the_content_rect() {
+        let worst = CoverageRow {
+            name: "N".repeat(40),
+            built: 100,
+            places: 200,
+            capacity: 200,
+            needed: 100,
+            below_critical: 100,
+            below_content: 100,
+            lost_share: 1.0,
+            boxed_in: vec![BoxedInAmenity {
+                label: "Defrag Bay".into(),
+                x: -100,
+                y: -100,
+                open_tiles: 1,
+            }],
+        };
+        assert_rows_fit(&coverage_rows(&[worst], 0), "Coverage");
     }
 
     #[test]

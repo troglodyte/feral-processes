@@ -31,6 +31,26 @@ pub(crate) fn filter_accepts(filter: Option<&DepotFilter>, item: &ItemId) -> boo
     filter.is_none_or(|f| !f.denied.contains(item))
 }
 
+/// What a producer of kind `def` puts into its own output buffer, or `None`
+/// when it makes nothing or makes a banked product, which reaches no buffer.
+pub(crate) fn buffered_item<'a>(def: &'a StructureDef, items: &ItemDb) -> Option<&'a ItemId> {
+    let item = crate::systems::produced_item(def)?;
+    let banked = items.get(item.as_str()).is_some_and(|d| d.banked);
+    (!banked).then_some(item)
+}
+
+/// The one rule for "a Depot takes from this producer": the item a producer of
+/// kind `def` would hand over, if the Depot's `filter` lets it in. The pull
+/// (`depot_intake_system`) and the drawn join (`Game::depot_takes_from`) both
+/// ask it, so the picture cannot show a line the pull would refuse.
+pub(crate) fn item_depot_takes<'a>(
+    def: &'a StructureDef,
+    items: &ItemDb,
+    filter: Option<&DepotFilter>,
+) -> Option<&'a ItemId> {
+    buffered_item(def, items).filter(|item| filter_accepts(filter, item))
+}
+
 impl Game {
     /// Whether `depot` will take `item` in.
     ///
@@ -152,22 +172,30 @@ impl Game {
     pub(crate) fn depot_takes_from(&self, depot: Entity, producer: Entity) -> bool {
         self.is_depot(depot)
             && self
-                .buffered_output(producer)
-                .is_some_and(|item| self.depot_accepts(depot, &item))
+                .structure_def(producer)
+                .and_then(|def| {
+                    item_depot_takes(
+                        def,
+                        self.world.resource::<ItemDb>(),
+                        self.world.get::<DepotFilter>(depot),
+                    )
+                })
+                .is_some()
+    }
+
+    fn structure_def(&self, structure: Entity) -> Option<&StructureDef> {
+        let kind = &self.world.get::<Structure>(structure)?.kind;
+        self.world.resource::<StructureDb>().get(kind)
     }
 
     /// What `structure` puts into its own output buffer, or `None` when it
     /// makes nothing or makes a banked product.
     fn buffered_output(&self, structure: Entity) -> Option<ItemId> {
-        let kind = &self.world.get::<Structure>(structure)?.kind;
-        let def = self.world.resource::<StructureDb>().get(kind)?;
-        let item = crate::systems::produced_item(def)?;
-        let banked = self
-            .world
-            .resource::<ItemDb>()
-            .get(item.as_str())
-            .is_some_and(|d| d.banked);
-        (!banked).then(|| item.clone())
+        buffered_item(
+            self.structure_def(structure)?,
+            self.world.resource::<ItemDb>(),
+        )
+        .cloned()
     }
 
     fn structure_at_tile(&self, tile: (i32, i32)) -> Option<Entity> {

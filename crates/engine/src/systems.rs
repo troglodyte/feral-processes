@@ -2021,6 +2021,7 @@ pub fn depot_intake_system(
     tasks: Query<(Entity, &Task)>,
     filters: Query<&crate::components::DepotFilter>,
     structure_db: Res<StructureDb>,
+    items: Res<ItemDb>,
     grid: Res<PowerGrid>,
 ) {
     let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
@@ -2046,14 +2047,13 @@ pub fn depot_intake_system(
                 .get(producer)
                 .ok()
                 .and_then(|(_, s, _)| structure_db.get(&s.kind))
-                .and_then(produced_item)
+                .and_then(|def| {
+                    crate::game::base::depot_filter::item_depot_takes(def, &items, filter)
+                })
             else {
                 continue;
             };
-            if !crate::game::base::depot_filter::filter_accepts(filter, item)
-                || grid.is_dark(producer)
-                || worker_of(tasks.iter(), producer).is_none()
-            {
+            if grid.is_dark(producer) || worker_of(tasks.iter(), producer).is_none() {
                 continue;
             }
             let held = stocks

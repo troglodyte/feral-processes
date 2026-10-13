@@ -209,7 +209,9 @@ fn a_dark_nodes_output_stays_put() {
     }
 
     assert!(
-        game.world.resource::<crate::resources::PowerGrid>().is_dark(node),
+        game.world
+            .resource::<crate::resources::PowerGrid>()
+            .is_dark(node),
         "precondition"
     );
     assert_eq!(output_of(&game, depot, &frag()), 0);

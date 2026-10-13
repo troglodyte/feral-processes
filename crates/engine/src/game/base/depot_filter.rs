@@ -152,6 +152,17 @@ impl Game {
         }
     }
 
+    /// Whether `depot` would pull `producer`'s output: it is a Depot, the
+    /// producer makes something that reaches a buffer, and the filter lets it
+    /// in. The worked and lit gates are the pull's alone — the drawn join is
+    /// about the layout, as the machine-to-machine one is.
+    pub(crate) fn depot_takes_from(&self, depot: Entity, producer: Entity) -> bool {
+        self.is_depot(depot)
+            && self
+                .buffered_output(producer)
+                .is_some_and(|item| self.depot_accepts(depot, &item))
+    }
+
     /// What `structure` puts into its own output buffer, or `None` when it
     /// makes nothing or makes a banked product.
     fn buffered_output(&self, structure: Entity) -> Option<ItemId> {

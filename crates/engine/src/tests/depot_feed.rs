@@ -256,3 +256,35 @@ fn fragments_reach_a_lathe_through_a_depot_with_no_carrier() {
         "the Lathe drew fragments out of the Depot the node filled"
     );
 }
+
+// ---- the drawn join ---------------------------------------------------
+
+fn edges_of(game: &mut Game, structure: Entity) -> Vec<(i32, i32)> {
+    let mut edges = game
+        .linked_edges_by_structure()
+        .remove(&structure)
+        .unwrap_or_default();
+    edges.sort();
+    edges
+}
+
+#[test]
+fn a_depot_is_drawn_joined_to_a_producer_whose_output_it_accepts() {
+    let mut game = Game::new(9030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = node(&mut game, 40, 40, 0, false);
+    let depot = depot_for_fragments(&mut game, 41, 40);
+
+    assert_eq!(edges_of(&mut game, depot), vec![(-1, 0)]);
+    assert_eq!(edges_of(&mut game, node), vec![(1, 0)]);
+}
+
+#[test]
+fn a_depot_that_refuses_the_output_is_not_drawn_joined() {
+    let mut game = Game::new(9031, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = node(&mut game, 40, 40, 0, false);
+    let depot = depot_for_fragments(&mut game, 41, 40);
+    game.set_depot_filter(depot, &[frag()], false);
+
+    assert!(edges_of(&mut game, depot).is_empty());
+    assert!(edges_of(&mut game, node).is_empty());
+}

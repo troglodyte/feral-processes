@@ -9,10 +9,12 @@ impl Game {
     pub fn base_report_flags(&self) -> BaseReportFlags {
         let unread = self.unread_alerts();
         BaseReportFlags {
-            production: None,
+            production: self.production_flag(),
             staff: self.staff_flag(),
+            stock: self.stock_flag(),
             work_orders: self.work_orders_flag(),
             staffing: self.staffing_flag(),
+            build_orders: self.build_orders_flag(),
             alerts: (unread > 0).then(|| format!("{unread} unread")),
         }
     }

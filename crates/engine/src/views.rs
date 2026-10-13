@@ -3535,9 +3535,86 @@ pub struct StockRow {
 pub struct BaseReportFlags {
     pub production: Option<String>,
     pub staff: Option<String>,
+    pub stock: Option<String>,
     pub work_orders: Option<String>,
     pub staffing: Option<String>,
+    pub build_orders: Option<String>,
     pub alerts: Option<String>,
+}
+
+/// One structure that is not running, or is hurt, on the Machines screen —
+/// see `Game::machine_report`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineRow {
+    pub entity: Entity,
+    pub label: String,
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    /// `Running` for a machine listed only because it is damaged.
+    pub status: crate::components::MachineStatus,
+    /// Current/max `Durability` when below full, else `None`.
+    pub damage: Option<(u32, u32)>,
+}
+
+/// One structure's share of the grid - see `PowerReport`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PowerLine {
+    pub label: String,
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    /// What it puts on the grid now: 0 for a dry or unsiphoned supplier.
+    pub supply: u32,
+    /// What it takes, whether or not anyone is posted to it.
+    pub draw: u32,
+    /// A machine that lost the cut and is not running for want of grid.
+    pub dark: bool,
+}
+
+/// The base grid on the Power screen - see `Game::power_report`. `draw` and
+/// `supply` are `Game::base_power`'s figures, and each is the sum of the
+/// lines beneath it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PowerReport {
+    pub draw: u32,
+    pub supply: u32,
+    /// Largest contributor first.
+    pub lines: Vec<PowerLine>,
+}
+
+/// One item on the Stock screen: what the base holds against the target of
+/// the work order that asks for it, if one does - see `Game::stock_report`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StockReportRow {
+    pub item: ItemId,
+    pub tag: String,
+    pub name: String,
+    pub qty: u32,
+    /// The order's target, and where that order stands.
+    pub order: Option<(u32, OrderState)>,
+}
+
+impl StockReportRow {
+    /// Whether a work order wants more than the base holds. The sort, the
+    /// red figure and the Stock flag all ask this.
+    pub fn is_short(&self) -> bool {
+        self.order.is_some_and(|(target, _)| self.qty < target)
+    }
+
+    /// Short, and the order that should be filling the gap is not moving.
+    pub fn is_stalled_short(&self) -> bool {
+        self.is_short() && matches!(self.order, Some((_, OrderState::Stalled)))
+    }
+}
+
+/// One cell marked for a floor finish, or for stripping one - see
+/// `Game::floor_marks`. A plain dig mark is a `DigMark` and never one of
+/// these.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloorMark {
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    /// The finish to lay, or `None` for a strip.
+    pub finish: Option<String>,
 }
 
 /// What a staff program is doing right now, as the Wellbeing page words it.

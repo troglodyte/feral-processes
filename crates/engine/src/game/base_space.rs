@@ -568,30 +568,74 @@ impl Game {
     /// A digger's `Task::progress` is the swing *cadence* and resets to zero
     /// every swing, so a bar drawn off it would sweep full and empty again
     /// between chips while the cut itself barely moved.
-    pub fn marked_cells(&mut self) -> Vec<DigMark> {
-        let solid: Vec<(Position, u32, u32)> = {
-            let mut query = self.world.query::<(&DigSite, &Position, &Durability)>();
-            query
-                .iter(&self.world)
-                .filter(|(d, ..)| d.marked)
-                .map(|(_, p, dur)| (*p, dur.hp, dur.max_hp))
-                .collect()
-        };
-        let grid = self.world.resource::<BaseGrid>();
-        let mut marks: Vec<DigMark> = solid
+    pub fn marked_cells(&self) -> Vec<DigMark> {
+        self.marked_sites()
             .into_iter()
-            .map(|(p, hp, max_hp)| DigMark {
-                pos: (p.x, p.y),
-                // Only a cell that still *is* a wall has a wall left to
-                // report. A marked `Open` cell is the other half of the one
-                // dig verb — floor it — and carries its old wall's `max_hp`
-                // against an `hp` of zero, which would read as a finished
-                // bar sitting on a job that has not started.
-                cut: (grid.is_solid(p.x, p.y) && max_hp > 0)
-                    .then(|| 1.0 - hp as f32 / max_hp as f32),
+            .map(|(mark, _)| mark)
+            .collect()
+    }
+
+    /// The marks that are plain digs: cut it, or tile it. `marked_cells`
+    /// less the finish marks, which `floor_marks` lists instead, so the
+    /// Digging and Floors screens never both show a cell.
+    pub fn dig_marks(&self) -> Vec<DigMark> {
+        self.marked_sites()
+            .into_iter()
+            .filter(|(_, finish)| finish.is_none())
+            .map(|(mark, _)| mark)
+            .collect()
+    }
+
+    /// Cells marked to be finished, or stripped, in `(x, y)` order.
+    pub fn floor_marks(&self) -> Vec<FloorMark> {
+        let floors = self.world.resource::<crate::floors::FloorDb>();
+        self.marked_sites()
+            .into_iter()
+            .filter_map(|(mark, finish)| {
+                let finish = finish?;
+                Some(FloorMark {
+                    pos: mark.pos,
+                    finish: match finish {
+                        FinishOrder::Strip => None,
+                        FinishOrder::Apply(id) => Some(
+                            floors
+                                .get(&id)
+                                .map_or_else(|| id.0.clone(), |d| d.name.clone()),
+                        ),
+                    },
+                })
+            })
+            .collect()
+    }
+
+    /// Every marked cell with the finish it carries: the one list the three
+    /// readers above filter, so a mark is a dig or a floor by one test.
+    fn marked_sites(&self) -> Vec<(DigMark, Option<FinishOrder>)> {
+        let grid = self.world.resource::<BaseGrid>();
+        let mut marks: Vec<(DigMark, Option<FinishOrder>)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let site = e.get::<DigSite>().filter(|d| d.marked)?;
+                let p = e.get::<Position>()?;
+                let dur = e.get::<Durability>()?;
+                Some((
+                    DigMark {
+                        pos: (p.x, p.y),
+                        // Only a cell that still *is* a wall has a wall left
+                        // to report. A marked `Open` cell is the other half
+                        // of the one dig verb - floor it - and carries its
+                        // old wall's `max_hp` against an `hp` of zero, which
+                        // would read as a finished bar sitting on a job that
+                        // has not started.
+                        cut: (grid.is_solid(p.x, p.y) && dur.max_hp > 0)
+                            .then(|| 1.0 - dur.hp as f32 / dur.max_hp as f32),
+                    },
+                    site.finish.clone(),
+                ))
             })
             .collect();
-        marks.sort_unstable_by_key(|m| m.pos);
+        marks.sort_unstable_by_key(|(m, _)| m.pos);
         marks
     }
 

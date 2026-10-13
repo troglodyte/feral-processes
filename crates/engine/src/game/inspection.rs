@@ -787,16 +787,14 @@ impl Game {
     /// Tile order for `assembler_system`'s reason: bevy's iteration order is
     /// not stable, and a list that reshuffled between openings is a list the
     /// player cannot learn.
-    pub fn build_order_report(&mut self) -> Vec<crate::views::BuildOrderRow> {
-        let sites: Vec<(i32, i32, Entity)> = {
-            let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
-            let mut found: Vec<(i32, i32, Entity)> = query
-                .iter(&self.world)
-                .map(|(e, _, p)| (p.x, p.y, e))
-                .collect();
-            found.sort_unstable();
-            found
-        };
+    pub fn build_order_report(&self) -> Vec<crate::views::BuildOrderRow> {
+        let mut sites: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.contains::<BuildSite>())
+            .filter_map(|e| e.get::<Position>().map(|p| (p.x, p.y, e.id())))
+            .collect();
+        sites.sort_unstable();
         sites
             .into_iter()
             .filter_map(|(.., e)| self.build_order_row(e))

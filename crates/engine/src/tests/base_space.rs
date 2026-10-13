@@ -2762,6 +2762,41 @@ fn a_finish_mark_and_a_strip_mark_survive_a_real_save_and_load() {
     );
 }
 
+/// The Floors screen lists finish and strip marks; the Digging screen lists
+/// plain marks; no cell is on both, and the map's `marked_cells` has all.
+#[test]
+fn floor_marks_exclude_plain_dig_marks_and_digging_excludes_floor_marks() {
+    let mut game = game_at_the_frontier(3262);
+    let dug = WALL;
+    let finished = (WALL.0 + 1, WALL.1);
+    let stripped = (WALL.0 + 2, WALL.1);
+    {
+        let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+        grid.lay_floor(finished.0, finished.1);
+        grid.lay_floor(stripped.0, stripped.1);
+        grid.set_finish(stripped.0, stripped.1, FloorId::from("cobalt_carpet"));
+    }
+    game.toggle_mark_box(dug, dug, None);
+    let apply = FinishOrder::Apply(FloorId::from("moss_weave"));
+    game.toggle_mark_box(finished, finished, Some(&apply));
+    game.toggle_mark_box(stripped, stripped, Some(&FinishOrder::Strip));
+
+    let floors = game.floor_marks();
+    let digs = game.dig_marks();
+
+    assert_eq!(
+        floors.iter().map(|m| m.pos).collect::<Vec<_>>(),
+        vec![finished, stripped]
+    );
+    assert_eq!(floors[1].finish, None, "a strip names no finish");
+    assert!(
+        floors[0].finish.as_deref().is_some_and(|n| !n.is_empty()),
+        "an Apply names the finish it lays"
+    );
+    assert_eq!(digs.iter().map(|m| m.pos).collect::<Vec<_>>(), vec![dug]);
+    assert_eq!(game.marked_cells().len(), 3);
+}
+
 // ---------------------------------------------------------------------------
 // Slice 2: the crew
 // ---------------------------------------------------------------------------

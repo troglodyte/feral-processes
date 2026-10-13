@@ -873,6 +873,34 @@ fn base_power_reports_draw_and_supply_before_the_first_tick() {
     );
 }
 
+#[test]
+fn power_report_lines_reconcile_with_base_power_and_mark_the_dark_machine() {
+    // Three 1M machines on a 2M grid: the totals are the ledger's, and the
+    // one machine that lost the cut says so.
+    let mut game = game_on_a_short_grid("power_report_lines", 4009);
+    spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    spawn_machine_at(&mut game, "test_greedy_node", 4, 4);
+    spawn_machine_at(&mut game, "test_greedy_node", 6, 4);
+    spawn_structure_at(&mut game, "test_grid_source", 5, 4);
+
+    let report = game.power_report();
+    let (draw, supply) = game.base_power();
+
+    assert_eq!((report.draw, report.supply), (draw, supply));
+    assert_eq!(report.lines.iter().map(|l| l.draw).sum::<u32>(), draw);
+    assert_eq!(report.lines.iter().map(|l| l.supply).sum::<u32>(), supply);
+    assert_eq!(report.lines.len(), 4, "one line per structure on the grid");
+    assert_eq!(
+        report.lines.iter().filter(|l| l.dark).count(),
+        1,
+        "2M of supply covers two of three 1M machines"
+    );
+    assert!(
+        report.lines[0].supply == supply,
+        "biggest first: the source outweighs any one machine"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Upkeep: a supplier that declares `StructureDef::power_upkeep` burns a Power
 // Cell off an adjacent buffer to stay on the grid, and supplies nothing while
@@ -1512,4 +1540,61 @@ fn a_supplier_will_not_burn_an_item_that_is_not_grid_fuel() {
         5,
         "and none of them were spent"
     );
+}
+
+/// The Production flag is the Machines and Power reports' own verdicts: a
+/// machine in a gap status lights it, and so does a grid that cannot carry
+/// its draw; a clean base and a merely idle machine do not.
+#[test]
+fn the_production_flag_follows_machine_statuses_and_the_grid() {
+    let mut game = game_on_a_short_grid("production_flag", 4010);
+    spawn_structure_at(&mut game, "test_grid_source", 5, 4);
+    let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    assert_eq!(game.base_report_flags().production, None);
+
+    game.world.entity_mut(node).insert(MachineStatus::Idle);
+    assert_eq!(
+        game.base_report_flags().production,
+        None,
+        "idle is listed on the Machines screen but is not a gap"
+    );
+    assert_eq!(game.machine_report().len(), 1);
+
+    game.world.entity_mut(node).insert(MachineStatus::Starved);
+    assert!(game.base_report_flags().production.is_some());
+
+    game.world.entity_mut(node).insert(MachineStatus::Running);
+    spawn_machine_at(&mut game, "test_greedy_node", 4, 4);
+    spawn_machine_at(&mut game, "test_greedy_node", 6, 4);
+    let power = game.power_report();
+    assert!(power.draw > power.supply, "precondition");
+    assert!(game.base_report_flags().production.is_some());
+}
+
+#[test]
+fn the_machine_report_lists_stalls_worst_first_then_damage() {
+    use crate::components::Durability;
+    let mut game = game_on_a_short_grid("machine_report", 4011);
+    let idle = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    let dark = spawn_machine_at(&mut game, "test_greedy_node", 4, 4);
+    let hurt = spawn_machine_at(&mut game, "test_greedy_node", 6, 4);
+    let fine = spawn_machine_at(&mut game, "test_greedy_node", 7, 4);
+    game.world.entity_mut(idle).insert(MachineStatus::Idle);
+    game.world.entity_mut(dark).insert(MachineStatus::Unpowered);
+    game.world
+        .entity_mut(hurt)
+        .insert(Durability { hp: 2, max_hp: 5 });
+    game.world
+        .entity_mut(fine)
+        .insert(Durability { hp: 5, max_hp: 5 });
+
+    let rows = game.machine_report();
+
+    assert_eq!(
+        rows.iter().map(|r| r.entity).collect::<Vec<_>>(),
+        vec![dark, idle, hurt],
+        "a full-health running machine is not listed"
+    );
+    assert_eq!(rows[2].damage, Some((2, 5)));
+    assert_eq!(rows[0].damage, None);
 }

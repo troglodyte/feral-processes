@@ -1100,6 +1100,21 @@ impl MachineStatus {
         MachineStatus::Dry,
     ];
 
+    /// Why a machine in this state is not producing, as a screen words it.
+    /// `Running` has nothing to say.
+    pub fn reason(self) -> &'static str {
+        match self {
+            MachineStatus::Running => "",
+            MachineStatus::Starved => "nothing is feeding it",
+            MachineStatus::Clogged => "its output buffer is full",
+            MachineStatus::Unstaffed => "its program is away",
+            MachineStatus::Stranded => "its program can't reach it",
+            MachineStatus::Idle => "no program is assigned",
+            MachineStatus::Unpowered => "the grid is short",
+            MachineStatus::Dry => "no Power Cells beside it",
+        }
+    }
+
     /// The name a `telemetry::Record::MachineStall` carries.
     ///
     /// Its own match rather than `{:?}`, `cell_mark`'s rule turned at the

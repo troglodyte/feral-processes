@@ -54,28 +54,28 @@ fn a_depot_built_beside_a_node_allows_only_its_output() {
 }
 
 #[test]
-fn a_node_built_beside_an_unfiltered_depot_filters_it() {
+fn a_node_built_beside_an_unfiltered_depot_leaves_it_unfiltered() {
     let mut game = base_game(9002);
     let depot = build(&mut game, "depot", 1, 0);
-    assert!(takes(&game, depot, &ItemId::from(ids::POWER_CELL)));
     build(&mut game, "mining_node", 2, 0);
 
-    assert!(allow_only(&game, depot, &[frag()]));
+    assert!(
+        game.world.get::<DepotFilter>(depot).is_none(),
+        "only placing a Depot filters it"
+    );
+    assert!(takes(&game, depot, &ItemId::from(ids::POWER_CELL)));
 }
 
 #[test]
-fn a_manual_filter_only_gains_the_producers_item() {
+fn a_node_built_beside_a_filtered_depot_leaves_the_players_filter() {
     let mut game = base_game(9003);
     let depot = build(&mut game, "depot", 1, 0);
     let cell = ItemId::from(ids::POWER_CELL);
     game.set_depot_filter(depot, &[frag(), cell.clone()], false);
     build(&mut game, "mining_node", 2, 0);
 
-    assert!(takes(&game, depot, &frag()), "the node's output is let in");
-    assert!(
-        !takes(&game, depot, &cell),
-        "and nothing the player denied is lifted"
-    );
+    assert!(!takes(&game, depot, &frag()), "the node does not lift it");
+    assert!(!takes(&game, depot, &cell));
 }
 
 #[test]

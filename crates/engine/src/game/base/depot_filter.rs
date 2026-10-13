@@ -116,39 +116,32 @@ impl Game {
             .collect()
     }
 
-    /// Lets a producer's output into the Depots beside it, once, when the
-    /// later of the two is raised — called from `spawn_structure`, the one
-    /// place a structure comes into being, so a filter the player edits
-    /// afterwards is never re-derived.
+    /// Lets the producers beside a Depot's output into it, once, when the
+    /// Depot is placed — called from `spawn_structure`, the one place a
+    /// structure comes into being, so a filter the player edits afterwards is
+    /// never re-derived. A producer built later beside an existing Depot
+    /// leaves it alone: the player has had the chance to set it.
     ///
-    /// A Depot just built is paired with each producer beside it, and a
-    /// producer just built with each Depot beside it. A Depot with no filter
-    /// becomes allow-only for the item; one that already has a filter only
-    /// gains it, so the player's denials are never widened or narrowed
-    /// beyond that one item. A banked product reaches no buffer, so it is
-    /// skipped rather than written as a filter nothing could use.
+    /// A Depot with no filter becomes allow-only for each item; one that
+    /// already has a filter only gains them, so the player's denials are never
+    /// widened or narrowed beyond that. A banked product reaches no buffer, so
+    /// it is skipped rather than written as a filter nothing could use.
     pub(crate) fn auto_filter_depots(&mut self, built: Entity) {
+        if !self.is_depot(built) {
+            return;
+        }
         let Some(&Position { x, y }) = self.world.get::<Position>(built) else {
             return;
         };
-        let built_is_depot = self.is_depot(built);
-        let pairs: Vec<(Entity, ItemId)> = crate::game::base::collect::ORTHOGONAL
+        let items: Vec<ItemId> = crate::game::base::collect::ORTHOGONAL
             .iter()
-            .filter_map(|(dx, dy)| {
-                let neighbour = self.structure_at_tile((x + dx, y + dy))?;
-                if built_is_depot {
-                    Some((built, self.buffered_output(neighbour)?))
-                } else {
-                    let item = self.buffered_output(built)?;
-                    self.is_depot(neighbour).then_some((neighbour, item))
-                }
-            })
+            .filter_map(|(dx, dy)| self.buffered_output(self.structure_at_tile((x + dx, y + dy))?))
             .collect();
-        for (depot, item) in pairs {
-            if self.world.get::<DepotFilter>(depot).is_none() {
-                self.set_all_depot_filters(depot, false);
+        for item in items {
+            if self.world.get::<DepotFilter>(built).is_none() {
+                self.set_all_depot_filters(built, false);
             }
-            self.set_depot_filter(depot, &[item], true);
+            self.set_depot_filter(built, &[item], true);
         }
     }
 

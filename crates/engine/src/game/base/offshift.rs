@@ -214,8 +214,12 @@ pub(crate) struct Contender {
     pub at: Position,
     /// The amenity tile that held this program's place last tick.
     pub held: Option<(i32, i32)>,
-    /// Below `content`: may claim a place it does not hold.
+    /// Below `content` and off duty: may claim a place it does not hold. A
+    /// program posted at a job never claims one, so it cannot hold a place
+    /// against an off-shift program that walked there for it.
     pub wants: bool,
+    /// The reserve, which ranks newcomers: the emptiest is served first.
+    pub reserve: f32,
     /// Short of a full reserve: may keep a place it holds.
     pub keeps: bool,
 }
@@ -226,7 +230,8 @@ pub(crate) struct Contender {
 /// **Incumbents first, across every amenity, and only then the newcomers.**
 /// A program in reach keeps the place it holds whatever walks up beside it —
 /// entity order breaks ties among incumbents only when places shrank — and a
-/// free place goes to the nearest waiting program, ties by entity order.
+/// free place goes to the emptiest waiting program, then the nearest, then
+/// entity order.
 /// Deciding incumbents for all amenities before any newcomer is what stops a
 /// program in reach of two from walking out of the place it holds.
 pub(crate) fn allocate(
@@ -257,7 +262,13 @@ pub(crate) fn allocate(
             .iter()
             .filter(|c| c.wants && !granted.contains_key(&c.who) && in_reach(c.at, *site, *radius))
             .collect();
-        waiting.sort_by_key(|c| ((c.at.x - site.x).abs().max((c.at.y - site.y).abs()), c.who));
+        waiting.sort_by(|a, b| {
+            let dist = |c: &Contender| (c.at.x - site.x).abs().max((c.at.y - site.y).abs());
+            a.reserve
+                .total_cmp(&b.reserve)
+                .then_with(|| dist(a).cmp(&dist(b)))
+                .then_with(|| a.who.cmp(&b.who))
+        });
         for c in waiting.into_iter().take(left[i]) {
             granted.insert(c.who, (site.x, site.y));
         }

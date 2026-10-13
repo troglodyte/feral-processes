@@ -7,7 +7,7 @@ use super::needs::{
 use super::support::*;
 use crate::base_grid::BaseGrid;
 use crate::components::Position;
-use crate::game::base::offshift::{effective_places, in_reach, open_tiles};
+use crate::game::base::offshift::{Contender, allocate, effective_places, in_reach, open_tiles};
 use crate::needs::NeedDb;
 use crate::*;
 
@@ -105,28 +105,28 @@ fn an_incumbent_is_not_evicted_by_a_newcomer() {
     assert_eq!(refilled(&game, &staff, before), vec![staff[1], staff[2]]);
 
     put(&mut game, staff[0], site.x + 1, site.y);
-    let before = reserve(&game, staff[0]);
+    let waiting_before = reserve(&game, staff[0]);
+    let held_before = [reserve(&game, staff[1]), reserve(&game, staff[2])];
     game.tick();
 
     assert!(
-        reserve(&game, staff[0]) < before,
-        "the newcomer waits: {before} -> {}",
+        reserve(&game, staff[0]) < waiting_before,
+        "the newcomer waits: {waiting_before} -> {}",
         reserve(&game, staff[0])
     );
-    assert!(reserve(&game, staff[1]) > before - 1.0);
-    assert_eq!(refilled(&game, &staff[1..], 0.0).len(), 2);
+    assert!(
+        reserve(&game, staff[1]) > held_before[0],
+        "incumbent keeps its place"
+    );
+    assert!(
+        reserve(&game, staff[2]) > held_before[1],
+        "incumbent keeps its place"
+    );
 }
 
-/// Boxed in so only one standing tile is open, a bay serves one program.
-#[test]
-fn a_boxed_in_bay_serves_one() {
-    let (mut game, site, staff) = crowded_bay(73, 2);
-    let open = |game: &mut Game| {
-        let taken = game.structure_tiles();
-        let grid = game.world.resource::<BaseGrid>();
-        open_tiles(grid, site, 1, &taken)
-    };
-    // Fill every open reach tile but one with a Depot.
+/// Fills every open reach tile of the bay at `site` but one with a Depot and
+/// returns the one left standing.
+fn box_in_to_one_tile(game: &mut Game, site: Position) -> (i32, i32) {
     let mut keep = None;
     for dy in -1..=1 {
         for dx in -1..=1 {
@@ -137,12 +137,21 @@ fn a_boxed_in_bay_serves_one() {
             if keep.is_none() {
                 keep = Some((x, y));
             } else {
-                spawn_structure_at(&mut game, "depot", x, y);
+                spawn_structure_at(game, "depot", x, y);
             }
         }
     }
-    assert_eq!(open(&mut game), 1, "one tile left open");
-    let (kx, ky) = keep.unwrap();
+    let taken = game.structure_tiles();
+    let grid = game.world.resource::<BaseGrid>();
+    assert_eq!(open_tiles(grid, site, 1, &taken), 1, "one tile left open");
+    keep.unwrap()
+}
+
+/// Boxed in so only one standing tile is open, a bay serves one program.
+#[test]
+fn a_boxed_in_bay_serves_one() {
+    let (mut game, site, staff) = crowded_bay(73, 2);
+    let (kx, ky) = box_in_to_one_tile(&mut game, site);
     for &who in &staff {
         put(&mut game, who, kx, ky);
     }
@@ -151,6 +160,67 @@ fn a_boxed_in_bay_serves_one() {
     game.tick();
 
     assert_eq!(refilled(&game, &staff, before).len(), 1);
+}
+
+/// A program posted at a machine beside the bay is working, not waiting for
+/// a place: it claims none, so the bay's places go to off-duty programs.
+#[test]
+fn a_posted_worker_does_not_claim_a_place() {
+    let (mut game, site, staff) = crowded_bay(76, 2);
+    let (posted, critical_one) = (staff[0], staff[1]);
+    let (critical, content) = threshold(&game, &coherence());
+    let node = spawn_machine_at(&mut game, "mining_node", site.x, site.y + 2);
+    set_reserve(&mut game, posted, &coherence(), content);
+    game.assign_guard(posted, node).unwrap();
+    put(&mut game, posted, site.x + 1, site.y + 1);
+    set_reserve(&mut game, posted, &coherence(), (critical + content) / 2.0);
+    game.world
+        .entity_mut(critical_one)
+        .insert(crate::components::OffShift { need: coherence() });
+    put(&mut game, critical_one, site.x - 1, site.y);
+    let (posted_before, other_before) = (reserve(&game, posted), reserve(&game, critical_one));
+
+    game.tick();
+
+    assert!(
+        game.world.get::<crate::components::Task>(posted).is_some(),
+        "still posted"
+    );
+    assert!(
+        reserve(&game, critical_one) > other_before,
+        "off shift is served"
+    );
+    assert!(
+        reserve(&game, posted) < posted_before,
+        "posted holds no place"
+    );
+}
+
+/// Newcomers queue by how empty they are, then distance, then entity: the
+/// lowest reserve gets the one free place whatever its entity order.
+#[test]
+fn the_emptier_newcomer_gets_the_free_place() {
+    let mut world = World::new();
+    let (first, second) = (world.spawn_empty().id(), world.spawn_empty().id());
+    let (low, high) = if first < second {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    let site = Position { x: 2, y: 0 };
+    let contender = |who, reserve| Contender {
+        who,
+        at: Position { x: 1, y: 0 },
+        held: None,
+        wants: true,
+        reserve,
+        keeps: true,
+    };
+    let granted = allocate(
+        &[(site, 1, 1)],
+        &[contender(low, 18.0), contender(high, 5.0)],
+    );
+    assert_eq!(granted.keys().copied().collect::<Vec<_>>(), vec![high]);
 }
 
 /// With one bay full, a third program heads for the free one.

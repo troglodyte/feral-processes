@@ -16,7 +16,8 @@ working. The manifest names the reserve as steady, fraying, strained or critical
 When a reserve runs low the program leaves its post, walks to the nearest machine that restores it,
 and goes back to work once it is well restored. A machine restores two programs at a time. A third
 that arrives stands in reach and waits for a place, still running down, so a program heads for a
-machine with a free place when there is one. A machine with only one open tile around it, because
+machine with a free place when there is one. A program working a post beside a machine takes no
+place; places go to programs off duty, the most run down first. A machine with only one open tile around it, because
 other structures or rock crowd it, restores only one. Until then it works a little worse. Neither building
 takes a program to build, and both can stand inside a room; see [rooms](rooms) for how a room's
 quality speeds the refill. A reserve that drops low (below 20 Coherence or 25 Slack) with nothing in the base to restore it, or with

@@ -99,6 +99,7 @@ type Needful<'w> = (
     &'w Tamed,
     &'w Position,
     Option<&'w crate::disposition::Disposition>,
+    Option<&'w crate::components::OffShift>,
 );
 
 /// What `rooms::of_parts` needs beyond the structure db, each optional
@@ -143,7 +144,7 @@ pub fn needs_drain_system(
         &structure_db,
     );
     let mut staff: Vec<(Entity, Position)> = Vec::new();
-    for (entity, mut needs, task, tamed, at, disposition) in &mut programs {
+    for (entity, mut needs, task, tamed, at, disposition, _) in &mut programs {
         if roles.of(entity, tamed.owner) != Some(crate::game::party::ProgramRole::Staff) {
             // A program that left the staff keeps no place at an amenity.
             if needs.serviced().next().is_some() {
@@ -174,11 +175,10 @@ pub fn needs_drain_system(
     if staff.is_empty() {
         return;
     }
-    // Standing in reach of an amenity refills, whatever brought the program
-    // here — a body posted beside a Sandbox is being serviced too, and a rule
-    // that only paid off-shift bodies would make that read as the amenity
-    // being broken. But an amenity has only so many places: who holds one is
-    // decided whole each tick by `allocate`.
+    // An amenity has only so many places, and they go to bodies that are off
+    // duty: a program posted at a job claims none, or a machine beside a bay
+    // would hold a place against the critical program that walked there. Who
+    // holds one is decided whole each tick by `allocate`.
     let taken = crate::game::base::hauling::footprint_tiles(sites.iter().map(|(s, p)| {
         (
             *p,
@@ -202,13 +202,15 @@ pub fn needs_drain_system(
         let contenders: Vec<Contender> = staff
             .iter()
             .filter_map(|&(who, at)| {
-                let (_, needs, ..) = programs.get(who).ok()?;
+                let (_, needs, task, .., off_shift) = programs.get(who).ok()?;
                 let level = needs.get(&def.id)?;
+                let posted = task.is_some() && off_shift.is_none();
                 Some(Contender {
                     who,
                     at,
                     held: needs.serviced_at(&def.id),
-                    wants: level < def.content,
+                    wants: level < def.content && !posted,
+                    reserve: level,
                     keeps: level < crate::needs::NEED_MAX,
                 })
             })

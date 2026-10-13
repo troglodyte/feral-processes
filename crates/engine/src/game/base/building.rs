@@ -1058,7 +1058,7 @@ impl Game {
             // suppressed. A refusal is news to the player standing there,
             // not to the base's own record of what it did.
             return Err(format!(
-                "You need {cost} {} to press into a tile.",
+                "You need {} x{cost} to press into a tile.",
                 self.item_name(&fragment)
             ));
         }

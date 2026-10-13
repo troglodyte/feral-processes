@@ -873,9 +873,9 @@ impl CrewFields {
     }
 }
 
-/// Which of the two things `Game::announce_dig_dry` ran out of Blank
-/// Substrate for — the two wordings share everything but this. A cut is
-/// never one of them: cutting spends nothing and is never held back.
+/// Which of the two things `Game::announce_dig_dry` ran short for — a tile
+/// is short of Core Fragments, a finish of Blank Substrate. A cut is never
+/// one of them: cutting spends nothing and is never held back.
 enum DigDryReason {
     Tile,
     Finish,
@@ -1175,7 +1175,7 @@ impl Game {
         // perfectly good face that nothing can walk to, because that
         // question needs the bodies. A corridor gone missing after the fact,
         // or a plan drawn past `haul_walk_radius`, leaves a run of those —
-        // and `drop_dry_dig_wants` below would spend the substrate budget on
+        // and `drop_dry_dig_wants` below would spend the floor budget on
         // them, announcing the one cell the crew *could* floor as dry.
         //
         // Asked of the staff rather than of a fixed reference point, and
@@ -1243,7 +1243,7 @@ impl Game {
         self.cut_to_lowest_build_level(&mut wanted);
 
         // **After the unreachable drop and before the matching**, so the
-        // substrate a plan the crew cannot walk to would have claimed goes
+        // stock a plan the crew cannot walk to would have claimed goes
         // to the cell it can — see the function's own doc — and so a job
         // nobody can pay for is never counted as demand for a body.
         self.drop_dry_dig_wants(&mut wanted);
@@ -1838,7 +1838,7 @@ impl Game {
     /// Structural, like `feeders_for` and unlike a stock count: what makes a
     /// site a want is that the player marked it, not whether the base can
     /// pay for the tile that finishes it. A want that flickered as the
-    /// substrate shelf drained would walk bodies on and off the frontier for
+    /// fragment shelf drained would walk bodies on and off the frontier for
     /// the rest of the run.
     ///
     /// One want per site whichever half of the verb it is on: a marked solid
@@ -1964,7 +1964,7 @@ impl Game {
     /// fetch is a shelf to fill.
     ///
     /// **The latch clears the tick a source appears**, in `build_wants`
-    /// above — `dig_wants`' `substrate_available` is the same idea applied
+    /// above — `drop_dry_dig_wants`' budget is the same idea applied
     /// to `DigSite::announced_dry`, because the same failure mode reaches
     /// both: said once and never again, a base that ran dry early would
     /// stay silent about running dry later, whether the drought is a bill
@@ -2051,15 +2051,15 @@ impl Game {
     /// deliberately**: filled in list order, a short-handed base
     /// keeps holding its floor before it decorates it. **A cell already open
     /// outranks one still solid** for the same reason one rung down: laying
-    /// the tile spends the shared substrate and cutting more does not, so
-    /// the units there are go to flooring what is already cut before a body
+    /// the tile spends the shared fragments and cutting more does not, so
+    /// the ones there are go to flooring what is already cut before a body
     /// is spent opening more ground.
     ///
     /// **Structural only, never a stock count.** What a site can be *paid*
     /// for is `Game::drop_dry_dig_wants`, which runs over the assembled want
     /// list in `schedule_base_labour` rather than here — `has_station` is
     /// four grid lookups and answers for a cell on its own, while the
-    /// substrate is a budget shared by every site in the base and so cannot
+    /// floor budget is shared by every site in the base and so cannot
     /// be spent on one the scheduler is about to drop as unreachable.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         // `structure_tiles` and not `blocked_tiles`: `has_station` asks
@@ -2099,27 +2099,27 @@ impl Game {
     ///
     /// **A dry job is not a want**, `build_is_workable`'s rule crossed over:
     /// a body pinned to a job it cannot afford is a body that cannot go run
-    /// the Lathe that would press it more Blank Substrate, and a one-program
-    /// base stops for the rest of the run exactly the way an
+    /// the Mining Node or the Lathe that would make what it is short of, and
+    /// a one-program base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
     /// **A cut is never dry.** Cutting spends nothing, so a solid cell claims
     /// nothing from the budget and is never dropped: the crew mines the cell
-    /// out now and floors it later, once substrate exists. That is the
-    /// player's call — a base with no Lathe yet still digs, rather than
-    /// holding every cut on a tile it has no way to make. The cut cell stays
-    /// marked and becomes an ordinary tile job, which *is* dropped as dry
-    /// until a unit arrives. A tile job claims `1`, an `Apply` claims
-    /// `FLOOR_FINISH_COST`, a `Strip` claims nothing; the substrate is a
-    /// *budget* claimed in want order, so open cells — sorted first by
-    /// `dig_wants` — take the units before any finish does.
+    /// out now and floors it later, once the fragments exist. The cut cell
+    /// stays marked and becomes an ordinary tile job, which *is* dropped as
+    /// dry until they arrive.
     ///
-    /// **The plan still asks the Lathe for every tile it will spend**: a
-    /// solid cell adds the `1` its tile job will claim to `need`, though not
-    /// to the budget, and the total is handed to `Game::sync_dig_order` from
-    /// here because this is the one pass that has priced every site the crew
-    /// can reach. A cut cell waiting on a shelf nobody is told to fill would
-    /// stay bare for the rest of the run.
+    /// **Two budgets, one per item.** A tile job claims `FLOOR_TILE_COST`
+    /// Core Fragments; an `Apply` claims `FLOOR_FINISH_COST` Blank
+    /// Substrate, a `Strip` nothing. Each is claimed in want order, so open
+    /// cells — sorted first by `dig_wants` — take the fragments before a
+    /// later tile does, and a finish can never starve a tile or the reverse.
+    ///
+    /// **The plan asks the Lathe for its finishes, and only those**: the
+    /// substrate every `Apply` will claim is handed to `Game::sync_dig_order`
+    /// from here, because this is the one pass that has priced every site
+    /// the crew can reach. Tiles add nothing to it — fragments come out of
+    /// the rock and the Mining Node, and no work order makes them.
     ///
     /// **It runs over the assembled want list, after the unreachable drop
     /// and before the matching**, and that placement is the budget's half
@@ -2134,14 +2134,17 @@ impl Game {
     /// every tick regardless of whose turn it is to swing, which is what
     /// lets a later drought at the same site still be news. A dropped site
     /// is never posted, so nobody else is left to say the base is dry. The
-    /// crew keeps its own `spend_substrate` call for the one race a budget
+    /// crew keeps its own `spend_from_stores` call for the one race a budget
     /// cannot close — a unit claimed here and spent by a hand or a recipe
     /// before the job lands on it, since a claim reserves nothing outside
     /// this function — but that failure is silent, `run_build_crew`'s
     /// `Errand::Dry` rule: this pass already said the bulk of what there was
     /// to say, from the one place that can see every site every tick.
     fn drop_dry_dig_wants(&mut self, wanted: &mut Vec<(Entity, TaskKind)>) {
-        let mut budget = self.substrate_available();
+        let mut fragments =
+            self.stores_hold(&ItemId::from(crate::items::ids::CORE_FRAGMENT));
+        let mut substrate =
+            self.stores_hold(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE));
         let mut need = 0;
         let mut dry: Vec<Entity> = Vec::new();
         let sites: Vec<Entity> = wanted
@@ -2158,28 +2161,32 @@ impl Game {
                 .get::<DigSite>(site)
                 .and_then(|d| d.finish.clone());
             let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
-            // `(claim, asks)`: what the site takes from the budget now, and
-            // what it adds to the plan's order. They differ only for a cut.
-            let (claim, asks) = match &finish {
-                None if solid => (0, 1),
-                None => (1, 1),
-                Some(FinishOrder::Apply(_)) => {
-                    let cost = crate::tuning::FLOOR_FINISH_COST;
-                    (cost, cost)
-                }
-                Some(FinishOrder::Strip) => (0, 0),
+            // Which budget the site draws on, and what it claims from it
+            // now. Only a finish adds to the plan's order: a tile is paid in
+            // Core Fragments, which no machine on the queue can make.
+            let (budget, claim, reason) = match &finish {
+                None if solid => (&mut fragments, 0, DigDryReason::Tile),
+                None => (
+                    &mut fragments,
+                    crate::tuning::FLOOR_TILE_COST,
+                    DigDryReason::Tile,
+                ),
+                Some(FinishOrder::Apply(_)) => (
+                    &mut substrate,
+                    crate::tuning::FLOOR_FINISH_COST,
+                    DigDryReason::Finish,
+                ),
+                Some(FinishOrder::Strip) => (&mut substrate, 0, DigDryReason::Finish),
             };
-            need += asks;
-            if budget < claim {
-                let reason = match finish {
-                    Some(_) => DigDryReason::Finish,
-                    None => DigDryReason::Tile,
-                };
+            if finish.is_some() {
+                need += claim;
+            }
+            if *budget < claim {
                 self.announce_dig_dry(site, at.x, at.y, reason);
                 dry.push(site);
                 continue;
             }
-            budget -= claim;
+            *budget -= claim;
             if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
                 dig.announced_dry = false;
             }
@@ -2235,7 +2242,7 @@ impl Game {
                     .0
                     .push(WorkOrder::level(substrate, need).with_dig());
                 self.log_base(format!(
-                    "Your dig plan filed a standing work order: hold {need} x {name} to floor it."
+                    "Your dig plan filed a standing work order: hold {need} x {name} to finish its floors."
                 ));
             }
         }
@@ -2246,9 +2253,8 @@ impl Game {
     /// `DigSite::announced_dry` rather than `BuildSite::announced_dry` — and
     /// a second function rather than a shared one because a dig site names
     /// a cell, not a bill of materials: there is no `outstanding()` to read
-    /// back and format, only the one item every floor or finish job spends.
-    /// `reason` is the only difference between the two wordings; both name
-    /// the item.
+    /// back and format, only the one item each kind of job spends.
+    /// `reason` picks the wording and the item it names.
     fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32, reason: DigDryReason) {
         if self
             .world
@@ -2260,8 +2266,6 @@ impl Game {
         if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
             dig.announced_dry = true;
         }
-        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-        let name = self.item_name(&substrate).to_string();
         // "to spare" rather than "in store" throughout: under the budget a
         // site can be dry while the base holds stock, because the units are
         // claimed by the jobs ahead of it.
@@ -2271,27 +2275,30 @@ impl Game {
             // sharing a phrase is two tests each satisfied by the other's
             // bug.
             DigDryReason::Tile => format!(
-                "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} to spare."
+                "Your crew has nothing to floor the cut cell at ({x}, {y}) with — it needs {} x{} to spare.",
+                self.item_name(&ItemId::from(crate::items::ids::CORE_FRAGMENT)),
+                crate::tuning::FLOOR_TILE_COST
             ),
             DigDryReason::Finish => format!(
-                "Your crew can't finish the floor at ({x}, {y}) — it needs {} {name} to spare.",
-                crate::tuning::FLOOR_FINISH_COST
+                "Your crew can't finish the floor at ({x}, {y}) — it needs {} {} to spare.",
+                crate::tuning::FLOOR_FINISH_COST,
+                self.item_name(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE))
             ),
         };
         self.log_base(line);
     }
 
-    /// How many Blank Substrate a floor or finish job could spend without
-    /// moving any of them — the base's own stores, then the player's pack.
-    /// `dig_wants`' read, kept separate from `Game::spend_substrate` because
-    /// that one has to remove what it finds and this one must not.
-    pub(crate) fn substrate_available(&self) -> u32 {
-        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-        let base = base_holding(self, &substrate);
+    /// How many of `item` a floor or finish job could spend without moving
+    /// any of them — the base's own stores, then the player's pack.
+    /// `drop_dry_dig_wants`' read, kept separate from
+    /// `Game::spend_from_stores` because that one has to remove what it
+    /// finds and this one must not.
+    pub(crate) fn stores_hold(&self, item: &ItemId) -> u32 {
+        let base = base_holding(self, item);
         let pack = self
             .world
             .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&substrate))
+            .map(|inv| inv.count(item))
             .unwrap_or(0);
         base + pack
     }

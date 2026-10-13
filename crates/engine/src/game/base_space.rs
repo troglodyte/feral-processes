@@ -737,7 +737,7 @@ impl Game {
     /// which are *the* place rock takes damage and *the* place a base cell
     /// becomes floor. A system could reach neither, and would have had to
     /// keep a second copy of the swing damage, the fragment roll, the
-    /// substrate spend and the cell write — four formulas with one door
+    /// tile spend and the cell write — four formulas with one door
     /// each, which is exactly the drift `balance_sim` has already been
     /// bitten by four times. It runs immediately after
     /// `schedule_base_labour`, so a body posted this tick digs this tick.
@@ -900,7 +900,7 @@ impl Game {
                     return;
                 }
                 let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-                if !self.spend_substrate(&substrate, crate::tuning::FLOOR_FINISH_COST) {
+                if !self.spend_from_stores(&substrate, crate::tuning::FLOOR_FINISH_COST) {
                     // `dig_wants` already judged this workable a moment ago
                     // — the one way this can still fail is two finish jobs
                     // landing on the same tick against a single surviving
@@ -933,13 +933,13 @@ impl Game {
         }
     }
 
-    /// The crew's half of `Game::lay_tile`: one Blank Substrate, and the
-    /// cell is floor.
+    /// The crew's half of `Game::lay_tile`: `tuning::FLOOR_TILE_COST` Core
+    /// Fragments, and the cell is floor.
     ///
     /// **Out of the base's own stores first, the player's pack second.** The
     /// crew is base labour, and the store it spends from is the one the base
     /// fills — `stock::spend_from_base` over the same buffers the stock block
-    /// counts, so a strip reading `BS 12` is a strip saying the crew can
+    /// counts, so a strip showing fragments is a strip saying the crew can
     /// pave. The pack is the fallback rather than the source: what the player
     /// is carrying stays theirs to lay by hand, and this is a cost the base
     /// incurs while the party is somewhere else entirely. `Game::lay_tile` is
@@ -954,31 +954,32 @@ impl Game {
     /// site reaching this function has already been judged workable a
     /// moment ago; the one way this can still fail is two floor jobs
     /// finishing on the same tick against a single surviving unit, a race
-    /// `dig_wants`'s `substrate_available` cannot see because it only reads
+    /// `drop_dry_dig_wants`' budget cannot see because it only reads
     /// how much exists right now, not enough for every job about to ask.
     /// That race needs no second announcement — `dig_wants` will see the
     /// shortage itself on the very next tick — and the mark stays either
     /// way, so the job is simply retried.
     fn crew_lays_tile(&mut self, x: i32, y: i32) {
-        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-        if !self.spend_substrate(&substrate, 1) {
+        let fragment = ItemId::from(crate::items::ids::CORE_FRAGMENT);
+        if !self.spend_from_stores(&fragment, crate::tuning::FLOOR_TILE_COST) {
             return;
         }
         self.floor_cell(x, y);
         self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
     }
 
-    /// Spends `count` of `substrate`, base stores before the player's pack,
-    /// refusing — and moving nothing — unless `substrate_available` already
-    /// covers the whole count. `crew_lays_tile` calls it with 1; the finish
-    /// arm above calls it with `tuning::FLOOR_FINISH_COST`.
-    fn spend_substrate(&mut self, substrate: &ItemId, count: u32) -> bool {
-        if self.substrate_available() < count {
+    /// Spends `count` of `item`, base stores before the player's pack,
+    /// refusing — and moving nothing — unless `stores_hold` already covers
+    /// the whole count. `crew_lays_tile` calls it with
+    /// `tuning::FLOOR_TILE_COST` Core Fragments; the finish arm above with
+    /// `tuning::FLOOR_FINISH_COST` Blank Substrate.
+    pub(crate) fn spend_from_stores(&mut self, item: &ItemId, count: u32) -> bool {
+        if self.stores_hold(item) < count {
             return false;
         }
         let from_base = crate::game::base::stock::spend_from_base(
             self,
-            substrate,
+            item,
             count,
             crate::base_ledger::ConsumeSource::Base,
         );
@@ -988,7 +989,7 @@ impl Game {
             self.world
                 .get_mut::<Inventory>(player)
                 .unwrap()
-                .take(substrate.clone(), remaining);
+                .take(item.clone(), remaining);
         }
         true
     }

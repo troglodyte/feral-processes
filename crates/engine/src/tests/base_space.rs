@@ -2001,24 +2001,34 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
 // Slice 2: laying a VectorStasis Tile
 // ---------------------------------------------------------------------------
 
-/// The party standing on a carved, unfloored cell with substrate to hand —
-/// the one situation `Game::lay_tile` is for.
-fn game_on_open_rock(seed: u32, substrate: u32) -> Game {
+/// The party standing on a carved, unfloored cell holding exactly enough
+/// Core Fragments for `tiles` tiles — the one situation `Game::lay_tile` is
+/// for.
+fn game_on_open_rock(seed: u32, tiles: u32) -> Game {
     let mut game = game_at_the_frontier(seed);
     let tick = game.current_tick();
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(WALL.0, WALL.1, tick);
     stand_in_base_at(&mut game, WALL.0, WALL.1);
-    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), substrate);
+    set_fragments(&mut game, tiles * crate::tuning::FLOOR_TILE_COST);
     game
 }
 
-fn substrate_held(game: &Game) -> u32 {
-    game.world
-        .get::<Inventory>(game.player_entity())
-        .unwrap()
-        .count(&ItemId::from(ids::BLANK_SUBSTRATE))
+/// Sets the player's Core Fragments to exactly `n`. `game_at_the_frontier`
+/// hands over 20 to pay for the Home and leaves the change in the pack, so
+/// a tile test that only `give`s would be counting from an unknown start.
+fn set_fragments(game: &mut Game, n: u32) {
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+    let held = inv.count(&fragment);
+    inv.take(fragment.clone(), held);
+    inv.add(fragment, n);
+}
+
+fn fragments_held(game: &Game) -> u32 {
+    count_item(game, ids::CORE_FRAGMENT)
 }
 
 /// Words the two refusals below may share, because everything is built out
@@ -2032,16 +2042,41 @@ fn meaningful_words(msg: &str) -> Vec<String> {
 }
 
 #[test]
-fn laying_a_tile_spends_exactly_one_substrate() {
+fn laying_a_tile_spends_its_core_fragments_and_no_substrate() {
     let mut game = game_on_open_rock(3220, 3);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 2);
 
     game.lay_tile()
         .expect("standing on carved rock, holding stock");
 
     assert_eq!(
-        substrate_held(&game),
+        fragments_held(&game),
+        2 * crate::tuning::FLOOR_TILE_COST,
+        "a tile costs FLOOR_TILE_COST Core Fragments and leaves the rest"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
         2,
-        "a tile costs one Blank Substrate and leaves the rest"
+        "a plain tile is pressed from fragments, not from the Lathe's substrate"
+    );
+}
+
+/// One fragment short of a tile is no tile: the refusal spends nothing.
+#[test]
+fn laying_a_tile_one_fragment_short_refuses_and_spends_nothing() {
+    let mut game = game_on_open_rock(3227, 0);
+    set_fragments(&mut game, crate::tuning::FLOOR_TILE_COST - 1);
+
+    game.lay_tile()
+        .expect_err("short of a tile means nothing happens");
+
+    assert_eq!(fragments_held(&game), crate::tuning::FLOOR_TILE_COST - 1);
+    assert!(
+        !game
+            .world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(WALL.0, WALL.1),
+        "a refused tiling laid floor anyway"
     );
 }
 
@@ -2067,7 +2102,7 @@ fn a_tile_turns_the_cell_you_stand_on_into_floor() {
 }
 
 #[test]
-fn laying_a_tile_without_substrate_refuses_and_spends_nothing() {
+fn laying_a_tile_without_fragments_refuses_and_spends_nothing() {
     let mut game = game_on_open_rock(3222, 0);
 
     game.lay_tile()
@@ -2082,11 +2117,11 @@ fn laying_a_tile_without_substrate_refuses_and_spends_nothing() {
     );
 }
 
-/// Two different errands for the player — go make a substrate, against you
+/// Two different errands for the player — go mine fragments, against you
 /// are standing in the wrong place — so they may not read as the same
 /// refusal. `NoPost::BoxedIn` against `NoPost::NoRoute`, one level down.
 #[test]
-fn laying_a_tile_on_floor_refuses_in_different_words_from_having_no_substrate() {
+fn laying_a_tile_on_floor_refuses_in_different_words_from_having_no_fragments() {
     let mut broke = game_on_open_rock(3223, 0);
     let no_stock = broke.lay_tile().unwrap_err();
 
@@ -2106,7 +2141,7 @@ fn laying_a_tile_on_floor_refuses_in_different_words_from_having_no_substrate() 
          \"{no_stock}\" against \"{already}\""
     );
     assert_eq!(
-        substrate_held(&floored),
+        fragments_held(&floored),
         0,
         "the refused second tile must not have spent anything"
     );
@@ -2128,11 +2163,15 @@ fn laying_a_tile_on_the_surface_refuses() {
         refused.contains(THE_BASE),
         "a tiling attempt on the surface must meet the base guard, got: {refused}"
     );
-    assert_eq!(substrate_held(&game), 1, "and must spend nothing");
+    assert_eq!(
+        fragments_held(&game),
+        crate::tuning::FLOOR_TILE_COST,
+        "and must spend nothing"
+    );
 }
 
 /// Settled decision 8, and the only thing pinning the player's word for a
-/// laid tile: the substrate is raw stock in the store, the tile is what it
+/// laid tile: the fragments are raw stock in the store, the tile is what they
 /// becomes underfoot. `BaseCell::Floor` stays the code's name for it, the
 /// same way "GC Entropy Sweep" is the player's word for a raid.
 #[test]
@@ -2147,8 +2186,8 @@ fn the_laid_tile_is_named_a_vectorstasis_tile() {
         .any(|line| line.text.contains("VectorStasis Tile"));
     assert!(said, "laying a tile never names what was laid");
     assert_eq!(
-        game.item_name(&ItemId::from(ids::BLANK_SUBSTRATE)),
-        "Blank Substrate",
+        game.item_name(&ItemId::from(ids::CORE_FRAGMENT)),
+        "Core Fragment",
         "and the stock it was pressed from keeps its own name"
     );
 }

@@ -1008,9 +1008,10 @@ impl Game {
     }
 
     /// Lays a VectorStasis Tile over the carved cell the party is standing
-    /// on, turning it into buildable floor for one Blank Substrate.
+    /// on, turning it into buildable floor for `tuning::FLOOR_TILE_COST`
+    /// Core Fragments.
     ///
-    /// The substrate is raw stock; the tile is what it becomes underfoot.
+    /// The fragments are raw stock; the tile is what they become underfoot.
     /// `BaseCell::Floor` stays the code's name for the result — this is the
     /// player's word for it, the same way "GC Entropy Sweep" is the player's
     /// word for a raid — and no new item exists for it.
@@ -1040,14 +1041,15 @@ impl Game {
             None => return Err("Cut the entropy out first — nothing stands on raw rock.".into()),
         }
 
-        let substrate = ItemId::from(ids::BLANK_SUBSTRATE);
+        let fragment = ItemId::from(ids::CORE_FRAGMENT);
+        let cost = crate::tuning::FLOOR_TILE_COST;
         let player = self.player_entity();
         let held = self
             .world
             .get::<Inventory>(player)
-            .map(|inv| inv.count(&substrate))
+            .map(|inv| inv.count(&fragment))
             .unwrap_or(0);
-        if held == 0 {
+        if held < cost {
             // Reported through the `Err` alone, like the two refusals above
             // it: app-core raises every one of them as the status banner,
             // and logging this one as well put the same sentence in the
@@ -1056,14 +1058,14 @@ impl Game {
             // suppressed. A refusal is news to the player standing there,
             // not to the base's own record of what it did.
             return Err(format!(
-                "You have no {} to press into a tile.",
-                self.item_name(&substrate)
+                "You need {cost} {} to press into a tile.",
+                self.item_name(&fragment)
             ));
         }
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(substrate, 1);
+            .take(fragment, cost);
         self.floor_cell(x, y);
         self.log_base("You lay a VectorStasis Tile, and the cell reads as floor.");
         self.tick();

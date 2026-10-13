@@ -3032,9 +3032,23 @@ pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 /// it said under `docs/measurements/`.
 pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 
-/// How many Blank Substrate a finish costs, on top of the one the tile
-/// itself already spent — `floors::FloorDb`'s one price, since there is no
-/// per-finish `cost` field (see `assets/floors/README.md`).
+/// How many Core Fragments one VectorStasis Tile costs, laid by hand or by
+/// the crew.
+///
+/// **Fragments, not Blank Substrate**, because the floor is what grows the
+/// base and a Lathe sitting between the mine and every tile made expansion
+/// wait on a 12-tick press per cell. Half a substrate's four fragments, so
+/// the plain floor is cheaper than it was as well as quicker; finishes stay
+/// on substrate (`FLOOR_FINISH_COST`) as the Lathe-fed decoration.
+///
+/// Above `BASE_MINE_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
+/// so a dig plan never floors itself out of its own rubble.
+pub const FLOOR_TILE_COST: u32 = 2;
+
+/// How many Blank Substrate a finish costs, on top of the
+/// `FLOOR_TILE_COST` fragments the tile itself already spent —
+/// `floors::FloorDb`'s one price, since there is no per-finish `cost` field
+/// (see `assets/floors/README.md`).
 pub const FLOOR_FINISH_COST: u32 = 3;
 
 /// How many ticks of construction each unit of material in a structure's

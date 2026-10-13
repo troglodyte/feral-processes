@@ -911,6 +911,29 @@ fn power_report_lines_reconcile_with_base_power_and_mark_the_dark_machine() {
 // only real if the structure the player actually builds carries it.
 // ---------------------------------------------------------------------------
 
+/// A dry burner is still listed, and at zero: the report's lines must sum to
+/// the ledger's supply, which counts a supplier only while it can pay.
+#[test]
+fn a_dry_supplier_is_listed_at_zero_and_the_lines_still_reconcile() {
+    let mut game = base_with_home(4106);
+    let (recharger, _) = recharger_beside_a_depot(&mut game, 0);
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+    assert_eq!(status_of(&game, recharger), Some(MachineStatus::Dry));
+
+    let report = game.power_report();
+    let (_, supply) = game.base_power();
+    assert_eq!(report.supply, supply);
+    assert_eq!(report.lines.iter().map(|l| l.supply).sum::<u32>(), supply);
+    let line = report
+        .lines
+        .iter()
+        .find(|l| l.label.contains("Recharger"))
+        .expect("a dry supplier is still listed");
+    assert_eq!(line.supply, 0, "dry supplies nothing");
+}
+
 /// A base on the shipped assets with a Home standing and the party inside
 /// base space, which is the only place a supplier can be deployed.
 fn base_with_home(seed: u32) -> Game {
@@ -1562,6 +1585,12 @@ fn the_production_flag_follows_machine_statuses_and_the_grid() {
 
     game.world.entity_mut(node).insert(MachineStatus::Starved);
     assert!(game.base_report_flags().production.is_some());
+
+    game.world.entity_mut(node).insert(MachineStatus::Dry);
+    assert!(
+        game.base_report_flags().production.is_some(),
+        "a dry supplier wants fuel"
+    );
 
     game.world.entity_mut(node).insert(MachineStatus::Running);
     spawn_machine_at(&mut game, "test_greedy_node", 4, 4);

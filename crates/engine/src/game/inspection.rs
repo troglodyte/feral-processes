@@ -844,6 +844,13 @@ impl Game {
             required_ticks: site.required_ticks(),
             builder,
             awaiting_program: site.awaiting_program,
+            blocked: if site.announced_stuck {
+                Some(crate::views::BuildBlock::Unreachable)
+            } else if site.announced_dry {
+                Some(crate::views::BuildBlock::Dry)
+            } else {
+                None
+            },
         })
     }
 

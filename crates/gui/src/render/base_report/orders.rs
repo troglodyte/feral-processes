@@ -33,12 +33,19 @@ pub(super) fn build_rows(report: &[BuildOrderRow], selected: usize) -> Vec<Row> 
         let who = if r.awaiting_program {
             "awaiting a program".to_string()
         } else {
-            match &r.builder {
-                Some(who) => who.clone(),
-                None => "pending".to_string(),
+            let who = r.builder.as_deref().unwrap_or("pending");
+            match r.blocked {
+                Some(block) => format!("{who} - {}", block.label()),
+                None => who.to_string(),
             }
         };
-        let color = if r.awaiting_program { RED } else { TEXT };
+        let color = if r.awaiting_program {
+            RED
+        } else if r.blocked.is_some() {
+            crate::render::hud::palette::ATTENTION
+        } else {
+            TEXT
+        };
         rows.push(colored_item_row(
             format!(
                 "{:<name_w$}  ({}, {})  {:>3}%  {who}",
@@ -104,8 +111,8 @@ pub(super) fn floor_rows(report: &[FloorMark], selected: usize) -> Vec<Row> {
 mod tests {
     use super::super::fit::{assert_rows_fit, text_of};
     use super::*;
-    use feral_processes_engine::Entity;
     use feral_processes_engine::components::BuildGoal;
+    use feral_processes_engine::{BuildBlock, Entity};
 
     fn build(awaiting: bool) -> BuildOrderRow {
         BuildOrderRow {
@@ -120,6 +127,7 @@ mod tests {
             required_ticks: 10,
             builder: None,
             awaiting_program: awaiting,
+            blocked: None,
         }
     }
 
@@ -135,6 +143,14 @@ mod tests {
         let rows = build_rows(&[build(true)], 0);
         assert!(text_of(&rows[1]).contains("awaiting a program"));
         assert_eq!(rows.len(), 2, "a waiting wreck is not fetching anything");
+    }
+
+    #[test]
+    fn a_blocked_build_row_says_why() {
+        let mut b = build(false);
+        b.blocked = Some(BuildBlock::Unreachable);
+        let rows = build_rows(&[b], 0);
+        assert!(text_of(&rows[1]).contains("pending - cut off"));
     }
 
     #[test]
@@ -177,6 +193,7 @@ mod tests {
         worst.structure = "N".repeat(40);
         worst.pos = (-9999, -9999);
         worst.builder = Some("M".repeat(20));
+        worst.blocked = Some(BuildBlock::Dry);
         worst.outstanding = (0..8).map(|i| (format!("Material {i}"), 9999)).collect();
         assert_rows_fit(&build_rows(&[worst], 0), "Builds");
         assert_rows_fit(

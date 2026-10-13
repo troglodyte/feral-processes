@@ -3470,6 +3470,28 @@ pub struct BuildOrderRow {
     /// (`Game::commit_rebuild_program`). Nothing is fetched or raised until
     /// they do, so the crew-facing fields above are not the story.
     pub awaiting_program: bool,
+    /// Why the crew has said this request cannot go on, if it has: the
+    /// scheduler's `BuildSite` latches, read here and never kept apart.
+    pub blocked: Option<BuildBlock>,
+}
+
+/// Why a build request is standing still, as the crew announced it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuildBlock {
+    /// Nothing anywhere to fetch the materials from.
+    Dry,
+    /// No route from the crew to the site.
+    Unreachable,
+}
+
+impl BuildBlock {
+    /// What a screen prints for it.
+    pub fn label(self) -> &'static str {
+        match self {
+            BuildBlock::Dry => "out of materials",
+            BuildBlock::Unreachable => "cut off",
+        }
+    }
 }
 
 impl BuildOrderRow {

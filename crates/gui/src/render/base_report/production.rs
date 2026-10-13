@@ -9,14 +9,6 @@ use feral_processes_engine::{MachineRow, PowerReport};
 /// The widest a structure's name column grows.
 const LABEL_CHARS: usize = 22;
 
-fn status_color(status: MachineStatus) -> Color {
-    match status {
-        MachineStatus::Unpowered | MachineStatus::Dry | MachineStatus::Stranded => RED,
-        MachineStatus::Starved | MachineStatus::Unstaffed | MachineStatus::Clogged => YELLOW,
-        MachineStatus::Idle | MachineStatus::Running => TEXT,
-    }
-}
-
 fn label_width(labels: impl Iterator<Item = usize>) -> usize {
     labels.max().unwrap_or(0).min(LABEL_CHARS)
 }
@@ -55,7 +47,7 @@ pub(super) fn machine_rows(report: &[MachineRow], selected: usize) -> Vec<Row> {
                 r.pos.1
             ),
             i == selected,
-            status_color(r.status),
+            crate::render::marks::machine_color(r.status),
         )
     }));
     rows

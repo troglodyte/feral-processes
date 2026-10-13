@@ -23,15 +23,16 @@ const MACHINE_ORDER: [MachineStatus; 8] = [
 
 /// The statuses that put the Production page's `!` up: a machine that wants
 /// something done. `Clogged` and `Idle` are listed on the page but are
-/// not by themselves a gap.
+/// not by themselves a gap. Exhaustive, so a new status must be decided.
 fn is_machine_gap(status: MachineStatus) -> bool {
-    matches!(
-        status,
+    match status {
         MachineStatus::Unpowered
-            | MachineStatus::Starved
-            | MachineStatus::Unstaffed
-            | MachineStatus::Stranded
-    )
+        | MachineStatus::Dry
+        | MachineStatus::Starved
+        | MachineStatus::Unstaffed
+        | MachineStatus::Stranded => true,
+        MachineStatus::Clogged | MachineStatus::Idle | MachineStatus::Running => false,
+    }
 }
 
 impl Game {
@@ -148,6 +149,9 @@ impl Game {
                     (stalled(order.state), order.target) > (stalled(state), target)
                 }
             };
+            // The order's own holding, so `is_short` agrees with the order
+            // whatever the stock block counts besides.
+            row.qty = order.have;
             if better {
                 row.order = Some((order.target, order.state));
             }
@@ -186,13 +190,19 @@ impl Game {
         (short > 0).then(|| format!("{short} short, stalled"))
     }
 
-    /// Build orders' reason: requests waiting on the player's program.
+    /// Build orders' reason: requests waiting on the player's program, and
+    /// requests the crew has said it cannot carry on.
     pub(super) fn build_orders_flag(&self) -> Option<String> {
-        let waiting = self
-            .build_order_report()
-            .iter()
-            .filter(|b| b.awaiting_program)
-            .count();
-        (waiting > 0).then(|| format!("{waiting} awaiting a program"))
+        let report = self.build_order_report();
+        let waiting = report.iter().filter(|b| b.awaiting_program).count();
+        let blocked = report.iter().filter(|b| b.blocked.is_some()).count();
+        let mut reasons = Vec::new();
+        if waiting > 0 {
+            reasons.push(format!("{waiting} awaiting a program"));
+        }
+        if blocked > 0 {
+            reasons.push(format!("{blocked} blocked"));
+        }
+        (!reasons.is_empty()).then(|| reasons.join(", "))
     }
 }

@@ -10,9 +10,11 @@ impl App {
     /// Right or Enter moves the cursor into the screen, Esc leaves to
     /// wherever the hub was opened from, and every other key is swallowed —
     /// a row jump or a screen action with no cursor on the screen would act
-    /// on a row the player cannot see is chosen. In the screen, Left and Esc
-    /// move the cursor back to the rail and everything else falls through.
-    /// `[`/`]` (pages) and `Tab` (the page's screens) work from either half.
+    /// on a row the player cannot see is chosen. In the screen, a page's
+    /// screens lie in a row to the right of the rail: Right steps to the next
+    /// (stopping at the last), Left to the previous and off the first back to
+    /// the rail, and Esc goes straight to the rail. Everything else falls
+    /// through. `[`/`]` turn pages from either half.
     ///
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
@@ -22,13 +24,10 @@ impl App {
         };
         let pages = BASE_REPORT_PAGES.len();
         let turn = |by: usize| BASE_REPORT_PAGES[(page + by) % pages].screens[0];
+        let screens = BASE_REPORT_PAGES[page].screens;
         match key {
             GameKey::Char(']') => self.mode = turn(1),
             GameKey::Char('[') => self.mode = turn(pages - 1),
-            GameKey::Tab => {
-                let screens = BASE_REPORT_PAGES[page].screens;
-                self.mode = screens[(screen + 1) % screens.len()];
-            }
             _ if self.hub_on_rail => match key {
                 GameKey::Down => self.mode = turn(1),
                 GameKey::Up => self.mode = turn(pages - 1),
@@ -37,14 +36,25 @@ impl App {
                 _ => {}
             },
             GameKey::Esc => self.hub_on_rail = true,
-            // The duty table spends Left on its column cursor, so it only
-            // reaches the rail off the first column.
+            // The duty table spends Left and Right on its column cursor, so
+            // it only leaves off its first and last columns.
             GameKey::Left if !(self.mode == Mode::BaseStaff && self.work_column > 0) => {
-                self.hub_on_rail = true;
+                match screen.checked_sub(1) {
+                    Some(prev) => self.mode = screens[prev],
+                    None => self.hub_on_rail = true,
+                }
+            }
+            GameKey::Right if screen + 1 < screens.len() && !self.on_inner_staff_column() => {
+                self.mode = screens[screen + 1];
             }
             _ => return false,
         }
         true
+    }
+
+    /// Whether Right on the duty table still has a column to move to.
+    fn on_inner_staff_column(&mut self) -> bool {
+        self.mode == Mode::BaseStaff && self.work_column + 1 < self.base_staff_table().columns.len()
     }
 
     /// Opens the hub where the player left it, or on Overview the first

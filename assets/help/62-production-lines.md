@@ -7,7 +7,7 @@ side by side are not, because neither makes anything the other needs.
 
 A line is one job, and one worker staffs it. Setting a standing job on any machine in a line sets
 it on every machine in that line, and the base posts a single program to run the line rather than
-one to each machine. The roster, on the second screen of the base report's Staffing page (Tab),
+one to each machine. The roster, on the second screen of the base report's Staffing page (Right past the duty table's last column),
 shows the line as one row, naming the machine its worker is running now.
 
 The worker pulls from the end. It runs the machine nearest the finished product that can make

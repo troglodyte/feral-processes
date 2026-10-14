@@ -46,6 +46,7 @@ mod program_points;
 mod quitting;
 mod readonly_screens;
 mod refactor;
+mod refit_copy;
 mod research;
 mod respec;
 mod routines;

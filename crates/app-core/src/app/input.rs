@@ -358,6 +358,7 @@ impl App {
             Mode::RoutineResearch => self.handle_research_key(key, ResearchTree::Routines),
             Mode::AffixResearch => self.handle_research_key(key, ResearchTree::Affixes),
             Mode::ModCopy => self.handle_mod_copy_key(key),
+            Mode::RefitCopy => self.handle_refit_copy_key(key),
             Mode::ModPickAffix => self.handle_mod_pick_affix_key(key),
             Mode::Contracts => self.handle_contracts_key(key),
             Mode::Alerts => self.handle_alerts_key(key),

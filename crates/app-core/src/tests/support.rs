@@ -3462,8 +3462,38 @@ pub(crate) fn app_at_a_mod_bench_carrying(
     fragments: u32,
     modded: Vec<(save::GearCopySave, u32)>,
 ) -> App {
+    let inventory = vec![
+        (ItemId::from("core_fragment"), fragments),
+        (ItemId::from("nullsteel_plate"), 1),
+    ];
+    app_at_a_bench(seed, "mod_bench", inventory, modded)
+}
+
+/// A founded base with a Refit Bench standing and `plate` (worn down by
+/// `wear` fights) carried in the pack beside `stock`.
+pub(crate) fn app_at_a_refit_bench(seed: u32, wear: u8, stock: Vec<(ItemId, u32)>) -> App {
+    let worn = save::GearCopySave {
+        item: ItemId::from("nullsteel_plate"),
+        rarity: Rarity::Ordinary,
+        tier: 0,
+        affix: None,
+        affixes: Vec::new(),
+        quality: feral_processes_engine::tuning::QUALITY_DEFAULT,
+        wear,
+    };
+    app_at_a_bench(seed, "refit_bench", stock, vec![(worn, 1)])
+}
+
+/// A founded base with one `kind` bench standing, the pack set to
+/// `inventory` and the modded `gear_copies` to `modded`.
+fn app_at_a_bench(
+    seed: u32,
+    kind: &str,
+    inventory: Vec<(ItemId, u32)>,
+    modded: Vec<(save::GearCopySave, u32)>,
+) -> App {
     let mut app = test_app(seed);
-    let path = scratch_path("mod_bench", seed);
+    let path = scratch_path(kind, seed);
     found_the_base(&mut app);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let _cleanup = RemoveOnDrop(&path);
@@ -3471,7 +3501,7 @@ pub(crate) fn app_at_a_mod_bench_carrying(
     let mut data = save::load_from_file(&path).unwrap();
     data.researched.push("affix:deflecting".to_string());
     data.structures.push(save::StructureSave {
-        kind: "mod_bench".to_string(),
+        kind: kind.to_string(),
         position: (2, 2),
         durability: None,
         tier: None,
@@ -3490,10 +3520,7 @@ pub(crate) fn app_at_a_mod_bench_carrying(
         incubating: Vec::new(),
     });
     // A plain copy lives in `inventory`; `gear_copies` holds only modded ones.
-    data.player.inventory = vec![
-        (ItemId::from("core_fragment"), fragments),
-        (ItemId::from("nullsteel_plate"), 1),
-    ];
+    data.player.inventory = inventory;
     data.player.gear_copies = modded;
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());

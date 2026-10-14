@@ -318,6 +318,13 @@ impl App {
             self.mode = Mode::ModCopy;
             return;
         }
+        if idx.map(|i| actions[i]) == Some('r') {
+            self.refit_copy = Some(copy);
+            self.pending_inventory_item = None;
+            self.status_line = None;
+            self.mode = Mode::RefitCopy;
+            return;
+        }
         if idx.map(|i| actions[i]) == Some('p') {
             self.pending_trap = Some(copy.item.clone());
             self.pending_inventory_item = None;

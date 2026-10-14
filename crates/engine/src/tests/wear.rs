@@ -678,3 +678,28 @@ fn refittable_copies_lists_worn_and_carried_gear_that_needs_it() {
 
     assert_eq!(game.refittable_copies(), vec![worn, carried]);
 }
+
+// -------------------------------------------------------- naming
+
+/// A full-condition copy names exactly as it did before wear shipped, so no
+/// existing row moves; a worn one reads its fights left, a spent one says so.
+#[test]
+fn copy_name_reads_the_condition_only_when_worn() {
+    let game = Game::new(5030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let item = ids::MONOFILAMENT_WHIP;
+    let plain = game.copy_name(&worn_copy(item, 0));
+    let (_, max) = game.condition_of(&worn_copy(item, 0));
+
+    assert_eq!(
+        game.copy_name(&worn_copy(item, 2)),
+        format!("{plain} {}/{max}", max - 2)
+    );
+    assert_eq!(
+        game.copy_name(&worn_copy(item, max)),
+        format!("{plain} 0/{max}!")
+    );
+    assert!(
+        !game.item_name(&ItemId::from(item)).contains('/'),
+        "log lines name items with item_name and must not pick the figure up"
+    );
+}

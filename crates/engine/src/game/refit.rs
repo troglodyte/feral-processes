@@ -13,6 +13,12 @@ use crate::*;
 const REFIT_BENCH: &str = "refit_bench";
 
 impl Game {
+    /// Whether a Refit Bench stands anywhere in the base, so a screen can say
+    /// so before the player pays attention to a bill they cannot pay.
+    pub fn refit_bench_standing(&self) -> bool {
+        self.has_structure(REFIT_BENCH)
+    }
+
     /// What refitting `copy` costs, merged per item and sorted by id.
     ///
     /// A craftable item costs `REFIT_RECIPE_SHARE_PERCENT` of its raw recipe,
@@ -87,7 +93,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        if !self.has_structure(REFIT_BENCH) {
+        if !self.refit_bench_standing() {
             return Err("Build a Refit Bench first.".into());
         }
         let Some((slot, _)) = self.equipment_of(&copy.item) else {

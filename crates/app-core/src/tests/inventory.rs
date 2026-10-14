@@ -99,14 +99,14 @@ fn every_equippable_item_offers_equip_fuse_and_erase() {
             .map(|(k, _)| k)
             .collect();
         // Modify is for Weapon and Armor copies; a Module has no affix slots
-        // to fit.
+        // to fit. Refit is for every piece of gear, which can all wear.
         let modifiable = game
             .equipment_of(&item)
             .is_some_and(|(slot, _)| slot != EquipmentSlot::Module);
         let expected = if modifiable {
-            vec!['e', 'u', 'm', 'd', 'x']
+            vec!['e', 'u', 'm', 'r', 'd', 'x']
         } else {
-            vec!['e', 'u', 'd', 'x']
+            vec!['e', 'u', 'r', 'd', 'x']
         };
         assert_eq!(
             keys,
@@ -744,15 +744,24 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
                 // of the band name the widest one, so three values cover
                 // every width `copy_name` can produce on this axis.
                 for quality in [QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX] {
-                    let name = game.copy_name(&GearCopy::with_affixes(
-                        item.clone(),
-                        rarity,
-                        0,
-                        affix.clone(),
-                        quality,
-                    ));
-                    if name.chars().count() > worst.1 {
-                        worst = (name.clone(), name.chars().count());
+                    // Wear adds ` n/max`, and ` broken` once spent: the
+                    // widest figure is the item's own durability, so one
+                    // fight taken and all of them taken bracket it.
+                    let (_, durability) = game.condition_of(&GearCopy::plain(item.clone()));
+                    for wear in [0, 1, durability] {
+                        let name = game.copy_name(&GearCopy {
+                            wear,
+                            ..GearCopy::with_affixes(
+                                item.clone(),
+                                rarity,
+                                0,
+                                affix.clone(),
+                                quality,
+                            )
+                        });
+                        if name.chars().count() > worst.1 {
+                            worst = (name.clone(), name.chars().count());
+                        }
                     }
                 }
             }

@@ -1489,10 +1489,10 @@ mod tests {
         // The rating column is part of the head — four cells and two of gap,
         // widest at the four digits `POWER_COLUMN_WIDTH` is cut for.
         let head = format!(
-            "[a] {:>4}  {:<71}",
+            "[a] {:>4}  {:<77}",
             9999,
             format!(
-                "{} Overdriven Singularity Matrix of Quiet Handshakes +6 (130%)",
+                "{} Reinforced Singularity Matrix of Quiet Handshakes +6 (130%) 0/15!",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
         );
@@ -1689,7 +1689,7 @@ mod tests {
         let head = swap_line(
             &heading_lead(),
             PowerCell::Rated(9999),
-            "Wearing: Overclocked Overdriven Singularity Matrix of Quiet Handshakes +6 (130%) \
+            "Wearing: Overclocked Reinforced Singularity Matrix of Quiet Handshakes +6 (130%) 0/15! \
              Lv10 maxed",
         );
         let lines = wrapped_row_lines(

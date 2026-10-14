@@ -83,8 +83,8 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
 /// than a second copy of it, so a buffer emptied here is *removed* rather
 /// than left holding a zero.
 ///
-/// There is one caller today — the dig crew's tile, the first cost the base
-/// incurs on its own initiative rather than at the player's keypress. It
+/// Its first caller was the dig crew's tile, the first cost the base incurs
+/// on its own initiative rather than at the player's keypress. It
 /// takes an item and a quantity anyway because that is what the arithmetic
 /// needs to be honest about a partial take; a caller that must have all of
 /// it checks the returned figure.

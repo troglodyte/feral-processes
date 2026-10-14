@@ -1026,9 +1026,9 @@ impl Game {
 
     /// Spends `count` of `item`, base stores before the player's pack,
     /// refusing — and moving nothing — unless `stores_hold` already covers
-    /// the whole count. The finish arm above calls it with
-    /// `tuning::FLOOR_FINISH_COST` Blank Substrate; a tile never does, since
-    /// the crew pays for tiles out of the base alone.
+    /// the whole count. The floor-finish arm above and the Refit Bench call
+    /// it; a tile never does, since the crew pays for tiles out of the base
+    /// alone.
     pub(crate) fn spend_from_stores(
         &mut self,
         item: &ItemId,

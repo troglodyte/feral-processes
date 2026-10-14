@@ -221,6 +221,9 @@ impl App {
                 (None, Some(copy)) => {
                     self.refit_copy = Some(copy);
                     self.pending_swap_slot = None;
+                    // Esc from the bench returns to the inventory, so land
+                    // on this slot's row as backing out of here would.
+                    self.menu_selected = Self::slot_row(slot);
                     self.status_line = None;
                     self.mode = Mode::RefitCopy;
                 }

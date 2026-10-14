@@ -189,3 +189,41 @@ fn a_save_without_the_wear_field_loads_every_copy_at_full_condition() {
         .collect();
     assert_eq!(shelved, vec![full(&sold)]);
 }
+
+/// A mod re-keys the copy, and the new key has to keep the condition the old
+/// one had, or a Mod Bench would double as a free repair.
+#[test]
+fn fitting_an_affix_keeps_the_copys_wear_carried_or_worn() {
+    let dir = modded_assets_dir("wear_mods", &[], &[], &[], &[], &[]);
+    std::fs::write(
+        dir.join("affixes").join("t_plate.ron"),
+        r#"(id: "t_plate", prefix: Some("Plated"), stats: (mitigation: 6),
+    slots: Some([Armor]),
+    research: Some((cost: 1, apply_cost: [("core_fragment", 2)])))"#,
+    )
+    .unwrap();
+    let mut game = Game::new(5020, DifficultyMode::Forgiving, &dir).unwrap();
+    spawn_structure_at(&mut game, "mod_bench", 3, 3);
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .insert("affix:t_plate".to_string());
+    give(&mut game, &ItemId::from("core_fragment"), 20);
+    let affix_id = crate::affixes::AffixId::from("t_plate");
+
+    let carried = GearCopy {
+        tier: 1,
+        ..worn_copy(ids::FIREWALL_PLATING, 6)
+    };
+    game.add_copies(&carried, 1);
+    let (modded, _) = game.apply_affix(&carried, &affix_id).unwrap();
+    assert_eq!(modded.wear, 6, "a carried copy lost its wear to the mod");
+
+    game.equip(game.player_entity(), &modded).unwrap();
+    let (stripped, _) = game.remove_affix(&modded, &affix_id).unwrap();
+    assert_eq!(stripped.wear, 6, "a worn copy lost its wear to the strip");
+    let worn = game
+        .worn(game.player_entity(), EquipmentSlot::Armor)
+        .unwrap();
+    assert_eq!(worn.copy, stripped);
+}

@@ -331,6 +331,21 @@ impl GearCopy {
         }
     }
 
+    /// This copy with its affix list replaced, canonicalised and with every
+    /// other property — wear included — carried over.
+    pub fn reaffixed(&self, affixes: Vec<AffixId>) -> Self {
+        Self {
+            wear: self.wear,
+            ..Self::with_affixes(
+                self.item.clone(),
+                self.rarity,
+                self.tier,
+                affixes,
+                self.quality,
+            )
+        }
+    }
+
     /// Whether this copy is indistinguishable from any other copy of the
     /// same id — which is exactly the question "does it live in
     /// `Inventory`". **The single definition**, so the three functions that

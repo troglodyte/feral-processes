@@ -255,6 +255,18 @@ pub(crate) const fn glyph(c: GlyphColor) -> Color {
     }
 }
 
+/// The casts a battle map's light is drawn from — warm, cool, sickly,
+/// violet and plain, one a board (`render/lighting.rs`). Multiplied over
+/// `ground_cast`, and as muted as it for the same reason: the board's hue
+/// belongs to the washes.
+pub(crate) const LIGHT_CASTS: [Color; 5] = [
+    Color::new(1.0, 0.92, 0.84, 1.0),
+    Color::new(0.84, 0.93, 1.0, 1.0),
+    Color::new(0.92, 1.0, 0.86, 1.0),
+    Color::new(0.94, 0.86, 1.0, 1.0),
+    Color::new(1.0, 1.0, 1.0, 1.0),
+];
+
 /// The faint cast a biome lends its battle-map ground — near white, because
 /// hue on the board belongs to the washes and a cast must never be read as
 /// one. Exhaustive, so a new biome does not compile until it is given one;

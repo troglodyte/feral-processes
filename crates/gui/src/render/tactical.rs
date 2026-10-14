@@ -27,6 +27,7 @@ use super::base::{ConRead, tile_origin_px};
 use super::history::history_rows;
 use super::hud::layout::strip_inset;
 use super::hud::palette;
+use super::lighting::{Lighting, Lit};
 use super::marks;
 use super::marks::draw_rarity_bar;
 use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_row};
@@ -86,19 +87,33 @@ fn ground_level(kind: BattleCell) -> f32 {
 }
 
 /// The tint ground art draws with: the kind's brightness times the biome's
-/// muted cast, so the kind still spends brightness alone.
-fn ground_tint(biome: Biome, kind: BattleCell) -> Color {
+/// muted cast, under the cell's light — which is clamped narrow enough that
+/// the kind still reads by brightness (`lighting`'s own doc).
+fn ground_tint(biome: Biome, kind: BattleCell, lit: Lit) -> Color {
     let level = ground_level(kind);
     let cast = palette::ground_cast(biome);
-    Color::new(cast.r * level, cast.g * level, cast.b * level, 1.0)
+    lit.apply(Color::new(
+        cast.r * level,
+        cast.g * level,
+        cast.b * level,
+        1.0,
+    ))
 }
 
 /// One cell's ground: the flat fill, then the first ground art that loads
 /// over it. The fill is both the look with no art and the backdrop under a
 /// transparent pixel.
-fn draw_ground(painter: &Painter, biome: Biome, kind: BattleCell, px: f32, py: f32, size: f32) {
-    painter.rect(px, py, size, size, cell_color(kind));
-    let tint = ground_tint(biome, kind);
+fn draw_ground(
+    painter: &Painter,
+    biome: Biome,
+    kind: BattleCell,
+    lit: Lit,
+    px: f32,
+    py: f32,
+    size: f32,
+) {
+    painter.rect(px, py, size, size, lit.apply(cell_color(kind)));
+    let tint = ground_tint(biome, kind, lit);
     for key in ground_sprite_keys(biome, kind) {
         if painter.sprite(&key, px, py, size, tint, 0) {
             break;
@@ -147,6 +162,7 @@ fn prop_fallback_glyph(prop: &PropView) -> &'static str {
 fn draw_prop(
     painter: &Painter,
     biome: Biome,
+    lit: Lit,
     prop: &PropView,
     (px, py): (f32, f32),
     size: f32,
@@ -158,7 +174,12 @@ fn draw_prop(
         PROP_LEVEL
     };
     let cast = palette::ground_cast(biome);
-    let tint = Color::new(cast.r * level, cast.g * level, cast.b * level, 1.0);
+    let tint = lit.apply(Color::new(
+        cast.r * level,
+        cast.g * level,
+        cast.b * level,
+        1.0,
+    ));
     if prop_sprite_keys(prop)
         .iter()
         .any(|key| painter.sprite(key, px, py, size, tint, 0))
@@ -659,6 +680,7 @@ pub(super) fn draw_tactical_map(
 
     let props: std::collections::HashMap<(i32, i32), &PropView> =
         view.props.iter().map(|p| (p.cell, p)).collect();
+    let lighting = Lighting::of(&view.board);
     for (cell, kind) in view.board.cells() {
         let (px, py) = tile_origin_px(
             cell,
@@ -671,11 +693,13 @@ pub(super) fn draw_tactical_map(
         if !on_pane(px, py) {
             continue;
         }
-        draw_ground(painter, view.ground, kind, px, py, tile_px - 1.0);
+        let lit = lighting.at(cell);
+        draw_ground(painter, view.ground, kind, lit, px, py, tile_px - 1.0);
         if let Some(prop) = props.get(&cell) {
             draw_prop(
                 painter,
                 view.ground,
+                lit,
                 prop,
                 (px, py),
                 tile_px - 1.0,
@@ -1712,11 +1736,37 @@ mod tests {
                 BattleCell::Rough,
                 BattleCell::Cover,
             ]
-            .map(|k| luminance(ground_tint(biome, k)));
+            .map(|k| luminance(ground_tint(biome, k, Lit::NONE)));
             assert!(
                 blocked < open && open < rough && rough < cover,
                 "{biome:?}: {blocked} {open} {rough} {cover}"
             );
+        }
+    }
+
+    /// The user's call on lighting against `cell_color`'s rule: whatever
+    /// the light, blocked stays the darkest ground and cover the brightest.
+    /// Open and rough may cross in deep shadow — their art differs.
+    #[test]
+    fn no_light_lets_blocked_or_cover_cross_another_kind() {
+        use super::super::lighting::{LEVEL_MAX, LEVEL_MIN};
+        for biome in WALKABLE_BIOMES {
+            for cast in palette::LIGHT_CASTS {
+                let lit = |kind, level| Lit { level, cast }.apply(cell_color(kind));
+                let art = |kind, level| ground_tint(biome, kind, Lit { level, cast });
+                for draw in [&lit as &dyn Fn(BattleCell, f32) -> Color, &art] {
+                    let bright = |k| luminance(draw(k, LEVEL_MAX));
+                    let dim = |k| luminance(draw(k, LEVEL_MIN));
+                    assert!(
+                        bright(BattleCell::Blocked) < dim(BattleCell::Open),
+                        "{biome:?} {cast:?}"
+                    );
+                    assert!(
+                        bright(BattleCell::Rough) < dim(BattleCell::Cover),
+                        "{biome:?} {cast:?}"
+                    );
+                }
+            }
         }
     }
 
@@ -1737,7 +1787,15 @@ mod tests {
             table.insert_still(key, bevy_egui::egui::TextureId::User(id));
         }
         let (_, shapes) = crate::paint::with_sprites(table, |p| {
-            draw_ground(p, Biome::Backplane, BattleCell::Cover, 10.0, 10.0, 15.0)
+            draw_ground(
+                p,
+                Biome::Backplane,
+                BattleCell::Cover,
+                Lit::NONE,
+                10.0,
+                10.0,
+                15.0,
+            )
         });
         let images = crate::paint::painted_images(&shapes)
             .into_iter()
@@ -1763,7 +1821,15 @@ mod tests {
         let mut table = crate::paint::SpriteTable::default();
         table.insert_still("ground_cover", bevy_egui::egui::TextureId::User(2));
         let (_, shapes) = crate::paint::with_sprites(table, |p| {
-            draw_ground(p, Biome::Backplane, BattleCell::Cover, 10.0, 10.0, 15.0)
+            draw_ground(
+                p,
+                Biome::Backplane,
+                BattleCell::Cover,
+                Lit::NONE,
+                10.0,
+                10.0,
+                15.0,
+            )
         });
         assert!(
             matches!(
@@ -2027,6 +2093,13 @@ mod tests {
             .expect("the fight reported nothing")
             .text
             .clone();
+        let board = game.tactical_result_view().expect("checked above").board;
+        let lighting = Lighting::of(&board);
+        let open_fills: Vec<Color> = board
+            .cells()
+            .filter(|&(_, kind)| kind == BattleCell::Open)
+            .map(|(cell, kind)| lighting.at(cell).apply(cell_color(kind)))
+            .collect();
 
         let mut app = crate::render::test_support::playing_app_around(game);
         app.mode = Mode::TacticalResult;
@@ -2045,7 +2118,9 @@ mod tests {
         // The ground's own fill and not a body's glyph: the player's `@` is
         // drawn by the surface map too, so a glyph passes with no board.
         assert!(
-            painted_rect_fill_count(&shapes, cell_color(BattleCell::Open)) > 0,
+            open_fills
+                .iter()
+                .any(|&fill| painted_rect_fill_count(&shapes, fill) > 0),
             "the board the fight ended on is not under the popup"
         );
         assert!(
@@ -2362,20 +2437,42 @@ mod tests {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
         let glyphs = crate::paint::painted_map_glyphs(&shapes);
-        let ink = |g: &str| {
-            glyphs
+        // Each prop stands in its own light, so the ink is compared with
+        // that light taken back off — the class is what is under test.
+        let lighting = Lighting::of(&view.board);
+        let ink = |g: &str, cell: (i32, i32)| {
+            let c = glyphs
                 .iter()
                 .find(|(t, _)| t == g)
                 .unwrap_or_else(|| panic!("no {g:?} among {glyphs:?}"))
-                .1
+                .1;
+            let lit = lighting.at(cell);
+            let unlit = |ch: f32, cast: f32| ch / (lit.level * cast);
+            Color::new(
+                unlit(c.r, lit.cast.r),
+                unlit(c.g, lit.cast.g),
+                unlit(c.b, lit.cast.b),
+                c.a,
+            )
         };
-        let (wall, debris, volatile, decor) = (ink("#"), ink("%"), ink("*"), ink(","));
-        assert_eq!(wall, debris);
-        assert_eq!(wall, volatile);
+        let (wall, debris, volatile, decor) = (
+            ink("#", at),
+            ink("%", (at.0 + 1, at.1)),
+            ink("*", (at.0 + 2, at.1)),
+            ink(",", (at.0 + 3, at.1)),
+        );
+        let same = |a: Color, b: Color| {
+            (a.r - b.r).abs() < 0.01 && (a.g - b.g).abs() < 0.01 && (a.b - b.b).abs() < 0.01
+        };
+        assert!(same(wall, debris), "{wall:?} {debris:?}");
+        assert!(same(wall, volatile), "{wall:?} {volatile:?}");
         assert!(decor.g < wall.g, "decoration must read dimmer than cover");
 
         let mut fx = Fx::new();
         view.props.clear();
+        view.reachable.clear();
+        view.covered.clear();
+        view.provoking.clear();
         let (_, bare) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });

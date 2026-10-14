@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.28
+
+**Every battle map now has its own light: it falls from a direction, in a colour, at a strength of its own, and cover and solid props cast shadows away from it.** Before, every board was lit by the same flat light and looked alike. A fight keeps its light from start to finish; harsh light throws long shadows and soft light short ones. Movement and danger markings, bodies and hit flashes are drawn as before, and the darkest ground is always impassable and the brightest always cover, whatever the light.
+
 ## 0.18.27
 
 **Resting in the base now costs Patch Routines: each one restores 40 Integrity, spread across your party worst-hurt first.** Before, a rest in the base healed everyone fully for nothing. A rest is never refused, so with too few patches you heal what they cover; the base also mends everyone a little each moment on its own, and a Repair Bay stocked with patches heals much faster than an empty one.

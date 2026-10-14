@@ -355,6 +355,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // that makes the first one.
     power_upkeep: Some("power_cell"),
 
+    // Optional; can be left out entirely (defaults to none). An item this
+    // structure spends by its own action rather than on a clock: a Shield or
+    // Turret spends one charge_coil per defence event, a Repair Bay one
+    // patch_routine per REST_INTEGRITY_PER_PATCH healed. Haulers keep its
+    // input buffer topped up from the base's stores, sharing the hauling path
+    // with power_upkeep (a fuel burner is fed first). A structure with a
+    // supply reports "Uncharged" on the Production page while its input is
+    // empty. The id must name a real item.
+    supply: Some("charge_coil"),
+
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
     // sector instead of blocking movement — see `Game::enter_next_zone`.

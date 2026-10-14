@@ -796,9 +796,8 @@ pub(crate) fn intake_recipe(
     if let Some(recipe) = assembly_recipe(def, items) {
         return Some(recipe.to_vec());
     }
-    def.power_upkeep
-        .clone()
-        .map(|fuel| vec![(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW)])
+    def.spends_supply()
+        .map(|item| vec![(item.clone(), def.supply_batch())])
 }
 
 /// What a structure puts into its *own* output buffer, or `None` for one

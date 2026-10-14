@@ -2504,6 +2504,11 @@ pub const POWER_UPKEEP_TICKS: u32 = 100;
 /// simply never stay lit.
 pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
 
+/// How many units of a `StructureDef::supply` make one delivery. Its input
+/// buffer then holds `2 * SUPPLY_BATCH` (`input_room`), so a defence stays
+/// charged across several uses between hauls.
+pub const SUPPLY_BATCH: u32 = 3;
+
 /// How many units a posted program carries to a depot in one trip.
 ///
 /// The cap is what makes `components::Carrying` a single `(item, qty)` pair

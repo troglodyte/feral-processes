@@ -125,6 +125,7 @@ mod staff_report;
 mod stock;
 mod sulking;
 mod summons;
+mod supply;
 mod tactical;
 mod tactical_policy;
 mod tactical_props;

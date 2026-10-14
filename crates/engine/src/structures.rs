@@ -882,6 +882,18 @@ impl StructureDef {
         self.power_upkeep.as_ref().or(self.supply.as_ref())
     }
 
+    /// How many units of `spends_supply` make one delivery: the fuel window
+    /// for a burner, `tuning::SUPPLY_BATCH` for a defence. `intake_recipe`
+    /// reports it as the batch size and `Game::fuel_wants` asks whether one
+    /// batch is within reach, so the two cannot disagree.
+    pub fn supply_batch(&self) -> u32 {
+        if self.power_upkeep.is_some() {
+            crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW
+        } else {
+            crate::tuning::SUPPLY_BATCH
+        }
+    }
+
     /// Whether raising or upgrading this structure costs a tamed program.
     ///
     /// **A body is spent on a machine that will take a body** — the cost

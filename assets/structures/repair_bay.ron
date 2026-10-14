@@ -11,4 +11,5 @@
         radius: 0,
     )),
     power_draw: 2,
+    supply: Some("patch_routine"),
 )

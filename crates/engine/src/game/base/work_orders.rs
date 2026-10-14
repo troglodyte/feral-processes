@@ -1779,12 +1779,14 @@ impl Game {
                 .sum()
         };
 
-        let mut fetches: Vec<((i32, i32), Entity)> = Vec::new();
-        let mut unstocked: Vec<ItemId> = Vec::new();
+        let mut fetches: Vec<((bool, (i32, i32)), Entity)> = Vec::new();
+        let mut unstocked: Vec<(ItemId, u32)> = Vec::new();
         for (burner, (x, y), kind) in &cells {
-            let Some(fuel) = db.get(kind).and_then(|d| d.power_upkeep.clone()) else {
+            let Some(def) = db.get(kind) else { continue };
+            let Some(fuel) = def.spends_supply().cloned() else {
                 continue;
             };
+            let per_window = def.supply_batch();
             let held = self
                 .world
                 .get::<Stock>(*burner)
@@ -1796,17 +1798,18 @@ impl Game {
                 .filter_map(|feeder| self.world.get::<Stock>(feeder))
                 .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
                 .sum();
-            let per_window = crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW;
             if batch_within_reach(held, beside, 0, per_window) {
                 continue;
             }
             if in_store(&fuel, *burner) < per_window {
-                if !unstocked.contains(&fuel) {
-                    unstocked.push(fuel);
+                if !unstocked.iter().any(|(item, _)| *item == fuel) {
+                    unstocked.push((fuel, per_window));
                 }
                 continue;
             }
-            fetches.push(((*x, *y), *burner));
+            // A fuel burner sorts ahead of a supply spender whatever their
+            // tiles, so the grid is fed before a defence is topped up.
+            fetches.push(((def.power_upkeep.is_none(), (*x, *y)), *burner));
         }
         // `assembler_system`'s reason: `iter_entities` order is not stable,
         // and two suppliers competing for the last body have to resolve the
@@ -1821,8 +1824,8 @@ impl Game {
         if unstocked.is_empty() {
             return out;
         }
-        for fuel in unstocked {
-            let order = WorkOrder::batch(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW);
+        for (item, batch) in unstocked {
+            let order = WorkOrder::batch(item, batch);
             for (machine, _) in wants(self, &order) {
                 if out.iter().any(|&(e, _)| e == machine) {
                     continue;

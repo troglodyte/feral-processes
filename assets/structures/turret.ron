@@ -8,4 +8,5 @@
     work: None,
     raid_defense: 1,
     turret: Some((damage: 8, range: 5)),
+    supply: Some("charge_coil"),
 )

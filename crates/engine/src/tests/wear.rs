@@ -703,3 +703,37 @@ fn copy_name_reads_the_condition_only_when_worn() {
         "log lines name items with item_name and must not pick the figure up"
     );
 }
+
+// ------------------------------------------------------------ alerts
+
+/// Alerts are saved, so a subject built from the wearer's `Entity` would
+/// differ after a reload and the same slot's break would post a second row
+/// instead of collapsing onto the first.
+#[test]
+fn the_wear_alert_subject_survives_a_save_and_load() {
+    let mut game = Game::new(5040, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    wear_the_whip(&mut game, player, GEAR_DURABILITY - 3);
+    lose_an_abstract_fight(&mut game);
+    let first = game.alerts();
+    assert_eq!(first.len(), 1, "2 of 15 left crosses the threshold");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_wear_alert_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    lose_an_abstract_fight(&mut loaded);
+    lose_an_abstract_fight(&mut loaded);
+    assert_eq!(
+        loaded.condition_of(&player_weapon(&loaded)).0,
+        0,
+        "the weapon broke after the reload"
+    );
+    let alerts = loaded.alerts();
+    assert_eq!(alerts.len(), 1, "the break collapsed onto the saved row");
+    assert_eq!(alerts[0].count, 2);
+}

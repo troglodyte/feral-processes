@@ -108,10 +108,12 @@ impl Game {
             )
         };
         self.log(text.clone());
-        self.post_alert(
-            AlertKind::GearWorn,
-            format!("{wearer:?}:{}", slot.label()),
-            text,
-        );
+        // Never the `Entity`: alerts are saved and entity ids are not stable
+        // across a load, so the same slot would post a second row.
+        let who = match self.world.get::<ProgramId>(wearer) {
+            Some(id) => format!("program-{}", id.0),
+            None => "player".to_string(),
+        };
+        self.post_alert(AlertKind::GearWorn, format!("{who}:{}", slot.label()), text);
     }
 }

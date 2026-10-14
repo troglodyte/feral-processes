@@ -202,3 +202,10 @@ fn an_unstocked_shield_does_not_crew_the_coil_maker() {
         "a defence's supply is no reason to put anyone on the coil maker"
     );
 }
+
+/// `Uncharged` is shared by every supply structure, so its wording cannot
+/// name the one item a Shield happens to spend.
+#[test]
+fn the_uncharged_reason_does_not_name_an_item() {
+    assert!(!MachineStatus::Uncharged.reason().contains("Coil"));
+}

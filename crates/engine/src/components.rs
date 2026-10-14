@@ -1124,7 +1124,7 @@ impl MachineStatus {
             MachineStatus::Idle => "no program is assigned",
             MachineStatus::Unpowered => "the grid is short",
             MachineStatus::Dry => "no Power Cells beside it",
-            MachineStatus::Uncharged => "it holds no Charge Coil",
+            MachineStatus::Uncharged => "its supply has run out",
         }
     }
 

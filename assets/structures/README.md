@@ -369,8 +369,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // patch_routine per REST_INTEGRITY_PER_PATCH healed. Haulers keep its
     // input buffer topped up from the base's stores, sharing the hauling path
     // with power_upkeep (a fuel burner is fed first). A structure with a
-    // supply reports "Uncharged" on the Production page while its input is
-    // empty. The id must name a real item.
+    // supply that is a defence (a Shield or Turret) reports "Uncharged" on
+    // the Production page while its input is empty; a Repair Bay simply heals
+    // at its plain rate. The id must name a real item.
     supply: Some("charge_coil"),
 
     // Optional; can be left out entirely (defaults to false). If true,

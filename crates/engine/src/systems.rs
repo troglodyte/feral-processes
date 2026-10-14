@@ -938,7 +938,7 @@ pub(crate) fn set_machine_status(
             format!("The {name} is out of fuel — no Power Cells beside it.")
         }
         MachineStatus::Uncharged => {
-            format!("The {name} is uncharged — it holds no Charge Coil.")
+            format!("The {name} is uncharged — its supply has run out.")
         }
     };
     log.push_base(text.clone());

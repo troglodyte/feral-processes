@@ -1594,9 +1594,7 @@ impl Game {
         // nothing. The walk is player then `Party` — the same set
         // `tick_field_buffs` ages.
         self.drop_until_rest_buffs_on_party();
-        // The roles are resolved into the list rather than asked for inside
-        // the loop, since `program_role` borrows the world immutably and the
-        // restores below take it mutably.
+        // Collected up front: the loop below takes the world mutably.
         let owned: Vec<Entity> = {
             let mut query = self
                 .world

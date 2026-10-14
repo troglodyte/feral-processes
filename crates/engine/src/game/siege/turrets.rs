@@ -62,14 +62,22 @@ impl Game {
             return;
         }
         battle.dry_turrets_told.push(turret);
-        let name = self
+        let Some(kind) = self.world.get::<Structure>(turret).map(|s| s.kind.clone()) else {
+            return;
+        };
+        let name = self.structure_name(&kind);
+        let supply = self
             .world
-            .get::<Structure>(turret)
-            .map(|s| self.structure_name(&s.kind))
-            .unwrap_or_default();
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|def| def.supply.clone())
+            .map_or_else(
+                || "supply".to_string(),
+                |item| self.item_name(&item).to_string(),
+            );
         self.log_kind(
             MessageKind::Raid,
-            format!("The {name} is dry — it has no Charge Coil to fire."),
+            format!("The {name} is dry — it has no {supply} to fire."),
         );
     }
 

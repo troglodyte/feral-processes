@@ -741,7 +741,7 @@ fn the_view_cone_is_rotated_so_straight_ahead_is_always_the_middle_column() {
             view.cells[1][middle] == StackCellView::Rock,
             !ahead.walkable()
         );
-        assert_eq!(view.facing, facing.label());
+        assert_eq!(view.facing, facing);
 
         game.turn_right();
     }
@@ -5164,4 +5164,52 @@ fn pick_lair_species_is_deterministic_and_ignores_gamerng() {
         "the guardian changed after burning GameRng rolls, which means it \
          is drawing from the wrong stream"
     );
+}
+
+fn light_seed(game: &Game) -> u64 {
+    game.stack_view().unwrap().light_seed
+}
+
+#[test]
+fn the_light_seed_holds_across_a_step_and_a_turn_within_a_frame() {
+    let mut game = game();
+    descend(&mut game);
+    let seed = light_seed(&game);
+    game.turn_around();
+    assert_eq!(light_seed(&game), seed);
+    step_forward_clear(&mut game);
+    assert_eq!(light_seed(&game), seed);
+}
+
+#[test]
+fn the_light_seed_survives_a_real_save_and_load() {
+    let mut game = game();
+    descend(&mut game);
+    let seed = light_seed(&game);
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_light_seed_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(light_seed(&loaded), seed);
+}
+
+#[test]
+fn the_light_seed_differs_across_depths_and_entrances() {
+    let mut game = game();
+    dive_to_depth(&mut game, 2);
+    let deep = light_seed(&game);
+    let mut one = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    dive_to_depth(&mut one, 1);
+    assert_ne!(deep, light_seed(&one));
+
+    // Same world seed and depth 1, different entrance.
+    let mut other = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *other.world.get::<Position>(other.player_entity()).unwrap();
+    other.enter_stack(pos.x + 1, pos.y);
+    let mut first = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    first.enter_stack(pos.x, pos.y);
+    assert_ne!(light_seed(&first), light_seed(&other));
 }

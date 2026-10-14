@@ -89,6 +89,7 @@ pub(crate) use world_map::{WorldMapHit, world_map_hit};
 // outside `render/` ever needed one of its types before the mouse did.
 pub(crate) mod sprite_forge;
 mod stack;
+mod stack_light;
 mod stack_market;
 mod structure_manifest;
 mod tactical;

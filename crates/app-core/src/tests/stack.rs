@@ -11,6 +11,7 @@ fn facing(app: &App) -> String {
         .stack_view()
         .unwrap()
         .facing
+        .label()
         .to_string()
 }
 

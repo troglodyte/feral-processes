@@ -19,6 +19,7 @@
 //! columns tile edge to edge.
 
 use super::popup::*;
+use super::stack_light::{Half, Side, Solids, StackLight};
 use super::*;
 use feral_processes_engine::{StackCellView, StackView};
 
@@ -230,6 +231,11 @@ pub(super) fn draw_stack(
 
     // The columns either side of the party's line of sight overhang the pane
     // — at depth 0 they are entirely off it — so the pane cuts them.
+    let ctx = CellCtx {
+        power,
+        max_power,
+        light: StackLight::new(view.light_seed, view.facing),
+    };
     painter.clipped(pane.x, pane.y, pane.w, pane.h, |painter| {
         // Back to front, so nearer geometry paints over further geometry and
         // no depth sorting is needed. That is the whole occlusion rule, and
@@ -239,9 +245,8 @@ pub(super) fn draw_stack(
         // passage running past the rock ahead is drawn and stays visible; one
         // that runs behind it is drawn and is painted over.
         for depth in (0..view.cells.len()).rev() {
-            let row = &view.cells[depth];
-            for i in 0..row.len() {
-                draw_cell(painter, row, i, depth, pane, m, (power, max_power));
+            for i in 0..view.cells[depth].len() {
+                draw_cell(painter, &view.cells, i, depth, pane, m, &ctx);
             }
         }
     });
@@ -250,7 +255,12 @@ pub(super) fn draw_stack(
 
     let heading = format!(
         "Facing {}   Depth {} / {}   ({}, {})   Trace: {}",
-        view.facing, view.depth, view.frames, view.position.0, view.position.1, view.trace
+        view.facing.label(),
+        view.depth,
+        view.frames,
+        view.position.0,
+        view.position.1,
+        view.trace
     );
     painter.ui(
         &heading,
@@ -272,40 +282,107 @@ pub(super) fn draw_stack(
     }
 }
 
-/// Draws `row[i]` — one cell of the cross-section `depth` ahead — into its
-/// own slice of the pane.
+/// What `draw_cell` needs besides the cell: the fog's reserve and the
+/// frame's light.
+struct CellCtx {
+    power: f32,
+    max_power: f32,
+    light: StackLight,
+}
+
+/// The part of a floor quad nearest one neighbour, between the slice edges
+/// `n*` (near) and `f*` (far), halved in screen space.
+fn floor_half(
+    half: Half,
+    (nl, nr, nb): (f32, f32, f32),
+    (fl, fr, fb): (f32, f32, f32),
+) -> [(f32, f32); 4] {
+    let (ml, mr, mb) = ((nl + fl) / 2.0, (nr + fr) / 2.0, (nb + fb) / 2.0);
+    let (cn, cf) = ((nl + nr) / 2.0, (fl + fr) / 2.0);
+    match half {
+        Half::Left => [(nl, nb), (cn, nb), (cf, fb), (fl, fb)],
+        Half::Right => [(cn, nb), (nr, nb), (fr, fb), (cf, fb)],
+        Half::Near => [(nl, nb), (nr, nb), (mr, mb), (ml, mb)],
+        Half::Far => [(ml, mb), (mr, mb), (fr, fb), (fl, fb)],
+    }
+}
+
+/// Draws `cells[depth][i]` — one cell of the cross-section `depth` ahead —
+/// into its own slice of the pane.
 ///
 /// The middle column is the one whose lateral offset works out to zero and
 /// has no special case: what used to be the whole of `draw_stack`'s loop
-/// body is this, run once per cell. The row comes in whole rather than just
-/// the cell, because a wall is a property of the boundary between two cells
+/// body is this, run once per cell. The cells come in whole rather than just
+/// the one, because a wall is a property of the boundary between two cells
 /// rather than of either one — and because the offset is measured from the
 /// row's own middle, so a row shorter than the rest is drawn centred rather
 /// than indexed off the end of.
+///
+/// Geometry is `light.apply(dim(base, fog))`: light then fog, both
+/// multiplicative. The marks below stay unlit.
 fn draw_cell(
     painter: &Painter,
-    row: &[StackCellView],
+    cells: &[Vec<StackCellView>],
     i: usize,
     depth: usize,
     pane: Rect,
     m: &Metrics,
-    (power, max_power): (f32, f32),
+    ctx: &CellCtx,
 ) {
+    let row = &cells[depth];
     let cell = row[i];
     let lateral = i as i32 - (row.len() / 2) as i32;
     let (nl, nt, nr, nb) = column_slice(depth, lateral, pane);
     let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, pane);
-    let s = shade(depth, power, max_power);
+    let s = shade(depth, ctx.power, ctx.max_power);
+    let light = &ctx.light;
 
     let face = draws_as_face(depth, cell);
     if face {
         // This cell's face toward us fills its slice. Anything behind it was
         // drawn already and is now covered, which is exactly right.
-        painter.rect(nl, nt, nr - nl, nb - nt, dim(face_color(cell), s));
+        painter.rect(
+            nl,
+            nt,
+            nr - nl,
+            nb - nt,
+            light.face().apply(dim(face_color(cell), s)),
+        );
     } else {
         // An open cell: floor and ceiling recede from this slice to the next.
-        painter.poly(&[(nl, nb), (nr, nb), (fr, fb), (fl, fb)], dim(FLOOR, s));
-        painter.poly(&[(nl, nt), (nr, nt), (fr, ft), (fl, ft)], dim(CEILING, s));
+        let lit = light.floor(depth, lateral);
+        painter.poly(
+            &[(nl, nb), (nr, nb), (fr, fb), (fl, fb)],
+            lit.apply(dim(FLOOR, s)),
+        );
+        // A solid neighbour toward the light throws a shadow on the half of
+        // the floor beside it. Only neighbours inside the cone count — the
+        // cone is what the party can see.
+        let solid_at = |row: Option<&Vec<StackCellView>>, j: Option<usize>| {
+            row.zip(j)
+                .and_then(|(r, j)| r.get(j))
+                .is_some_and(|&c| solid(c))
+        };
+        let solids = Solids {
+            left: solid_at(Some(row), i.checked_sub(1)),
+            right: solid_at(Some(row), Some(i + 1)),
+            near: solid_at(depth.checked_sub(1).map(|d| &cells[d]), Some(i)),
+            far: solid_at(cells.get(depth + 1), Some(i)),
+        };
+        for (half, shadow) in light
+            .floor_shadows(depth, lateral, solids)
+            .into_iter()
+            .flatten()
+        {
+            painter.poly(
+                &floor_half(half, (nl, nr, nb), (fl, fr, fb)),
+                shadow.apply(dim(FLOOR, s)),
+            );
+        }
+        painter.poly(
+            &[(nl, nt), (nr, nt), (fr, ft), (fl, ft)],
+            lit.apply(dim(CEILING, s)),
+        );
 
         // A solid neighbour is seen edge-on from here, which is the wall this
         // draws — the neighbour's own face is its business, and it draws
@@ -317,10 +394,16 @@ fn draw_cell(
         // door rather than as the rock it is set into.
         let (left, right) = flank_colors(row, i);
         if let Some(color) = left {
-            painter.poly(&[(nl, nt), (fl, ft), (fl, fb), (nl, nb)], dim(color, s));
+            painter.poly(
+                &[(nl, nt), (fl, ft), (fl, fb), (nl, nb)],
+                light.wall(Side::Left).apply(dim(color, s)),
+            );
         }
         if let Some(color) = right {
-            painter.poly(&[(nr, nt), (fr, ft), (fr, fb), (nr, nb)], dim(color, s));
+            painter.poly(
+                &[(nr, nt), (fr, ft), (fr, fb), (nr, nb)],
+                light.wall(Side::Right).apply(dim(color, s)),
+            );
         }
     }
 
@@ -427,8 +510,11 @@ pub(super) fn draw_cell_describe(
 
 #[cfg(test)]
 mod tests {
+    use super::super::hud::palette;
+    use super::super::lighting::{LEVEL_MAX, LEVEL_MIN, Lit};
     use super::*;
     use feral_processes_engine::components::POWER_MAX;
+    use feral_processes_engine::stack::Dir;
 
     #[test]
     fn slices_shrink_monotonically_with_distance() {
@@ -567,7 +653,20 @@ mod tests {
     /// drawn is three cells out.
     #[test]
     fn the_unlit_fill_is_lighter_than_void_and_darker_than_the_far_wall() {
-        let far_wall = dim(WALL, shade(3, POWER_MAX, POWER_MAX));
+        // The worst lit case: the lowest level through the darkest channel
+        // of any cast, which is what the far wall can be dimmed to.
+        let casts = &palette::LIGHT_CASTS;
+        let darkest = Color::new(
+            casts.iter().map(|c| c.r).fold(f32::MAX, f32::min),
+            casts.iter().map(|c| c.g).fold(f32::MAX, f32::min),
+            casts.iter().map(|c| c.b).fold(f32::MAX, f32::min),
+            1.0,
+        );
+        let worst = Lit {
+            level: LEVEL_MIN,
+            cast: darkest,
+        };
+        let far_wall = worst.apply(dim(WALL, shade(3, POWER_MAX, POWER_MAX)));
         for (fill, void, wall) in [
             (UNLIT.r, VOID.r, far_wall.r),
             (UNLIT.g, VOID.g, far_wall.g),
@@ -575,6 +674,33 @@ mod tests {
         ] {
             assert!(fill > void, "the fill is still the hole it replaced");
             assert!(fill < wall, "the fill outshines the end of the corridor");
+        }
+    }
+
+    /// Hue, not brightness, carries a door: lit at any level in the band and
+    /// through any cast, a door and a seal keep red dominant and rock does
+    /// not.
+    #[test]
+    fn a_lit_door_and_seal_stay_distinguishable_from_lit_rock() {
+        for cast in palette::LIGHT_CASTS {
+            for step in 0..=8 {
+                let level = LEVEL_MIN + (LEVEL_MAX - LEVEL_MIN) * step as f32 / 8.0;
+                let lit = Lit { level, cast };
+                for depth in 0..4 {
+                    let s = shade(depth, POWER_MAX, POWER_MAX);
+                    let (door, seal, wall) = (
+                        lit.apply(dim(DOOR, s)),
+                        lit.apply(dim(SEALED, s)),
+                        lit.apply(dim(WALL, s)),
+                    );
+                    assert!(door.r > door.g && door.r > door.b, "door lost its hue");
+                    assert!(seal.r > seal.g && seal.r > seal.b, "seal lost its hue");
+                    assert!(
+                        wall.r < wall.g && wall.r < wall.b,
+                        "rock turned red at level {level}"
+                    );
+                }
+            }
         }
     }
 
@@ -711,7 +837,8 @@ mod tests {
         StackView {
             depth: 2,
             frames: 4,
-            facing: "N",
+            facing: Dir::North,
+            light_seed: 0,
             trace: "Traced",
             position: (3, 4),
             cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
@@ -857,7 +984,8 @@ mod tests {
         let empty = StackView {
             depth: 1,
             frames: 1,
-            facing: "N",
+            facing: Dir::North,
+            light_seed: 0,
             trace: "Quiet",
             position: (0, 0),
             cells: Vec::new(),
@@ -866,7 +994,8 @@ mod tests {
         let single = StackView {
             depth: 1,
             frames: 1,
-            facing: "S",
+            facing: Dir::South,
+            light_seed: 0,
             trace: "Hunted",
             position: (0, 0),
             cells: vec![vec![StackCellView::Floor]],

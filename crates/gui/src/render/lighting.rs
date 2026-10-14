@@ -126,7 +126,7 @@ pub(super) fn board_light(board: &Board) -> Light {
     light_from_seed(h)
 }
 
-fn light_from_seed(seed: u64) -> Light {
+pub(super) fn light_from_seed(seed: u64) -> Light {
     let mut state = seed;
     let angle = unit(splitmix(&mut state)) * std::f32::consts::TAU;
     let casts = &palette::LIGHT_CASTS;

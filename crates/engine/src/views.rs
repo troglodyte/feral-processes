@@ -2223,9 +2223,13 @@ pub struct StackView {
     /// "2 / 4" and the player can tell a long descent from a short one
     /// without counting frames.
     pub frames: u32,
-    /// `Dir::label` — "N", "E", "S", "W". A compass reading for the player,
-    /// not something the renderer projects with.
-    pub facing: &'static str,
+    /// The party's world facing; `.label()` for display. The cells are
+    /// already rotated into view space, so the renderer needs it only for
+    /// what depends on the world's axes, such as a light's direction.
+    pub facing: crate::stack::Dir,
+    /// The frame's lighting seed, derived per frame and never stored; the
+    /// engine attaches no meaning to it.
+    pub light_seed: u64,
     /// `TraceBand::label` — how loud the party has been in this stack, and
     /// the only form they ever see the meter in. A reading, like `facing`,
     /// not a number the renderer does arithmetic on.

@@ -618,6 +618,7 @@ fn the_staff_screen_does_not_change_a_role() {
     let mut app = app_owning_distant_programs(743, 2);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 0;
     let before: Vec<Option<ProgramRole>> =
         app.base_staff_table().rows.iter().map(|r| r.role).collect();
@@ -644,6 +645,7 @@ fn space_toggles_the_highlighted_cell() {
     let mut app = app_owning_distant_programs(760, 1);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 0;
     app.work_column = 2; // Dig
 
@@ -762,6 +764,7 @@ fn a_toggles_the_whole_highlighted_column() {
     let mut app = app_owning_distant_programs(762, 2);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.work_column = 1; // Guard
 
     app.handle_key(GameKey::Char('A'));
@@ -784,6 +787,7 @@ fn moving_a_row_keeps_the_selection_on_the_moved_program() {
     let mut app = app_owning_distant_programs(763, 2);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 1;
     let moved = app.base_staff_table().rows[1].program.entity;
 
@@ -816,6 +820,7 @@ fn moving_a_row_around_an_interleaved_away_program_follows_the_displayed_order()
     app.game.as_mut().unwrap().add_companion(middle).unwrap();
 
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 0; // the top staff row, `first`
     let table = app.base_staff_table();
     assert_eq!(
@@ -855,6 +860,7 @@ fn an_away_row_is_editable() {
     let member = app.base_staff_table().rows[0].program.entity;
     app.game.as_mut().unwrap().add_companion(member).unwrap();
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 0;
     app.work_column = 0;
     assert_eq!(

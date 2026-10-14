@@ -66,11 +66,14 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
 }
 
 /// Paints the frame (its keybar only when `keybar_mode` is given) and returns the content rect, already shortened by a
-/// red refusal line when one is up.
+/// red refusal line when one is up. `on_rail` is whether the rail holds the
+/// hub's one cursor; the rows draw it otherwise.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn paint_frame(
     page: usize,
     screen: usize,
     keybar_mode: Option<Mode>,
+    on_rail: bool,
     flags: &BaseReportFlags,
     refusal: Option<&str>,
     painter: &Painter,
@@ -89,10 +92,10 @@ pub(super) fn paint_frame(
         2.0,
         hud::palette::PANE_BORDER,
     );
-    draw_rail(&l.rail, page, flags, char_w, painter, m);
+    draw_rail(&l.rail, page, on_rail, flags, char_w, painter, m);
     draw_title(&l.title, page, screen, painter, m);
     if let Some(mode) = keybar_mode {
-        draw_groups(l.keybar, &keybar_groups(mode, page), painter, m);
+        draw_groups(l.keybar, &keybar_groups(mode, page, on_rail), painter, m);
     }
 
     let mut content = l.content;
@@ -110,9 +113,13 @@ pub(super) fn paint_frame(
     content
 }
 
+/// The current page always carries the caret; the highlight bar is the
+/// cursor, drawn only while the rail has it and in the rows' own
+/// `SELECT_BG`, so it reads as the one cursor moving rather than a second.
 fn draw_rail(
     rail: &RailGeom,
     selected: usize,
+    focused: bool,
     flags: &BaseReportFlags,
     char_w: f32,
     painter: &Painter,
@@ -159,14 +166,10 @@ fn draw_rail(
         let top = rail.rows.y + slot as f32 * rail.row_h;
         let base = top + rail.row_h * 0.85;
         let current = page == selected;
+        if current && focused {
+            painter.rect(rail.rows.x, top, rail.rows.w, rail.row_h, SELECT_BG);
+        }
         if current {
-            painter.rect(
-                rail.rows.x,
-                top,
-                rail.rows.w,
-                rail.row_h,
-                hud::palette::PANE_BORDER,
-            );
             painter.ui(
                 "▸",
                 rail.rows.x,
@@ -219,12 +222,24 @@ fn draw_title(title: &Rect, page: usize, screen: usize, painter: &Painter, m: &M
 }
 
 /// The keys that work here, most important first (the bar drops groups from
-/// the end when it is too narrow).
-pub(super) fn keybar_groups(mode: Mode, page: usize) -> Vec<Vec<hud::strip::Piece>> {
-    let mut nav = vec![keycap("[ ]", "page")];
-    if BASE_REPORT_PAGES[page].screens.len() > 1 {
-        nav.push(keycap("Tab", "screen"));
+/// the end when it is too narrow). The rail and the rows each list only
+/// what the cursor does where it is.
+pub(super) fn keybar_groups(mode: Mode, page: usize, on_rail: bool) -> Vec<Vec<hud::strip::Piece>> {
+    let tab = (BASE_REPORT_PAGES[page].screens.len() > 1).then(|| keycap("Tab", "screen"));
+    if on_rail {
+        let nav = [keycap("↑/↓", "page"), keycap("→", "open")]
+            .into_iter()
+            .chain(tab)
+            .collect();
+        return [nav, vec![keycap("Esc", "close")]]
+            .into_iter()
+            .map(group)
+            .collect();
     }
+    let nav: Vec<_> = [keycap("←", "menu"), keycap("[ ]", "page")]
+        .into_iter()
+        .chain(tab)
+        .collect();
     let acts = match mode {
         Mode::BaseOverview => vec![keycap("↑/↓", "select"), keycap("Enter", "open")],
         Mode::Alerts => vec![keycap("↑/↓", "select"), keycap("x/d", "dismiss")],
@@ -252,7 +267,7 @@ pub(super) fn keybar_groups(mode: Mode, page: usize) -> Vec<Vec<hud::strip::Piec
         Mode::Structures => vec![keycap("↑/↓", "select"), keycap("Enter", "staff")],
         _ => Vec::new(),
     };
-    [acts, nav, vec![keycap("Esc", "close")]]
+    [acts, nav, vec![keycap("Esc", "menu")]]
         .into_iter()
         .filter(|g| !g.is_empty())
         .map(group)
@@ -319,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn the_keybar_names_page_nav_and_close_on_every_screen() {
+    fn the_keybar_names_the_way_out_of_each_half_on_every_screen() {
         for mode in [
             Mode::BaseOverview,
             Mode::StaffWellbeing,
@@ -338,13 +353,19 @@ mod tests {
             Mode::Alerts,
         ] {
             let page = base_page_of(mode).unwrap().0;
-            let text: String = keybar_groups(mode, page)
-                .iter()
-                .flatten()
-                .map(|(t, _, _)| t.as_str())
-                .collect();
-            assert!(text.contains("page"), "{mode:?}: {text}");
-            assert!(text.contains("close"), "{mode:?}: {text}");
+            let text = |on_rail| -> String {
+                keybar_groups(mode, page, on_rail)
+                    .iter()
+                    .flatten()
+                    .map(|(t, _, _)| t.as_str())
+                    .collect()
+            };
+            let rail = text(true);
+            assert!(rail.contains("page"), "{mode:?}: {rail}");
+            assert!(rail.contains("open"), "{mode:?}: {rail}");
+            assert!(rail.contains("close"), "{mode:?}: {rail}");
+            let rows = text(false);
+            assert!(rows.contains("menu"), "{mode:?}: {rows}");
         }
     }
 }

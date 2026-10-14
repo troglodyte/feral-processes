@@ -1457,7 +1457,7 @@ pub(super) fn base_staff_menu_rows(
     table: &WorkTable,
     pets: &[PetInfo],
     selected: usize,
-    column: usize,
+    column: Option<usize>,
 ) -> Vec<Row> {
     let cols = Columns::of(table);
     let mut rows = vec![
@@ -1473,7 +1473,7 @@ pub(super) fn base_staff_menu_rows(
             drew_away_divider = true;
             rows.push(text_row(away_divider(&cols)));
         }
-        let cursor_column = (i == selected).then_some(column);
+        let cursor_column = column.filter(|_| i == selected);
         let text = cols.row(i, row, cursor_column);
         let pet = pets.iter().find(|p| p.entity == row.program.entity);
         let base_row = if row.section == WorkSection::Away {
@@ -3887,7 +3887,7 @@ mod base_staff_tests {
             label: "POD",
             unworked: 0,
         });
-        for row in base_staff_menu_rows(&t, &[], 0, 0) {
+        for row in base_staff_menu_rows(&t, &[], 0, Some(0)) {
             let text = match &row {
                 Row::Text(text) | Row::TextColored(text, _) => text.clone(),
                 Row::Item { text, .. } => text.clone(),
@@ -3900,7 +3900,7 @@ mod base_staff_tests {
             );
         }
         with_painter(|p| {
-            let rows = base_staff_menu_rows(&t, &[], 0, 0);
+            let rows = base_staff_menu_rows(&t, &[], 0, Some(0));
             for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
                 let m = ui_metrics(h);
                 let char_w = p.measure_ui_advance("M", m.font_size);
@@ -3932,7 +3932,7 @@ mod base_staff_tests {
             work_row("A", "idle", WorkSection::Staff, [true, false, true, true]),
             work_row("B", "idle", WorkSection::Staff, [true, false, true, true]),
         ]);
-        let rows = base_staff_menu_rows(&t, &[], 0, 1);
+        let rows = base_staff_menu_rows(&t, &[], 0, Some(1));
         let text = |i: usize| match &rows[i + 2] {
             // +2: the header counts line and the column header sit above row 0.
             Row::Item { text, .. } => text.clone(),
@@ -3950,12 +3950,29 @@ mod base_staff_tests {
         );
     }
 
+    /// With the base report's cursor on its rail the table has no column
+    /// cursor, so no cell on any row changes shape.
+    #[test]
+    fn no_column_means_no_cell_cursor() {
+        let t = table(vec![work_row(
+            "A",
+            "idle",
+            WorkSection::Staff,
+            [true, false, true, true],
+        )]);
+        let rows = base_staff_menu_rows(&t, &[], 0, None);
+        let Row::Item { text, .. } = &rows[2] else {
+            panic!("expected an item row");
+        };
+        assert!(!text.contains('<'), "{text}");
+    }
+
     /// A duty column's header names its unworked count and nothing when
     /// there is none — `DIG` in `columns` above is given 2.
     #[test]
     fn a_duty_columns_header_shows_its_unworked_count() {
         let t = table(vec![widest_row()]);
-        let header = match &base_staff_menu_rows(&t, &[], 0, 0)[1] {
+        let header = match &base_staff_menu_rows(&t, &[], 0, Some(0))[1] {
             Row::Text(s) => s.clone(),
             _ => panic!("expected the column header"),
         };
@@ -3975,7 +3992,7 @@ mod base_staff_tests {
             work_row("Staffer", "idle", WorkSection::Staff, [true; 4]),
             work_row("Traveller", "in party", WorkSection::Away, [true; 4]),
         ]);
-        let rows = base_staff_menu_rows(&t, &[], 0, 0);
+        let rows = base_staff_menu_rows(&t, &[], 0, Some(0));
         let dividers = rows
             .iter()
             .filter(|r| matches!(r, Row::Text(s) if s.contains("away")))
@@ -4017,7 +4034,7 @@ mod base_staff_tests {
             })
             .collect();
         let t = table(rows);
-        let body = base_staff_menu_rows(&t, &[], 0, 0);
+        let body = base_staff_menu_rows(&t, &[], 0, Some(0));
         let m = ui_metrics(720.0);
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);

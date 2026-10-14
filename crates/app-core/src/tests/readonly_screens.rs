@@ -24,7 +24,9 @@ fn the_hub_opens_the_structure_roster_and_esc_leaves_to_the_map() {
     open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.mode, Mode::Structures);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "Esc leaves the hub in one press");
+    assert_eq!(app.mode, Mode::Structures, "the first Esc goes to the rail");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "and the second leaves the hub");
 }
 
 /// Up/Down are the scroll, and the popup's window follows the highlighted
@@ -124,7 +126,13 @@ fn scrolling_a_list_does_not_advance_the_game() {
     let mut app = app_owning_a_program_and_a_compiler(94, &[]);
     let before = app.game.as_ref().unwrap().current_tick();
     open_hub_screen(&mut app, Mode::Structures);
-    for key in [GameKey::Down, GameKey::Down, GameKey::Up, GameKey::Esc] {
+    for key in [
+        GameKey::Down,
+        GameKey::Down,
+        GameKey::Up,
+        GameKey::Esc,
+        GameKey::Esc,
+    ] {
         app.handle_key(key);
     }
     assert_eq!(app.mode, Mode::Playing);
@@ -252,6 +260,7 @@ fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
     app.handle_key(GameKey::Char('B'));
     app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Right);
     for key in [
         GameKey::Down,
         GameKey::Up,

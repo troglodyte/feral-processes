@@ -2722,7 +2722,8 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
     app.handle_key(GameKey::Char(menu_shortcut(idx)));
 }
 
-/// Opens the base report and walks `[` / `Tab` to `target`, the way a player
+/// Opens the base report, walks `]` / `Tab` to `target` and steps the cursor
+/// off the rail onto its rows, the way a player
 /// reaches a screen that no longer has a menu row of its own.
 pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     let (page, screen) = base_page_of(target).expect("target is a hub screen");
@@ -2736,7 +2737,9 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     for _ in 0..screen {
         app.handle_key(GameKey::Tab);
     }
+    app.handle_key(GameKey::Right);
     assert_eq!(app.mode, target, "the hub reached {target:?}");
+    assert!(!app.hub_on_rail, "the cursor is on the screen's rows");
 }
 
 /// A base the player is standing inside: a Home one tile north and an

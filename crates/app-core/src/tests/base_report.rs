@@ -153,6 +153,7 @@ fn n_lands_on_alerts_with_everything_marked_read() {
     assert_eq!(app.mode, Mode::Alerts);
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 0);
     app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -186,6 +187,7 @@ fn the_base_output_row_is_gone_and_the_report_row_is_offered() {
 fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     let mut app = test_app(30011);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Enter);
     assert_eq!(
         app.mode,
@@ -195,6 +197,7 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 
     let mut app = test_app(30013);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Right);
     for _ in 0..BASE_REPORT_PAGES.len() - 2 {
         app.handle_key(GameKey::Down);
     }
@@ -209,6 +212,7 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 fn a_digit_on_the_overview_reaches_its_handler() {
     let mut app = test_app(30014);
     app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char('7'));
     assert_eq!(app.mode, Mode::Alerts);
 }
@@ -254,6 +258,7 @@ fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
     let mut app = test_app(30016);
     app.handle_key(GameKey::Char('B'));
     app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Right);
     let rows = app.game.as_ref().unwrap().need_coverage().len();
     assert!(rows >= 2, "the shipped catalogue has two needs");
     app.handle_key(GameKey::Tab);
@@ -305,7 +310,9 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
         "and then onto the parent screen"
     );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "whose Esc leaves the hub");
+    assert!(app.hub_on_rail, "whose Esc goes to the rail");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "and the rail's leaves the hub");
 }
 
 #[test]
@@ -543,6 +550,7 @@ fn the_list_cursor_wraps_over_each_screens_own_report_and_costs_no_time() {
     ] {
         app.mode = mode;
         app.menu_selected = 0;
+        app.hub_on_rail = false;
         let rows = {
             let game = app.game.as_ref().unwrap();
             match mode {
@@ -570,4 +578,102 @@ fn the_list_cursor_wraps_over_each_screens_own_report_and_costs_no_time() {
         assert_eq!(app.mode, mode);
     }
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}
+
+#[test]
+fn b_opens_with_the_cursor_on_the_rail_and_down_walks_the_pages() {
+    let mut app = test_app(30030);
+    app.handle_key(GameKey::Char('B'));
+    assert!(app.hub_on_rail, "B opens on the rail");
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.mode, Mode::StaffWellbeing);
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::Alerts, "Up wraps first -> last");
+    assert!(app.hub_on_rail, "walking the rail keeps the cursor there");
+}
+
+#[test]
+fn right_moves_the_cursor_into_the_page_and_left_brings_it_back() {
+    let mut app = test_app(30031);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        app.mode,
+        Mode::StaffWellbeing,
+        "Down in the page moves its rows"
+    );
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail);
+    assert_eq!(app.mode, Mode::StaffWellbeing);
+}
+
+#[test]
+fn enter_on_the_rail_moves_into_the_page_without_acting_on_it() {
+    let mut app = test_app(30032);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Enter);
+    assert!(!app.hub_on_rail);
+    assert_eq!(
+        app.mode,
+        Mode::BaseOverview,
+        "Enter did not open an Overview row"
+    );
+}
+
+#[test]
+fn the_rail_keeps_page_keys_from_reaching_the_screen() {
+    let mut app = test_app(30033);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(
+        app.mode,
+        Mode::BaseOverview,
+        "a row jump waits for the page"
+    );
+}
+
+#[test]
+fn esc_in_the_page_goes_to_the_rail_and_esc_on_the_rail_closes() {
+    let mut app = test_app(30034);
+    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseOverview);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+#[test]
+fn n_opens_alerts_with_the_cursor_in_the_page() {
+    let mut app = test_app(30035);
+    app.handle_key(GameKey::Char('N'));
+    assert_eq!(app.mode, Mode::Alerts);
+    assert!(
+        !app.hub_on_rail,
+        "N is for reading the board, so it lands on it"
+    );
+}
+
+#[test]
+fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
+    let mut app = test_app(30036);
+    app.handle_key(GameKey::Char('B'));
+    while app.mode != Mode::BaseStaff {
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.work_column, 2);
+    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.work_column, 0);
+    assert!(!app.hub_on_rail, "a column step is not a trip to the rail");
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail);
 }

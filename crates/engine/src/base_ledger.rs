@@ -196,6 +196,9 @@ pub enum ConsumeSource {
     /// Spent making something by hand: a hand-compile's ingredients, or
     /// the blank a routine was burnt onto.
     Craft,
+    /// Paid at the Refit Bench to restore a worn copy, whichever of the
+    /// shelves and the pack the units came from.
+    Refit,
     /// A routine disk written into a slot. It buys the routine and refunds
     /// nothing, which is what makes it a sink rather than a move.
     Install,
@@ -219,6 +222,7 @@ impl ConsumeSource {
             ConsumeSource::Build => "build",
             ConsumeSource::Base => "base",
             ConsumeSource::Craft => "craft",
+            ConsumeSource::Refit => "refit",
             ConsumeSource::Install => "install",
             ConsumeSource::Breach => "breach",
             ConsumeSource::Sabotage => "sabotage",

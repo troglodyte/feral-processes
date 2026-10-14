@@ -92,7 +92,7 @@ impl Game {
             return Err(format!("Need {}.", short.join(", ")));
         }
         for (item, qty) in &cost {
-            let paid = self.spend_from_stores(item, *qty);
+            let paid = self.spend_from_stores(item, *qty, crate::base_ledger::ConsumeSource::Refit);
             debug_assert!(paid, "stores_hold said the bill was covered");
         }
 

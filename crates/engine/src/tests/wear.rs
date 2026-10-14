@@ -723,3 +723,38 @@ fn the_wear_alert_subject_survives_a_save_and_load() {
     assert_eq!(alerts.len(), 1, "the break collapsed onto the saved row");
     assert_eq!(alerts[0].count, 2);
 }
+
+/// The refit's whole bill is a sink, the pack's share as much as the
+/// shelves': `spend_from_stores` once logged only the base half.
+#[test]
+fn a_refit_logs_its_whole_bill_to_the_ledger() {
+    let mut game = refit_game(5110);
+    let depot = spawn_structure_at(&mut game, "depot", 4, 3);
+    game.world.entity_mut(depot).insert(Stock {
+        output: [(ItemId::from(ids::CORE_FRAGMENT), 1)]
+            .into_iter()
+            .collect(),
+        capacity: 50,
+        ..Default::default()
+    });
+    let edge = worn_copy("kinetic_edge", 5);
+    game.add_copies(&edge, 1);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 10);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 1);
+    let ledger = |game: &Game, item: &str| {
+        game.world
+            .resource::<crate::base_ledger::BaseLedger>()
+            .lifetime
+            .get(&ItemId::from(item))
+            .map_or(0, |t| t.consumed)
+    };
+    let (fragments, coils) = (
+        ledger(&game, ids::CORE_FRAGMENT),
+        ledger(&game, ids::CHARGE_COIL),
+    );
+
+    game.refit_copy(&edge).unwrap();
+
+    assert_eq!(ledger(&game, ids::CORE_FRAGMENT) - fragments, 4);
+    assert_eq!(ledger(&game, ids::CHARGE_COIL) - coils, 1, "pack-only item");
+}

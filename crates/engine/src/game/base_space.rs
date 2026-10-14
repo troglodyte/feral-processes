@@ -944,7 +944,11 @@ impl Game {
                     return;
                 }
                 let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
-                if !self.spend_from_stores(&substrate, crate::tuning::FLOOR_FINISH_COST) {
+                if !self.spend_from_stores(
+                    &substrate,
+                    crate::tuning::FLOOR_FINISH_COST,
+                    crate::base_ledger::ConsumeSource::Base,
+                ) {
                     // `dig_wants` already judged this workable a moment ago
                     // — the one way this can still fail is two finish jobs
                     // landing on the same tick against a single surviving
@@ -1025,16 +1029,16 @@ impl Game {
     /// the whole count. The finish arm above calls it with
     /// `tuning::FLOOR_FINISH_COST` Blank Substrate; a tile never does, since
     /// the crew pays for tiles out of the base alone.
-    pub(crate) fn spend_from_stores(&mut self, item: &ItemId, count: u32) -> bool {
+    pub(crate) fn spend_from_stores(
+        &mut self,
+        item: &ItemId,
+        count: u32,
+        source: crate::base_ledger::ConsumeSource,
+    ) -> bool {
         if self.stores_hold(item) < count {
             return false;
         }
-        let from_base = crate::game::base::stock::spend_from_base(
-            self,
-            item,
-            count,
-            crate::base_ledger::ConsumeSource::Base,
-        );
+        let from_base = crate::game::base::stock::spend_from_base(self, item, count, source);
         let remaining = count - from_base;
         if remaining > 0 {
             let player = self.player_entity();
@@ -1042,6 +1046,7 @@ impl Game {
                 .get_mut::<Inventory>(player)
                 .unwrap()
                 .take(item.clone(), remaining);
+            self.note_consumed(item, remaining, source);
         }
         true
     }

@@ -94,3 +94,38 @@ fn the_bench_being_absent_is_told_not_hidden() {
     );
     assert!(!app.game.as_ref().unwrap().refit_bench_standing());
 }
+
+/// Wear lands only on what is worn, so the equipment row has to reach the
+/// bench itself; unequipping first would re-lock the copy at the current
+/// zone's level.
+#[test]
+fn a_worn_weapon_is_refitted_from_its_slot_screen_and_keeps_its_level() {
+    const LEVEL: u32 = 3;
+    let item = "kinetic_edge";
+    let probe = app_at_a_refit_bench_wearing(9410, item, LEVEL, WEAR, Vec::new());
+    let probe_game = probe.game.as_ref().unwrap();
+    let worn = probe_game
+        .worn(probe_game.player_entity(), EquipmentSlot::Weapon)
+        .unwrap();
+    assert_eq!(worn.copy.wear, WEAR, "the fixture wears the weapon");
+    let bill = probe_game.refit_cost(&worn.copy);
+    let mut app = app_at_a_refit_bench_wearing(9410, item, LEVEL, WEAR, bill);
+
+    app.mode = Mode::Inventory;
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::EquipSwap);
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(app.mode, Mode::RefitCopy, "{:?}", app.status_line);
+    assert_eq!(app.refit_copy, Some(worn.copy.clone()));
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.status_line, None);
+    let game = app.game.as_ref().unwrap();
+    let after = game
+        .worn(game.player_entity(), EquipmentSlot::Weapon)
+        .expect("still equipped");
+    assert_eq!(after.copy.wear, 0);
+    assert_eq!(after.level, LEVEL, "refit does not re-lock the gear level");
+    assert_eq!(app.refit_copy, Some(after.copy));
+}

@@ -665,20 +665,6 @@ fn a_refit_needs_the_bench_and_a_worn_copy() {
     );
 }
 
-#[test]
-fn refittable_copies_lists_worn_and_carried_gear_that_needs_it() {
-    let mut game = refit_game(5108);
-    let player = game.player_entity();
-    let worn = worn_copy(ids::MONOFILAMENT_WHIP, 3);
-    game.add_copies(&worn, 1);
-    game.equip(player, &worn).unwrap();
-    let carried = worn_copy("kinetic_edge", 6);
-    game.add_copies(&carried, 1);
-    game.add_copies(&worn_copy(ids::ABLATIVE_PLATING, 0), 1);
-
-    assert_eq!(game.refittable_copies(), vec![worn, carried]);
-}
-
 // -------------------------------------------------------- naming
 
 /// A full-condition copy names exactly as it did before wear shipped, so no

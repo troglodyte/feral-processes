@@ -4,7 +4,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::items::EquipmentSlot;
 use crate::items::{GearCopy, ItemId, ids};
 use crate::*;
 
@@ -51,35 +50,6 @@ impl Game {
         }
         *bill.entry(ItemId::from(ids::CHARGE_COIL)).or_default() += crate::tuning::REFIT_COILS;
         bill.into_iter().collect()
-    }
-
-    /// Every copy the player could refit right now and that needs it: what
-    /// they wear, then what they carry, each distinct value once. Full-
-    /// condition copies are left out — `refit_copy` refuses them — and so are
-    /// companions' copies, which have to come off first.
-    pub fn refittable_copies(&self) -> Vec<GearCopy> {
-        let player = self.player_entity();
-        let worn = self
-            .world
-            .get::<Equipment>(player)
-            .into_iter()
-            .flat_map(|e| {
-                EquipmentSlot::ALL
-                    .into_iter()
-                    .filter_map(|slot| e.get(slot).map(|w| w.copy))
-            });
-        let carried = self
-            .world
-            .get::<GearCopies>(player)
-            .into_iter()
-            .flat_map(|c| c.copies.iter().map(|(copy, _)| copy.clone()));
-        let mut found: Vec<GearCopy> = Vec::new();
-        for copy in worn.chain(carried) {
-            if copy.wear > 0 && self.equipment_of(&copy.item).is_some() && !found.contains(&copy) {
-                found.push(copy);
-            }
-        }
-        found
     }
 
     /// Restores `copy` to full condition, paying `refit_cost` from the

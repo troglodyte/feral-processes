@@ -514,6 +514,7 @@ pub(super) fn draw_equip_swap(
     };
     let wearer = target.unwrap_or_else(|| game.player_entity());
     let worn = game.worn(wearer, slot);
+    let wearing = worn.is_some();
     let mut rows: Vec<Row> = worn_heading_lines(game, worn)
         .into_iter()
         .map(|line| Row::TextColored(line, CYAN))
@@ -541,6 +542,9 @@ pub(super) fn draw_equip_swap(
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
+    if target.is_none() && wearing {
+        rows.push(text_row("[R] refit what you are wearing, at a Refit Bench"));
+    }
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
     draw_popup(
         &format!("Replace {}", slot.label()),

@@ -1028,6 +1028,7 @@ mod turrets {
             },
             Position { x: 1, y: 1 },
         ));
+        charge_defences(&mut game);
 
         assert_eq!(turret_defense(&game), damage);
     }
@@ -1054,6 +1055,7 @@ mod turrets {
                 Position { x: i, y: 1 },
             ));
         }
+        charge_defences(&mut game);
 
         assert_eq!(turret_defense(&game), damage * 2);
     }
@@ -2166,11 +2168,14 @@ mod turrets_fire {
     }
 
     fn spawn_turret(game: &mut Game) -> Entity {
-        game.world
+        let turret = game
+            .world
             .spawn(Structure {
                 kind: "turret".to_string(),
             })
-            .id()
+            .id();
+        charge_defences(game);
+        turret
     }
 
     fn spawn_hostile(game: &mut Game, hp: i32) -> Entity {
@@ -3339,6 +3344,7 @@ mod review_findings {
                 kind: "turret".to_string(),
             })
             .id();
+        charge_defences(&mut game);
 
         battle.place(player, (9, 9));
         battle.place(leaving, (1, 0));

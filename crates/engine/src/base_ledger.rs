@@ -204,6 +204,12 @@ pub enum ConsumeSource {
     Breach,
     /// Spoiled by a sulking program, one unit out of a machine's output.
     Sabotage,
+    /// A charged defence spent a coil holding off a sweep, a raid or a
+    /// siege — `StructureDef::supply` on a `raid_defense` or `turret` def.
+    Defence,
+    /// Patches spent mending the party — a rest in base, the free trickle's
+    /// top-up, or the Repair Bay's fast heal.
+    Heal,
 }
 
 impl ConsumeSource {
@@ -216,6 +222,8 @@ impl ConsumeSource {
             ConsumeSource::Install => "install",
             ConsumeSource::Breach => "breach",
             ConsumeSource::Sabotage => "sabotage",
+            ConsumeSource::Defence => "defence",
+            ConsumeSource::Heal => "heal",
         }
     }
 }

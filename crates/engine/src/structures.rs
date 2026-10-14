@@ -882,6 +882,12 @@ impl StructureDef {
         self.power_upkeep.as_ref().or(self.supply.as_ref())
     }
 
+    /// Whether this structure takes part in base defence: it softens a sweep
+    /// or siege (`raid_defense`) or fires in one (`turret`).
+    pub fn is_defence(&self) -> bool {
+        self.raid_defense > 0 || self.turret.is_some()
+    }
+
     /// How many units of `spends_supply` make one delivery: the fuel window
     /// for a burner, `tuning::SUPPLY_BATCH` for a defence. `intake_recipe`
     /// reports it as the batch size and `Game::fuel_wants` asks whether one

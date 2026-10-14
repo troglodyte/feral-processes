@@ -937,6 +937,9 @@ pub(crate) fn set_machine_status(
         MachineStatus::Dry => {
             format!("The {name} is out of fuel — no Power Cells beside it.")
         }
+        MachineStatus::Uncharged => {
+            format!("The {name} is uncharged — it holds no Charge Coil.")
+        }
     };
     log.push_base(text.clone());
     // Only the six stall states reach the board — `Running` and `Idle` are
@@ -951,7 +954,8 @@ pub(crate) fn set_machine_status(
         | MachineStatus::Unstaffed
         | MachineStatus::Stranded
         | MachineStatus::Unpowered
-        | MachineStatus::Dry => true,
+        | MachineStatus::Dry
+        | MachineStatus::Uncharged => true,
         MachineStatus::Running | MachineStatus::Idle => false,
     };
     if is_blocker {
@@ -1248,7 +1252,13 @@ fn burn_grid_upkeep(world: &mut World) {
 /// before the base went short.
 #[allow(clippy::too_many_arguments)]
 pub fn idle_machine_system(
-    mut machines: Query<(Entity, &Structure, &Position, &mut MachineStatus)>,
+    mut machines: Query<(
+        Entity,
+        &Structure,
+        &Position,
+        &mut MachineStatus,
+        Option<&Stock>,
+    )>,
     tasks: Query<(Entity, &Task)>,
     structure_db: Res<StructureDb>,
     grid: Res<PowerGrid>,
@@ -1257,7 +1267,7 @@ pub fn idle_machine_system(
     mut telemetry: ResMut<BattleTelemetry>,
     mut board: ResMut<AlertBoard>,
 ) {
-    for (machine, structure, pos, mut status) in &mut machines {
+    for (machine, structure, pos, mut status, stock) in &mut machines {
         let def = structure_db.get(&structure.kind);
         let name = def.map(|d| d.name.as_str()).unwrap_or("machine");
         // Stated at each of the two sites rather than built by a closure:
@@ -1283,7 +1293,30 @@ pub fn idle_machine_system(
         // stall some other way — a burning supplier's `Starved`. Nobody is
         // ever posted to one, so `Idle` here would be a permanent false
         // alarm that also stamped over what `power_grid_system` just wrote.
-        if def.is_some_and(|d| !d.runs_a_job()) {
+        if let Some(def) = def.filter(|d| !d.runs_a_job()) {
+            // A defence that spends a supply is the one non-job structure
+            // this pass writes for: charged or not is its whole state.
+            if let Some(coil) = def.supply.as_ref().filter(|_| def.is_defence()) {
+                let charged = stock.is_some_and(|s| s.input.get(coil).copied().unwrap_or(0) > 0);
+                let next = if charged {
+                    MachineStatus::Running
+                } else {
+                    MachineStatus::Uncharged
+                };
+                set_machine_status(
+                    &mut status,
+                    next,
+                    name,
+                    &mut log,
+                    &mut board,
+                    StallSite {
+                        telemetry: &mut telemetry,
+                        tick: clock.tick,
+                        machine: (pos.x, pos.y),
+                        kind: &structure.kind,
+                    },
+                );
+            }
             continue;
         }
         if worker_of(tasks.iter(), machine).is_some() {

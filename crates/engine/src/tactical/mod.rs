@@ -182,6 +182,10 @@ pub struct TacticalBattle {
     /// directly, so a capture rolls against the same count on a battle map
     /// as it does in front of a group.
     pub(crate) decompile_attempts: HashMap<Entity, u32>,
+    /// The turrets that have already said they are out of coils this fight,
+    /// so the line is logged once a battle and not once a round. A field here
+    /// for `decompile_attempts`' reason.
+    pub(crate) dry_turrets_told: Vec<Entity>,
     /// Whether the hostiles outweighed the party at the bell, by summed
     /// `Stats::power()` — `BattleState::outmatched`'s counterpart, and a
     /// snapshot for its reason: by the time a fight is won the question is
@@ -263,6 +267,7 @@ impl TacticalBattle {
             bodies: Vec::new(),
             rewards: BattleRewards::default(),
             decompile_attempts: HashMap::new(),
+            dry_turrets_told: Vec::new(),
             initiative: Vec::new(),
             turn: 0,
             spent: 0,

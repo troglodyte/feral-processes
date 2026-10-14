@@ -3511,3 +3511,36 @@ pub(crate) fn see_twelve_tiles(game: &mut Game) {
     game.recompute_derived(player);
     game.mark_seen_tiles();
 }
+
+/// Gives every defence the base stands (a Shield, a Turret) a few Charge
+/// Coils, so a fixture written when defences ran free still defends. A bare
+/// `Structure` spawned without a `Stock` gets one.
+pub(crate) fn charge_defences(game: &mut Game) {
+    let coil = ItemId::from(ids::CHARGE_COIL);
+    let armed: Vec<Entity> = {
+        let mut query = game.world.query::<(Entity, &Structure)>();
+        let all: Vec<(Entity, String)> = query
+            .iter(&game.world)
+            .map(|(e, s)| (e, s.kind.clone()))
+            .collect();
+        let db = game.world.resource::<crate::structures::StructureDb>();
+        all.into_iter()
+            .filter(|(_, kind)| {
+                db.get(kind)
+                    .is_some_and(|d| d.is_defence() && d.supply.is_some())
+            })
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for entity in armed {
+        let mut entity = game.world.entity_mut(entity);
+        if !entity.contains::<Stock>() {
+            entity.insert(Stock::new(10));
+        }
+        entity
+            .get_mut::<Stock>()
+            .unwrap()
+            .input
+            .insert(coil.clone(), 50);
+    }
+}

@@ -17,6 +17,7 @@ pub(crate) mod assignment;
 pub(crate) mod building;
 pub(crate) mod collect;
 pub(crate) mod construction;
+pub(crate) mod defences;
 pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;

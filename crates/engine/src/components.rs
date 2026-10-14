@@ -1083,13 +1083,24 @@ pub enum MachineStatus {
     /// Written by `systems::burn_grid_upkeep` and by nothing else, which is
     /// already the single writer of a burner's stall.
     Dry,
+    /// A defence (`StructureDef::raid_defense` or `::turret`) that spends a
+    /// `StructureDef::supply` holds none, so it adds nothing to a sweep or a
+    /// siege until a hauler stocks it.
+    ///
+    /// **Not `Dry`, which means a burner out of Power Cells.** `Dry`'s fix is
+    /// "stand a stocked buffer beside it"; this one's is "haul it coils", and
+    /// the two sentences must not be shared.
+    ///
+    /// Written by `systems::idle_machine_system`, the one pass that already
+    /// visits every structure, for the defences that carry a status.
+    Uncharged,
 }
 
 impl MachineStatus {
     /// Every status, for `GlyphColor::ALL`'s reason: the renderer's colour
     /// table is exhaustive, but the census holding the palette's reserved
     /// colours off machine states is not, unless it walks this.
-    pub const ALL: [MachineStatus; 8] = [
+    pub const ALL: [MachineStatus; 9] = [
         MachineStatus::Running,
         MachineStatus::Starved,
         MachineStatus::Clogged,
@@ -1098,6 +1109,7 @@ impl MachineStatus {
         MachineStatus::Idle,
         MachineStatus::Unpowered,
         MachineStatus::Dry,
+        MachineStatus::Uncharged,
     ];
 
     /// Why a machine in this state is not producing, as a screen words it.
@@ -1112,6 +1124,7 @@ impl MachineStatus {
             MachineStatus::Idle => "no program is assigned",
             MachineStatus::Unpowered => "the grid is short",
             MachineStatus::Dry => "no Power Cells beside it",
+            MachineStatus::Uncharged => "it holds no Charge Coil",
         }
     }
 
@@ -1131,6 +1144,7 @@ impl MachineStatus {
             MachineStatus::Idle => "idle",
             MachineStatus::Unpowered => "unpowered",
             MachineStatus::Dry => "dry",
+            MachineStatus::Uncharged => "uncharged",
         }
     }
 }
@@ -3691,17 +3705,18 @@ mod machine_status_tests {
             MachineStatus::Idle => 5,
             MachineStatus::Unpowered => 6,
             MachineStatus::Dry => 7,
+            MachineStatus::Uncharged => 8,
         };
         assert_eq!(
             MachineStatus::ALL.len(),
-            8,
-            "the match above has 8 arms; ALL must list all 8"
+            9,
+            "the match above has 9 arms; ALL must list all 9"
         );
         let mut seen: Vec<usize> = MachineStatus::ALL.iter().map(|s| arms(*s)).collect();
         seen.sort_unstable();
         assert_eq!(
             seen,
-            (0..8).collect::<Vec<_>>(),
+            (0..9).collect::<Vec<_>>(),
             "ALL repeats one status and omits another"
         );
     }

@@ -1779,7 +1779,7 @@ impl Game {
                 .sum()
         };
 
-        let mut fetches: Vec<((bool, (i32, i32)), Entity)> = Vec::new();
+        let mut fetches: Vec<(bool, (i32, i32), Entity)> = Vec::new();
         let mut unstocked: Vec<(ItemId, u32)> = Vec::new();
         for (burner, (x, y), kind) in &cells {
             let Some(def) = db.get(kind) else { continue };
@@ -1809,7 +1809,7 @@ impl Game {
             }
             // A fuel burner sorts ahead of a supply spender whatever their
             // tiles, so the grid is fed before a defence is topped up.
-            fetches.push(((def.power_upkeep.is_none(), (*x, *y)), *burner));
+            fetches.push((def.power_upkeep.is_none(), (*x, *y), *burner));
         }
         // `assembler_system`'s reason: `iter_entities` order is not stable,
         // and two suppliers competing for the last body have to resolve the
@@ -1819,7 +1819,7 @@ impl Game {
         unstocked.sort_unstable();
         let mut out: Vec<(Entity, TaskKind)> = fetches
             .into_iter()
-            .map(|(_, burner)| (burner, TaskKind::GatherResource))
+            .map(|(_, _, burner)| (burner, TaskKind::GatherResource))
             .collect();
         if unstocked.is_empty() {
             return out;

@@ -447,6 +447,13 @@ pub struct StructureDef {
     /// ships a supplier that can never be fed and never says why.
     #[serde(default)]
     pub power_upkeep: Option<ItemId>,
+    /// An item this structure spends by its own action (a defence firing, a
+    /// Repair Bay mending) and that haulers deliver to its input buffer. Unlike
+    /// `power_upkeep` it burns on no clock; whatever acts draws from the input.
+    /// `#[serde(default)]` so every existing structure file, mods included,
+    /// keeps parsing as one that spends nothing.
+    #[serde(default)]
+    pub supply: Option<ItemId>,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is
@@ -856,6 +863,23 @@ impl StructureDef {
             || self.assembles.is_some()
             || self.strips.is_some()
             || self.holds_prisoner.is_some()
+    }
+
+    /// Whether this structure carries a `MachineStatus`. The one definition,
+    /// read by both places a structure's components are written
+    /// (`Game::spawn_structure` and the save loader) so a hand-written copy
+    /// cannot drift: a job runner reports a stall, and a supply spender
+    /// reports that it ran dry.
+    pub fn has_machine_status(&self) -> bool {
+        self.runs_a_job() || self.spends_supply().is_some()
+    }
+
+    /// The item this structure spends to keep working and that haulers
+    /// deliver to its input buffer: a supplier's `power_upkeep` fuel or a
+    /// defence's `supply`. The one question every hauling special-case asks,
+    /// so the two kinds share a single hauling path.
+    pub fn spends_supply(&self) -> Option<&ItemId> {
+        self.power_upkeep.as_ref().or(self.supply.as_ref())
     }
 
     /// Whether raising or upgrading this structure costs a tamed program.

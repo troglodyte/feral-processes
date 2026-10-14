@@ -847,7 +847,7 @@ pub(crate) fn feeds_fuel(
     a: &crate::structures::StructureDef,
     b: &crate::structures::StructureDef,
 ) -> bool {
-    matches!((produced_item(a), &b.power_upkeep), (Some(made), Some(fuel)) if made == fuel)
+    matches!((produced_item(a), b.spends_supply()), (Some(made), Some(fuel)) if made == fuel)
 }
 
 /// Either feed edge: `a` makes something `b` takes in.

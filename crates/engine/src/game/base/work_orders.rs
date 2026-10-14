@@ -1415,7 +1415,7 @@ impl Game {
                     .world
                     .get::<Structure>(target)
                     .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-                    .is_some_and(|def| def.power_upkeep.is_some())
+                    .is_some_and(|def| def.spends_supply().is_some())
         });
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)

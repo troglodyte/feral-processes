@@ -1159,7 +1159,7 @@ pub(crate) fn haul_step_system(
             // grid without the cell either way. Left out, a Conduit standing
             // beside a Recharger Node would have its cells hauled off to a
             // depot for somebody to walk back.
-            let wanted = def.power_upkeep.is_some()
+            let wanted = def.spends_supply().is_some()
                 || produced_item(def).is_some_and(|item| needed.contains(item))
                 || standing.get(e).is_ok_and(|job| job.work);
             wanted.then_some((*p, recipe))
@@ -1232,7 +1232,7 @@ pub(crate) fn haul_step_system(
             let recipe = def.and_then(|def| intake_recipe(def, &items));
             // The burner itself is in `every_structure`, harmlessly: a
             // fetched cell lands in its *input*, never its output.
-            let sources = if def.is_some_and(|d| d.power_upkeep.is_some()) {
+            let sources = if def.is_some_and(|d| d.spends_supply().is_some()) {
                 &every_structure
             } else {
                 &stores

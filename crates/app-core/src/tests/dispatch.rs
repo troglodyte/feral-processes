@@ -171,7 +171,7 @@ fn a_dispatch_ready_app(seed: u32) -> (App, ItemId, SettlementKey) {
     (app, item, key)
 }
 
-/// The row is `BASE_ROWS`' own gate — `dispatch_reach() != NoRelay` — so a
+/// The row is `TRADE_ROWS`' own gate — `dispatch_reach() != NoRelay` — so a
 /// fresh run with no Relay standing sees no row, and one that stood a Relay
 /// up does.
 #[test]
@@ -292,7 +292,7 @@ fn x_toggles_a_candidate_and_enter_dispatches_the_squad() {
 }
 
 /// Esc from the squad picker drops the pending site and the squad built so
-/// far, and returns to the hub rather than the base menu — `Mode::SettlementMarket`'s
+/// far, and returns to the hub rather than the Trade page — `Mode::SettlementMarket`'s
 /// shape.
 #[test]
 fn esc_from_the_squad_picker_drops_the_pending_squad() {

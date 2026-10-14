@@ -44,7 +44,7 @@ fn an_idle_node_asks_for_a_program() {
 
     let idle = row(&mut game, AttentionKind::IdleStructures);
     assert_eq!(idle.text, "1 node without a program");
-    assert_eq!(idle.key, 'b', "the base menu is where a node is staffed");
+    assert_eq!(idle.key, 'b', "the base report is where a node is staffed");
     assert!(!idle.threat, "an idle node is work, not harm");
 }
 

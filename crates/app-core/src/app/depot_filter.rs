@@ -48,7 +48,7 @@ impl App {
     /// Moves to the next adjacent Depot, wrapping. A no-op with one.
     ///
     /// The list is re-read rather than cached with the screen, so a Depot
-    /// that has gone — demolished from the base menu, or lost to a sweep
+    /// that has gone — demolished from the Build page, or lost to a sweep
     /// while this was open — is simply not in it.
     pub(crate) fn cycle_depot_filter(&mut self) {
         let Some((game, current)) = self

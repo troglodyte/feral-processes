@@ -25,7 +25,7 @@ fn b_opens_the_hub_and_p_opens_the_party_menu() {
 fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
     let mut app = test_app(4002);
     // Inside the base, which is where every one of these rows is legal at
-    // all now — see `the_base_menu_offers_its_base_rows_only_inside_base_space`.
+    // all now — see `the_command_pages_offer_their_base_rows_only_inside_base_space`.
     // Without it the Deploy assertion below would be asking the locale
     // rather than asking whether the screen has anything in it.
     stand_in_base(&mut app);
@@ -107,7 +107,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
     }
     // Not a menu that lost every row: the two that are not locale-gated at
     // all have to survive the walk out, or the assertions above would pass
-    // against a base menu that had simply gone empty.
+    // against a command page that had simply gone empty.
     assert!(
         rows.contains(&"Research"),
         "research is not locale-gated: {rows:?}"
@@ -121,7 +121,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
 }
 
 #[test]
-fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
+fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
     let mut covered: Vec<&'static str> = Vec::new();
 
     // Two fixtures because no single one stands up every guarded row: the
@@ -146,7 +146,7 @@ fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
 /// hidden before the base moved out of phase — so the flag's rename cannot
 /// have quietly re-opened the Stack.
 #[test]
-fn the_base_menu_drops_its_base_rows_underground_too() {
+fn the_command_pages_drop_their_base_rows_underground_too() {
     for mut app in [
         app_owning_a_program_and_a_compiler_deep(4005, &[], &[], true),
         app_inside_a_small_base_with_programs(4007, true, 1),
@@ -264,7 +264,7 @@ fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     assert_eq!(
         app.mode,
         Mode::Playing,
-        "the pack was opened from the map, not from the base menu"
+        "the pack was opened from the map, not from a command page"
     );
 }
 

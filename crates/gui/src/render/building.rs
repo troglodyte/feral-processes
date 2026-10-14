@@ -129,7 +129,7 @@ pub(super) fn build_menu_rows(
 }
 
 /// What both levels of the deploy menu open with. Esc goes back on either —
-/// out of a category to the list of them, or from there to the base menu.
+/// out of a category to the list of them, or from there to the Build page.
 fn build_menu_preamble(shortfall: Option<&str>) -> Vec<Row> {
     let mut rows = vec![text_row("Esc to go back; Up/Down + Enter also work")];
     if let Some(line) = shortfall {

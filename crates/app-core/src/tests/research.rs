@@ -292,7 +292,7 @@ fn active_routine_project(app: &App) -> Option<String> {
         .map(|n| n.id)
 }
 
-/// The base menu's own row, gated on `has_research_tree(Routines)` rather
+/// The Research page's own row, gated on `has_research_tree(Routines)` rather
 /// than on anything being listed — true for any fresh run with a loaded
 /// `AbilityDb`, exactly as `has_research_tree`'s own doc explains.
 #[test]

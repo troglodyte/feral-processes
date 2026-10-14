@@ -53,7 +53,7 @@ impl Game {
     /// none stands — `assembler_system`'s sorting rule, so `research_block`'s
     /// gate and `settle_research`'s "which subject is spent" read the same
     /// station and cannot resolve two Stations differently between runs.
-    /// `pub` rather than `pub(crate)`: the base menu's row and
+    /// `pub` rather than `pub(crate)`: the Research page's row and
     /// `Mode::PinSubject`'s picker both live in app-core, not this crate.
     ///
     /// `&self`, like `producers_of` beside it: `research_block` is read from

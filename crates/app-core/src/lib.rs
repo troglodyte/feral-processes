@@ -1740,7 +1740,7 @@ pub enum Mode {
     /// `needs_status_banner`.
     TrapDirection,
     /// Aiming the upgrade verb at one of the four neighbouring tiles,
-    /// reached from the base menu. Whatever structure stands that way
+    /// reached from the Build page. Whatever structure stands that way
     /// **files a request** for the next tier, which the base's build crew
     /// fetches for and works.
     ///
@@ -2052,7 +2052,7 @@ pub enum Mode {
     /// is no buyback: what is sold here is gone.
     StackMarket,
     /// The counter a visiting caravan sets out — see `Game::caravan_view`.
-    /// Reached from the base menu, and only while one is actually docked.
+    /// Reached from the Trade page, and only while one is actually docked.
     ///
     /// One list with two sections, the wagon's stock then cargo it will
     /// take, resolved by `caravan_row`. There is no buyback section, because
@@ -2062,7 +2062,7 @@ pub enum Mode {
     /// together by Enter — one basket, one commit, one turn. There is no
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
-    /// The Relay hub, opened with the base menu's "Dispatch" row — sortie
+    /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
     /// sites (`Game::sortie_board`), route destinations
     /// (`Game::route_destinations`) numbered continuously in one list
     /// (`app::dispatch::dispatch_row`, `contract_row`'s shape), and every
@@ -2175,7 +2175,7 @@ pub enum Mode {
     ///
     /// This screen was read-only until 2026-08-14, on the argument that it
     /// shouldn't become a second way to assign. What that missed is the
-    /// direction the two screens are read in: the base menu's Cronjob row is
+    /// direction the two screens are read in: the Research page's Cronjob row is
     /// program-first and answers "where do I put this program", while the
     /// roster is the only screen that shows the whole base at once and
     /// colours an unstaffed machine yellow — so it is where you find out
@@ -2206,8 +2206,7 @@ pub enum Mode {
     BaseOverview,
     /// The hub's command pages, one per kind of base errand: each lists the
     /// errands that are currently possible and dispatches to the screen
-    /// behind the highlighted one — see `App::command_rows`. They replaced
-    /// the flat base menu that `b` used to open.
+    /// behind the highlighted one — see `App::command_rows`.
     BaseBuild,
     BaseResearch,
     BaseTrade,
@@ -2425,10 +2424,10 @@ impl Mode {
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
-            // Opened from the base menu, `BuildProgram`'s own reason —
+            // Opened from the Research page, `BuildProgram`'s own reason —
             // never reachable mid-battle at all.
             | Mode::PinSubject
-            // Opened from the base menu, `PinSubject`'s own reason.
+            // Opened from the Research page, `PinSubject`'s own reason.
             | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
@@ -2527,7 +2526,7 @@ impl Mode {
             | Mode::StackMarket
             | Mode::Caravan
             // Opened only by a key press from `Mode::Dispatch` itself,
-            // reached from the base menu — `Mode::SettlementMarket`'s
+            // reached from the Trade page — `Mode::SettlementMarket`'s
             // reason exactly.
             | Mode::Dispatch
             | Mode::SortieSquad
@@ -2854,7 +2853,7 @@ pub struct App {
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
     /// The category `Mode::Build` has open, or `None` on its top level.
-    /// Cleared on the way in from the base menu, so the menu never reopens
+    /// Cleared on the way in from the Build page, so the menu never reopens
     /// inside a category the player left by some other door.
     pub build_category: Option<feral_processes_engine::structures::StructureCategory>,
     /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s

@@ -310,7 +310,7 @@ impl App {
     ///
     /// **No longer a screen's rows** — `Mode::UpgradeDirection` aims at one
     /// tile. Two readers are left and they want different things from it:
-    /// the base menu asks whether the row is worth offering at all, and
+    /// the Build page asks whether the row is worth offering at all, and
     /// gui's `build_commit` names the machine an order was filed against.
     /// Both are questions about the neighbourhood rather than about one
     /// cell, which is why the scan radius stayed.
@@ -692,7 +692,7 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    /// The base menu's upgrade verb + a direction: file a request for the
+    /// The Build page's upgrade verb + a direction: file a request for the
     /// next tier on whatever machine stands on that neighbouring tile.
     ///
     /// `handle_remove_direction_key`'s shape, and `Game::adjacent_structure`
@@ -1103,7 +1103,7 @@ impl App {
 }
 
 /// The `(dx, dy)` step a direction key points, arrows or vi keys; `None` for
-/// anything else. The one mapping the base menu's pick-a-side prompts share.
+/// anything else. The one mapping the Build page's pick-a-side prompts share.
 fn direction_of(key: GameKey) -> Option<(i32, i32)> {
     match key {
         GameKey::Up | GameKey::Char('k') => Some((0, -1)),

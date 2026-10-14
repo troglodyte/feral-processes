@@ -3686,7 +3686,7 @@ fn a_hold_contract_stays_offerable_whatever_is_in_the_pack() {
 /// Two of the seven objective lines used words the rest of the game does not.
 /// `Breach` said "Reach sector 3" — *reach* is a verb nothing else in the game
 /// spends, so it named no gesture the player could go and make, while *breach*
-/// is what the Zone Portal, the base menu and the sweep notification all call
+/// is what the Zone Portal, the command pages and the sweep notification all call
 /// it. `Hold` said "Hold 4 Core Fragment", which reads as a second kind of
 /// handing-in rather than as the one objective that asks for nothing at all
 /// beyond having them.

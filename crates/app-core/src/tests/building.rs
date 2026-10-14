@@ -30,7 +30,7 @@ fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
 }
 
 /// A structure the current zone caps at Mk1 is still offered, not filtered
-/// out. Hiding it would take the whole Upgrade row out of the base menu for
+/// out. Hiding it would take the whole Upgrade row out of the Build page for
 /// the entirety of zone 1 — see `app/group_menu.rs`, which drops a row whose
 /// screen would be empty — and a player who has never breached would never
 /// learn that upgrading exists. The row explains itself instead, which is
@@ -79,7 +79,7 @@ fn deploy_home(app: &mut App) {
 }
 
 /// Home declares no upgrade path, so a base consisting only of one leaves
-/// nothing to upgrade — and the base menu now says so by not offering the
+/// nothing to upgrade — and the Build page says so by not offering the
 /// row at all, rather than opening a picker with no entries in it.
 #[test]
 fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
@@ -157,7 +157,10 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
             let before = structure_count(&mut app);
 
             open_command(&mut app, "Deploy a structure");
-            assert!(app.mode == Mode::Build, "the base menu should reach Deploy");
+            assert!(
+                app.mode == Mode::Build,
+                "the Build page should reach Deploy"
+            );
 
             for _ in 0..n {
                 app.handle_key(GameKey::Down);
@@ -248,7 +251,7 @@ fn working_a_structure_yourself_opens_the_same_structure_list() {
 }
 
 /// `d` + a direction demolishes what is on the neighbouring tile, without
-/// going through the base menu's picker at all.
+/// going through the Build page's picker at all.
 #[test]
 fn the_demolish_key_removes_the_structure_next_to_you() {
     let mut app = app_inside_a_small_base(240, false);
@@ -984,7 +987,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     assert_eq!(outside.mode, Mode::Playing, "and must open no screen");
 }
 
-/// Opens the work order screen from the base menu and walks it to the
+/// Opens the work order screen from the Build page and walks it to the
 /// quantity page with the first orderable item pending — the two-page shape
 /// the compile flow uses, one screen over.
 fn open_order_quantity_page(app: &mut App) {
@@ -1341,7 +1344,7 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
 
 /// `Mode::UpgradeDirection`'s counterpart to `deploy_second_structure` —
 /// aims at the one upgradeable structure the fixture offers, the Compiler,
-/// through the base menu rather than by hand-setting `app.mode`, since that
+/// through the Build page rather than by hand-setting `app.mode`, since that
 /// menu path is also what proves the verb is still reachable at all.
 ///
 /// Callers stand the party with `stand_beside_the_compiler`, so east is the
@@ -1871,7 +1874,7 @@ fn the_deploy_menu_opens_on_categories_with_the_home_listed_directly() {
 
 /// Picking a category opens that category's structures; picking one of them
 /// is the deploy it always was. Esc from inside walks back to the category
-/// list on the row it came from, and from there to the base menu.
+/// list on the row it came from, and from there to the Build page.
 #[test]
 fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     let mut app = test_app(4102);

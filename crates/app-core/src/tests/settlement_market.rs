@@ -81,7 +81,7 @@ fn m_opens_the_market_from_the_hub_page() {
 }
 
 /// Esc goes back one page rather than to the map — the difference from
-/// `Mode::Caravan`, which is reached off the base menu and closes to
+/// `Mode::Caravan`, which is reached off the Trade page and closes to
 /// `Mode::Playing`.
 #[test]
 fn esc_returns_to_the_settlement_page_and_clears_the_basket() {

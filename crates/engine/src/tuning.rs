@@ -2473,7 +2473,7 @@ pub const CONTRACT_MAX_DELIVER_VALUE: u32 = 8;
 /// decide which programs live in this sector.
 ///
 /// A sample rather than a walk because `Game::contract_board` is on a
-/// per-frame path — the contracts screen and the base menu's row test both
+/// per-frame path — the contracts screen and the command pages' row tests both
 /// call it — while the ring it walks grows with a base that can reach
 /// `MAX_BUILD_RADIUS_TILES`. Biome features run about 25 tiles across at
 /// `WorldMap::classify`'s noise scale, so 32 points stay inside one feature

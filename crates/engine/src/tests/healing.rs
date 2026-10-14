@@ -3,7 +3,7 @@
 //! floor under it. The Repair Bay's patches are at the foot of this file.
 
 use super::support::*;
-use crate::components::Downed;
+use crate::components::{Downed, PatchCredit};
 use crate::tuning::{BASE_TRICKLE_PER_TICK, REST_INTEGRITY_PER_PATCH};
 use crate::*;
 
@@ -302,4 +302,35 @@ fn an_empty_bay_heals_at_its_own_trickle() {
     game.run_repair_bays();
 
     assert_eq!(hp(&game, program), 100 + plain);
+}
+
+#[test]
+fn a_heal_larger_than_the_credit_charges_the_overflow_to_the_next_patch() {
+    let mut game = base();
+    let (_, supplied) = bay_rates(&game);
+    let (bay, program) = a_bay_with_a_patient(&mut game, 1);
+    game.world.entity_mut(bay).insert(PatchCredit(3));
+
+    game.run_repair_bays();
+
+    assert_eq!(hp(&game, program), 100 + supplied);
+    assert_eq!(held(&game, bay), 0, "the overflow drew the next patch");
+    assert_eq!(
+        game.world.get::<PatchCredit>(bay).unwrap().0,
+        REST_INTEGRITY_PER_PATCH as u32 - (supplied - 3) as u32,
+        "and was paid out of it rather than given free"
+    );
+}
+
+#[test]
+fn with_no_patch_left_a_heal_stops_at_the_credit_plus_the_plain_rate() {
+    let mut game = base();
+    let (plain, _) = bay_rates(&game);
+    let (bay, program) = a_bay_with_a_patient(&mut game, 0);
+    game.world.entity_mut(bay).insert(PatchCredit(3));
+
+    game.run_repair_bays();
+
+    assert_eq!(hp(&game, program), 100 + 3 + plain);
+    assert_eq!(game.world.get::<PatchCredit>(bay).unwrap().0, 0);
 }

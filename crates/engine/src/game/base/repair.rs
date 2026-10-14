@@ -198,8 +198,13 @@ impl Game {
                 stock.input.get(supply).copied()
             })
             .is_some_and(|n| n > 0);
-        if credit > 0 || holds_one {
+        if holds_one {
             (supplied, true)
+        } else if credit > 0 {
+            // No patch behind the credit: a heal larger than what is left of
+            // it would be paid for by nothing, so it stops at the credit
+            // plus the rate the Bay heals at unsupplied.
+            (supplied.min(credit as i32 + bay.rate), true)
         } else {
             (bay.rate, false)
         }
@@ -210,18 +215,27 @@ impl Game {
     /// patch is worth `REST_INTEGRITY_PER_PATCH` Integrity, shared by every
     /// patient the Bay mends.
     fn pay_for_bay_heal(&mut self, bay: BaySite, restored: i32) {
-        let credit = self.world.get::<PatchCredit>(bay.entity).map_or(0, |c| c.0);
-        let credit = if credit == 0 {
-            if !crate::game::base::stock::spend_supply(self, bay.entity, ConsumeSource::Heal) {
-                return;
+        let mut credit = self.world.get::<PatchCredit>(bay.entity).map_or(0, |c| c.0);
+        let mut owed = restored.max(0) as u32;
+        // A heal bigger than the credit left is charged to the next patch
+        // rather than the difference being free.
+        loop {
+            if credit == 0 {
+                if !crate::game::base::stock::spend_supply(self, bay.entity, ConsumeSource::Heal) {
+                    break;
+                }
+                credit = REST_INTEGRITY_PER_PATCH as u32;
             }
-            REST_INTEGRITY_PER_PATCH as u32
-        } else {
-            credit
-        };
+            let paid = owed.min(credit);
+            credit -= paid;
+            owed -= paid;
+            if owed == 0 {
+                break;
+            }
+        }
         self.world
             .entity_mut(bay.entity)
-            .insert(PatchCredit(credit.saturating_sub(restored.max(0) as u32)));
+            .insert(PatchCredit(credit));
     }
 
     /// The base's Bays, gathered from the structure query.

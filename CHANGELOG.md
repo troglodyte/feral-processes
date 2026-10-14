@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.27
+
+**Resting in the base now costs Patch Routines: each one restores 40 Integrity, spread across your party worst-hurt first.** Before, a rest in the base healed everyone fully for nothing. A rest is never refused, so with too few patches you heal what they cover; the base also mends everyone a little each moment on its own, and a Repair Bay stocked with patches heals much faster than an empty one.
+
+**Shields and turrets now need Charge Coils to defend.** A defence with none adds nothing to a GC Entropy Sweep or a siege and shows as Uncharged. Each charged defence uses one coil per sweep or siege, and a turret uses one per shot. Haulers keep defences and the Repair Bay stocked from your shelves, never from a production line's own output, and your town garrisons fight regardless.
+
+**Gear now wears down with each fight, and a Refit Bench restores it.** A piece's name shows how many fights it has left, as in "Kinetic Edge 11/15". At 0 it is broken, marked with "!", and gives no bonus until refitted, and an alert warns when equipped gear runs low. The Refit Bench costs a few Core Fragments with no research needed. A refit costs half the item's recipe plus a Charge Coil, or Core Fragments by rarity for gear that was dropped. Open it with R from an item's menu or from an equipped slot, so worn gear can be refitted without taking it off. Older saves load with all gear at full condition.
+
 ## 0.18.26
 
 **In the base report, Right and Left now walk a page's screens; Tab no longer does.** Right steps from the page list onto a page and then on through its other screens, stopping at the last; Left steps back a screen and, from the first, back to the list. Before, the arrows only crossed between the list and the page and Tab cycled the screens, so reaching Production's Power screen took a second kind of key. On the Staffing table the arrows still move between columns first, and Right past the last column steps on to the structure roster.

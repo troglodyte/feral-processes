@@ -231,3 +231,27 @@ fn a_shield_takes_the_shelf_not_the_nearer_production_output() {
     assert!(hopper(&game, shield, ids::CHARGE_COIL) > 0);
     assert_eq!(node_output(&game, winding, ids::CHARGE_COIL), 20);
 }
+
+/// A defence beside a coil maker is not its attached building: nothing pulls
+/// from a neighbour into a supply-only input, so reserving the maker's buffer
+/// for it would leave the coils where no hauler may take them.
+#[test]
+fn a_shield_beside_the_coil_maker_does_not_hold_its_buffer() {
+    let mut game = base(9309);
+    deploy(&mut game, "shield", 1, 0);
+    let winding = deploy(&mut game, "winding_node", 2, 0);
+    let depot = deploy(&mut game, "depot", 5, 0);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    game.assign_cronjob(worker, winding).unwrap();
+    park_at_post(&mut game, worker, winding);
+    fill_output(&mut game, winding, ids::CHARGE_COIL, 3);
+
+    tick_until(&mut game, 60, |g| {
+        node_output(g, depot, ids::CHARGE_COIL) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CHARGE_COIL) > 0,
+        "the coils belong on a shelf the shield can be supplied from"
+    );
+}

@@ -1165,8 +1165,9 @@ pub(crate) fn haul_step_system(
             // reasons an assembler counts cannot apply — and it is off the
             // grid without the cell either way. Left out, a Conduit standing
             // beside a Recharger Node would have its cells hauled off to a
-            // depot for somebody to walk back.
-            let wanted = def.spends_supply().is_some()
+            // depot for somebody to walk back. A supply-only structure pulls
+            // nothing from a neighbour, so it is never one.
+            let wanted = def.power_upkeep.is_some()
                 || produced_item(def).is_some_and(|item| needed.contains(item))
                 || standing.get(e).is_ok_and(|job| job.work);
             wanted.then_some((*p, recipe))

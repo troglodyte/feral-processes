@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.29
+
+**Every Stack frame now has its own light: it falls from a direction, in a colour, at a strength of its own.** One corridor wall catches the light and the other falls into shade, and turning swaps them, so the light also tells you which way you face. Solid rock beside an open cell throws a shadow across the floor. A frame keeps its light as you step, turn and reload. Map marks, the heading and the frame map are drawn as before.
+
 ## 0.18.28
 
 **Every battle map now has its own light: it falls from a direction, in a colour, at a strength of its own, and cover and solid props cast shadows away from it.** Before, every board was lit by the same flat light and looked alike. A fight keeps its light from start to finish; harsh light throws long shadows and soft light short ones. Movement and danger markings, bodies and hit flashes are drawn as before, and the darkest ground is always impassable and the brightest always cover, whatever the light.

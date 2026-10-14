@@ -293,8 +293,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // NOT the same field as `repair` further down, which is about patching
     // the base's *structures* back up and has nothing to do with programs.
+    //
+    // Optional `per_tick_supplied` (a whole number, floored at zero like
+    // `per_tick`) is the faster rate used while the structure's `supply`
+    // is being drawn on: it spends one unit of its supply per
+    // `tuning::REST_INTEGRITY_PER_PATCH` Integrity it restores at that rate,
+    // and falls back to `per_tick` when none is left. The Repair Bay pairs
+    // it with `supply: Some("patch_routine")`.
     recovery: Some((
         per_tick: 1,
+        per_tick_supplied: Some(8),
         radius: 0,
     )),
 

@@ -197,6 +197,13 @@ pub struct DropPodDef {
 pub struct RecoveryDef {
     /// Integrity restored per tick to a downed program within `radius`.
     pub per_tick: i32,
+    /// Integrity restored per tick while the structure's `supply` is
+    /// being drawn on: it holds a patch, or is working through one already
+    /// bought. Absent, a supply buys no speed and the Bay heals at
+    /// `per_tick` alone. `#[serde(default)]` so every existing structure
+    /// file keeps parsing.
+    #[serde(default)]
+    pub per_tick_supplied: Option<i32>,
     /// Chebyshev distance in tiles, `power_regen`'s form rather than a
     /// circle. `0` is "standing on it".
     pub radius: i32,
@@ -207,6 +214,12 @@ impl RecoveryDef {
     /// than trusted — a field named for repair must never damage.
     pub fn rate(&self) -> i32 {
         self.per_tick.max(0)
+    }
+
+    /// `rate`'s floor, applied to the supplied rate: `None` when the def
+    /// authors none.
+    pub fn supplied_rate(&self) -> Option<i32> {
+        self.per_tick_supplied.map(|r| r.max(0))
     }
 }
 
@@ -1272,6 +1285,7 @@ mod tests {
         assert_eq!(
             RecoveryDef {
                 per_tick: -4,
+                per_tick_supplied: None,
                 radius: 0,
             }
             .rate(),

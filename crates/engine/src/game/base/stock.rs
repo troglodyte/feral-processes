@@ -301,3 +301,35 @@ impl Game {
             .collect()
     }
 }
+
+/// Takes one unit of `entity`'s `StructureDef::supply` out of its input
+/// buffer and writes it to the ledger under `source`. Returns whether it held
+/// one — the shared door for a defence firing and a Repair Bay mending.
+pub(crate) fn spend_supply(
+    game: &mut Game,
+    entity: Entity,
+    source: crate::base_ledger::ConsumeSource,
+) -> bool {
+    let Some(supply) = game
+        .world
+        .get::<Structure>(entity)
+        .and_then(|s| game.world.resource::<StructureDb>().get(&s.kind))
+        .and_then(|def| def.supply.clone())
+    else {
+        return false;
+    };
+    let Some(mut stock) = game.world.get_mut::<Stock>(entity) else {
+        return false;
+    };
+    let held = stock.input.get(&supply).copied().unwrap_or(0);
+    if held == 0 {
+        return false;
+    }
+    if held == 1 {
+        stock.input.remove(&supply);
+    } else {
+        stock.input.insert(supply.clone(), held - 1);
+    }
+    game.note_consumed(&supply, 1, source);
+    true
+}

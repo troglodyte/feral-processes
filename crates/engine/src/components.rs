@@ -1149,6 +1149,15 @@ impl MachineStatus {
     }
 }
 
+/// Integrity left on the Patch Routine a Repair Bay is working through: a
+/// supplied heal tick draws a patch when this is zero and refills it to
+/// `tuning::REST_INTEGRITY_PER_PATCH`, then pays it down by what it restores.
+///
+/// Not saved, `MachineStatus`' rule: a reload forfeits at most the part-used
+/// patch, and a save field for it would buy nothing a player could see.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PatchCredit(pub u32);
+
 /// How many ticks of charge a `StructureDef::power_upkeep` supplier has left
 /// before it must buy another Power Cell — see `systems::power_grid_system`,
 /// which is the only writer.

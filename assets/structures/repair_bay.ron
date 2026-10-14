@@ -8,6 +8,7 @@
     work: None,
     recovery: Some((
         per_tick: 1,
+        per_tick_supplied: Some(8),
         radius: 0,
     )),
     power_draw: 2,

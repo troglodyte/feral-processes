@@ -7,12 +7,13 @@
 //! way back is a structure the player chose to build.
 
 use crate::base_grid::BaseGrid;
-use crate::components::{Downed, Position, Stats, Structure};
+use crate::base_ledger::ConsumeSource;
+use crate::components::{Downed, PatchCredit, Position, Stats, Stock, Structure};
 use crate::game::base::hauling::{NoPost, Step, step_to_post};
 use crate::game::base::offshift::in_reach;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
-use crate::tuning::BAY_ADMISSION_HP_FRACTION;
+use crate::tuning::{BAY_ADMISSION_HP_FRACTION, REST_INTEGRITY_PER_PATCH};
 use bevy_ecs::prelude::Entity;
 use std::collections::HashSet;
 
@@ -27,29 +28,49 @@ use crate::Game;
 /// and a cached one would be a new `Resource` and another
 /// query-iteration-order shift.
 pub(crate) struct Bays {
-    /// `(tile, rate, radius)`, sorted by tile so a tie between two Bays
-    /// equidistant from one program resolves the same way every run.
-    sites: Vec<(Position, i32, i32)>,
+    /// Sorted by tile so a tie between two Bays equidistant from one program
+    /// resolves the same way every run.
+    sites: Vec<BaySite>,
+}
+
+/// One Bay: where it stands, how fast it heals plain and supplied, and how
+/// far it reaches.
+#[derive(Clone, Copy)]
+pub(crate) struct BaySite {
+    pub entity: Entity,
+    pub pos: Position,
+    pub rate: i32,
+    /// `Some` when the def authors a faster rate that a supply buys.
+    pub supplied_rate: Option<i32>,
+    pub radius: i32,
 }
 
 impl Bays {
     /// Takes an iterator so a `&Game` and, should one ever want it, a bevy
     /// system can both build one — `Amenities::build`'s signature.
     pub(crate) fn build<'a>(
-        structures: impl Iterator<Item = (&'a StructureId, &'a Position)>,
+        structures: impl Iterator<Item = (Entity, &'a StructureId, &'a Position)>,
         db: &StructureDb,
     ) -> Self {
-        let mut sites: Vec<(Position, i32, i32)> = structures
-            .filter_map(|(kind, pos)| {
-                let recovery = db.get(kind)?.recovery.as_ref()?;
-                Some((*pos, recovery.rate(), recovery.radius))
+        let mut sites: Vec<BaySite> = structures
+            .filter_map(|(entity, kind, pos)| {
+                let def = db.get(kind)?;
+                let recovery = def.recovery.as_ref()?;
+                Some(BaySite {
+                    entity,
+                    pos: *pos,
+                    rate: recovery.rate(),
+                    // Only a structure that names a supply can be supplied.
+                    supplied_rate: def.supply.as_ref().and(recovery.supplied_rate()),
+                    radius: recovery.radius,
+                })
             })
             .collect();
         // **A total order, not bevy's iteration order.** `min_by_key`
         // returns the first of several equal minima, so two Bays the same
         // distance from one program must already be in a settled order
         // before anything asks.
-        sites.sort_by_key(|(p, _, _)| (p.x, p.y));
+        sites.sort_by_key(|s| (s.pos.x, s.pos.y));
         Self { sites }
     }
 
@@ -61,10 +82,13 @@ impl Bays {
     ///
     /// Ties break on a **total** `(chebyshev distance, x, y)` order, for
     /// `Amenities::nearest`'s reason.
-    pub(crate) fn nearest(&self, from: Position) -> Option<(Position, i32, i32)> {
+    pub(crate) fn nearest(&self, from: Position) -> Option<BaySite> {
         self.sites
             .iter()
-            .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
+            .min_by_key(|s| {
+                let p = s.pos;
+                ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y)
+            })
             .copied()
     }
 
@@ -79,9 +103,9 @@ impl Bays {
     /// heal — a body lighting up while lying a tile too far away, or going
     /// dark while it is being healed — with nothing failing to compile and
     /// the fault reading as a rendering bug.
-    pub(crate) fn serving(&self, here: Position) -> Option<(Position, i32)> {
-        let (site, rate, radius) = self.nearest(here)?;
-        in_reach(here, site, radius).then_some((site, rate))
+    pub(crate) fn serving(&self, here: Position) -> Option<BaySite> {
+        let site = self.nearest(here)?;
+        in_reach(here, site.pos, site.radius).then_some(site)
     }
 }
 
@@ -125,13 +149,17 @@ impl Game {
         downed.sort();
         for (x, y, program) in downed {
             let here = Position { x, y };
-            let Some((_, rate)) = bays.serving(here) else {
+            let Some(bay) = bays.serving(here) else {
                 continue;
             };
             // `restore_hp` caps at `max_hp` itself, so a Bay cannot overheal
             // and a rate of zero — a mod's negative one, floored — simply
             // lands nothing.
-            self.restore_hp(program, rate);
+            let (rate, supplied) = self.bay_rate(bay);
+            let restored = self.restore_hp(program, rate);
+            if supplied {
+                self.pay_for_bay_heal(bay, restored);
+            }
             let Some(stats) = self.world.get::<Stats>(program).copied() else {
                 continue;
             };
@@ -148,19 +176,67 @@ impl Game {
         }
     }
 
+    /// The rate `bay` heals at this tick, and whether it is the supplied one:
+    /// its supplied rate while it is working through a patch or holds one to
+    /// start, its plain rate otherwise.
+    fn bay_rate(&self, bay: BaySite) -> (i32, bool) {
+        let Some(supplied) = bay.supplied_rate else {
+            return (bay.rate, false);
+        };
+        let credit = self.world.get::<PatchCredit>(bay.entity).map_or(0, |c| c.0);
+        let holds_one = self
+            .world
+            .get::<Stock>(bay.entity)
+            .zip(self.world.get::<Structure>(bay.entity))
+            .and_then(|(stock, s)| {
+                let supply = self
+                    .world
+                    .resource::<StructureDb>()
+                    .get(&s.kind)?
+                    .supply
+                    .as_ref()?;
+                stock.input.get(supply).copied()
+            })
+            .is_some_and(|n| n > 0);
+        if credit > 0 || holds_one {
+            (supplied, true)
+        } else {
+            (bay.rate, false)
+        }
+    }
+
+    /// Draws a patch when `bay` is about to heal at its supplied rate on an
+    /// empty credit, then pays the credit down by what was restored. One
+    /// patch is worth `REST_INTEGRITY_PER_PATCH` Integrity, shared by every
+    /// patient the Bay mends.
+    fn pay_for_bay_heal(&mut self, bay: BaySite, restored: i32) {
+        let credit = self.world.get::<PatchCredit>(bay.entity).map_or(0, |c| c.0);
+        let credit = if credit == 0 {
+            if !crate::game::base::stock::spend_supply(self, bay.entity, ConsumeSource::Heal) {
+                return;
+            }
+            REST_INTEGRITY_PER_PATCH as u32
+        } else {
+            credit
+        };
+        self.world
+            .entity_mut(bay.entity)
+            .insert(PatchCredit(credit.saturating_sub(restored.max(0) as u32)));
+    }
+
     /// The base's Bays, gathered from the structure query.
     ///
     /// One pass per caller, `Game::amenities`' shape — `run_repair_bays` and
     /// `drift_idle_staff` each build their own rather than sharing a cached
     /// copy.
     pub(crate) fn repair_bays(&mut self) -> Bays {
-        let mut query = self.world.query::<(&Structure, &Position)>();
-        let sites: Vec<(StructureId, Position)> = query
+        let mut query = self.world.query::<(Entity, &Structure, &Position)>();
+        let sites: Vec<(Entity, StructureId, Position)> = query
             .iter(&self.world)
-            .map(|(s, p)| (s.kind.clone(), *p))
+            .map(|(e, s, p)| (e, s.kind.clone(), *p))
             .collect();
         Bays::build(
-            sites.iter().map(|(kind, pos)| (kind, pos)),
+            sites.iter().map(|(e, kind, pos)| (*e, kind, pos)),
             self.world.resource::<StructureDb>(),
         )
     }
@@ -301,7 +377,8 @@ impl Game {
             .get::<Position>(worker)
             .copied()
             .ok_or(NoPost::NoRoute)?;
-        let (site, _, radius) = bays.nearest(here).ok_or(NoPost::NoRoute)?;
+        let bay = bays.nearest(here).ok_or(NoPost::NoRoute)?;
+        let (site, radius) = (bay.pos, bay.radius);
         if in_reach(here, site, radius) {
             // Arrived. It stands here until it is whole — the drift's other
             // shape would walk it straight back off again.

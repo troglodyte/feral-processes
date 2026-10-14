@@ -64,34 +64,7 @@ impl Game {
             .map(|d| d.entity)
             .collect();
         for entity in payers {
-            self.spend_one_supply(entity);
+            crate::game::base::stock::spend_supply(self, entity, ConsumeSource::Defence);
         }
-    }
-
-    /// Takes one unit of `entity`'s supply out of its input and writes it to
-    /// the ledger. Returns whether it held one.
-    pub(crate) fn spend_one_supply(&mut self, entity: Entity) -> bool {
-        let Some(supply) = self
-            .world
-            .get::<Structure>(entity)
-            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-            .and_then(|def| def.supply.clone())
-        else {
-            return false;
-        };
-        let Some(mut stock) = self.world.get_mut::<Stock>(entity) else {
-            return false;
-        };
-        let held = stock.input.get(&supply).copied().unwrap_or(0);
-        if held == 0 {
-            return false;
-        }
-        if held == 1 {
-            stock.input.remove(&supply);
-        } else {
-            stock.input.insert(supply.clone(), held - 1);
-        }
-        self.note_consumed(&supply, 1, ConsumeSource::Defence);
-        true
     }
 }

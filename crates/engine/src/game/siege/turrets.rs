@@ -109,7 +109,11 @@ impl Game {
         };
         // After the target is found, so a round with nothing in range costs
         // nothing.
-        if !self.spend_one_supply(turret) {
+        if !crate::game::base::stock::spend_supply(
+            self,
+            turret,
+            crate::base_ledger::ConsumeSource::Defence,
+        ) {
             self.say_turret_is_dry(turret);
             return;
         }

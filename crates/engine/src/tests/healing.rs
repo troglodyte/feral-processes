@@ -1,8 +1,9 @@
 //! Healing spends `patch_routine`: a rest in base buys Integrity at
 //! `REST_INTEGRITY_PER_PATCH` a patch, and the base's trickle is the free
-//! floor under it. The Repair Bay's patches are `tests::repair_bay_supply`.
+//! floor under it. The Repair Bay's patches are at the foot of this file.
 
 use super::support::*;
+use crate::components::Downed;
 use crate::tuning::{BASE_TRICKLE_PER_TICK, REST_INTEGRITY_PER_PATCH};
 use crate::*;
 
@@ -214,4 +215,91 @@ fn the_trickle_does_not_raise_the_dead() {
     game.run_base_trickle();
 
     assert_eq!(hp(&game, player), 0, "a body at zero is for the reaper");
+}
+
+// ---------------------------------------------------------------------------
+// The Repair Bay: a patch in its input buys a faster heal
+// ---------------------------------------------------------------------------
+
+fn bay_rates(game: &Game) -> (i32, i32) {
+    let recovery = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "repair_bay")
+        .and_then(|d| d.recovery)
+        .expect("repair_bay.ron declares a recovery");
+    (
+        recovery.per_tick,
+        recovery
+            .per_tick_supplied
+            .expect("repair_bay.ron declares a supplied rate"),
+    )
+}
+
+/// A Bay holding `patches` Patch Routines and a downed program lying on it,
+/// at 100/200 Integrity.
+fn a_bay_with_a_patient(game: &mut Game, patches: u32) -> (Entity, Entity) {
+    let bay = spawn_machine_at(game, "repair_bay", 2, 0);
+    if patches > 0 {
+        game.world
+            .get_mut::<Stock>(bay)
+            .unwrap()
+            .input
+            .insert(ItemId::from(ids::PATCH_ROUTINE), patches);
+    }
+    let program = spawn_tamed(game, 200, 3);
+    game.world.entity_mut(program).insert(Downed);
+    game.world.get_mut::<Stats>(program).unwrap().hp = 100;
+    let at = *game.world.get::<Position>(bay).unwrap();
+    *game.world.get_mut::<Position>(program).unwrap() = Position {
+        x: at.x + 1,
+        y: at.y,
+    };
+    (bay, program)
+}
+
+fn held(game: &Game, bay: Entity) -> u32 {
+    game.world
+        .get::<Stock>(bay)
+        .and_then(|s| s.input.get(&ItemId::from(ids::PATCH_ROUTINE)).copied())
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_bay_with_a_patch_heals_at_its_supplied_rate() {
+    let mut game = base();
+    let (_, supplied) = bay_rates(&game);
+    let (_, program) = a_bay_with_a_patient(&mut game, 2);
+
+    game.run_repair_bays();
+
+    assert_eq!(hp(&game, program), 100 + supplied);
+}
+
+#[test]
+fn a_bay_spends_one_patch_per_forty_integrity_healed() {
+    let mut game = base();
+    let (_, supplied) = bay_rates(&game);
+    let (bay, program) = a_bay_with_a_patient(&mut game, 3);
+    let ticks_per_patch = (REST_INTEGRITY_PER_PATCH / supplied) as u32;
+
+    for _ in 0..ticks_per_patch {
+        game.run_repair_bays();
+    }
+    assert_eq!(hp(&game, program), 100 + REST_INTEGRITY_PER_PATCH);
+    assert_eq!(held(&game, bay), 2, "forty healed is one patch");
+
+    game.run_repair_bays();
+    assert_eq!(held(&game, bay), 1, "the next point draws the next patch");
+}
+
+#[test]
+fn an_empty_bay_heals_at_its_own_trickle() {
+    let mut game = base();
+    let (plain, _) = bay_rates(&game);
+    let (_, program) = a_bay_with_a_patient(&mut game, 0);
+
+    game.run_repair_bays();
+
+    assert_eq!(hp(&game, program), 100 + plain);
 }

@@ -108,7 +108,7 @@ fn the_party_heals_worst_hurt_first_as_far_as_the_patches_cover() {
 #[test]
 fn a_partial_last_patch_rounds_in_the_partys_favour() {
     let mut game = base();
-    let player = hurt_player(&mut game, 200, REST_INTEGRITY_PER_PATCH as i32 + 1);
+    let player = hurt_player(&mut game, 200, REST_INTEGRITY_PER_PATCH + 1);
     stock_patches(&mut game, 5);
 
     game.rest().unwrap();

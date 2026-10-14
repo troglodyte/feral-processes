@@ -60,8 +60,9 @@ Reading and housekeeping:
 - L — history
 - B — the base report: a rail of pages down the left (Overview, Staff, Production, Stock, Work orders, Staffing, Build orders, Alerts) and the page
   beside it. One highlight moves through both: Up and Down walk the rail, Right (or Enter) steps
-  onto the page's rows, and Left or Esc steps back to the rail. Tab cycles a page's screens, and
-  [ and ] turn pages from anywhere. Esc on the rail leaves for wherever you opened it from. B
+  onto the page's rows, and Right again walks on through a page's other screens. Left steps back
+  a screen and then to the rail, Esc goes straight to the rail, and [ and ] turn pages from
+  anywhere. Esc on the rail leaves for wherever you opened it from. B
   reopens the page you left. The Overview shows where the base is short, and Enter opens the
   highlighted page.
 - N — the base report on its Alerts page, highlight already on the rows: production blockers and

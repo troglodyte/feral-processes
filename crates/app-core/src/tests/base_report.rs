@@ -1,4 +1,4 @@
-//! The base report hub: `BASE_REPORT_PAGES`, the `[`/`]`/`Tab`/`Esc` nav
+//! The base report hub: `BASE_REPORT_PAGES`, the arrow/`[`/`]`/`Esc` nav
 //! that runs ahead of every hub screen's own handler, and the three doors
 //! in (`B`, `N`, the base-menu row).
 
@@ -231,25 +231,40 @@ fn the_screens_inside_the_hub_cost_no_game_time() {
 }
 
 #[test]
-fn tab_cycles_the_three_staff_screens_and_wraps() {
+fn right_walks_the_three_staff_screens_and_left_walks_back_to_the_rail() {
     let mut app = test_app(30015);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char(']'));
-    let seen: Vec<Mode> = (0..4)
-        .map(|_| {
-            let mode = app.mode;
-            app.handle_key(GameKey::Tab);
-            mode
-        })
-        .collect();
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Right);
+    let walk = |app: &mut App, key| -> Vec<Mode> {
+        (0..3)
+            .map(|_| {
+                app.handle_key(key);
+                app.mode
+            })
+            .collect()
+    };
     assert_eq!(
-        seen,
+        walk(&mut app, GameKey::Right),
         vec![
-            Mode::StaffWellbeing,
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
+            Mode::StaffDiscontent
+        ],
+        "Right stops at the last screen"
+    );
+    assert!(!app.hub_on_rail);
+    assert_eq!(
+        walk(&mut app, GameKey::Left),
+        vec![
+            Mode::StaffCoverage,
+            Mode::StaffWellbeing,
             Mode::StaffWellbeing
         ]
+    );
+    assert!(
+        app.hub_on_rail,
+        "Left off the first screen reaches the rail"
     );
 }
 
@@ -261,11 +276,11 @@ fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
     app.handle_key(GameKey::Right);
     let rows = app.game.as_ref().unwrap().need_coverage().len();
     assert!(rows >= 2, "the shipped catalogue has two needs");
-    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::StaffCoverage);
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 1);
-    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.menu_selected, 0, "a new screen starts at the top");
 }
 
@@ -433,9 +448,9 @@ fn the_duty_table_refuses_edits_outside_base_space() {
 }
 
 /// `work_column` is reset by the mode change, not by which key made it, so
-/// entering the duty table through `Tab` must clear it too.
+/// stepping back into the duty table from the roster must clear it too.
 #[test]
-fn tabbing_into_the_duty_table_resets_its_column_cursor() {
+fn stepping_back_into_the_duty_table_resets_its_column_cursor() {
     let mut app = app_owning_distant_programs(30024, 1);
     stand_in_base(&mut app);
     open_hub_screen(&mut app, Mode::BaseStaff);
@@ -443,9 +458,19 @@ fn tabbing_into_the_duty_table_resets_its_column_cursor() {
     app.handle_key(GameKey::Right);
     assert_eq!(app.work_column, 2);
 
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::Structures);
-    app.handle_key(GameKey::Tab);
+    let columns = app.base_staff_table().columns.len();
+    for _ in 3..columns {
+        app.handle_key(GameKey::Right);
+    }
+    assert_eq!(
+        app.work_column,
+        columns - 1,
+        "Right stops on the last column"
+    );
+    assert_eq!(app.mode, Mode::BaseStaff);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::Structures, "and then steps to the roster");
+    app.handle_key(GameKey::Left);
 
     assert_eq!(app.mode, Mode::BaseStaff);
     assert_eq!(
@@ -455,13 +480,12 @@ fn tabbing_into_the_duty_table_resets_its_column_cursor() {
 }
 
 /// The roster's `keeps_highlight` pair: the staffing popup's Esc lands on
-/// the row it was opened from even though the roster was entered by `Tab`.
+/// the row it was opened from even though the roster was stepped onto from
+/// the duty table.
 #[test]
-fn the_roster_keeps_its_highlight_across_the_staffing_popup_after_a_tab() {
+fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
     let mut app = app_inside_a_small_base_with_programs(30025, false, 1);
-    open_hub_screen(&mut app, Mode::BaseStaff);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::Structures);
+    open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.menu_selected, 0, "entered at the top");
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
@@ -493,32 +517,30 @@ fn the_full_rail_walks_forward_and_back() {
 }
 
 #[test]
-fn tab_cycles_production_and_build_orders_screens() {
+fn right_walks_production_and_build_orders_screens() {
     let mut app = test_app(30018);
+    app.hub_on_rail = false;
+    for screens in [
+        [Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
+        [Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+    ] {
+        app.mode = screens[0];
+        for &next in &screens[1..] {
+            app.handle_key(GameKey::Right);
+            assert_eq!(app.mode, next);
+        }
+        app.handle_key(GameKey::Right);
+        assert_eq!(app.mode, screens[2], "Right stops at the last screen");
+    }
+}
+
+#[test]
+fn tab_no_longer_turns_a_pages_screens() {
+    let mut app = test_app(30019);
     app.mode = Mode::BaseOutput;
-    let production: Vec<Mode> = (0..4)
-        .map(|_| {
-            let mode = app.mode;
-            app.handle_key(GameKey::Tab);
-            mode
-        })
-        .collect();
-    assert_eq!(
-        production,
-        vec![
-            Mode::BaseOutput,
-            Mode::BaseMachines,
-            Mode::BasePower,
-            Mode::BaseOutput
-        ]
-    );
-    app.mode = Mode::BuildOrders;
+    app.hub_on_rail = false;
     app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::DigOrders);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::FloorOrders);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::BuildOrders);
+    assert_eq!(app.mode, Mode::BaseOutput);
 }
 
 /// The cursor walks the report each screen draws and wraps at its ends, and

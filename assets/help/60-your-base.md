@@ -79,7 +79,7 @@ machine draws whether or not anybody is posted to it, which makes an idle machin
 real expense. This is the Power Grid and it is not your Power — the two are separate resources that happen
 to share a word.
 
-The base report (B) has a page for each of these. Production has three screens, Tab to walk them:
+The base report (B) has a page for each of these. Production has three screens, Right and Left to walk them:
 Output, Machines (every structure that is not running, worst first, with the reason, and any that are
 damaged) and Power (supply against draw, and what each structure adds to either; a machine the grid
 cut is marked dark). The rail marks Production with a ! while a machine is starved, unstaffed, cut off,

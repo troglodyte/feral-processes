@@ -225,21 +225,19 @@ fn draw_title(title: &Rect, page: usize, screen: usize, painter: &Painter, m: &M
 /// the end when it is too narrow). The rail and the rows each list only
 /// what the cursor does where it is.
 pub(super) fn keybar_groups(mode: Mode, page: usize, on_rail: bool) -> Vec<Vec<hud::strip::Piece>> {
-    let tab = (BASE_REPORT_PAGES[page].screens.len() > 1).then(|| keycap("Tab", "screen"));
     if on_rail {
-        let nav = [keycap("↑/↓", "page"), keycap("→", "open")]
-            .into_iter()
-            .chain(tab)
-            .collect();
+        let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
         return [nav, vec![keycap("Esc", "close")]]
             .into_iter()
             .map(group)
             .collect();
     }
-    let nav: Vec<_> = [keycap("←", "menu"), keycap("[ ]", "page")]
-        .into_iter()
-        .chain(tab)
-        .collect();
+    let step = if BASE_REPORT_PAGES[page].screens.len() > 1 {
+        keycap("←/→", "screen")
+    } else {
+        keycap("←", "menu")
+    };
+    let nav = vec![step, keycap("[ ]", "page")];
     let acts = match mode {
         Mode::BaseOverview => vec![keycap("↑/↓", "select"), keycap("Enter", "open")],
         Mode::Alerts => vec![keycap("↑/↓", "select"), keycap("x/d", "dismiss")],

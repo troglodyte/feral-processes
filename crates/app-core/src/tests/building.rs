@@ -708,8 +708,9 @@ fn space_and_a_toggle_the_drop_trooper_column() {
     let mut app = with_a_drop_pod(app_owning_distant_programs(765, 2), 765);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.menu_selected = 0;
-    for _ in 0..10 {
+    for _ in 1..app.base_staff_table().columns.len() {
         app.handle_key(GameKey::Right);
     }
     let table = app.base_staff_table();
@@ -738,22 +739,27 @@ fn space_and_a_toggle_the_drop_trooper_column() {
     );
 }
 
-/// `Right` walks the column cursor across every `Duty`, clamped at the last
-/// one — there is no wrap, unlike `Up`/`Down` on the row cursor.
+/// `Right` walks the column cursor across every `Duty` — there is no wrap,
+/// unlike `Up`/`Down` on the row cursor — and past the last one steps on to
+/// the Staffing page's next screen.
 #[test]
-fn right_moves_the_column_cursor_and_clamps_at_the_end() {
+fn right_moves_the_column_cursor_then_steps_off_the_end() {
     let mut app = app_owning_distant_programs(761, 1);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
+    app.hub_on_rail = false;
     app.work_column = 0;
 
-    for _ in 0..10 {
+    for _ in 0..3 {
         app.handle_key(GameKey::Right);
     }
-    assert_eq!(app.work_column, 3, "clamped at BUILD, the last column");
-
+    assert_eq!(app.work_column, 3, "BUILD, the last column");
     app.handle_key(GameKey::Left);
     assert_eq!(app.work_column, 2);
+
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::Structures);
 }
 
 /// `A` toggles the whole highlighted column at once, off if every row in it

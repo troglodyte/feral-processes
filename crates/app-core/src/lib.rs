@@ -2174,17 +2174,15 @@ pub enum Mode {
     /// screens, since neither is something you go looking for here.
     ///
     /// This screen was read-only until 2026-08-14, on the argument that it
-    /// shouldn't become a second way to assign. What that missed is the
-    /// direction the two screens are read in: the Research page's Cronjob row is
-    /// program-first and answers "where do I put this program", while the
+    /// shouldn't become a second way to assign. What that missed is that the
     /// roster is the only screen that shows the whole base at once and
     /// colours an unstaffed machine yellow — so it is where you find out
     /// *that* something is idle, and backing out to a program-first picker to
-    /// act on it was the friction. Both flows stay.
+    /// act on it was the friction.
     Structures,
     /// Picking who works the structure highlighted on the roster — see
-    /// `App::staff_rows`. The mirror of `Mode::CronjobStructure`, which
-    /// arrives with the program already chosen and picks the structure.
+    /// `App::staff_rows`. Picks the program for a structure
+    /// already chosen, where the program-first flow picks the structure.
     ///
     /// Returns to `Mode::Structures` rather than the map, on that structure's
     /// row: what the player is looking at is the base, and the assignee the

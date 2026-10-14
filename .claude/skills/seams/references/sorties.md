@@ -108,8 +108,8 @@
 - **A route and a squad leave through the same door.** `Game::dispatch_reach`
   → `DispatchReach {NoRelay, OffBase, AtRelay}` gates both, both on
   `StructureDef::dispatches_sorties`. A second `runs_routes` flag was
-  rejected: it buys a second building, a second reach function, a second base
-  menu row and a second screen to express one idea, and it weakens the seam
+  rejected: it buys a second building, a second reach function, a second command
+  row and a second screen to express one idea, and it weakens the seam
   above rather than reusing it — a mod's second dispatch structure gets
   routes for free exactly as it gets sorties. The `SortieReach` →
   `DispatchReach` rename is the cost and is compiler-checked, so unlike the

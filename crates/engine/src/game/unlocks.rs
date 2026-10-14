@@ -978,7 +978,7 @@ impl Game {
 
     /// Whether there is a research tree to open at all, for `tree`.
     ///
-    /// The base menu's availability closure asks this **every frame**, and it
+    /// The command pages' availability closures ask this **every frame**, and it
     /// used to ask it by building the whole of `research_nodes` — every node's
     /// bill counted against every shelf, every conversion line worded, every
     /// chain walked. `Game::contract_board` carries the same note. What the row

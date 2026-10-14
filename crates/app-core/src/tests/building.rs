@@ -6,7 +6,7 @@ use feral_processes_engine::save;
 use feral_processes_engine::structures::StructureCategory;
 
 #[test]
-fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
+fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
     // A Compiler, not a Home: the row is hidden unless something nearby
     // actually declares an upgrade path (see `App::upgradeable_structures`).
     let mut app = app_owning_a_program_and_a_compiler(230, &[]);
@@ -18,17 +18,19 @@ fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
     // upgrade that actually lands needs.
     stand_in_base(&mut app);
 
-    open_via_menu(&mut app, 'b', "Upgrade a structure");
+    open_command(&mut app, "Upgrade a structure");
     assert_eq!(app.mode, Mode::UpgradeDirection);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::BaseBuild, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
 }
 
 /// A structure the current zone caps at Mk1 is still offered, not filtered
-/// out. Hiding it would take the whole Upgrade row out of the base menu for
+/// out. Hiding it would take the whole Upgrade row out of the Build page for
 /// the entirety of zone 1 — see `app/group_menu.rs`, which drops a row whose
 /// screen would be empty — and a player who has never breached would never
 /// learn that upgrading exists. The row explains itself instead, which is
@@ -65,7 +67,7 @@ fn a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown() {
 /// one deploy made from out there — and leaves the party inside afterwards,
 /// which is where every other base key is pressed from.
 fn deploy_home(app: &mut App) {
-    open_via_menu(app, 'b', "Deploy a structure");
+    open_command(app, "Deploy a structure");
     app.handle_key(GameKey::Enter);
     app.handle_key(GameKey::Up);
     assert_eq!(structure_count(app), 1, "Home should now be deployed");
@@ -77,15 +79,14 @@ fn deploy_home(app: &mut App) {
 }
 
 /// Home declares no upgrade path, so a base consisting only of one leaves
-/// nothing to upgrade — and the base menu now says so by not offering the
+/// nothing to upgrade — and the Build page says so by not offering the
 /// row at all, rather than opening a picker with no entries in it.
 #[test]
 fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
     let mut app = test_app(231);
     deploy_home(&mut app);
 
-    app.handle_key(GameKey::Char('b'));
-    let rows: Vec<_> = app.base_menu_rows().iter().map(|r| r.label).collect();
+    let rows = command_labels_all(&mut app);
     assert!(
         rows.contains(&"Demolish a structure"),
         "Home is deployed, so the rows that take any structure are live: {rows:?}"
@@ -110,7 +111,7 @@ fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
 #[test]
 fn founding_a_home_bypasses_the_program_picker() {
     let mut app = test_app(879);
-    open_via_menu(&mut app, 'b', "Deploy a structure");
+    open_command(&mut app, "Deploy a structure");
     app.handle_key(GameKey::Enter); // Home sorts first — see `StructureDef::category`
     assert_eq!(app.mode, Mode::BuildDirection);
 
@@ -155,8 +156,11 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
         for dir in [GameKey::Up, GameKey::Down, GameKey::Left, GameKey::Right] {
             let before = structure_count(&mut app);
 
-            open_via_menu(&mut app, 'b', "Deploy a structure");
-            assert!(app.mode == Mode::Build, "the base menu should reach Deploy");
+            open_command(&mut app, "Deploy a structure");
+            assert!(
+                app.mode == Mode::Build,
+                "the Build page should reach Deploy"
+            );
 
             for _ in 0..n {
                 app.handle_key(GameKey::Down);
@@ -199,7 +203,7 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
     let mut app = test_app(203);
     deploy_home(&mut app);
 
-    open_via_menu(&mut app, 'b', "Demolish a structure");
+    open_command(&mut app, "Demolish a structure");
     assert_eq!(app.mode, Mode::Remove);
     app.handle_key(GameKey::Enter);
     assert!(
@@ -220,7 +224,7 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
         "declining the warning should leave Home in place"
     );
 
-    open_via_menu(&mut app, 'b', "Demolish a structure");
+    open_command(&mut app, "Demolish a structure");
     app.handle_key(GameKey::Enter);
     assert!(app.mode == Mode::RemoveConfirm);
     app.handle_key(GameKey::Char('y'));
@@ -239,15 +243,15 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
 fn working_a_structure_yourself_opens_the_same_structure_list() {
     let mut app = app_owning_a_program_and_a_compiler(960, &[]);
     stand_in_base(&mut app);
-    open_via_menu(&mut app, 'b', "Work a structure yourself");
+    open_command(&mut app, "Work a structure yourself");
     assert_eq!(app.mode, Mode::WorkStructure);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc backs into the base menu");
+    assert_eq!(app.mode, Mode::BaseBuild, "Esc backs into the Build page");
 }
 
 /// `d` + a direction demolishes what is on the neighbouring tile, without
-/// going through the base menu's picker at all.
+/// going through the Build page's picker at all.
 #[test]
 fn the_demolish_key_removes_the_structure_next_to_you() {
     let mut app = app_inside_a_small_base(240, false);
@@ -983,7 +987,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     assert_eq!(outside.mode, Mode::Playing, "and must open no screen");
 }
 
-/// Opens the work order screen from the base menu and walks it to the
+/// Opens the work order screen from the Build page and walks it to the
 /// quantity page with the first orderable item pending — the two-page shape
 /// the compile flow uses, one screen over.
 fn open_order_quantity_page(app: &mut App) {
@@ -1132,7 +1136,7 @@ fn deploy_second_structure(app: &mut App) {
 /// its position and every structure dropped into `assets/structures/`
 /// renumbers whatever sorts after it.
 fn choose_build_row(app: &mut App, id: &str) {
-    open_via_menu(app, 'b', "Deploy a structure");
+    open_command(app, "Deploy a structure");
     let menu = app.build_menu().expect("a running game");
     let def = menu
         .defs
@@ -1340,13 +1344,13 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
 
 /// `Mode::UpgradeDirection`'s counterpart to `deploy_second_structure` —
 /// aims at the one upgradeable structure the fixture offers, the Compiler,
-/// through the base menu rather than by hand-setting `app.mode`, since that
+/// through the Build page rather than by hand-setting `app.mode`, since that
 /// menu path is also what proves the verb is still reachable at all.
 ///
 /// Callers stand the party with `stand_beside_the_compiler`, so east is the
 /// machine.
 fn open_upgrade_picker(app: &mut App) {
-    open_via_menu(app, 'b', "Upgrade a structure");
+    open_command(app, "Upgrade a structure");
     assert_eq!(app.mode, Mode::UpgradeDirection);
     app.handle_key(GameKey::Right); // the Compiler, one tile east
 }
@@ -1420,7 +1424,7 @@ fn aiming_the_upgrade_at_empty_ground_refuses_and_files_nothing() {
     stand_beside_the_compiler(&mut app);
     tame_program_at_zone(&mut app, 2);
 
-    open_via_menu(&mut app, 'b', "Upgrade a structure");
+    open_command(&mut app, "Upgrade a structure");
     // North. Not west — the exit cell that way carries Home, which is a
     // structure and so answers the other refusal below.
     app.handle_key(GameKey::Up);
@@ -1471,7 +1475,7 @@ fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
         "precondition: Home is the party's western neighbour"
     );
 
-    open_via_menu(&mut app, 'b', "Upgrade a structure");
+    open_command(&mut app, "Upgrade a structure");
     app.handle_key(GameKey::Left);
 
     assert_eq!(app.mode, Mode::Playing);
@@ -1713,7 +1717,7 @@ fn picking_a_program_in_the_study_screen_pins_it() {
     stand_in_base(&mut app);
     let program = app.game.as_mut().unwrap().base_staff()[0];
 
-    open_via_menu(&mut app, 'b', "Study a program");
+    open_command(&mut app, "Study a program");
     assert_eq!(app.mode, Mode::PinSubject);
     app.handle_key(GameKey::Char('1'));
 
@@ -1753,7 +1757,7 @@ fn the_study_screen_unpins_the_current_subject_through_its_one_row() {
         "precondition: the subject must have reached the pen before this test can mean anything"
     );
 
-    open_via_menu(&mut app, 'b', "Study a program");
+    open_command(&mut app, "Study a program");
     assert_eq!(app.mode, Mode::PinSubject);
     app.handle_key(GameKey::Char('1'));
 
@@ -1773,12 +1777,12 @@ fn escaping_the_study_screen_pins_nobody() {
     stand_in_base(&mut app);
     let program = app.game.as_mut().unwrap().base_staff()[0];
 
-    open_via_menu(&mut app, 'b', "Study a program");
+    open_command(&mut app, "Study a program");
     app.handle_key(GameKey::Esc);
 
     assert_eq!(
         app.mode,
-        Mode::BaseMenu,
+        Mode::BaseResearch,
         "Esc from a group-menu screen returns to the menu it opened from"
     );
     assert_eq!(
@@ -1844,7 +1848,7 @@ fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
 #[test]
 fn the_deploy_menu_opens_on_categories_with_the_home_listed_directly() {
     let mut app = test_app(4101);
-    open_via_menu(&mut app, 'b', "Deploy a structure");
+    open_command(&mut app, "Deploy a structure");
     assert_eq!(app.mode, Mode::Build);
     let menu = app.build_menu().expect("a game is loaded");
     let mut categories = Vec::new();
@@ -1870,11 +1874,11 @@ fn the_deploy_menu_opens_on_categories_with_the_home_listed_directly() {
 
 /// Picking a category opens that category's structures; picking one of them
 /// is the deploy it always was. Esc from inside walks back to the category
-/// list on the row it came from, and from there to the base menu.
+/// list on the row it came from, and from there to the Build page.
 #[test]
 fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     let mut app = test_app(4102);
-    open_via_menu(&mut app, 'b', "Deploy a structure");
+    open_command(&mut app, "Deploy a structure");
     let top = app.build_menu().unwrap();
     let (row, category) = top
         .rows
@@ -1907,7 +1911,7 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     assert_eq!(app.build_category, None);
     assert_eq!(app.menu_selected, row, "back on the category it opened");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu);
+    assert_eq!(app.mode, Mode::BaseBuild);
 
     // Back in, and through to a deploy.
     app.handle_key(GameKey::Enter);
@@ -1943,7 +1947,7 @@ fn picking_a_record_in_the_hold_screen_jails_it_and_spends_a_protocol() {
     let mut app = app_beside_a_holding_cell(889, vec![a_downed_record()], 1);
     let pets = app.game.as_ref().unwrap().pet_count();
 
-    open_via_menu(&mut app, 'b', "Hold a program");
+    open_command(&mut app, "Hold a program");
     assert_eq!(app.mode, Mode::PinPrisoner);
     app.handle_key(GameKey::Char('1'));
 
@@ -1958,7 +1962,7 @@ fn picking_a_record_in_the_hold_screen_jails_it_and_spends_a_protocol() {
 #[test]
 fn enter_on_the_hold_screen_jails_the_highlighted_record() {
     let mut app = app_beside_a_holding_cell(890, vec![a_downed_record()], 1);
-    open_via_menu(&mut app, 'b', "Hold a program");
+    open_command(&mut app, "Hold a program");
     app.handle_key(GameKey::Enter);
     assert!(app.game.as_mut().unwrap().downed_program_rows().is_empty());
 }
@@ -1970,7 +1974,7 @@ fn the_hold_screen_refuses_with_the_blockers_text_and_spends_nothing() {
     let mut app = app_beside_a_holding_cell(891, vec![a_downed_record()], 0);
     let pets = app.game.as_ref().unwrap().pet_count();
 
-    open_via_menu(&mut app, 'b', "Hold a program");
+    open_command(&mut app, "Hold a program");
     app.handle_key(GameKey::Char('1'));
 
     assert_eq!(

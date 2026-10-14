@@ -16,7 +16,7 @@
 //! wrong on the way out. And Esc returns to `Mode::Settlement` rather than
 //! the map, because it was reached from a page rather than the map — like
 //! `Mode::CompanionEquip`, which returns to `Mode::Companion`, rather than
-//! `Mode::Caravan`, which is reached straight off the base menu and returns
+//! `Mode::Caravan`, which is reached straight off the Trade page and returns
 //! there through `App::close_screen`.
 
 use crate::app::basket::halve;

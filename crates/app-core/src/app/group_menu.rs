@@ -1,10 +1,12 @@
-//! The two group menus — `b` for the base, `p` for the party — and the
-//! rule that decides which of their rows are on screen right now.
+//! The party menu (`p`), the base hub's four command pages (`b`, then
+//! Build / Research / Trade / Compile), and the rule that decides which of
+//! their rows are on screen right now.
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were
 //! retired rather than kept as aliases, so the flat surface actually shrank
-//! instead of growing a second system to document.
+//! instead of growing a second system to document. The base half used to be
+//! a menu of its own; it lives in the hub now so the base is one window.
 
 use crate::*;
 
@@ -22,7 +24,7 @@ pub struct GroupMenuRow {
 struct GroupEntry {
     label: &'static str,
     target: Mode,
-    /// Where this row's action is legal, which for most of the base menu is
+    /// Where this row's action is legal, which for most of the base commands is
     /// "in base space" — see `Locality`.
     ///
     /// It used to be a `surface_only` bool and used to ask `is_underground()`,
@@ -48,7 +50,7 @@ struct GroupEntry {
 ///
 /// Three answers and not two, because the build row genuinely has a third:
 /// deploying is a `Game::require_base` caller like everything else in the
-/// base menu, *except* for the run's first Home. That one is the act that
+/// base commands, *except* for the run's first Home. That one is the act that
 /// opens base space at all, so it has to be reachable from the open grid or
 /// a fresh run can never start a base — and a row that was hidden until you
 /// were inside would hide the only way of getting inside.
@@ -81,7 +83,7 @@ impl Locality {
     }
 }
 
-const BASE_ROWS: &[GroupEntry] = &[
+const BUILD_ROWS: &[GroupEntry] = &[
     GroupEntry {
         // The one row with a third answer: see `Locality::BaseOrFounding`.
         label: "Deploy a structure",
@@ -91,16 +93,6 @@ const BASE_ROWS: &[GroupEntry] = &[
             app.game
                 .as_ref()
                 .is_some_and(|g| !g.buildable_structure_defs().is_empty())
-        },
-    },
-    GroupEntry {
-        label: "Compile an item",
-        target: Mode::Craft,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.craft_recipes().is_empty())
         },
     },
     GroupEntry {
@@ -127,6 +119,9 @@ const BASE_ROWS: &[GroupEntry] = &[
         locality: Locality::Base,
         available: |app| !app.nearby_structures().is_empty(),
     },
+];
+
+const RESEARCH_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Research",
         target: Mode::Research,
@@ -138,6 +133,29 @@ const BASE_ROWS: &[GroupEntry] = &[
             app.game
                 .as_ref()
                 .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Base))
+        },
+    },
+    GroupEntry {
+        label: "Routine research",
+        target: Mode::RoutineResearch,
+        locality: Locality::Anywhere,
+        // `has_research_tree`, not "is anything listed": the row must stay
+        // reachable while the tree is closed or nothing is discovered yet,
+        // because the screen behind it is what tells the player that.
+        available: |app| {
+            app.game.as_ref().is_some_and(|g| {
+                g.has_research_tree(feral_processes_engine::ResearchTree::Routines)
+            })
+        },
+    },
+    GroupEntry {
+        label: "Affix research",
+        target: Mode::AffixResearch,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Affixes))
         },
     },
     GroupEntry {
@@ -164,29 +182,9 @@ const BASE_ROWS: &[GroupEntry] = &[
         locality: Locality::Base,
         available: |app| app.game.as_ref().is_some_and(|g| g.has_holding_cell()),
     },
-    GroupEntry {
-        label: "Routine research",
-        target: Mode::RoutineResearch,
-        locality: Locality::Anywhere,
-        // `has_research_tree`, not "is anything listed": the row must stay
-        // reachable while the tree is closed or nothing is discovered yet,
-        // because the screen behind it is what tells the player that.
-        available: |app| {
-            app.game.as_ref().is_some_and(|g| {
-                g.has_research_tree(feral_processes_engine::ResearchTree::Routines)
-            })
-        },
-    },
-    GroupEntry {
-        label: "Affix research",
-        target: Mode::AffixResearch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Affixes))
-        },
-    },
+];
+
+const TRADE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         // Not base-only, and deliberately so: mission status is the
         // question worth answering four frames down, and the board itself is
@@ -241,13 +239,18 @@ const BASE_ROWS: &[GroupEntry] = &[
                 .is_some_and(|g| g.dispatch_reach() != DispatchReach::NoRelay)
         },
     },
+];
+
+const COMPILE_ROWS: &[GroupEntry] = &[
     GroupEntry {
-        // Readable anywhere, as the screens it absorbed were: the ledger is
-        // history and the alert board is not a scan around the party.
-        label: "Base report",
-        target: Mode::BaseOverview,
+        label: "Compile an item",
+        target: Mode::Craft,
         locality: Locality::Anywhere,
-        available: |_| true,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| !g.craft_recipes().is_empty())
+        },
     },
     GroupEntry {
         // Not base-only: the chains come off the loaded assets, not off a
@@ -391,17 +394,35 @@ const PARTY_ROWS: &[GroupEntry] = &[
     },
 ];
 
+/// The static table behind a command page, or `None` for any other mode.
+fn command_table(page: Mode) -> Option<&'static [GroupEntry]> {
+    match page {
+        Mode::BaseBuild => Some(BUILD_ROWS),
+        Mode::BaseResearch => Some(RESEARCH_ROWS),
+        Mode::BaseTrade => Some(TRADE_ROWS),
+        Mode::BaseCompile => Some(COMPILE_ROWS),
+        _ => None,
+    }
+}
+
+/// Whether `mode` is one of the hub's command pages.
+pub(crate) fn is_command_page(mode: Mode) -> bool {
+    command_table(mode).is_some()
+}
+
 impl App {
-    /// The base menu's rows as they stand right now. Both the handler that
-    /// picks from this and the renderer that draws it call *this* function —
-    /// rows are hidden dynamically, so a renderer building its own copy of
-    /// the list would drift out of index with the handler and row 2 would
-    /// open a different screen from the one under the highlight.
-    pub fn base_menu_rows(&mut self) -> Vec<GroupMenuRow> {
-        self.group_rows(BASE_ROWS)
+    /// A command page's rows as they stand right now, or `None` when `page`
+    /// is not a command page. The handler that picks from this, the renderer
+    /// that draws it and the Overview's count all call *this* function —
+    /// rows are hidden dynamically, so a caller building its own copy of the
+    /// list would drift out of index with the handler and row 2 would open a
+    /// different screen from the one under the highlight.
+    pub fn command_rows(&mut self, page: Mode) -> Option<Vec<GroupMenuRow>> {
+        let table = command_table(page)?;
+        Some(self.group_rows(table))
     }
 
-    /// The party menu's rows — same contract as `base_menu_rows`.
+    /// The party menu's rows — same contract as `command_rows`.
     pub fn party_menu_rows(&mut self) -> Vec<GroupMenuRow> {
         self.group_rows(PARTY_ROWS)
     }
@@ -432,10 +453,6 @@ impl App {
             .collect()
     }
 
-    pub(crate) fn handle_base_menu_key(&mut self, key: GameKey) {
-        self.handle_group_menu_key(key, BASE_ROWS);
-    }
-
     pub(crate) fn handle_party_menu_key(&mut self, key: GameKey) {
         self.handle_group_menu_key(key, PARTY_ROWS);
     }
@@ -448,16 +465,21 @@ impl App {
         let rows = self.group_rows(entries);
         if let Some(idx) = self.selected_index(key, rows.len()) {
             self.menu_origin = Some(self.mode);
-            match rows[idx].target {
-                Mode::Perks => self.open_perks(),
-                Mode::Manifest => self.open_menu_manifest(),
-                Mode::Build => {
-                    self.build_category = None;
-                    self.mode = Mode::Build;
-                }
-                Mode::BaseOverview => self.open_base_report(),
-                target => self.mode = target,
+            self.open_row_target(rows[idx].target);
+        }
+    }
+
+    /// Opens the screen a group-menu or command-page row points at. The
+    /// callers have already set `menu_origin`, so Esc comes back to them.
+    pub(crate) fn open_row_target(&mut self, target: Mode) {
+        match target {
+            Mode::Perks => self.open_perks(),
+            Mode::Manifest => self.open_menu_manifest(),
+            Mode::Build => {
+                self.build_category = None;
+                self.mode = Mode::Build;
             }
+            target => self.mode = target,
         }
     }
 

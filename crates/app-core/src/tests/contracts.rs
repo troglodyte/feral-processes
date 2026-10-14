@@ -1,4 +1,4 @@
-//! The contracts screen: its base-menu row, its two stacked sections, and
+//! The contracts screen: its command-page row, its two stacked sections, and
 //! the three verbs.
 
 use super::support::*;
@@ -6,7 +6,7 @@ use crate::app::contracts::{ContractScreenRow, contract_row};
 use crate::*;
 
 fn base_labels(app: &mut App) -> Vec<&'static str> {
-    app.base_menu_rows().iter().map(|r| r.label).collect()
+    command_labels_all(app)
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn a_broker_in_range_shows_the_row() {
 #[test]
 fn a_contract_in_hand_shows_the_row_underground() {
     let mut app = app_at_a_contract_broker(3103, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     app.handle_key(GameKey::Char('1'));
     assert!(
         !app.game.as_ref().unwrap().active_contracts().is_empty(),
@@ -92,7 +92,7 @@ fn the_row_is_listed_across_the_map_from_the_base() {
 #[test]
 fn taking_an_offer_away_from_the_base_says_where_to_go() {
     let mut app = app_at_a_contract_broker(3121, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     let offered = app.contract_sections().1;
     assert!(!offered.is_empty(), "the fixture needs a board");
 
@@ -114,12 +114,14 @@ fn taking_an_offer_away_from_the_base_says_where_to_go() {
 }
 
 #[test]
-fn the_screen_opens_from_the_base_menu_and_esc_walks_back() {
+fn the_screen_opens_from_the_trade_page_and_esc_walks_back() {
     let mut app = app_at_a_contract_broker(3105, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     assert_eq!(app.mode, Mode::Contracts);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::BaseTrade, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -138,7 +140,7 @@ fn a_row_number_resolves_against_the_right_section() {
 #[test]
 fn picking_an_offer_accepts_it_and_the_screen_stays_open() {
     let mut app = app_at_a_contract_broker(3106, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     let offered = app.game.as_mut().unwrap().contract_board().unwrap();
     assert!(!offered.is_empty());
 
@@ -173,7 +175,7 @@ fn giving_back_an_onboarding_mission_is_refused_with_a_sentence() {
     // run still running it, and it needs no Broker — the mission is in hand
     // from tick 0.
     let mut app = test_app(3123);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     let held = app.game.as_ref().unwrap().active_contracts();
     assert_eq!(held.len(), 1, "one onboarding mission in hand");
     assert!(held[0].tutorial);
@@ -215,7 +217,7 @@ fn giving_back_an_onboarding_mission_is_refused_with_a_sentence() {
 #[test]
 fn abandoning_the_highlighted_contract_drops_it() {
     let mut app = app_at_a_contract_broker(3107, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.game.as_ref().unwrap().active_contracts().len(), 1);
 
@@ -232,7 +234,7 @@ fn abandoning_the_highlighted_contract_drops_it() {
 #[test]
 fn a_refusal_reports_why_and_leaves_the_screen_open() {
     let mut app = app_at_a_contract_broker(3108, false);
-    open_via_menu(&mut app, 'b', "Contracts");
+    open_command(&mut app, "Contracts");
     // Take everything the board offers, then try for one more.
     for _ in 0..MAX_ACTIVE_CONTRACTS + 1 {
         let offers = app.game.as_mut().unwrap().contract_board().unwrap().len();

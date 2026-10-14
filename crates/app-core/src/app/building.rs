@@ -31,7 +31,7 @@ pub struct Staffing {
 /// the player is not staff and the scheduler never moves them. Keeping all
 /// of them in one ordered list is what stops the renderer and the handler
 /// disagreeing about which index means what, the same rule
-/// `App::base_menu_rows` holds for a menu whose rows are hidden dynamically.
+/// `App::command_rows` holds for a menu whose rows are hidden dynamically.
 #[derive(Clone)]
 pub struct StaffRow {
     pub label: String,
@@ -310,7 +310,7 @@ impl App {
     ///
     /// **No longer a screen's rows** — `Mode::UpgradeDirection` aims at one
     /// tile. Two readers are left and they want different things from it:
-    /// the base menu asks whether the row is worth offering at all, and
+    /// the Build page asks whether the row is worth offering at all, and
     /// gui's `build_commit` names the machine an order was filed against.
     /// Both are questions about the neighbourhood rather than about one
     /// cell, which is why the scan radius stayed.
@@ -692,7 +692,7 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    /// The base menu's upgrade verb + a direction: file a request for the
+    /// The Build page's upgrade verb + a direction: file a request for the
     /// next tier on whatever machine stands on that neighbouring tile.
     ///
     /// `handle_remove_direction_key`'s shape, and `Game::adjacent_structure`
@@ -815,7 +815,7 @@ pub(crate) const OUT_OF_BASE: &str = "Not from out here — that's back at the b
 /// A row rather than a bare report, for the reason `StaffRow` is one: the
 /// "new order" row is not an order at all, and keeping both in one ordered
 /// list is what stops the renderer and the handler disagreeing about which
-/// index means what. That is the rule `App::base_menu_rows` holds for a
+/// index means what. That is the rule `App::command_rows` holds for a
 /// menu whose rows are hidden dynamically, one screen down.
 #[derive(Clone)]
 pub struct WorkOrderRow {
@@ -909,8 +909,8 @@ impl App {
     }
 
     /// Refuses, and says so, when the party is not in base space. Work
-    /// orders and the duty table used to be base-menu rows hidden outside
-    /// it (`Locality::Base`); reached from the hub they are visible from
+    /// orders and the duty table were `Locality::Base` rows hidden outside
+    /// it; reached from the hub they are visible from
     /// anywhere, so the refusal moves to the keys that change something.
     /// Reading stays open.
     fn refuse_outside_base(&mut self) -> bool {
@@ -1103,7 +1103,7 @@ impl App {
 }
 
 /// The `(dx, dy)` step a direction key points, arrows or vi keys; `None` for
-/// anything else. The one mapping the base menu's pick-a-side prompts share.
+/// anything else. The one mapping the Build page's pick-a-side prompts share.
 fn direction_of(key: GameKey) -> Option<(i32, i32)> {
     match key {
         GameKey::Up | GameKey::Char('k') => Some((0, -1)),

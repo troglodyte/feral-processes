@@ -84,7 +84,7 @@ fn enter_on_a_filled_slot_is_refused_not_opened() {
 #[test]
 fn the_group_menu_row_opens_the_affix_research_view() {
     let mut app = app_at_a_mod_bench(9304, 0);
-    open_via_menu(&mut app, 'b', "Affix research");
+    open_command(&mut app, "Affix research");
     assert_eq!(app.mode, Mode::AffixResearch);
     app.handle_key(GameKey::Esc);
     assert_ne!(app.mode, Mode::AffixResearch);

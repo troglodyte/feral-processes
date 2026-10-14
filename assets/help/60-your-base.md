@@ -79,7 +79,7 @@ machine draws whether or not anybody is posted to it, which makes an idle machin
 real expense. This is the Power Grid and it is not your Power — the two are separate resources that happen
 to share a word.
 
-The base report (B) has a page for each of these. Production has three screens, Right and Left to walk them:
+The base report (b) has a page for each of these. Production has three screens, Right and Left to walk them:
 Output, Machines (every structure that is not running, worst first, with the reason, and any that are
 damaged) and Power (supply against draw, and what each structure adds to either; a machine the grid
 cut is marked dark). The rail marks Production with a ! while a machine is starved, unstaffed, cut off,
@@ -101,7 +101,7 @@ stay on. With no cell on any shelf, that program goes to a Power Conduit and mak
 the base works out which machines make it, who stands on each, and what has to be fetched. The queue
 is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
 and > move the highlighted order up and down. Cancelling one unwinds nothing. Orders live on the
-Work orders page of the base report (B, then down the rail to Work orders and Right onto its rows); Enter on the last row queues
+Work orders page of the base report (b, then down the rail to Work orders and Right onto its rows); Enter on the last row queues
 another, and Backspace drops the highlighted one. Orders and the duty table are edited from the base itself,
 not from out on the open grid, and the rail marks the page with a ! while an order is stalled.
 
@@ -145,8 +145,8 @@ The rest of what a base does:
   same window. Stand beside it and press c: the Depots come in from wherever they stand, both to
   take from and to put into. Machines still have to be walked to.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
-  structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick the upgrade
-  row off the base menu and then point at the machine: it has to be the tile right beside you, north,
+  structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick Upgrade a
+  structure on the Build page of the base report (b) and then point at the machine: it has to be the tile right beside you, north,
   south, east or west. An upgrade is a request like any other build: nothing is charged when you ask
   for it, your crew fetches the parts out of the base and works on the spot, and the machine keeps
   running the whole time. Call one off with d and a direction, as with any pending site, and you get
@@ -163,7 +163,7 @@ The rest of what a base does:
   Station nobody is working stands idle, which the base panel will tell you about. The tree is what unlocks the benches,
   the recipes and several routines.
 - A Research Station is a 2x2 building with a pen in the corner diagonally opposite its own tile.
-  "Study a program" on the base menu pins one of your own programs there — it stops working
+  "Study a program" on the Research page of the base report (b) pins one of your own programs there — it stops working
   whatever post it held and walks to the pen by itself, and the same row unpins it again once
   nothing needs it there. While a program is pinned, each full study attempt has a 35% chance to
   uncover a hidden research node; a miss spends the attempt and the log says the study turned up

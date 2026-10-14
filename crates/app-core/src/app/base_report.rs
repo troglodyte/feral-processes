@@ -58,9 +58,8 @@ impl App {
     }
 
     /// Opens the hub where the player left it, or on Overview the first
-    /// time, with the cursor on the rail. `menu_origin` is whatever the
-    /// caller already set (a group menu) or `None` from the map, so `Esc`
-    /// goes back the way it came.
+    /// time, with the cursor on the rail. `b` opens it from the map
+    /// with no `menu_origin`, so `Esc` from the rail returns there.
     pub(crate) fn open_base_report(&mut self) {
         self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
         self.hub_on_rail = true;
@@ -71,6 +70,21 @@ impl App {
     pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {
         if let Some(row) = self.selected_index(key, BASE_REPORT_PAGES.len() - 1) {
             self.mode = BASE_REPORT_PAGES[row + 1].screens[0];
+        }
+    }
+
+    /// A command page: a cursor over its rows, `selected_index` style. The
+    /// hub nav has already let Up/Down/Enter and row letters through because
+    /// the cursor is in the page. The row's index is parked so Esc from its
+    /// screen lands back on it.
+    pub(crate) fn handle_command_page_key(&mut self, key: GameKey) {
+        let Some(rows) = self.command_rows(self.mode) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, rows.len()) {
+            self.menu_origin = Some(self.mode);
+            self.command_return_row = Some(idx);
+            self.open_row_target(rows[idx].target);
         }
     }
 

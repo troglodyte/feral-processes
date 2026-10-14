@@ -272,7 +272,7 @@ impl NotificationKind {
             NotificationKind::BaseFounding => NotificationDef {
                 title: "Base Space",
                 body: "Your Home stands, the base runs out of phase with the zone map. Use the \
-                       home portal to enter phase space.\n\n [b] for the base menu: build, craft, \
+                       home portal to enter phase space.\n\n [b] for the base report: build, craft, \
                        and assign entities to structures.\n\n Programs you own and are not in the \
                        party will live and work in the base.",
                 // The same art the zone map now draws the anchor with, so
@@ -355,7 +355,7 @@ impl NotificationKind {
                        program walks there itself and is written up to full Integrity a tick at \
                        a time. Until one stands in your base, benched is where it stays — you \
                        can still sell it or pull a routine out of it.\n\n[b] for the base \
-                       menu, then Deploy a structure.",
+                       report, then Deploy a structure on the Build page.",
                 sprite: None,
                 glyph: 'r',
                 color: GlyphColor::Red,
@@ -407,7 +407,7 @@ impl NotificationKind {
                        every structure \
                        you own, and a second one stacks with the first. A Patch Node writes \
                        damaged structures back up across the whole base on its own, while you are \
-                       somewhere else.\n\n[b] for the base menu, then Deploy a structure.",
+                       somewhere else.\n\n[b] for the base report, then Deploy a structure on the Build page.",
                 sprite: None,
                 // The Shield's own glyph and hue, so the screen and the thing
                 // it is telling you to build agree on what to look for. The

@@ -157,12 +157,14 @@ fn enter_and_row_shortcuts_do_nothing_on_the_history() {
 }
 
 #[test]
-fn the_base_menu_opens_the_recipes_screen_and_esc_backs_into_it() {
+fn the_compile_page_opens_the_recipes_screen_and_esc_backs_into_it() {
     let mut app = test_app(97);
-    open_via_menu(&mut app, 'b', "Recipes");
+    open_command(&mut app, "Recipes");
     assert_eq!(app.mode, Mode::Recipes);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::BaseCompile, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -174,7 +176,7 @@ fn up_and_down_scroll_the_recipes_by_chain() {
     let mut app = test_app(99);
     let chains = app.game.as_ref().unwrap().recipe_chains().len();
     assert!(chains >= 2, "the shipped assets have several chains");
-    open_via_menu(&mut app, 'b', "Recipes");
+    open_command(&mut app, "Recipes");
     assert_eq!(app.menu_selected, 0, "the list opens at its first chain");
 
     app.handle_key(GameKey::Up);
@@ -190,7 +192,7 @@ fn up_and_down_scroll_the_recipes_by_chain() {
 fn the_recipes_screen_does_not_advance_the_game() {
     let mut app = test_app(100);
     let before = app.game.as_ref().unwrap().current_tick();
-    open_via_menu(&mut app, 'b', "Recipes");
+    open_command(&mut app, "Recipes");
     for key in [
         GameKey::Down,
         GameKey::Enter,
@@ -242,9 +244,10 @@ fn app_with_base_output(seed: u32) -> App {
 #[test]
 fn the_hub_opens_the_output_page_and_esc_leaves_to_the_map() {
     let mut app = app_with_base_output(101);
-    app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char('b'));
+    for _ in 0..base_page_of(Mode::BaseOutput).unwrap().0 {
+        app.handle_key(GameKey::Char(']'));
+    }
     assert_eq!(app.mode, Mode::BaseOutput);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -257,10 +260,7 @@ fn the_hub_opens_the_output_page_and_esc_leaves_to_the_map() {
 fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
     let mut app = app_with_base_output(103);
     let before = app.game.as_ref().unwrap().current_tick();
-    app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Right);
+    open_hub_screen(&mut app, Mode::BaseOutput);
     for key in [
         GameKey::Down,
         GameKey::Up,

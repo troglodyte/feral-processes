@@ -8,10 +8,10 @@ fn labels(rows: &[GroupMenuRow]) -> Vec<&'static str> {
 }
 
 #[test]
-fn b_and_p_open_the_group_menus() {
+fn b_opens_the_hub_and_p_opens_the_party_menu() {
     let mut app = test_app(4001);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseMenu);
+    assert_eq!(app.mode, Mode::BaseOverview);
 
     let mut app = test_app(4001);
     app.handle_key(GameKey::Char('p'));
@@ -22,14 +22,14 @@ fn b_and_p_open_the_group_menus() {
 /// it has nothing in it. A fresh game has no structures deployed and no
 /// programs compiled, so five of the nine base rows have nowhere to go.
 #[test]
-fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
+fn the_command_pages_hide_rows_whose_screen_would_be_empty() {
     let mut app = test_app(4002);
     // Inside the base, which is where every one of these rows is legal at
-    // all now — see `the_base_menu_offers_its_base_rows_only_inside_base_space`.
+    // all now — see `the_command_pages_offer_their_base_rows_only_inside_base_space`.
     // Without it the Deploy assertion below would be asking the locale
     // rather than asking whether the screen has anything in it.
     stand_in_base(&mut app);
-    let rows = labels(&app.base_menu_rows());
+    let rows = command_labels_all(&mut app);
     for absent in [
         "Work a structure yourself",
         "Upgrade a structure",
@@ -51,7 +51,7 @@ fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
 fn a_program_in_range_brings_back_the_rows_that_need_one() {
     let mut app = app_owning_a_program_and_a_compiler(4003, &[]);
     stand_in_base(&mut app);
-    let rows = labels(&app.base_menu_rows());
+    let rows = command_labels_all(&mut app);
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
@@ -87,7 +87,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
         app.game.as_ref().is_some_and(|g| g.in_base()),
         "the fixture must start inside the base"
     );
-    let offered: Vec<&'static str> = labels(&app.base_menu_rows())
+    let offered: Vec<&'static str> = command_labels_all(&mut app)
         .into_iter()
         .filter(|label| GUARDED.contains(label))
         .collect();
@@ -98,7 +98,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
         .leave_base()
         .expect("the fixture stands on the exit cell");
 
-    let rows = labels(&app.base_menu_rows());
+    let rows = command_labels_all(&mut app);
     for absent in GUARDED {
         assert!(
             !rows.contains(&absent),
@@ -107,7 +107,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
     }
     // Not a menu that lost every row: the two that are not locale-gated at
     // all have to survive the walk out, or the assertions above would pass
-    // against a base menu that had simply gone empty.
+    // against a command page that had simply gone empty.
     assert!(
         rows.contains(&"Research"),
         "research is not locale-gated: {rows:?}"
@@ -121,7 +121,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
 }
 
 #[test]
-fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
+fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
     let mut covered: Vec<&'static str> = Vec::new();
 
     // Two fixtures because no single one stands up every guarded row: the
@@ -146,7 +146,7 @@ fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
 /// hidden before the base moved out of phase — so the flag's rename cannot
 /// have quietly re-opened the Stack.
 #[test]
-fn the_base_menu_drops_its_base_rows_underground_too() {
+fn the_command_pages_drop_their_base_rows_underground_too() {
     for mut app in [
         app_owning_a_program_and_a_compiler_deep(4005, &[], &[], true),
         app_inside_a_small_base_with_programs(4007, true, 1),
@@ -155,7 +155,7 @@ fn the_base_menu_drops_its_base_rows_underground_too() {
             app.game.as_ref().is_some_and(|g| g.is_underground()),
             "precondition: the fixture really went down"
         );
-        let rows = labels(&app.base_menu_rows());
+        let rows = command_labels_all(&mut app);
         for absent in GUARDED {
             assert!(
                 !rows.contains(&absent),
@@ -217,41 +217,18 @@ fn fuse_row_is_hidden_until_fusion_is_researched_then_shown() {
     );
 }
 
-/// The reason the handler and the renderer must call the same function.
-/// Rows are hidden dynamically, so row 1 of the base menu is whatever
-/// survived the filter — not the first entry of the static table.
-#[test]
-fn a_hidden_row_cannot_be_reached_by_its_table_position() {
-    let mut app = app_underground(4007);
-    let expected = app.base_menu_rows()[0].target;
-    assert_ne!(
-        expected,
-        Mode::Build,
-        "the fixture should have hidden Deploy, or this proves nothing"
-    );
-    app.mode = Mode::BaseMenu;
-    app.handle_key(GameKey::Char('1'));
-    assert_eq!(
-        app.mode, expected,
-        "row 1 must open the first row still on screen"
-    );
-}
-
 #[test]
 fn esc_from_a_screen_opened_by_a_group_menu_returns_to_it() {
     let mut app = test_app(4008);
     stand_in_base(&mut app);
-    app.handle_key(GameKey::Char('b'));
-    let deploy = app
-        .base_menu_rows()
-        .iter()
-        .position(|r| r.label == "Deploy a structure")
-        .expect("a fresh game can always deploy");
-    app.handle_key(GameKey::Char(menu_shortcut(deploy)));
+    open_command(&mut app, "Deploy a structure");
     assert_eq!(app.mode, Mode::Build);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::BaseBuild, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseBuild, "the first goes to the rail");
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
 }
@@ -274,13 +251,7 @@ fn esc_from_a_screen_opened_from_the_map_returns_to_the_map() {
 fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     let mut app = test_app(4010);
     stand_in_base(&mut app);
-    app.handle_key(GameKey::Char('b'));
-    let deploy = app
-        .base_menu_rows()
-        .iter()
-        .position(|r| r.label == "Deploy a structure")
-        .expect("a fresh game can always deploy");
-    app.handle_key(GameKey::Char(menu_shortcut(deploy)));
+    open_command(&mut app, "Deploy a structure");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::BuildDirection);
     app.handle_key(GameKey::Char('l'));
@@ -293,7 +264,7 @@ fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     assert_eq!(
         app.mode,
         Mode::Playing,
-        "the pack was opened from the map, not from the base menu"
+        "the pack was opened from the map, not from a command page"
     );
 }
 
@@ -454,10 +425,10 @@ fn refactoring_works_underground() {
 /// structure are replaced by one that queues an order and one that hands a
 /// program to the base.
 #[test]
-fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
+fn the_build_page_offers_work_orders_and_staff_rather_than_manual_posting() {
     let mut app = app_owning_a_program_and_a_compiler(4030, &[]);
     stand_in_base(&mut app);
-    let rows = labels(&app.base_menu_rows());
+    let rows = command_labels_all(&mut app);
 
     assert!(!rows.contains(&"Assign a cronjob"), "{rows:?}");
     assert!(!rows.contains(&"Post a guard"), "{rows:?}");
@@ -478,14 +449,14 @@ fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
     let mut app = app_owning_a_program_and_a_compiler(883, &[]);
     stand_in_base(&mut app);
     assert!(
-        !labels(&app.base_menu_rows()).contains(&"Study a program"),
+        !command_labels_all(&mut app).contains(&"Study a program"),
         "a Compiler alone declares no `studies` pen"
     );
 
     let mut app = app_owning_a_program_and_a_research_station(884);
     stand_in_base(&mut app);
     assert!(
-        labels(&app.base_menu_rows()).contains(&"Study a program"),
+        command_labels_all(&mut app).contains(&"Study a program"),
         "a standing Research Station must offer the row"
     );
 }
@@ -495,9 +466,9 @@ fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
 fn the_hold_row_is_hidden_with_no_cell_and_shown_with_one() {
     let mut app = app_owning_a_program_and_a_compiler(887, &[]);
     stand_in_base(&mut app);
-    assert!(!labels(&app.base_menu_rows()).contains(&"Hold a program"));
+    assert!(!command_labels_all(&mut app).contains(&"Hold a program"));
 
     let mut app = app_beside_a_holding_cell(888, Vec::new(), 0);
     stand_in_base(&mut app);
-    assert!(labels(&app.base_menu_rows()).contains(&"Hold a program"));
+    assert!(command_labels_all(&mut app).contains(&"Hold a program"));
 }

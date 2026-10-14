@@ -21,7 +21,7 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
     let mut app = test_app(9101);
     found_the_base(&mut app);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseMenu);
+    assert_eq!(app.mode, Mode::BaseOverview);
 
     queue(
         &mut app,
@@ -30,7 +30,7 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
     app.handle_key(GameKey::Down);
     assert_eq!(
         app.mode,
-        Mode::BaseMenu,
+        Mode::BaseBuild,
         "a menu must not be interrupted by a notification"
     );
 

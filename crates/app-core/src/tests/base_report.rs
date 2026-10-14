@@ -1,6 +1,6 @@
 //! The base report hub: `BASE_REPORT_PAGES`, the arrow/`[`/`]`/`Esc` nav
-//! that runs ahead of every hub screen's own handler, and the three doors
-//! in (`B`, `N`, the base-menu row).
+//! that runs ahead of every hub screen's own handler, and the doors in
+//! (`b`, `N`).
 
 use feral_processes_engine::alerts::AlertKind;
 
@@ -16,11 +16,15 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_runs_all_eight_pages_in_order() {
+fn the_rail_runs_all_twelve_pages_in_order() {
     assert_eq!(
         page_modes(),
         vec![
             Mode::BaseOverview,
+            Mode::BaseBuild,
+            Mode::BaseResearch,
+            Mode::BaseTrade,
+            Mode::BaseCompile,
             Mode::StaffWellbeing,
             Mode::BaseOutput,
             Mode::BaseStock,
@@ -30,21 +34,21 @@ fn the_rail_runs_all_eight_pages_in_order() {
             Mode::Alerts
         ]
     );
-    assert_eq!(base_page_of(Mode::BaseOutput), Some((2, 0)));
-    assert_eq!(base_page_of(Mode::BasePower), Some((2, 2)));
-    assert_eq!(base_page_of(Mode::Structures), Some((5, 1)));
-    assert_eq!(base_page_of(Mode::FloorOrders), Some((6, 2)));
+    assert_eq!(base_page_of(Mode::BaseOutput), Some((6, 0)));
+    assert_eq!(base_page_of(Mode::BasePower), Some((6, 2)));
+    assert_eq!(base_page_of(Mode::Structures), Some((9, 1)));
+    assert_eq!(base_page_of(Mode::FloorOrders), Some((10, 2)));
     assert_eq!(base_page_of(Mode::WorkOrderPick), None);
     assert_eq!(base_page_of(Mode::WorkOrderQuantity), None);
     assert_eq!(base_page_of(Mode::StructureAssign), None);
-    assert_eq!(base_page_of(Mode::StaffDiscontent), Some((1, 2)));
+    assert_eq!(base_page_of(Mode::StaffDiscontent), Some((5, 2)));
     assert_eq!(base_page_of(Mode::Playing), None);
 }
 
 #[test]
 fn b_opens_overview_and_esc_returns_to_the_map() {
     let mut app = test_app(30001);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseOverview);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -53,19 +57,19 @@ fn b_opens_overview_and_esc_returns_to_the_map() {
 #[test]
 fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
     let mut app = test_app(30002);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Char('['));
     assert_eq!(app.mode, Mode::Alerts, "[ wraps first -> last");
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview, "] wraps last -> first");
     app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::StaffWellbeing);
+    assert_eq!(app.mode, Mode::BaseBuild);
 }
 
 #[test]
 fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
     let mut app = test_app(30003);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     for _ in 0..BASE_REPORT_PAGES.len() - 1 {
         app.handle_key(GameKey::Char(']'));
     }
@@ -75,19 +79,19 @@ fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
 }
 
 #[test]
-fn esc_returns_to_the_base_menu_when_the_row_opened_the_hub() {
+fn esc_from_the_rail_leaves_the_hub_opened_from_the_map() {
     let mut app = test_app(30004);
-    open_via_menu(&mut app, 'b', "Base report");
+    app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseOverview);
     app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseMenu);
+    assert_eq!(app.mode, Mode::Playing);
 }
 
 #[test]
 fn tab_is_consumed_by_the_hub_and_keeps_a_single_screen_page() {
     let mut app = test_app(30005);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::BaseOverview);
     assert!(!app.log_expanded, "Tab must not reach the map's log toggle");
@@ -118,22 +122,12 @@ fn a_digit_on_alerts_stays_on_alerts() {
 #[test]
 fn b_reopens_the_last_page() {
     let mut app = test_app(30007);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
-    app.handle_key(GameKey::Char('B'));
-    assert_eq!(app.mode, Mode::StaffWellbeing);
-}
-
-#[test]
-fn the_base_menu_row_reopens_the_last_page_too() {
-    let mut app = test_app(30008);
-    app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('['));
-    app.handle_key(GameKey::Esc);
-    open_via_menu(&mut app, 'b', "Base report");
-    assert_eq!(app.mode, Mode::Alerts);
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.mode, Mode::BaseBuild);
 }
 
 #[test]
@@ -147,7 +141,7 @@ fn n_lands_on_alerts_with_everything_marked_read() {
         )],
     );
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 1);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Char('N'));
     assert_eq!(app.mode, Mode::Alerts);
@@ -167,7 +161,7 @@ fn paging_onto_alerts_marks_everything_read() {
             "Every Depot is full.",
         )],
     );
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 1);
     app.handle_key(GameKey::Char('['));
     assert_eq!(app.mode, Mode::Alerts);
@@ -175,28 +169,27 @@ fn paging_onto_alerts_marks_everything_read() {
 }
 
 #[test]
-fn the_base_output_row_is_gone_and_the_report_row_is_offered() {
+fn no_command_row_is_called_base_output_or_base_report() {
     let mut app = test_app(30010);
-    app.handle_key(GameKey::Char('b'));
-    let labels: Vec<_> = app.base_menu_rows().iter().map(|r| r.label).collect();
+    let labels = command_labels_all(&mut app);
     assert!(!labels.contains(&"Base output"), "{labels:?}");
-    assert!(labels.contains(&"Base report"), "{labels:?}");
+    assert!(!labels.contains(&"Base report"), "{labels:?}");
 }
 
 #[test]
 fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     let mut app = test_app(30011);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Enter);
     assert_eq!(
         app.mode,
-        Mode::StaffWellbeing,
+        Mode::BaseBuild,
         "row 0 is the page after Overview"
     );
 
     let mut app = test_app(30013);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
     for _ in 0..BASE_REPORT_PAGES.len() - 2 {
         app.handle_key(GameKey::Down);
@@ -211,9 +204,9 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
 #[test]
 fn a_digit_on_the_overview_reaches_its_handler() {
     let mut app = test_app(30014);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Char('7'));
+    app.handle_key(GameKey::Char(menu_shortcut(BASE_REPORT_PAGES.len() - 2)));
     assert_eq!(app.mode, Mode::Alerts);
 }
 
@@ -221,7 +214,7 @@ fn a_digit_on_the_overview_reaches_its_handler() {
 fn the_screens_inside_the_hub_cost_no_game_time() {
     let mut app = test_app(30012);
     let before = app.game.as_ref().unwrap().current_tick();
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     for _ in 0..4 {
         app.handle_key(GameKey::Char(']'));
         app.handle_key(GameKey::Tab);
@@ -233,9 +226,7 @@ fn the_screens_inside_the_hub_cost_no_game_time() {
 #[test]
 fn right_walks_the_three_staff_screens_and_left_walks_back_to_the_rail() {
     let mut app = test_app(30015);
-    app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Right);
+    open_hub_screen(&mut app, Mode::StaffWellbeing);
     let walk = |app: &mut App, key| -> Vec<Mode> {
         (0..3)
             .map(|_| {
@@ -271,9 +262,7 @@ fn right_walks_the_three_staff_screens_and_left_walks_back_to_the_rail() {
 #[test]
 fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
     let mut app = test_app(30016);
-    app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Right);
+    open_hub_screen(&mut app, Mode::StaffWellbeing);
     let rows = app.game.as_ref().unwrap().need_coverage().len();
     assert!(rows >= 2, "the shipped catalogue has two needs");
     app.handle_key(GameKey::Right);
@@ -369,7 +358,7 @@ fn each_popup_child_names_the_hub_screen_it_draws_over() {
     assert_eq!(base_popup_parent(Mode::Playing), None);
 }
 
-/// The base-menu rows were `Locality::Base`; the screens now open from
+/// The old command rows were `Locality::Base`; the screens now open from
 /// anywhere, so the keys that change something carry the refusal.
 #[test]
 fn work_orders_refuse_edits_outside_base_space() {
@@ -501,7 +490,7 @@ fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
 #[test]
 fn the_full_rail_walks_forward_and_back() {
     let mut app = test_app(30017);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     let mut seen = vec![app.mode];
     for _ in 1..BASE_REPORT_PAGES.len() {
         app.handle_key(GameKey::Char(']'));
@@ -605,10 +594,10 @@ fn the_list_cursor_wraps_over_each_screens_own_report_and_costs_no_time() {
 #[test]
 fn b_opens_with_the_cursor_on_the_rail_and_down_walks_the_pages() {
     let mut app = test_app(30030);
-    app.handle_key(GameKey::Char('B'));
-    assert!(app.hub_on_rail, "B opens on the rail");
+    app.handle_key(GameKey::Char('b'));
+    assert!(app.hub_on_rail, "b opens on the rail");
     app.handle_key(GameKey::Down);
-    assert_eq!(app.mode, Mode::StaffWellbeing);
+    assert_eq!(app.mode, Mode::BaseBuild);
     app.handle_key(GameKey::Up);
     app.handle_key(GameKey::Up);
     assert_eq!(app.mode, Mode::Alerts, "Up wraps first -> last");
@@ -618,25 +607,21 @@ fn b_opens_with_the_cursor_on_the_rail_and_down_walks_the_pages() {
 #[test]
 fn right_moves_the_cursor_into_the_page_and_left_brings_it_back() {
     let mut app = test_app(30031);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Right);
     assert!(!app.hub_on_rail);
     app.handle_key(GameKey::Down);
-    assert_eq!(
-        app.mode,
-        Mode::StaffWellbeing,
-        "Down in the page moves its rows"
-    );
+    assert_eq!(app.mode, Mode::BaseBuild, "Down in the page moves its rows");
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail);
-    assert_eq!(app.mode, Mode::StaffWellbeing);
+    assert_eq!(app.mode, Mode::BaseBuild);
 }
 
 #[test]
 fn enter_on_the_rail_moves_into_the_page_without_acting_on_it() {
     let mut app = test_app(30032);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Enter);
     assert!(!app.hub_on_rail);
     assert_eq!(
@@ -649,7 +634,7 @@ fn enter_on_the_rail_moves_into_the_page_without_acting_on_it() {
 #[test]
 fn the_rail_keeps_page_keys_from_reaching_the_screen() {
     let mut app = test_app(30033);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.mode,
@@ -661,7 +646,7 @@ fn the_rail_keeps_page_keys_from_reaching_the_screen() {
 #[test]
 fn esc_in_the_page_goes_to_the_rail_and_esc_on_the_rail_closes() {
     let mut app = test_app(30034);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseOverview);
@@ -684,7 +669,7 @@ fn n_opens_alerts_with_the_cursor_in_the_page() {
 #[test]
 fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
     let mut app = test_app(30036);
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     while app.mode != Mode::BaseStaff {
         app.handle_key(GameKey::Down);
     }
@@ -698,4 +683,166 @@ fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
     assert!(!app.hub_on_rail, "a column step is not a trip to the rail");
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail);
+}
+
+fn command_labels(app: &mut App, page: Mode) -> Vec<&'static str> {
+    app.command_rows(page)
+        .expect("a command page")
+        .iter()
+        .map(|r| r.label)
+        .collect()
+}
+
+#[test]
+fn b_opens_the_hub_at_overview_then_where_it_was_left() {
+    let mut app = test_app(30100);
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.mode, Mode::Alerts, "the last hub screen");
+    assert!(app.hub_on_rail);
+}
+
+#[test]
+fn capital_b_no_longer_opens_anything() {
+    let mut app = test_app(30101);
+    app.handle_key(GameKey::Char('B'));
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+#[test]
+fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
+    let mut app = app_underground(30102);
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    let build = command_labels(&mut app, Mode::BaseBuild);
+    for absent in [
+        "Work a structure yourself",
+        "Upgrade a structure",
+        "Demolish a structure",
+        "Deploy a structure",
+    ] {
+        assert!(!build.contains(&absent), "{absent:?} in {build:?}");
+    }
+}
+
+#[test]
+fn the_command_pages_sit_after_overview_with_their_titles() {
+    let titles: Vec<_> = BASE_REPORT_PAGES.iter().map(|p| p.title).collect();
+    assert_eq!(
+        titles[..5],
+        ["Overview", "Build", "Research", "Trade", "Compile"]
+    );
+    assert_eq!(base_page_of(Mode::BaseBuild), Some((1, 0)));
+    assert_eq!(base_page_of(Mode::BaseCompile), Some((4, 0)));
+}
+
+#[test]
+fn each_command_page_lists_its_table_in_base_space() {
+    let mut app = app_inside_a_small_base_with_programs(30103, false, 1);
+    assert_eq!(
+        command_labels(&mut app, Mode::BaseBuild),
+        [
+            "Deploy a structure",
+            "Work a structure yourself",
+            "Upgrade a structure",
+            "Demolish a structure"
+        ]
+    );
+    assert_eq!(
+        command_labels(&mut app, Mode::BaseResearch),
+        ["Research", "Routine research", "Affix research"]
+    );
+    assert_eq!(
+        command_labels(&mut app, Mode::BaseTrade),
+        ["Contracts"],
+        "the onboarding mission is in hand"
+    );
+    assert_eq!(
+        command_labels(&mut app, Mode::BaseCompile),
+        ["Compile an item", "Recipes"]
+    );
+
+    let mut station = app_owning_a_program_and_a_research_station(30104);
+    stand_in_base(&mut station);
+    assert!(command_labels(&mut station, Mode::BaseResearch).contains(&"Study a program"));
+    let mut cell = app_beside_a_holding_cell(30105, Vec::new(), 0);
+    stand_in_base(&mut cell);
+    let research = command_labels(&mut cell, Mode::BaseResearch);
+    assert_eq!(research.last(), Some(&"Hold a program"), "{research:?}");
+
+    let mut broker = app_at_a_contract_broker(30106, false);
+    assert_eq!(command_labels(&mut broker, Mode::BaseTrade), ["Contracts"]);
+}
+
+#[test]
+fn founding_offers_deploy_alone_and_it_opens_the_category_list() {
+    let mut app = test_app(30107);
+    assert_eq!(
+        command_labels(&mut app, Mode::BaseBuild),
+        ["Deploy a structure"]
+    );
+    app.build_category = Some(feral_processes_engine::structures::StructureCategory::Utility);
+    open_command(&mut app, "Deploy a structure");
+    assert_eq!(app.mode, Mode::Build);
+    assert_eq!(app.build_category, None);
+}
+
+#[test]
+fn a_non_command_mode_has_no_command_rows() {
+    let mut app = test_app(30108);
+    assert!(app.command_rows(Mode::BaseStock).is_none());
+    assert!(app.command_rows(Mode::Playing).is_none());
+}
+
+#[test]
+fn esc_from_a_command_returns_to_its_row_and_a_page_turn_forgets_it() {
+    let mut app = app_inside_a_small_base_with_programs(30109, false, 1);
+    open_hub_screen(&mut app, Mode::BaseBuild);
+    let demolish = app
+        .command_rows(Mode::BaseBuild)
+        .unwrap()
+        .iter()
+        .position(|r| r.label == "Demolish a structure")
+        .unwrap();
+    assert!(demolish > 0);
+    app.handle_key(GameKey::Char(menu_shortcut(demolish)));
+    assert_eq!(app.mode, Mode::Remove);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseBuild);
+    assert!(!app.hub_on_rail, "the highlight is on the row just used");
+    assert_eq!(app.menu_selected, demolish);
+
+    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.menu_selected, 0, "a page turn starts at the top");
+}
+
+#[test]
+fn a_row_letter_on_the_rail_of_a_command_page_does_nothing() {
+    let mut app = app_inside_a_small_base_with_programs(30110, false, 1);
+    app.handle_key(GameKey::Char('b'));
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::BaseBuild);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::BaseBuild);
+}
+
+#[test]
+fn an_all_hidden_page_is_still_on_the_rail() {
+    let mut app = test_app(30111);
+    skip_tutorial(&mut app);
+    app.handle_key(GameKey::Char('b'));
+    for _ in 0..3 {
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(app.mode, Mode::BaseTrade);
+    assert_eq!(app.command_rows(Mode::BaseTrade).map(|r| r.len()), Some(0));
 }

@@ -1066,7 +1066,7 @@ impl Game {
 /// Three states out of one call rather than two booleans, for
 /// `BrokerReach`'s reason and `NoPost::BoxedIn`'s before it: the three leave
 /// the player different errands — wait for one, walk home, or trade — and two
-/// independent predicates would let the base menu's row and the screen's own
+/// independent predicates would let the Trade page's row and the screen's own
 /// header disagree about which.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaravanReach {

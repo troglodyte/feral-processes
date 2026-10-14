@@ -129,7 +129,7 @@ pub(super) fn build_menu_rows(
 }
 
 /// What both levels of the deploy menu open with. Esc goes back on either —
-/// out of a category to the list of them, or from there to the base menu.
+/// out of a category to the list of them, or from there to the Build page.
 fn build_menu_preamble(shortfall: Option<&str>) -> Vec<Row> {
     let mut rows = vec![text_row("Esc to go back; Up/Down + Enter also work")];
     if let Some(line) = shortfall {
@@ -1783,7 +1783,7 @@ pub(super) fn structure_headline(s: &StructureReport) -> String {
 /// Everything under the headline — idleness, assignees, a stall, the two
 /// buffers — as `(text, colour)` pairs.
 ///
-/// Extracted rather than written twice: the `B` roster and the inspector's
+/// Extracted rather than written twice: the Structures roster and the inspector's
 /// sheet describe the same machine, and a detail screen that disagreed with
 /// the roster about whether something was starved is exactly the drift
 /// `CLAUDE.md` means by a mirror having to be a call. The two differ only in

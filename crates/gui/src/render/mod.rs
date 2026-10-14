@@ -944,7 +944,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // survivable while both are unconditional, and is not once the base
     // menu starts hiding rows.
     let group_rows = match app.mode {
-        Mode::BaseMenu => app.base_menu_rows(),
         Mode::PartyMenu => app.party_menu_rows(),
         _ => Vec::new(),
     };
@@ -998,7 +997,18 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BaseStaff => Some(app.base_staff_table()),
         _ => None,
     };
+    // `command_rows` reads the party's surroundings, so like the lists above
+    // it is taken before `game` borrows the app.
+    let commands = app.command_rows(app.mode);
+    let command_counts: Vec<(usize, usize)> = match app.mode {
+        Mode::BaseOverview => base_report::command_pages()
+            .filter_map(|(page, mode)| Some((page, app.command_rows(mode)?.len())))
+            .collect(),
+        _ => Vec::new(),
+    };
     let app_screens = base_report::AppScreens {
+        commands: commands.as_deref(),
+        command_counts: &command_counts,
         work_orders: &work_orders,
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,
@@ -1156,7 +1166,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     };
     let Some(game) = &mut app.game else { return };
     match app.mode {
-        Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, refusal, painter, m),
         Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, refusal, painter, m),
         Mode::DevConsole => {
             draw_dev_console(App::dev_console_rows(), selected, refusal, painter, m)
@@ -1666,7 +1675,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 147] = [
+    const ALL_MODES: [Mode; 150] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1683,7 +1692,6 @@ mod tests {
         Mode::DepotFilter,
         Mode::RigTool,
         Mode::SpliceRig,
-        Mode::BaseMenu,
         Mode::PartyMenu,
         Mode::Battle,
         Mode::BattleTarget,
@@ -1785,6 +1793,10 @@ mod tests {
         Mode::Recipes,
         Mode::BaseOutput,
         Mode::BaseOverview,
+        Mode::BaseBuild,
+        Mode::BaseResearch,
+        Mode::BaseTrade,
+        Mode::BaseCompile,
         Mode::StaffWellbeing,
         Mode::StaffCoverage,
         Mode::StaffDiscontent,

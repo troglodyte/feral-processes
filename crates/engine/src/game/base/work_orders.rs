@@ -2959,7 +2959,7 @@ impl Game {
     /// The list a frontend offers, and it asks `chain_break` — the same
     /// question `queue_work_order` refuses on — so the picker cannot list a
     /// row the queue would then reject. That is the rule
-    /// `App::base_menu_rows` holds for a menu whose rows are hidden
+    /// `App::command_rows` holds for a menu whose rows are hidden
     /// dynamically, one level down.
     pub fn orderable_items(&self) -> Vec<(ItemId, String)> {
         let mut rows: Vec<(ItemId, String)> = self

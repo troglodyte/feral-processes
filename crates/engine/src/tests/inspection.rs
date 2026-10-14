@@ -1685,7 +1685,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
     assert!(max_hp >= hp);
 }
 
-/// The detail screen and the `B` roster must never disagree about the same
+/// The detail screen and the Structures roster must never disagree about the same
 /// machine, which is why one calls the other rather than building its own
 /// row (see `Game::structure_manifest`).
 #[test]

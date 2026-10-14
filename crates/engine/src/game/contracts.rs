@@ -634,7 +634,7 @@ impl Game {
     ///
     /// Sampled at `CONTRACT_HABITAT_SAMPLES` evenly-spaced points rather than
     /// walked whole, because `contract_board` sits on a per-frame path — both
-    /// the contracts screen and the base menu's row test call it.
+    /// the contracts screen and the Trade page's row test call it.
     pub(crate) fn template_pools(&mut self) -> crate::contracts::TemplatePools {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut pools = crate::contracts::TemplatePools {
@@ -895,7 +895,7 @@ impl Game {
     ///
     /// Three states out of one call rather than two predicates, for
     /// `NoPost::BoxedIn`'s reason for sitting beside `NoPost::NoRoute`: five
-    /// things ask this (the board, accepting, delivering, the base menu's row
+    /// things ask this (the board, accepting, delivering, the Trade page's row
     /// and the screen's own header) and two independent booleans would let
     /// them disagree about whether a board that is drawn can be taken from.
     ///
@@ -1096,7 +1096,7 @@ impl Game {
             ),
 
             Objective::Build { .. } => Some(
-                "Deploy it from the base menu and the crew raises it - a build is a \
+                "Deploy it from the Build page of the base report (b) and the crew raises it - a build is a \
                  request, not something your own hands finish."
                     .to_string(),
             ),

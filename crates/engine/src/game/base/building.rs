@@ -1803,7 +1803,7 @@ impl Game {
     /// A refusal rather than a filtered menu, for the reason `assign_cronjob`
     /// refuses an unwalkable post: the picker lists everything within
     /// `MENU_SCAN_RADIUS`, and a row that vanished by distance would take the
-    /// whole screen — and the base menu row leading to it — with it.
+    /// whole screen — and the command row leading to it — with it.
     pub fn work_structure(&mut self, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());

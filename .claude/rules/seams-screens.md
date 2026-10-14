@@ -53,14 +53,14 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   any per-row transform must live in the engine.** Both sides call
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
-- **A group menu's rows are hidden dynamically**, so `base_menu_rows` /
+- **A group menu's rows are hidden dynamically**, so `command_rows` /
   `party_menu_rows` must be the *only* source of them.
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and
   `Game::broker_reach` is the one call that answers both.** `NoBroker` /
   `OffBase` / `AtBroker`; `board_defs` refuses on `NoBroker` alone, the two
-  verbs require `AtBroker`, and the base menu's row test and the screen's
+  verbs require `AtBroker`, and the command page's row test and the screen's
   header read the same value.
 - **A `Deed` is the extension point for a new job kind; an `Objective`
   variant is for a parameterised one.**

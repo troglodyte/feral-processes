@@ -4,7 +4,7 @@
 //!
 //! Deliberately not a variant of `render/manifest.rs`: that screen's whole
 //! body is HP, level, XP, stats and equipment, none of which a structure
-//! has. What this screen shows is the `B` roster's row for one machine, and
+//! has. What this screen shows is the Structures roster's row for one machine, and
 //! it is built by *calling* the roster's own line builders rather than
 //! restating them — see `building::structure_detail_lines`.
 

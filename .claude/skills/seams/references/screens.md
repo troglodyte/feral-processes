@@ -131,7 +131,7 @@
   any per-row transform must live in the engine.** Both sides call
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
-- **A group menu's rows are hidden dynamically**, so `base_menu_rows` /
+- **A group menu's rows are hidden dynamically**, so `command_rows` /
   `party_menu_rows` must be the *only* source of them. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
@@ -143,7 +143,7 @@
 - **Reading a Broker's board and signing it are two questions, and
   `Game::broker_reach` is the one call that answers both.** `NoBroker` /
   `OffBase` / `AtBroker`; `board_defs` refuses on `NoBroker` alone, the two
-  verbs require `AtBroker`, and the base menu's row test and the screen's
+  verbs require `AtBroker`, and the command page's row test and the screen's
   header read the same value. Three states rather than two booleans for
   `NoPost::BoxedIn`'s reason, and `ContractRefusal::NotAtBroker` is distinct
   from `NotOffered` because the two leave the player different errands.

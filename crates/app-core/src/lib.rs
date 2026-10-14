@@ -1602,12 +1602,9 @@ pub enum Mode {
     /// Build an implant into the player or cut one out — `[I]` in base
     /// space beside a Splice Rig. See `App::splice_rig`.
     SpliceRig,
-    /// The base menu, opened with `b`. Lists every base errand that is
-    /// currently possible and dispatches to its screen — see
-    /// `App::base_menu_rows`.
-    BaseMenu,
-    /// The party menu, opened with `p`. Same shape as `Mode::BaseMenu`, for
-    /// everything about the programs you own — see `App::party_menu_rows`.
+    /// The party menu, opened with `p`. Lists everything about the programs
+    /// you own that is currently possible and dispatches to its screen — see
+    /// `App::party_menu_rows`.
     PartyMenu,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
@@ -1743,7 +1740,7 @@ pub enum Mode {
     /// `needs_status_banner`.
     TrapDirection,
     /// Aiming the upgrade verb at one of the four neighbouring tiles,
-    /// reached from the base menu. Whatever structure stands that way
+    /// reached from the Build page. Whatever structure stands that way
     /// **files a request** for the next tier, which the base's build crew
     /// fetches for and works.
     ///
@@ -2055,7 +2052,7 @@ pub enum Mode {
     /// is no buyback: what is sold here is gone.
     StackMarket,
     /// The counter a visiting caravan sets out — see `Game::caravan_view`.
-    /// Reached from the base menu, and only while one is actually docked.
+    /// Reached from the Trade page, and only while one is actually docked.
     ///
     /// One list with two sections, the wagon's stock then cargo it will
     /// take, resolved by `caravan_row`. There is no buyback section, because
@@ -2065,7 +2062,7 @@ pub enum Mode {
     /// together by Enter — one basket, one commit, one turn. There is no
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
-    /// The Relay hub, opened with the base menu's "Dispatch" row — sortie
+    /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
     /// sites (`Game::sortie_board`), route destinations
     /// (`Game::route_destinations`) numbered continuously in one list
     /// (`app::dispatch::dispatch_row`, `contract_row`'s shape), and every
@@ -2114,7 +2111,7 @@ pub enum Mode {
     Research,
     /// The routine research tree — `Mode::Research`'s own screen, passing
     /// `ResearchTree::Routines` instead of `ResearchTree::Base`. Opened from
-    /// its own base-menu row, gated on `Game::has_research_tree(Routines)`
+    /// its own Research-page row, gated on `Game::has_research_tree(Routines)`
     /// rather than on anything being listed, because the empty-list line is
     /// what tells the player the tree is there before anything is.
     RoutineResearch,
@@ -2177,17 +2174,15 @@ pub enum Mode {
     /// screens, since neither is something you go looking for here.
     ///
     /// This screen was read-only until 2026-08-14, on the argument that it
-    /// shouldn't become a second way to assign. What that missed is the
-    /// direction the two screens are read in: the base menu's Cronjob row is
-    /// program-first and answers "where do I put this program", while the
+    /// shouldn't become a second way to assign. What that missed is that the
     /// roster is the only screen that shows the whole base at once and
     /// colours an unstaffed machine yellow — so it is where you find out
     /// *that* something is idle, and backing out to a program-first picker to
-    /// act on it was the friction. Both flows stay.
+    /// act on it was the friction.
     Structures,
     /// Picking who works the structure highlighted on the roster — see
-    /// `App::staff_rows`. The mirror of `Mode::CronjobStructure`, which
-    /// arrives with the program already chosen and picks the structure.
+    /// `App::staff_rows`. Picks the program for a structure
+    /// already chosen, where the program-first flow picks the structure.
     ///
     /// Returns to `Mode::Structures` rather than the map, on that structure's
     /// row: what the player is looking at is the base, and the assignee the
@@ -2207,6 +2202,13 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
+    /// The hub's command pages, one per kind of base errand: each lists the
+    /// errands that are currently possible and dispatches to the screen
+    /// behind the highlighted one — see `App::command_rows`.
+    BaseBuild,
+    BaseResearch,
+    BaseTrade,
+    BaseCompile,
     /// The Staff page's first screen: every staff program, worst morale
     /// first, with its mood, health, needs and what it is doing — see
     /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
@@ -2414,17 +2416,16 @@ impl Mode {
             | Mode::LoadGame
             | Mode::SaveAction
             | Mode::Playing
-            | Mode::BaseMenu
             | Mode::PartyMenu
             // Opened from the map only, so it never layers over a fight.
             | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
-            // Opened from the base menu, `BuildProgram`'s own reason —
+            // Opened from the Research page, `BuildProgram`'s own reason —
             // never reachable mid-battle at all.
             | Mode::PinSubject
-            // Opened from the base menu, `PinSubject`'s own reason.
+            // Opened from the Research page, `PinSubject`'s own reason.
             | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
@@ -2523,7 +2524,7 @@ impl Mode {
             | Mode::StackMarket
             | Mode::Caravan
             // Opened only by a key press from `Mode::Dispatch` itself,
-            // reached from the base menu — `Mode::SettlementMarket`'s
+            // reached from the Trade page — `Mode::SettlementMarket`'s
             // reason exactly.
             | Mode::Dispatch
             | Mode::SortieSquad
@@ -2546,9 +2547,13 @@ impl Mode {
             | Mode::StructureAssign
             | Mode::Recipes
             | Mode::BaseOutput
-            // Opened from the map with `B` or the base menu, `BaseOutput`'s
-            // reason — never layers over a fight.
+            // Opened from the map with `b`, `BaseOutput`'s reason — never
+            // layers over a fight.
             | Mode::BaseOverview
+            | Mode::BaseBuild
+            | Mode::BaseResearch
+            | Mode::BaseTrade
+            | Mode::BaseCompile
             | Mode::StaffWellbeing
             | Mode::StaffCoverage
             | Mode::StaffDiscontent
@@ -2725,6 +2730,22 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
         screens: &[Mode::BaseOverview],
     },
     BasePage {
+        title: "Build",
+        screens: &[Mode::BaseBuild],
+    },
+    BasePage {
+        title: "Research",
+        screens: &[Mode::BaseResearch],
+    },
+    BasePage {
+        title: "Trade",
+        screens: &[Mode::BaseTrade],
+    },
+    BasePage {
+        title: "Compile",
+        screens: &[Mode::BaseCompile],
+    },
+    BasePage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -2830,7 +2851,7 @@ pub struct App {
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
     /// The category `Mode::Build` has open, or `None` on its top level.
-    /// Cleared on the way in from the base menu, so the menu never reopens
+    /// Cleared on the way in from the Build page, so the menu never reopens
     /// inside a category the player left by some other door.
     pub build_category: Option<feral_processes_engine::structures::StructureCategory>,
     /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s
@@ -2856,9 +2877,13 @@ pub struct App {
     /// origin somebody else was still holding — `etch_return`'s trap, one
     /// field down.
     menu_origin: Option<Mode>,
-    /// The hub screen last on screen, so `B` reopens where the player left
+    /// The hub screen last on screen, so `b` reopens where the player left
     /// off. `None` until the hub has been opened, which lands on Overview.
     base_report_last: Option<Mode>,
+    /// The command-page row that opened the screen the player is on, so Esc
+    /// lands back with the highlight on it. Taken when the mode returns to a
+    /// command page and cleared with `menu_origin`.
+    command_return_row: Option<usize>,
     /// Which half of the hub holds its one cursor: the page rail, or the
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.

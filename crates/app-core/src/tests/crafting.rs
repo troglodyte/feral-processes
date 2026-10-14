@@ -40,7 +40,7 @@ fn stocked_app(seed: u32) -> App {
 /// Opens Compile and picks `item`'s row by name — the recipe list is sorted
 /// by category, so a hardcoded digit picks whatever happens to sort first.
 fn open_compile_of(app: &mut App, item: &str) {
-    open_via_menu(app, 'b', "Compile an item");
+    open_command(app, "Compile an item");
     let idx = app
         .game
         .as_ref()
@@ -56,7 +56,7 @@ fn open_compile_of(app: &mut App, item: &str) {
 /// Opens Compile and picks the first recipe, leaving the app on the
 /// quantity page with something pending.
 fn open_quantity_page(app: &mut App) {
-    open_via_menu(app, 'b', "Compile an item");
+    open_command(app, "Compile an item");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::CraftQuantity, "a recipe should be pending");
 }
@@ -80,6 +80,8 @@ fn careful_compiling_toggles_on_the_quantity_page_and_never_leaks() {
     app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Craft);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseCompile);
     open_quantity_page(&mut app);
     assert!(
         !app.careful_craft,

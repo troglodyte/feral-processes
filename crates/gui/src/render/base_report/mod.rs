@@ -6,6 +6,7 @@
 //! Each absorbed screen is a row builder drawn by `draw_rows_in`, not a
 //! popup: the frame owns the chrome, the screen owns its rows.
 
+mod commands;
 mod frame;
 pub(in crate::render) use frame::RAIL_CELLS;
 #[cfg(test)]
@@ -18,7 +19,9 @@ mod stock;
 
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::{BASE_REPORT_PAGES, WorkOrderRow, base_page_of, base_popup_parent};
+use feral_processes_app_core::{
+    BASE_REPORT_PAGES, GroupMenuRow, WorkOrderRow, base_page_of, base_popup_parent,
+};
 use feral_processes_engine::WorkTable;
 
 /// What the screens that read `App` state rather than the `Game` are drawn
@@ -31,6 +34,10 @@ pub(super) struct AppScreens<'a> {
     /// `App::hub_on_rail`: the rail holds the cursor, so the screen's rows
     /// draw none.
     pub(super) on_rail: bool,
+    /// The current screen's rows when it is a command page.
+    pub(super) commands: Option<&'a [GroupMenuRow]>,
+    /// `(page index, row count)` for each command page, for the Overview.
+    pub(super) command_counts: &'a [(usize, usize)],
 }
 
 /// Draws the hub at `mode`, which `base_page_of` has already placed on a
@@ -96,7 +103,10 @@ fn screen_rows(
     flags: &feral_processes_engine::BaseReportFlags,
 ) -> Vec<Row> {
     match mode {
-        Mode::BaseOverview => overview::overview_rows(flags, selected),
+        Mode::BaseOverview => overview::overview_rows(flags, app_screens.command_counts, selected),
+        Mode::BaseBuild | Mode::BaseResearch | Mode::BaseTrade | Mode::BaseCompile => {
+            commands::command_rows(app_screens.commands.unwrap_or_default(), selected)
+        }
         Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),
         Mode::StaffCoverage => staff::coverage_rows(&game.need_coverage(), selected),
         Mode::StaffDiscontent => staff::discontent_rows(&game.discontent(), selected),
@@ -125,6 +135,14 @@ fn screen_rows(
         Mode::Alerts => alerts::alert_rows(&game.alerts(), selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
+}
+
+/// Each page whose first screen is a command page, with its index.
+pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
+    BASE_REPORT_PAGES
+        .iter()
+        .enumerate()
+        .map(|(page, entry)| (page, entry.screens[0]))
 }
 
 /// Why `page` is flagged, if it is: the engine's reason for the page's

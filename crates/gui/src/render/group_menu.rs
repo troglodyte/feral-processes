@@ -1,10 +1,10 @@
-//! The two group menus, `b` and `p`. One draw function for both: they differ
-//! only in their title and the rows app-core hands over.
+//! The party menu, `p`. The base's commands are hub pages now; see
+//! `render::base_report`.
 
 use super::popup::*;
 use super::*;
 
-/// Rows come from `App::base_menu_rows`/`party_menu_rows` — the same call
+/// Rows come from `App::party_menu_rows` — the same call
 /// the handler dispatches from. Rows are hidden when the screen behind them
 /// would be empty, so building the list here instead would drift out of
 /// index with the handler and row 2 would open a different screen from the
@@ -33,6 +33,12 @@ pub(super) fn draw_dev_console(
     draw_popup("Dev Console", PopupSize::Large, &out, refusal, painter, m);
 }
 
+/// One `[a] Label` command row: the `p` popup and the hub's command pages
+/// share it so the format has one home.
+pub(super) fn group_row(i: usize, label: &str, selected: bool) -> Row {
+    item_row(format!("[{}] {}", menu_shortcut(i), label), selected)
+}
+
 pub(super) fn draw_group_menu(
     rows: &[GroupMenuRow],
     title: &str,
@@ -46,10 +52,7 @@ pub(super) fn draw_group_menu(
         out.push(text_row("(nothing available here right now)"));
     }
     for (i, row) in rows.iter().enumerate() {
-        out.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), row.label),
-            i == selected,
-        ));
+        out.push(group_row(i, row.label, i == selected));
     }
     draw_popup(title, PopupSize::Large, &out, refusal, painter, m);
 }

@@ -93,18 +93,18 @@ fn a_caravan() -> App {
 /// every frame the menu is open, and the view rolls a whole shelf — gear
 /// copies, affixes and all — before it could answer.
 #[test]
-fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
+fn the_trade_page_offers_the_caravan_row_only_while_one_is_docked() {
     let mut app = test_app(7);
     found_the_base(&mut app);
     stand_in_base(&mut app);
     assert!(
-        !app.base_menu_rows().iter().any(|r| r.label == "Caravan"),
+        !command_labels_all(&mut app).contains(&"Caravan"),
         "nothing is visiting and the row is offered anyway"
     );
 
     let mut docked = a_caravan();
     assert!(
-        docked.base_menu_rows().iter().any(|r| r.label == "Caravan"),
+        command_labels_all(&mut docked).contains(&"Caravan"),
         "a trader is standing at the counter and the row is missing"
     );
 
@@ -118,8 +118,29 @@ fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
         .leave_base()
         .expect("standing on the exit cell, the way out is open");
     assert!(
-        !docked.base_menu_rows().iter().any(|r| r.label == "Caravan"),
+        !command_labels_all(&mut docked).contains(&"Caravan"),
         "the row survived the party walking out of the base"
+    );
+}
+
+/// The parked row is an index into a list that can shrink while the child
+/// screen is open; Esc must land on a row that still exists.
+#[test]
+fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+    let mut app = a_caravan();
+    open_command(&mut app, "Caravan");
+    assert_eq!(app.mode, Mode::Caravan);
+    stand_in_base_at(&mut app, 0, 0);
+    app.game.as_mut().unwrap().leave_base().unwrap();
+    let rows = app.command_rows(Mode::BaseTrade).unwrap().len();
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::BaseTrade);
+    assert!(
+        app.menu_selected < rows,
+        "highlight {} is past the {rows} rows the page now has",
+        app.menu_selected
     );
 }
 
@@ -128,7 +149,7 @@ fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
 #[test]
 fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     assert_eq!(app.mode, Mode::Caravan);
 
     // Editing a row must not take the player anywhere. Walked to with the
@@ -151,8 +172,8 @@ fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::BaseMenu,
-        "the screen was opened from the base menu, so Esc goes back to it"
+        Mode::BaseTrade,
+        "the screen was opened from the Trade page, so Esc goes back to it"
     );
 }
 
@@ -163,7 +184,7 @@ fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
 #[test]
 fn a_cursor_past_the_end_still_resolves_to_a_row() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let before = app.game.as_mut().unwrap().caravan_view().unwrap();
     assert!(
         before.offers.len() >= 2 && !before.sells.is_empty(),
@@ -199,7 +220,7 @@ fn a_cursor_past_the_end_still_resolves_to_a_row() {
 #[test]
 fn a_trader_that_rolls_away_closes_the_screen() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     assert_eq!(app.mode, Mode::Caravan);
 
     // Wait out the whole stay. The trader packs up and there is nothing to
@@ -234,7 +255,7 @@ fn first_sell_row(app: &mut App) -> usize {
 #[test]
 fn a_sell_rows_ceiling_is_static() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let row = first_sell_row(&mut app);
     let view = app.game.as_mut().unwrap().caravan_view().unwrap();
     let before = app.caravan_sell_available(&view, row);
@@ -269,7 +290,7 @@ fn a_sell_rows_ceiling_is_static() {
 #[test]
 fn a_pending_buy_lowers_the_other_rows_budget_but_not_its_own() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let view = app.game.as_mut().unwrap().caravan_view().unwrap();
     assert!(view.offers.len() >= 2, "the fixture needs two offers");
     let budget_before = app.caravan_budget(&view, 1);
@@ -304,7 +325,7 @@ fn a_pending_buy_lowers_the_other_rows_budget_but_not_its_own() {
 #[test]
 fn enter_commits_the_basket_and_stays_on_the_wagon() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let before = app.game.as_mut().unwrap().caravan_view().unwrap();
 
     app.menu_selected = 0;
@@ -339,7 +360,7 @@ fn enter_commits_the_basket_and_stays_on_the_wagon() {
 #[test]
 fn shift_left_empties_a_sell_row_in_one_press() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let row = first_sell_row(&mut app);
     app.menu_selected = row;
 
@@ -360,7 +381,7 @@ fn shift_left_empties_a_sell_row_in_one_press() {
 #[test]
 fn a_fills_the_sell_rows_and_leaves_the_offers_alone() {
     let mut app = a_caravan();
-    open_via_menu(&mut app, 'b', "Caravan");
+    open_command(&mut app, "Caravan");
     let view = app.game.as_mut().unwrap().caravan_view().unwrap();
     let offers = view.offers.len();
 

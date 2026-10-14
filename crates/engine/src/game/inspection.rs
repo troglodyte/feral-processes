@@ -686,7 +686,7 @@ impl Game {
         found
     }
 
-    /// The `B` roster's row for one structure, for the inspector's detail
+    /// The Structures roster's row for one structure, for the inspector's detail
     /// screen. Deliberately *the same call* the roster makes rather than a
     /// second builder beside it: per `CLAUDE.md` a doc comment claiming to
     /// mirror another formula has to be a call, and a detail screen that
@@ -1952,7 +1952,7 @@ impl Game {
             rows.push(AttentionRow {
                 kind: AttentionKind::NoResearchProject,
                 text: "Research Station with no project".to_string(),
-                // `b`, the base menu, which is where Research is reached —
+                // `b`, the base report, which is where Research is reached —
                 // `AttentionRow::key` is "the map key that opens the screen
                 // this is acted on from" and the HUD badge draws it literally.
                 // `r` on the map is `rest`.

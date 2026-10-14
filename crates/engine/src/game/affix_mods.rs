@@ -97,7 +97,7 @@ impl Game {
         let mut affixes = copy.affixes.clone();
         affixes.push(affix.clone());
         let modded = self.rekey_copy(copy, copy.reaffixed(affixes), slot, worn);
-        let msg = format!("You fit {label} to {}.", self.copy_name(&modded));
+        let msg = format!("You fit {label} to {}.", self.item_name(&modded.item));
         self.log(msg.clone());
         self.tick();
         Ok((modded, msg))

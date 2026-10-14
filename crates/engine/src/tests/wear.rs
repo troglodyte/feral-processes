@@ -217,8 +217,12 @@ fn fitting_an_affix_keeps_the_copys_wear_carried_or_worn() {
         ..worn_copy(ids::FIREWALL_PLATING, 6)
     };
     game.add_copies(&carried, 1);
-    let (modded, _) = game.apply_affix(&carried, &affix_id).unwrap();
+    let (modded, msg) = game.apply_affix(&carried, &affix_id).unwrap();
     assert_eq!(modded.wear, 6, "a carried copy lost its wear to the mod");
+    assert!(
+        !msg.contains('/'),
+        "a log line names the item without its condition: {msg}"
+    );
 
     game.equip(game.player_entity(), &modded).unwrap();
     let (stripped, _) = game.remove_affix(&modded, &affix_id).unwrap();

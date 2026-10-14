@@ -46,7 +46,7 @@ pub(in crate::render) struct StatusBarState<'a> {
     /// Drawn beside `tick`, which it paces.
     pub clock: Clock,
     /// `Game::base_power`, as `(draw, supply)` — the base's grid, in the
-    /// order the `B` roster's own header states it.
+    /// order the Structures roster's own header states it.
     ///
     /// Handed in rather than derived here, `attention`'s reason: the caller
     /// holds the `Game` and this module is pure drawing. It is the *same*

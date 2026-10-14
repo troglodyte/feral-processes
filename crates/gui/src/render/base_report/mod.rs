@@ -143,12 +143,6 @@ pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
         .iter()
         .enumerate()
         .map(|(page, entry)| (page, entry.screens[0]))
-        .filter(|(_, mode)| {
-            matches!(
-                mode,
-                Mode::BaseBuild | Mode::BaseResearch | Mode::BaseTrade | Mode::BaseCompile
-            )
-        })
 }
 
 /// Why `page` is flagged, if it is: the engine's reason for the page's

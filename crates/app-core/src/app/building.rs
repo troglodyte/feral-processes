@@ -909,8 +909,8 @@ impl App {
     }
 
     /// Refuses, and says so, when the party is not in base space. Work
-    /// orders and the duty table used to be base-menu rows hidden outside
-    /// it (`Locality::Base`); reached from the hub they are visible from
+    /// orders and the duty table were `Locality::Base` rows hidden outside
+    /// it; reached from the hub they are visible from
     /// anywhere, so the refusal moves to the keys that change something.
     /// Reading stays open.
     fn refuse_outside_base(&mut self) -> bool {

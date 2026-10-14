@@ -58,9 +58,8 @@ impl App {
     }
 
     /// Opens the hub where the player left it, or on Overview the first
-    /// time, with the cursor on the rail. `menu_origin` is whatever the
-    /// caller already set (a group menu) or `None` from the map, so `Esc`
-    /// goes back the way it came.
+    /// time, with the cursor on the rail. `b` opens it from the map
+    /// with no `menu_origin`, so `Esc` from the rail returns there.
     pub(crate) fn open_base_report(&mut self) {
         self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
         self.hub_on_rail = true;

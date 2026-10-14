@@ -2111,7 +2111,7 @@ pub enum Mode {
     Research,
     /// The routine research tree — `Mode::Research`'s own screen, passing
     /// `ResearchTree::Routines` instead of `ResearchTree::Base`. Opened from
-    /// its own base-menu row, gated on `Game::has_research_tree(Routines)`
+    /// its own Research-page row, gated on `Game::has_research_tree(Routines)`
     /// rather than on anything being listed, because the empty-list line is
     /// what tells the player the tree is there before anything is.
     RoutineResearch,

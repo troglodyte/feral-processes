@@ -686,7 +686,7 @@ impl Game {
         found
     }
 
-    /// The `B` roster's row for one structure, for the inspector's detail
+    /// The Structures roster's row for one structure, for the inspector's detail
     /// screen. Deliberately *the same call* the roster makes rather than a
     /// second builder beside it: per `CLAUDE.md` a doc comment claiming to
     /// mirror another formula has to be a call, and a detail screen that

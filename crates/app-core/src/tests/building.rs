@@ -6,7 +6,7 @@ use feral_processes_engine::save;
 use feral_processes_engine::structures::StructureCategory;
 
 #[test]
-fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
+fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
     // A Compiler, not a Home: the row is hidden unless something nearby
     // actually declares an upgrade path (see `App::upgradeable_structures`).
     let mut app = app_owning_a_program_and_a_compiler(230, &[]);

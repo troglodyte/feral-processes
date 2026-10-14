@@ -1,4 +1,4 @@
-//! The contracts screen: its base-menu row, its two stacked sections, and
+//! The contracts screen: its command-page row, its two stacked sections, and
 //! the three verbs.
 
 use super::support::*;
@@ -114,7 +114,7 @@ fn taking_an_offer_away_from_the_base_says_where_to_go() {
 }
 
 #[test]
-fn the_screen_opens_from_the_base_menu_and_esc_walks_back() {
+fn the_screen_opens_from_the_trade_page_and_esc_walks_back() {
     let mut app = app_at_a_contract_broker(3105, false);
     open_command(&mut app, "Contracts");
     assert_eq!(app.mode, Mode::Contracts);

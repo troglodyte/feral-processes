@@ -93,7 +93,7 @@ fn a_caravan() -> App {
 /// every frame the menu is open, and the view rolls a whole shelf — gear
 /// copies, affixes and all — before it could answer.
 #[test]
-fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
+fn the_trade_page_offers_the_caravan_row_only_while_one_is_docked() {
     let mut app = test_app(7);
     found_the_base(&mut app);
     stand_in_base(&mut app);
@@ -120,6 +120,27 @@ fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
     assert!(
         !command_labels_all(&mut docked).contains(&"Caravan"),
         "the row survived the party walking out of the base"
+    );
+}
+
+/// The parked row is an index into a list that can shrink while the child
+/// screen is open; Esc must land on a row that still exists.
+#[test]
+fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+    let mut app = a_caravan();
+    open_command(&mut app, "Caravan");
+    assert_eq!(app.mode, Mode::Caravan);
+    stand_in_base_at(&mut app, 0, 0);
+    app.game.as_mut().unwrap().leave_base().unwrap();
+    let rows = app.command_rows(Mode::BaseTrade).unwrap().len();
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::BaseTrade);
+    assert!(
+        app.menu_selected < rows,
+        "highlight {} is past the {rows} rows the page now has",
+        app.menu_selected
     );
 }
 

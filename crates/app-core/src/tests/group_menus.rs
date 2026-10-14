@@ -22,7 +22,7 @@ fn b_opens_the_hub_and_p_opens_the_party_menu() {
 /// it has nothing in it. A fresh game has no structures deployed and no
 /// programs compiled, so five of the nine base rows have nowhere to go.
 #[test]
-fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
+fn the_command_pages_hide_rows_whose_screen_would_be_empty() {
     let mut app = test_app(4002);
     // Inside the base, which is where every one of these rows is legal at
     // all now — see `the_command_pages_offer_their_base_rows_only_inside_base_space`.
@@ -425,7 +425,7 @@ fn refactoring_works_underground() {
 /// structure are replaced by one that queues an order and one that hands a
 /// program to the base.
 #[test]
-fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
+fn the_build_page_offers_work_orders_and_staff_rather_than_manual_posting() {
     let mut app = app_owning_a_program_and_a_compiler(4030, &[]);
     stand_in_base(&mut app);
     let rows = command_labels_all(&mut app);

@@ -157,7 +157,7 @@ fn enter_and_row_shortcuts_do_nothing_on_the_history() {
 }
 
 #[test]
-fn the_base_menu_opens_the_recipes_screen_and_esc_backs_into_it() {
+fn the_compile_page_opens_the_recipes_screen_and_esc_backs_into_it() {
     let mut app = test_app(97);
     open_command(&mut app, "Recipes");
     assert_eq!(app.mode, Mode::Recipes);

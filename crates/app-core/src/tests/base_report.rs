@@ -1,6 +1,6 @@
 //! The base report hub: `BASE_REPORT_PAGES`, the arrow/`[`/`]`/`Esc` nav
-//! that runs ahead of every hub screen's own handler, and the three doors
-//! in (`B`, `N`, the base-menu row).
+//! that runs ahead of every hub screen's own handler, and the doors in
+//! (`b`, `N`).
 
 use feral_processes_engine::alerts::AlertKind;
 
@@ -358,7 +358,7 @@ fn each_popup_child_names_the_hub_screen_it_draws_over() {
     assert_eq!(base_popup_parent(Mode::Playing), None);
 }
 
-/// The base-menu rows were `Locality::Base`; the screens now open from
+/// The old command rows were `Locality::Base`; the screens now open from
 /// anywhere, so the keys that change something carry the refusal.
 #[test]
 fn work_orders_refuse_edits_outside_base_space() {

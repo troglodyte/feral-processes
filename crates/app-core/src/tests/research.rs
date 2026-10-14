@@ -46,7 +46,7 @@ fn to_the_list(app: &mut App) {
 /// this only fails if the *menu itself* is broken, not because of which
 /// particular structure a fresh session happens to put at each digit.
 #[test]
-fn the_base_menu_opens_research_and_esc_closes_it() {
+fn the_research_page_opens_research_and_esc_closes_it() {
     let mut app = test_app(501);
     open_command(&mut app, "Research");
     assert!(matches!(app.mode, Mode::Research));
@@ -296,7 +296,7 @@ fn active_routine_project(app: &App) -> Option<String> {
 /// than on anything being listed — true for any fresh run with a loaded
 /// `AbilityDb`, exactly as `has_research_tree`'s own doc explains.
 #[test]
-fn the_base_menu_opens_routine_research_and_esc_closes_it() {
+fn the_research_page_opens_routine_research_and_esc_closes_it() {
     let mut app = test_app(560);
     open_command(&mut app, "Routine research");
     assert!(matches!(app.mode, Mode::RoutineResearch));

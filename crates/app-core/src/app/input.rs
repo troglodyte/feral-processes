@@ -406,14 +406,19 @@ impl App {
         if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
             // Esc from a command's screen puts the highlight back on the row
             // that opened it; any other way onto the page starts at the top.
+            // Clamped because rows hide dynamically: the one that opened the
+            // screen may be gone by the time Esc comes back.
             let parked = if crate::app::group_menu::is_command_page(self.mode) {
-                self.command_return_row.take()
+                let last = self
+                    .command_rows(self.mode)
+                    .map_or(0, |rows| rows.len().saturating_sub(1));
+                self.command_return_row.take().map(|row| row.min(last))
             } else {
                 None
             };
             self.menu_selected = parked.unwrap_or_else(|| self.opening_row());
         }
-        // Entering the board by any door is reading it — `N`, `B` onto the
+        // Entering the board by any door is reading it — `N`, `b` onto the
         // last page, a page turn or the Overview — so the rail's `!` and the
         // status bar's badge never stay lit over the page they point at.
         if self.mode != mode_before

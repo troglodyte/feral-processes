@@ -143,7 +143,7 @@ impl StackLight {
             (Half::Near, solids.near, neg(self.forward)),
             (Half::Far, solids.far, self.forward),
         ];
-        casters.map(|(half, solid, dir)| {
+        let mut shadows = casters.map(|(half, solid, dir)| {
             let toward = dot(dir, self.light.toward);
             (solid && toward > 0.0).then(|| {
                 (
@@ -151,7 +151,10 @@ impl StackLight {
                     self.lit(floor - SHADOW * self.light.strength * toward),
                 )
             })
-        })
+        });
+        let level = |s: &Option<(Half, Lit)>| s.as_ref().map_or(f32::INFINITY, |(_, l)| l.level);
+        shadows.sort_by(|a, b| level(b).total_cmp(&level(a)));
+        shadows
     }
 }
 
@@ -167,6 +170,37 @@ mod tests {
         (0..10_000u64)
             .find(|&s| want(light_from_seed(s).toward))
             .expect("no seed in 0..10000 has a light pointing that way")
+    }
+
+    #[test]
+    fn the_floor_brightens_toward_the_light() {
+        let seed = seed_where(|t| t.0 > 0.6);
+        let n = StackLight::new(seed, Dir::North);
+        assert!(n.floor(1, 1).level > n.floor(1, -1).level);
+    }
+
+    #[test]
+    fn overlapping_shadows_come_back_deepest_last() {
+        // Left and near both toward the light: they share the near-left
+        // corner, and the deeper must be painted over the lighter.
+        // The left shadow is the deeper one, so the natural order (left before
+        // near) is the wrong one and only the sort puts it last.
+        let seed = seed_where(|t| t.1 > 0.1 && -t.0 > t.1 + 0.1);
+        let light = StackLight::new(seed, Dir::North);
+        let solids = Solids {
+            left: true,
+            right: false,
+            near: true,
+            far: false,
+        };
+        let levels: Vec<f32> = light
+            .floor_shadows(1, 0, solids)
+            .into_iter()
+            .flatten()
+            .map(|(_, l)| l.level)
+            .collect();
+        assert_eq!(levels.len(), 2);
+        assert!(levels[0] >= levels[1]);
     }
 
     #[test]

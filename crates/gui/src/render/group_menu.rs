@@ -1,10 +1,10 @@
-//! The two group menus, `b` and `p`. One draw function for both: they differ
-//! only in their title and the rows app-core hands over.
+//! The party menu, `p`. The base's commands are hub pages now; see
+//! `render::base_report`.
 
 use super::popup::*;
 use super::*;
 
-/// Rows come from `App::base_menu_rows`/`party_menu_rows` — the same call
+/// Rows come from `App::party_menu_rows` — the same call
 /// the handler dispatches from. Rows are hidden when the screen behind them
 /// would be empty, so building the list here instead would drift out of
 /// index with the handler and row 2 would open a different screen from the

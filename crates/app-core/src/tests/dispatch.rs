@@ -178,28 +178,37 @@ fn a_dispatch_ready_app(seed: u32) -> (App, ItemId, SettlementKey) {
 fn the_dispatch_row_appears_only_with_a_relay() {
     let mut app = test_app(2100);
     assert!(
-        !app.base_menu_rows().iter().any(|r| r.label == "Dispatch"),
+        !command_labels_all(&mut app).contains(&"Dispatch"),
         "no Relay stands yet"
     );
 
     let (mut app, _, _) = a_dispatch_ready_app(2101);
-    assert!(app.base_menu_rows().iter().any(|r| r.label == "Dispatch"));
+    assert!(command_labels_all(&mut app).contains(&"Dispatch"));
 }
 
-/// Picking the row from the base menu opens the hub.
+/// The reason the handler and the renderer must call the same function.
+/// Rows are hidden dynamically, so row 1 of a command page is whatever
+/// survived the filter — not the first entry of the static table.
+#[test]
+fn a_hidden_row_cannot_be_reached_by_its_table_position() {
+    let (mut app, _, _) = a_dispatch_ready_app(2104);
+    skip_tutorial(&mut app);
+    let rows = app.command_rows(Mode::BaseTrade).unwrap();
+    assert_eq!(
+        rows.iter().map(|r| r.label).collect::<Vec<_>>(),
+        ["Dispatch"],
+        "the table lists Contracts first, and it is hidden here"
+    );
+    open_hub_screen(&mut app, Mode::BaseTrade);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::Dispatch);
+}
+
+/// Picking the row from the Trade page opens the hub.
 #[test]
 fn the_row_opens_the_hub() {
     let (mut app, _, _) = a_dispatch_ready_app(2102);
-    app.mode = Mode::BaseMenu;
-    let rows = app.base_menu_rows();
-    let idx = rows
-        .iter()
-        .position(|r| r.label == "Dispatch")
-        .expect("the row is offered");
-    for _ in 0..idx {
-        app.handle_key(GameKey::Down);
-    }
-    app.handle_key(GameKey::Enter);
+    open_command(&mut app, "Dispatch");
     assert_eq!(app.mode, Mode::Dispatch);
 }
 

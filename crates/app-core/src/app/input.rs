@@ -261,7 +261,6 @@ impl App {
             Mode::DepotFilter => self.handle_depot_filter_key(key),
             Mode::RigTool => self.handle_rig_tool_key(key),
             Mode::SpliceRig => self.handle_splice_rig_key(key),
-            Mode::BaseMenu => self.handle_base_menu_key(key),
             Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
@@ -370,6 +369,9 @@ impl App {
             Mode::Recipes => self.handle_recipes_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
+            Mode::BaseBuild | Mode::BaseResearch | Mode::BaseTrade | Mode::BaseCompile => {
+                self.handle_command_page_key(key)
+            }
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }
@@ -402,7 +404,14 @@ impl App {
         // fresh at the top of its list, rather than carrying over whatever
         // row happened to be highlighted on a previous, unrelated menu.
         if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
-            self.menu_selected = self.opening_row();
+            // Esc from a command's screen puts the highlight back on the row
+            // that opened it; any other way onto the page starts at the top.
+            let parked = if crate::app::group_menu::is_command_page(self.mode) {
+                self.command_return_row.take()
+            } else {
+                None
+            };
+            self.menu_selected = parked.unwrap_or_else(|| self.opening_row());
         }
         // Entering the board by any door is reading it — `N`, `B` onto the
         // last page, a page turn or the Overview — so the rail's `!` and the
@@ -429,6 +438,7 @@ impl App {
         // unrelated screen's Esc back to a menu the player long since left.
         if self.mode == Mode::Playing {
             self.menu_origin = None;
+            self.command_return_row = None;
         }
         self.after_tick();
         // Last, because `after_tick` is itself allowed to raise a message.

@@ -74,6 +74,21 @@ impl App {
         }
     }
 
+    /// A command page: a cursor over its rows, `selected_index` style. The
+    /// hub nav has already let Up/Down/Enter and row letters through because
+    /// the cursor is in the page. The row's index is parked so Esc from its
+    /// screen lands back on it.
+    pub(crate) fn handle_command_page_key(&mut self, key: GameKey) {
+        let Some(rows) = self.command_rows(self.mode) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, rows.len()) {
+            self.menu_origin = Some(self.mode);
+            self.command_return_row = Some(idx);
+            self.open_row_target(rows[idx].target);
+        }
+    }
+
     /// The three Staff screens: a cursor over the screen's own rows, which
     /// is the scroll position. The row counts are the engine reports the
     /// renderer draws, so the cursor cannot run past what is shown.

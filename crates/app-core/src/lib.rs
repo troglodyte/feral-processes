@@ -1602,12 +1602,9 @@ pub enum Mode {
     /// Build an implant into the player or cut one out — `[I]` in base
     /// space beside a Splice Rig. See `App::splice_rig`.
     SpliceRig,
-    /// The base menu, opened with `b`. Lists every base errand that is
-    /// currently possible and dispatches to its screen — see
-    /// `App::base_menu_rows`.
-    BaseMenu,
-    /// The party menu, opened with `p`. Same shape as `Mode::BaseMenu`, for
-    /// everything about the programs you own — see `App::party_menu_rows`.
+    /// The party menu, opened with `p`. Lists everything about the programs
+    /// you own that is currently possible and dispatches to its screen — see
+    /// `App::party_menu_rows`.
     PartyMenu,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
@@ -2207,6 +2204,14 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
+    /// The hub's command pages, one per kind of base errand: each lists the
+    /// errands that are currently possible and dispatches to the screen
+    /// behind the highlighted one — see `App::command_rows`. They replaced
+    /// the flat base menu that `b` used to open.
+    BaseBuild,
+    BaseResearch,
+    BaseTrade,
+    BaseCompile,
     /// The Staff page's first screen: every staff program, worst morale
     /// first, with its mood, health, needs and what it is doing — see
     /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
@@ -2414,7 +2419,6 @@ impl Mode {
             | Mode::LoadGame
             | Mode::SaveAction
             | Mode::Playing
-            | Mode::BaseMenu
             | Mode::PartyMenu
             // Opened from the map only, so it never layers over a fight.
             | Mode::DevConsole
@@ -2546,9 +2550,13 @@ impl Mode {
             | Mode::StructureAssign
             | Mode::Recipes
             | Mode::BaseOutput
-            // Opened from the map with `B` or the base menu, `BaseOutput`'s
-            // reason — never layers over a fight.
+            // Opened from the map with `b`, `BaseOutput`'s reason — never
+            // layers over a fight.
             | Mode::BaseOverview
+            | Mode::BaseBuild
+            | Mode::BaseResearch
+            | Mode::BaseTrade
+            | Mode::BaseCompile
             | Mode::StaffWellbeing
             | Mode::StaffCoverage
             | Mode::StaffDiscontent
@@ -2725,6 +2733,22 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
         screens: &[Mode::BaseOverview],
     },
     BasePage {
+        title: "Build",
+        screens: &[Mode::BaseBuild],
+    },
+    BasePage {
+        title: "Research",
+        screens: &[Mode::BaseResearch],
+    },
+    BasePage {
+        title: "Trade",
+        screens: &[Mode::BaseTrade],
+    },
+    BasePage {
+        title: "Compile",
+        screens: &[Mode::BaseCompile],
+    },
+    BasePage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -2856,9 +2880,13 @@ pub struct App {
     /// origin somebody else was still holding — `etch_return`'s trap, one
     /// field down.
     menu_origin: Option<Mode>,
-    /// The hub screen last on screen, so `B` reopens where the player left
+    /// The hub screen last on screen, so `b` reopens where the player left
     /// off. `None` until the hub has been opened, which lands on Overview.
     base_report_last: Option<Mode>,
+    /// The command-page row that opened the screen the player is on, so Esc
+    /// lands back with the highlight on it. Taken when the mode returns to a
+    /// command page and cleared with `menu_origin`.
+    command_return_row: Option<usize>,
     /// Which half of the hub holds its one cursor: the page rail, or the
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.

@@ -174,17 +174,13 @@ impl App {
             self.walk = None;
         }
         match key {
-            // The two group menus. Seventeen keys used to sit on this
-            // screen doing what these two now reach; see `group_menu.rs`
-            // for why none of them survive as an alias.
+            // The group menu `p` and the base hub `b`. Seventeen keys used
+            // to sit on this screen doing what these now reach; see
+            // `group_menu.rs` for why none of them survive as an alias.
             // Dev-only, and inert unless FERAL_DEV_CONSOLE opened the gate.
             GameKey::Char(c) if c == DEV_CONSOLE_KEY && self.dev_console_enabled() => {
                 self.mode = Mode::DevConsole;
                 self.menu_selected = 0;
-                return;
-            }
-            GameKey::Char('b') => {
-                self.mode = Mode::BaseMenu;
                 return;
             }
             GameKey::Char('p') => {
@@ -327,9 +323,10 @@ impl App {
                 self.mode = Mode::History;
                 return;
             }
-            // The base report, before the underground hand-off for `N`'s
-            // reason below, so it opens from the Stack as well.
-            GameKey::Char('B') => {
+            // The base report hub, which holds the base's commands too.
+            // Before the underground hand-off for `N`'s reason below, so it
+            // opens from the Stack as well.
+            GameKey::Char('b') => {
                 self.open_base_report();
                 return;
             }

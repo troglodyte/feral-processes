@@ -31,7 +31,7 @@ pub struct Staffing {
 /// the player is not staff and the scheduler never moves them. Keeping all
 /// of them in one ordered list is what stops the renderer and the handler
 /// disagreeing about which index means what, the same rule
-/// `App::base_menu_rows` holds for a menu whose rows are hidden dynamically.
+/// `App::command_rows` holds for a menu whose rows are hidden dynamically.
 #[derive(Clone)]
 pub struct StaffRow {
     pub label: String,
@@ -815,7 +815,7 @@ pub(crate) const OUT_OF_BASE: &str = "Not from out here — that's back at the b
 /// A row rather than a bare report, for the reason `StaffRow` is one: the
 /// "new order" row is not an order at all, and keeping both in one ordered
 /// list is what stops the renderer and the handler disagreeing about which
-/// index means what. That is the rule `App::base_menu_rows` holds for a
+/// index means what. That is the rule `App::command_rows` holds for a
 /// menu whose rows are hidden dynamically, one screen down.
 #[derive(Clone)]
 pub struct WorkOrderRow {

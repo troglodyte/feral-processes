@@ -2702,16 +2702,15 @@ pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
     }
 }
 
-/// Opens a screen the way a player now has to: through its group menu.
+/// Opens a party-menu screen the way a player has to: through the menu.
 ///
-/// Tests that used to press one retired key go through this instead of
-/// hard-coding a row number — the rows are filtered by what is currently
-/// possible (see `App::base_menu_rows`), so a row's position depends on the
-/// fixture and pinning it would make these tests break for the wrong reason.
+/// Tests go through this instead of hard-coding a row number — the rows are
+/// filtered by what is currently possible (see `App::party_menu_rows`), so a
+/// row's position depends on the fixture and pinning it would make these
+/// tests break for the wrong reason.
 pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
     app.handle_key(GameKey::Char(group));
     let rows = match group {
-        'b' => app.base_menu_rows(),
         'p' => app.party_menu_rows(),
         other => panic!("{other} is not a group menu key"),
     };
@@ -2723,12 +2722,46 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
     app.handle_key(GameKey::Char(menu_shortcut(idx)));
 }
 
+/// The four command pages, in rail order.
+pub(crate) const COMMAND_PAGES: [Mode; 4] = [
+    Mode::BaseBuild,
+    Mode::BaseResearch,
+    Mode::BaseTrade,
+    Mode::BaseCompile,
+];
+
+/// Every command row on offer right now, across all four pages.
+pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
+    COMMAND_PAGES
+        .iter()
+        .flat_map(|&page| app.command_rows(page).unwrap_or_default())
+        .map(|r| r.label)
+        .collect()
+}
+
+/// Opens the command page that offers `label` through the hub and selects its
+/// row, the way a player does. Rows are filtered by what is currently
+/// possible, so the row is found by label rather than by position.
+pub(crate) fn open_command(app: &mut App, label: &str) {
+    let mut offered = Vec::new();
+    for page in COMMAND_PAGES {
+        let rows = app.command_rows(page).unwrap_or_default();
+        offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
+        if let Some(idx) = rows.iter().position(|r| r.label == label) {
+            open_hub_screen(app, page);
+            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            return;
+        }
+    }
+    panic!("{label:?} is not offered right now; pages: {offered:?}");
+}
+
 /// Opens the base report, walks `]` to `target`'s page and Right off the rail
 /// and along its screens to `target`, the way a player
 /// reaches a screen that no longer has a menu row of its own.
 pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     let (page, screen) = base_page_of(target).expect("target is a hub screen");
-    app.handle_key(GameKey::Char('B'));
+    app.handle_key(GameKey::Char('b'));
     for _ in 0..BASE_REPORT_PAGES.len() {
         if base_page_of(app.mode).map(|(p, _)| p) == Some(page) {
             break;

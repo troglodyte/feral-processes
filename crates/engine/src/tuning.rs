@@ -1891,6 +1891,10 @@ pub const QUALITY_DEFAULT: u8 = 100;
 /// Refit Bench restores it.
 pub const GEAR_DURABILITY: u8 = 15;
 
+/// A worn copy raises a `GearWorn` alert when its remaining fights fall
+/// below this percentage of its durability.
+pub const GEAR_WORN_ALERT_PERCENT: u32 = 20;
+
 /// The clamp on a rolled quality. Both ends are reachable — a fresh
 /// player's craft can hit the floor and a developed base's can hit the
 /// ceiling — so they are the band, not guard rails.

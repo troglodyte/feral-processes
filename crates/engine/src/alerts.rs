@@ -49,6 +49,10 @@ pub enum AlertKind {
     /// state, and the board's own collapse-and-bump rule (`post`) is what
     /// keeps repeated hits from spamming rather than a second latch here.
     OutpostRaided,
+    /// An equipped copy fell below `GEAR_WORN_ALERT_PERCENT` of its
+    /// durability, or broke. Posted on the step that crosses the line, not
+    /// every fight after it.
+    GearWorn,
 }
 
 /// One row on the board. `subject` is the collapse key the poster mints —

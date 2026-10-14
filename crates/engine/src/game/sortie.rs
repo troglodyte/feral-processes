@@ -535,6 +535,8 @@ impl Game {
             self.world.entity_mut(hostile).despawn();
         }
 
+        // Before `bench_or_dissolve`, which strips a fallen member's gear.
+        self.wear_gear(&members);
         let downed = casualty.map(|e| (e, self.bench_or_dissolve(e)));
         for &member in &members {
             if !self.creature_alive(member) {

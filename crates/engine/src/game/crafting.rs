@@ -822,6 +822,11 @@ impl Game {
                     evasion: acc.evasion + affix.stats.evasion,
                     deflection: acc.deflection + affix.stats.deflection,
                 });
+        // A spent copy stays worn and inert: zero, not absent, so the
+        // equip/unequip delta stays exact whether or not it is broken.
+        if self.is_broken(copy) {
+            return Some(items::EquipmentStats::default());
+        }
         Some(
             affixed
                 .scaled_for_level(level)
@@ -1170,13 +1175,17 @@ impl Game {
 
         let mut affixes = copy.affixes.clone();
         affixes.extend(partner.affixes.iter().cloned());
-        let fused = GearCopy::with_affixes(
-            copy.item.clone(),
-            copy.rarity,
-            fused_tier,
-            affixes,
-            average_quality(copy.quality, partner.quality),
-        );
+        let fused = GearCopy {
+            // Rounded up, so a fusion never launders wear into a repair.
+            wear: (copy.wear + partner.wear).div_ceil(2),
+            ..GearCopy::with_affixes(
+                copy.item.clone(),
+                copy.rarity,
+                fused_tier,
+                affixes,
+                average_quality(copy.quality, partner.quality),
+            )
+        };
 
         if !survivor_worn {
             self.take_copies(copy, 1);

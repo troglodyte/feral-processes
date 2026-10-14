@@ -2177,7 +2177,7 @@ fn a_group_fight_leaves_no_frozen_board() {
 
 /// Fights a one-body tactical pack to its end, the player walking into reach
 /// of it every turn.
-fn win_a_lone_tactical_fight(game: &mut Game) {
+pub(super) fn win_a_lone_tactical_fight(game: &mut Game) {
     let pack = tactical_fight(game, 1, 1);
     let player = game.player_entity();
     let target = pack[0];

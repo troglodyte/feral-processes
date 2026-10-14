@@ -464,3 +464,217 @@ fn fusing_never_launders_wear_into_a_repair() {
         .expect("a fused copy");
     assert_eq!(fused.wear, 9);
 }
+
+// -------------------------------------------------------------- refit
+
+fn refit_game(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "refit_bench", 3, 3);
+    game
+}
+
+fn pack(game: &Game, item: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(item))
+}
+
+#[test]
+fn a_craftable_copys_refit_is_half_its_recipe_rounded_up_plus_a_coil() {
+    let game = refit_game(5100);
+    let edge = worn_copy("kinetic_edge", 5);
+    assert_eq!(
+        game.refit_cost(&edge),
+        vec![
+            (ItemId::from(ids::CHARGE_COIL), 1),
+            (ItemId::from(ids::CORE_FRAGMENT), 4),
+        ],
+        "half of 7 core fragments, rounded up"
+    );
+}
+
+#[test]
+fn a_found_copys_refit_scales_with_its_rarity_rank() {
+    let game = refit_game(5101);
+    let cost = |rarity| {
+        game.refit_cost(&GearCopy {
+            rarity,
+            ..worn_copy("broadcast_storm", 3)
+        })
+    };
+    let fragments = |bill: &[(ItemId, u32)]| {
+        bill.iter()
+            .find(|(i, _)| i.as_str() == ids::CORE_FRAGMENT)
+            .map(|(_, q)| *q)
+            .unwrap()
+    };
+    let per = crate::tuning::REFIT_DROP_FRAGMENTS_PER_RANK;
+    assert_eq!(fragments(&cost(Rarity::Ordinary)), per);
+    assert_eq!(fragments(&cost(Rarity::Gold)), per * 3);
+    assert_eq!(
+        cost(Rarity::Gold)
+            .iter()
+            .find(|(i, _)| i.as_str() == ids::CHARGE_COIL)
+            .map(|(_, q)| *q),
+        Some(crate::tuning::REFIT_COILS)
+    );
+}
+
+#[test]
+fn refitting_a_carried_copy_restores_it_and_charges_the_share() {
+    let mut game = refit_game(5102);
+    let edge = worn_copy("kinetic_edge", 5);
+    game.add_copies(&edge, 1);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 10);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 2);
+    let (fragments, coils) = (
+        pack(&game, ids::CORE_FRAGMENT),
+        pack(&game, ids::CHARGE_COIL),
+    );
+
+    let (renewed, _) = game.refit_copy(&edge).unwrap();
+
+    assert_eq!(renewed.wear, 0);
+    assert!(renewed.is_plain(), "a mended copy is plain again");
+    assert_eq!(game.count_copies(&edge), 0, "the worn key is gone");
+    assert_eq!(game.count_copies(&renewed), 1, "the new key is findable");
+    assert_eq!(pack(&game, ids::CORE_FRAGMENT), fragments - 4);
+    assert_eq!(pack(&game, ids::CHARGE_COIL), coils - 1);
+}
+
+#[test]
+fn refitting_a_broken_worn_copy_gives_its_bonus_back_exactly() {
+    let mut game = refit_game(5103);
+    let player = game.player_entity();
+    let bare = *game.world.get::<Stats>(player).unwrap();
+    let plating = worn_copy(ids::FIREWALL_PLATING, GEAR_DURABILITY);
+    game.add_copies(&plating, 1);
+    game.equip(player, &plating).unwrap();
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().mitigation,
+        bare.mitigation,
+        "broken gear is inert"
+    );
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 50);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 1);
+
+    let (renewed, _) = game.refit_copy(&plating).unwrap();
+
+    assert_eq!(
+        game.worn(player, EquipmentSlot::Armor).unwrap().copy,
+        renewed
+    );
+    assert!(game.world.get::<Stats>(player).unwrap().mitigation > bare.mitigation);
+    game.unequip(player, EquipmentSlot::Armor).unwrap();
+    assert_eq!(*game.world.get::<Stats>(player).unwrap(), bare);
+}
+
+#[test]
+fn a_short_payer_is_refused_with_nothing_spent() {
+    let mut game = refit_game(5104);
+    let edge = worn_copy("kinetic_edge", 5);
+    game.add_copies(&edge, 1);
+    // Plenty of fragments, no coil: the bill is all-or-nothing.
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 10);
+    let fragments = pack(&game, ids::CORE_FRAGMENT);
+
+    let err = game.refit_copy(&edge).unwrap_err();
+
+    assert!(err.contains("Charge Coil"), "{err}");
+    assert_eq!(
+        pack(&game, ids::CORE_FRAGMENT),
+        fragments,
+        "nothing was spent"
+    );
+    assert_eq!(game.count_copies(&edge), 1, "and the copy is unchanged");
+}
+
+#[test]
+fn a_refit_pays_the_base_first_then_the_pack() {
+    let mut game = refit_game(5105);
+    let depot = spawn_structure_at(&mut game, "depot", 4, 3);
+    game.world.entity_mut(depot).insert(Stock {
+        output: [(ItemId::from(ids::CORE_FRAGMENT), 3)]
+            .into_iter()
+            .collect(),
+        capacity: 50,
+        ..Default::default()
+    });
+    let edge = worn_copy("kinetic_edge", 5);
+    game.add_copies(&edge, 1);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 1);
+    let fragments = pack(&game, ids::CORE_FRAGMENT);
+
+    game.refit_copy(&edge).unwrap();
+
+    assert_eq!(
+        game.world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0),
+        0,
+        "the shelf is emptied first"
+    );
+    assert_eq!(
+        pack(&game, ids::CORE_FRAGMENT),
+        fragments - 1,
+        "the pack covers the one the shelf could not"
+    );
+    assert_eq!(pack(&game, ids::CHARGE_COIL), 0);
+}
+
+#[test]
+fn a_module_can_be_refitted() {
+    let mut game = refit_game(5106);
+    let module = worn_copy("redundant_bank", 4);
+    game.add_copies(&module, 1);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 1);
+    let (renewed, _) = game.refit_copy(&module).unwrap();
+    assert_eq!(renewed.wear, 0);
+}
+
+#[test]
+fn a_refit_needs_the_bench_and_a_worn_copy() {
+    let mut game = Game::new(5107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let edge = worn_copy("kinetic_edge", 5);
+    game.add_copies(&edge, 1);
+    assert!(game.refit_copy(&edge).unwrap_err().contains("Refit Bench"));
+
+    spawn_structure_at(&mut game, "refit_bench", 3, 3);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 10);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 1);
+    let fragments = pack(&game, ids::CORE_FRAGMENT);
+    let fresh = worn_copy("kinetic_edge", 0);
+    game.add_copies(&fresh, 1);
+    assert!(
+        game.refit_copy(&fresh)
+            .unwrap_err()
+            .contains("full condition")
+    );
+    let absent = worn_copy("kinetic_edge", 9);
+    assert!(game.refit_copy(&absent).unwrap_err().contains("don't have"));
+    assert_eq!(
+        pack(&game, ids::CORE_FRAGMENT),
+        fragments,
+        "refusals spend nothing"
+    );
+}
+
+#[test]
+fn refittable_copies_lists_worn_and_carried_gear_that_needs_it() {
+    let mut game = refit_game(5108);
+    let player = game.player_entity();
+    let worn = worn_copy(ids::MONOFILAMENT_WHIP, 3);
+    game.add_copies(&worn, 1);
+    game.equip(player, &worn).unwrap();
+    let carried = worn_copy("kinetic_edge", 6);
+    game.add_copies(&carried, 1);
+    game.add_copies(&worn_copy(ids::ABLATIVE_PLATING, 0), 1);
+
+    assert_eq!(game.refittable_copies(), vec![worn, carried]);
+}

@@ -143,8 +143,8 @@ impl Game {
         Ok(())
     }
 
-    /// Which slot `copy` fits and whether it is the worn one. The worn copy
-    /// wins a tie with an identical carried one, `fuse_copy`'s rule.
+    /// Which slot `copy` fits and whether it is the worn one, for a copy the
+    /// Mod Bench takes.
     fn locate_copy(
         &self,
         copy: &GearCopy,
@@ -152,6 +152,19 @@ impl Game {
         let Some(slot) = self.bench_slot(&copy.item) else {
             return Err(format!("{} can't be modified.", self.item_name(&copy.item)));
         };
+        self.locate_in_slot(copy, slot)
+    }
+
+    /// Whether the player wears `copy` in `slot`, and that they hold it at
+    /// all. The worn copy wins a tie with an identical carried one,
+    /// `fuse_copy`'s rule. The slot is the caller's because what each bench
+    /// accepts differs: the Mod Bench refuses a Module, the Refit Bench does
+    /// not.
+    pub(crate) fn locate_in_slot(
+        &self,
+        copy: &GearCopy,
+        slot: EquipmentSlot,
+    ) -> Result<(EquipmentSlot, Option<EquippedItem>), String> {
         let player = self.player_entity();
         let worn = self
             .world

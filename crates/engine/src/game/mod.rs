@@ -53,6 +53,7 @@ pub(crate) mod preview;
 pub(crate) mod pursuit;
 pub(crate) mod ranking;
 pub(crate) mod refactor;
+pub(crate) mod refit;
 pub(crate) mod reinforcement;
 pub(crate) mod respec;
 pub(crate) mod route;

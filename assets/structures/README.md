@@ -788,3 +788,18 @@ The Research Station itself (`research_node.ron` — the id stayed put when
 the structure grew a pen and a display name) is the source of Research
 Data: assign a tamed program to it via the cronjob menu, same as a Mining
 Node.
+
+## The Refit Bench
+
+`refit_bench.ron` is the one structure the engine looks up by id for gear
+wear (the Mod Bench is the other). Gear loses a point of durability for every
+fight its wearer is in (see `durability` in `assets/items/README.md`), and the
+Refit Bench restores a copy to full condition. Only its presence matters: one
+standing anywhere in the base is enough, and the player need not be next to
+it. It has no `work` and nothing to author beyond the usual fields; it is
+named by no research file, so it is buildable from turn one.
+
+What a refit costs is not authored here. A craftable item costs half its
+recipe, rounded up per ingredient, plus a Charge Coil; an item that only drops
+costs Core Fragments scaled by the copy's rarity, plus a Charge Coil. The
+constants are `REFIT_*` in `crates/engine/src/tuning.rs`.

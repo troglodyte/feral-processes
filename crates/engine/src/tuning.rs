@@ -1891,6 +1891,18 @@ pub const QUALITY_DEFAULT: u8 = 100;
 /// Refit Bench restores it.
 pub const GEAR_DURABILITY: u8 = 15;
 
+/// What a Refit Bench charges for a craftable copy, as a percentage of its
+/// recipe, rounded up per ingredient. See `Game::refit_cost`.
+pub const REFIT_RECIPE_SHARE_PERCENT: u32 = 50;
+
+/// Charge Coils every refit costs on top of the materials, craftable or
+/// found.
+pub const REFIT_COILS: u32 = 1;
+
+/// Core Fragments per rarity rung (plus one) for refitting a copy with no
+/// recipe, which only drops. An `Ordinary` drop costs one rung's worth.
+pub const REFIT_DROP_FRAGMENTS_PER_RANK: u32 = 5;
+
 /// A worn copy raises a `GearWorn` alert when its remaining fights fall
 /// below this percentage of its durability.
 pub const GEAR_WORN_ALERT_PERCENT: u32 = 20;

@@ -1,0 +1,9 @@
+(
+    id: "refit_bench",
+    name: "Refit Bench",
+    description: "Where worn gear is restored: pay half a craftable copy's recipe plus a Charge Coil, or a rarity-scaled bill for a found one, and its condition returns to full. One standing anywhere in the base is enough.",
+    glyph: 'F',
+    color: Cyan,
+    build_cost: [("core_fragment", 12)],
+    work: None,
+)

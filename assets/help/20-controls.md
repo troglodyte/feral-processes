@@ -20,8 +20,18 @@ Moving and living:
 
 Your menus and stores:
 
-- b — base menu: deploy, compile, work it yourself, upgrade, demolish, research, study a program,
-  routine and affix research, contracts, caravan, dispatch, base report, recipes
+- b — the base report, which is also where the base's commands live. A rail of pages runs down
+  the left: Overview, then four command pages, then the report pages below. Build holds deploy,
+  work a structure yourself, upgrade and demolish. Research holds research, routine and affix
+  research, study a program and hold a program. Trade holds contracts, caravan and dispatch.
+  Compile holds compile an item and recipes. Pick a row by its number or with Enter.
+  The rest of the rail is Staff, Production, Stock, Work orders, Staffing, Build orders and
+  Alerts, each a page of the report beside it. One highlight moves through both: Up and Down
+  walk the rail, Right (or Enter) steps onto the page's rows, and Right again walks on through a page's other screens. Left steps back
+  a screen and then to the rail, Esc goes straight to the rail, and [ and ] turn pages from
+  anywhere. Esc on the rail leaves for wherever you opened it from. b
+  reopens the page you left. The Overview shows where the base is short, and Enter opens the
+  highlighted page.
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
   develop, perks, tools
 - ? — this manual
@@ -58,13 +68,6 @@ Reading and housekeeping:
   are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
   needs you.
 - L — history
-- B — the base report: a rail of pages down the left (Overview, Staff, Production, Stock, Work orders, Staffing, Build orders, Alerts) and the page
-  beside it. One highlight moves through both: Up and Down walk the rail, Right (or Enter) steps
-  onto the page's rows, and Right again walks on through a page's other screens. Left steps back
-  a screen and then to the rail, Esc goes straight to the rail, and [ and ] turn pages from
-  anywhere. Esc on the rail leaves for wherever you opened it from. B
-  reopens the page you left. The Overview shows where the base is short, and Enter opens the
-  highlighted page.
 - N — the base report on its Alerts page, highlight already on the rows: production blockers and
   program events, capped and dismissed with x or d. Opening it marks everything read.
 - u — the compass: home, the settlements and the Stack entrances you know of, each with its

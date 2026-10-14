@@ -1096,7 +1096,7 @@ impl Game {
             ),
 
             Objective::Build { .. } => Some(
-                "Deploy it from the base menu and the crew raises it - a build is a \
+                "Deploy it from the Build page of the base report (b) and the crew raises it - a build is a \
                  request, not something your own hands finish."
                     .to_string(),
             ),

@@ -1,7 +1,7 @@
 # Contracts and the Broker
 
 A Contract Broker is a structure you build in [your base](your-base). Once one is standing, the
-base menu grows a Contracts row, and that one screen does three separate things: it lists the jobs
+Trade page of the base report (b) grows a Contracts row, and that one screen does three separate things: it lists the jobs
 you are holding, it lists the three the board is offering, and it is where a delivery is actually
 handed over.
 

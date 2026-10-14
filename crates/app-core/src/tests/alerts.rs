@@ -191,6 +191,11 @@ fn esc_closes_the_board() {
     app.handle_key(GameKey::Char('N'));
     assert_eq!(app.mode, Mode::Alerts);
     app.handle_key(GameKey::Esc);
+    assert!(
+        app.hub_on_rail,
+        "the first Esc lifts the cursor to the rail"
+    );
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -218,6 +223,7 @@ fn a_notification_waits_for_the_board_to_close() {
         "a queued notification must not interrupt the board"
     );
 
+    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,

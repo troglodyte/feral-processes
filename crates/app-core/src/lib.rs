@@ -2850,6 +2850,10 @@ pub struct App {
     /// The hub screen last on screen, so `B` reopens where the player left
     /// off. `None` until the hub has been opened, which lands on Overview.
     base_report_last: Option<Mode>,
+    /// Which half of the hub holds its one cursor: the page rail, or the
+    /// current screen's rows (`menu_selected`). The renderer draws the
+    /// highlight on this half alone, so there is never a second one to read.
+    pub hub_on_rail: bool,
     /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
     /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
     /// the player is still holding open. `None` when the etch screen was

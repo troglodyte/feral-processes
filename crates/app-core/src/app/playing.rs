@@ -341,6 +341,7 @@ impl App {
             // `handle_key` marks it read on the way in.
             GameKey::Char('N') => {
                 self.menu_selected = 0;
+                self.hub_on_rail = false;
                 self.mode = Mode::Alerts;
                 return;
             }

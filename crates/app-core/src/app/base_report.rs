@@ -5,41 +5,55 @@ use crate::*;
 
 impl App {
     /// Runs ahead of every hub screen's own handler and answers whether it
-    /// took the key. `[`/`]` walk the pages (wrapping), `Tab` walks the
-    /// current page's screens (wrapping), `Esc` leaves to wherever the hub
-    /// was opened from. Everything else — digits, lowercase, Enter — falls
-    /// through, because Alerts and the later list screens already spend
-    /// those on row jumps.
+    /// took the key. The hub has one cursor, on the rail or in the screen
+    /// (`hub_on_rail`). On the rail, Up/Down walk the pages (wrapping),
+    /// Right or Enter moves the cursor into the screen, Esc leaves to
+    /// wherever the hub was opened from, and every other key is swallowed —
+    /// a row jump or a screen action with no cursor on the screen would act
+    /// on a row the player cannot see is chosen. In the screen, Left and Esc
+    /// move the cursor back to the rail and everything else falls through.
+    /// `[`/`]` (pages) and `Tab` (the page's screens) work from either half.
     ///
-    /// `Esc` leaves the hub rather than stepping back a page: the rail is a
-    /// set of siblings, not a history.
+    /// `Esc` on the rail leaves the hub rather than stepping back a page:
+    /// the rail is a set of siblings, not a history.
     pub(crate) fn handle_base_report_nav(&mut self, key: GameKey) -> bool {
         let Some((page, screen)) = base_page_of(self.mode) else {
             return false;
         };
         let pages = BASE_REPORT_PAGES.len();
+        let turn = |by: usize| BASE_REPORT_PAGES[(page + by) % pages].screens[0];
         match key {
-            GameKey::Char(']') => {
-                self.mode = BASE_REPORT_PAGES[(page + 1) % pages].screens[0];
-            }
-            GameKey::Char('[') => {
-                self.mode = BASE_REPORT_PAGES[(page + pages - 1) % pages].screens[0];
-            }
+            GameKey::Char(']') => self.mode = turn(1),
+            GameKey::Char('[') => self.mode = turn(pages - 1),
             GameKey::Tab => {
                 let screens = BASE_REPORT_PAGES[page].screens;
                 self.mode = screens[(screen + 1) % screens.len()];
             }
-            GameKey::Esc => self.close_screen(),
+            _ if self.hub_on_rail => match key {
+                GameKey::Down => self.mode = turn(1),
+                GameKey::Up => self.mode = turn(pages - 1),
+                GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
+                GameKey::Esc => self.close_screen(),
+                _ => {}
+            },
+            GameKey::Esc => self.hub_on_rail = true,
+            // The duty table spends Left on its column cursor, so it only
+            // reaches the rail off the first column.
+            GameKey::Left if !(self.mode == Mode::BaseStaff && self.work_column > 0) => {
+                self.hub_on_rail = true;
+            }
             _ => return false,
         }
         true
     }
 
     /// Opens the hub where the player left it, or on Overview the first
-    /// time. `menu_origin` is whatever the caller already set (a group menu)
-    /// or `None` from the map, so `Esc` goes back the way it came.
+    /// time, with the cursor on the rail. `menu_origin` is whatever the
+    /// caller already set (a group menu) or `None` from the map, so `Esc`
+    /// goes back the way it came.
     pub(crate) fn open_base_report(&mut self) {
         self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
+        self.hub_on_rail = true;
     }
 
     /// Overview: a cursor over the pages after itself. `Enter`, or a row's

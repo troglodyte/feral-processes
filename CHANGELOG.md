@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.26
+
+**In the base report, Right and Left now walk a page's screens; Tab no longer does.** Right steps from the page list onto a page and then on through its other screens, stopping at the last; Left steps back a screen and, from the first, back to the list. Before, the arrows only crossed between the list and the page and Tab cycled the screens, so reaching Production's Power screen took a second kind of key. On the Staffing table the arrows still move between columns first, and Right past the last column steps on to the structure roster.
+
 ## 0.18.25
 
 **The base report (B) has one highlight, and the arrow keys move it between the page list and the page.** Up and Down walk the list on the left, Right or Enter steps onto the page's rows, and Left or Esc steps back to the list; Esc on the list closes the report. Before, the list moved on [ and ] while Up and Down moved a second highlight on the page, so two things on screen looked selected at once. Now only the half you are in shows a highlight, and the keys along the bottom say what the arrows do there. On the Staffing table Left walks the columns first and reaches the list from the first column. N still opens Alerts with the highlight on its rows, and Tab and [ ] still work as before.

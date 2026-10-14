@@ -33,6 +33,12 @@ pub(super) fn draw_dev_console(
     draw_popup("Dev Console", PopupSize::Large, &out, refusal, painter, m);
 }
 
+/// One `[a] Label` command row: the `p` popup and the hub's command pages
+/// share it so the format has one home.
+pub(super) fn group_row(i: usize, label: &str, selected: bool) -> Row {
+    item_row(format!("[{}] {}", menu_shortcut(i), label), selected)
+}
+
 pub(super) fn draw_group_menu(
     rows: &[GroupMenuRow],
     title: &str,
@@ -46,10 +52,7 @@ pub(super) fn draw_group_menu(
         out.push(text_row("(nothing available here right now)"));
     }
     for (i, row) in rows.iter().enumerate() {
-        out.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), row.label),
-            i == selected,
-        ));
+        out.push(group_row(i, row.label, i == selected));
     }
     draw_popup(title, PopupSize::Large, &out, refusal, painter, m);
 }

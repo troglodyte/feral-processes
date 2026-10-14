@@ -997,7 +997,18 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BaseStaff => Some(app.base_staff_table()),
         _ => None,
     };
+    // `command_rows` reads the party's surroundings, so like the lists above
+    // it is taken before `game` borrows the app.
+    let commands = app.command_rows(app.mode);
+    let command_counts: Vec<(usize, usize)> = match app.mode {
+        Mode::BaseOverview => base_report::command_pages()
+            .filter_map(|(page, mode)| Some((page, app.command_rows(mode)?.len())))
+            .collect(),
+        _ => Vec::new(),
+    };
     let app_screens = base_report::AppScreens {
+        commands: commands.as_deref(),
+        command_counts: &command_counts,
         work_orders: &work_orders,
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,

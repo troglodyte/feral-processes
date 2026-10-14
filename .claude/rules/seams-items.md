@@ -176,3 +176,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   The delivery loop stops at the first refusal, because once the store is
   full it stays full and `message_history` condenses repeats — a log-entry
   count cannot tell "said once" from "said eight times".
+
+- **`GearCopy.wear` is wear taken (0 = full) and part of the copy's key, every worn-copy change goes through `swap_worn_copy`, wear applies before `bench_or_dissolve`, and a broken copy's bonus is `Some(default)`, never `None`.**

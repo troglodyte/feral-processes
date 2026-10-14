@@ -10,9 +10,10 @@ use std::collections::BTreeMap;
 
 /// Worst first on the Machines screen: a dark machine outranks everything
 /// the player could fix about it, as the status's own doc argues.
-const MACHINE_ORDER: [MachineStatus; 8] = [
+const MACHINE_ORDER: [MachineStatus; 9] = [
     MachineStatus::Unpowered,
     MachineStatus::Dry,
+    MachineStatus::Uncharged,
     MachineStatus::Starved,
     MachineStatus::Unstaffed,
     MachineStatus::Stranded,
@@ -28,6 +29,7 @@ fn is_machine_gap(status: MachineStatus) -> bool {
     match status {
         MachineStatus::Unpowered
         | MachineStatus::Dry
+        | MachineStatus::Uncharged
         | MachineStatus::Starved
         | MachineStatus::Unstaffed
         | MachineStatus::Stranded => true,

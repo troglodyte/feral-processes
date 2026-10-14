@@ -1415,7 +1415,7 @@ impl Game {
                     .world
                     .get::<Structure>(target)
                     .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-                    .is_some_and(|def| def.power_upkeep.is_some())
+                    .is_some_and(|def| def.spends_supply().is_some())
         });
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
@@ -1770,43 +1770,57 @@ impl Game {
         let by_tile: std::collections::HashMap<(i32, i32), Entity> =
             cells.iter().map(|&(e, tile, _)| (tile, e)).collect();
         let db = self.world.resource::<StructureDb>();
-        let in_store = |item: &ItemId, burner: Entity| -> u32 {
+        // A burner's fuel is the grid and is taken off any structure's
+        // output; any other supply is taken off a store alone, so a
+        // production buffer is never raided for it.
+        let in_store = |item: &ItemId, burner: Entity, any_structure: bool| -> u32 {
             cells
                 .iter()
                 .filter(|(e, ..)| *e != burner)
+                .filter(|(.., kind)| any_structure || db.get(kind).is_some_and(|d| d.stores))
                 .filter_map(|(e, ..)| self.world.get::<Stock>(*e))
                 .map(|stock| stock.output.get(item).copied().unwrap_or(0))
                 .sum()
         };
 
-        let mut fetches: Vec<((i32, i32), Entity)> = Vec::new();
-        let mut unstocked: Vec<ItemId> = Vec::new();
+        let mut fetches: Vec<(bool, (i32, i32), Entity)> = Vec::new();
+        let mut unstocked: Vec<(ItemId, u32)> = Vec::new();
         for (burner, (x, y), kind) in &cells {
-            let Some(fuel) = db.get(kind).and_then(|d| d.power_upkeep.clone()) else {
+            let Some(def) = db.get(kind) else { continue };
+            let Some(fuel) = def.spends_supply().cloned() else {
                 continue;
             };
+            let per_window = def.supply_batch();
             let held = self
                 .world
                 .get::<Stock>(*burner)
                 .and_then(|s| s.input.get(&fuel).copied())
                 .unwrap_or(0);
-            let beside: u32 = ORTHOGONAL
-                .into_iter()
-                .filter_map(|(dx, dy)| by_tile.get(&(x + dx, y + dy)).copied())
-                .filter_map(|feeder| self.world.get::<Stock>(feeder))
-                .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
-                .sum();
-            let per_window = crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW;
+            let beside: u32 = if def.draws_from_neighbours() {
+                ORTHOGONAL
+                    .into_iter()
+                    .filter_map(|(dx, dy)| by_tile.get(&(x + dx, y + dy)).copied())
+                    .filter_map(|feeder| self.world.get::<Stock>(feeder))
+                    .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
+                    .sum()
+            } else {
+                0
+            };
             if batch_within_reach(held, beside, 0, per_window) {
                 continue;
             }
-            if in_store(&fuel, *burner) < per_window {
-                if !unstocked.contains(&fuel) {
-                    unstocked.push(fuel);
+            let is_fuel = def.power_upkeep.is_some();
+            if in_store(&fuel, *burner, is_fuel) < per_window {
+                // Only the grid's fuel puts staff on its maker at this
+                // priority; a defence's supply is made by work orders.
+                if is_fuel && !unstocked.iter().any(|(item, _)| *item == fuel) {
+                    unstocked.push((fuel, per_window));
                 }
                 continue;
             }
-            fetches.push(((*x, *y), *burner));
+            // A fuel burner sorts ahead of a supply spender whatever their
+            // tiles, so the grid is fed before a defence is topped up.
+            fetches.push((!is_fuel, (*x, *y), *burner));
         }
         // `assembler_system`'s reason: `iter_entities` order is not stable,
         // and two suppliers competing for the last body have to resolve the
@@ -1816,13 +1830,13 @@ impl Game {
         unstocked.sort_unstable();
         let mut out: Vec<(Entity, TaskKind)> = fetches
             .into_iter()
-            .map(|(_, burner)| (burner, TaskKind::GatherResource))
+            .map(|(_, _, burner)| (burner, TaskKind::GatherResource))
             .collect();
         if unstocked.is_empty() {
             return out;
         }
-        for fuel in unstocked {
-            let order = WorkOrder::batch(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW);
+        for (item, batch) in unstocked {
+            let order = WorkOrder::batch(item, batch);
             for (machine, _) in wants(self, &order) {
                 if out.iter().any(|&(e, _)| e == machine) {
                     continue;

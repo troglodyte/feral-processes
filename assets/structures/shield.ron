@@ -7,4 +7,5 @@
     build_cost: [("core_fragment", 16)],
     work: None,
     raid_defense: 2,
+    supply: Some("charge_coil"),
 )

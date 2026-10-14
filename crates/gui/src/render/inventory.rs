@@ -363,7 +363,7 @@ fn worn_summary(
 ///
 /// Split out for `SwapRow::stats`' reason, one line further up the screen: the
 /// picker's heading is a row of the same shape as the ones under it, and six
-/// stat axes behind a 71-cell name do not fit a 114.65-cell popup body. The
+/// stat axes behind a 77-cell name do not fit a 114.65-cell popup body. The
 /// name and the stats answer different questions, so the stats are what sheds
 /// — exactly the treatment the rows below already get. Joined here rather than
 /// in two places so the panel's row and the picker's heading cannot come to
@@ -514,6 +514,7 @@ pub(super) fn draw_equip_swap(
     };
     let wearer = target.unwrap_or_else(|| game.player_entity());
     let worn = game.worn(wearer, slot);
+    let wearing = worn.is_some();
     let mut rows: Vec<Row> = worn_heading_lines(game, worn)
         .into_iter()
         .map(|line| Row::TextColored(line, CYAN))
@@ -541,6 +542,9 @@ pub(super) fn draw_equip_swap(
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
+    if target.is_none() && wearing {
+        rows.push(text_row("[R] refit what you are wearing, at a Refit Bench"));
+    }
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
     draw_popup(
         &format!("Replace {}", slot.label()),
@@ -1489,10 +1493,10 @@ mod tests {
         // The rating column is part of the head — four cells and two of gap,
         // widest at the four digits `POWER_COLUMN_WIDTH` is cut for.
         let head = format!(
-            "[a] {:>4}  {:<71}",
+            "[a] {:>4}  {:<77}",
             9999,
             format!(
-                "{} Overdriven Singularity Matrix of Quiet Handshakes +6 (130%)",
+                "{} Reinforced Singularity Matrix of Quiet Handshakes +6 (130%) 0/15!",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
         );
@@ -1684,12 +1688,12 @@ mod tests {
     /// copy carries and the `Wearing: ` that labels the line.
     #[test]
     fn the_widest_wearing_heading_fits_its_popup() {
-        // The 71-cell name `SWAP_NAME_COLUMN` is cut for, the deepest level a
+        // The 77-cell name `SWAP_NAME_COLUMN` is cut for, the deepest level a
         // worn copy remembers, and a maxed fusion note.
         let head = swap_line(
             &heading_lead(),
             PowerCell::Rated(9999),
-            "Wearing: Overclocked Overdriven Singularity Matrix of Quiet Handshakes +6 (130%) \
+            "Wearing: Overclocked Reinforced Singularity Matrix of Quiet Handshakes +6 (130%) 0/15! \
              Lv10 maxed",
         );
         let lines = wrapped_row_lines(

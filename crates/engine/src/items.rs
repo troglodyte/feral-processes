@@ -277,6 +277,14 @@ pub struct GearCopy {
     /// presenting as a balance bug rather than as a failed load.
     #[serde(default = "default_quality")]
     pub quality: u8,
+    /// Fights this copy has been through, counted up from 0 (full) toward
+    /// its durability — see `Game::wear_gear`. **Wear taken, not condition
+    /// left**: 0 is the neutral value, so `#[serde(default)]` loads every
+    /// existing copy at full condition and `is_plain` needs no durability
+    /// lookup. Joins `Eq` like `quality`, so copies of differing wear do not
+    /// stack.
+    #[serde(default)]
+    pub wear: u8,
 }
 
 /// `serde`'s default for `GearCopy::quality` — see that field.
@@ -294,6 +302,7 @@ impl GearCopy {
             tier: 0,
             affixes: Vec::new(),
             quality: QUALITY_DEFAULT,
+            wear: 0,
         }
     }
 
@@ -318,6 +327,22 @@ impl GearCopy {
             tier,
             affixes,
             quality,
+            wear: 0,
+        }
+    }
+
+    /// This copy with its affix list replaced, canonicalised and with every
+    /// other property — wear included — carried over.
+    pub fn reaffixed(&self, affixes: Vec<AffixId>) -> Self {
+        Self {
+            wear: self.wear,
+            ..Self::with_affixes(
+                self.item.clone(),
+                self.rarity,
+                self.tier,
+                affixes,
+                self.quality,
+            )
         }
     }
 
@@ -327,13 +352,14 @@ impl GearCopy {
     /// pick a store cannot drift apart; see this type's doc for what happens
     /// if they do.
     ///
-    /// A fourth property added to a copy joins the `&&` here and nowhere
+    /// A new property added to a copy joins the `&&` here and nowhere
     /// else.
     pub fn is_plain(&self) -> bool {
         self.rarity == Rarity::Ordinary
             && self.tier == 0
             && self.affixes.is_empty()
             && self.quality == QUALITY_DEFAULT
+            && self.wear == 0
     }
 
     /// Whether two copies may be fused into one — **the single definition**

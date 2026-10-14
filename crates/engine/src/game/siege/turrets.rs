@@ -18,14 +18,7 @@ use crate::*;
 /// than a `Game` method because Task 4's shortfall formula and Task 15's
 /// fire both read it as one term among several, not as a verb on `Game`.
 pub(crate) fn turret_defense(game: &Game) -> u32 {
-    let structure_db = game.world.resource::<StructureDb>();
-    game.world
-        .iter_entities()
-        .filter_map(|e| e.get::<Structure>())
-        .filter_map(|s| structure_db.get(&s.kind))
-        .filter_map(|def| def.turret.as_ref())
-        .map(|turret| turret.damage)
-        .sum()
+    game.armed_defences().iter().map(|d| d.turret_damage).sum()
 }
 
 impl Game {
@@ -58,6 +51,34 @@ impl Game {
         for turret in turrets {
             self.fire_one_turret(turret);
         }
+    }
+
+    /// Logs that `turret` has no coil to fire, the first time this fight.
+    fn say_turret_is_dry(&mut self, turret: Entity) {
+        let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() else {
+            return;
+        };
+        if battle.dry_turrets_told.contains(&turret) {
+            return;
+        }
+        battle.dry_turrets_told.push(turret);
+        let Some(kind) = self.world.get::<Structure>(turret).map(|s| s.kind.clone()) else {
+            return;
+        };
+        let name = self.structure_name(&kind);
+        let supply = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|def| def.supply.clone())
+            .map_or_else(
+                || "supply".to_string(),
+                |item| self.item_name(&item).to_string(),
+            );
+        self.log_kind(
+            MessageKind::Raid,
+            format!("The {name} is dry — it has no {supply} to fire."),
+        );
     }
 
     /// `turret` fires at the nearest hostile in range with line of sight,
@@ -94,6 +115,16 @@ impl Game {
         let Some((_, target)) = target else {
             return;
         };
+        // After the target is found, so a round with nothing in range costs
+        // nothing.
+        if !crate::game::base::stock::spend_supply(
+            self,
+            turret,
+            crate::base_ledger::ConsumeSource::Defence,
+        ) {
+            self.say_turret_is_dry(turret);
+            return;
+        }
         self.apply_damage(target, def.damage as i32);
     }
 }

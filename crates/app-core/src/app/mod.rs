@@ -35,6 +35,7 @@ pub(crate) mod outposts;
 mod party;
 mod playing;
 mod progression;
+mod refit_copy;
 pub mod rig_tool;
 mod routines;
 pub(crate) mod settlement_board;

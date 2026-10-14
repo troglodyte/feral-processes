@@ -216,6 +216,9 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
     {
         actions.push(('m', "[M] Modify affixes...".to_string()));
     }
+    if game.equipment_of(item).is_some() {
+        actions.push(('r', "[R]efit...".to_string()));
+    }
     if game.is_usable(item) {
         actions.push(('c', "[C]onsume".to_string()));
     }
@@ -469,8 +472,9 @@ pub struct SwapRow {
 /// Wide enough for the longest name `Game::copy_name` can build out of the
 /// shipped assets — a rare tier's word, a prefix affix, the item's own
 /// name, a suffix affix, the count of the affixes those two did not name,
-/// and the quality figure. "Overclocked Overdriven Singularity Matrix of
-/// Quiet Handshakes +6 (130%)" is 71 cells.
+/// the quality figure and the condition of a spent copy. "Overclocked
+/// Reinforced Singularity Matrix of Quiet Handshakes +6 (130%) 0/15!"
+/// is 77 cells.
 ///
 /// The count is what a fused copy adds: affixes stack, `copy_name` names
 /// two and counts the rest, and `+N` is bounded by the fusion ladder at
@@ -490,7 +494,7 @@ pub struct SwapRow {
 /// shipped assets whether that string is still the worst case. **Adding a
 /// long affix or a long item name can break this**, and those tests are
 /// what say so.
-const SWAP_NAME_COLUMN: usize = 71;
+const SWAP_NAME_COLUMN: usize = 77;
 const SWAP_STATS_COLUMN: usize = 20;
 
 #[cfg(test)]
@@ -1863,6 +1867,10 @@ pub enum Mode {
     /// `Mode::ModPickAffix` with Enter. Reached with `[M]` from
     /// `Mode::InventoryItemAction`.
     ModCopy,
+    /// The Refit Bench screen for `App::refit_copy`: the copy's condition,
+    /// the bill to restore it, and Enter to pay. Reached with `[R]` from
+    /// `Mode::InventoryItemAction`.
+    RefitCopy,
     /// The researched affixes that fit `App::mod_copy`, each with its stats
     /// and `apply_cost`. A row applies it; a refusal stays here on the
     /// status line.
@@ -2525,6 +2533,7 @@ impl Mode {
             | Mode::RoutineResearch
             | Mode::AffixResearch
             | Mode::ModCopy
+            | Mode::RefitCopy
             | Mode::ModPickAffix
             | Mode::Contracts
             // Opened from the map with `N`, so it never layers over a
@@ -3086,6 +3095,9 @@ pub struct App {
     /// apply or strip hands back, because a modded copy is a different
     /// ledger key from the one the screen was opened on.
     pub mod_copy: Option<GearCopy>,
+    /// The copy `Mode::RefitCopy` is mending. Re-keyed on success, as
+    /// `mod_copy` is: a refit returns it to a plain key.
+    pub refit_copy: Option<GearCopy>,
     /// What `Mode::ItemDescribe` is showing, and where Esc goes — see
     /// `GearInspect`. Set by every `[I]` and by `[d]` on the action list,
     /// so the page has one subject however it was reached.

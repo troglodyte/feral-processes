@@ -424,6 +424,13 @@ impl Game {
                 .count() as u32,
         });
         self.clear_battle_status_effects(player, wild);
+        // Before the dead loop: `bench_or_dissolve` strips a fallen
+        // program's gear, and wear taken after would miss the copies that
+        // just fought.
+        let wearers: Vec<Entity> = std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .collect();
+        self.wear_gear(&wearers);
         let dead: Vec<Entity> = self
             .world
             .resource::<Party>()

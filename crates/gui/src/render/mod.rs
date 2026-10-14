@@ -70,6 +70,7 @@ mod perk_bought;
 mod points;
 mod popup;
 mod progression;
+mod refit_copy;
 mod research_graph;
 mod rig_tool;
 mod routines;
@@ -152,6 +153,7 @@ use party::{
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu, draw_respec_confirm};
+use refit_copy::draw_refit_copy;
 use rig_tool::draw_rig_tool;
 use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
@@ -932,6 +934,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let build_category = app.build_category;
     let pending_item = app.pending_inventory_item.clone();
     let mod_copy = app.mod_copy.clone();
+    let refit_copy = app.refit_copy.clone();
     let pending_inspect = app.pending_inspect.clone();
     // Taken off `app` before `app.game` is borrowed below, and through the
     // same methods the handlers pick from. A renderer holding its own copy
@@ -1569,6 +1572,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::ModPickAffix => {
             draw_mod_pick_affix(game, mod_copy.clone(), selected, refusal, painter, m)
         }
+        Mode::RefitCopy => draw_refit_copy(game, refit_copy.clone(), refusal, painter, m),
         Mode::Contracts => draw_contracts(
             &contract_active,
             &contract_offers,
@@ -1660,7 +1664,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 146] = [
+    const ALL_MODES: [Mode; 147] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1769,6 +1773,7 @@ mod tests {
         Mode::AffixResearch,
         Mode::ModCopy,
         Mode::ModPickAffix,
+        Mode::RefitCopy,
         Mode::Contracts,
         Mode::Alerts,
         Mode::History,
@@ -1882,10 +1887,12 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 27] = [
+    const NEEDS_PENDING_STATE: [Mode; 28] = [
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,
         Mode::ModPickAffix,
+        // Drawn off `App::refit_copy`, which the census app never sets.
+        Mode::RefitCopy,
         // Drawn off `pending_develop_target`, which the census app never
         // sets — the same omission `Mode::FuseSecond` below is here for.
         Mode::RespecTalentsConfirm,

@@ -287,15 +287,7 @@ impl Game {
     }
 
     pub(crate) fn total_raid_defense(&self) -> u32 {
-        let structure_db = self.world.resource::<StructureDb>();
-        let structures: u32 = self
-            .world
-            .iter_entities()
-            .filter_map(|e| e.get::<Structure>())
-            .filter_map(|s| structure_db.get(&s.kind))
-            .map(|def| def.raid_defense)
-            .sum();
-        structures + self.garrison_defense()
+        self.structure_raid_defense() + self.garrison_defense()
     }
 
     /// What the party's friendly neighbours station around the base — the
@@ -822,6 +814,10 @@ impl Game {
         };
         let target_label = self.entity_label(target);
         let raid_damage = RAID_DAMAGE.saturating_sub(self.total_raid_defense());
+        // Spent whenever the sweep lands: the armed structures are what cut
+        // `raid_damage`, and `RAID_DAMAGE` outruns the garrison's clamp, so
+        // there is always damage for them to have cut.
+        self.spend_defence_supply(|d| d.raid_defense > 0);
 
         let defender = {
             let mut query = self.world.query::<(Entity, &Task)>();
@@ -925,6 +921,7 @@ impl Game {
             if let Some(defender) = self.first_raid_defender() {
                 self.push_effect(defender, EffectKind::Deflected);
             }
+            self.spend_defence_supply(|d| d.raid_defense > 0);
             self.log_base_kind(
                 MessageKind::Raid,
                 format!("Raiders out of {name} probe your defences and turn back empty-handed."),
@@ -932,6 +929,7 @@ impl Game {
             return;
         }
 
+        self.spend_defence_supply(|d| d.raid_defense > 0);
         let currency = self.currency();
         let money = self.item_name(&currency).to_string();
         let banked = self.banked(&currency);
@@ -996,13 +994,13 @@ impl Game {
                 .map(|(e, s, p)| (s.kind.clone(), e, (p.x, p.y)))
                 .collect()
         };
-        let structure_db = self.world.resource::<StructureDb>();
+        let armed = self.armed_defences();
         defended
             .into_iter()
-            .filter(|(kind, _, _)| {
-                structure_db
-                    .get(kind)
-                    .is_some_and(|def| def.raid_defense > 0)
+            .filter(|(_, entity, _)| {
+                armed
+                    .iter()
+                    .any(|d| d.entity == *entity && d.raid_defense > 0)
             })
             .min_by_key(|(_, _, tile)| *tile)
             .map(|(_, entity, _)| entity)

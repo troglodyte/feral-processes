@@ -718,9 +718,10 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
         //
         // Not `palette::THREAT`. Br red is reserved for hostility and inbound
         // harm, and a clogged Mining Node is neither.
-        MachineStatus::Clogged | MachineStatus::Stranded | MachineStatus::Unpowered => {
-            hud::palette::ATTENTION
-        }
+        MachineStatus::Clogged
+        | MachineStatus::Stranded
+        | MachineStatus::Unpowered
+        | MachineStatus::Uncharged => hud::palette::ATTENTION,
         // The one machine state that gets a red, and it is `palette::OFFLINE`
         // rather than THREAT — see that constant for why a second red exists.
         // A dry supplier is the *cause* of every dark machine on the map, so

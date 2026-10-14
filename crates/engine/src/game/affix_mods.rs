@@ -96,8 +96,8 @@ impl Game {
 
         let mut affixes = copy.affixes.clone();
         affixes.push(affix.clone());
-        let modded = self.rekey_copy(copy, affixes, slot, worn);
-        let msg = format!("You fit {label} to {}.", self.copy_name(&modded));
+        let modded = self.rekey_copy(copy, copy.reaffixed(affixes), slot, worn);
+        let msg = format!("You fit {label} to {}.", self.item_name(&modded.item));
         self.log(msg.clone());
         self.tick();
         Ok((modded, msg))
@@ -125,7 +125,7 @@ impl Game {
             .map_or_else(|| affix.as_str().to_string(), |d| d.label());
         let mut affixes = copy.affixes.clone();
         affixes.remove(position);
-        let stripped = self.rekey_copy(copy, affixes, slot, worn);
+        let stripped = self.rekey_copy(copy, copy.reaffixed(affixes), slot, worn);
         let msg = format!("You strip {label} from {}.", self.item_name(&stripped.item));
         self.log(msg.clone());
         self.tick();
@@ -143,8 +143,8 @@ impl Game {
         Ok(())
     }
 
-    /// Which slot `copy` fits and whether it is the worn one. The worn copy
-    /// wins a tie with an identical carried one, `fuse_copy`'s rule.
+    /// Which slot `copy` fits and whether it is the worn one, for a copy the
+    /// Mod Bench takes.
     fn locate_copy(
         &self,
         copy: &GearCopy,
@@ -152,6 +152,19 @@ impl Game {
         let Some(slot) = self.bench_slot(&copy.item) else {
             return Err(format!("{} can't be modified.", self.item_name(&copy.item)));
         };
+        self.locate_in_slot(copy, slot)
+    }
+
+    /// Whether the player wears `copy` in `slot`, and that they hold it at
+    /// all. The worn copy wins a tie with an identical carried one,
+    /// `fuse_copy`'s rule. The slot is the caller's because what each bench
+    /// accepts differs: the Mod Bench refuses a Module, the Refit Bench does
+    /// not.
+    pub(crate) fn locate_in_slot(
+        &self,
+        copy: &GearCopy,
+        slot: EquipmentSlot,
+    ) -> Result<(EquipmentSlot, Option<EquippedItem>), String> {
         let player = self.player_entity();
         let worn = self
             .world
@@ -164,45 +177,52 @@ impl Game {
         Ok((slot, worn))
     }
 
-    /// Replaces `copy` with the same copy carrying `affixes`, wherever it
-    /// is. Through `take_copies`/`add_copies` when carried, because
-    /// removing the last affix can make a copy plain and change its store;
-    /// a worn one is swapped in its slot with `fuse_copy`'s delta pair.
-    fn rekey_copy(
+    /// Replaces `copy` with `new`, wherever it is. Through
+    /// `take_copies`/`add_copies` when carried, because changing a property
+    /// can make a copy plain (or not) and change its store; a worn one is
+    /// swapped in its slot by `swap_worn_copy`.
+    pub(crate) fn rekey_copy(
         &mut self,
         copy: &GearCopy,
-        affixes: Vec<AffixId>,
+        new: GearCopy,
         slot: EquipmentSlot,
         worn: Option<EquippedItem>,
     ) -> GearCopy {
-        let new = GearCopy::with_affixes(
-            copy.item.clone(),
-            copy.rarity,
-            copy.tier,
-            affixes,
-            copy.quality,
-        );
         let Some(worn) = worn else {
             self.take_copies(copy, 1);
             self.add_copies(&new, 1);
             return new;
         };
         let player = self.player_entity();
+        self.swap_worn_copy(player, slot, &worn, new.clone());
+        new
+    }
+
+    /// Swaps the copy `wearer` has on in `slot` for `new` in place, keeping
+    /// its gear level. The `-1`/`+1` delta pair is `fuse_copy`'s, so `Stats`
+    /// ends exact however the copy's worth changed; wear, mods and refits
+    /// all go through here rather than writing the slot themselves.
+    pub(crate) fn swap_worn_copy(
+        &mut self,
+        wearer: Entity,
+        slot: EquipmentSlot,
+        old: &EquippedItem,
+        new: GearCopy,
+    ) {
         let promoted = EquippedItem {
-            copy: new.clone(),
-            level: worn.level,
+            copy: new,
+            level: old.level,
         };
-        if let Some(mods) = self.worn_bonus(&worn) {
-            self.apply_equipment_delta(player, mods, -1);
+        if let Some(mods) = self.worn_bonus(old) {
+            self.apply_equipment_delta(wearer, mods, -1);
         }
         if let Some(mods) = self.worn_bonus(&promoted) {
-            self.apply_equipment_delta(player, mods, 1);
+            self.apply_equipment_delta(wearer, mods, 1);
         }
         *self
             .world
-            .get_mut::<Equipment>(player)
+            .get_mut::<Equipment>(wearer)
             .unwrap()
             .slot_mut(slot) = Some(promoted);
-        new
     }
 }

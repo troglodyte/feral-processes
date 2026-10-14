@@ -83,8 +83,8 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
 /// than a second copy of it, so a buffer emptied here is *removed* rather
 /// than left holding a zero.
 ///
-/// There is one caller today — the dig crew's tile, the first cost the base
-/// incurs on its own initiative rather than at the player's keypress. It
+/// Its first caller was the dig crew's tile, the first cost the base incurs
+/// on its own initiative rather than at the player's keypress. It
 /// takes an item and a quantity anyway because that is what the arithmetic
 /// needs to be honest about a partial take; a caller that must have all of
 /// it checks the returned figure.
@@ -300,4 +300,36 @@ impl Game {
             })
             .collect()
     }
+}
+
+/// Takes one unit of `entity`'s `StructureDef::supply` out of its input
+/// buffer and writes it to the ledger under `source`. Returns whether it held
+/// one — the shared door for a defence firing and a Repair Bay mending.
+pub(crate) fn spend_supply(
+    game: &mut Game,
+    entity: Entity,
+    source: crate::base_ledger::ConsumeSource,
+) -> bool {
+    let Some(supply) = game
+        .world
+        .get::<Structure>(entity)
+        .and_then(|s| game.world.resource::<StructureDb>().get(&s.kind))
+        .and_then(|def| def.supply.clone())
+    else {
+        return false;
+    };
+    let Some(mut stock) = game.world.get_mut::<Stock>(entity) else {
+        return false;
+    };
+    let held = stock.input.get(&supply).copied().unwrap_or(0);
+    if held == 0 {
+        return false;
+    }
+    if held == 1 {
+        stock.input.remove(&supply);
+    } else {
+        stock.input.insert(supply.clone(), held - 1);
+    }
+    game.note_consumed(&supply, 1, source);
+    true
 }

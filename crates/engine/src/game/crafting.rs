@@ -822,6 +822,11 @@ impl Game {
                     evasion: acc.evasion + affix.stats.evasion,
                     deflection: acc.deflection + affix.stats.deflection,
                 });
+        // A spent copy stays worn and inert: zero, not absent, so the
+        // equip/unequip delta stays exact whether or not it is broken.
+        if self.is_broken(copy) {
+            return Some(items::EquipmentStats::default());
+        }
         Some(
             affixed
                 .scaled_for_level(level)
@@ -1170,13 +1175,17 @@ impl Game {
 
         let mut affixes = copy.affixes.clone();
         affixes.extend(partner.affixes.iter().cloned());
-        let fused = GearCopy::with_affixes(
-            copy.item.clone(),
-            copy.rarity,
-            fused_tier,
-            affixes,
-            average_quality(copy.quality, partner.quality),
-        );
+        let fused = GearCopy {
+            // Rounded up, so a fusion never launders wear into a repair.
+            wear: (copy.wear + partner.wear).div_ceil(2),
+            ..GearCopy::with_affixes(
+                copy.item.clone(),
+                copy.rarity,
+                fused_tier,
+                affixes,
+                average_quality(copy.quality, partner.quality),
+            )
+        };
 
         if !survivor_worn {
             self.take_copies(copy, 1);
@@ -1228,8 +1237,9 @@ impl Game {
     /// Highest `quality` first, because that is what a player would pick.
     /// Then cargo before worn, so a fusion disturbs the slot only when it
     /// has to. Then fewest affixes, which leaves the more interesting spare
-    /// in cargo for a later fusion. Then the affix ids themselves, which is
-    /// what makes it total.
+    /// in cargo for a later fusion. Then the affix ids themselves, then the
+    /// least worn, because the result takes the average of both copies'
+    /// wear; the last is what makes it total.
     fn best_fusion_partner(
         &self,
         survivor: &GearCopy,
@@ -1279,6 +1289,7 @@ impl Game {
                 u8::from(*from_slot),
                 candidate.affixes.len(),
                 candidate.affixes.clone(),
+                candidate.wear,
             )
         })
     }

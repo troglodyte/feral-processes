@@ -209,6 +209,27 @@ impl App {
         }
         let Some(game) = &self.game else { return };
         let wearer = target.unwrap_or_else(|| game.player_entity());
+        // Wear lands only on what is worn, so the bench has to be reachable
+        // from the slot itself: unequipping first would re-lock the copy at
+        // the current zone's level. A companion's gear has to come off
+        // first, as `refit_copy` documents. Uppercase for `I`'s reason.
+        if key == GameKey::Char('R') {
+            let worn = game.worn(wearer, slot).map(|w| w.copy);
+            match (target, worn) {
+                (Some(_), _) => self.refuse("Take it off first; only your own gear is refitted."),
+                (None, None) => self.refuse("That slot is empty."),
+                (None, Some(copy)) => {
+                    self.refit_copy = Some(copy);
+                    self.pending_swap_slot = None;
+                    // Esc from the bench returns to the inventory, so land
+                    // on this slot's row as backing out of here would.
+                    self.menu_selected = Self::slot_row(slot);
+                    self.status_line = None;
+                    self.mode = Mode::RefitCopy;
+                }
+            }
+            return;
+        }
         // The picker is where the question is actually asked — its rows name
         // candidates the player does not own the consequences of yet. The
         // unequip row names no item and so opens nothing.
@@ -316,6 +337,13 @@ impl App {
             self.pending_inventory_item = None;
             self.status_line = None;
             self.mode = Mode::ModCopy;
+            return;
+        }
+        if idx.map(|i| actions[i]) == Some('r') {
+            self.refit_copy = Some(copy);
+            self.pending_inventory_item = None;
+            self.status_line = None;
+            self.mode = Mode::RefitCopy;
             return;
         }
         if idx.map(|i| actions[i]) == Some('p') {

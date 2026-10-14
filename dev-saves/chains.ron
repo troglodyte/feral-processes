@@ -1808,7 +1808,9 @@
             position: (-4, 0),
             durability: Some(30),
             tier: None,
-            stock_input: [],
+            stock_input: [
+                ("charge_coil", 6),
+            ],
             stock_output: [],
             standing_work: false,
             standing_guard: false,
@@ -1818,7 +1820,9 @@
             position: (-4, -2),
             durability: Some(30),
             tier: None,
-            stock_input: [],
+            stock_input: [
+                ("charge_coil", 6),
+            ],
             stock_output: [],
             standing_work: false,
             standing_guard: false,
@@ -1838,7 +1842,9 @@
             position: (1, -2),
             durability: Some(30),
             tier: None,
-            stock_input: [],
+            stock_input: [
+                ("charge_coil", 6),
+            ],
             stock_output: [],
             standing_work: false,
             standing_guard: false,

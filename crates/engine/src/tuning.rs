@@ -1886,6 +1886,27 @@ pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 /// multiplier: an authored item is the reference, not a floor.
 pub const QUALITY_DEFAULT: u8 = 100;
 
+/// Fights an equipped piece of gear survives before it breaks, unless its
+/// def authors `durability`. A broken copy stays worn and inert until a
+/// Refit Bench restores it.
+pub const GEAR_DURABILITY: u8 = 15;
+
+/// What a Refit Bench charges for a craftable copy, as a percentage of its
+/// recipe, rounded up per ingredient. See `Game::refit_cost`.
+pub const REFIT_RECIPE_SHARE_PERCENT: u32 = 50;
+
+/// Charge Coils every refit costs on top of the materials, craftable or
+/// found.
+pub const REFIT_COILS: u32 = 1;
+
+/// Core Fragments per rarity rung (plus one) for refitting a copy with no
+/// recipe, which only drops. An `Ordinary` drop costs one rung's worth.
+pub const REFIT_DROP_FRAGMENTS_PER_RANK: u32 = 5;
+
+/// A worn copy raises a `GearWorn` alert when its remaining fights fall
+/// below this percentage of its durability.
+pub const GEAR_WORN_ALERT_PERCENT: u32 = 20;
+
 /// The clamp on a rolled quality. Both ends are reachable — a fresh
 /// player's craft can hit the floor and a developed base's can hit the
 /// ceiling — so they are the band, not guard rails.
@@ -2503,6 +2524,22 @@ pub const POWER_UPKEEP_TICKS: u32 = 100;
 /// is within reach. A supplier that burnt two and was fetched one would
 /// simply never stay lit.
 pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
+
+/// Integrity one Patch Routine buys when the party rests in base. A rest
+/// spends `ceil(missing / REST_INTEGRITY_PER_PATCH)` patches, so the last one
+/// rounds in the party's favour.
+pub const REST_INTEGRITY_PER_PATCH: i32 = 40;
+
+/// Integrity the party regains each tick while standing in base space out of
+/// battle, for free. The floor under paid rest, not a rival to it: at the
+/// world's two ticks a second a hundred points takes under a minute, a
+/// full recovery from near zero a few.
+pub const BASE_TRICKLE_PER_TICK: i32 = 1;
+
+/// How many units of a `StructureDef::supply` make one delivery. Its input
+/// buffer then holds `2 * SUPPLY_BATCH` (`input_room`), so a defence stays
+/// charged across several uses between hauls.
+pub const SUPPLY_BATCH: u32 = 3;
 
 /// How many units a posted program carries to a depot in one trip.
 ///

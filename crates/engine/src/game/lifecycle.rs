@@ -43,15 +43,19 @@ fn worn_from_save(
     affix: Option<AffixId>,
     affixes: Vec<AffixId>,
     quality: u8,
+    wear: u8,
 ) -> Option<EquippedItem> {
     Some(EquippedItem {
-        copy: GearCopy::with_affixes(
-            item?,
-            rarity,
-            fusion_tier,
-            save::affixes_from_save(affix, affixes),
-            quality,
-        ),
+        copy: GearCopy {
+            wear,
+            ..GearCopy::with_affixes(
+                item?,
+                rarity,
+                fusion_tier,
+                save::affixes_from_save(affix, affixes),
+                quality,
+            )
+        },
         level,
     })
 }
@@ -68,6 +72,7 @@ fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
         affix: None,
         affixes: worn.copy.affixes.clone(),
         quality: worn.copy.quality,
+        wear: worn.copy.wear,
     }
 }
 
@@ -76,13 +81,16 @@ fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
 /// reason: the conversion is open-coded nowhere, so no site can drop the
 /// legacy field and strip an affix off a reloaded save in silence.
 fn copy_from_save(saved: save::GearCopySave) -> GearCopy {
-    GearCopy::with_affixes(
-        saved.item,
-        saved.rarity,
-        saved.tier,
-        save::affixes_from_save(saved.affix, saved.affixes),
-        saved.quality,
-    )
+    GearCopy {
+        wear: saved.wear,
+        ..GearCopy::with_affixes(
+            saved.item,
+            saved.rarity,
+            saved.tier,
+            save::affixes_from_save(saved.affix, saved.affixes),
+            saved.quality,
+        )
+    }
 }
 
 /// The inverse of `copy_from_save`, for the write side.
@@ -94,6 +102,7 @@ fn copy_to_save(copy: &GearCopy) -> save::GearCopySave {
         affix: None,
         affixes: copy.affixes.clone(),
         quality: copy.quality,
+        wear: copy.wear,
     }
 }
 
@@ -342,6 +351,7 @@ fn spawn_player_from_save(
                     player_save.weapon_affix.clone(),
                     player_save.weapon_affixes.clone(),
                     player_save.weapon_quality,
+                    player_save.weapon_wear,
                 ),
                 armor: worn_from_save(
                     player_save.armor,
@@ -351,6 +361,7 @@ fn spawn_player_from_save(
                     player_save.armor_affix.clone(),
                     player_save.armor_affixes.clone(),
                     player_save.armor_quality,
+                    player_save.armor_wear,
                 ),
                 module: worn_from_save(
                     player_save.module,
@@ -360,6 +371,7 @@ fn spawn_player_from_save(
                     player_save.module_affix.clone(),
                     player_save.module_affixes.clone(),
                     player_save.module_quality,
+                    player_save.module_wear,
                 ),
             },
             Inventory {
@@ -393,6 +405,7 @@ fn spawn_player_from_save(
                             tier,
                             affixes: Vec::new(),
                             quality: crate::tuning::QUALITY_DEFAULT,
+                            wear: 0,
                         },
                         qty,
                     )
@@ -1184,7 +1197,7 @@ impl Game {
             // hand-written copy this file has always been: a burning supplier
             // missing its `PowerFuel` reads as a base whose grid collapsed on
             // reload, and nothing here fails to compile when it drifts.
-            if def.runs_a_job() || def.power_upkeep.is_some() {
+            if def.has_machine_status() {
                 entity.insert(MachineStatus::default());
             }
             if def.power_upkeep.is_some() {
@@ -1582,6 +1595,7 @@ impl Game {
                                 tier,
                                 affixes: Vec::new(),
                                 quality: crate::tuning::QUALITY_DEFAULT,
+                                wear: 0,
                             },
                             qty,
                         )
@@ -2303,6 +2317,7 @@ impl Game {
                     saved.affix,
                     saved.affixes,
                     saved.quality,
+                    saved.wear,
                 );
             }
             entity.insert(worn);
@@ -3192,6 +3207,7 @@ impl Game {
                 .as_ref()
                 .map(|e| e.copy.quality)
                 .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            weapon_wear: equipment.weapon.as_ref().map(|e| e.copy.wear).unwrap_or(0),
             armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
             armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
             armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -3211,6 +3227,7 @@ impl Game {
                 .as_ref()
                 .map(|e| e.copy.quality)
                 .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            armor_wear: equipment.armor.as_ref().map(|e| e.copy.wear).unwrap_or(0),
             module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
             module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
             module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -3230,6 +3247,7 @@ impl Game {
                 .as_ref()
                 .map(|e| e.copy.quality)
                 .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            module_wear: equipment.module.as_ref().map(|e| e.copy.wear).unwrap_or(0),
             // The legacy store is never written again — see its doc in
             // `save.rs`. It is `skip_serializing_if` empty, so a save
             // from here on carries only `gear_copies`.

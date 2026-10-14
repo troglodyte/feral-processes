@@ -600,6 +600,7 @@ fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
             },
             Position { x: 1, y: 1 },
         ));
+        charge_defences(&mut game);
         let structure = game
             .world
             .spawn((
@@ -900,6 +901,7 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
                 Position { x: 1, y: 1 },
             ));
         }
+        charge_defences(&mut game);
         let structure = game
             .world
             .spawn((
@@ -1056,6 +1058,11 @@ fn raid_defense_active_tracks_whether_any_shield_is_standing() {
         },
         Position { x: 1, y: 1 },
     ));
+    assert!(
+        !game.raid_defense_active(),
+        "an uncharged shield defends nothing"
+    );
+    charge_defences(&mut game);
     assert!(game.raid_defense_active());
 }
 
@@ -2151,6 +2158,7 @@ fn enough_defense_turns_a_town_raid_away_and_the_floor_does_not_undo_it() {
             Durability { hp: 30, max_hp: 30 },
         ));
     }
+    charge_defences(&mut game);
     assert!(
         game.total_raid_defense() * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT
             >= crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT,

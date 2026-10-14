@@ -196,6 +196,9 @@ pub enum ConsumeSource {
     /// Spent making something by hand: a hand-compile's ingredients, or
     /// the blank a routine was burnt onto.
     Craft,
+    /// Paid at the Refit Bench to restore a worn copy, whichever of the
+    /// shelves and the pack the units came from.
+    Refit,
     /// A routine disk written into a slot. It buys the routine and refunds
     /// nothing, which is what makes it a sink rather than a move.
     Install,
@@ -204,6 +207,12 @@ pub enum ConsumeSource {
     Breach,
     /// Spoiled by a sulking program, one unit out of a machine's output.
     Sabotage,
+    /// A charged defence spent a coil holding off a sweep, a raid or a
+    /// siege — `StructureDef::supply` on a `raid_defense` or `turret` def.
+    Defence,
+    /// Patches spent mending the party — a rest in base, the free trickle's
+    /// top-up, or the Repair Bay's fast heal.
+    Heal,
 }
 
 impl ConsumeSource {
@@ -213,9 +222,12 @@ impl ConsumeSource {
             ConsumeSource::Build => "build",
             ConsumeSource::Base => "base",
             ConsumeSource::Craft => "craft",
+            ConsumeSource::Refit => "refit",
             ConsumeSource::Install => "install",
             ConsumeSource::Breach => "breach",
             ConsumeSource::Sabotage => "sabotage",
+            ConsumeSource::Defence => "defence",
+            ConsumeSource::Heal => "heal",
         }
     }
 }

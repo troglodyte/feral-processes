@@ -466,6 +466,9 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "quarantine_rack".to_string(),
             "recharger_node".to_string(),
             "refinery".to_string(),
+            // Ungated on purpose: gear wears from the first fights, so the
+            // bench that mends it is not a blueprint to earn.
+            "refit_bench".to_string(),
             // Ungated on purpose: recovering from a wipe is not a blueprint
             // you have to earn, and a Bay you cannot build in the zone where
             // the first wipe happens is a dead run rather than pressure.

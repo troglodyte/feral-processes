@@ -561,3 +561,12 @@
   so an input shelf is never narrowed), only ever widens a filter, and skips a
   banked output, which never reaches `Stock.output`. A Depot never joins a
   production line.
+- **`StructureDef::supply` and `power_upkeep` share one hauling path through
+  `spends_supply()`, but only a burner `draws_from_neighbours()`.** A
+  supply-only structure gets no "beside" credit, is never an attached
+  consumer (the `hauling.rs` consumers predicate is `power_upkeep`), and is
+  sourced from `stores` only: `every_structure` would let a shield raid a
+  production buffer such as a Winding Node's output. `has_machine_status()`
+  is the one predicate `spawn_structure` and the save loader both call.
+  Coils are spent per defence event, not per point (a turret authors
+  `raid_defense: 1`, `damage: 8`), and the garrison is never gated.

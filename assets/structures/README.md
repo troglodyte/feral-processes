@@ -293,8 +293,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // NOT the same field as `repair` further down, which is about patching
     // the base's *structures* back up and has nothing to do with programs.
+    //
+    // Optional `per_tick_supplied` (a whole number, floored at zero like
+    // `per_tick`) is the faster rate used while the structure's `supply`
+    // is being drawn on: it spends one unit of its supply per
+    // `tuning::REST_INTEGRITY_PER_PATCH` Integrity it restores at that rate,
+    // and falls back to `per_tick` when none is left. The Repair Bay pairs
+    // it with `supply: Some("patch_routine")`.
     recovery: Some((
         per_tick: 1,
+        per_tick_supplied: Some(8),
         radius: 0,
     )),
 
@@ -354,6 +362,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     // holding no Power Cells could otherwise never run the Power Conduit
     // that makes the first one.
     power_upkeep: Some("power_cell"),
+
+    // Optional; can be left out entirely (defaults to none). An item this
+    // structure spends by its own action rather than on a clock: a Shield or
+    // Turret spends one charge_coil per defence event, a Repair Bay one
+    // patch_routine per REST_INTEGRITY_PER_PATCH healed. Haulers keep its
+    // input buffer topped up from the base's stores, sharing the hauling path
+    // with power_upkeep (a fuel burner is fed first). A structure with a
+    // supply that is a defence (a Shield or Turret) reports "Uncharged" on
+    // the Production page while its input is empty; a Repair Bay simply heals
+    // at its plain rate. The id must name a real item.
+    supply: Some("charge_coil"),
 
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
@@ -769,3 +788,18 @@ The Research Station itself (`research_node.ron` — the id stayed put when
 the structure grew a pen and a display name) is the source of Research
 Data: assign a tamed program to it via the cronjob menu, same as a Mining
 Node.
+
+## The Refit Bench
+
+`refit_bench.ron` is the one structure the engine looks up by id for gear
+wear (the Mod Bench is the other). Gear loses a point of durability for every
+fight its wearer is in (see `durability` in `assets/items/README.md`), and the
+Refit Bench restores a copy to full condition. Only its presence matters: one
+standing anywhere in the base is enough, and the player need not be next to
+it. It has no `work` and nothing to author beyond the usual fields; it is
+named by no research file, so it is buildable from turn one.
+
+What a refit costs is not authored here. A craftable item costs half its
+recipe, rounded up per ingredient, plus a Charge Coil; an item that only drops
+costs Core Fragments scaled by the copy's rarity, plus a Charge Coil. The
+constants are `REFIT_*` in `crates/engine/src/tuning.rs`.

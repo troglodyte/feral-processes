@@ -445,3 +445,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`[c]` is the interact dispatcher: it acts on what `Game::adjacent_interactions` lists and nothing else.**
 - **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
+
+- **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**

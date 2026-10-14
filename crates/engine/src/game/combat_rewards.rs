@@ -233,7 +233,12 @@ impl Game {
     /// copy with one prefix and one suffix names both and gains nothing,
     /// and no name in any existing save moves.
     ///
-    /// The quality figure goes **last**, after the tier word, the affix
+    /// The condition goes after even that, `n/max` fights left and a `!`
+    /// at zero (a word would cost the swap picker's heading its room), and is omitted at full condition for the same reason. It is
+    /// for screens that list copies; log lines name items with `item_name`
+    /// and stay clear of it.
+    ///
+    /// The quality figure goes **last of the name**, after the tier word, the affix
     /// decoration and the count, and is omitted at `QUALITY_DEFAULT` — the
     /// reason nothing already on screen gets wider when the axis ships,
     /// since every copy in every existing save sits there. It costs seven
@@ -264,10 +269,16 @@ impl Game {
             Some(tier) => format!("{tier} {named}"),
             None => named,
         };
-        match copy.quality {
+        let qualified = match copy.quality {
             crate::tuning::QUALITY_DEFAULT => tiered,
             q => format!("{tiered} ({q}%)"),
+        };
+        if copy.wear == 0 {
+            return qualified;
         }
+        let (left, max) = self.condition_of(copy);
+        let broken = if left == 0 { "!" } else { "" };
+        format!("{qualified} {left}/{max}{broken}")
     }
 
     /// How a dropped copy reads in its loot line: the tier's word, the item

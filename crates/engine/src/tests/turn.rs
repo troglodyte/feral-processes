@@ -127,6 +127,7 @@ fn idle_tick_advances_the_clock_outside_battle_but_not_during_one() {
 #[test]
 fn rest_fully_heals_and_restores_power() {
     let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let player = game.player_entity();
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -158,6 +159,7 @@ fn rest_fully_heals_and_restores_power() {
 #[test]
 fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
     let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
     stand_in_base_beside_home(&mut game);
@@ -197,6 +199,7 @@ fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
 #[test]
 fn rest_also_fully_heals_the_active_companion() {
     let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let companion = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, companion);
     {
@@ -217,6 +220,7 @@ fn rest_also_fully_heals_the_active_companion() {
 #[test]
 fn rest_heals_every_party_member() {
     let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, a);
@@ -242,6 +246,7 @@ fn rest_heals_every_party_member() {
 #[test]
 fn resting_repairs_the_party_and_leaves_base_staff_to_the_repair_bay() {
     let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
     let staff = spawn_tamed(&mut game, 10, 3);
@@ -319,6 +324,7 @@ fn a_field_rest_does_not_reach_back_and_repair_base_staff() {
 #[test]
 fn a_wielded_program_is_repaired_by_a_rest() {
     let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     let weapon = spawn_tamed(&mut game, 10, 3);
     stand_in_base_beside_home(&mut game);
     game.wield_program(weapon).expect("wielding a program");

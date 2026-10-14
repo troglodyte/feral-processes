@@ -356,10 +356,34 @@ fn the_garrison_cap_does_not_touch_the_structure_half() {
     let before = game.total_raid_defense();
     spawn_structure_at(&mut game, "shield", ax + 3, ay);
     spawn_structure_at(&mut game, "shield", ax + 4, ay);
+    charge_defences(&mut game);
     let with_shields = game.total_raid_defense();
     assert!(
         with_shields > before + SETTLEMENT_GARRISON_MAX,
         "two shields ({with_shields}) were clamped by a settlement constant"
+    );
+}
+
+/// The garrison is a neighbour's, not a structure's: an uncharged Shield
+/// adds nothing, and the garrison stays exactly what the town stations.
+#[test]
+fn an_uncharged_shield_leaves_the_garrison_standing() {
+    let mut game = game();
+    let before = game.total_raid_defense();
+    town_near_anchor(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        2,
+        0,
+        SETTLEMENT_WARM_STANDING,
+    );
+    let (ax, ay) = game.anchor_position().unwrap();
+    spawn_structure_at(&mut game, "shield", ax + 3, ay);
+
+    assert_eq!(
+        game.total_raid_defense(),
+        before + SETTLEMENT_WARM_GARRISON,
+        "the shield is uncharged and the garrison is not gated"
     );
 }
 

@@ -177,7 +177,7 @@ pub struct DropPodDef {
 }
 
 /// What a structure does for a **downed** program — see
-/// `StructureDef::recovery` and `systems::recovery_system`.
+/// `StructureDef::recovery` and `Game::run_repair_bays`.
 ///
 /// The third member of the `PowerRegenDef` / `ServiceDef` family: a rate and
 /// a Chebyshev radius. What differs is what it aims at — `power_regen` at
@@ -197,6 +197,13 @@ pub struct DropPodDef {
 pub struct RecoveryDef {
     /// Integrity restored per tick to a downed program within `radius`.
     pub per_tick: i32,
+    /// Integrity restored per tick while the structure's `supply` is
+    /// being drawn on: it holds a patch, or is working through one already
+    /// bought. Absent, a supply buys no speed and the Bay heals at
+    /// `per_tick` alone. `#[serde(default)]` so every existing structure
+    /// file keeps parsing.
+    #[serde(default)]
+    pub per_tick_supplied: Option<i32>,
     /// Chebyshev distance in tiles, `power_regen`'s form rather than a
     /// circle. `0` is "standing on it".
     pub radius: i32,
@@ -207,6 +214,12 @@ impl RecoveryDef {
     /// than trusted — a field named for repair must never damage.
     pub fn rate(&self) -> i32 {
         self.per_tick.max(0)
+    }
+
+    /// `rate`'s floor, applied to the supplied rate: `None` when the def
+    /// authors none.
+    pub fn supplied_rate(&self) -> Option<i32> {
+        self.per_tick_supplied.map(|r| r.max(0))
     }
 }
 
@@ -386,7 +399,7 @@ pub struct StructureDef {
     pub services: Vec<ServiceDef>,
     /// If set, this structure restores a downed program's Integrity every
     /// tick while that program stands within `radius` tiles — see
-    /// `components::Downed` and `systems::recovery_system`. No assigned
+    /// `components::Downed` and `Game::run_repair_bays`. No assigned
     /// worker and no input, `power_regen`'s shape. A downed program walks
     /// here on its own and leaves when it is whole.
     ///
@@ -447,6 +460,13 @@ pub struct StructureDef {
     /// ships a supplier that can never be fed and never says why.
     #[serde(default)]
     pub power_upkeep: Option<ItemId>,
+    /// An item this structure spends by its own action (a defence firing, a
+    /// Repair Bay mending) and that haulers deliver to its input buffer. Unlike
+    /// `power_upkeep` it burns on no clock; whatever acts draws from the input.
+    /// `#[serde(default)]` so every existing structure file, mods included,
+    /// keeps parsing as one that spends nothing.
+    #[serde(default)]
+    pub supply: Option<ItemId>,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is
@@ -858,6 +878,50 @@ impl StructureDef {
             || self.holds_prisoner.is_some()
     }
 
+    /// Whether this structure carries a `MachineStatus`. The one definition,
+    /// read by both places a structure's components are written
+    /// (`Game::spawn_structure` and the save loader) so a hand-written copy
+    /// cannot drift: a job runner reports a stall, and a supply spender
+    /// reports that it ran dry.
+    pub fn has_machine_status(&self) -> bool {
+        self.runs_a_job() || self.spends_supply().is_some()
+    }
+
+    /// The item this structure spends to keep working and that haulers
+    /// deliver to its input buffer: a supplier's `power_upkeep` fuel or a
+    /// defence's `supply`. The one question every hauling special-case asks,
+    /// so the two kinds share a single hauling path.
+    pub fn spends_supply(&self) -> Option<&ItemId> {
+        self.power_upkeep.as_ref().or(self.supply.as_ref())
+    }
+
+    /// Whether stock in an adjacent structure's output counts as within
+    /// reach of this one's intake. True for a burner, which
+    /// `burn_grid_upkeep` pulls from its neighbours, and for an assembler;
+    /// false for a structure that only spends a `supply`, which reads its
+    /// own input alone (`defence_is_armed`, `spend_supply`).
+    pub fn draws_from_neighbours(&self) -> bool {
+        self.power_upkeep.is_some() || self.supply.is_none()
+    }
+
+    /// Whether this structure takes part in base defence: it softens a sweep
+    /// or siege (`raid_defense`) or fires in one (`turret`).
+    pub fn is_defence(&self) -> bool {
+        self.raid_defense > 0 || self.turret.is_some()
+    }
+
+    /// How many units of `spends_supply` make one delivery: the fuel window
+    /// for a burner, `tuning::SUPPLY_BATCH` for a defence. `intake_recipe`
+    /// reports it as the batch size and `Game::fuel_wants` asks whether one
+    /// batch is within reach, so the two cannot disagree.
+    pub fn supply_batch(&self) -> u32 {
+        if self.power_upkeep.is_some() {
+            crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW
+        } else {
+            crate::tuning::SUPPLY_BATCH
+        }
+    }
+
     /// Whether raising or upgrading this structure costs a tamed program.
     ///
     /// **A body is spent on a machine that will take a body** — the cost
@@ -1230,6 +1294,7 @@ mod tests {
         assert_eq!(
             RecoveryDef {
                 per_tick: -4,
+                per_tick_supplied: None,
                 radius: 0,
             }
             .rate(),

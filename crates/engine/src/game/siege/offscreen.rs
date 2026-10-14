@@ -55,6 +55,12 @@ impl Game {
         let defence = self.total_raid_defense()
             + turret_defense(self)
             + staff.len() as u32 * SIEGE_STAFF_DEFENSE;
+        // Charged only if the structures were needed: when staff and garrison
+        // already clear the pack, nothing fired.
+        let without_structures = defence - self.structure_raid_defense() - turret_defense(self);
+        if strength > without_structures {
+            self.spend_defence_supply(|d| d.raid_defense > 0 || d.turret_damage > 0);
+        }
         let shortfall = strength.saturating_sub(defence);
         if shortfall == 0 {
             return true;

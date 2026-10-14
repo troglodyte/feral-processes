@@ -23,7 +23,8 @@ fn alert_color(kind: &AlertKind) -> Color {
         | AlertKind::DepotsFull
         | AlertKind::OutpostStale
         | AlertKind::OutpostDeclining
-        | AlertKind::OutpostDark => TEXT,
+        | AlertKind::OutpostDark
+        | AlertKind::GearWorn => TEXT,
     }
 }
 

@@ -1063,8 +1063,13 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
             .is_some(),
         "the dead program should have been benched"
     );
+    // Worn by the fight it fell in, so it is no longer a plain copy.
+    let returned = GearCopy {
+        wear: 1,
+        ..gear(&weapon, 0)
+    };
     assert_eq!(
-        held(&game, &weapon),
+        game.count_copies(&returned),
         1,
         "its gear is the player's property and comes back"
     );

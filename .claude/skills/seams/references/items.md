@@ -476,3 +476,12 @@
   through `take_from_adjacent` rather than drained here, keeping
   `hauling::take_from` the one way a unit leaves a buffer and inheriting its
   `(x, y)` sort.
+- **`GearCopy.wear` is wear taken (0 = full) and part of the copy's key;
+  every change to a worn copy goes through `swap_worn_copy`.** Taken, not
+  left, so the serde default loads old copies at full condition and
+  `is_plain` needs no durability lookup. `swap_worn_copy` is the one -1/+1
+  delta swap that mods, wear and refit share. `wear_gear` runs before
+  `bench_or_dissolve` in teardown, which strips a fallen program's gear and
+  would miss the copies that just fought. A broken copy's `copy_bonus` is
+  `Some(default)`, never `None`, so equip/unequip stays exact. `copy_name`
+  shows condition; log lines use `item_name`.

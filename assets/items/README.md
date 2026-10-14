@@ -190,6 +190,15 @@ any non-finite `taming_potency`, `consume.power`, or
     // in that slot.
     equipment: Some((Weapon, (atk: 4, damage: (min: 7, max: 13)))),
 
+    // Optional; can be left out entirely (defaults to
+    // `tuning::GEAR_DURABILITY`, 15). Only meaningful on an item with
+    // `equipment`. How many fights a worn copy lasts: each fight the
+    // wearer takes part in, win or lose, wears every equipped copy by one.
+    // At zero the copy stays worn but gives no bonus until it is repaired
+    // at a Refit Bench. Wear is a property of the copy, not the item, so
+    // copies of differing wear are separate rows and never stack.
+    durability: Some(10),
+
     // Optional; can be left out entirely (defaults to not a catalyst). If
     // set, this item is a taming catalyst: a decompile attempt spends one
     // of it and it contributes this much to the taming roll — higher is

@@ -2437,6 +2437,7 @@ fn a_pinned_program_cannot_be_recalled_into_the_party() {
 #[test]
 fn a_pinned_program_is_not_healed_by_a_rest() {
     let mut game = Game::new(4123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     stand_in_base(&mut game);
     place_home(&mut game);
     let program = spawn_tamed(&mut game, 10, 3);
@@ -2583,6 +2584,7 @@ fn fuse_companions_rejects_a_posted_program_as_either_input() {
 #[test]
 fn a_posted_program_is_not_healed_by_a_rest() {
     let mut game = Game::new(4224, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stock_patches(&mut game, 50);
     stand_in_base(&mut game);
     place_home(&mut game);
     let program = spawn_tamed(&mut game, 10, 3);

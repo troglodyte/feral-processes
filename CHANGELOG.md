@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.30
+
+**`b` now opens the base report, and the base's commands live on its Build, Research, Trade and Compile pages; `B` is gone.** The base menu and the base report were two windows onto one base, on two keys. Now the four command pages sit at the top of the report's rail, right after Overview, which shows how many commands each page has available where you stand. Commands you can't use here are hidden, as before, and a page with none left says so. Esc from a command's screen comes back to its page with the cursor on the row you used, and `b` reopens the report where you left it.
+
 ## 0.18.29
 
 **Every Stack frame now has its own light: it falls from a direction, in a colour, at a strength of its own.** One corridor wall catches the light and the other falls into shade, and turning swaps them, so the light also tells you which way you face. Solid rock beside an open cell throws a shadow across the floor. A frame keeps its light as you step, turn and reload. Map marks, the heading and the frame map are drawn as before.

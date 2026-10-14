@@ -209,3 +209,25 @@ fn an_unstocked_shield_does_not_crew_the_coil_maker() {
 fn the_uncharged_reason_does_not_name_an_item() {
     assert!(!MachineStatus::Uncharged.reason().contains("Coil"));
 }
+
+/// With a want standing (the shelf holds coils), the hauler still takes them
+/// off the shelf and not off the nearer production buffer.
+#[test]
+fn a_shield_takes_the_shelf_not_the_nearer_production_output() {
+    let mut game = base(9308);
+    let shield = deploy(&mut game, "shield", 1, 0);
+    let winding = deploy(&mut game, "winding_node", 3, 0);
+    let depot = deploy(&mut game, "depot", 6, 0);
+    fill_output(&mut game, winding, ids::CHARGE_COIL, 20);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, 20);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    tick_until(&mut game, 400, |g| hopper(g, shield, ids::CHARGE_COIL) > 0);
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    assert!(hopper(&game, shield, ids::CHARGE_COIL) > 0);
+    assert_eq!(node_output(&game, winding, ids::CHARGE_COIL), 20);
+}

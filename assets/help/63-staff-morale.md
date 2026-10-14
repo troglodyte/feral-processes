@@ -59,7 +59,7 @@ Data Cache, or release the program from the siphon.
 
 The Staff page
 
-Press B for the base report, then [ or ] along the rail to the Staff page. Tab flips between its three screens.
+Press B for the base report, then down the rail to the Staff page and Right onto its rows. Tab flips between its three screens.
 
 - Wellbeing lists every staff program, worst mood first: its mood, Integrity, a bar for each need
   with a ! under the critical line, and what it is doing, including waiting for a place.

@@ -6,6 +6,7 @@ use super::*;
 /// One line of a popup's body. `Item` rows are the numbered/lettered
 /// options a menu key press resolves to (see `App::selected_index`);
 /// `Text` rows are just informational.
+#[derive(Clone)]
 pub(super) enum Row {
     Text(String),
     TextColored(String, Color),
@@ -47,6 +48,7 @@ pub(super) enum Row {
 /// there was no span for a renderer to colour without re-parsing a string it
 /// had just built. Held here, the colour and weight are `quality_tag_style`'s
 /// and are decided once.
+#[derive(Clone)]
 pub(super) struct ItemTag {
     /// The row's text *up to* the column: its shortcut, and the quantity
     /// where the screen prints one.
@@ -706,6 +708,7 @@ pub(super) fn draw_popup(
 
     draw_layout_rows(
         &layout,
+        true,
         &status_lines,
         x,
         w,
@@ -719,11 +722,22 @@ pub(super) fn draw_popup(
 /// Draws `rows` into `rect` with the popup's paging — pinned header and
 /// footer, a body that scrolls to keep the selected row visible — but none
 /// of its chrome. For screens that live inside a frame of their own.
-pub(super) fn draw_rows_in(rect: Rect, rows: &[Row], painter: &Painter, m: &Metrics) {
+///
+/// `focused: false` draws the rows without their highlight but keeps the
+/// window where the highlight put it, so a list the cursor has stepped off
+/// does not jump back to its top.
+pub(super) fn draw_rows_in(
+    rect: Rect,
+    rows: &[Row],
+    focused: bool,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let shown = (rect.h / m.line_height).floor().max(0.0) as usize;
     let layout = page_rows(rows, shown, 0, rect.h);
     draw_layout_rows(
         &layout,
+        focused,
         &[],
         rect.x,
         rect.w,
@@ -739,6 +753,7 @@ pub(super) fn draw_rows_in(rect: Rect, rows: &[Row], painter: &Painter, m: &Metr
 #[allow(clippy::too_many_arguments)]
 fn draw_layout_rows(
     layout: &PopupLayout,
+    focused: bool,
     status_lines: &[Row],
     x: f32,
     w: f32,
@@ -767,7 +782,12 @@ fn draw_layout_rows(
 
         let visible_end = (layout.offset + layout.capacity).min(layout.body.len());
         for row in &layout.body[layout.offset..visible_end] {
-            cy = draw_row(row, x, w, cy, max_y, painter, m);
+            cy = match row {
+                Row::Item { selected: true, .. } if !focused => {
+                    draw_row(&unselected(row), x, w, cy, max_y, painter, m)
+                }
+                _ => draw_row(row, x, w, cy, max_y, painter, m),
+            };
         }
 
         if layout.scrolling {
@@ -785,6 +805,14 @@ fn draw_layout_rows(
     for row in layout.footer {
         cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
+}
+
+fn unselected(row: &Row) -> Row {
+    let mut row = row.clone();
+    if let Row::Item { selected, .. } = &mut row {
+        *selected = false;
+    }
+    row
 }
 
 /// Draws one popup row and returns the y coordinate for the next one.

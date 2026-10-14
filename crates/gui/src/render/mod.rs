@@ -997,6 +997,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         work_orders: &work_orders,
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,
+        on_rail: app.hub_on_rail,
     };
     // The row's two holdings and the amount the basket is asking for, taken
     // here because `game` below borrows `&mut app.game` and these read the

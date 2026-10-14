@@ -28,6 +28,9 @@ pub(super) struct AppScreens<'a> {
     pub(super) work_orders: &'a [WorkOrderRow],
     pub(super) base_staff: Option<&'a WorkTable>,
     pub(super) work_column: usize,
+    /// `App::hub_on_rail`: the rail holds the cursor, so the screen's rows
+    /// draw none.
+    pub(super) on_rail: bool,
 }
 
 /// Draws the hub at `mode`, which `base_page_of` has already placed on a
@@ -46,8 +49,17 @@ pub(super) fn draw_base_report(
     };
     let flags = game.base_report_flags();
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
-    let content = frame::paint_frame(page, screen, Some(mode), &flags, refusal, painter, m);
-    draw_rows_in(content, &rows, painter, m);
+    let content = frame::paint_frame(
+        page,
+        screen,
+        Some(mode),
+        app_screens.on_rail,
+        &flags,
+        refusal,
+        painter,
+        m,
+    );
+    draw_rows_in(content, &rows, !app_screens.on_rail, painter, m);
 }
 
 /// A popup child's parent page, drawn as the frame behind it: rail and title,
@@ -66,6 +78,7 @@ pub(super) fn draw_popup_parent(game: &Game, child: Mode, painter: &Painter, m: 
         page,
         screen,
         None,
+        false,
         &game.base_report_flags(),
         None,
         painter,
@@ -104,7 +117,7 @@ fn screen_rows(
                 table,
                 &game.owned_pets(),
                 selected,
-                app_screens.work_column,
+                (!app_screens.on_rail).then_some(app_screens.work_column),
             ),
             None => Vec::new(),
         },

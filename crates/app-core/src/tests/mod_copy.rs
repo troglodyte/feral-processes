@@ -112,6 +112,7 @@ fn stripping_the_last_row_of_an_over_cap_copy_keeps_the_highlight_on_a_row() {
         affix: None,
         affixes: over_cap.affixes.clone(),
         quality: over_cap.quality,
+        wear: over_cap.wear,
     };
     let mut app = app_at_a_mod_bench_carrying(9304, 10, vec![(carried, 1)]);
     app.mod_copy = Some(over_cap);

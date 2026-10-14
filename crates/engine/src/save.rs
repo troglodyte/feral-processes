@@ -53,6 +53,9 @@ pub struct PlayerSave {
     /// bonus on the first reload.
     #[serde(default = "default_worn_quality")]
     pub weapon_quality: u8,
+    /// Wear taken by the worn copy — see `items::GearCopy::wear`.
+    #[serde(default)]
+    pub weapon_wear: u8,
     pub armor: Option<ItemId>,
     pub armor_level: u32,
     pub armor_fusion_tier: u32,
@@ -65,6 +68,9 @@ pub struct PlayerSave {
     pub armor_affixes: Vec<AffixId>,
     #[serde(default = "default_worn_quality")]
     pub armor_quality: u8,
+    /// Wear taken by the worn copy — see `items::GearCopy::wear`.
+    #[serde(default)]
+    pub armor_wear: u8,
     pub module: Option<ItemId>,
     pub module_level: u32,
     pub module_fusion_tier: u32,
@@ -77,6 +83,9 @@ pub struct PlayerSave {
     pub module_affixes: Vec<AffixId>,
     #[serde(default = "default_worn_quality")]
     pub module_quality: u8,
+    /// Wear taken by the worn copy — see `items::GearCopy::wear`.
+    #[serde(default)]
+    pub module_wear: u8,
     /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
     /// Which perks have been bought, and at what level (see
@@ -1118,6 +1127,9 @@ pub struct EquippedItemSave {
     /// bonus on the first reload.
     #[serde(default = "default_worn_quality")]
     pub quality: u8,
+    /// Wear taken — see `items::GearCopy::wear`. Defaults to 0, full.
+    #[serde(default)]
+    pub wear: u8,
 }
 
 /// `serde`'s default for every worn copy's quality — the four flat save
@@ -1151,6 +1163,9 @@ pub struct GearCopySave {
     pub affixes: Vec<AffixId>,
     #[serde(default = "default_worn_quality")]
     pub quality: u8,
+    /// Wear taken — see `items::GearCopy::wear`. Defaults to 0, full.
+    #[serde(default)]
+    pub wear: u8,
 }
 
 /// A save's affixes, taking the list when it has one and lifting the
@@ -2355,6 +2370,7 @@ mod tests {
                 weapon_affix: None,
                 weapon_affixes: Vec::new(),
                 weapon_quality: crate::tuning::QUALITY_DEFAULT,
+                weapon_wear: 0,
                 armor: None,
                 armor_level: 1,
                 armor_fusion_tier: 0,
@@ -2362,6 +2378,7 @@ mod tests {
                 armor_affix: None,
                 armor_affixes: Vec::new(),
                 armor_quality: crate::tuning::QUALITY_DEFAULT,
+                armor_wear: 0,
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
@@ -2369,6 +2386,7 @@ mod tests {
                 module_affix: None,
                 module_affixes: Vec::new(),
                 module_quality: crate::tuning::QUALITY_DEFAULT,
+                module_wear: 0,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
                 downed_programs: Vec::new(),

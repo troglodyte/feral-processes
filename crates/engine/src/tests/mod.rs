@@ -146,6 +146,7 @@ mod turn;
 mod walls;
 mod watch;
 mod weapon_reach;
+mod wear;
 mod wielded;
 mod wild_density_probe;
 mod work_orders;

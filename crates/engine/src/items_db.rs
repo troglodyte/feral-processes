@@ -146,6 +146,12 @@ pub struct ItemDef {
     pub role: Option<EconomyRole>,
     #[serde(default)]
     pub equipment: Option<(EquipmentSlot, EquipmentStats)>,
+    /// Fights this item survives when worn, in place of
+    /// `tuning::GEAR_DURABILITY`. Meaningless on an item with no
+    /// `equipment`. `#[serde(default)]` so existing and modded items keep
+    /// parsing.
+    #[serde(default)]
+    pub durability: Option<u8>,
     #[serde(default)]
     pub taming_potency: Option<f32>,
     #[serde(default)]
@@ -595,6 +601,7 @@ impl ItemDb {
                     value: Some(value),
                     role: None,
                     equipment: None,
+                    durability: None,
                     taming_potency: None,
                     consume: None,
                     craftable: None,
@@ -677,6 +684,7 @@ impl ItemDb {
                     value: Some(crate::tuning::TOOL_CARRIER_VALUE),
                     role: None,
                     equipment: None,
+                    durability: None,
                     taming_potency: None,
                     consume: None,
                     // Minted, not compiled at a bench — `forge_tool` is the

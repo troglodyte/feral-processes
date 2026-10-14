@@ -1886,6 +1886,11 @@ pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 /// multiplier: an authored item is the reference, not a floor.
 pub const QUALITY_DEFAULT: u8 = 100;
 
+/// Fights an equipped piece of gear survives before it breaks, unless its
+/// def authors `durability`. A broken copy stays worn and inert until a
+/// Refit Bench restores it.
+pub const GEAR_DURABILITY: u8 = 15;
+
 /// The clamp on a rolled quality. Both ends are reachable — a fresh
 /// player's craft can hit the floor and a developed base's can hit the
 /// ceiling — so they are the band, not guard rails.

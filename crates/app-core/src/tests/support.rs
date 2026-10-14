@@ -2679,6 +2679,7 @@ pub(crate) fn app_carrying_affixed_gear(seed: u32, item: &str, affix: &str, zone
             affix: None,
             affixes: vec![AffixId::from(affix)],
             quality: feral_processes_engine::tuning::QUALITY_DEFAULT,
+            wear: 0,
         },
         1,
     )];

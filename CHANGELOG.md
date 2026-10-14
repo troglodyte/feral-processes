@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.25
+
+**The base report (B) has one highlight, and the arrow keys move it between the page list and the page.** Up and Down walk the list on the left, Right or Enter steps onto the page's rows, and Left or Esc steps back to the list; Esc on the list closes the report. Before, the list moved on [ and ] while Up and Down moved a second highlight on the page, so two things on screen looked selected at once. Now only the half you are in shows a highlight, and the keys along the bottom say what the arrows do there. On the Staffing table Left walks the columns first and reaches the list from the first column. N still opens Alerts with the highlight on its rows, and Tab and [ ] still work as before.
+
 ## 0.18.24
 
 **A Depot placed beside a machine that makes something now accepts what that machine makes and fills itself from it while a program works the machine, with no carrier.** Before, a Depot took anything and the crew had to carry a machine's output over to it. Now a Depot with no list becomes allow-only for that output, and one you have already set up only gains the item. Building a machine beside a Depot that already stands leaves its list alone, so a Depot you use to stock a machine keeps working.

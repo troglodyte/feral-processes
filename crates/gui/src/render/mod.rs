@@ -59,6 +59,7 @@ pub(crate) mod hud;
 mod icon_editor;
 mod inventory;
 mod level_up;
+mod lighting;
 mod manifest;
 mod marks;
 mod meta;

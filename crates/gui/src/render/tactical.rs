@@ -2470,9 +2470,6 @@ mod tests {
 
         let mut fx = Fx::new();
         view.props.clear();
-        view.reachable.clear();
-        view.covered.clear();
-        view.provoking.clear();
         let (_, bare) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });

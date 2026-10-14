@@ -895,6 +895,15 @@ impl StructureDef {
         self.power_upkeep.as_ref().or(self.supply.as_ref())
     }
 
+    /// Whether stock in an adjacent structure's output counts as within
+    /// reach of this one's intake. True for a burner, which
+    /// `burn_grid_upkeep` pulls from its neighbours, and for an assembler;
+    /// false for a structure that only spends a `supply`, which reads its
+    /// own input alone (`defence_is_armed`, `spend_supply`).
+    pub fn draws_from_neighbours(&self) -> bool {
+        self.power_upkeep.is_some() || self.supply.is_none()
+    }
+
     /// Whether this structure takes part in base defence: it softens a sweep
     /// or siege (`raid_defense`) or fires in one (`turret`).
     pub fn is_defence(&self) -> bool {

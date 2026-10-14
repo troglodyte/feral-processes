@@ -1792,12 +1792,16 @@ impl Game {
                 .get::<Stock>(*burner)
                 .and_then(|s| s.input.get(&fuel).copied())
                 .unwrap_or(0);
-            let beside: u32 = ORTHOGONAL
-                .into_iter()
-                .filter_map(|(dx, dy)| by_tile.get(&(x + dx, y + dy)).copied())
-                .filter_map(|feeder| self.world.get::<Stock>(feeder))
-                .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
-                .sum();
+            let beside: u32 = if def.draws_from_neighbours() {
+                ORTHOGONAL
+                    .into_iter()
+                    .filter_map(|(dx, dy)| by_tile.get(&(x + dx, y + dy)).copied())
+                    .filter_map(|feeder| self.world.get::<Stock>(feeder))
+                    .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
+                    .sum()
+            } else {
+                0
+            };
             if batch_within_reach(held, beside, 0, per_window) {
                 continue;
             }

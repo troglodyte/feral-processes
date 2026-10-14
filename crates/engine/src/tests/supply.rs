@@ -122,3 +122,40 @@ fn every_shipped_supply_names_a_real_item() {
         "the shield, turret and repair bay all author one"
     );
 }
+
+/// A supply spender reads only its own input (`defence_is_armed`,
+/// `spend_supply`), unlike a burner, which `burn_grid_upkeep` feeds from its
+/// neighbours — so stock standing beside one is not stock within reach.
+#[test]
+fn a_shield_beside_a_stocked_depot_is_still_hauled_to() {
+    let mut game = base(9304);
+    let shield = deploy(&mut game, "shield", 1, 0);
+    let depot = deploy(&mut game, "depot", 2, 0);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, SUPPLY_BATCH);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    tick_until(&mut game, 400, |g| hopper(g, shield, ids::CHARGE_COIL) > 0);
+
+    assert!(
+        hopper(&game, shield, ids::CHARGE_COIL) > 0,
+        "coils beside the shield are not in its input"
+    );
+}
+
+#[test]
+fn a_repair_bay_beside_stocked_patches_is_still_hauled_to() {
+    let mut game = base(9305);
+    let bay = deploy(&mut game, "repair_bay", 1, 0);
+    let depot = deploy(&mut game, "depot", 2, 0);
+    fill_output(&mut game, depot, ids::PATCH_ROUTINE, SUPPLY_BATCH);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, bay);
+
+    tick_until(&mut game, 400, |g| hopper(g, bay, ids::PATCH_ROUTINE) > 0);
+
+    assert!(
+        hopper(&game, bay, ids::PATCH_ROUTINE) > 0,
+        "patches beside the bay are not in its input"
+    );
+}

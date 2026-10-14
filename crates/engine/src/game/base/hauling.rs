@@ -926,21 +926,28 @@ fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
 /// considered rather than part of the question.
 /// `work_orders::batch_within_reach` is the shared rule, so the machine the
 /// scheduler staffs off store is the machine this fetches for.
+/// `draws_from_neighbours` is `StructureDef::draws_from_neighbours`: a
+/// supply-only structure gets no credit for stock beside it.
 fn missing_ingredient(
     machine: Entity,
     recipe: &[(ItemId, u32)],
     structures: &HaulStructures,
     by_tile: &HashMap<(i32, i32), Entity>,
+    draws_from_neighbours: bool,
 ) -> Option<ItemId> {
     let (_, pos, stock, _) = structures.get(machine).ok()?;
     recipe.iter().find_map(|(item, per_batch)| {
         let held = stock.input.get(item).copied().unwrap_or(0);
-        let beside: u32 = ORTHOGONAL
-            .into_iter()
-            .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
-            .filter_map(|feeder| structures.get(feeder).ok())
-            .map(|(_, _, s, _)| s.output.get(item).copied().unwrap_or(0))
-            .sum();
+        let beside: u32 = if draws_from_neighbours {
+            ORTHOGONAL
+                .into_iter()
+                .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
+                .filter_map(|feeder| structures.get(feeder).ok())
+                .map(|(_, _, s, _)| s.output.get(item).copied().unwrap_or(0))
+                .sum()
+        } else {
+            0
+        };
         (!crate::game::base::work_orders::batch_within_reach(held, beside, 0, *per_batch))
             .then(|| item.clone())
     })
@@ -1294,7 +1301,10 @@ pub(crate) fn haul_step_system(
                     }
                 }
                 None => recipe
-                    .and_then(|r| missing_ingredient(machine, r, &structures, &by_tile))
+                    .and_then(|r| {
+                        let neighbours = def.is_none_or(|d| d.draws_from_neighbours());
+                        missing_ingredient(machine, r, &structures, &by_tile, neighbours)
+                    })
                     .and_then(|item| {
                         let want = recipe
                             .and_then(|r| {

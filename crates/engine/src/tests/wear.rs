@@ -465,6 +465,39 @@ fn fusing_never_launders_wear_into_a_repair() {
     assert_eq!(fused.wear, 9);
 }
 
+/// A fusion averages the two copies' wear, so of two otherwise equal
+/// partners the less worn one yields the better result — whatever order
+/// they were picked up in.
+#[test]
+fn fusion_prefers_the_least_worn_partner_when_all_else_is_equal() {
+    let mut game = Game::new(5041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let survivor = worn_copy(ids::MONOFILAMENT_WHIP, 0);
+    let ragged = worn_copy(ids::MONOFILAMENT_WHIP, 8);
+    let crisp = worn_copy(ids::MONOFILAMENT_WHIP, 2);
+    game.add_copies(&survivor, 1);
+    game.add_copies(&ragged, 1);
+    game.add_copies(&crisp, 1);
+
+    game.fuse_item(&survivor).unwrap();
+
+    assert_eq!(game.count_copies(&ragged), 1, "the worn spare is kept");
+    assert_eq!(
+        game.count_copies(&crisp),
+        0,
+        "the crisp one was the partner"
+    );
+    let fused = game
+        .world
+        .get::<GearCopies>(game.player_entity())
+        .unwrap()
+        .copies
+        .iter()
+        .map(|(c, _)| c.clone())
+        .find(|c| c.tier == 1)
+        .expect("a fused copy");
+    assert_eq!(fused.wear, 1);
+}
+
 // -------------------------------------------------------------- refit
 
 fn refit_game(seed: u32) -> Game {

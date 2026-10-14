@@ -1237,8 +1237,9 @@ impl Game {
     /// Highest `quality` first, because that is what a player would pick.
     /// Then cargo before worn, so a fusion disturbs the slot only when it
     /// has to. Then fewest affixes, which leaves the more interesting spare
-    /// in cargo for a later fusion. Then the affix ids themselves, which is
-    /// what makes it total.
+    /// in cargo for a later fusion. Then the affix ids themselves, then the
+    /// least worn, because the result takes the average of both copies'
+    /// wear; the last is what makes it total.
     fn best_fusion_partner(
         &self,
         survivor: &GearCopy,
@@ -1288,6 +1289,7 @@ impl Game {
                 u8::from(*from_slot),
                 candidate.affixes.len(),
                 candidate.affixes.clone(),
+                candidate.wear,
             )
         })
     }

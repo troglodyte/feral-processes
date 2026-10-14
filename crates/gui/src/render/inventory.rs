@@ -363,7 +363,7 @@ fn worn_summary(
 ///
 /// Split out for `SwapRow::stats`' reason, one line further up the screen: the
 /// picker's heading is a row of the same shape as the ones under it, and six
-/// stat axes behind a 71-cell name do not fit a 114.65-cell popup body. The
+/// stat axes behind a 77-cell name do not fit a 114.65-cell popup body. The
 /// name and the stats answer different questions, so the stats are what sheds
 /// — exactly the treatment the rows below already get. Joined here rather than
 /// in two places so the panel's row and the picker's heading cannot come to
@@ -1688,7 +1688,7 @@ mod tests {
     /// copy carries and the `Wearing: ` that labels the line.
     #[test]
     fn the_widest_wearing_heading_fits_its_popup() {
-        // The 71-cell name `SWAP_NAME_COLUMN` is cut for, the deepest level a
+        // The 77-cell name `SWAP_NAME_COLUMN` is cut for, the deepest level a
         // worn copy remembers, and a maxed fusion note.
         let head = swap_line(
             &heading_lead(),

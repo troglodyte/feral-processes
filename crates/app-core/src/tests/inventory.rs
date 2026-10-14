@@ -744,7 +744,7 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
                 // of the band name the widest one, so three values cover
                 // every width `copy_name` can produce on this axis.
                 for quality in [QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX] {
-                    // Wear adds ` n/max`, and ` broken` once spent: the
+                    // Wear adds ` n/max`, and a `!` once spent: the
                     // widest figure is the item's own durability, so one
                     // fight taken and all of them taken bracket it.
                     let (_, durability) = game.condition_of(&GearCopy::plain(item.clone()));

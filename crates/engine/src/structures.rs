@@ -177,7 +177,7 @@ pub struct DropPodDef {
 }
 
 /// What a structure does for a **downed** program — see
-/// `StructureDef::recovery` and `systems::recovery_system`.
+/// `StructureDef::recovery` and `Game::run_repair_bays`.
 ///
 /// The third member of the `PowerRegenDef` / `ServiceDef` family: a rate and
 /// a Chebyshev radius. What differs is what it aims at — `power_regen` at
@@ -386,7 +386,7 @@ pub struct StructureDef {
     pub services: Vec<ServiceDef>,
     /// If set, this structure restores a downed program's Integrity every
     /// tick while that program stands within `radius` tiles — see
-    /// `components::Downed` and `systems::recovery_system`. No assigned
+    /// `components::Downed` and `Game::run_repair_bays`. No assigned
     /// worker and no input, `power_regen`'s shape. A downed program walks
     /// here on its own and leaves when it is whole.
     ///

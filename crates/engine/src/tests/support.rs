@@ -3544,3 +3544,21 @@ pub(crate) fn charge_defences(game: &mut Game) {
             .insert(coil.clone(), 50);
     }
 }
+/// Puts `n` Patch Routines on a shelf the base can spend from, standing in
+/// for a Depot the fixture never built. A rest in base now costs them
+/// (`Game::rest`), so a test about anything else that rests stocks them
+/// rather than weakening what it asserts about the heal.
+///
+/// Placed far from any base-space tile a fixture uses so it cannot collide
+/// with a deployed structure.
+pub(crate) fn stock_patches(game: &mut Game, n: u32) {
+    let mut stock = Stock::new(10_000);
+    stock.output.insert(ItemId::from(ids::PATCH_ROUTINE), n);
+    game.world.spawn((
+        Structure {
+            kind: "depot".to_string(),
+        },
+        Position { x: 9_000, y: 9_000 },
+        stock,
+    ));
+}

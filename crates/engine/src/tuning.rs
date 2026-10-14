@@ -2504,6 +2504,17 @@ pub const POWER_UPKEEP_TICKS: u32 = 100;
 /// simply never stay lit.
 pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
 
+/// Integrity one Patch Routine buys when the party rests in base. A rest
+/// spends `ceil(missing / REST_INTEGRITY_PER_PATCH)` patches, so the last one
+/// rounds in the party's favour.
+pub const REST_INTEGRITY_PER_PATCH: i32 = 40;
+
+/// Integrity the party regains each tick while standing in base space out of
+/// battle, for free. The floor under paid rest, not a rival to it: at the
+/// world's two ticks a second a hundred points takes under a minute, a
+/// full recovery from near zero a few.
+pub const BASE_TRICKLE_PER_TICK: i32 = 1;
+
 /// How many units of a `StructureDef::supply` make one delivery. Its input
 /// buffer then holds `2 * SUPPLY_BATCH` (`input_room`), so a defence stays
 /// charged across several uses between hauls.

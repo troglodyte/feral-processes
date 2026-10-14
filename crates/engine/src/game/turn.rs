@@ -327,6 +327,8 @@ impl Game {
         // are `&mut Game` doors no bevy system can reach. See
         // `Game::run_repair_bays`.
         self.run_repair_bays();
+        // Beside the Bays: the free floor under a paid rest. See `run_base_trickle`.
+        self.run_base_trickle();
         // Beside the Bays and for their reason: seating a child goes through
         // `roster_parts` and names it through `creature_label`, `&mut Game`
         // work no bevy system can express. See `Game::hatch_incubations`.
@@ -1574,10 +1576,20 @@ impl Game {
             let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
             needs.fill(max);
         }
-        {
-            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
-            stats.hp = stats.max_hp;
-        }
+        // Integrity: in base it is bought with Patch Routines and may fall
+        // short; out here the Outlet already paid for a full repair. Rest is
+        // never refused either way.
+        let mended: crate::game::base::healing::Mend = if self.in_base() {
+            let bodies = self.rest_bodies();
+            self.mend_with_patches(&bodies)
+        } else {
+            for body in self.rest_bodies() {
+                if let Some(mut stats) = self.world.get_mut::<Stats>(body) {
+                    stats.hp = stats.max_hp;
+                }
+            }
+            crate::game::base::healing::Mend::default()
+        };
         // Below the gates rather than beside them, so a refused rest clears
         // nothing. The walk is player then `Party` — the same set
         // `tick_field_buffs` ages.
@@ -1585,52 +1597,17 @@ impl Game {
         // The roles are resolved into the list rather than asked for inside
         // the loop, since `program_role` borrows the world immutably and the
         // restores below take it mutably.
-        let owned: Vec<(Entity, Option<ProgramRole>)> = {
+        let owned: Vec<Entity> = {
             let mut query = self
                 .world
                 .query_filtered::<(Entity, &Tamed), With<Creature>>();
-            let owned: Vec<Entity> = query
+            query
                 .iter(&self.world)
                 .filter(|(_, t)| t.owner == player)
                 .map(|(e, _)| e)
-                .collect();
-            owned
-                .into_iter()
-                .map(|e| (e, self.program_role(e)))
                 .collect()
         };
-        for (creature, role) in owned {
-            // Exhaustive rather than a `!=`, `cell_mark`'s rule: the question
-            // is whether this program is standing *with* the player, the
-            // six roles answer it two and four, and there is no safe side
-            // to default a seventh one to. `UnderStudy` falls on the `false`
-            // side (as does `Jailed`) with `Sortie`, `Outpost` and `Staff` — a pinned program is
-            // not beside you either, and this is the one reader of the enum
-            // a fifth role could not leave silently wrong: decision 2 in
-            // `docs/superpowers/plans/2026-09-20-research-station-study.md`
-            // found this the only one of the role's five intended omissions
-            // that is an exhaustive match rather than a comparison. `Outpost`
-            // widened it the same way, a `false` arm for the same reason —
-            // an away crew member is no more beside you than a pinned one.
-            // `None` is unreachable — `owned` is already filtered to
-            // programs this player owns — and is spelled out rather than
-            // folded into a catch-all so it cannot become the arm a new role
-            // quietly lands in.
-            let repaired = match role {
-                Some(ProgramRole::InParty | ProgramRole::Wielded) => true,
-                Some(
-                    ProgramRole::Sortie
-                    | ProgramRole::Outpost
-                    | ProgramRole::Staff
-                    | ProgramRole::UnderStudy
-                    | ProgramRole::Jailed
-                    | ProgramRole::Siphoned,
-                ) => false,
-                None => false,
-            };
-            if repaired && let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
-                stats.hp = stats.max_hp;
-            }
+        for creature in owned {
             // Rest is the *only* refill for a companion's reserve: nothing
             // restores one passively, and there is no way to hand a program a
             // Power Cell mid-fight. The excluded roles included, deliberately
@@ -1642,13 +1619,16 @@ impl Game {
                 reserve.fill(max);
             }
         }
+        let repair = if mended.is_partial() {
+            "recharged, though the patches ran short and you are only partly repaired."
+        } else {
+            "fully recharged and repaired."
+        };
         match spent {
-            Some(name) => self.log(format!(
-                "You burn a {name} and come back online, fully recharged and repaired."
+            Some(name) => self.log(format!("You burn a {name} and come back online, {repair}")),
+            None => self.log(format!(
+                "You power down at the base and come back online, {repair}"
             )),
-            None => self.log(
-                "You power down at the base and come back online, fully recharged and repaired.",
-            ),
         }
         Ok(())
     }

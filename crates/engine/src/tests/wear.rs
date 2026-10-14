@@ -795,3 +795,79 @@ fn a_refit_logs_its_whole_bill_to_the_ledger() {
     assert_eq!(ledger(&game, ids::CORE_FRAGMENT) - fragments, 4);
     assert_eq!(ledger(&game, ids::CHARGE_COIL) - coils, 1, "pack-only item");
 }
+
+// ------------------------------------------------------- test gaps
+
+#[test]
+fn save_and_load_keep_wear_on_the_armor_and_module_slots() {
+    let mut game = Game::new(5050, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let armor = worn_copy(ids::FIREWALL_PLATING, 5);
+    let module = worn_copy("redundant_bank", 3);
+    for copy in [&armor, &module] {
+        game.add_copies(copy, 1);
+        game.equip(player, copy).unwrap();
+    }
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_wear_slots_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let player = loaded.player_entity();
+    assert_eq!(
+        loaded.worn(player, EquipmentSlot::Armor).unwrap().copy,
+        armor,
+        "armor_wear was dropped"
+    );
+    assert_eq!(
+        loaded.worn(player, EquipmentSlot::Module).unwrap().copy,
+        module,
+        "module_wear was dropped"
+    );
+}
+
+#[test]
+fn a_party_members_stats_stay_exact_through_wear_break_and_unequip() {
+    let mut game = Game::new(5051, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let member = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, member);
+    let bare = *game.world.get::<Stats>(member).unwrap();
+    let plating = worn_copy(ids::FIREWALL_PLATING, GEAR_DURABILITY - 1);
+    game.add_copies(&plating, 1);
+    game.equip(member, &plating).unwrap();
+    assert!(game.world.get::<Stats>(member).unwrap().mitigation > bare.mitigation);
+
+    lose_an_abstract_fight(&mut game);
+
+    let worn = game.worn(member, EquipmentSlot::Armor).unwrap().copy;
+    assert_eq!(game.condition_of(&worn).0, 0, "the fight broke it");
+    assert_eq!(
+        game.world.get::<Stats>(member).unwrap().mitigation,
+        bare.mitigation,
+        "a broken copy is inert on a party member too"
+    );
+    game.unequip(member, EquipmentSlot::Armor).unwrap();
+    let mut after = *game.world.get::<Stats>(member).unwrap();
+    after.hp = bare.hp;
+    assert_eq!(after, bare);
+}
+
+/// Called on `wear_gear` directly: `finish_fight` sweeps a fork away, so
+/// the body would not be left to read after a whole fight.
+#[test]
+fn a_summoned_fork_does_not_wear_its_gear() {
+    let mut game = Game::new(5052, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let fork = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, fork);
+    wear_the_whip(&mut game, fork, 0);
+    game.world
+        .entity_mut(fork)
+        .insert(crate::components::Summoned);
+
+    game.wear_gear(&[fork]);
+
+    assert_eq!(game.worn(fork, EquipmentSlot::Weapon).unwrap().copy.wear, 0);
+}

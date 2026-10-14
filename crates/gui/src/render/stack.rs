@@ -250,7 +250,12 @@ pub(super) fn draw_stack(
 
     let heading = format!(
         "Facing {}   Depth {} / {}   ({}, {})   Trace: {}",
-        view.facing, view.depth, view.frames, view.position.0, view.position.1, view.trace
+        view.facing.label(),
+        view.depth,
+        view.frames,
+        view.position.0,
+        view.position.1,
+        view.trace
     );
     painter.ui(
         &heading,
@@ -429,6 +434,7 @@ pub(super) fn draw_cell_describe(
 mod tests {
     use super::*;
     use feral_processes_engine::components::POWER_MAX;
+    use feral_processes_engine::stack::Dir;
 
     #[test]
     fn slices_shrink_monotonically_with_distance() {
@@ -711,7 +717,8 @@ mod tests {
         StackView {
             depth: 2,
             frames: 4,
-            facing: "N",
+            facing: Dir::North,
+            light_seed: 0,
             trace: "Traced",
             position: (3, 4),
             cells: ahead.iter().map(|&c| vec![flank, c, flank]).collect(),
@@ -857,7 +864,8 @@ mod tests {
         let empty = StackView {
             depth: 1,
             frames: 1,
-            facing: "N",
+            facing: Dir::North,
+            light_seed: 0,
             trace: "Quiet",
             position: (0, 0),
             cells: Vec::new(),
@@ -866,7 +874,8 @@ mod tests {
         let single = StackView {
             depth: 1,
             frames: 1,
-            facing: "S",
+            facing: Dir::South,
+            light_seed: 0,
             trace: "Hunted",
             position: (0, 0),
             cells: vec![vec![StackCellView::Floor]],

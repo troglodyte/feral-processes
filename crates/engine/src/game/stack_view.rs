@@ -21,6 +21,11 @@ use super::stack_features::AdoptBlock;
 use crate::stack::{CellKind, Dir, Frame};
 use crate::*;
 
+/// Salts `StackView::light_seed` off the frame's spec, distinct from
+/// `DESCRIPTION_SALT` and `PASSAGE_SALT` so lighting never correlates with
+/// what a cell says.
+const LIGHT_SALT: u64 = 0x11_6874_5EED;
+
 /// How far ahead the first-person view reaches, in cells. Four is enough
 /// corridor to read a junction coming without the far wall shrinking to
 /// nothing.
@@ -530,6 +535,7 @@ impl Game {
             x,
             y,
             facing,
+            entrance,
             ..
         } = pos;
         let level = self.world.resource::<CurrentStack>().0.as_ref()?;
@@ -661,7 +667,10 @@ impl Game {
         Some(StackView {
             depth,
             frames,
-            facing: facing.label(),
+            facing,
+            light_seed: self
+                .frame_spec(depth, frames, entrance)
+                .salted(&[LIGHT_SALT]),
             trace: self.trace_band().label(),
             position: (x, y),
             cells,

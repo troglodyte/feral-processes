@@ -1770,10 +1770,14 @@ impl Game {
         let by_tile: std::collections::HashMap<(i32, i32), Entity> =
             cells.iter().map(|&(e, tile, _)| (tile, e)).collect();
         let db = self.world.resource::<StructureDb>();
-        let in_store = |item: &ItemId, burner: Entity| -> u32 {
+        // A burner's fuel is the grid and is taken off any structure's
+        // output; any other supply is taken off a store alone, so a
+        // production buffer is never raided for it.
+        let in_store = |item: &ItemId, burner: Entity, any_structure: bool| -> u32 {
             cells
                 .iter()
                 .filter(|(e, ..)| *e != burner)
+                .filter(|(.., kind)| any_structure || db.get(kind).is_some_and(|d| d.stores))
                 .filter_map(|(e, ..)| self.world.get::<Stock>(*e))
                 .map(|stock| stock.output.get(item).copied().unwrap_or(0))
                 .sum()
@@ -1805,15 +1809,18 @@ impl Game {
             if batch_within_reach(held, beside, 0, per_window) {
                 continue;
             }
-            if in_store(&fuel, *burner) < per_window {
-                if !unstocked.iter().any(|(item, _)| *item == fuel) {
+            let is_fuel = def.power_upkeep.is_some();
+            if in_store(&fuel, *burner, is_fuel) < per_window {
+                // Only the grid's fuel puts staff on its maker at this
+                // priority; a defence's supply is made by work orders.
+                if is_fuel && !unstocked.iter().any(|(item, _)| *item == fuel) {
                     unstocked.push((fuel, per_window));
                 }
                 continue;
             }
             // A fuel burner sorts ahead of a supply spender whatever their
             // tiles, so the grid is fed before a defence is topped up.
-            fetches.push((def.power_upkeep.is_none(), (*x, *y), *burner));
+            fetches.push((!is_fuel, (*x, *y), *burner));
         }
         // `assembler_system`'s reason: `iter_entities` order is not stable,
         // and two suppliers competing for the last body have to resolve the

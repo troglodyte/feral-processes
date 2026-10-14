@@ -1239,7 +1239,10 @@ pub(crate) fn haul_step_system(
             let recipe = def.and_then(|def| intake_recipe(def, &items));
             // The burner itself is in `every_structure`, harmlessly: a
             // fetched cell lands in its *input*, never its output.
-            let sources = if def.is_some_and(|d| d.spends_supply().is_some()) {
+            // A defence's supply is shelf stock only: `every_structure`
+            // would let it raid a production buffer such as a Winding
+            // Node's output.
+            let sources = if def.is_some_and(|d| d.power_upkeep.is_some()) {
                 &every_structure
             } else {
                 &stores

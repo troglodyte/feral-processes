@@ -159,3 +159,46 @@ fn a_repair_bay_beside_stocked_patches_is_still_hauled_to() {
         "patches beside the bay are not in its input"
     );
 }
+
+/// The Winding Node's output feeds the Assembly Bay's `patch_routine` line;
+/// a defence's supply is drawn off a store, never off a production buffer.
+#[test]
+fn a_shield_is_not_supplied_from_a_production_output() {
+    let mut game = base(9306);
+    let shield = deploy(&mut game, "shield", 1, 0);
+    let winding = deploy(&mut game, "winding_node", 4, 0);
+    fill_output(&mut game, winding, ids::CHARGE_COIL, 20);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert_eq!(hopper(&game, shield, ids::CHARGE_COIL), 0);
+    assert_eq!(node_output(&game, winding, ids::CHARGE_COIL), 20);
+}
+
+#[test]
+fn an_unstocked_shield_does_not_crew_the_coil_maker() {
+    let mut game = base(9307);
+    let shield = deploy(&mut game, "shield", 1, 0);
+    let winding = deploy(&mut game, "winding_node", 4, 0);
+    game.world
+        .get_mut::<Stock>(winding)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::POWER_CELL), 10);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    assert_ne!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(winding),
+        "a defence's supply is no reason to put anyone on the coil maker"
+    );
+}

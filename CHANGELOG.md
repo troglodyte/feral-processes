@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.33
+
+**Programs fighting you on a battle map now fight as a pack, with one of three tactics a fight-start line announces.** Some packs still rush you, as before. Some keep together, so a fast program waits for slower packmates instead of arriving alone. Some spread out behind cover and wait, breaking cover once they see you, one of them is hit, one is lost, or they have waited six rounds. How often each tactic comes up depends on the leading program's temperament, so cautious packs lie in wait more and brutes rush more.
+
+**A battle-map fight no longer crashes when a program's step ends the fight.** A program walking off the edge as the last of its side closed the battle and then read the board that was gone.
+
 ## 0.18.32
 
 **`p` now opens your party as a page list like the base report's: Companions, Programs, Routines and Perks.** The party menu was a list of rows that each opened its own window. Now the roster and your perks are pages of one screen, and the remaining rows sit on two pages: Programs (read a manifest, fuse, refactor, develop) and Routines (install, etch, extract). Turn pages with the arrows or `[` and `]`, and `p` reopens the page you left. `P` from a level-up goes straight to Perks with the cursor on the list, and every roster and Perks letter key works as before.

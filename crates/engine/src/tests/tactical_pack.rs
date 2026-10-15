@@ -365,6 +365,7 @@ mod hold {
     use super::field::*;
     use super::*;
     use crate::components::Stats;
+    use crate::tactical::pack;
     use crate::tactical::reach;
     use crate::tuning::TACTICAL_HOLD_ROUNDS;
 
@@ -374,10 +375,33 @@ mod hold {
     /// is covered from a player standing due east on row 8.
     fn holding_pair(player_at: (i32, i32)) -> (Game, Vec<Entity>) {
         let mut game = game();
-        let pack = stand(&mut game, 2, player_at, &[(2, 8), (1, 9)]);
+        let pack = stand(&mut game, 2, player_at, &[(4, 8), (3, 9)]);
+        melee(&mut game, &pack);
         open_field_cover(&mut game);
         game.set_pack_tactic(PackTactic::Hold);
         (game, pack)
+    }
+
+    /// Plays the pack as a melee species, so the only reason it has to look
+    /// for cover is the tactic's own: a ranged body already walks for cover on
+    /// its profile's weight and would hide what the Hold bonus is worth.
+    fn melee(game: &mut Game, pack: &[Entity]) {
+        let ids: Vec<String> = game
+            .species_defs()
+            .into_iter()
+            .filter(|d| !d.is_hybrid())
+            .map(|d| d.id.clone())
+            .collect();
+        for &body in pack {
+            let found = ids.iter().find(|id| {
+                game.world
+                    .get_mut::<crate::components::Creature>(body)
+                    .unwrap()
+                    .species = (*id).clone();
+                game.swing_range(body) == 1
+            });
+            assert!(found.is_some(), "no melee species ships");
+        }
     }
 
     /// `open_field` again with the boulder in, bodies left where they stand.
@@ -420,20 +444,45 @@ mod hold {
     }
 
     #[test]
+    fn a_holding_body_does_not_close_on_a_distant_player() {
+        let moved = |tactic| {
+            let mut game = game();
+            let pack = stand(&mut game, 2, (14, 8), &[(2, 8), (1, 9)]);
+            melee(&mut game, &pack);
+            game.set_pack_tactic(tactic);
+            take_turn(&mut game, pack[0]);
+            cell_of(&game, pack[0]) != (2, 8)
+        };
+        assert!(moved(PackTactic::Rush), "the control did not close");
+        assert!(!moved(PackTactic::Hold));
+    }
+
+    #[test]
+    fn the_planner_reads_the_tactic_a_pending_trigger_would_leave() {
+        // The forecast cannot write, so it must plan under what the turn will:
+        // a hold that is about to break already closes at full scale.
+        let quiet = holding_pair((14, 8));
+        let sighted = holding_pair((8, 8));
+        assert_eq!(pack::closing_scale(&quiet.0, quiet.1[0]), 0.0);
+        assert_eq!(pack::closing_scale(&sighted.0, sighted.1[0]), 1.0);
+        assert_eq!(tactic_of(&sighted.0), PackTactic::Hold, "the read wrote");
+    }
+
+    #[test]
     fn hold_breaks_when_the_player_comes_into_sight() {
-        // Six cells due east: inside the alert range and in the open.
+        // Four cells due east: inside the alert range and in the open.
         let (mut game, pack) = holding_pair((8, 8));
         take_turn(&mut game, pack[0]);
         assert_eq!(tactic_of(&game), PackTactic::Rush);
         assert_eq!(breaks_logged(&game), 1);
         // And the body whose turn it was planned under Rush: it closed.
-        assert!(cell_of(&game, pack[0]).0 > 2, "did not advance that turn");
+        assert!(cell_of(&game, pack[0]).0 > 4, "did not advance that turn");
     }
 
     #[test]
     fn a_player_out_of_range_does_not_break_the_hold() {
         // Seven cells off: clear sight, but past the alert range.
-        let (mut game, pack) = holding_pair((9, 8));
+        let (mut game, pack) = holding_pair((11, 8));
         take_turn(&mut game, pack[0]);
         assert_eq!(tactic_of(&game), PackTactic::Hold);
     }

@@ -11,9 +11,9 @@ use crate::abilities::TamperKind;
 use crate::behaviours::BehaviourDb;
 use crate::components::{Routines, Tampered};
 use crate::resources::{Behaviours, DifficultyMode};
+use crate::tactical::TacticalBattle;
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::pack::PackTactic;
-use crate::tactical::TacticalBattle;
 use bevy_ecs::prelude::Entity;
 
 fn game() -> Game {
@@ -514,9 +514,7 @@ mod hold {
     #[test]
     fn hold_breaks_when_a_member_is_gone() {
         let (mut game, pack) = holding_pair((14, 8));
-        game.world
-            .resource_mut::<TacticalBattle>()
-            .remove(pack[1]);
+        game.world.resource_mut::<TacticalBattle>().remove(pack[1]);
         take_turn(&mut game, pack[0]);
         assert_eq!(tactic_of(&game), PackTactic::Rush);
         assert_eq!(breaks_logged(&game), 1);

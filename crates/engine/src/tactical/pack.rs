@@ -12,12 +12,12 @@ use bevy_ecs::prelude::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::Game;
-use crate::resources::Behaviours;
 use crate::components::Stats;
 use crate::derive::{FNV_BASIS, fold, index};
+use crate::resources::Behaviours;
 use crate::tactical::TacticalBattle;
-use crate::tactical::map::BattleSpec;
 use crate::tactical::ai::cover_share;
+use crate::tactical::map::BattleSpec;
 use crate::tactical::reach::{self, line_of_sight};
 use crate::tuning::{
     PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_SLACK, TACTICAL_COHESION_WEIGHT,
@@ -271,7 +271,13 @@ pub fn roll(spec: BattleSpec, members: &[Entity], game: &Game) -> PackTactic {
     let weights: Vec<u32> = PackTactic::ALL
         .iter()
         .zip(odds)
-        .map(|(tactic, weight)| if tactic.eligible(members.len()) { weight } else { 0 })
+        .map(|(tactic, weight)| {
+            if tactic.eligible(members.len()) {
+                weight
+            } else {
+                0
+            }
+        })
         .collect();
     let total: u32 = weights.iter().sum();
     if total == 0 {

@@ -17,7 +17,10 @@ use crate::components::Stats;
 use crate::derive::{FNV_BASIS, fold, index};
 use crate::tactical::TacticalBattle;
 use crate::tactical::map::BattleSpec;
-use crate::tuning::{PACK_ROLL_SALT, PACK_TACTIC_ODDS};
+use crate::tactical::reach;
+use crate::tuning::{
+    PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_SLACK, TACTICAL_COHESION_WEIGHT,
+};
 
 /// What the hostile side is doing as a pack.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -65,9 +68,61 @@ impl Game {
     }
 }
 
+/// Every body the hostile side has on the board right now.
+///
+/// **`acts_for_hostiles`, the one door onto allegiance**: a body tampered
+/// onto the party's side has left the pack and a hallucinating one is still in
+/// it. A squad is one body, and positions are read through `cells_of`.
+pub(crate) fn members(game: &Game) -> Vec<Entity> {
+    let battle = game.world.resource::<TacticalBattle>();
+    battle
+        .bodies()
+        .map(|(body, _)| body)
+        .filter(|&body| game.acts_for_hostiles(body))
+        .collect()
+}
+
+/// Whether `body` is part of the pack the current tactic plays for.
+fn in_pack(game: &Game, body: Entity) -> bool {
+    game.acts_for_hostiles(body)
+}
+
 /// What `body` adds to a candidate cell's worth under the pack's tactic.
-pub(crate) fn cell_terms(_game: &Game, _body: Entity, _cell: (i32, i32)) -> f32 {
-    0.0
+///
+/// Zero for `Rush` and for any body outside the pack, so a party body driven
+/// through `scored_cells` plans as it always has.
+pub(crate) fn cell_terms(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
+    let battle = game.world.resource::<TacticalBattle>();
+    if !in_pack(game, body) {
+        return 0.0;
+    }
+    match battle.pack.tactic {
+        PackTactic::Rush => 0.0,
+        PackTactic::Together => cohesion(game, body, cell),
+        PackTactic::Hold => 0.0,
+    }
+}
+
+/// The slack-rope pull toward the packmates' centroid: free within
+/// `TACTICAL_COHESION_SLACK` of it, a linear charge beyond.
+fn cohesion(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
+    let battle = game.world.resource::<TacticalBattle>();
+    let mates: Vec<(i32, i32)> = members(game)
+        .into_iter()
+        .filter(|&mate| mate != body)
+        .flat_map(|mate| battle.cells_of(mate))
+        .collect();
+    if mates.is_empty() {
+        return 0.0;
+    }
+    let n = mates.len() as i32;
+    let centroid = (
+        (mates.iter().map(|c| c.0).sum::<i32>() as f32 / n as f32).round() as i32,
+        (mates.iter().map(|c| c.1).sum::<i32>() as f32 / n as f32).round() as i32,
+    );
+    let stands = crate::tactical::footprint_cells_at(cell, battle.footprint_of(body));
+    let d = reach::gap(&stands, &[centroid]);
+    -TACTICAL_COHESION_WEIGHT * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
 }
 
 /// The multiplier on `body`'s closing term.

@@ -5839,6 +5839,18 @@ pub const PACK_TACTIC_ODDS: [(&str, [u32; 3]); 5] = [
 /// on no such word).
 pub const PACK_ROLL_SALT: u64 = 0x9ac7_7ac7_1c5e_ed01;
 
+/// How hard `Together` pulls a body back toward its packmates' centroid, per
+/// step beyond `TACTICAL_COHESION_SLACK`.
+///
+/// Above `TACTICAL_AI_CLOSING_WEIGHT`, or a step of closing would always pay
+/// for the step of straying it costs and the term would never hold anyone.
+/// Far below `TACTICAL_AI_REACH_SCORE`, so a body that can swing still swings.
+pub const TACTICAL_COHESION_WEIGHT: f32 = 1.5;
+
+/// How far from its packmates' centroid a body may stand before `Together`
+/// starts to charge it for the distance, in steps.
+pub const TACTICAL_COHESION_SLACK: u32 = 2;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tactical squads
 // ─────────────────────────────────────────────────────────────────────────

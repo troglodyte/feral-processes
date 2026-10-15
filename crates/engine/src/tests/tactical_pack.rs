@@ -14,6 +14,7 @@ use crate::resources::{Behaviours, DifficultyMode};
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::pack::PackTactic;
 use crate::tactical::TacticalBattle;
+use bevy_ecs::prelude::Entity;
 
 fn game() -> Game {
     Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -90,7 +91,6 @@ fn every_shipped_profile_forecasts_the_action_its_turn_takes_under_every_tactic(
 
 mod roll {
     use super::*;
-    use bevy_ecs::prelude::Entity;
     use crate::components::Stats;
     use crate::resources::GameRng;
     use crate::tactical::map::BattleSpec;
@@ -248,5 +248,115 @@ mod arena_override {
         )
         .unwrap_err();
         assert!(err.contains("Tactical"), "{err}");
+    }
+}
+
+/// Board helpers for the movement tests: a 16 by 16 open field, the player
+/// far to the east, and the pack parked where the test says.
+mod field {
+    use super::*;
+    use crate::components::Stats;
+    use crate::tactical::map::Board;
+    use crate::tactical::reach;
+
+    pub fn open_field(game: &mut Game, cover: &[(usize, usize)]) {
+        let mut rows = vec![".".repeat(16); 16];
+        for &(x, y) in cover {
+            rows[y].replace_range(x..=x, "#");
+        }
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        game.world.resource_mut::<TacticalBattle>().board = Board::from_rows(&rows);
+        let player = game.player_entity();
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = 10_000;
+        stats.max_hp = 10_000;
+    }
+
+    pub fn put(game: &mut Game, body: Entity, cell: (i32, i32)) {
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, cell),
+            "{cell:?} would not take a body"
+        );
+    }
+
+    pub fn cell_of(game: &Game, body: Entity) -> (i32, i32) {
+        game.world
+            .resource::<TacticalBattle>()
+            .cell_of(body)
+            .expect("on the board")
+    }
+
+    /// `count` swing-only hostiles parked out of the way, then stood on
+    /// `cells`, with the player at `player_at`.
+    pub fn stand(
+        game: &mut Game,
+        count: usize,
+        player_at: (i32, i32),
+        cells: &[(i32, i32)],
+    ) -> Vec<Entity> {
+        let pack = tactical_fight(game, count, 10_000);
+        for &body in &pack {
+            game.world.entity_mut(body).insert(Routines::default());
+        }
+        open_field(game, &[]);
+        for (i, &body) in pack.iter().enumerate() {
+            put(game, body, (i as i32, 15));
+        }
+        let player = game.player_entity();
+        put(game, player, player_at);
+        for (&body, &cell) in pack.iter().zip(cells) {
+            put(game, body, cell);
+        }
+        pack
+    }
+
+    pub fn step_distance(a: (i32, i32), b: (i32, i32)) -> u32 {
+        reach::distance(a, b)
+    }
+}
+
+mod together {
+    use super::field::*;
+    use super::*;
+    use crate::tuning::TACTICAL_COHESION_SLACK;
+
+    /// Where the first hostile ends its turn, with its packmate left behind
+    /// at the west edge and the player far to the east.
+    fn runner_ends_at(tactic: PackTactic) -> ((i32, i32), (i32, i32)) {
+        let mut game = game();
+        let pack = stand(&mut game, 2, (14, 8), &[(2, 8), (0, 8)]);
+        game.set_pack_tactic(tactic);
+        assert!(wait_for_turn(&mut game, pack[0]));
+        assert!(game.tactical_ai_turn_at(0.0));
+        (cell_of(&game, pack[0]), cell_of(&game, pack[1]))
+    }
+
+    #[test]
+    fn a_body_that_would_outrun_its_packmate_stops_within_the_slack() {
+        let (rush_runner, rush_mate) = runner_ends_at(PackTactic::Rush);
+        assert!(
+            step_distance(rush_runner, rush_mate) > TACTICAL_COHESION_SLACK,
+            "the control did not outrun the pack: {rush_runner:?} vs {rush_mate:?}"
+        );
+        let (runner, mate) = runner_ends_at(PackTactic::Together);
+        assert!(
+            step_distance(runner, mate) <= TACTICAL_COHESION_SLACK,
+            "outran the pack: {runner:?} vs {mate:?}"
+        );
+    }
+
+    #[test]
+    fn a_lone_body_under_together_closes_as_it_always_did() {
+        let end = |tactic| {
+            let mut game = game();
+            let pack = stand(&mut game, 1, (14, 8), &[(2, 8)]);
+            game.set_pack_tactic(tactic);
+            assert!(wait_for_turn(&mut game, pack[0]));
+            assert!(game.tactical_ai_turn_at(0.0));
+            cell_of(&game, pack[0])
+        };
+        assert_eq!(end(PackTactic::Together), end(PackTactic::Rush));
     }
 }

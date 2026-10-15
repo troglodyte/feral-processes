@@ -173,10 +173,10 @@ fn the_command_pages_drop_their_base_rows_underground_too() {
     }
 }
 
-/// The party menu is deliberately almost all non-surface — managing what you
+/// The party hub is deliberately almost all non-surface — managing what you
 /// brought with you is exactly what the Stack is for.
 #[test]
-fn the_party_menu_survives_going_underground() {
+fn the_party_hub_survives_going_underground() {
     let mut app = app_underground(4005);
     let rows = labels(&party_rows(&mut app));
     assert!(rows.contains(&"Read a manifest"), "{rows:?}");
@@ -302,7 +302,7 @@ fn the_retired_map_keys_do_nothing() {
 }
 
 /// `i` moved from inspect to the pack, so inspect took `x` — freed by perks
-/// moving into the party menu.
+/// moving into the party hub.
 #[test]
 fn i_opens_the_pack_and_x_inspects() {
     let mut app = test_app(4013);

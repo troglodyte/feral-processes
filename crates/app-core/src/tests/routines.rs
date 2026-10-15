@@ -3,7 +3,7 @@ use crate::*;
 use feral_processes_engine::abilities::FALLBACK_ABILITY_ID;
 
 #[test]
-fn the_party_menu_opens_the_routine_target_picker_and_esc_backs_all_the_way_out() {
+fn the_routines_page_opens_the_routine_target_picker_and_esc_backs_all_the_way_out() {
     let mut app = test_app(61);
     open_via_menu(&mut app, 'p', "Install a routine");
     assert_eq!(app.mode, Mode::RoutineTarget);
@@ -154,7 +154,7 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
 /// starts full, so a player who had never popped one out could not reach it
 /// at all — and it is where blanks turn into the disks that fill slots.
 #[test]
-fn the_party_menu_opens_the_etch_screen_and_esc_comes_straight_back() {
+fn the_routines_page_opens_the_etch_screen_and_esc_comes_straight_back() {
     let mut app = test_app(65);
     // The row is hidden while there is nothing to write, and a new game
     // knows nothing: `Game::new` takes `CharacterChoice::default()`, whose
@@ -190,7 +190,7 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineInstall);
     // And the rest of the chain is undisturbed — the `[e]` detour must not
-    // consume the origin the party menu left behind.
+    // consume the origin the Routines page left behind.
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Routines);
     app.handle_key(GameKey::Esc);

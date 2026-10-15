@@ -1,5 +1,5 @@
 //! The party hub: `p` opens a rail of Companions, Programs, Routines and
-//! Perks, and every screen that hung off the old party menu still has its
+//! Perks, and every screen that hung off the old `p` menu still has its
 //! door. Driven through `handle_key` throughout, so a lost door fails here.
 
 use feral_processes_engine::save;
@@ -31,10 +31,15 @@ fn assert_in_page(app: &App, mode: Mode) {
 /// A run holding `perk_points`, through the save, the only door app-core has
 /// onto them.
 fn app_with_perk_points(seed: u32, perk_points: u32) -> App {
+    app_with_points(seed, 0, perk_points)
+}
+
+fn app_with_points(seed: u32, stat_points: u32, perk_points: u32) -> App {
     let mut app = test_app(seed);
     let path = scratch_path("party_hub_points", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
+    data.player.stat_points = stat_points;
     data.player.perk_points = perk_points;
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
@@ -263,16 +268,19 @@ fn refactor_and_develop_are_reached_from_programs() {
     let mut app = app_owning_a_program_and_a_compiler_with_cargo(
         31015,
         &[],
-        &[("privilege_ring", 3), ("scrap_plating", 1)],
+        &[
+            ("privilege_ring", 3),
+            ("scrap_plating", 1),
+            ("bounds_check", 1),
+            ("inline_cache", 1),
+        ],
     );
     let rows = party_rows(&mut app);
     for (label, mode) in [
         ("Refactor a program", Mode::Refactor),
         ("Develop a program", Mode::Develop),
     ] {
-        if rows.iter().all(|r| r.label != label) {
-            continue;
-        }
+        assert!(rows.iter().any(|r| r.label == label), "{label} is offered");
         open_via_menu(&mut app, 'p', label);
         assert_eq!(app.mode, mode);
         app.handle_key(GameKey::Esc);
@@ -280,7 +288,6 @@ fn refactor_and_develop_are_reached_from_programs() {
         press(&mut app, &[GameKey::Esc, GameKey::Esc]);
         assert_eq!(app.mode, Mode::Playing);
     }
-    assert!(rows.iter().any(|r| r.label == "Develop a program"));
 }
 
 #[test]
@@ -338,10 +345,11 @@ fn level_up_p_lands_on_perks_in_page() {
 
 #[test]
 fn allocate_stats_returns_to_perks_in_page() {
-    let mut app = app_with_perk_points(31021, 1);
+    let mut app = app_with_points(31021, 3, 1);
     open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
-    // Nothing banked: the refusal keeps the page, which is the same door.
+    assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
     assert_in_page(&app, Mode::Perks);
 }
 

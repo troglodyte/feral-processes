@@ -179,7 +179,7 @@ fn the_menu_keys_still_open_their_screens_underground() {
         app.handle_key(key);
         assert_eq!(app.mode, expected, "{key:?} should still open its screen");
     }
-    // And the party menu still reaches its screens from down there — the
+    // And the party hub still reaches its screens from down there — the
     // rows are non-surface, so none of them are filtered out.
     let mut app = app_underground(303);
     open_via_menu(&mut app, 'p', "Install a routine");

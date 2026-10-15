@@ -912,11 +912,9 @@ fn cost_rows(game: &Game, cost: &[(ItemId, u32)], have: impl Fn(&ItemId) -> u32)
         .collect()
 }
 
-/// The cargo row `Mode::InventoryItemAction` and `Mode::ItemDescribe` are
-/// about, as the `(item, tier)` pair both their screens take.
 fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
-    // Cloned off `app` before `app.game` is borrowed, `group_rows`' reason,
+    // Cloned off `app` before `app.game` is borrowed, `command_rows`' reason,
     // and only where it is read: a preview is a few numbers per perk.
     let perk_previews = match app.mode {
         Mode::Perks => app.perk_previews.clone(),
@@ -935,12 +933,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let mod_copy = app.mod_copy.clone();
     let refit_copy = app.refit_copy.clone();
     let pending_inspect = app.pending_inspect.clone();
-    // Taken off `app` before `app.game` is borrowed below, and through the
-    // same methods the handlers pick from. A renderer holding its own copy
-    // of the filter would draw a list the handler doesn't index — which is
-    // survivable while both are unconditional, and is not once the base
-    // menu starts hiding rows.
-    // Rows off `app` before `app.game` is borrowed, `group_rows`' reason.
+    // Rows off `app` before `app.game` is borrowed, `command_rows`' reason.
     let allocation_rows = match app.mode {
         Mode::AllocateStats => points::allocate_stats_rows(app),
         _ => Vec::new(),
@@ -954,7 +947,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => None,
     };
     // Through `App::contract_sections` and not off the engine directly, for
-    // `group_rows`' reason one line up: the handler resolves a row number
+    // `command_rows`' reason one line up: the handler resolves a row number
     // against these two lists, so a renderer with its own copy would act on a
     // different contract from the one under the highlight.
     let (contract_active, contract_offers, contract_reach) = match app.mode {

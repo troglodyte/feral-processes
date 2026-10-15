@@ -13,9 +13,9 @@ impl App {
     /// a row that is simply gone. See
     /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` guard
     /// table.
-    /// Every action on
-    /// this screen acts on the highlight — `P` adds the highlighted program
-    /// to the party or stands it down again, `<` and `>` shift it along the
+    ///
+    /// Every action on this screen acts on the highlight — `P` adds the
+    /// highlighted program to the party or stands it down again, `<` and `>` shift it along the
     /// battle line, `N`/`E`/`W` rename, gear and wield it, `U` takes all of
     /// that gear back off, `M` reads its manifest — so a row's number or
     /// letter *only* moves the highlight.
@@ -352,7 +352,7 @@ impl App {
     /// roster grows.
     ///
     /// **Nothing on the screen names this key.** That omission is the whole
-    /// feature — see `render::party`'s `COMPANION_HELP`, which a gui test
+    /// feature — see `render::party`'s `ROSTER_KEYS`, which a gui test
     /// holds to it.
     fn toggle_wield(&mut self) {
         let row = self.menu_selected;

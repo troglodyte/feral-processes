@@ -73,7 +73,7 @@ fn zero_picks_no_row_rather_than_underflowing() {
 }
 
 #[test]
-fn the_party_menu_opens_the_manifest_on_you_and_esc_backs_out() {
+fn the_companions_page_opens_the_manifest_on_you_and_esc_backs_out() {
     let mut app = test_app(70);
     open_via_menu(&mut app, 'p', "Read a manifest");
     assert_eq!(app.mode, Mode::Manifest);

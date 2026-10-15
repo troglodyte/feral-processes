@@ -100,6 +100,7 @@ fn every_route_into_the_perks_menu_fills_the_previews() {
         let mut app = app_holding_points(9606, 2, 1);
         open_via_menu(&mut app, 'p', "Perks");
         app.handle_key(GameKey::Char('S'));
+        app.perk_previews.clear();
         app.handle_key(key);
         assert_previews_filled(&app, "leaving Points");
     }
@@ -109,6 +110,7 @@ fn every_route_into_the_perks_menu_fills_the_previews() {
     open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::PerkBought, "{:?}", app.status_line);
+    app.perk_previews.clear();
     app.handle_key(GameKey::Enter);
     assert_previews_filled(&app, "purchase page");
 }

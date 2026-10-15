@@ -231,7 +231,7 @@ fn leaving_the_hub_from_a_drill_down_does_not_keep_the_pick_for_the_return() {
 }
 
 #[test]
-fn the_party_menu_no_longer_lists_tools_and_the_page_is_a_bracket_away() {
+fn the_party_hub_no_longer_lists_tools_and_the_page_is_a_bracket_away() {
     let mut app = test_app(9508);
     app.handle_key(GameKey::Char('p'));
     assert!(

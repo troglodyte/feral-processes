@@ -125,7 +125,7 @@ fn the_hidden_key_unwields_when_pressed_on_the_program_already_in_hand() {
 #[test]
 fn the_hidden_key_is_ignored_on_an_empty_roster() {
     let mut app = test_app(772);
-    // Set directly: with no programs the party menu hides the row entirely,
+    // Set directly: with no programs the party hub hides the row entirely,
     // so the screen is unreachable through it — which is the point. The key
     // still must not panic if the screen is somehow open on nothing.
     app.mode = Mode::Companion;
@@ -321,7 +321,7 @@ fn enter_does_nothing_on_the_roster() {
 fn p_is_ignored_on_an_empty_roster() {
     let mut app = test_app(783);
     // Set directly, for the reason `the_hidden_key_is_ignored_on_an_empty_
-    // roster` gives: the party menu hides the row when there is nothing on it.
+    // roster` gives: the party hub hides the row when there is nothing on it.
     app.mode = Mode::Companion;
 
     app.handle_key(GameKey::Char('P'));
@@ -644,7 +644,7 @@ fn the_memories_page_scrolls_without_losing_the_rosters_row() {
 /// `R` with the highlight past the end of the roster has no program to be
 /// about, and must leave the mode alone rather than open a page with no
 /// subject. Reached by writing the highlight rather than by emptying the
-/// roster: with nobody owned the party menu does not offer the row at all,
+/// roster: with nobody owned the party hub does not offer the row at all,
 /// so there is no way in to test from.
 #[test]
 fn r_with_the_highlight_past_the_roster_opens_nothing() {

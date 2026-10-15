@@ -1,6 +1,6 @@
 //! The hub command pages — the base's four (`b`, then Build / Research /
-//! Trade / Compile) and the party's two (`p`, then Programs / Routines) — and the rule that decides which of
-//! their rows are on screen right now.
+//! Trade / Compile) and the party's two (`p`, then Programs / Routines) —
+//! and the rule that decides which of their rows are on screen right now.
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were

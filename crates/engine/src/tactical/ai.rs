@@ -1166,7 +1166,7 @@ impl Game {
         // The profile's weights with the pack's closing scale applied, so
         // the merit filter, the standing comparison and the score below all
         // read one figure.
-        let plan = pack::plan(self, actor);
+        let plan = pack::plan(self, actor, w.closing);
         let scaled = CellWeights {
             closing: w.closing * plan.closing_scale(),
             ..*w

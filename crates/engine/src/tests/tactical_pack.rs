@@ -557,8 +557,11 @@ mod hold {
         // a hold that is about to break already closes at full scale.
         let quiet = holding_pair((14, 8));
         let sighted = holding_pair((8, 8));
-        assert_eq!(pack::plan(&quiet.0, quiet.1[0]).closing_scale(), 0.0);
-        assert_eq!(pack::plan(&sighted.0, sighted.1[0]).closing_scale(), 1.0);
+        assert_eq!(pack::plan(&quiet.0, quiet.1[0], 1.0).closing_scale(), 0.0);
+        assert_eq!(
+            pack::plan(&sighted.0, sighted.1[0], 1.0).closing_scale(),
+            1.0
+        );
         assert_eq!(tactic_of(&sighted.0), PackTactic::Hold, "the read wrote");
     }
 
@@ -581,7 +584,7 @@ mod hold {
         assert_eq!(tactic_of(&game), PackTactic::Hold);
         // The stored field alone proves little: the planner must still be
         // holding too.
-        assert_eq!(pack::plan(&game, pack[1]).closing_scale(), 0.0);
+        assert_eq!(pack::plan(&game, pack[1], 1.0).closing_scale(), 0.0);
     }
 
     #[test]
@@ -698,7 +701,7 @@ mod real_fights {
 mod rush_and_forecast {
     use super::field::*;
     use super::*;
-    use crate::components::{AbilityCooldowns, Creature, Stats, Tampered};
+    use crate::components::{Creature, Stats, Tampered};
     use crate::tactical::map::Board;
     use crate::tactical::reach;
 
@@ -767,7 +770,6 @@ mod rush_and_forecast {
         let forecast = game.tactical_forecast(wild).expect("a profiled hostile");
         let predicted = forecast.walk.last().copied().unwrap_or(from);
         game.tactical_ai_turn();
-        let _ = game.world.get::<AbilityCooldowns>(wild);
         (from, predicted, cell_of(&game, wild))
     }
 

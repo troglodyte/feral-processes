@@ -730,6 +730,8 @@ fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
         })
         .collect();
     game.open_tactical_battle(pack.clone());
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     pack
 }
 

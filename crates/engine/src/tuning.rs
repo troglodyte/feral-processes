@@ -5863,6 +5863,12 @@ pub const TACTICAL_COHESION_SLACK: u32 = 2;
 /// swung at.
 pub const TACTICAL_HOLD_COVER_BONUS: f32 = 6.0;
 
+/// What `Hold` charges a cell from which a target is in view (within
+/// `TACTICAL_HOLD_ALERT_RANGE` with line of sight): the very sighting that
+/// would end the hold. Far past `TACTICAL_HOLD_COVER_BONUS`, so no cover is
+/// worth walking into the party's view for.
+pub const TACTICAL_HOLD_SIGHT_CHARGE: f32 = 100.0;
+
 /// How near a non-pack body must come to a pack member, in steps, for a hold
 /// to count it as sighted.
 ///

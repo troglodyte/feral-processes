@@ -17,11 +17,12 @@ use crate::derive::{FNV_BASIS, fold, index};
 use crate::resources::Behaviours;
 use crate::tactical::TacticalBattle;
 use crate::tactical::ai::cover_share;
-use crate::tactical::map::BattleSpec;
+use crate::tactical::map::{BattleSpec, Board};
 use crate::tactical::reach::{self, line_of_sight};
 use crate::tuning::{
     PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_FACTOR, TACTICAL_COHESION_SLACK,
     TACTICAL_HOLD_ALERT_RANGE, TACTICAL_HOLD_COVER_BONUS, TACTICAL_HOLD_ROUNDS,
+    TACTICAL_HOLD_SIGHT_CHARGE,
 };
 
 /// What the hostile side is doing as a pack.
@@ -119,9 +120,10 @@ pub(crate) struct PackPlan {
     cohesion: f32,
 }
 
-/// `body`'s plan under the pack's tactic. A body outside the pack, and any
+/// `body`'s plan under the pack's tactic, `closing` being its profile's closing
+/// weight. A body outside the pack, and any
 /// body under `Rush`, gets a plan that adds nothing and scales by one.
-pub(crate) fn plan(game: &Game, body: Entity) -> PackPlan {
+pub(crate) fn plan(game: &Game, body: Entity, closing: f32) -> PackPlan {
     let battle = game.world.resource::<TacticalBattle>();
     let tactic = if game.acts_for_hostiles(body) {
         effective(game)
@@ -133,7 +135,7 @@ pub(crate) fn plan(game: &Game, body: Entity) -> PackPlan {
         mates: None,
         targets: Vec::new(),
         footprint: battle.footprint_of(body),
-        cohesion: game.cell_weights_of(body).closing * TACTICAL_COHESION_FACTOR,
+        cohesion: closing * TACTICAL_COHESION_FACTOR,
     };
     match tactic {
         PackTactic::Rush => {}
@@ -185,8 +187,17 @@ impl PackPlan {
                 let d = reach::gap(&stands, &[centroid]);
                 -self.cohesion * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
             }),
+            // Cover-seeking must agree with the trigger: a cell the party
+            // would see from is charged past anything cover pays, so the walk
+            // to shelter never ends where the hold would then break.
             PackTactic::Hold => {
-                TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, &self.targets)
+                let seen = self.targets.iter().any(|&t| in_view(board, &stands, &[t]));
+                let charge = if seen {
+                    TACTICAL_HOLD_SIGHT_CHARGE
+                } else {
+                    0.0
+                };
+                TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, &self.targets) - charge
             }
         }
     }
@@ -220,8 +231,21 @@ fn hold_should_break(game: &Game) -> bool {
     hit_or_gone || sighted(game, &pack)
 }
 
-/// Whether any body outside the pack is within `TACTICAL_HOLD_ALERT_RANGE` of
-/// a member and in its line of sight.
+/// Whether anything standing on `theirs` is within `TACTICAL_HOLD_ALERT_RANGE`
+/// of `ours` and in sight of it.
+///
+/// **The one sighted test.** The hold's trigger and the cover-seeking term
+/// both ask it, so a body never walks to a cell the trigger would then count
+/// as seen.
+fn in_view(board: &Board, ours: &[(i32, i32)], theirs: &[(i32, i32)]) -> bool {
+    ours.iter().any(|&a| {
+        theirs.iter().any(|&b| {
+            reach::distance(a, b) <= TACTICAL_HOLD_ALERT_RANGE && line_of_sight(board, a, b)
+        })
+    })
+}
+
+/// Whether any body outside the pack is sighted by a member.
 fn sighted(game: &Game, pack: &[Entity]) -> bool {
     let battle = game.world.resource::<TacticalBattle>();
     battle
@@ -229,15 +253,8 @@ fn sighted(game: &Game, pack: &[Entity]) -> bool {
         .filter(|(body, _)| !pack.contains(body))
         .any(|(outsider, _)| {
             let theirs = battle.cells_of(outsider);
-            pack.iter().any(|&member| {
-                let ours = battle.cells_of(member);
-                ours.iter().any(|&a| {
-                    theirs.iter().any(|&b| {
-                        reach::distance(a, b) <= TACTICAL_HOLD_ALERT_RANGE
-                            && line_of_sight(&battle.board, a, b)
-                    })
-                })
-            })
+            pack.iter()
+                .any(|&member| in_view(&battle.board, &battle.cells_of(member), &theirs))
         })
 }
 

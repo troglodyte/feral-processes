@@ -208,7 +208,6 @@ impl App {
             // the party stands — so a store reachable only on the surface
             // would be the keyboard disagreeing with the engine.
             GameKey::Char('D') => {
-                self.pending_downed_program_index = None;
                 self.hub_on_rail = false;
                 self.mode = Mode::DownedPrograms;
                 return;

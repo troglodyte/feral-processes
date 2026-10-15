@@ -134,11 +134,9 @@ fn i_reopens_on_the_last_inventory_page_and_b_keeps_its_own_slot() {
 #[test]
 fn capital_d_on_the_map_opens_downed_in_the_page_and_esc_esc_reaches_the_map() {
     let mut app = test_app(9505);
-    app.pending_downed_program_index = Some(3);
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
     assert!(!app.hub_on_rail);
-    assert!(app.pending_downed_program_index.is_none());
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::DownedPrograms);

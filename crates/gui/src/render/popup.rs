@@ -256,7 +256,7 @@ pub(super) fn wrapped_tagged_lines(
 ) -> Vec<String> {
     let prefix = tagged_text(lead, tag, power, "");
     let room = columns.saturating_sub(prefix.chars().count());
-    let mut lines = match split_head(head, room, columns) {
+    let mut lines = match split_head(head, room) {
         Some((first, rest)) => {
             let mut lines = vec![format!("{prefix}{first}")];
             // A tail too long for one line goes over several; the tags pack
@@ -277,32 +277,27 @@ pub(super) fn wrapped_tagged_lines(
 }
 
 /// Splits a head wider than `room` columns in two at a word boundary, for the
-/// continuation line its tail goes on. The space before the affix text (the
-/// ` · ` separator) is preferred, so the base name stays whole, but only when
-/// the tail then fits one continuation line within `columns`; otherwise the
-/// last space that leaves the first part within `room`, so a long affix is
-/// spread over the lines `wrapped_row_lines_within` and the caller give it
-/// rather than running off the edge. `None` when the head fits, or has no
-/// space to break at.
-fn split_head(head: &str, room: usize, columns: usize) -> Option<(&str, &str)> {
+/// continuation lines its tail goes on. The space before the affix text (the
+/// ` · ` separator) is preferred, so the base name stays whole; the caller
+/// wraps a tail too long for one line over several. Failing that, the last
+/// space that leaves the first part within `room`. `None` when the head
+/// fits, or has no space to break at.
+fn split_head(head: &str, room: usize) -> Option<(&str, &str)> {
     if head.chars().count() <= room {
         return None;
     }
     let fits = |at: &usize| head[..*at].chars().count() <= room;
-    let tail_fits = |at: &usize| {
-        let rest = head[*at..].trim_start();
-        ROW_CONTINUATION_INDENT.len() + rest.chars().count() <= columns
-    };
     let spaces = || head.match_indices(' ').map(|(i, _)| i);
     // Scanned from the right: the last break that still fits wins.
     let at = spaces()
         .filter(|&i| head[i..].starts_with(" · "))
         .rev()
-        .find(|at| fits(at) && tail_fits(at))
+        .find(fits)
         .or_else(|| spaces().rev().find(fits))
         // A first word wider than the room is broken after rather than lost.
         .or_else(|| spaces().next())?;
-    Some((&head[..at], head[at..].trim_start()))
+    let rest = head[at..].trim_start();
+    (!rest.is_empty()).then_some((&head[..at], rest))
 }
 
 /// What an icon occupies in a row's label: the glyph itself plus the gap
@@ -1284,8 +1279,8 @@ mod tests {
     #[test]
     fn a_head_of_exactly_the_room_stays_whole_and_one_more_column_splits() {
         let room = 20;
-        assert_eq!(split_head(&head_of_width(room), room, 78), None);
-        assert!(split_head(&head_of_width(room + 1), room, 78).is_some());
+        assert_eq!(split_head(&head_of_width(room), room), None);
+        assert!(split_head(&head_of_width(room + 1), room).is_some());
     }
 
     #[test]
@@ -1305,17 +1300,13 @@ mod tests {
     }
 
     #[test]
-    fn the_separator_is_skipped_when_its_tail_would_not_fit_one_line() {
-        // Splitting at the separator would leave a 36-column tail, which
-        // overruns a 40-column body once indented; the later break fits the room.
+    fn the_separator_is_the_break_and_never_hangs_at_a_line_end() {
+        // A later space fits the room too ("…Disk · Thermal" is 33 columns,
+        // "…Disk ·" 25), but breaking there strands the separator.
         let head = "Overclocked Etched Disk · Thermal Throttle Single of Quiet";
-        let (first, rest) = split_head(head, 30, 40).expect("splits");
-        assert!(first.chars().count() <= 30, "{first}");
-        assert_eq!(format!("{first} {rest}"), head);
-        assert!(
-            !rest.starts_with('·'),
-            "the separator was not the break: {rest}"
-        );
+        let (first, rest) = split_head(head, 30).expect("splits");
+        assert_eq!(first, "Overclocked Etched Disk");
+        assert!(rest.starts_with("· "), "{rest}");
     }
 
     /// The three properties `wrapped_row_lines` is relied on for, none of

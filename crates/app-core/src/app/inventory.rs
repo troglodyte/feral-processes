@@ -103,7 +103,6 @@ impl App {
         // lands on the same page, in it, so Esc means the same from both.
         // The cursor is already in the page here, so it needs no moving.
         if key == GameKey::Char('D') {
-            self.pending_downed_program_index = None;
             self.mode = Mode::DownedPrograms;
             return;
         }

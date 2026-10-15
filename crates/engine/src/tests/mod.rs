@@ -129,6 +129,7 @@ mod sulking;
 mod summons;
 mod supply;
 mod tactical;
+mod tactical_pack;
 mod tactical_policy;
 mod tactical_props;
 mod talents;

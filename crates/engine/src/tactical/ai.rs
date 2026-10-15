@@ -34,7 +34,7 @@ use crate::tactical::map::Board;
 use crate::tactical::policy::CellWeights;
 use crate::tactical::reach::{cover_between, line_of_sight};
 use crate::tactical::turn::StepOutcome;
-use crate::tactical::{TacticalBattle, reach};
+use crate::tactical::{TacticalBattle, pack, reach};
 use crate::tuning::{
     ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
     TACTICAL_MELEE_RANGE,
@@ -1150,6 +1150,14 @@ impl Game {
             return (Vec::new(), Vec::new());
         }
         let band = intent.band();
+        // The profile's weights with the pack's closing scale applied, so
+        // the merit filter, the standing comparison and the score below all
+        // read one figure.
+        let scaled = CellWeights {
+            closing: w.closing * pack::closing_scale(self, actor),
+            ..*w
+        };
+        let w = &scaled;
         // The footprint the body would cover anchored at each candidate —
         // one cell without a `Squad`, so every score below is the one it
         // always was for an ordinary body.
@@ -1166,7 +1174,8 @@ impl Game {
         // The hold still goes through the draw, so a turn spends one draw
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
-        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w);
+        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w)
+            + pack::cell_terms(self, actor, from);
         // **A party routine walks only where it can be aimed.** Band alone
         // would hold a body whose every aim from here covers a companion;
         // `party_routine_intent` chose the routine because some cell in reach
@@ -1193,6 +1202,7 @@ impl Game {
                 aimable(cell)
                     && (!hold_is_aimable
                         || cell_merit(&battle.board, &block(cell), band, &sides.targets, w)
+                            + pack::cell_terms(self, actor, cell)
                             - self.walk_risk(actor, cell, w.reaction)
                             > standing)
             })
@@ -1214,7 +1224,8 @@ impl Game {
                     &sides.targets,
                     &sides.allies,
                     w,
-                ) - self.walk_risk(actor, cell, w.reaction)
+                ) + pack::cell_terms(self, actor, cell)
+                    - self.walk_risk(actor, cell, w.reaction)
             })
             .collect();
         (cells, scores)

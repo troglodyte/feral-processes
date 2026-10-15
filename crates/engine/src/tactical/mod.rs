@@ -16,6 +16,7 @@
 pub mod ai;
 pub mod deploy;
 pub mod map;
+pub mod pack;
 pub mod policy;
 pub mod prop_fight;
 pub mod props;
@@ -250,6 +251,10 @@ pub struct TacticalBattle {
     /// `BASE_EXIT_CELL`, in board coordinates — `siege_origin`'s own
     /// reason, and `game::siege::board::SiegeBoard::door`'s copy.
     pub(crate) siege_door: (i32, i32),
+    /// The hostile side's plan. `Rush` from `open`, so a hand-built board and
+    /// a restored siege decide as they always have; `open_tactical_battle_at`
+    /// is the one seat that rolls it.
+    pub pack: pack::PackState,
 }
 
 /// One entry of `TacticalBattle::shapes` — see that field's doc.
@@ -285,6 +290,7 @@ impl TacticalBattle {
             siege_pack: 0,
             siege_origin: (0, 0),
             siege_door: (0, 0),
+            pack: pack::PackState::default(),
         }
     }
 

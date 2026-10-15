@@ -282,6 +282,20 @@ pub(super) fn keybar_groups(
             keycap("< >", "move"),
         ],
         Mode::Structures => vec![keycap("↑/↓", "select"), keycap("Enter", "staff")],
+        Mode::Inventory => vec![
+            keycap("↑/↓", "select"),
+            keycap("S", "sell"),
+            keycap("U", "fuse all"),
+            keycap("I", "inspect"),
+            keycap("D", "downed"),
+        ],
+        Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
+        Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],
+        Mode::Tools => vec![
+            keycap("F", "forge"),
+            keycap("I", "install"),
+            keycap("X", "pull"),
+        ],
         _ => Vec::new(),
     };
     [acts, nav, vec![keycap("Esc", "menu")]]

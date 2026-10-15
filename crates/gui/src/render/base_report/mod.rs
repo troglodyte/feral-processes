@@ -1,6 +1,6 @@
-//! The base report hub: a page rail down the left and the current screen's
+//! The hub screens (base report, inventory): a page rail down the left and the current screen's
 //! rows in the content rect beside it. The pages and their screens come from
-//! `app_core::BASE_REPORT_PAGES`; this module only draws what that table
+//! `app_core::Hub::pages`; this module only draws what that table
 //! says, so a page cannot be on the rail and missing from the nav.
 //!
 //! Each absorbed screen is a row builder drawn by `draw_rows_in`, not a
@@ -8,6 +8,8 @@
 
 mod commands;
 mod frame;
+#[cfg(test)]
+pub(in crate::render) use fit::{assert_rows_fit, content_rows_at_720};
 pub(in crate::render) use frame::RAIL_CELLS;
 #[cfg(test)]
 pub(in crate::render) use frame::content_rect_at;
@@ -20,7 +22,7 @@ mod stock;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{
-    BASE_REPORT_PAGES, GroupMenuRow, HubPage, WorkOrderRow, base_popup_parent, hub_of,
+    BASE_REPORT_PAGES, GroupMenuRow, Hub, HubPage, WorkOrderRow, base_popup_parent, hub_of,
 };
 use feral_processes_engine::WorkTable;
 
@@ -54,7 +56,13 @@ pub(super) fn draw_base_report(
     let Some((hub, page, screen)) = hub_of(mode) else {
         return;
     };
-    let flags = game.base_report_flags();
+    // Only the base report has attention marks to compute and draw.
+    let is_base = hub == Hub::Base;
+    let flags = if is_base {
+        game.base_report_flags()
+    } else {
+        Default::default()
+    };
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
     let content = frame::paint_frame(
         hub.title(),
@@ -63,7 +71,7 @@ pub(super) fn draw_base_report(
         screen,
         Some(mode),
         app_screens.on_rail,
-        Some(&flags),
+        is_base.then_some(&flags),
         refusal,
         painter,
         m,
@@ -137,6 +145,10 @@ fn screen_rows(
         },
         Mode::Structures => building::structures_rows(game, selected),
         Mode::Alerts => alerts::alert_rows(&game.alerts(), selected),
+        Mode::Inventory => inventory::items_rows(game, selected),
+        Mode::PhaseKeys => inventory::phase_key_rows(&game.phase_keys(), selected),
+        Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
+        Mode::Tools => tools::tools_rows(game, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
 }
@@ -169,8 +181,19 @@ pub(super) fn page_flag(
 
 /// What every screen's width census shares.
 #[cfg(test)]
-mod fit {
+pub(in crate::render) mod fit {
     use super::*;
+
+    /// How many rows the content rect holds at 1280x720, the smallest window.
+    pub(in crate::render) fn content_rows_at_720() -> usize {
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(720.0);
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let content = crate::render::base_report::content_rect_at(1280.0, 720.0, char_w, &m);
+            (content.h / m.line_height).floor() as usize
+        })
+        .0
+    }
 
     pub(super) fn text_of(row: &Row) -> &str {
         match row {
@@ -182,7 +205,7 @@ mod fit {
     /// `draw_row` clips a row vertically and never horizontally, so a line
     /// past the right edge is lost. Held at the smallest supported window,
     /// where the content rect is narrowest in characters.
-    pub(super) fn assert_rows_fit(rows: &[Row], what: &str) {
+    pub(in crate::render) fn assert_rows_fit(rows: &[Row], what: &str) {
         crate::paint::with_painter(|p| {
             for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
                 let m = crate::text::ui_metrics(h);

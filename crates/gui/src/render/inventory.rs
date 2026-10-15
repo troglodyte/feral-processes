@@ -54,24 +54,9 @@ pub(super) fn draw_erase_quantity(
     draw_popup("Erase", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_phase_keys(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = phase_key_rows(&game.phase_keys(), selected);
-    draw_popup("Phase keys", PopupSize::Large, &rows, refusal, painter, m);
-}
-
-pub(super) fn draw_inventory(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+/// The Items page: the level line, the three equipment slots, then the cargo
+/// stacks. Its keys live on the hub's keybar, not in a footer here.
+pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(
@@ -154,21 +139,17 @@ pub(super) fn draw_inventory(
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
         }
     }
-    rows.push(text_row(""));
-    for line in inventory_help_rows() {
-        rows.push(text_row(line));
-    }
-    draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
+    rows
 }
 
 /// What a wrapped effect or flavour line is indented by under its key row.
 const PHASE_KEY_INDENT: &str = "    ";
 
 /// The Phase Keys page: one row per zone (always ten), the
-/// highlighted key's flavour, the count, and the key footer. Held keys carry
+/// highlighted key's flavour and the count. Held keys carry
 /// their one-line effect on a continuation under the name, wrapped, so a
 /// long summary never runs off the popup (text never clips or wraps itself).
-fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
+pub(super) fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
     let mut rows = Vec::new();
     for (i, slot) in view.slots.iter().enumerate() {
         match &slot.held {
@@ -178,7 +159,7 @@ fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
                     selected == i,
                 ));
                 if !key.effect.is_empty() {
-                    for line in wrap_text(&key.effect, ROW_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
+                    for line in wrap_text(&key.effect, HUB_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
                         rows.push(text_row(format!("{PHASE_KEY_INDENT}{line}")));
                     }
                 }
@@ -192,7 +173,7 @@ fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
     }
     rows.push(text_row(""));
     if let Some(key) = view.slots.get(selected).and_then(|slot| slot.held.as_ref()) {
-        for line in wrap_text(&key.flavour, ROW_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
+        for line in wrap_text(&key.flavour, HUB_WRAP_COLUMNS - PHASE_KEY_INDENT.len()) {
             rows.push(text_row(format!("{PHASE_KEY_INDENT}{line}")));
         }
         rows.push(text_row(""));
@@ -205,24 +186,7 @@ fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
     if view.held_count == feral_processes_engine::tuning::PHASE_KEY_COUNT {
         rows.push(text_row("The Basin Exit can be built."));
     }
-    rows.push(text_row(""));
-    rows.push(text_row(PHASE_KEY_HELP));
     rows
-}
-
-const PHASE_KEY_HELP: &str = "Tab for items; Esc to close; Up/Down to read a key";
-
-/// The screen's own key footer, as its own array — `party.rs`'s
-/// `companion_help`'s reason: a width or content census can walk these
-/// lines directly rather than re-deriving them from `draw_inventory`'s row
-/// list, and a key added here cannot land undocumented on screen without
-/// widening what the census measures too.
-fn inventory_help_rows() -> [&'static str; 3] {
-    [
-        "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
-        "[I] inspect — full stats, and what a granted routine actually does",
-        "[D] downed programs — what your kills left behind",
-    ]
 }
 
 /// The indented lines an item's extra effects contribute under its row,
@@ -282,6 +246,7 @@ fn inventory_row_lines(
         power,
         &game.copy_name(copy),
         &[equip_preview_tag(game, copy, zone)],
+        HUB_WRAP_COLUMNS,
     );
     lines.extend(effect_lines(game, &copy.item));
     (lead, tag, power, lines)
@@ -821,8 +786,8 @@ pub(super) fn draw_inventory_item_action(
 mod tests {
     use super::super::popup::popup_body_width;
     use super::{
-        equipped_row, gear_inspect_rows, heading_lead, inventory_help_rows, inventory_row_lines,
-        swap_head, swap_line, swap_power, worn_heading_lines, worn_summary,
+        equipped_row, gear_inspect_rows, heading_lead, inventory_row_lines, swap_head, swap_line,
+        swap_power, worn_heading_lines, worn_summary,
     };
     use crate::paint::{painted_runs_in, with_painter};
     use crate::render::popup::PowerCell;
@@ -1299,49 +1264,13 @@ mod tests {
             .collect();
         assert!(!rows.is_empty(), "the shipped assets define items");
 
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for (name, lines) in &rows {
-                for line in lines {
-                    // The two-space prefix `draw_row` puts in front of every
-                    // `Row::Item` label, which a continuation carries too.
-                    let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
-                    assert!(
-                        drawn <= room,
-                        "a {name} row overflows by {:.0}px ({drawn:.0} into {room:.0}):\n{line}",
-                        drawn - room
-                    );
-                }
-            }
-        });
+        for (name, lines) in &rows {
+            let rows: Vec<Row> = lines.iter().map(crate::render::text_row).collect();
+            crate::render::base_report::assert_rows_fit(&rows, name);
+        }
     }
 
-    /// The screen's own key footer — `no_shipped_inventory_row_overflows_
-    /// its_popup` measures gear-copy rows only, so this is the one census
-    /// over the static text `draw_inventory` appends after them, added
-    /// alongside the `[D]` line so it never draws unmeasured.
-    #[test]
-    fn no_inventory_help_row_overflows_the_popup_body_at_1280x720() {
-        let m = ui_metrics(720.0);
-        let body = popup_body_width(1280.0, PopupSize::Large, &m);
-        with_painter(|p| {
-            for line in inventory_help_rows() {
-                // The two-space prefix `draw_row` puts in front of every
-                // `Row::Text` label — `no_shipped_inventory_row_overflows_
-                // its_popup`'s own reason for measuring `"  {line}"`.
-                let width = p.measure_ui_advance(format!("  {line}"), m.font_size);
-                assert!(
-                    width <= body,
-                    "the inventory help line draws {width}px into a {body}px body at \
-                     1280x720: {line:?}"
-                );
-            }
-        });
-    }
-
-    /// The lines `draw_inventory` actually draws for a carried copy: its head
+    /// The lines the Items page actually draws for a carried copy: its head
     /// with the tag column joined back on, then its continuations.
     ///
     /// The column is a reserved slot in the drawn label, so a width census

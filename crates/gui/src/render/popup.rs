@@ -252,14 +252,49 @@ pub(super) fn wrapped_tagged_lines(
     power: PowerCell,
     head: &str,
     tags: &[String],
+    columns: usize,
 ) -> Vec<String> {
     let prefix = tagged_text(lead, tag, power, "");
-    let mut lines = wrapped_row_lines(tagged_text(lead, tag, power, head), tags);
+    let room = columns.saturating_sub(prefix.chars().count());
+    let mut lines = match split_head(head, room) {
+        Some((first, rest)) => {
+            let mut lines = vec![format!("{prefix}{first}")];
+            lines.extend(wrapped_row_lines_within(
+                format!("{ROW_CONTINUATION_INDENT}{rest}"),
+                tags,
+                columns,
+            ));
+            lines
+        }
+        None => wrapped_row_lines_within(tagged_text(lead, tag, power, head), tags, columns),
+    };
     lines[0] = lines[0]
         .strip_prefix(&prefix)
         .expect("wrapped_row_lines only ever appends to the head line")
         .to_string();
     lines
+}
+
+/// Splits a head wider than `room` columns in two at a word boundary, for the
+/// continuation line its tail goes on. The space before the affix text (the
+/// ` · ` separator) is preferred, so the base name stays whole; failing that,
+/// the last space that leaves the first part within `room`. `None` when the
+/// head fits, or has no space to break at.
+fn split_head(head: &str, room: usize) -> Option<(&str, &str)> {
+    if head.chars().count() <= room {
+        return None;
+    }
+    let fits = |at: &usize| head[..*at].chars().count() <= room;
+    let spaces = || head.match_indices(' ').map(|(i, _)| i);
+    // Scanned from the right: the last break that still fits wins.
+    let at = spaces()
+        .filter(|&i| head[i..].starts_with(" · "))
+        .rev()
+        .find(fits)
+        .or_else(|| spaces().rev().find(fits))
+        // A first word wider than the room is broken after rather than lost.
+        .or_else(|| spaces().next())?;
+    Some((&head[..at], head[at..].trim_start()))
 }
 
 /// What an icon occupies in a row's label: the glyph itself plus the gap
@@ -1179,10 +1214,20 @@ pub(super) fn description_rows_at(
 /// same call `wrap_text` makes about an over-long word and for the same
 /// reason: one row running wide beats losing text.
 pub(super) fn wrapped_row_lines(head: String, tags: &[String]) -> Vec<String> {
+    wrapped_row_lines_within(head, tags, ROW_WRAP_COLUMNS)
+}
+
+/// `wrapped_row_lines` for a body narrower than a popup's, a hub's content
+/// rect being the one so far.
+pub(super) fn wrapped_row_lines_within(
+    head: String,
+    tags: &[String],
+    columns: usize,
+) -> Vec<String> {
     let mut lines = vec![head];
     for tag in tags.iter().filter(|t| !t.is_empty()) {
         let line = lines.last_mut().expect("the head is always present");
-        if line.chars().count() + tag.chars().count() <= ROW_WRAP_COLUMNS {
+        if line.chars().count() + tag.chars().count() <= columns {
             line.push_str(tag);
         } else {
             // Trimmed because a tag carries the space that joined it to the
@@ -1205,6 +1250,21 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_head_over_the_budget_continues_on_an_indented_line_and_one_under_does_not() {
+        let lead = "[-] 1234x ";
+        let head = "Overclocked Etched Disk · Thermal Throttle Single of Quiet Handshakes (130%)";
+        let wide = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, head, &[], 78);
+        assert_eq!(wide.len(), 2, "{wide:?}");
+        assert!(wide[0].ends_with("Etched Disk"), "{wide:?}");
+        assert!(wide[1].starts_with(ROW_CONTINUATION_INDENT), "{wide:?}");
+        assert!(wide[1].trim_start().starts_with("· Thermal"), "{wide:?}");
+        let rejoined = format!("{} {}", wide[0], wide[1].trim_start());
+        assert!(rejoined.ends_with(head), "nothing is elided: {wide:?}");
+        let narrow = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, "Etched Disk", &[], 78);
+        assert_eq!(narrow, vec!["Etched Disk".to_string()]);
+    }
 
     /// The three properties `wrapped_row_lines` is relied on for, none of
     /// which the roster census above it can distinguish from luck: a row

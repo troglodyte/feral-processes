@@ -549,6 +549,8 @@ fn tactical_board(tag: &str, weapon: &str) -> (ScratchAssets, Board) {
         })
         .collect();
     game.open_tactical_battle(pack.clone());
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
 
     // A row along y, with the player at x and the aim at x + 1. `Radius { 1 }`
     // around the aim covers x..=x + 2, so `beside` is caught and `away` is

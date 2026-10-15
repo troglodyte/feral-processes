@@ -207,3 +207,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   both call `Game::vetoes_own_side_harm`.
 - **The prop chain cap counts blasts**, so a volatile prop at the cap stays
   standing rather than going off as a dud.
+- **The pack tactic is rolled from the `BattleSpec` and never draws
+  `GameRng`**, and every pack term enters through `pack::plan`.

@@ -1,0 +1,39 @@
+// `tactical-full-group.ron`'s party against a pack that is part melee and
+// part ranged: two sentinels (basic attacks all melee, reach 1) and two
+// rootkits (a ranged basic attack, reach 2). Pack tactics that seat bodies by
+// rank need a front and a back to be eligible, which the all-rootkit twin
+// cannot give; this is the file those measurements share.
+//
+// Four of each, against a level-14 player and level-8 companions: on-curve,
+// not a walkover, so a tactic that costs the party HP shows. A smaller pack
+// or a stronger party loses almost no Integrity under any tactic.
+//
+// Absent `tactic:` is Rush. Force one with `tactic: Some(Together)` etc.
+(
+    player: Fresh(level: 14, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 8, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 8, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 8, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [
+        (species: "sentinel", count: 4),
+        (species: "rootkit", count: 4),
+    ],
+    model: Tactical,
+    approach: Some(East),
+    party_turns: AutoPlay,
+    reps: 200,
+    seed: 7,
+)

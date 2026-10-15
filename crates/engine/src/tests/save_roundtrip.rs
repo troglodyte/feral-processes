@@ -1409,6 +1409,8 @@ fn no_bolt_survives_a_save_and_load() {
         ))
         .id();
     game.open_tactical_battle(vec![wild]);
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     for _ in 0..16 {
         if game.tactical_actor() == Some(player) {
             break;

@@ -16,6 +16,7 @@ use crate::Game;
 use crate::components::Creature;
 use crate::resources::Behaviours;
 use crate::species::SpeciesDb;
+use crate::tactical::pack::PackTactic;
 use crate::tactical::policy::{CellWeights, TacticalFeature};
 use bevy_ecs::prelude::Entity;
 
@@ -54,6 +55,10 @@ pub struct BehaviourDb {
     profiles: BTreeMap<String, BehaviourDef>,
     /// A fixed fight's profile for every hostile, set by the arena.
     forced: Option<String>,
+    /// A fixed fight's pack tactic, set by the arena. Held beside `forced`
+    /// because it is the same kind of thing and a new `Resource` would shift
+    /// bevy's query iteration order.
+    forced_tactic: Option<PackTactic>,
 }
 
 impl BehaviourDb {
@@ -138,6 +143,7 @@ impl BehaviourDb {
             Self {
                 profiles,
                 forced: None,
+                forced_tactic: None,
             },
             warnings,
         ))
@@ -167,6 +173,15 @@ impl BehaviourDb {
     /// profile is ignored on read, like a species naming one.
     pub fn set_override(&mut self, id: Option<String>) {
         self.forced = id;
+    }
+
+    /// Makes every fight open under `tactic`, or lifts the override.
+    pub fn set_tactic_override(&mut self, tactic: Option<PackTactic>) {
+        self.forced_tactic = tactic;
+    }
+
+    pub(crate) fn forced_tactic(&self) -> Option<PackTactic> {
+        self.forced_tactic
     }
 
     /// The profile a species names, `default` when it names none or one this

@@ -6,7 +6,7 @@ use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, Statu
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
-use crate::tactical::ai::PartyTurns;
+use crate::tactical::ai::{AiBeat, PartyTurns};
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
@@ -137,12 +137,15 @@ pub(super) fn log_texts(game: &Game) -> Vec<String> {
 pub(super) fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let pack = tactical_pack(game, count, hp);
     game.open_tactical_battle(pack.clone());
+    // Pinned: the fixture seats whatever the roll gives, and a test about
+    // something else must not depend on the seed happening to roll `Rush`.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     pack
 }
 
 /// `count` hostiles standing next to the player, with no fight opened around
 /// them yet — so a test may open one on a bearing of its own.
-fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+pub(super) fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let player = game.player_entity();
     let at = *game
         .world
@@ -429,6 +432,29 @@ fn walking_off_the_edge_leaves_the_fight() {
         "breaking off is not dying"
     );
     assert!(battle.fallen().is_empty(), "breaking off left a mark");
+}
+
+/// The last hostile's committed walk steps off the board: the departure
+/// closes the fight and drops `TacticalBattle`, and the beat that took the
+/// step must end there rather than read the board it just lost.
+#[test]
+fn a_walk_step_that_closes_the_fight_ends_the_beat() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+    let leaver = pack[0];
+    assert!(wait_for_turn(&mut game, leaver));
+    let edge = western_edge(&game);
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        assert!(battle.move_to(leaver, edge));
+        battle.commit_walk(vec![(edge.0 - 1, edge.1)]);
+    }
+
+    assert_eq!(game.tactical_ai_beat(), AiBeat::Acted);
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fight stayed open with no hostile left in it"
+    );
 }
 
 /// The player walking out is the jack-out, and it is not a win.
@@ -2878,6 +2904,8 @@ fn fight_against(game: &mut Game, species: &str) -> Entity {
         ))
         .id();
     game.open_tactical_battle(vec![wild]);
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     wild
 }
 

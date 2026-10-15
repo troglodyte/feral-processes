@@ -34,7 +34,7 @@ use crate::tactical::map::Board;
 use crate::tactical::policy::CellWeights;
 use crate::tactical::reach::{cover_between, line_of_sight};
 use crate::tactical::turn::StepOutcome;
-use crate::tactical::{TacticalBattle, reach};
+use crate::tactical::{TacticalBattle, pack, reach};
 use crate::tuning::{
     ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
     TACTICAL_MELEE_RANGE,
@@ -259,7 +259,7 @@ fn cell_score(
 /// cover the roll would not grant. The denominator is every target, since
 /// `cover_between` asks sight itself and a target that cannot see the cell
 /// is not a shot to be sheltered from.
-fn cover_share(board: &Board, cells: &[(i32, i32)], targets: &[(i32, i32)]) -> f32 {
+pub(super) fn cover_share(board: &Board, cells: &[(i32, i32)], targets: &[(i32, i32)]) -> f32 {
     if targets.is_empty() {
         return 0.0;
     }
@@ -718,13 +718,26 @@ impl Game {
                 AiBeat::Acted
             };
         }
+        // **Before the intent and the walk**, so the body whose turn breaks
+        // a hold plans under `Rush` that same turn. Only on the opening beat:
+        // a body walking up to the player mid-turn has not been sighted
+        // *by the start of its turn*, which is what the hold is judged on.
+        // The planner (`pack::plan`) reads a pending break by itself, so a
+        // forecast and the turn it precedes agree whether or not this has
+        // written the transition yet; this only commits it and logs.
+        if self.acts_for_hostiles(actor)
+            && self.tactical_turn_opening()
+            && let Some(line) = pack::check_transition(self)
+        {
+            self.log(line);
+        }
         let sides = self.tactical_sides(actor);
         if sides.targets.is_empty() {
             self.tactical_end_turn();
             return AiBeat::Acted;
         }
-        if self.step_along_walk(actor) {
-            return AiBeat::Stepped;
+        if let Some(beat) = self.step_along_walk(actor) {
+            return beat;
         }
 
         // Carried across the walk rather than asked again on the beat that
@@ -751,8 +764,8 @@ impl Game {
             self.world
                 .resource_mut::<TacticalBattle>()
                 .keep_intent(intent.clone());
-            if self.step_along_walk(actor) {
-                return AiBeat::Stepped;
+            if let Some(beat) = self.step_along_walk(actor) {
+                return beat;
             }
         }
 
@@ -961,17 +974,20 @@ impl Game {
     /// between beats, so a refusal means the plan is wrong about the world
     /// and the body is better off acting from where it stands than standing
     /// still forever.
-    fn step_along_walk(&mut self, actor: Entity) -> bool {
+    ///
+    /// `None` means the body acts from where it stands. A step that closes
+    /// the fight (`StepOutcome::Departed`) ends the beat as `Acted`: the
+    /// board is gone, and every read the caller would make next is of it.
+    fn step_along_walk(&mut self, actor: Entity) -> Option<AiBeat> {
         let battle = self.world.resource::<TacticalBattle>();
-        let Some(from) = battle.cell_of(actor) else {
-            return false;
-        };
-        let Some(next) = self.world.resource_mut::<TacticalBattle>().take_walk_step() else {
-            return false;
-        };
+        let from = battle.cell_of(actor)?;
+        let next = self
+            .world
+            .resource_mut::<TacticalBattle>()
+            .take_walk_step()?;
         let dir = (next.0 - from.0, next.1 - from.1);
         match self.tactical_step(dir) {
-            StepOutcome::Moved => true,
+            StepOutcome::Moved => Some(AiBeat::Stepped),
             // `Struck` is unreachable from here — `reach::movement_field`
             // treats every *other* body as a wall and offers no anchor whose
             // whole footprint is not clear, so a committed path never names a
@@ -989,10 +1005,11 @@ impl Game {
             // `get_resource_mut`, because a departure closes the fight and
             // takes the resource with it.
             StepOutcome::Departed | StepOutcome::Refused | StepOutcome::Struck => {
-                if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
-                    battle.commit_walk(Vec::new());
-                }
-                false
+                let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() else {
+                    return Some(AiBeat::Acted);
+                };
+                battle.commit_walk(Vec::new());
+                None
             }
         }
     }
@@ -1150,6 +1167,15 @@ impl Game {
             return (Vec::new(), Vec::new());
         }
         let band = intent.band();
+        // The profile's weights with the pack's closing scale applied, so
+        // the merit filter, the standing comparison and the score below all
+        // read one figure.
+        let plan = pack::plan(self, actor, w.closing);
+        let scaled = CellWeights {
+            closing: w.closing * plan.closing_scale(),
+            ..*w
+        };
+        let w = &scaled;
         // The footprint the body would cover anchored at each candidate —
         // one cell without a `Squad`, so every score below is the one it
         // always was for an ordinary body.
@@ -1166,7 +1192,8 @@ impl Game {
         // The hold still goes through the draw, so a turn spends one draw
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
-        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w);
+        let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w)
+            + plan.cell_terms(&battle.board, from);
         // **A party routine walks only where it can be aimed.** Band alone
         // would hold a body whose every aim from here covers a companion;
         // `party_routine_intent` chose the routine because some cell in reach
@@ -1193,6 +1220,7 @@ impl Game {
                 aimable(cell)
                     && (!hold_is_aimable
                         || cell_merit(&battle.board, &block(cell), band, &sides.targets, w)
+                            + plan.cell_terms(&battle.board, cell)
                             - self.walk_risk(actor, cell, w.reaction)
                             > standing)
             })
@@ -1214,7 +1242,8 @@ impl Game {
                     &sides.targets,
                     &sides.allies,
                     w,
-                ) - self.walk_risk(actor, cell, w.reaction)
+                ) + plan.cell_terms(&battle.board, cell)
+                    - self.walk_risk(actor, cell, w.reaction)
             })
             .collect();
         (cells, scores)

@@ -5816,6 +5816,74 @@ pub const TACTICAL_AI_REACTION_WEIGHT: f32 = 1.0;
 pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Tactical pack tactics
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The odds of each pack tactic, keyed by the behaviour id of the pack's
+/// toughest body (an id with no row rolls on `default`).
+///
+/// Columns are `PackTactic::ALL`'s order: `[Rush, Together, Hold]`. Integer
+/// weights, so a roll is `derive::index` over their sum and nothing in it is
+/// a float. `Rush` stays above zero in every row, which is what lets a roll
+/// whose other tactics are all ineligible still answer.
+pub const PACK_TACTIC_ODDS: [(&str, [u32; 3]); 5] = [
+    ("default", [2, 2, 2]),
+    ("brute", [5, 4, 1]),
+    ("hunter", [5, 2, 1]),
+    ("skirmisher", [2, 1, 6]),
+    ("cautious", [2, 1, 6]),
+];
+
+/// Added to the fold the pack roll is drawn from, so it is independent of
+/// the board drawn from the same `BattleSpec` (`BattleSpec::base_seed` ends
+/// on no such word).
+pub const PACK_ROLL_SALT: u64 = 0x9ac7_7ac7_1c5e_ed01;
+
+/// How hard `Together` pulls a body back toward its packmates' centroid, per
+/// step beyond `TACTICAL_COHESION_SLACK`, as a multiple of the body's *own*
+/// profile closing weight.
+///
+/// Above one, or a step of closing would always pay for the step of straying
+/// it costs and the term would never hold anyone. Relative rather than
+/// absolute because profiles scale closing (a brute's is 1.5): an absolute
+/// figure held a body back only by an exact tie. Far below
+/// `TACTICAL_AI_REACH_SCORE`, so a body that can swing still swings.
+pub const TACTICAL_COHESION_FACTOR: f32 = 1.5;
+
+/// How far from its packmates' centroid a body may stand before `Together`
+/// starts to charge it for the distance, in steps.
+pub const TACTICAL_COHESION_SLACK: u32 = 4;
+
+/// What `Hold` pays a cell for the fraction of the pack's targets it has cover
+/// against.
+///
+/// Well above the melee cover tiebreak and crowding, so a holding body walks
+/// to cover rather than shuffling among cells that tie; far below
+/// `TACTICAL_AI_REACH_SCORE`, so a target that wanders into reach is still
+/// swung at.
+pub const TACTICAL_HOLD_COVER_BONUS: f32 = 6.0;
+
+/// What `Hold` charges a cell from which a target is in view (within
+/// `TACTICAL_HOLD_ALERT_RANGE` with line of sight): the very sighting that
+/// would end the hold. Far past `TACTICAL_HOLD_COVER_BONUS`, so no cover is
+/// worth walking into the party's view for.
+pub const TACTICAL_HOLD_SIGHT_CHARGE: f32 = 100.0;
+
+/// How near a non-pack body must come to a pack member, in steps, for a hold
+/// to count it as sighted.
+///
+/// **Must stay clearly below `TACTICAL_DEPLOY_GAP`.** The two sides open that
+/// far apart, so a range at the gap (it was six) saw the party on the first
+/// hostile turn in about five fights in six and a hold played as `Rush`. At
+/// four a real fight holds past its first turn in every seed probed (40 of
+/// 40, against 6 of 40 at six).
+pub const TACTICAL_HOLD_ALERT_RANGE: u32 = 4;
+
+/// How many rounds a hold waits before giving up. Without it a player who
+/// also waits stalls the fight for good.
+pub const TACTICAL_HOLD_ROUNDS: u32 = 6;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Tactical squads
 // ─────────────────────────────────────────────────────────────────────────
 

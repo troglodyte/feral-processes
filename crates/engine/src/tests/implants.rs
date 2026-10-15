@@ -938,6 +938,8 @@ fn a_negative_delta_cannot_drive_max_hp_or_power_below_their_floors() {
 fn open_tactical(game: &mut Game) {
     let wild = spawn_wild_on_player_tile(game);
     game.open_tactical_battle(vec![wild]);
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     assert!(
         game.world
             .contains_resource::<crate::tactical::TacticalBattle>()

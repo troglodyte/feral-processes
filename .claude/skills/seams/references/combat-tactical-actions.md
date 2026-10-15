@@ -603,3 +603,12 @@ damage and so does not pass through `apply_damage`. See `seam:tactical-squads`.
   `argmax_scored`, which keeps the last for the cell draw. A tie going the
   other way, or a draw added to the decision, shifts the seeded stream under
   every fight; the cell softmax stays the only AI draw.
+- **The pack tactic is rolled from the `BattleSpec` and never draws
+  `GameRng`** (`tactical/pack.rs::roll`, at `open_tactical_battle_at` only).
+  A draw at the seat shifts the seeded stream under every tactical fight and
+  every seed-luck test. An arena rep shares one `BattleSpec`, so the arena
+  seats the scenario's `tactic:` (absent is Rush) rather than rolling. Hold
+  has two traps of its own: `TACTICAL_HOLD_ALERT_RANGE` must stay below
+  `TACTICAL_DEPLOY_GAP` or the hold breaks at seating, and its cover term
+  must charge cells in view through the trigger's own `pack::in_view` or the
+  pack walks into its own trigger.

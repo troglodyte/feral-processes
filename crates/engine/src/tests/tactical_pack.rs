@@ -645,21 +645,35 @@ mod hold {
 mod real_fights {
     use super::*;
 
-    /// A Hold in a real fight must outlast the first hostile turn in most
-    /// seeds. The sides open `TACTICAL_DEPLOY_GAP` apart, so an alert range at
-    /// that gap sees the party at once and the hold plays as `Rush`.
+    /// A Hold in a real fight must outlast two full rounds in most seeds, with
+    /// every hostile turn played through. The sides open
+    /// `TACTICAL_DEPLOY_GAP` apart, so an alert range at that gap sees the
+    /// party at once, and a hold that walks to the nearest cover walks into
+    /// the range its own trigger watches.
     #[test]
-    fn a_hold_survives_the_first_hostile_turn_in_most_real_fights() {
+    fn a_hold_survives_two_full_rounds_in_most_real_fights() {
+        use crate::components::Hostile;
         let seeds = 1..41u32;
         let total = seeds.len();
         let mut held = 0;
         for seed in seeds {
             let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-            let pack = tactical_fight(&mut game, 3, 100);
+            tactical_fight(&mut game, 3, 100);
             game.set_pack_tactic(PackTactic::Hold);
-            assert!(wait_for_turn(&mut game, pack[0]));
-            assert!(game.tactical_ai_turn_at(0.0));
-            if tactic_of(&game) == PackTactic::Hold {
+            for _ in 0..200 {
+                let Some(actor) = game.tactical_actor() else {
+                    break;
+                };
+                if game.world.resource::<TacticalBattle>().round >= 3 {
+                    break;
+                }
+                if game.world.get::<Hostile>(actor).is_some() {
+                    assert!(game.tactical_ai_turn_at(0.0));
+                } else {
+                    game.tactical_end_turn();
+                }
+            }
+            if game.has_active_battle() && tactic_of(&game) == PackTactic::Hold {
                 held += 1;
             }
         }

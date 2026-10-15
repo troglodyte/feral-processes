@@ -6,7 +6,7 @@ use crate::components::{Creature, Hostile, Position, Rarity, Squad, Stats, Statu
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
-use crate::tactical::ai::PartyTurns;
+use crate::tactical::ai::{AiBeat, PartyTurns};
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
@@ -432,6 +432,29 @@ fn walking_off_the_edge_leaves_the_fight() {
         "breaking off is not dying"
     );
     assert!(battle.fallen().is_empty(), "breaking off left a mark");
+}
+
+/// The last hostile's committed walk steps off the board: the departure
+/// closes the fight and drops `TacticalBattle`, and the beat that took the
+/// step must end there rather than read the board it just lost.
+#[test]
+fn a_walk_step_that_closes_the_fight_ends_the_beat() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+    let leaver = pack[0];
+    assert!(wait_for_turn(&mut game, leaver));
+    let edge = western_edge(&game);
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        assert!(battle.move_to(leaver, edge));
+        battle.commit_walk(vec![(edge.0 - 1, edge.1)]);
+    }
+
+    assert_eq!(game.tactical_ai_beat(), AiBeat::Acted);
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fight stayed open with no hostile left in it"
+    );
 }
 
 /// The player walking out is the jack-out, and it is not a win.

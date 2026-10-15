@@ -42,6 +42,7 @@ mod notifications;
 mod options;
 mod outposts;
 mod party;
+mod party_hub;
 mod playing;
 mod program_points;
 mod quitting;

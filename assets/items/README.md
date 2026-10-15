@@ -353,7 +353,7 @@ any non-finite `taming_potency`, `consume.power`, or
     grid_fuel: Some(1),
 
     // Optional; can be left out entirely (defaults to no upgrade). What this
-    // item does to one *tamed program* when applied from the party menu's
+    // item does to one *tamed program* when applied from the Programs page's
     // "Refactor a program" screen. It upgrades a companion permanently; it
     // never touches the player.
     //

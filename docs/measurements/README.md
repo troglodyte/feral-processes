@@ -54,6 +54,12 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-10-15 — Pack tactics, phase 1: Together and Hold against Rush](2026-10-15-pack-tactics-phase-1.md)
+  — on `dev-arenas/tactical-mixed-pack.ron` Hold matches Rush (98.0% wins,
+  18.0% vs 17.6% Integrity lost); Together at slack 2 cost the party half as
+  much Integrity (9.3%) and was retuned to slack 4 (16.7%). The full-group
+  scenario is a walkover and bounds nothing.
+
 - [2026-10-07 — What the running game costs: CPU, GPU and memory](2026-10-07-whole-process-resource-cost.md)
   — the first whole-process figure. In the debug build on the dev box, a
   developed base map uses 24% of a core, ~450 MB RSS, ~580 MB GPU memory and

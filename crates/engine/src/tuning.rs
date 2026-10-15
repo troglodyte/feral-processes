@@ -5852,7 +5852,7 @@ pub const TACTICAL_COHESION_FACTOR: f32 = 1.5;
 
 /// How far from its packmates' centroid a body may stand before `Together`
 /// starts to charge it for the distance, in steps.
-pub const TACTICAL_COHESION_SLACK: u32 = 2;
+pub const TACTICAL_COHESION_SLACK: u32 = 4;
 
 /// What `Hold` pays a cell for the fraction of the pack's targets it has cover
 /// against.

@@ -138,7 +138,7 @@ use help::{draw_help_index, draw_help_page};
 use history::draw_history;
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
-    draw_inventory_item_action, effect_lines,
+    draw_inventory_item_action, draw_phase_keys, effect_lines,
 };
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
@@ -1332,7 +1332,8 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::OutpostPost => {
             draw_outpost_post(&outpost_post_candidates, selected, refusal, painter, m)
         }
-        Mode::Inventory => draw_inventory(game, app.inventory_tab, selected, refusal, painter, m),
+        Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
+        Mode::PhaseKeys => draw_phase_keys(game, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
             app.pending_equip_program,
@@ -1674,7 +1675,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 150] = [
+    const ALL_MODES: [Mode; 151] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1732,6 +1733,7 @@ mod tests {
         Mode::OutpostVisit,
         Mode::OutpostPost,
         Mode::Inventory,
+        Mode::PhaseKeys,
         Mode::EquipSwap,
         Mode::InventoryItemAction,
         Mode::ItemDescribe,

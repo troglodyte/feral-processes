@@ -1,4 +1,4 @@
-//! `Mode::Tools`: the tool kit, reached from the party menu — see
+//! `Mode::Tools`: the tool kit, a page of the inventory hub — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
 //! section 6. A flat list, `App::menu_selected` naming the highlighted row —
 //! there is no per-row drill-down page the way `Mode::DownedPrograms` has
@@ -7,10 +7,7 @@
 use crate::*;
 
 impl App {
-    /// `Esc` returns to the party menu through `App::close_screen` — this is
-    /// only ever opened through the group menu, which already set
-    /// `menu_origin`, so there is no `Mode::DownedPrograms`-style special
-    /// case for a screen reached a second way.
+    /// `Esc` is the hub nav's: it never reaches this handler.
     ///
     /// `F`/`I`/`X` act on the highlighted row in place, rather than picking
     /// it first the way a digit key does on every other screen: uppercase,
@@ -23,10 +20,6 @@ impl App {
     /// that shrank under the player (a slot pulled, a carrier spent
     /// elsewhere) cannot be indexed past its own end.
     pub(crate) fn handle_tools_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         if let GameKey::Char(action @ ('F' | 'I' | 'X')) = key {
             self.act_on_tool_row(action);
             return;

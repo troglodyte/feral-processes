@@ -1,6 +1,5 @@
 //! The inventory list, its per-item action page, and the erase prompt.
 
-use feral_processes_app_core::InventoryTab;
 use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::views::{PhaseKeysView, RoutineDetailView};
 
@@ -55,23 +54,26 @@ pub(super) fn draw_erase_quantity(
     draw_popup("Erase", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_inventory(
+pub(super) fn draw_phase_keys(
     game: &mut Game,
-    tab: InventoryTab,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    if tab == InventoryTab::PhaseKeys {
-        let rows = phase_key_rows(&game.phase_keys(), selected);
-        draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
-        return;
-    }
+    let rows = phase_key_rows(&game.phase_keys(), selected);
+    draw_popup("Phase keys", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+pub(super) fn draw_inventory(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let mut rows = vec![
-        text_row(tab_header(InventoryTab::Items)),
-        text_row(""),
         Row::TextColored(
             format!(
                 "Level {}   Attack {}   Defense {}   Power {}   Decompiler {}",
@@ -159,31 +161,15 @@ pub(super) fn draw_inventory(
     draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The tab strip both pages open with; the active page is bracketed.
-fn tab_header(active: InventoryTab) -> String {
-    let label = |tab: InventoryTab, name: &str| {
-        if tab == active {
-            format!("[{name}]")
-        } else {
-            format!(" {name} ")
-        }
-    };
-    format!(
-        "{}  {}   Tab to switch",
-        label(InventoryTab::Items, "Items"),
-        label(InventoryTab::PhaseKeys, "Phase Keys")
-    )
-}
-
 /// What a wrapped effect or flavour line is indented by under its key row.
 const PHASE_KEY_INDENT: &str = "    ";
 
-/// The Phase Keys page: the tab strip, one row per zone (always ten), the
+/// The Phase Keys page: one row per zone (always ten), the
 /// highlighted key's flavour, the count, and the key footer. Held keys carry
 /// their one-line effect on a continuation under the name, wrapped, so a
 /// long summary never runs off the popup (text never clips or wraps itself).
 fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> {
-    let mut rows = vec![text_row(tab_header(InventoryTab::PhaseKeys)), text_row("")];
+    let mut rows = Vec::new();
     for (i, slot) in view.slots.iter().enumerate() {
         match &slot.held {
             Some(key) => {

@@ -1,5 +1,4 @@
-//! `Mode::Tools`: the flat tool kit, reached from the party menu with
-//! `App::party_menu_rows`'s "Tools" row.
+//! `Mode::Tools`: the flat tool kit, a page of the inventory hub.
 
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::save;
@@ -64,28 +63,24 @@ fn app_holding_a_carrier(seed: u32, tool: &str, level: u32) -> App {
 }
 
 #[test]
-fn the_party_menu_opens_the_tools_screen_and_esc_backs_all_the_way_out() {
+fn the_inventory_hub_opens_the_tools_page_and_esc_backs_all_the_way_out() {
     let mut app = test_app(9400);
-    open_via_menu(&mut app, 'p', "Tools");
-    assert_eq!(app.mode, Mode::Tools);
+    open_hub_screen(&mut app, Mode::Tools);
 
     app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Tools);
+    assert!(app.hub_on_rail);
 
-    assert_eq!(app.mode, Mode::PartyMenu);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
 }
 
-/// `App::party_menu_rows` is the only source of the row — there is no
-/// direct key that opens `Mode::Tools`, `open_via_menu`'s own premise (it
-/// looks the label up rather than pressing a hardcoded key).
+/// The starter tool is installed from turn one, so the page always has a row
+/// to land its cursor on.
 #[test]
-fn the_tools_row_is_offered_from_a_fresh_game() {
-    let mut app = test_app(9401);
-    let labels: Vec<_> = app.party_menu_rows().iter().map(|r| r.label).collect();
-    assert!(
-        labels.contains(&"Tools"),
-        "the starter tool is installed from turn one, so the row must always be offered: \
-         {labels:?}"
-    );
+fn the_tools_page_has_a_row_in_a_fresh_game() {
+    let app = test_app(9401);
+    assert!(!app.game.as_ref().unwrap().tool_rows().is_empty());
 }
 
 /// An out-of-range digit does nothing — `selected_index`'s own floor,
@@ -100,7 +95,7 @@ fn an_out_of_range_row_is_ignored() {
         len, 1,
         "test premise: only the installed starter tool has a row"
     );
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
 
     app.handle_key(GameKey::Char('2'));
 
@@ -122,7 +117,7 @@ fn f_forges_a_carrier_of_the_highlighted_known_tool() {
         &[("logic_wafer", 3), ("charge_coil", 1)],
         1,
     );
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
     let rows = app.game.as_ref().unwrap().tool_rows();
     let core_tap_idx = rows
         .iter()
@@ -162,7 +157,7 @@ fn f_forges_a_carrier_of_the_highlighted_known_tool() {
 #[test]
 fn i_installs_a_held_carrier_beside_the_starter() {
     let mut app = app_holding_a_carrier(9404, "core_tap", 1);
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
     let rows = app.game.as_ref().unwrap().tool_rows();
     let core_tap_idx = rows
         .iter()
@@ -201,7 +196,7 @@ fn i_installs_a_held_carrier_beside_the_starter() {
 #[test]
 fn x_uninstalls_the_starter_and_its_row_survives() {
     let mut app = test_app(9405);
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
     let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
     let starter_idx = app
         .game
@@ -238,7 +233,7 @@ fn x_uninstalls_the_starter_and_its_row_survives() {
 #[test]
 fn pulling_the_starter_leaves_it_re_forgeable_and_its_row_present() {
     let mut app = app_with_cargo(9408, &[("core_fragment", 3)], 1);
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
     let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
     let idx = app
         .game
@@ -298,7 +293,7 @@ fn a_refusal_from_forging_names_the_item_once_in_the_status_line() {
     // so forging it now hits the "already installed" refusal (Minor 7)
     // before the cost check ever runs.
     let mut app = app_with_known_tool(9406, "core_tap", &[], 1);
-    open_via_menu(&mut app, 'p', "Tools");
+    open_hub_screen(&mut app, Mode::Tools);
     let idx = app
         .game
         .as_ref()

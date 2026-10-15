@@ -31,6 +31,7 @@ mod icon_editor;
 mod info_tab;
 mod interact;
 mod inventory;
+mod inventory_hub;
 mod key_names;
 mod keys;
 mod level_up;

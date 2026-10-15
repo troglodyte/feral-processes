@@ -371,7 +371,7 @@ fn item_fusion_note_is_the_bare_fraction() {
 #[test]
 fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
     let mut app = app_wearing_weapon(910, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
 
     app.handle_key(GameKey::Char('1'));
 
@@ -392,7 +392,7 @@ fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
 #[test]
 fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
     let mut app = app_wearing_weapon(911, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('1'));
 
     let rows = equip_swap_rows(
@@ -425,7 +425,7 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
 #[test]
 fn the_unequip_row_empties_the_slot() {
     let mut app = app_wearing_weapon(912, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('1'));
 
     let rows = equip_swap_rows(
@@ -559,7 +559,7 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
 #[test]
 fn an_empty_slot_with_nothing_to_fill_it_stays_on_the_inventory() {
     let mut app = app_wearing_weapon(916, None, &[("core_fragment", 4)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
 
     app.handle_key(GameKey::Char('1'));
 
@@ -577,7 +577,7 @@ fn an_empty_slot_with_nothing_to_fill_it_stays_on_the_inventory() {
 #[test]
 fn esc_returns_from_the_swap_list_to_the_inventory() {
     let mut app = app_wearing_weapon(917, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('1'));
 
     app.handle_key(GameKey::Esc);
@@ -622,7 +622,7 @@ fn the_inventory_screen_lists_no_row_for_a_banked_item() {
 fn fusing_from_the_inventory_screen_splits_the_stack_into_two_rows() {
     let spare = ItemId::from("kinetic_edge");
     let mut app = app_wearing_weapon(9130, None, &[("kinetic_edge", 6)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     // Three equipment slot rows come before the pack, and the pack holds
     // only the one item.
     app.menu_selected = 3;
@@ -875,7 +875,7 @@ fn the_unequip_row_prices_the_affix_on_your_back() {
 fn capital_u_in_the_inventory_fuses_every_matching_pair() {
     let plating = ItemId::from(ids::ABLATIVE_PLATING);
     let mut app = app_at_a_trading_post(944, &[(ids::ABLATIVE_PLATING, 4)]);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
 
     app.handle_key(GameKey::Char('U'));
 
@@ -1028,34 +1028,10 @@ fn app_holding_keys(held: u16) -> App {
 }
 
 #[test]
-fn tab_switches_the_inventory_between_items_and_phase_keys() {
-    let mut app = test_app(9020);
-    app.mode = Mode::Inventory;
-    assert_eq!(app.inventory_tab, InventoryTab::Items);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.inventory_tab, InventoryTab::PhaseKeys);
-    assert_eq!(app.mode, Mode::Inventory);
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.inventory_tab, InventoryTab::Items);
-}
-
-#[test]
-fn opening_the_inventory_lands_on_items() {
-    let mut app = test_app(9020);
-    app.mode = Mode::Inventory;
-    app.handle_key(GameKey::Tab);
-    app.handle_key(GameKey::Esc);
-    app.handle_key(GameKey::Char('i'));
-    assert_eq!(app.mode, Mode::Inventory);
-    assert_eq!(app.inventory_tab, InventoryTab::Items);
-}
-
-#[test]
-fn the_keys_tab_always_has_ten_rows_to_walk() {
+fn the_keys_page_always_has_ten_rows_to_walk() {
     let mut app = app_holding_keys(0b11);
     assert_eq!(app.game.as_ref().unwrap().phase_keys().slots.len(), 10);
-    app.mode = Mode::Inventory;
-    app.handle_key(GameKey::Tab);
+    open_hub_screen(&mut app, Mode::PhaseKeys);
     assert_eq!(app.menu_selected, 0);
     app.handle_key(GameKey::Up);
     assert_eq!(app.menu_selected, 9);
@@ -1064,10 +1040,9 @@ fn the_keys_tab_always_has_ten_rows_to_walk() {
 }
 
 #[test]
-fn item_actions_are_inert_on_the_keys_tab() {
+fn item_actions_are_inert_on_the_keys_page() {
     let mut app = app_holding_keys(0b1);
-    app.mode = Mode::Inventory;
-    app.handle_key(GameKey::Tab);
+    open_hub_screen(&mut app, Mode::PhaseKeys);
     let before = app.game.as_ref().unwrap().player_status().inventory.clone();
     // Sell, fuse-all, inspect, downed store, row pick and Enter.
     for key in [
@@ -1080,7 +1055,7 @@ fn item_actions_are_inert_on_the_keys_tab() {
         GameKey::Enter,
     ] {
         app.handle_key(key);
-        assert_eq!(app.mode, Mode::Inventory, "{key:?} left the keys tab");
+        assert_eq!(app.mode, Mode::PhaseKeys, "{key:?} left the keys page");
     }
     assert_eq!(app.game.as_ref().unwrap().player_status().inventory, before);
 }

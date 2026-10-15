@@ -357,7 +357,7 @@ fn capital_s_on_a_program_row_still_asks_for_confirmation() {
 #[test]
 fn capital_s_in_the_inventory_sells_one_to_the_only_trader_in_range() {
     let mut app = app_at_a_trading_post(943, &[(ids::CORE_FRAGMENT, 5)]);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     // Three equipment slot rows come before the pack.
     app.menu_selected = 3;
 
@@ -372,7 +372,7 @@ fn capital_s_in_the_inventory_sells_one_to_the_only_trader_in_range() {
 #[test]
 fn capital_s_in_the_inventory_needs_a_trader_in_range() {
     let mut app = test_app(944);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 3;
 
     app.handle_key(GameKey::Char('S'));
@@ -392,7 +392,7 @@ fn capital_s_in_the_inventory_needs_a_trader_in_range() {
 #[test]
 fn capital_s_on_the_currency_is_refused_by_the_engine() {
     let mut app = app_at_a_trading_post(947, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     let inventory = app.game.as_ref().unwrap().player_status().inventory;
     let row = inventory
         .iter()
@@ -419,7 +419,7 @@ fn capital_s_on_the_currency_is_refused_by_the_engine() {
 #[test]
 fn capital_s_with_two_traders_in_range_asks_which_one() {
     let mut app = app_at_trading_posts(945, &[(ids::CORE_FRAGMENT, 5)], 2);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 3;
 
     app.handle_key(GameKey::Char('S'));

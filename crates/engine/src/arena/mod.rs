@@ -309,6 +309,14 @@ pub fn stage(
         }
         behaviours.0.set_override(Some(id.clone()));
     }
+    // Before the seat for the same reason: the roll and its opening line
+    // happen inside it.
+    if let Some(tactic) = scenario.tactic {
+        game.world
+            .resource_mut::<crate::resources::Behaviours>()
+            .0
+            .set_tactic_override(Some(tactic));
+    }
     // Armed here rather than by whoever installs the `Game`, because
     // `begin_battle` below is what emits `fight_start` — a game armed after
     // staging joins its own fight already in progress. `run_rep` passes

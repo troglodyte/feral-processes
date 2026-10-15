@@ -18,6 +18,7 @@ use crate::components::Rarity;
 use crate::game::creation::CharacterChoice;
 use crate::items::{GearCopy, ItemId};
 use crate::species::SpeciesId;
+use crate::tactical::pack::PackTactic;
 use crate::world::Biome;
 
 /// A fight, authored rather than rolled.
@@ -83,6 +84,9 @@ pub struct Scenario {
     /// its species names, so one profile is judged on fixed fights. An id
     /// with no profile is refused at stage time.
     pub behaviour: Option<String>,
+    /// `Tactical` only — the pack tactic the hostile side plays, instead of
+    /// the one the fight would roll. An unknown name fails to parse.
+    pub tactic: Option<PackTactic>,
     pub reps: u32,
     pub seed: u64,
 }
@@ -106,6 +110,7 @@ impl Default for Scenario {
             approach: None,
             party_turns: PartyTurnsSpec::default(),
             behaviour: None,
+            tactic: None,
             reps: 1,
             seed: 0,
         }
@@ -441,6 +446,7 @@ impl Scenario {
         for (field, set) in [
             ("party_turns", self.party_turns != PartyTurnsSpec::default()),
             ("behaviour", self.behaviour.is_some()),
+            ("tactic", self.tactic.is_some()),
         ] {
             if set && self.model != CombatModel::Tactical {
                 return Err(format!(

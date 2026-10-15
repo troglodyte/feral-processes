@@ -199,3 +199,54 @@ mod roll {
         assert_eq!(tactic_of(&game), PackTactic::Rush);
     }
 }
+
+mod arena_override {
+    use super::*;
+    use crate::arena::{CombatModel, Scenario, stage};
+    use crate::tactical::pack;
+
+    fn scenario(extra: &str) -> Result<Scenario, String> {
+        Scenario::from_ron(&format!(
+            r#"(opponents: [(species: "glitch", count: 3)], model: Tactical, {extra})"#
+        ))
+    }
+
+    fn staged_tactic(extra: &str, seed: u64) -> (PackTactic, Vec<String>) {
+        let s = scenario(extra).unwrap();
+        let staged = stage(&s, &test_assets_dir(), seed, false, CombatModel::Tactical).unwrap();
+        let log = super::super::tactical::log_texts(&staged.game);
+        (tactic_of(&staged.game), log)
+    }
+
+    #[test]
+    fn a_scenario_tactic_wins_over_the_roll_and_is_announced() {
+        // Seeds vary the staged fight's own spec, so a roll that was merely
+        // lucky would show up as a mismatch on one of them.
+        for seed in 0..12 {
+            for forced in [PackTactic::Together, PackTactic::Hold] {
+                let (tactic, log) = staged_tactic(&format!("tactic: Some({forced:?})"), seed);
+                assert_eq!(tactic, forced, "seed {seed}");
+                let line = pack::opening_line(forced).unwrap();
+                assert!(log.iter().any(|l| l == line), "seed {seed}: {log:?}");
+            }
+            let (tactic, log) = staged_tactic("tactic: Some(Rush)", seed);
+            assert_eq!(tactic, PackTactic::Rush, "seed {seed}");
+            assert!(!log.iter().any(|l| l.starts_with("The pack")), "{log:?}");
+        }
+    }
+
+    #[test]
+    fn an_unknown_tactic_name_fails_to_parse() {
+        let err = scenario("tactic: Some(Sneak)").unwrap_err();
+        assert!(err.contains("Sneak"), "{err}");
+    }
+
+    #[test]
+    fn a_tactic_on_a_group_scenario_is_refused() {
+        let err = Scenario::from_ron(
+            r#"(opponents: [(species: "glitch", count: 1)], tactic: Some(Hold))"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("Tactical"), "{err}");
+    }
+}

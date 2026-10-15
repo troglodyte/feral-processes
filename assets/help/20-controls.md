@@ -33,11 +33,14 @@ Your menus and stores:
   it from. b reopens the page you left. The Overview shows where the base is short, and Enter
   opens the highlighted page.
 - p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
-  develop, perks, tools
+  develop, perks
 - ? — this manual
-- i — your pack
-- D — the downed programs you are holding, and the tools that take them apart. The same key opens
-  it from inside your pack. See [taking a program apart](extraction).
+- i — your inventory, a rail of pages like the base report's: Items (your pack), Phase keys,
+  Downed programs and Tools. The rail and page keys work as they do under b, and i reopens the
+  page you left.
+- D — the Downed programs page of your inventory: the downed programs you are holding, and the
+  tools that take them apart. The same key opens it from Items. See
+  [taking a program apart](extraction).
 
 Acting on the world:
 

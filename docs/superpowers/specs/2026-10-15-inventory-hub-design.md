@@ -99,10 +99,10 @@ Each page has one screen. Rail title: "INVENTORY".
 - **Returns to Items.** Every path that ends with
   `self.mode = Mode::Inventory` (equip swap with no target, Mod Bench, Refit
   Bench, `return_to_trade_list`, item action, erase) lands on the Items page
-  with the cursor **in the page** and the highlight where it was. The plan
-  reuses the mechanism the base command pages use for their returns
-  (`command_return_row`, `hub_on_rail = false`) rather than adding a second
-  one.
+  with the cursor **in the page**; the highlight behaves as it does today.
+  This holds because the cursor was in the Items page when the sub-screen
+  opened and nothing between sets `hub_on_rail`. That is the base command
+  pages' mechanism, so no second one is added. A test pins it.
 - `Mode::PhaseKeys` joins every list `Mode::Inventory` is in: the
   `lib.rs:~2483` classification and gui `render/mod.rs:~1735`.
 

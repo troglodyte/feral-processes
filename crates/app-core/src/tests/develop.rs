@@ -30,7 +30,7 @@ fn the_party_menu_opens_the_develop_picker_and_esc_backs_all_the_way_out() {
     assert_eq!(app.mode, Mode::PartyPrograms);
 }
 
-/// Through `App::party_menu_rows` rather than a bespoke predicate: rows are
+/// Through `party_rows` (`App::command_rows`) rather than a bespoke predicate: rows are
 /// hidden dynamically and that table is the only source of them.
 #[test]
 fn the_develop_row_is_hidden_with_no_programs_to_develop() {

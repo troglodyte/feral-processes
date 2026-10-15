@@ -148,12 +148,11 @@ use meta::{
 use mod_copy::{draw_mod_copy, draw_mod_pick_affix};
 use outposts::{draw_outpost_post, draw_outpost_visit};
 use party::{
-    draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
-    draw_fuse_name_menu, draw_fuse_second_menu, draw_refactor, draw_refactor_item,
-    draw_rename_menu,
+    draw_companion_equip, draw_companion_memories, draw_fuse_menu, draw_fuse_name_menu,
+    draw_fuse_second_menu, draw_refactor, draw_refactor_item, draw_rename_menu,
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
-use progression::{draw_perks_menu, draw_research_menu, draw_respec_confirm};
+use progression::{draw_research_menu, draw_respec_confirm};
 use refit_copy::draw_refit_copy;
 use rig_tool::draw_rig_tool;
 use routines::{
@@ -1007,6 +1006,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,
         on_rail: app.hub_on_rail,
+        perk_previews: &perk_previews,
     };
     // The row's two holdings and the amount the basket is asking for, taken
     // here because `game` below borrows `&mut app.game` and these read the
@@ -1373,7 +1373,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
         Mode::FuseSecond => {
             draw_fuse_second_menu(game, app.pending_fuse_first, selected, refusal, painter, m)
@@ -1528,7 +1527,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 m,
             )
         }
-        Mode::Perks => draw_perks_menu(game, &perk_previews, selected, refusal, painter, m),
         Mode::AllocateStats => {
             points::draw_allocate_stats(&allocation_title, &allocation_rows, refusal, painter, m)
         }

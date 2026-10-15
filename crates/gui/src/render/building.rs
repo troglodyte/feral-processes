@@ -767,6 +767,7 @@ pub(super) fn build_program_rows(
             menu_shortcut(i),
             i == selected,
             &extra,
+            ROW_WRAP_COLUMNS,
         ));
     }
     rows

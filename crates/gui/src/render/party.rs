@@ -5,42 +5,36 @@ use super::popup::*;
 use super::*;
 use feral_processes_app_core::ProgramRole;
 
-/// The help lines above the roster.
+/// The roster's keys, as the hub's keybar names them.
 ///
 /// **They deliberately say nothing about wielding a program as a weapon.**
 /// That command is an easter egg: it is reachable, it changes the run, and
-/// nothing in the game's text points at it. Extracted into a const so
-/// `the_companion_screen_never_advertises_the_hidden_key` can read them —
-/// a later helpful edit then fails a test rather than quietly spoiling it.
-/// The gear line follows the two above it — bare `E ...`, not the `[E]quip`
-/// label style the item-action page uses. It also cannot name the slot a
-/// wielded program fills, because that word starts with the capital letter
-/// the census below forbids anywhere in these lines. That is the constraint
-/// working, not a phrasing accident.
+/// nothing in the game's text points at it. Kept as a table so
+/// `the_companion_screen_never_advertises_the_hidden_key` can read it -- a
+/// later helpful edit then fails a test rather than quietly spoiling it.
+/// It also cannot name the slot a wielded program fills, because that word
+/// starts with the capital letter the census forbids anywhere in the table.
 ///
-/// `U` sits directly under `E` because it is that same errand run
-/// backwards, and it has to be named: the picker's own `(Unequip)` row is a
-/// keypress and a slot choice away and only ever empties the one slot, so a
-/// player who never finds this line never learns the screen can undress a
-/// program in one press at all.
-fn companion_help() -> [String; 7] {
-    [
-        format!(
-            "P adds the highlighted program to your party (max {MAX_PARTY_SIZE}), or stands a member back down."
-        ),
-        "< and > move the highlighted member along the battle line; the front slot draws the most fire."
-            .to_string(),
-        "N renames the highlighted program; clear the name to go back to its species."
-            .to_string(),
-        "E fits gear to the highlighted program, out of your own cargo."
-            .to_string(),
-        "U takes every piece of gear back off the highlighted program, into your cargo."
-            .to_string(),
-        "M reads the highlighted program's manifest — its full stat sheet."
-            .to_string(),
-        "R reads what the highlighted program remembers, and how it feels about it."
-            .to_string(),
-    ]
+/// `U` sits beside `E` because it is that same errand run backwards, and it
+/// has to be named: the picker's own `(Unequip)` row is a keypress and a slot
+/// choice away and only ever empties the one slot, so a player who never
+/// finds this key never learns the screen can undress a program in one press
+/// at all. `P` is the one thing this screen is *for*: since the row shortcuts
+/// stopped toggling membership, nothing else points at the key.
+pub(super) const ROSTER_KEYS: [(&str, &str); 7] = [
+    ("P", "party"),
+    ("< >", "order"),
+    ("N", "rename"),
+    ("E", "gear"),
+    ("U", "strip gear"),
+    ("M", "manifest"),
+    ("R", "memories"),
+];
+
+/// The line over the roster. The front slot's cost is the one rule the keys
+/// cannot carry.
+fn roster_note() -> String {
+    format!("Up to {MAX_PARTY_SIZE} programs fight beside you; the front slot draws the most fire.")
 }
 
 /// One program's three equipment slots — the same three rows the inventory
@@ -265,7 +259,12 @@ pub(super) fn strength(intensity: f32) -> String {
 /// off the right edge, taking the activity and CRITICAL with it. Those are
 /// the two tags the list is most often being read for, which is why the fix
 /// wraps rather than chopping: a chop deletes exactly them.
-fn companion_row_lines(shortcut: char, p: &PetInfo, extra: &[String]) -> Vec<String> {
+fn companion_row_lines(
+    shortcut: char,
+    p: &PetInfo,
+    extra: &[String],
+    columns: usize,
+) -> Vec<String> {
     let slot = p
         .party_slot
         .map(|s| format!("#{} ", s + 1))
@@ -301,7 +300,7 @@ fn companion_row_lines(shortcut: char, p: &PetInfo, extra: &[String]) -> Vec<Str
             .unwrap_or_default(),
     ];
     let tags: Vec<String> = tags.into_iter().chain(extra.iter().cloned()).collect();
-    wrapped_row_lines(head, &tags)
+    wrapped_row_lines_within(head, &tags, columns)
 }
 
 /// What a run of one role is called on the roster.
@@ -310,7 +309,7 @@ fn companion_row_lines(shortcut: char, p: &PetInfo, extra: &[String]) -> Vec<Str
 /// fallback here would be listed under whichever heading sorted in front of
 /// it. `Wielded` is named because the heading only ever appears for a player
 /// who has already found the key — the easter egg is the key, and it is
-/// `companion_help` that is held to never printing it.
+/// `ROSTER_KEYS` that is held to never printing it.
 fn role_heading(role: ProgramRole) -> &'static str {
     match role {
         ProgramRole::InParty => "In your party",
@@ -342,7 +341,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
 /// line, the same tier colours and the same CRITICAL warning the roster
 /// does. A second row format for the one keypress that *deletes* a program
 /// would be the place the two drifted.
-pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row> {
+pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize, columns: usize) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut run: Option<ProgramRole> = None;
     for (i, p) in pets.iter().enumerate() {
@@ -350,7 +349,13 @@ pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row>
             rows.push(Row::TextColored(role_heading(p.role).to_string(), TEXT));
             run = Some(p.role);
         }
-        rows.extend(companion_rows(p, menu_shortcut(i), i == selected, &[]));
+        rows.extend(companion_rows(
+            p,
+            menu_shortcut(i),
+            i == selected,
+            &[],
+            columns,
+        ));
     }
     rows
 }
@@ -369,6 +374,7 @@ pub(super) fn companion_rows(
     shortcut: char,
     selected: bool,
     extra: &[String],
+    columns: usize,
 ) -> Vec<Row> {
     let mut rows = Vec::new();
     // No row colour of its own: `fusion_row` already loses to CRITICAL
@@ -385,7 +391,7 @@ pub(super) fn companion_rows(
             tier_row(text, selected, p.fusions, p.rarity)
         }
     };
-    let mut lines = companion_row_lines(shortcut, p, extra).into_iter();
+    let mut lines = companion_row_lines(shortcut, p, extra, columns).into_iter();
     let head = lines
         .next()
         .expect("companion_row_lines always emits the identity row");
@@ -406,20 +412,16 @@ pub(super) fn companion_rows(
     rows
 }
 
-pub(super) fn draw_companion_menu(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+/// The Companions page: the note, then the roster. Its keys live on the
+/// hub's keybar, not in a footer here.
+pub(super) fn roster_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     let pets = game.owned_pets();
-    let mut rows: Vec<_> = companion_help().into_iter().map(text_row).collect();
+    let mut rows = vec![text_row(roster_note())];
     if pets.is_empty() {
         rows.push(text_row("(you don't have any compiled programs yet)"));
     }
-    rows.extend(companion_page_rows(&pets, selected));
-    draw_popup("Party", PopupSize::Large, &rows, refusal, painter, m);
+    rows.extend(companion_page_rows(&pets, selected, HUB_WRAP_COLUMNS));
+    rows
 }
 
 /// Formats one fuse-candidate row with the full stat line a fusion
@@ -762,7 +764,7 @@ mod tests {
             pet("bb", ProgramRole::InParty),
             pet("cc", ProgramRole::Staff),
         ];
-        let rows = companion_page_rows(&pets, 0);
+        let rows = companion_page_rows(&pets, 0, ROW_WRAP_COLUMNS);
 
         let headings: Vec<&str> = rows
             .iter()
@@ -807,7 +809,7 @@ mod tests {
             pet("cc", ProgramRole::Siphoned),
             pet("dd", ProgramRole::Staff),
         ];
-        let rows = companion_page_rows(&pets, 0);
+        let rows = companion_page_rows(&pets, 0, ROW_WRAP_COLUMNS);
         let headings: Vec<&str> = rows
             .iter()
             .filter_map(|r| match r {
@@ -917,7 +919,7 @@ mod tests {
     /// the widest quality label, `Rarity::Gold`'s "Overclocked" — because the
     /// name half is capped in characters and the UI face is monospace, so the
     /// row *is* bounded even though half of it is player-authored.
-    fn widest_roster_rows() -> Vec<(Vec<String>, String)> {
+    fn widest_roster_rows(columns: usize) -> Vec<(Vec<String>, String)> {
         // 12 characters, `MAX_CUSTOM_NAME_LEN`, plus the rare tier's word in
         // front and the zone tag behind, which `creature_label` appends to a
         // custom name exactly as it does to a species name.
@@ -957,7 +959,7 @@ mod tests {
             // guess.
             p.atk = 1234;
             p.mitigation = feral_processes_engine::tuning::MAX_MITIGATION_PERCENT;
-            out.push((companion_row_lines('a', &p, &[]), why.to_string()));
+            out.push((companion_row_lines('a', &p, &[], columns), why.to_string()));
         }
         out
     }
@@ -968,7 +970,7 @@ mod tests {
     #[test]
     fn a_roster_row_names_both_build_rolls() {
         let mut p = pet("Testmon", "");
-        let without = companion_row_lines('a', &p, &[]).join(" ");
+        let without = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
         assert!(
             !without.contains("Assembly") && !without.contains("Extraction"),
             "a program with no Potential drew a build tag: {without}"
@@ -976,7 +978,7 @@ mod tests {
 
         p.assembly = Some("Excellent".to_string());
         p.extraction = Some("Poor".to_string());
-        let with = companion_row_lines('a', &p, &[]).join(" ");
+        let with = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
         assert!(
             with.contains("[Assembly: Excellent]"),
             "the assembly rung is missing: {with}"
@@ -1003,7 +1005,7 @@ mod tests {
             // 0.88 is `PopupSize::Large`'s width fraction, against the
             // 1440x900 geometry `ui_metrics` is calibrated for.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for (lines, why) in widest_roster_rows() {
+            for (lines, why) in widest_roster_rows(ROW_WRAP_COLUMNS) {
                 for (i, line) in lines.iter().enumerate() {
                     // The head draws through `with_icon`, so its label carries
                     // the selection prefix *and* the glyph's reserved slot;
@@ -1021,13 +1023,33 @@ mod tests {
         });
     }
 
+    /// The Companions page draws in the hub's content rect, which has the rail
+    /// to its left, so the popup census above proves nothing about it. Held at
+    /// every supported window, with the head's icon slot included.
+    #[test]
+    fn no_roster_row_overflows_the_hub_content_rect() {
+        let rows: Vec<Row> = widest_roster_rows(HUB_WRAP_COLUMNS)
+            .into_iter()
+            .flat_map(|(lines, _)| {
+                lines.into_iter().enumerate().map(|(i, line)| {
+                    if i == 0 {
+                        with_icon(item_row(line, false), 'p', TEXT)
+                    } else {
+                        item_row(line, false)
+                    }
+                })
+            })
+            .collect();
+        super::super::base_report::assert_rows_fit(&rows, "Companions");
+    }
+
     /// The wrap may not silently drop a tag: a row that sheds its tail is
     /// only better than one that runs off the edge if the tail is still on
     /// screen. Asserted on the *joined* lines so it holds however the six
     /// tags happen to be distributed.
     #[test]
     fn a_wrapped_roster_row_keeps_every_tag() {
-        for (lines, why) in widest_roster_rows() {
+        for (lines, why) in widest_roster_rows(HUB_WRAP_COLUMNS) {
             assert!(lines.len() > 1, "{why} is the case that needs wrapping");
             let joined = lines.join(" ");
             for tag in [
@@ -1056,14 +1078,14 @@ mod tests {
         let mut p = pet("Kestrel", "w|a|m");
         p.atk = 8;
         p.mitigation = 5;
-        let head = companion_row_lines('a', &p, &[]).remove(0);
+        let head = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).remove(0);
         assert!(head.contains("ATK 8"), "{head}");
         assert!(head.contains("MIT 5%"), "{head}");
     }
 
     #[test]
     fn a_roster_row_carries_the_loadout_cell() {
-        let head = |p: &PetInfo| companion_row_lines('a', p, &[]).remove(0);
+        let head = |p: &PetInfo| companion_row_lines('a', p, &[], ROW_WRAP_COLUMNS).remove(0);
         assert!(head(&pet("Kestrel", "w|a|m")).contains("w|a|m"));
         let bare = head(&pet("Nine", ".|.|."));
         assert!(bare.contains(".|.|."), "{bare}");
@@ -1077,7 +1099,7 @@ mod tests {
     fn an_ordinary_roster_row_stays_on_one_line() {
         let mut p = pet("Kestrel", "w|a|m");
         p.quality = Some("Average (54%)".to_string());
-        assert_eq!(companion_row_lines('a', &p, &[]).len(), 1);
+        assert_eq!(companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).len(), 1);
     }
 
     /// The cell sits ahead of the tags that come and go — quality, fusion,
@@ -1088,7 +1110,7 @@ mod tests {
         let mut p = pet("Kestrel", "w|.|.");
         p.quality = Some("Excellent (94%)".to_string());
         p.wielded = true;
-        let row = companion_row_lines('a', &p, &[]).join(" ");
+        let row = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
         let cell = row.find("w|.|.").expect("the cell is drawn");
         assert!(cell < row.find("Excellent").unwrap(), "{row}");
         assert!(cell < row.find("WEP").unwrap(), "{row}");
@@ -1101,9 +1123,9 @@ mod tests {
     #[test]
     fn the_companion_screen_names_the_gear_key() {
         assert!(
-            companion_help().iter().any(|line| line.starts_with("E ")),
+            ROSTER_KEYS.iter().any(|(key, _)| *key == "E"),
             "the roster must say which key opens a program's gear: {:?}",
-            companion_help()
+            ROSTER_KEYS
         );
     }
 
@@ -1114,9 +1136,9 @@ mod tests {
     #[test]
     fn the_companion_screen_names_the_strip_key() {
         assert!(
-            companion_help().iter().any(|line| line.starts_with("U ")),
+            ROSTER_KEYS.iter().any(|(key, _)| *key == "U"),
             "the roster must say which key takes a program's gear back off: {:?}",
-            companion_help()
+            ROSTER_KEYS
         );
     }
 
@@ -1126,9 +1148,9 @@ mod tests {
     #[test]
     fn the_companion_screen_names_the_party_key() {
         assert!(
-            companion_help().iter().any(|line| line.starts_with("P ")),
+            ROSTER_KEYS.iter().any(|(key, _)| *key == "P"),
             "the roster must say which key stands a program in the party: {:?}",
-            companion_help()
+            ROSTER_KEYS
         );
     }
 
@@ -1141,9 +1163,9 @@ mod tests {
     #[test]
     fn the_companion_screen_names_the_manifest_key() {
         assert!(
-            companion_help().iter().any(|line| line.starts_with("M ")),
+            ROSTER_KEYS.iter().any(|(key, _)| *key == "M"),
             "the roster must say which key opens a program's manifest: {:?}",
-            companion_help()
+            ROSTER_KEYS
         );
     }
 
@@ -1353,9 +1375,9 @@ mod tests {
     #[test]
     fn the_companion_screen_names_the_memories_key() {
         assert!(
-            companion_help().iter().any(|line| line.starts_with("R ")),
+            ROSTER_KEYS.iter().any(|(key, _)| *key == "R"),
             "the roster must say which key opens a program's memories: {:?}",
-            companion_help()
+            ROSTER_KEYS
         );
     }
 
@@ -1653,11 +1675,12 @@ mod tests {
     }
 
     /// The easter-egg census. Wielding a program as your weapon is
-    /// deliberately undocumented in-game, and the help lines above the
-    /// roster are the one place a well-meaning edit would give it away.
+    /// deliberately undocumented in-game, and the roster's keys are
+    /// one place a well-meaning edit would give it away.
     #[test]
     fn the_companion_screen_never_advertises_the_hidden_key() {
-        for line in companion_help() {
+        for (key, label) in ROSTER_KEYS {
+            let line = format!("{key} {label}");
             let lower = line.to_lowercase();
             assert!(
                 !lower.contains("weapon"),

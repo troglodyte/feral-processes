@@ -17,9 +17,11 @@ use crate::components::Stats;
 use crate::derive::{FNV_BASIS, fold, index};
 use crate::tactical::TacticalBattle;
 use crate::tactical::map::BattleSpec;
-use crate::tactical::reach;
+use crate::tactical::ai::cover_share;
+use crate::tactical::reach::{self, line_of_sight};
 use crate::tuning::{
     PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_SLACK, TACTICAL_COHESION_WEIGHT,
+    TACTICAL_HOLD_ALERT_RANGE, TACTICAL_HOLD_COVER_BONUS, TACTICAL_HOLD_ROUNDS,
 };
 
 /// What the hostile side is doing as a pack.
@@ -57,14 +59,34 @@ impl PackTactic {
 #[derive(Clone, Debug, Default)]
 pub struct PackState {
     pub tactic: PackTactic,
+    /// The round a hold began on, for its timeout.
+    hold_start_round: u32,
+    /// Every member's Integrity when the hold began, so "hit" is a
+    /// comparison and `apply_damage` stays the only damage path with no hook
+    /// of ours in it. A member that is no longer on the board is "gone".
+    hold_hp: Vec<(Entity, i32)>,
 }
 
 impl Game {
     /// Seats `tactic` as the hostile side's plan.
     pub(crate) fn set_pack_tactic(&mut self, tactic: PackTactic) {
-        if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
-            battle.pack = PackState { tactic };
-        }
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let round = battle.round;
+        let hold_hp = if tactic == PackTactic::Hold {
+            members(self)
+                .into_iter()
+                .map(|member| (member, self.world.get::<Stats>(member).map_or(0, |s| s.hp)))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.world.resource_mut::<TacticalBattle>().pack = PackState {
+            tactic,
+            hold_start_round: round,
+            hold_hp,
+        };
     }
 }
 
@@ -92,15 +114,85 @@ fn in_pack(game: &Game, body: Entity) -> bool {
 /// Zero for `Rush` and for any body outside the pack, so a party body driven
 /// through `scored_cells` plans as it always has.
 pub(crate) fn cell_terms(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
-    let battle = game.world.resource::<TacticalBattle>();
     if !in_pack(game, body) {
         return 0.0;
     }
-    match battle.pack.tactic {
+    match effective(game) {
         PackTactic::Rush => 0.0,
         PackTactic::Together => cohesion(game, body, cell),
-        PackTactic::Hold => 0.0,
+        PackTactic::Hold => hold_cover(game, body, cell),
     }
+}
+
+/// What a holding body gains for standing where its targets cannot shoot it.
+fn hold_cover(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
+    let battle = game.world.resource::<TacticalBattle>();
+    let stands = crate::tactical::footprint_cells_at(cell, battle.footprint_of(body));
+    let targets = game.tactical_sides(body).targets;
+    TACTICAL_HOLD_COVER_BONUS * cover_share(&battle.board, &stands, &targets)
+}
+
+/// The tactic the pack is playing **this turn**: the stored one, unless a hold
+/// has a reason to end.
+///
+/// What `closing_scale` and `cell_terms` read, so a forecast (which cannot
+/// write) and the turn that follows it plan under the same tactic.
+fn effective(game: &Game) -> PackTactic {
+    let state = &game.world.resource::<TacticalBattle>().pack;
+    if state.tactic == PackTactic::Hold && hold_should_break(game) {
+        PackTactic::Rush
+    } else {
+        state.tactic
+    }
+}
+
+/// Whether a hold has been sighted, hit, or run out of patience.
+fn hold_should_break(game: &Game) -> bool {
+    let battle = game.world.resource::<TacticalBattle>();
+    let state = &battle.pack;
+    if battle.round >= state.hold_start_round + TACTICAL_HOLD_ROUNDS {
+        return true;
+    }
+    let pack = members(game);
+    let hit_or_gone = state.hold_hp.iter().any(|&(member, hp)| {
+        !pack.contains(&member) || game.world.get::<Stats>(member).is_none_or(|s| s.hp < hp)
+    });
+    hit_or_gone || sighted(game, &pack)
+}
+
+/// Whether any body outside the pack is within `TACTICAL_HOLD_ALERT_RANGE` of
+/// a member and in its line of sight.
+fn sighted(game: &Game, pack: &[Entity]) -> bool {
+    let battle = game.world.resource::<TacticalBattle>();
+    battle
+        .bodies()
+        .filter(|(body, _)| !pack.contains(body))
+        .any(|(outsider, _)| {
+            let theirs = battle.cells_of(outsider);
+            pack.iter().any(|&member| {
+                let ours = battle.cells_of(member);
+                ours.iter().any(|&a| {
+                    theirs.iter().any(|&b| {
+                        reach::distance(a, b) <= TACTICAL_HOLD_ALERT_RANGE
+                            && line_of_sight(&battle.board, a, b)
+                    })
+                })
+            })
+        })
+}
+
+/// Ends the hold if it has a reason to, returning the line to log.
+///
+/// Called at the start of every hostile beat, before the intent is chosen.
+/// The first trigger to fire ends the hold for the whole pack, and a pack no
+/// longer holding answers `None`.
+pub(crate) fn check_transition(game: &mut Game) -> Option<&'static str> {
+    let battle = game.world.get_resource::<TacticalBattle>()?;
+    if battle.pack.tactic != PackTactic::Hold || !hold_should_break(game) {
+        return None;
+    }
+    game.set_pack_tactic(PackTactic::Rush);
+    Some("The pack breaks cover!")
 }
 
 /// The slack-rope pull toward the packmates' centroid: free within
@@ -126,8 +218,14 @@ fn cohesion(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
 }
 
 /// The multiplier on `body`'s closing term.
-pub(crate) fn closing_scale(_game: &Game, _body: Entity) -> f32 {
-    1.0
+pub(crate) fn closing_scale(game: &Game, body: Entity) -> f32 {
+    if !in_pack(game, body) {
+        return 1.0;
+    }
+    match effective(game) {
+        PackTactic::Rush | PackTactic::Together => 1.0,
+        PackTactic::Hold => 0.0,
+    }
 }
 
 /// The odds row for behaviour `id`, falling back to `default`'s.

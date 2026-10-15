@@ -360,3 +360,139 @@ mod together {
         assert_eq!(end(PackTactic::Together), end(PackTactic::Rush));
     }
 }
+
+mod hold {
+    use super::field::*;
+    use super::*;
+    use crate::components::Stats;
+    use crate::tactical::reach;
+    use crate::tuning::TACTICAL_HOLD_ROUNDS;
+
+    const BREAKS: &str = "The pack breaks cover!";
+
+    /// A holding pair on the west side, a boulder at (6,7) so the cell (5,8)
+    /// is covered from a player standing due east on row 8.
+    fn holding_pair(player_at: (i32, i32)) -> (Game, Vec<Entity>) {
+        let mut game = game();
+        let pack = stand(&mut game, 2, player_at, &[(2, 8), (1, 9)]);
+        open_field_cover(&mut game);
+        game.set_pack_tactic(PackTactic::Hold);
+        (game, pack)
+    }
+
+    /// `open_field` again with the boulder in, bodies left where they stand.
+    fn open_field_cover(game: &mut Game) {
+        use crate::tactical::map::BattleCell;
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .board
+            .put(6, 7, BattleCell::Cover);
+    }
+
+    fn take_turn(game: &mut Game, body: Entity) {
+        assert!(wait_for_turn(game, body));
+        assert!(game.tactical_ai_turn_at(0.0));
+    }
+
+    fn breaks_logged(game: &Game) -> usize {
+        super::super::tactical::log_texts(game)
+            .iter()
+            .filter(|l| l.as_str() == BREAKS)
+            .count()
+    }
+
+    fn covered(game: &Game, body: Entity, from: (i32, i32)) -> bool {
+        let board = &game.world.resource::<TacticalBattle>().board;
+        reach::cover_between(board, from, cell_of(game, body))
+    }
+
+    #[test]
+    fn a_holding_body_walks_to_cover_and_then_stays_while_the_player_is_out_of_sight() {
+        let player = (14, 8);
+        let (mut game, pack) = holding_pair(player);
+        take_turn(&mut game, pack[0]);
+        assert!(covered(&game, pack[0], player), "took no cover");
+        let parked = cell_of(&game, pack[0]);
+        take_turn(&mut game, pack[0]);
+        assert_eq!(cell_of(&game, pack[0]), parked, "left its cover");
+        assert_eq!(tactic_of(&game), PackTactic::Hold);
+        assert_eq!(breaks_logged(&game), 0);
+    }
+
+    #[test]
+    fn hold_breaks_when_the_player_comes_into_sight() {
+        // Six cells due east: inside the alert range and in the open.
+        let (mut game, pack) = holding_pair((8, 8));
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+        assert_eq!(breaks_logged(&game), 1);
+        // And the body whose turn it was planned under Rush: it closed.
+        assert!(cell_of(&game, pack[0]).0 > 2, "did not advance that turn");
+    }
+
+    #[test]
+    fn a_player_out_of_range_does_not_break_the_hold() {
+        // Seven cells off: clear sight, but past the alert range.
+        let (mut game, pack) = holding_pair((9, 8));
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Hold);
+    }
+
+    #[test]
+    fn a_player_behind_cover_does_not_break_the_hold() {
+        // A wall of boulders between them: in range, out of sight.
+        let (mut game, pack) = holding_pair((8, 8));
+        {
+            use crate::tactical::map::BattleCell;
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            for y in 5..12 {
+                battle.board.put(5, y, BattleCell::Cover);
+            }
+        }
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Hold);
+    }
+
+    #[test]
+    fn hold_breaks_when_a_member_is_hit() {
+        let (mut game, pack) = holding_pair((14, 8));
+        game.world.get_mut::<Stats>(pack[1]).unwrap().hp -= 1;
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+        assert_eq!(breaks_logged(&game), 1);
+    }
+
+    #[test]
+    fn hold_breaks_when_a_member_is_gone() {
+        let (mut game, pack) = holding_pair((14, 8));
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .remove(pack[1]);
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+        assert_eq!(breaks_logged(&game), 1);
+    }
+
+    #[test]
+    fn hold_breaks_on_the_timeout_round() {
+        let (mut game, pack) = holding_pair((14, 8));
+        let start = game.world.resource::<TacticalBattle>().round;
+        game.world.resource_mut::<TacticalBattle>().round = start + TACTICAL_HOLD_ROUNDS - 2;
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Hold, "a round early");
+        game.world.resource_mut::<TacticalBattle>().round = start + TACTICAL_HOLD_ROUNDS;
+        take_turn(&mut game, pack[0]);
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+        assert_eq!(breaks_logged(&game), 1);
+    }
+
+    #[test]
+    fn a_broken_hold_logs_once_and_stays_rush() {
+        let (mut game, pack) = holding_pair((8, 8));
+        take_turn(&mut game, pack[0]);
+        take_turn(&mut game, pack[1]);
+        take_turn(&mut game, pack[0]);
+        assert_eq!(breaks_logged(&game), 1);
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+    }
+}

@@ -259,7 +259,7 @@ fn cell_score(
 /// cover the roll would not grant. The denominator is every target, since
 /// `cover_between` asks sight itself and a target that cannot see the cell
 /// is not a shot to be sheltered from.
-fn cover_share(board: &Board, cells: &[(i32, i32)], targets: &[(i32, i32)]) -> f32 {
+pub(super) fn cover_share(board: &Board, cells: &[(i32, i32)], targets: &[(i32, i32)]) -> f32 {
     if targets.is_empty() {
         return 0.0;
     }
@@ -717,6 +717,16 @@ impl Game {
             } else {
                 AiBeat::Acted
             };
+        }
+        // **Before the intent and the walk**, so the body whose turn breaks
+        // a hold plans under `Rush` that same turn. Only on the opening beat:
+        // a body walking up to the player mid-turn has not been sighted
+        // *by the start of its turn*, which is what the hold is judged on.
+        if self.acts_for_hostiles(actor)
+            && self.tactical_turn_opening()
+            && let Some(line) = pack::check_transition(self)
+        {
+            self.log(line);
         }
         let sides = self.tactical_sides(actor);
         if sides.targets.is_empty() {

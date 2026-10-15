@@ -5851,6 +5851,24 @@ pub const TACTICAL_COHESION_WEIGHT: f32 = 1.5;
 /// starts to charge it for the distance, in steps.
 pub const TACTICAL_COHESION_SLACK: u32 = 2;
 
+/// What `Hold` pays a cell for the fraction of the pack's targets it has cover
+/// against.
+///
+/// Well above the melee cover tiebreak and crowding, so a holding body walks
+/// to cover rather than shuffling among cells that tie; far below
+/// `TACTICAL_AI_REACH_SCORE`, so a target that wanders into reach is still
+/// swung at.
+pub const TACTICAL_HOLD_COVER_BONUS: f32 = 6.0;
+
+/// How near a non-pack body must come to a pack member, in steps, for a hold
+/// to count it as sighted. Six, the thrown range: past it nobody on the pack
+/// could do anything about what it saw.
+pub const TACTICAL_HOLD_ALERT_RANGE: u32 = 6;
+
+/// How many rounds a hold waits before giving up. Without it a player who
+/// also waits stalls the fight for good.
+pub const TACTICAL_HOLD_ROUNDS: u32 = 6;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Tactical squads
 // ─────────────────────────────────────────────────────────────────────────

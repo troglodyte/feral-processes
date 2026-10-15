@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.31
+
+**`i` now opens your inventory as a page list like the base report's: Items, Phase keys, Downed programs and Tools.** The pack used to be one window with a Tab between items and phase keys, while downed programs had their own window and Tools sat on the party menu. Now all four are pages of one screen, turned with the arrows or `[` and `]`, and `i` reopens the page you left. `D` still goes straight to Downed programs, with the cursor already on the list, and Tools has moved off the party menu. Long item names on the Items page continue on a second line rather than running off the edge.
+
 ## 0.18.30
 
 **`b` now opens the base report, and the base's commands live on its Build, Research, Trade and Compile pages; `B` is gone.** The base menu and the base report were two windows onto one base, on two keys. Now the four command pages sit at the top of the report's rail, right after Overview, which shows how many commands each page has available where you stand. Commands you can't use here are hidden, as before, and a page with none left says so. Esc from a command's screen comes back to its page with the cursor on the row you used, and `b` reopens the report where you left it.

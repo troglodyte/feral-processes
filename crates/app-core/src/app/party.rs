@@ -3,7 +3,17 @@
 use crate::*;
 
 impl App {
-    /// Lists every tamed program you own, wherever it is. Every action on
+    /// Lists every tamed program you own, wherever it is. **The page is
+    /// always on the rail, not `Locality::Base`**, though the join and the
+    /// stand-down behind `P` are decided at home: hidden off-base it would
+    /// take reading your own programs away four frames down along with the
+    /// one thing that needed guarding. `add_companion` and
+    /// `stand_down_companion` carry `require_base` themselves and refuse onto
+    /// the status line, which is a sentence the player can act on rather than
+    /// a row that is simply gone. See
+    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` guard
+    /// table.
+    /// Every action on
     /// this screen acts on the highlight — `P` adds the highlighted program
     /// to the party or stands it down again, `<` and `>` shift it along the
     /// battle line, `N`/`E`/`W` rename, gear and wield it, `U` takes all of
@@ -14,10 +24,6 @@ impl App {
     /// digit, or an Enter aimed at a screen that has never had one, stood a
     /// party member down with nothing to undo it but noticing.
     pub(crate) fn handle_companion_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         let shift = match key {
             GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
             GameKey::Char('>') | GameKey::Char('.') => Some(SlotShift::Back),
@@ -218,7 +224,7 @@ impl App {
     }
 
     /// Opens the highlighted program's stat sheet — the same manifest the
-    /// party menu's picker and the map's `x` open, reached from the screen
+    /// Programs page's picker and the map's `x` open, reached from the screen
     /// the player is already comparing programs on.
     ///
     /// Handled before `selected_index` and bound to an uppercase key for the

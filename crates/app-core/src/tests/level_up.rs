@@ -158,7 +158,11 @@ fn p_opens_perks_and_esc_from_there_returns_to_playing() {
     app.handle_key(GameKey::Char('P'));
     assert_eq!(app.mode, Mode::Perks);
     assert!(app.pending_level_up.is_none());
+    assert!(!app.hub_on_rail, "opened in the page, as D opens Downed");
 
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Perks, "Esc goes to the rail first");
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -304,6 +308,7 @@ fn the_flow_runs_level_up_then_points_then_perks_then_playing() {
     assert_eq!(attribute(&app, "parity"), parity_before + banked as i32);
 
     app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -349,7 +354,7 @@ fn the_owned_points_screen_can_be_left_with_points_unspent() {
 #[test]
 fn s_on_the_perks_screen_opens_points_and_is_refused_at_zero() {
     let mut app = test_app(9508);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
 
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::Perks, "nothing banked, nothing to spend");
@@ -409,7 +414,7 @@ fn the_preview_carries_what_perks_and_gear_add() {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
 
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
     let row = allocation_row(&app, "analysis");
@@ -444,7 +449,7 @@ fn the_preview_carries_held_phase_keys() {
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
     let _ = std::fs::remove_file(&path);
 
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
     let row = allocation_row(&app, "parity");
@@ -531,6 +536,7 @@ fn spending_from_a_reopened_page_returns_to_the_sheet_with_fresh_counts() {
     app.handle_key(GameKey::Enter);
     assert_eq!(stat_points(&app), 0);
     assert_eq!(app.mode, Mode::Perks, "Perk Points are still unspent");
+    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Manifest);
 

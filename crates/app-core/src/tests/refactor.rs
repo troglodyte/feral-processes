@@ -28,7 +28,7 @@ fn the_party_menu_opens_the_refactor_picker_and_esc_backs_all_the_way_out() {
         "and forgets which program was picked, or the next visit refactors the old one"
     );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::PartyPrograms);
 }
 
 /// A refactor is permanent and cannot be undone, so Enter must never resolve

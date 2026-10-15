@@ -81,6 +81,13 @@ impl App {
         self.hub_on_rail = true;
     }
 
+    /// Opens the party where the player left it, or on Companions the first
+    /// time, with the cursor on the rail — `open_base_report`'s rule.
+    pub(crate) fn open_party_hub(&mut self) {
+        self.mode = self.hub_last[Hub::Party.slot()].unwrap_or(Mode::Companion);
+        self.hub_on_rail = true;
+    }
+
     /// Overview: a cursor over the pages after itself. `Enter`, or a row's
     /// own shortcut, jumps to that page's first screen.
     pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {

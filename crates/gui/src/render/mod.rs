@@ -9,9 +9,9 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
-    hub_of, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, MENU_SCAN_RADIUS, Mode, Staffing,
+    SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows, hub_of,
+    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -133,7 +133,7 @@ use excavate_brush::draw_excavate_brush;
 use extraction::draw_extraction_options;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
-use group_menu::{draw_dev_console, draw_group_menu};
+use group_menu::draw_dev_console;
 use help::{draw_help_index, draw_help_page};
 use history::draw_history;
 use inventory::{
@@ -228,7 +228,7 @@ const BACK_RANK_DESATURATION: f32 = 0.55;
 const CRITICAL_HP_DIVISOR: i32 = 3;
 
 /// Whether a program is close enough to deletion to warrant the warning
-/// colour. The single definition both the battle pane and the party menu
+/// colour. The single definition both the battle pane and the roster
 /// call, so the threshold cannot come to mean two different things on two
 /// screens.
 pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
@@ -941,10 +941,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // of the filter would draw a list the handler doesn't index — which is
     // survivable while both are unconditional, and is not once the base
     // menu starts hiding rows.
-    let group_rows = match app.mode {
-        Mode::PartyMenu => app.party_menu_rows(),
-        _ => Vec::new(),
-    };
     // Rows off `app` before `app.game` is borrowed, `group_rows`' reason.
     let allocation_rows = match app.mode {
         Mode::AllocateStats => points::allocate_stats_rows(app),
@@ -1164,7 +1160,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     };
     let Some(game) = &mut app.game else { return };
     match app.mode {
-        Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, refusal, painter, m),
         Mode::DevConsole => {
             draw_dev_console(App::dev_console_rows(), selected, refusal, painter, m)
         }
@@ -1676,7 +1671,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 151] = [
+    const ALL_MODES: [Mode; 152] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1693,7 +1688,6 @@ mod tests {
         Mode::DepotFilter,
         Mode::RigTool,
         Mode::SpliceRig,
-        Mode::PartyMenu,
         Mode::Battle,
         Mode::BattleTarget,
         Mode::BattleItem,
@@ -1799,6 +1793,8 @@ mod tests {
         Mode::BaseResearch,
         Mode::BaseTrade,
         Mode::BaseCompile,
+        Mode::PartyPrograms,
+        Mode::PartyRoutines,
         Mode::StaffWellbeing,
         Mode::StaffCoverage,
         Mode::StaffDiscontent,

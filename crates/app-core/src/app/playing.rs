@@ -184,7 +184,7 @@ impl App {
                 return;
             }
             GameKey::Char('p') => {
-                self.mode = Mode::PartyMenu;
+                self.open_party_hub();
                 return;
             }
             GameKey::Char('i') => {
@@ -213,7 +213,7 @@ impl App {
                 return;
             }
             // Examine, in the roguelike sense — `i` went to the pack, and
-            // perks moving into the party menu freed the key a player would
+            // perks moving into the party hub freed the key a player would
             // guess for it anyway.
             GameKey::Char('x') => {
                 self.mode = Mode::InspectDirection;

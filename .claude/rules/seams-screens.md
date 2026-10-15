@@ -53,8 +53,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   any per-row transform must live in the engine.** Both sides call
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
-- **A group menu's rows are hidden dynamically**, so `command_rows` /
-  `party_menu_rows` must be the *only* source of them.
+- **A group menu's rows are hidden dynamically**, so `command_rows`
+  must be the *only* source of them, for the base's pages and the party's.
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and

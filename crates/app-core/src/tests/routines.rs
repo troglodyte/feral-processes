@@ -12,7 +12,9 @@ fn the_party_menu_opens_the_routine_target_picker_and_esc_backs_all_the_way_out(
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineTarget);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::PartyRoutines);
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -121,15 +123,17 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
         "backing out must not destroy the program"
     );
     // Esc backs out one page at a time (same as `TradeProgramConfirm`):
-    // ExtractConfirm -> ExtractPick -> Extract -> PartyMenu -> Playing, four
-    // Escs to fully unwind. Asserting each step is what makes the following
+    // ExtractConfirm -> ExtractPick -> Extract -> PartyRoutines -> rail ->
+    // Playing, five Escs to fully unwind. Asserting each step is what makes the following
     // re-entry meaningful — driven from anywhere but `Playing` it would be
     // swallowed by that mode's own numbered-menu handler and prove nothing.
     assert_eq!(app.mode, Mode::ExtractPick);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Extract);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::PartyRoutines);
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
@@ -161,9 +165,11 @@ fn the_party_menu_opens_the_etch_screen_and_esc_comes_straight_back() {
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::PartyMenu,
-        "Esc returns to the menu that opened it, not into the install flow"
+        Mode::PartyRoutines,
+        "Esc returns to the page that opened it, not into the install flow"
     );
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -190,7 +196,7 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineTarget);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::PartyRoutines);
 }
 
 /// Standing on the extract confirm for the fixture's one program.

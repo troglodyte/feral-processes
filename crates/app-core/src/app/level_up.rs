@@ -65,16 +65,17 @@ impl App {
         }
     }
 
-    /// Perks from the level-up flow. From the map, `menu_origin` is left
-    /// untouched (this page never sets it), so Perks' own `Esc` —
-    /// `App::close_screen` — falls back to `Mode::Playing` rather than back
-    /// to a page it can no longer answer for; from the sheet it goes back to
-    /// the sheet.
+    /// Perks from the level-up flow, with the cursor in the page. From the
+    /// map, `menu_origin` is left untouched (this page never sets it), so Esc
+    /// to the rail and again out — `App::close_screen` — falls back to
+    /// `Mode::Playing` rather than back to a page it can no longer answer
+    /// for; from the sheet it goes back to the sheet.
     pub(crate) fn open_level_up_perks(&mut self) {
         if self.level_up_origin == LevelUpOrigin::Manifest {
             self.menu_origin = Some(Mode::Manifest);
         }
-        self.open_perks();
+        self.hub_on_rail = false;
+        self.mode = Mode::Perks;
     }
 
     /// Whether `L` on your own Manifest would reopen the page: one was

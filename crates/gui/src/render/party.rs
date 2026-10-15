@@ -1134,7 +1134,7 @@ mod tests {
 
     /// The manifest is the one screen that states a program's potential
     /// rolls, affinities, growth and base job — none of which the roster's own
-    /// stat row carries. Reached from the party menu's picker as well, so a
+    /// stat row carries. Reached from the Programs page's picker as well, so a
     /// player who never finds this key is not locked out of anything; what the
     /// line buys is that comparing two programs' full sheets doesn't mean
     /// backing all the way out to a menu between each one.
@@ -1347,7 +1347,7 @@ mod tests {
     }
 
     /// The memories page is the one thing on the roster with no other way
-    /// in: it is not reachable from the party menu, from the map, or from a
+    /// in: it is not reachable from the Programs page, from the map, or from a
     /// manifest, so a player who never finds this key never sees the
     /// feature at all.
     #[test]

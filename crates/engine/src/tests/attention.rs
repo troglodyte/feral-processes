@@ -63,7 +63,7 @@ fn unspent_perk_points_ask_to_be_spent() {
 
     let perks = row(&mut game, AttentionKind::PerkPoints);
     assert_eq!(perks.text, "3 perk points unspent");
-    assert_eq!(perks.key, 'p', "perks live behind the party menu");
+    assert_eq!(perks.key, 'p', "perks live behind the Perks page");
     assert!(!perks.threat);
 }
 

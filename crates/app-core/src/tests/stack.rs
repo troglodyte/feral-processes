@@ -172,7 +172,7 @@ fn the_menu_keys_still_open_their_screens_underground() {
     // Stack — see `Game::require_surface`.
     for (key, expected) in [
         (GameKey::Char('i'), Mode::Inventory),
-        (GameKey::Char('p'), Mode::PartyMenu),
+        (GameKey::Char('p'), Mode::Companion),
         (GameKey::Char('?'), Mode::Help),
     ] {
         let mut app = app_underground(303);

@@ -86,7 +86,7 @@ impl App {
     /// stopping them.
     ///
     /// Esc follows `App::etch_return` — back to the install screen for the
-    /// `[e]` detour, out to the party menu for the row that opens this
+    /// `[e]` detour, out to the Routines page for the row that opens this
     /// screen in its own right.
     pub(crate) fn handle_routine_etch_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {

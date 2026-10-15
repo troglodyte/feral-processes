@@ -432,6 +432,11 @@ neither is worth it until a question needs it.
   left and the battle map in 7.3 at 93% — turns spent walking, and damage
   spread across whoever is in reach rather than forced onto a group's front.
   Bin only, like every `model: Tactical` file.
+- **`tactical-mixed-pack.ron`** — four sentinels (melee) and four rootkits
+  (ranged) against a level-14 player and three level-8 scrappers, on
+  `AutoPlay`. On-curve (about 98% wins, 18% Integrity lost, 14.5 rounds under
+  Rush), so a pack tactic that changes the fight shows; the pack-tactics
+  measurements use it, forcing `tactic:` per run. Bin only.
 - **`squad.ron`** and **`squad-control.ron`** — the tactical-squads pair:
   five rootkits that fold into one formation against the same mid-grade
   party as `tactical-full-group.ron`, and four rootkits plus one

@@ -10,9 +10,8 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_page_of, equip_preview_tag,
-    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column,
-    stat_summary,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
+    hub_of, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -131,15 +130,15 @@ use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipe
 use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
 use excavate_brush::draw_excavate_brush;
-use extraction::draw_downed_programs;
+use extraction::draw_extraction_options;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
 use help::{draw_help_index, draw_help_page};
 use history::draw_history;
 use inventory::{
-    draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
-    draw_inventory_item_action, effect_lines,
+    draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory_item_action,
+    effect_lines,
 };
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
@@ -167,7 +166,6 @@ use splice_rig::draw_splice_rig;
 use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
-use tools::draw_tools;
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -1333,7 +1331,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::OutpostPost => {
             draw_outpost_post(&outpost_post_candidates, selected, refusal, painter, m)
         }
-        Mode::Inventory => draw_inventory(game, app.inventory_tab, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
             app.pending_equip_program,
@@ -1373,10 +1370,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
-        Mode::DownedPrograms => {
-            draw_downed_programs(game, pending_downed_program, selected, refusal, painter, m)
-        }
-        Mode::Tools => draw_tools(game, selected, refusal, painter, m),
+        Mode::DownedPrograms if pending_downed_program.is_some() => draw_extraction_options(
+            game,
+            pending_downed_program.unwrap_or_default(),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
         Mode::FuseSecond => {
@@ -1593,7 +1594,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        mode if base_page_of(mode).is_some() => {
+        mode if hub_of(mode).is_some() => {
             base_report::draw_base_report(game, mode, selected, &app_screens, refusal, painter, m)
         }
         Mode::History => draw_history(game, selected, refusal, painter, m),
@@ -1675,7 +1676,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 150] = [
+    const ALL_MODES: [Mode; 151] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1733,6 +1734,7 @@ mod tests {
         Mode::OutpostVisit,
         Mode::OutpostPost,
         Mode::Inventory,
+        Mode::PhaseKeys,
         Mode::EquipSwap,
         Mode::InventoryItemAction,
         Mode::ItemDescribe,

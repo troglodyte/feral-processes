@@ -211,7 +211,7 @@ pub(super) fn caravan_page_rows(
             Some(text) => with_suffix(sell, text),
             None => sell,
         });
-        for line in effect_lines(game, &row.copy.item) {
+        for line in effect_lines(game, &row.copy.item, ROW_WRAP_COLUMNS) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
         }
         idx += 1;

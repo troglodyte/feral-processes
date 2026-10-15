@@ -1,4 +1,4 @@
-//! `Mode::DownedPrograms`: the `D` key on the map and in the pack, and the
+//! `Mode::DownedPrograms`: the `D` key on the map and on Items, and the
 //! two-phase screen it opens — a list of held programs, then the tool-and-yield page for
 //! whichever one is picked.
 
@@ -23,7 +23,7 @@ fn program(species: &str, condition: u8, rarity: Rarity, level: u32) -> DownedPr
 #[test]
 fn pressing_uppercase_d_opens_the_downed_programs_screen_from_the_pack() {
     let mut app = test_app(9000);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     assert_eq!(app.mode, Mode::Inventory);
 
     app.handle_key(GameKey::Char('D'));
@@ -51,7 +51,7 @@ fn pressing_uppercase_d_opens_the_downed_programs_screen_from_the_pack() {
 #[test]
 fn lowercase_d_selects_a_row_instead_of_opening_the_downed_programs_screen() {
     let mut app = app_on_inventory_with_many_items(9001);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     assert_eq!(app.mode, Mode::Inventory);
     let tenth_item = app.game.as_ref().unwrap().player_status().inventory[9]
         .copy
@@ -111,53 +111,34 @@ fn the_store_opens_underground() {
     assert_eq!(app.mode, Mode::DownedPrograms);
 }
 
-/// The two doors share one screen, so Esc has to answer which one it came
-/// through — `menu_origin`, the slot that already answers exactly that for
-/// every screen a group menu opens, rather than a second field beside it.
-/// The map's own arm needs no write: `handle_key` clears `menu_origin`
-/// whenever the map is reached.
 #[test]
-fn esc_from_the_map_route_returns_to_the_map() {
+fn esc_from_the_map_route_steps_to_the_rail_and_then_out_to_the_map() {
     let mut app =
         app_holding_downed_programs(9012, vec![program("scrapper", 70, Rarity::Gold, 20)]);
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
 
     app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// And the pack route still lands back on the pack rather than dropping to
-/// the map — the whole point of routing Esc through `menu_origin` rather
-/// than hardcoding either destination.
+/// Both doors land on the same page, in it, so Esc means the same from
+/// either: to the rail, then out to the map.
 #[test]
-fn esc_from_the_pack_route_returns_to_the_pack_and_then_to_the_map() {
+fn esc_from_the_pack_route_steps_to_the_rail_and_then_out_to_the_map() {
     let mut app = test_app(9013);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Inventory);
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "the pack's own Esc still works: the store consumed the origin it set"
-    );
-}
-
-#[test]
-fn esc_from_the_list_returns_to_inventory() {
-    let mut app = test_app(9002);
-    app.handle_key(GameKey::Char('i'));
-    app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
+    assert!(app.hub_on_rail);
 
     app.handle_key(GameKey::Esc);
-
-    assert_eq!(app.mode, Mode::Inventory);
+    assert_eq!(app.mode, Mode::Playing);
 }
 
 #[test]
@@ -167,7 +148,7 @@ fn an_out_of_range_row_is_ignored_on_an_empty_store() {
         app.game.as_mut().unwrap().downed_program_rows().is_empty(),
         "test premise: a fresh run holds nothing"
     );
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
 
     app.handle_key(GameKey::Char('1'));
@@ -183,7 +164,7 @@ fn an_out_of_range_row_is_ignored_on_an_empty_store() {
 fn picking_a_row_opens_the_tool_page_and_esc_backs_out_to_the_list() {
     let mut app =
         app_holding_downed_programs(9004, vec![program("scrapper", 70, Rarity::Gold, 20)]);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
 
@@ -213,7 +194,7 @@ fn picking_a_row_opens_the_tool_page_and_esc_backs_out_to_the_list() {
 fn picking_a_tool_extracts_the_program_and_returns_to_the_list() {
     let mut app =
         app_holding_downed_programs(9005, vec![program("scrapper", 70, Rarity::Gold, 20)]);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.pending_downed_program_index, Some(0));
@@ -260,7 +241,7 @@ fn app_beside_a_rig_holding(n: u32) -> App {
         .map(|level| program("scrapper", 70, Rarity::Ordinary, level))
         .collect();
     let mut app = app_beside_a_teardown_rig_holding(9100, held);
-    app.handle_key(GameKey::Char('i'));
+    open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
     app

@@ -1,30 +1,14 @@
-//! `Mode::DownedPrograms`: the store reached from the pack, and the
+//! `Mode::DownedPrograms`: the store on the inventory hub's rail, and the
 //! tool-and-yield picker for one held program — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 6.
 //!
-//! One popup, two pages — `App::pending_downed_program_index` decides which
-//! — the shape `draw_develop`/`draw_develop_program` take across two
-//! `Mode`s collapsed into one: there is no per-tier ladder here to keep
-//! apart from the list the way a Kernel Ring's page needs.
+//! Two pages under one `Mode` — `App::pending_downed_program_index` decides
+//! which. The list is a hub screen; the picker for one program stays a popup.
 
 use super::popup::*;
 use super::*;
 use feral_processes_engine::views::ExtractionPreview;
-
-pub(super) fn draw_downed_programs(
-    game: &Game,
-    pending_index: Option<usize>,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    match pending_index {
-        Some(index) => draw_extraction_options(game, index, selected, refusal, painter, m),
-        None => draw_downed_program_list(game, selected, refusal, painter, m),
-    }
-}
 
 /// Page one: every held program, `Game::downed_program_rows`' own order.
 ///
@@ -59,27 +43,7 @@ pub(super) fn downed_program_list_rows(game: &Game, selected: usize) -> Vec<Row>
         }
         rows.push(tier_row(label, i == selected, 0, p.rarity));
     }
-    rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
     rows
-}
-
-fn draw_downed_program_list(
-    game: &Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = downed_program_list_rows(game, selected);
-    draw_popup(
-        "Downed Programs",
-        PopupSize::Large,
-        &rows,
-        refusal,
-        painter,
-        m,
-    );
 }
 
 /// Page two: the program named by `index`, the bench that is working on it,
@@ -196,7 +160,7 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
     rows
 }
 
-fn draw_extraction_options(
+pub(super) fn draw_extraction_options(
     game: &Game,
     index: usize,
     selected: usize,
@@ -417,15 +381,14 @@ mod tests {
     /// this failed, and reverted — the constant itself is the thing under
     /// test, not a second copy of it here.
     #[test]
-    fn the_tallest_downed_program_list_fits_its_popup_at_1280x720() {
+    fn the_tallest_downed_program_list_fits_the_hub_at_1280x720() {
         let game = tallest_and_widest_list_game();
         let rows = downed_program_list_rows(&game, 0).len();
-        let m = ui_metrics(720.0);
-        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
+        let cap = crate::render::base_report::content_rows_at_720();
         assert!(
             rows <= cap,
             "a full store ({MAX_DOWNED_PROGRAMS} programs) builds a {rows}-row page into a \
-             {cap}-row popup at 1280x720"
+             {cap}-row hub at 1280x720"
         );
     }
 
@@ -433,22 +396,12 @@ mod tests {
     /// `Row::Item` rows rather than `Row::Text` — this page's list is
     /// exactly the row kind that trap warns a naive width census skips.
     #[test]
-    fn no_downed_program_row_overflows_the_popup_body_at_1280x720() {
+    fn no_downed_program_row_overflows_the_hub_content_rect() {
         let game = tallest_and_widest_list_game();
-        let rows = downed_program_list_rows(&game, 0);
-        let m = ui_metrics(720.0);
-        let body = popup_body_width(1280.0, PopupSize::Large, &m);
-        crate::paint::with_painter(|p| {
-            for row in &rows {
-                let label = row_label_text(row);
-                let width = p.measure_ui_advance(&label, m.font_size);
-                assert!(
-                    width <= body,
-                    "a downed-program row draws {width}px into a {body}px body at 1280x720: \
-                     {label:?}"
-                );
-            }
-        });
+        crate::render::base_report::assert_rows_fit(
+            &downed_program_list_rows(&game, 0),
+            "downed-program",
+        );
     }
 
     /// The tool page's own worst case: the widest program and the widest

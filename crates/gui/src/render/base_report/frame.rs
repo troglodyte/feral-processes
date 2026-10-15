@@ -67,14 +67,17 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
 
 /// Paints the frame (its keybar only when `keybar_mode` is given) and returns the content rect, already shortened by a
 /// red refusal line when one is up. `on_rail` is whether the rail holds the
-/// hub's one cursor; the rows draw it otherwise.
+/// hub's one cursor; the rows draw it otherwise. `flags` is the base
+/// report's attention marks; a hub without any passes `None`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_frame(
+    title: &str,
+    pages: &[HubPage],
     page: usize,
     screen: usize,
     keybar_mode: Option<Mode>,
     on_rail: bool,
-    flags: &BaseReportFlags,
+    flags: Option<&BaseReportFlags>,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -92,10 +95,17 @@ pub(super) fn paint_frame(
         2.0,
         hud::palette::PANE_BORDER,
     );
-    draw_rail(&l.rail, page, on_rail, flags, char_w, painter, m);
-    draw_title(&l.title, page, screen, painter, m);
+    draw_rail(
+        &l.rail, title, pages, page, on_rail, flags, char_w, painter, m,
+    );
+    draw_title(&l.title, pages, page, screen, painter, m);
     if let Some(mode) = keybar_mode {
-        draw_groups(l.keybar, &keybar_groups(mode, page, on_rail), painter, m);
+        draw_groups(
+            l.keybar,
+            &keybar_groups(mode, pages, page, on_rail),
+            painter,
+            m,
+        );
     }
 
     let mut content = l.content;
@@ -116,11 +126,14 @@ pub(super) fn paint_frame(
 /// The current page always carries the caret; the highlight bar is the
 /// cursor, drawn only while the rail has it and in the rows' own
 /// `SELECT_BG`, so it reads as the one cursor moving rather than a second.
+#[allow(clippy::too_many_arguments)]
 fn draw_rail(
     rail: &RailGeom,
+    hub_title: &str,
+    pages: &[HubPage],
     selected: usize,
     focused: bool,
-    flags: &BaseReportFlags,
+    flags: Option<&BaseReportFlags>,
     char_w: f32,
     painter: &Painter,
     m: &Metrics,
@@ -134,15 +147,14 @@ fn draw_rail(
     );
     if let Some(title) = rail.title {
         painter.ui_bold(
-            "BASE REPORT",
+            hub_title,
             title.x,
             title.y + title.h * 0.75,
             m.small(),
             hud::palette::PANE_TITLE,
         );
     }
-    let pages = BASE_REPORT_PAGES.len();
-    let w = rail_window(pages, selected, rail.fits());
+    let w = rail_window(pages.len(), selected, rail.fits());
     let mut slot = 0;
     let more = |slot: usize, arrow: char, n: usize| {
         painter.ui(
@@ -157,12 +169,7 @@ fn draw_rail(
         more(slot, '↑', w.above);
         slot += 1;
     }
-    for (page, entry) in BASE_REPORT_PAGES
-        .iter()
-        .enumerate()
-        .take(w.end)
-        .skip(w.start)
-    {
+    for (page, entry) in pages.iter().enumerate().take(w.end).skip(w.start) {
         let top = rail.rows.y + slot as f32 * rail.row_h;
         let base = top + rail.row_h * 0.85;
         let current = page == selected;
@@ -189,7 +196,7 @@ fn draw_rail(
                 hud::palette::EMPHASIS
             },
         );
-        if page_flag(flags, page).is_some() {
+        if flags.is_some_and(|f| page_flag(f, page).is_some()) {
             painter.ui_bold(
                 "!",
                 rail.rows.x + rail.rows.w - char_w * 2.0,
@@ -207,11 +214,18 @@ fn draw_rail(
 
 /// The page's title, then one dot per screen with the current one filled.
 /// A one-screen page draws no dots.
-fn draw_title(title: &Rect, page: usize, screen: usize, painter: &Painter, m: &Metrics) {
+fn draw_title(
+    title: &Rect,
+    pages: &[HubPage],
+    page: usize,
+    screen: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let base = title.y + title.h * 0.75;
-    let name = BASE_REPORT_PAGES[page].title;
+    let name = pages[page].title;
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
-    let screens = BASE_REPORT_PAGES[page].screens.len();
+    let screens = pages[page].screens.len();
     if screens > 1 {
         let dots: Vec<&str> = (0..screens)
             .map(|i| if i == screen { "●" } else { "○" })
@@ -224,7 +238,12 @@ fn draw_title(title: &Rect, page: usize, screen: usize, painter: &Painter, m: &M
 /// The keys that work here, most important first (the bar drops groups from
 /// the end when it is too narrow). The rail and the rows each list only
 /// what the cursor does where it is.
-pub(super) fn keybar_groups(mode: Mode, page: usize, on_rail: bool) -> Vec<Vec<hud::strip::Piece>> {
+pub(super) fn keybar_groups(
+    mode: Mode,
+    pages: &[HubPage],
+    page: usize,
+    on_rail: bool,
+) -> Vec<Vec<hud::strip::Piece>> {
     if on_rail {
         let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
         return [nav, vec![keycap("Esc", "close")]]
@@ -232,7 +251,7 @@ pub(super) fn keybar_groups(mode: Mode, page: usize, on_rail: bool) -> Vec<Vec<h
             .map(group)
             .collect();
     }
-    let step = if BASE_REPORT_PAGES[page].screens.len() > 1 {
+    let step = if pages[page].screens.len() > 1 {
         keycap("←/→", "screen")
     } else {
         keycap("←", "menu")
@@ -263,6 +282,20 @@ pub(super) fn keybar_groups(mode: Mode, page: usize, on_rail: bool) -> Vec<Vec<h
             keycap("< >", "move"),
         ],
         Mode::Structures => vec![keycap("↑/↓", "select"), keycap("Enter", "staff")],
+        Mode::Inventory => vec![
+            keycap("↑/↓", "select"),
+            keycap("S", "sell"),
+            keycap("U", "fuse all"),
+            keycap("I", "inspect"),
+            keycap("D", "downed"),
+        ],
+        Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
+        Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],
+        Mode::Tools => vec![
+            keycap("F", "forge"),
+            keycap("I", "install"),
+            keycap("X", "pull"),
+        ],
         _ => Vec::new(),
     };
     [acts, nav, vec![keycap("Esc", "menu")]]
@@ -350,9 +383,9 @@ mod tests {
             Mode::Structures,
             Mode::Alerts,
         ] {
-            let page = base_page_of(mode).unwrap().0;
+            let page = hub_of(mode).unwrap().1;
             let text = |on_rail| -> String {
-                keybar_groups(mode, page, on_rail)
+                keybar_groups(mode, BASE_REPORT_PAGES, page, on_rail)
                     .iter()
                     .flatten()
                     .map(|(t, _, _)| t.as_str())

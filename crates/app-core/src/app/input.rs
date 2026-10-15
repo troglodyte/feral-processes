@@ -247,7 +247,7 @@ impl App {
         };
         let carried = self.status_line.clone();
         let mode_before = self.mode;
-        let hub_took_it = self.handle_base_report_nav(key);
+        let hub_took_it = self.handle_hub_nav(key);
         match self.mode {
             _ if hub_took_it => {}
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -303,6 +303,7 @@ impl App {
             Mode::AllocateStats => self.handle_allocate_stats_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::Inventory => self.handle_inventory_key(key),
+            Mode::PhaseKeys => self.handle_phase_keys_key(key),
             Mode::EquipSwap => self.handle_equip_swap_key(key),
             Mode::InventoryItemAction => self.handle_inventory_item_action_key(key),
             Mode::ItemDescribe => self.handle_item_describe_key(key),
@@ -427,9 +428,15 @@ impl App {
         {
             game.mark_alerts_read();
         }
+        // A pick belongs to the drill-down it was made in; kept past a page
+        // turn it would reopen as the extraction popup over a store that may
+        // have changed meanwhile.
+        if self.mode != mode_before && self.mode != Mode::DownedPrograms {
+            self.pending_downed_program_index = None;
+        }
         // Every hub screen is reopened from where the player last was.
-        if base_page_of(self.mode).is_some() {
-            self.base_report_last = Some(self.mode);
+        if let Some((hub, ..)) = hub_of(self.mode) {
+            self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no

@@ -252,14 +252,52 @@ pub(super) fn wrapped_tagged_lines(
     power: PowerCell,
     head: &str,
     tags: &[String],
+    columns: usize,
 ) -> Vec<String> {
     let prefix = tagged_text(lead, tag, power, "");
-    let mut lines = wrapped_row_lines(tagged_text(lead, tag, power, head), tags);
+    let room = columns.saturating_sub(prefix.chars().count());
+    let mut lines = match split_head(head, room) {
+        Some((first, rest)) => {
+            let mut lines = vec![format!("{prefix}{first}")];
+            // A tail too long for one line goes over several; the tags pack
+            // onto the last of them.
+            let mut tail = continuation_lines_within(rest, columns);
+            let last = tail.pop().unwrap_or_default();
+            lines.extend(tail);
+            lines.extend(wrapped_row_lines_within(last, tags, columns));
+            lines
+        }
+        None => wrapped_row_lines_within(tagged_text(lead, tag, power, head), tags, columns),
+    };
     lines[0] = lines[0]
         .strip_prefix(&prefix)
         .expect("wrapped_row_lines only ever appends to the head line")
         .to_string();
     lines
+}
+
+/// Splits a head wider than `room` columns in two at a word boundary, for the
+/// continuation lines its tail goes on. The space before the affix text (the
+/// ` · ` separator) is preferred, so the base name stays whole; the caller
+/// wraps a tail too long for one line over several. Failing that, the last
+/// space that leaves the first part within `room`. `None` when the head
+/// fits, or has no space to break at.
+fn split_head(head: &str, room: usize) -> Option<(&str, &str)> {
+    if head.chars().count() <= room {
+        return None;
+    }
+    let fits = |at: &usize| head[..*at].chars().count() <= room;
+    let spaces = || head.match_indices(' ').map(|(i, _)| i);
+    // Scanned from the right: the last break that still fits wins.
+    let at = spaces()
+        .filter(|&i| head[i..].starts_with(" · "))
+        .rev()
+        .find(fits)
+        .or_else(|| spaces().rev().find(fits))
+        // A first word wider than the room is broken after rather than lost.
+        .or_else(|| spaces().next())?;
+    let rest = head[at..].trim_start();
+    (!rest.is_empty()).then_some((&head[..at], rest))
 }
 
 /// What an icon occupies in a row's label: the glyph itself plus the gap
@@ -1179,10 +1217,20 @@ pub(super) fn description_rows_at(
 /// same call `wrap_text` makes about an over-long word and for the same
 /// reason: one row running wide beats losing text.
 pub(super) fn wrapped_row_lines(head: String, tags: &[String]) -> Vec<String> {
+    wrapped_row_lines_within(head, tags, ROW_WRAP_COLUMNS)
+}
+
+/// `wrapped_row_lines` for a body narrower than a popup's, a hub's content
+/// rect being the one so far.
+pub(super) fn wrapped_row_lines_within(
+    head: String,
+    tags: &[String],
+    columns: usize,
+) -> Vec<String> {
     let mut lines = vec![head];
     for tag in tags.iter().filter(|t| !t.is_empty()) {
         let line = lines.last_mut().expect("the head is always present");
-        if line.chars().count() + tag.chars().count() <= ROW_WRAP_COLUMNS {
+        if line.chars().count() + tag.chars().count() <= columns {
             line.push_str(tag);
         } else {
             // Trimmed because a tag carries the space that joined it to the
@@ -1205,6 +1253,61 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_head_over_the_budget_continues_on_an_indented_line_and_one_under_does_not() {
+        let lead = "[-] 1234x ";
+        let head = "Overclocked Etched Disk · Thermal Throttle Single of Quiet Handshakes (130%)";
+        let wide = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, head, &[], 78);
+        assert_eq!(wide.len(), 2, "{wide:?}");
+        assert!(wide[0].ends_with("Etched Disk"), "{wide:?}");
+        assert!(wide[1].starts_with(ROW_CONTINUATION_INDENT), "{wide:?}");
+        assert!(wide[1].trim_start().starts_with("· Thermal"), "{wide:?}");
+        let rejoined = format!("{} {}", wide[0], wide[1].trim_start());
+        assert!(rejoined.ends_with(head), "nothing is elided: {wide:?}");
+        let narrow = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, "Etched Disk", &[], 78);
+        assert_eq!(narrow, vec!["Etched Disk".to_string()]);
+    }
+
+    fn head_of_width(n: usize) -> String {
+        // Words of four columns so there is always a space to break at.
+        let mut head = "abc ".repeat(n / 4 + 1);
+        head.truncate(n);
+        head
+    }
+
+    #[test]
+    fn a_head_of_exactly_the_room_stays_whole_and_one_more_column_splits() {
+        let room = 20;
+        assert_eq!(split_head(&head_of_width(room), room), None);
+        assert!(split_head(&head_of_width(room + 1), room).is_some());
+    }
+
+    #[test]
+    fn a_short_base_with_a_long_affix_still_puts_the_whole_tail_inside_the_columns() {
+        let lead = "[-] 1234x ";
+        let head =
+            "Disk · Thermal Throttle Single of Quiet Handshakes and Many Other Long Words (130%)";
+        let columns = 40;
+        let lines = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, head, &[], columns);
+        assert!(lines.len() > 2, "the tail needs several lines: {lines:?}");
+        for line in &lines[1..] {
+            assert!(line.starts_with(ROW_CONTINUATION_INDENT), "{lines:?}");
+            assert!(line.chars().count() <= columns, "{lines:?}");
+        }
+        let words: Vec<&str> = lines.iter().flat_map(|l| l.split_whitespace()).collect();
+        assert_eq!(words.join(" "), head, "nothing is elided");
+    }
+
+    #[test]
+    fn the_separator_is_the_break_and_never_hangs_at_a_line_end() {
+        // A later space fits the room too ("…Disk · Thermal" is 33 columns,
+        // "…Disk ·" 25), but breaking there strands the separator.
+        let head = "Overclocked Etched Disk · Thermal Throttle Single of Quiet";
+        let (first, rest) = split_head(head, 30).expect("splits");
+        assert_eq!(first, "Overclocked Etched Disk");
+        assert!(rest.starts_with("· "), "{rest}");
+    }
 
     /// The three properties `wrapped_row_lines` is relied on for, none of
     /// which the roster census above it can distinguish from luck: a row

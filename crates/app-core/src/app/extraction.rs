@@ -1,6 +1,6 @@
-//! `Mode::DownedPrograms`: the downed-program store, reached with `D` from
-//! the map and from the pack, and the tool-and-yield picker for one held
-//! program — see
+//! `Mode::DownedPrograms`: the downed-program store, a page of the inventory
+//! hub reached with `D` from the map and from Items, and the tool-and-yield
+//! picker for one held program — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 6.
 
@@ -18,19 +18,11 @@ impl App {
     /// just spent, a program benched elsewhere) cannot be indexed past its
     /// own end — `selected_index`'s bound is exactly `len`.
     pub(crate) fn handle_downed_programs_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            if self.pending_downed_program_index.take().is_none() {
-                // Two doors, one screen: `D` on the map and `D` in the
-                // pack. `close_screen` is what tells them apart —
-                // `Mode::Inventory` sets `menu_origin` opening this screen
-                // and the map does not, so the fallback to `Mode::Playing`
-                // is exactly the map's answer. A hardcoded destination here
-                // would send one of the two routes somewhere the player
-                // never was.
-                self.close_screen();
-            } else {
-                self.menu_selected = 0;
-            }
+        // Only reached with a program picked: the hub nav takes Esc and Left
+        // on the list itself and steps them to the rail.
+        if matches!(key, GameKey::Esc | GameKey::Left) {
+            self.pending_downed_program_index = None;
+            self.menu_selected = 0;
             return;
         }
         match self.pending_downed_program_index {

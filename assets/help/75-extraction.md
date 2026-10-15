@@ -32,7 +32,7 @@ What a body is worth is a property of the body. Its level, the rarity it rolled 
 went down all feed the same figure, so a Prismatic taken at full health is worth more through the
 same tool than an Ordinary you barely left standing.
 
-The Tools row on the party menu is where you forge, install and pull. The store's own screen is
+The Tools page of your inventory (i) is where you forge, install and pull. The store's own screen is
 where you spend a program: pick the body, and every installed tool is listed with what it would
 draw out before you commit to one. Material tools quote units. The Routine Extractor names the pool it would
 draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually

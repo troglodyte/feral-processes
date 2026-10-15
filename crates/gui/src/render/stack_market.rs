@@ -79,7 +79,7 @@ pub(super) fn draw_stack_market(
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),
         ));
-        for line in effect_lines(game, &row.copy.item) {
+        for line in effect_lines(game, &row.copy.item, ROW_WRAP_COLUMNS) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
         }
         idx += 1;

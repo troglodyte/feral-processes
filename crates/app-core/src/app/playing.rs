@@ -187,21 +187,18 @@ impl App {
                 self.mode = Mode::PartyMenu;
                 return;
             }
-            // No menu of its own: the pack is a single screen, so the group
-            // key opens it directly.
             GameKey::Char('i') => {
-                self.inventory_tab = InventoryTab::Items;
-                self.mode = Mode::Inventory;
+                self.open_inventory_hub();
                 return;
             }
-            // The downed-program store, which is not a pocket of the pack:
-            // a body goes down in most fights and the tool page is where it
-            // is spent, so it gets a door of its own rather than one reached
-            // two screens deep. Kept on `D` — the same key the pack binds —
-            // because one screen with two doors on two different keys is
-            // worse than the extra reach it saves. Uppercase is forced
-            // there, not here: `selected_index` reserves shifted letters for
-            // screen actions, and `d` is demolish on this screen anyway.
+            // The downed-program store: a body goes down in most fights and
+            // the tool page is where it is spent, so it gets a door of its
+            // own rather than one reached two screens deep. Kept on `D` — the
+            // same key the Items page binds — because one screen with two
+            // doors on two different keys is worse than the extra reach it
+            // saves. Uppercase is forced there, not here: `selected_index`
+            // reserves shifted letters for screen actions, and `d` is
+            // demolish on this screen anyway.
             //
             // Bound up here beside the digits and for their reason: this
             // match runs before the hand-off to `handle_stack_key`, so one
@@ -211,7 +208,7 @@ impl App {
             // the party stands — so a store reachable only on the surface
             // would be the keyboard disagreeing with the engine.
             GameKey::Char('D') => {
-                self.pending_downed_program_index = None;
+                self.hub_on_rail = false;
                 self.mode = Mode::DownedPrograms;
                 return;
             }

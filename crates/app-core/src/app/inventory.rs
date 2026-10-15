@@ -31,32 +31,20 @@ impl App {
         }
     }
 
+    /// The keys page is read-only: Up/Down move the highlight and nothing
+    /// else resolves, so sell, fuse, inspect and equip cannot reach a row
+    /// that is not an item.
+    pub(crate) fn handle_phase_keys_key(&mut self, key: GameKey) {
+        self.scroll(
+            key,
+            feral_processes_engine::tuning::PHASE_KEY_COUNT as usize,
+        );
+    }
+
     /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and open
     /// `Mode::EquipSwap` for that slot; unequipped inventory items start at
     /// 4 and open `Mode::InventoryItemAction` for the selected item.
     pub(crate) fn handle_inventory_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
-        // Not a letter: lowercase picks rows and uppercase acts, and this is
-        // neither. A `return` for the info tab's reason: changing page is
-        // not an action.
-        if key == GameKey::Tab {
-            self.inventory_tab = self.inventory_tab.other();
-            self.menu_selected = 0;
-            return;
-        }
-        // The keys tab is read-only: Up/Down move the highlight and nothing
-        // else resolves, so sell, fuse, inspect and equip cannot reach a
-        // row that is not an item.
-        if self.inventory_tab == InventoryTab::PhaseKeys {
-            self.scroll(
-                key,
-                feral_processes_engine::tuning::PHASE_KEY_COUNT as usize,
-            );
-            return;
-        }
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
         let total = 3 + inventory.len();
@@ -111,18 +99,10 @@ impl App {
         // The store, not the pack: `D`, not `d`, for `S`'s reason —
         // `selected_index` reserves shifted letters for screen actions, so
         // a lowercase binding here would both open this screen and pick a
-        // row on the very keypress that opened it.
-        //
-        // The same key on the map opens the same screen, which is where
-        // most visits start; this route survives because the pack is where
-        // a player looking for something they are carrying looks first.
-        // `menu_origin` is what tells Esc which door it came through — set
-        // here and left unset on the map, where `handle_key` clears it on
-        // arrival anyway.
+        // row on the very keypress that opened it. The same key on the map
+        // lands on the same page, in it, so Esc means the same from both.
+        // The cursor is already in the page here, so it needs no moving.
         if key == GameKey::Char('D') {
-            self.menu_origin = Some(Mode::Inventory);
-            self.pending_downed_program_index = None;
-            self.menu_selected = 0;
             self.mode = Mode::DownedPrograms;
             return;
         }

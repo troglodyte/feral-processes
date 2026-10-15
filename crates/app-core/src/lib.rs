@@ -1051,25 +1051,6 @@ pub enum InfoTab {
     Contracts,
 }
 
-/// Which page of `Mode::Inventory` is showing. UI state only, like
-/// [`InfoTab`]: the keys tab is a read-only view, so it decides what is
-/// drawn and which keys do anything.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum InventoryTab {
-    #[default]
-    Items,
-    PhaseKeys,
-}
-
-impl InventoryTab {
-    pub fn other(self) -> Self {
-        match self {
-            Self::Items => Self::PhaseKeys,
-            Self::PhaseKeys => Self::Items,
-        }
-    }
-}
-
 impl InfoTab {
     /// Every tab, in the order the column draws them and the digits select
     /// them — `1` is `ALL[0]`. The two have to agree or a digit would open a
@@ -1852,6 +1833,8 @@ pub enum Mode {
     /// not a set committed later.
     OutpostPost,
     Inventory,
+    /// The inventory hub's Phase keys page: the ten key slots, read-only.
+    PhaseKeys,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
     /// lists exactly what fits and shows what each swap would change. The
@@ -1888,7 +1871,8 @@ pub enum Mode {
     /// hard inventory cap makes partial erasure the common case — dumping a
     /// whole stack to free two units of room is not a real option.
     EraseQuantity,
-    /// The downed-program store, opened with `D` from `Mode::Inventory` —
+    /// The downed-program store, a page of the inventory hub, opened with
+    /// `D` from the map and from `Mode::Inventory` —
     /// see `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
     /// section 6. One row per program held (`Game::downed_program_rows`)
     /// until `App::pending_downed_program_index` names one; then the page
@@ -1898,7 +1882,7 @@ pub enum Mode {
     /// two-mode shape: there is no per-tier structure here to keep apart
     /// from the list the way a Kernel Ring's ladder is.
     DownedPrograms,
-    /// The tool kit, reached from the party menu — see
+    /// The tool kit, a page of the inventory hub — see
     /// `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
     /// section 6. One row per tool the player knows plus any tool actually
     /// installed (`Game::tool_rows`, plan decision 3), so a researched but
@@ -2481,6 +2465,7 @@ impl Mode {
             // Reached only by a key press from `Mode::OutpostVisit` itself.
             | Mode::OutpostPost
             | Mode::Inventory
+            | Mode::PhaseKeys
             | Mode::EquipSwap
             | Mode::InventoryItemAction
             | Mode::ItemDescribe
@@ -2714,38 +2699,38 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
     }
 }
 
-/// One page of the base report hub: a rail entry, and the screens `Tab`
-/// cycles through on it.
-pub struct BasePage {
+/// One page of a hub: a rail entry, and the screens `Right`/`Left` step
+/// through on it.
+pub struct HubPage {
     pub title: &'static str,
     pub screens: &'static [Mode],
 }
 
-/// The hub's one table: the rail, the `Tab` order and "is this mode in the
-/// hub" are all read off it, so a page cannot be on the rail and missing
-/// from the nav. Rail order is the order here; `[` and `]` walk it.
-pub const BASE_REPORT_PAGES: &[BasePage] = &[
-    BasePage {
+/// The base report's one table: the rail, the screen order and "is this mode
+/// in the hub" are all read off it, so a page cannot be on the rail and
+/// missing from the nav. Rail order is the order here; `[` and `]` walk it.
+pub const BASE_REPORT_PAGES: &[HubPage] = &[
+    HubPage {
         title: "Overview",
         screens: &[Mode::BaseOverview],
     },
-    BasePage {
+    HubPage {
         title: "Build",
         screens: &[Mode::BaseBuild],
     },
-    BasePage {
+    HubPage {
         title: "Research",
         screens: &[Mode::BaseResearch],
     },
-    BasePage {
+    HubPage {
         title: "Trade",
         screens: &[Mode::BaseTrade],
     },
-    BasePage {
+    HubPage {
         title: "Compile",
         screens: &[Mode::BaseCompile],
     },
-    BasePage {
+    HubPage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -2753,40 +2738,94 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
             Mode::StaffDiscontent,
         ],
     },
-    BasePage {
+    HubPage {
         title: "Production",
         screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
     },
-    BasePage {
+    HubPage {
         title: "Stock",
         screens: &[Mode::BaseStock],
     },
-    BasePage {
+    HubPage {
         title: "Work orders",
         screens: &[Mode::WorkOrders],
     },
-    BasePage {
+    HubPage {
         title: "Staffing",
         screens: &[Mode::BaseStaff, Mode::Structures],
     },
-    BasePage {
+    HubPage {
         title: "Build orders",
         screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
     },
-    BasePage {
+    HubPage {
         title: "Alerts",
         screens: &[Mode::Alerts],
     },
 ];
 
-/// Where `mode` sits in `BASE_REPORT_PAGES` as `(page, screen)`, or `None`
-/// for a mode outside the hub.
-pub fn base_page_of(mode: Mode) -> Option<(usize, usize)> {
-    BASE_REPORT_PAGES.iter().enumerate().find_map(|(p, page)| {
-        page.screens
-            .iter()
-            .position(|&s| s == mode)
-            .map(|screen| (p, screen))
+/// The inventory's table, in rail order. Tools lives here rather than in the
+/// party menu: it is a kit you carry.
+pub const INVENTORY_PAGES: &[HubPage] = &[
+    HubPage {
+        title: "Items",
+        screens: &[Mode::Inventory],
+    },
+    HubPage {
+        title: "Phase keys",
+        screens: &[Mode::PhaseKeys],
+    },
+    HubPage {
+        title: "Downed programs",
+        screens: &[Mode::DownedPrograms],
+    },
+    HubPage {
+        title: "Tools",
+        screens: &[Mode::Tools],
+    },
+];
+
+/// A rail of pages with one cursor, shared by the base report and the
+/// inventory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hub {
+    Base,
+    Inventory,
+}
+
+impl Hub {
+    pub const ALL: [Hub; 2] = [Hub::Base, Hub::Inventory];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Hub::Base => "BASE REPORT",
+            Hub::Inventory => "INVENTORY",
+        }
+    }
+
+    pub fn pages(self) -> &'static [HubPage] {
+        match self {
+            Hub::Base => BASE_REPORT_PAGES,
+            Hub::Inventory => INVENTORY_PAGES,
+        }
+    }
+
+    /// Index into `App::hub_last`.
+    fn slot(self) -> usize {
+        self as usize
+    }
+}
+
+/// Which hub `mode` belongs to and where it sits there as `(hub, page,
+/// screen)`, or `None` for a mode outside every hub.
+pub fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
+    Hub::ALL.into_iter().find_map(|hub| {
+        hub.pages().iter().enumerate().find_map(|(p, page)| {
+            page.screens
+                .iter()
+                .position(|&s| s == mode)
+                .map(|screen| (hub, p, screen))
+        })
     })
 }
 
@@ -2870,16 +2909,12 @@ pub struct App {
     /// `App::close_screen` sends Esc. `None` for a screen reached straight
     /// from the map, and cleared the moment the map is reached again.
     ///
-    /// A group menu in every case but one: `Mode::Inventory` sets it too,
-    /// because `Mode::DownedPrograms` is opened from the map *and* from the
-    /// pack and Esc has to answer which. Safe because the pack itself is
-    /// only ever reached from the map, so nothing it opens can overwrite an
-    /// origin somebody else was still holding — `etch_return`'s trap, one
-    /// field down.
+    /// Always a group menu.
     menu_origin: Option<Mode>,
-    /// The hub screen last on screen, so `b` reopens where the player left
-    /// off. `None` until the hub has been opened, which lands on Overview.
-    base_report_last: Option<Mode>,
+    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`
+    /// and `i` reopen where the player left off. `None` until a hub has been
+    /// opened, which lands on the base's Overview or the inventory's Items.
+    hub_last: [Option<Mode>; 2],
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
@@ -2983,9 +3018,6 @@ pub struct App {
     /// which a manual `1`/`2`/`3`/`4` press overrides until the next
     /// crossing.
     pub info_tab: InfoTab,
-    /// Which page `Mode::Inventory` shows; reset to `Items` on every
-    /// opening from the map. See [`InventoryTab`].
-    pub inventory_tab: InventoryTab,
     /// Which side of the base boundary `info_tab` was last synced
     /// against — `true` for base space, `false` for everywhere else
     /// (surface and the Stack read the same here; see `Game::in_base`).

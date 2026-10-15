@@ -111,7 +111,7 @@ fn a_worn_weapon_is_refitted_from_its_slot_screen_and_keeps_its_level() {
     let bill = probe_game.refit_cost(&worn.copy);
     let mut app = app_at_a_refit_bench_wearing(9410, item, LEVEL, WEAR, bill);
 
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::EquipSwap);

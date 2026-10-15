@@ -1,4 +1,4 @@
-//! `Mode::Tools`: the tool kit, reached from the party menu — see
+//! `Mode::Tools`: the tool kit, on the inventory hub's rail — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 6. A flat list, `Game::tool_rows`'s own order — there is no per-row
 //! drill-down page the way `Mode::DownedPrograms` has one.
@@ -7,8 +7,7 @@ use super::popup::*;
 use super::*;
 
 /// Every row of the screen: a header counting installed tools, then one row
-/// per `Game::tool_rows` entry, then the
-/// footer every read-and-act popup in this family closes with.
+/// per `Game::tool_rows` entry. The keys are the hub keybar's.
 ///
 /// The status column reads one of three ways depending on the row's own
 /// figures — never re-derived here beyond formatting, `message_history`'s
@@ -18,10 +17,7 @@ pub(super) fn tools_rows(game: &Game, selected: usize) -> Vec<Row> {
     let rows_data = game.tool_rows();
     let installed = game.installed_tools().len();
     let mut rows = vec![
-        text_row(format!(
-            "Tools installed: {installed}. F forges a carrier, I installs one (replacing \
-             one of its category), X pulls one."
-        )),
+        text_row(format!("Tools installed: {installed}.")),
         text_row(""),
     ];
     if rows_data.is_empty() {
@@ -42,20 +38,7 @@ pub(super) fn tools_rows(game: &Game, selected: usize) -> Vec<Row> {
         );
         rows.push(item_row(label, i == selected));
     }
-    rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
     rows
-}
-
-pub(super) fn draw_tools(
-    game: &Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = tools_rows(game, selected);
-    draw_popup("Tools", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]
@@ -192,34 +175,21 @@ mod tests {
     /// constraint — `the_tallest_downed_program_list_fits_its_popup`'s
     /// shape.
     #[test]
-    fn the_tallest_tools_list_fits_its_popup_at_1280x720() {
+    fn the_tallest_tools_list_fits_the_hub_at_1280x720() {
         let game = worst_case_game();
         let rows = tools_rows(&game, 0).len();
-        let m = ui_metrics(720.0);
-        let cap = popup_max_rows(720.0, PopupSize::Large, &m);
+        let cap = crate::render::base_report::content_rows_at_720();
         assert!(
             rows <= cap,
-            "every shipped tool known builds a {rows}-row page into a {cap}-row popup at \
+            "every shipped tool known builds a {rows}-row page into a {cap}-row hub at \
              1280x720"
         );
     }
 
     #[test]
-    fn no_tools_row_overflows_the_popup_body_at_1280x720() {
+    fn no_tools_row_overflows_the_hub_content_rect() {
         let game = worst_case_game();
-        let rows = tools_rows(&game, 0);
-        let m = ui_metrics(720.0);
-        let body = popup_body_width(1280.0, PopupSize::Large, &m);
-        crate::paint::with_painter(|p| {
-            for row in &rows {
-                let label = row_label_text(row);
-                let width = p.measure_ui_advance(&label, m.font_size);
-                assert!(
-                    width <= body,
-                    "a tools row draws {width}px into a {body}px body at 1280x720: {label:?}"
-                );
-            }
-        });
+        crate::render::base_report::assert_rows_fit(&tools_rows(&game, 0), "tools");
     }
 
     /// The list must agree with what the engine actually counts —

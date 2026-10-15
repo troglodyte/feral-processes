@@ -17,7 +17,7 @@ use crate::*;
 #[test]
 fn inspect_opens_from_the_swap_picker_and_esc_returns_to_it() {
     let mut app = app_wearing_weapon(940, None, &[("crash_handler", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::EquipSwap, "row 1 is the weapon slot");
@@ -44,7 +44,7 @@ fn inspect_opens_from_the_swap_picker_and_esc_returns_to_it() {
 #[test]
 fn inspect_opens_straight_from_the_cargo_list() {
     let mut app = app_wearing_weapon(941, None, &[("crash_handler", 1)], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     // The three equipment slots lead, so the first cargo row is 4.
     app.menu_selected = 3;
 
@@ -64,7 +64,7 @@ fn inspect_opens_straight_from_the_cargo_list() {
 #[test]
 fn inspect_on_a_slot_row_reads_what_is_worn() {
     let mut app = app_wearing_weapon(942, Some(("crash_handler", 1)), &[], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
 
     app.handle_key(GameKey::Char('I'));
@@ -82,7 +82,7 @@ fn inspect_on_a_slot_row_reads_what_is_worn() {
 #[test]
 fn inspect_on_an_empty_slot_says_so() {
     let mut app = app_wearing_weapon(943, None, &[], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
 
     app.handle_key(GameKey::Char('I'));
@@ -124,7 +124,7 @@ fn inspect_from_a_programs_slots_measures_it_for_that_program() {
 #[test]
 fn the_unequip_row_has_nothing_to_inspect() {
     let mut app = app_wearing_weapon(945, Some(("crash_handler", 1)), &[], 1);
-    app.mode = Mode::Inventory;
+    open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::EquipSwap);

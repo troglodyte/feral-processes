@@ -414,8 +414,9 @@
   helper. Granting it into `KnownTools` at `Game::new` instead compiles,
   passes, and makes pulling the starter unrecoverable: `uninstall_tool`
   correctly returns no carrier, so with no knowledge behind it there is
-  nothing to re-forge, and `tool_rows()` going empty takes the Tools row out
-  of the party menu — the screen that would fix it disappears with it. Since
+  nothing to re-forge, and `tool_rows()` going empty leaves the Tools page
+  (always on the `i` rail) with no row to press `F` on — the screen that
+  would fix it is there but cannot act. Since
   phase 1 deleted `roll_work_resource_drop`, every kill afterwards pays
   nothing. Derived also repairs saves phase 1 already wrote, which a grant at
   creation cannot. Do not re-fix it with a confirmation prompt or a

@@ -245,7 +245,7 @@ fn app_with_base_output(seed: u32) -> App {
 fn the_hub_opens_the_output_page_and_esc_leaves_to_the_map() {
     let mut app = app_with_base_output(101);
     app.handle_key(GameKey::Char('b'));
-    for _ in 0..base_page_of(Mode::BaseOutput).unwrap().0 {
+    for _ in 0..hub_of(Mode::BaseOutput).unwrap().1 {
         app.handle_key(GameKey::Char(']'));
     }
     assert_eq!(app.mode, Mode::BaseOutput);

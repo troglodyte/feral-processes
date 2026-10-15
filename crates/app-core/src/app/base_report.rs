@@ -1,5 +1,5 @@
-//! The base report hub's navigation. `BASE_REPORT_PAGES` is the only list of
-//! pages; everything here is read off it.
+//! Hub navigation. Each `Hub`'s `pages()` is its only list of pages;
+//! everything here is read off it.
 
 use crate::*;
 
@@ -18,13 +18,14 @@ impl App {
     ///
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
-    pub(crate) fn handle_base_report_nav(&mut self, key: GameKey) -> bool {
-        let Some((page, screen)) = base_page_of(self.mode) else {
+    pub(crate) fn handle_hub_nav(&mut self, key: GameKey) -> bool {
+        let Some((hub, page, screen)) = hub_of(self.mode) else {
             return false;
         };
-        let pages = BASE_REPORT_PAGES.len();
-        let turn = |by: usize| BASE_REPORT_PAGES[(page + by) % pages].screens[0];
-        let screens = BASE_REPORT_PAGES[page].screens;
+        let table = hub.pages();
+        let pages = table.len();
+        let turn = |by: usize| table[(page + by) % pages].screens[0];
+        let screens = table[page].screens;
         match key {
             GameKey::Char(']') => self.mode = turn(1),
             GameKey::Char('[') => self.mode = turn(pages - 1),
@@ -35,6 +36,10 @@ impl App {
                 GameKey::Esc => self.close_screen(),
                 _ => {}
             },
+            // With a program picked Esc steps back to the list, which the
+            // downed-program handler owns; Left would strand that pick on
+            // the rail.
+            GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => return false,
             GameKey::Esc => self.hub_on_rail = true,
             // The duty table spends Left and Right on its column cursor, so
             // it only leaves off its first and last columns.
@@ -52,6 +57,10 @@ impl App {
         true
     }
 
+    fn in_downed_drill_down(&self) -> bool {
+        self.mode == Mode::DownedPrograms && self.pending_downed_program_index.is_some()
+    }
+
     /// Whether Right on the duty table still has a column to move to.
     fn on_inner_staff_column(&mut self) -> bool {
         self.mode == Mode::BaseStaff && self.work_column + 1 < self.base_staff_table().columns.len()
@@ -61,7 +70,14 @@ impl App {
     /// time, with the cursor on the rail. `b` opens it from the map
     /// with no `menu_origin`, so `Esc` from the rail returns there.
     pub(crate) fn open_base_report(&mut self) {
-        self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
+        self.mode = self.hub_last[Hub::Base.slot()].unwrap_or(Mode::BaseOverview);
+        self.hub_on_rail = true;
+    }
+
+    /// Opens the inventory where the player left it, or on Items the first
+    /// time, with the cursor on the rail — `open_base_report`'s rule.
+    pub(crate) fn open_inventory_hub(&mut self) {
+        self.mode = self.hub_last[Hub::Inventory.slot()].unwrap_or(Mode::Inventory);
         self.hub_on_rail = true;
     }
 

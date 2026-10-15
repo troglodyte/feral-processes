@@ -2756,14 +2756,17 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
     panic!("{label:?} is not offered right now; pages: {offered:?}");
 }
 
-/// Opens the base report, walks `]` to `target`'s page and Right off the rail
-/// and along its screens to `target`, the way a player
+/// Opens `target`'s hub with its own key, walks `]` to `target`'s page and
+/// Right off the rail and along its screens to `target`, the way a player
 /// reaches a screen that no longer has a menu row of its own.
 pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
-    let (page, screen) = base_page_of(target).expect("target is a hub screen");
-    app.handle_key(GameKey::Char('b'));
-    for _ in 0..BASE_REPORT_PAGES.len() {
-        if base_page_of(app.mode).map(|(p, _)| p) == Some(page) {
+    let (hub, page, screen) = hub_of(target).expect("target is a hub screen");
+    app.handle_key(GameKey::Char(match hub {
+        Hub::Base => 'b',
+        Hub::Inventory => 'i',
+    }));
+    for _ in 0..hub.pages().len() {
+        if hub_of(app.mode).map(|(_, p, _)| p) == Some(page) {
             break;
         }
         app.handle_key(GameKey::Char(']'));

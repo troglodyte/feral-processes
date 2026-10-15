@@ -10,9 +10,8 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_page_of, equip_preview_tag,
-    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column,
-    stat_summary,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
+    hub_of, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -1593,7 +1592,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        mode if base_page_of(mode).is_some() => {
+        mode if hub_of(mode).is_some() => {
             base_report::draw_base_report(game, mode, selected, &app_screens, refusal, painter, m)
         }
         Mode::History => draw_history(game, selected, refusal, painter, m),

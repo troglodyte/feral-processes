@@ -34,15 +34,15 @@ fn the_rail_runs_all_twelve_pages_in_order() {
             Mode::Alerts
         ]
     );
-    assert_eq!(base_page_of(Mode::BaseOutput), Some((6, 0)));
-    assert_eq!(base_page_of(Mode::BasePower), Some((6, 2)));
-    assert_eq!(base_page_of(Mode::Structures), Some((9, 1)));
-    assert_eq!(base_page_of(Mode::FloorOrders), Some((10, 2)));
-    assert_eq!(base_page_of(Mode::WorkOrderPick), None);
-    assert_eq!(base_page_of(Mode::WorkOrderQuantity), None);
-    assert_eq!(base_page_of(Mode::StructureAssign), None);
-    assert_eq!(base_page_of(Mode::StaffDiscontent), Some((5, 2)));
-    assert_eq!(base_page_of(Mode::Playing), None);
+    assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 6, 0)));
+    assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 6, 2)));
+    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 9, 1)));
+    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 10, 2)));
+    assert_eq!(hub_of(Mode::WorkOrderPick), None);
+    assert_eq!(hub_of(Mode::WorkOrderQuantity), None);
+    assert_eq!(hub_of(Mode::StructureAssign), None);
+    assert_eq!(hub_of(Mode::StaffDiscontent), Some((Hub::Base, 5, 2)));
+    assert_eq!(hub_of(Mode::Playing), None);
 }
 
 #[test]
@@ -731,14 +731,25 @@ fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
 }
 
 #[test]
+fn no_mode_is_in_two_hubs() {
+    let mut seen = Vec::new();
+    for hub in Hub::ALL {
+        for mode in hub.pages().iter().flat_map(|p| p.screens) {
+            assert!(!seen.contains(mode), "{mode:?} is in two hubs");
+            seen.push(*mode);
+        }
+    }
+}
+
+#[test]
 fn the_command_pages_sit_after_overview_with_their_titles() {
     let titles: Vec<_> = BASE_REPORT_PAGES.iter().map(|p| p.title).collect();
     assert_eq!(
         titles[..5],
         ["Overview", "Build", "Research", "Trade", "Compile"]
     );
-    assert_eq!(base_page_of(Mode::BaseBuild), Some((1, 0)));
-    assert_eq!(base_page_of(Mode::BaseCompile), Some((4, 0)));
+    assert_eq!(hub_of(Mode::BaseBuild), Some((Hub::Base, 1, 0)));
+    assert_eq!(hub_of(Mode::BaseCompile), Some((Hub::Base, 4, 0)));
 }
 
 #[test]

@@ -20,7 +20,7 @@ mod stock;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{
-    BASE_REPORT_PAGES, GroupMenuRow, WorkOrderRow, base_page_of, base_popup_parent,
+    BASE_REPORT_PAGES, GroupMenuRow, HubPage, WorkOrderRow, base_popup_parent, hub_of,
 };
 use feral_processes_engine::WorkTable;
 
@@ -40,7 +40,7 @@ pub(super) struct AppScreens<'a> {
     pub(super) command_counts: &'a [(usize, usize)],
 }
 
-/// Draws the hub at `mode`, which `base_page_of` has already placed on a
+/// Draws the hub at `mode`, which `hub_of` has already placed on a
 /// page. `selected` is the screen's own cursor (`App::menu_selected`).
 pub(super) fn draw_base_report(
     game: &mut Game,
@@ -51,17 +51,19 @@ pub(super) fn draw_base_report(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some((page, screen)) = base_page_of(mode) else {
+    let Some((hub, page, screen)) = hub_of(mode) else {
         return;
     };
     let flags = game.base_report_flags();
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
     let content = frame::paint_frame(
+        hub.title(),
+        hub.pages(),
         page,
         screen,
         Some(mode),
         app_screens.on_rail,
-        &flags,
+        Some(&flags),
         refusal,
         painter,
         m,
@@ -78,15 +80,17 @@ pub(super) fn draw_popup_parent(game: &Game, child: Mode, painter: &Painter, m: 
     let Some(parent) = base_popup_parent(child) else {
         return;
     };
-    let Some((page, screen)) = base_page_of(parent) else {
+    let Some((hub, page, screen)) = hub_of(parent) else {
         return;
     };
     frame::paint_frame(
+        hub.title(),
+        hub.pages(),
         page,
         screen,
         None,
         false,
-        &game.base_report_flags(),
+        Some(&game.base_report_flags()),
         None,
         painter,
         m,

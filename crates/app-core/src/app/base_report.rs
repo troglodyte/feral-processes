@@ -1,5 +1,5 @@
-//! The base report hub's navigation. `BASE_REPORT_PAGES` is the only list of
-//! pages; everything here is read off it.
+//! Hub navigation. Each `Hub`'s `pages()` is its only list of pages;
+//! everything here is read off it.
 
 use crate::*;
 
@@ -18,13 +18,14 @@ impl App {
     ///
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
-    pub(crate) fn handle_base_report_nav(&mut self, key: GameKey) -> bool {
-        let Some((page, screen)) = base_page_of(self.mode) else {
+    pub(crate) fn handle_hub_nav(&mut self, key: GameKey) -> bool {
+        let Some((hub, page, screen)) = hub_of(self.mode) else {
             return false;
         };
-        let pages = BASE_REPORT_PAGES.len();
-        let turn = |by: usize| BASE_REPORT_PAGES[(page + by) % pages].screens[0];
-        let screens = BASE_REPORT_PAGES[page].screens;
+        let table = hub.pages();
+        let pages = table.len();
+        let turn = |by: usize| table[(page + by) % pages].screens[0];
+        let screens = table[page].screens;
         match key {
             GameKey::Char(']') => self.mode = turn(1),
             GameKey::Char('[') => self.mode = turn(pages - 1),
@@ -61,7 +62,7 @@ impl App {
     /// time, with the cursor on the rail. `b` opens it from the map
     /// with no `menu_origin`, so `Esc` from the rail returns there.
     pub(crate) fn open_base_report(&mut self) {
-        self.mode = self.base_report_last.unwrap_or(Mode::BaseOverview);
+        self.mode = self.hub_last[Hub::Base.slot()].unwrap_or(Mode::BaseOverview);
         self.hub_on_rail = true;
     }
 

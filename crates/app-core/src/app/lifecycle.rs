@@ -67,7 +67,7 @@ impl App {
             pending_build: None,
             pending_post_structure: None,
             menu_origin: None,
-            base_report_last: None,
+            hub_last: [None; 2],
             command_return_row: None,
             hub_on_rail: true,
             etch_return: None,

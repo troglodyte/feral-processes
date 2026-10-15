@@ -247,7 +247,7 @@ impl App {
         };
         let carried = self.status_line.clone();
         let mode_before = self.mode;
-        let hub_took_it = self.handle_base_report_nav(key);
+        let hub_took_it = self.handle_hub_nav(key);
         match self.mode {
             _ if hub_took_it => {}
             Mode::MainMenu => self.handle_main_menu_key(key),
@@ -428,8 +428,8 @@ impl App {
             game.mark_alerts_read();
         }
         // Every hub screen is reopened from where the player last was.
-        if base_page_of(self.mode).is_some() {
-            self.base_report_last = Some(self.mode);
+        if let Some((hub, ..)) = hub_of(self.mode) {
+            self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no

@@ -2714,38 +2714,38 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
     }
 }
 
-/// One page of the base report hub: a rail entry, and the screens `Tab`
-/// cycles through on it.
-pub struct BasePage {
+/// One page of a hub: a rail entry, and the screens `Right`/`Left` step
+/// through on it.
+pub struct HubPage {
     pub title: &'static str,
     pub screens: &'static [Mode],
 }
 
-/// The hub's one table: the rail, the `Tab` order and "is this mode in the
-/// hub" are all read off it, so a page cannot be on the rail and missing
-/// from the nav. Rail order is the order here; `[` and `]` walk it.
-pub const BASE_REPORT_PAGES: &[BasePage] = &[
-    BasePage {
+/// The base report's one table: the rail, the screen order and "is this mode
+/// in the hub" are all read off it, so a page cannot be on the rail and
+/// missing from the nav. Rail order is the order here; `[` and `]` walk it.
+pub const BASE_REPORT_PAGES: &[HubPage] = &[
+    HubPage {
         title: "Overview",
         screens: &[Mode::BaseOverview],
     },
-    BasePage {
+    HubPage {
         title: "Build",
         screens: &[Mode::BaseBuild],
     },
-    BasePage {
+    HubPage {
         title: "Research",
         screens: &[Mode::BaseResearch],
     },
-    BasePage {
+    HubPage {
         title: "Trade",
         screens: &[Mode::BaseTrade],
     },
-    BasePage {
+    HubPage {
         title: "Compile",
         screens: &[Mode::BaseCompile],
     },
-    BasePage {
+    HubPage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -2753,40 +2753,73 @@ pub const BASE_REPORT_PAGES: &[BasePage] = &[
             Mode::StaffDiscontent,
         ],
     },
-    BasePage {
+    HubPage {
         title: "Production",
         screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
     },
-    BasePage {
+    HubPage {
         title: "Stock",
         screens: &[Mode::BaseStock],
     },
-    BasePage {
+    HubPage {
         title: "Work orders",
         screens: &[Mode::WorkOrders],
     },
-    BasePage {
+    HubPage {
         title: "Staffing",
         screens: &[Mode::BaseStaff, Mode::Structures],
     },
-    BasePage {
+    HubPage {
         title: "Build orders",
         screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
     },
-    BasePage {
+    HubPage {
         title: "Alerts",
         screens: &[Mode::Alerts],
     },
 ];
 
-/// Where `mode` sits in `BASE_REPORT_PAGES` as `(page, screen)`, or `None`
-/// for a mode outside the hub.
-pub fn base_page_of(mode: Mode) -> Option<(usize, usize)> {
-    BASE_REPORT_PAGES.iter().enumerate().find_map(|(p, page)| {
-        page.screens
-            .iter()
-            .position(|&s| s == mode)
-            .map(|screen| (p, screen))
+/// A rail of pages with one cursor, shared by the base report and the
+/// inventory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hub {
+    Base,
+    Inventory,
+}
+
+impl Hub {
+    pub const ALL: [Hub; 2] = [Hub::Base, Hub::Inventory];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Hub::Base => "BASE REPORT",
+            Hub::Inventory => "INVENTORY",
+        }
+    }
+
+    pub fn pages(self) -> &'static [HubPage] {
+        match self {
+            Hub::Base => BASE_REPORT_PAGES,
+            Hub::Inventory => &[],
+        }
+    }
+
+    /// Index into `App::hub_last`.
+    fn slot(self) -> usize {
+        self as usize
+    }
+}
+
+/// Which hub `mode` belongs to and where it sits there as `(hub, page,
+/// screen)`, or `None` for a mode outside every hub.
+pub fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
+    Hub::ALL.into_iter().find_map(|hub| {
+        hub.pages().iter().enumerate().find_map(|(p, page)| {
+            page.screens
+                .iter()
+                .position(|&s| s == mode)
+                .map(|screen| (hub, p, screen))
+        })
     })
 }
 
@@ -2879,7 +2912,7 @@ pub struct App {
     menu_origin: Option<Mode>,
     /// The hub screen last on screen, so `b` reopens where the player left
     /// off. `None` until the hub has been opened, which lands on Overview.
-    base_report_last: Option<Mode>,
+    hub_last: [Option<Mode>; 2],
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.

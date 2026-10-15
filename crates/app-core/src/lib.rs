@@ -2911,8 +2911,9 @@ pub struct App {
     ///
     /// Always a group menu.
     menu_origin: Option<Mode>,
-    /// The hub screen last on screen, so `b` reopens where the player left
-    /// off. `None` until the hub has been opened, which lands on Overview.
+    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`
+    /// and `i` reopen where the player left off. `None` until a hub has been
+    /// opened, which lands on the base's Overview or the inventory's Items.
     hub_last: [Option<Mode>; 2],
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a

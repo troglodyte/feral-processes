@@ -736,13 +736,8 @@ impl Game {
             self.tactical_end_turn();
             return AiBeat::Acted;
         }
-        if self.step_along_walk(actor) {
-            return AiBeat::Stepped;
-        }
-        // A step can close the fight (`StepOutcome::Departed`), taking the
-        // resource with it; the reads below would panic on the missing board.
-        if self.world.get_resource::<TacticalBattle>().is_none() {
-            return AiBeat::Acted;
+        if let Some(beat) = self.step_along_walk(actor) {
+            return beat;
         }
 
         // Carried across the walk rather than asked again on the beat that
@@ -769,8 +764,8 @@ impl Game {
             self.world
                 .resource_mut::<TacticalBattle>()
                 .keep_intent(intent.clone());
-            if self.step_along_walk(actor) {
-                return AiBeat::Stepped;
+            if let Some(beat) = self.step_along_walk(actor) {
+                return beat;
             }
         }
 
@@ -979,17 +974,20 @@ impl Game {
     /// between beats, so a refusal means the plan is wrong about the world
     /// and the body is better off acting from where it stands than standing
     /// still forever.
-    fn step_along_walk(&mut self, actor: Entity) -> bool {
+    ///
+    /// `None` means the body acts from where it stands. A step that closes
+    /// the fight (`StepOutcome::Departed`) ends the beat as `Acted`: the
+    /// board is gone, and every read the caller would make next is of it.
+    fn step_along_walk(&mut self, actor: Entity) -> Option<AiBeat> {
         let battle = self.world.resource::<TacticalBattle>();
-        let Some(from) = battle.cell_of(actor) else {
-            return false;
-        };
-        let Some(next) = self.world.resource_mut::<TacticalBattle>().take_walk_step() else {
-            return false;
-        };
+        let from = battle.cell_of(actor)?;
+        let next = self
+            .world
+            .resource_mut::<TacticalBattle>()
+            .take_walk_step()?;
         let dir = (next.0 - from.0, next.1 - from.1);
         match self.tactical_step(dir) {
-            StepOutcome::Moved => true,
+            StepOutcome::Moved => Some(AiBeat::Stepped),
             // `Struck` is unreachable from here — `reach::movement_field`
             // treats every *other* body as a wall and offers no anchor whose
             // whole footprint is not clear, so a committed path never names a
@@ -1007,10 +1005,11 @@ impl Game {
             // `get_resource_mut`, because a departure closes the fight and
             // takes the resource with it.
             StepOutcome::Departed | StepOutcome::Refused | StepOutcome::Struck => {
-                if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
-                    battle.commit_walk(Vec::new());
-                }
-                false
+                let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() else {
+                    return Some(AiBeat::Acted);
+                };
+                battle.commit_walk(Vec::new());
+                None
             }
         }
     }

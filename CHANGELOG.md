@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.32
+
+**`p` now opens your party as a page list like the base report's: Companions, Programs, Routines and Perks.** The party menu was a list of rows that each opened its own window. Now the roster and your perks are pages of one screen, and the remaining rows sit on two pages: Programs (read a manifest, fuse, refactor, develop) and Routines (install, etch, extract). Turn pages with the arrows or `[` and `]`, and `p` reopens the page you left. `P` from a level-up goes straight to Perks with the cursor on the list, and every roster and Perks letter key works as before.
+
 ## 0.18.31
 
 **`i` now opens your inventory as a page list like the base report's: Items, Phase keys, Downed programs and Tools.** The pack used to be one window with a Tab between items and phase keys, while downed programs had their own window and Tools sat on the party menu. Now all four are pages of one screen, turned with the arrows or `[` and `]`, and `i` reopens the page you left. `D` still goes straight to Downed programs, with the cursor already on the list, and Tools has moved off the party menu. Long item names on the Items page continue on a second line rather than running off the edge.

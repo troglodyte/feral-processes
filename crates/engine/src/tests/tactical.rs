@@ -2881,6 +2881,8 @@ fn fight_against(game: &mut Game, species: &str) -> Entity {
         ))
         .id();
     game.open_tactical_battle(vec![wild]);
+    // Pinned: these tests are not about the pack, and the roll is seed luck.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     wild
 }
 

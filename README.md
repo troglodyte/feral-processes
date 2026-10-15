@@ -32,7 +32,8 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 | `report-overview.png` | `--template chains --keys "B"` |
 | `memories.png` | `--template bonds --keys "p Enter R"` |
 | `roster.png` | `--template bonds --keys "p Enter"` |
-| `downed.png` | `--template bonds --keys "D"` |
+| `downed.png` | `--template bonds --keys "D"` (inventory, Downed programs page) |
+| `inventory.png` | `--template bonds --keys "i Right"` (inventory, Items page) |
 | `towns.png` | `--template settlements` |
 | `world-map.png` | `--template world-map --keys "g"` |
 | `stack.png` | `--template stack` |

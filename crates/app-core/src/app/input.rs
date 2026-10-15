@@ -428,6 +428,12 @@ impl App {
         {
             game.mark_alerts_read();
         }
+        // A pick belongs to the drill-down it was made in; kept past a page
+        // turn it would reopen as the extraction popup over a store that may
+        // have changed meanwhile.
+        if self.mode != mode_before && self.mode != Mode::DownedPrograms {
+            self.pending_downed_program_index = None;
+        }
         // Every hub screen is reopened from where the player last was.
         if let Some((hub, ..)) = hub_of(self.mode) {
             self.hub_last[hub.slot()] = Some(self.mode);

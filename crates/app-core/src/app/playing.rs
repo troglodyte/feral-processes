@@ -196,8 +196,9 @@ impl App {
             // own rather than one reached two screens deep. Kept on `D` — the
             // same key the Items page binds — because one screen with two
             // doors on two different keys is worse than the extra reach it
-            // saves. Uppercase is forced there, not here: `selected_index` reserves shifted letters for
-            // screen actions, and `d` is demolish on this screen anyway.
+            // saves. Uppercase is forced there, not here: `selected_index`
+            // reserves shifted letters for screen actions, and `d` is
+            // demolish on this screen anyway.
             //
             // Bound up here beside the digits and for their reason: this
             // match runs before the hand-off to `handle_stack_key`, so one

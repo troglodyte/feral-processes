@@ -134,6 +134,7 @@ fn i_reopens_on_the_last_inventory_page_and_b_keeps_its_own_slot() {
 #[test]
 fn capital_d_on_the_map_opens_downed_in_the_page_and_esc_esc_reaches_the_map() {
     let mut app = test_app(9505);
+    app.pending_downed_program_index = Some(3);
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
     assert!(!app.hub_on_rail);
@@ -178,6 +179,57 @@ fn esc_in_a_downed_drill_down_goes_back_to_the_list_not_the_rail() {
 
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "only Esc on the list reaches the rail");
+}
+
+fn one_downed_program() -> DownedProgram {
+    DownedProgram {
+        species: "scrapper".to_string(),
+        level: 20,
+        rarity: Rarity::Gold,
+        boss: false,
+        condition: 70,
+        carried: None,
+    }
+}
+
+#[test]
+fn enter_opens_the_downed_drill_down_and_left_steps_back_to_the_list() {
+    let mut app = app_holding_downed_programs(9510, vec![one_downed_program()]);
+    app.handle_key(GameKey::Char('D'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.pending_downed_program_index, Some(0));
+
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.pending_downed_program_index, None);
+    assert_eq!(app.mode, Mode::DownedPrograms);
+    assert!(!app.hub_on_rail, "the list, not the rail");
+}
+
+#[test]
+fn a_page_turn_out_of_the_drill_down_drops_the_pick() {
+    let mut app = app_holding_downed_programs(9511, vec![one_downed_program()]);
+    press(&mut app, &[GameKey::Char('D'), GameKey::Enter]);
+    assert_eq!(app.pending_downed_program_index, Some(0));
+
+    press(&mut app, &[GameKey::Char(']'), GameKey::Char('[')]);
+    assert_eq!(app.mode, Mode::DownedPrograms);
+    assert_eq!(
+        app.pending_downed_program_index, None,
+        "the list is showing"
+    );
+}
+
+#[test]
+fn leaving_the_hub_from_a_drill_down_does_not_keep_the_pick_for_the_return() {
+    let mut app = app_holding_downed_programs(9512, vec![one_downed_program()]);
+    press(
+        &mut app,
+        &[GameKey::Char('D'), GameKey::Enter, GameKey::Char(']')],
+    );
+    press(&mut app, &[GameKey::Esc, GameKey::Esc, GameKey::Char('i')]);
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.mode, Mode::DownedPrograms);
+    assert_eq!(app.pending_downed_program_index, None);
 }
 
 #[test]

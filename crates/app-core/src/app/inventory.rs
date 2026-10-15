@@ -101,9 +101,9 @@ impl App {
         // a lowercase binding here would both open this screen and pick a
         // row on the very keypress that opened it. The same key on the map
         // lands on the same page, in it, so Esc means the same from both.
+        // The cursor is already in the page here, so it needs no moving.
         if key == GameKey::Char('D') {
             self.pending_downed_program_index = None;
-            self.hub_on_rail = false;
             self.mode = Mode::DownedPrograms;
             return;
         }

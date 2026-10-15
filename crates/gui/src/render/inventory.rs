@@ -202,10 +202,13 @@ pub(super) fn phase_key_rows(view: &PhaseKeysView, selected: usize) -> Vec<Row> 
 /// answers a different question from the row's own columns. Sitting under
 /// the row unconditionally is also what lets a player scan a shelf for the
 /// one module that grants something without opening each in turn.
-pub(super) fn effect_lines(game: &Game, item: &ItemId) -> Vec<String> {
+///
+/// `columns` is the body the lines sit in: a popup's, or a hub's, which is
+/// narrower by its rail.
+pub(super) fn effect_lines(game: &Game, item: &ItemId, columns: usize) -> Vec<String> {
     game.item_effects(item)
         .iter()
-        .flat_map(|effect| continuation_lines(effect))
+        .flat_map(|effect| continuation_lines_within(effect, columns))
         .collect()
 }
 
@@ -248,7 +251,7 @@ fn inventory_row_lines(
         &[equip_preview_tag(game, copy, zone)],
         HUB_WRAP_COLUMNS,
     );
-    lines.extend(effect_lines(game, &copy.item));
+    lines.extend(effect_lines(game, &copy.item, HUB_WRAP_COLUMNS));
     (lead, tag, power, lines)
 }
 
@@ -772,7 +775,11 @@ pub(super) fn draw_inventory_item_action(
     let mut rows = vec![Row::TextColored(title, TEXT)];
     // The same lines the list this screen was opened from carries, so the
     // effect does not vanish the moment you select the item to act on it.
-    rows.extend(effect_lines(game, &copy.item).into_iter().map(text_row));
+    rows.extend(
+        effect_lines(game, &copy.item, ROW_WRAP_COLUMNS)
+            .into_iter()
+            .map(text_row),
+    );
     rows.push(text_row(""));
     for (i, (_, label)) in inventory_item_actions(game, &copy.item).iter().enumerate() {
         rows.push(item_row(label.clone(), i == selected));

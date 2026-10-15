@@ -105,7 +105,7 @@ pub(super) fn draw_trade_action_menu(
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),
         ));
-        for line in effect_lines(game, &row.copy.item) {
+        for line in effect_lines(game, &row.copy.item, ROW_WRAP_COLUMNS) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
         }
         idx += 1;
@@ -130,7 +130,11 @@ pub(super) fn draw_trade_action_menu(
             // plain copy of the stock rates exactly what buying it gets you.
             PowerCell::of_item(game, item),
         ));
-        rows.extend(effect_lines(game, item).into_iter().map(text_row));
+        rows.extend(
+            effect_lines(game, item, ROW_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        );
         idx += 1;
     }
     // What this trader has bought off the player, offered back at a markup.
@@ -155,7 +159,11 @@ pub(super) fn draw_trade_action_menu(
                 Some(row.copy.quality),
                 PowerCell::of_copy(game, &row.copy),
             ));
-            rows.extend(effect_lines(game, &row.copy.item).into_iter().map(text_row));
+            rows.extend(
+                effect_lines(game, &row.copy.item, ROW_WRAP_COLUMNS)
+                    .into_iter()
+                    .map(text_row),
+            );
             idx += 1;
         }
     }

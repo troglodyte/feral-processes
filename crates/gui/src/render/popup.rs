@@ -256,14 +256,15 @@ pub(super) fn wrapped_tagged_lines(
 ) -> Vec<String> {
     let prefix = tagged_text(lead, tag, power, "");
     let room = columns.saturating_sub(prefix.chars().count());
-    let mut lines = match split_head(head, room) {
+    let mut lines = match split_head(head, room, columns) {
         Some((first, rest)) => {
             let mut lines = vec![format!("{prefix}{first}")];
-            lines.extend(wrapped_row_lines_within(
-                format!("{ROW_CONTINUATION_INDENT}{rest}"),
-                tags,
-                columns,
-            ));
+            // A tail too long for one line goes over several; the tags pack
+            // onto the last of them.
+            let mut tail = continuation_lines_within(rest, columns);
+            let last = tail.pop().unwrap_or_default();
+            lines.extend(tail);
+            lines.extend(wrapped_row_lines_within(last, tags, columns));
             lines
         }
         None => wrapped_row_lines_within(tagged_text(lead, tag, power, head), tags, columns),
@@ -277,20 +278,27 @@ pub(super) fn wrapped_tagged_lines(
 
 /// Splits a head wider than `room` columns in two at a word boundary, for the
 /// continuation line its tail goes on. The space before the affix text (the
-/// ` · ` separator) is preferred, so the base name stays whole; failing that,
-/// the last space that leaves the first part within `room`. `None` when the
-/// head fits, or has no space to break at.
-fn split_head(head: &str, room: usize) -> Option<(&str, &str)> {
+/// ` · ` separator) is preferred, so the base name stays whole, but only when
+/// the tail then fits one continuation line within `columns`; otherwise the
+/// last space that leaves the first part within `room`, so a long affix is
+/// spread over the lines `wrapped_row_lines_within` and the caller give it
+/// rather than running off the edge. `None` when the head fits, or has no
+/// space to break at.
+fn split_head(head: &str, room: usize, columns: usize) -> Option<(&str, &str)> {
     if head.chars().count() <= room {
         return None;
     }
     let fits = |at: &usize| head[..*at].chars().count() <= room;
+    let tail_fits = |at: &usize| {
+        let rest = head[*at..].trim_start();
+        ROW_CONTINUATION_INDENT.len() + rest.chars().count() <= columns
+    };
     let spaces = || head.match_indices(' ').map(|(i, _)| i);
     // Scanned from the right: the last break that still fits wins.
     let at = spaces()
         .filter(|&i| head[i..].starts_with(" · "))
         .rev()
-        .find(fits)
+        .find(|at| fits(at) && tail_fits(at))
         .or_else(|| spaces().rev().find(fits))
         // A first word wider than the room is broken after rather than lost.
         .or_else(|| spaces().next())?;
@@ -1264,6 +1272,50 @@ mod tests {
         assert!(rejoined.ends_with(head), "nothing is elided: {wide:?}");
         let narrow = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, "Etched Disk", &[], 78);
         assert_eq!(narrow, vec!["Etched Disk".to_string()]);
+    }
+
+    fn head_of_width(n: usize) -> String {
+        // Words of four columns so there is always a space to break at.
+        let mut head = "abc ".repeat(n / 4 + 1);
+        head.truncate(n);
+        head
+    }
+
+    #[test]
+    fn a_head_of_exactly_the_room_stays_whole_and_one_more_column_splits() {
+        let room = 20;
+        assert_eq!(split_head(&head_of_width(room), room, 78), None);
+        assert!(split_head(&head_of_width(room + 1), room, 78).is_some());
+    }
+
+    #[test]
+    fn a_short_base_with_a_long_affix_still_puts_the_whole_tail_inside_the_columns() {
+        let lead = "[-] 1234x ";
+        let head =
+            "Disk · Thermal Throttle Single of Quiet Handshakes and Many Other Long Words (130%)";
+        let columns = 40;
+        let lines = wrapped_tagged_lines(lead, "MAT", PowerCell::Blank, head, &[], columns);
+        assert!(lines.len() > 2, "the tail needs several lines: {lines:?}");
+        for line in &lines[1..] {
+            assert!(line.starts_with(ROW_CONTINUATION_INDENT), "{lines:?}");
+            assert!(line.chars().count() <= columns, "{lines:?}");
+        }
+        let words: Vec<&str> = lines.iter().flat_map(|l| l.split_whitespace()).collect();
+        assert_eq!(words.join(" "), head, "nothing is elided");
+    }
+
+    #[test]
+    fn the_separator_is_skipped_when_its_tail_would_not_fit_one_line() {
+        // Splitting at the separator would leave a 36-column tail, which
+        // overruns a 40-column body once indented; the later break fits the room.
+        let head = "Overclocked Etched Disk · Thermal Throttle Single of Quiet";
+        let (first, rest) = split_head(head, 30, 40).expect("splits");
+        assert!(first.chars().count() <= 30, "{first}");
+        assert_eq!(format!("{first} {rest}"), head);
+        assert!(
+            !rest.starts_with('·'),
+            "the separator was not the break: {rest}"
+        );
     }
 
     /// The three properties `wrapped_row_lines` is relied on for, none of

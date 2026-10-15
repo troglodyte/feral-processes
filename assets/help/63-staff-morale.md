@@ -1,7 +1,7 @@
 # Staff morale
 
 Every program on your base staff has needs, and a mood. Programs out fighting beside you have a
-mood too, but their needs do not run down. Open a program's manifest from the party menu to read them: the WORK
+mood too, but their needs do not run down. Open a program's manifest from the Programs page under p to read them: the WORK
 box lists its needs, and the MEMORIES box leads with its Mood.
 
 Needs

@@ -25,19 +25,16 @@ pub(super) fn perks_menu_rows(
     selected: usize,
     respec_cost: u32,
 ) -> Vec<Row> {
-    // The respec is named on the existing instruction line rather than in a
-    // footer of its own: the header is pinned above the scrolling body, so a
-    // row here is a row of the list the player can no longer see at once.
-    // `PopupSize::Large` carries about 114 monospace cells, which this sits
-    // well inside. `[S]` is named beside the Perk Points line rather than in
-    // the instruction line: that one is already near the popup's width, and
-    // `[S]` is only useful with points to spend.
+    // `[S]` and `[X]` are named on the points lines they act on rather than
+    // on the hub's keybar: `[S]` is only useful with points to spend, and the
+    // respec's price has to be on screen where the key is. The row keys that
+    // buy a level are the keybar's.
     let mut rows = vec![
-        Row::TextColored(format!("Perk Points: {points}"), CYAN),
+        Row::TextColored(
+            format!("Perk Points: {points}   [X] refunds every perk for {respec_cost} Credits"),
+            CYAN,
+        ),
         Row::TextColored(format!("Stat points: {stat_points}  [S] spends them"), CYAN),
-        text_row(format!(
-            "A row's key buys a level.  [X] refunds every perk for {respec_cost} Credits.  Esc to close"
-        )),
         text_row(preview),
         text_row(""),
     ];
@@ -140,18 +137,16 @@ pub(super) fn perk_preview_line(preview: Option<&PerkPreview>) -> String {
     format!("Next level: {}", parts.join(" \u{b7} "))
 }
 
-pub(super) fn draw_perks_menu(
+/// The Perks page: points, the preview of the highlighted perk, then the list.
+pub(super) fn perks_rows(
     game: &mut Game,
     previews: &[Option<PerkPreview>],
     selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+) -> Vec<Row> {
     let status = game.player_status();
     let quote = game.respec_quote(RespecSubject::Perks);
     let preview = perk_preview_line(previews.get(selected).and_then(Option::as_ref));
-    let rows = perks_menu_rows(
+    perks_menu_rows(
         status.perk_points,
         status.stat_points,
         &preview,
@@ -159,8 +154,7 @@ pub(super) fn draw_perks_menu(
         &status.unlocked_perks,
         selected,
         quote.cost,
-    );
-    draw_popup("Perks", PopupSize::Large, &rows, refusal, painter, m);
+    )
 }
 
 /// The two colours a locked research row can take, dimmed well below `TEXT`
@@ -184,7 +178,7 @@ const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
 /// job.
 ///
 /// A function rather than an inline `match` for the reason
-/// `render/party.rs::companion_help` is one: it is the only way a test can
+/// `render/party.rs::ROSTER_KEYS` is one: it is the only way a test can
 /// hold the string without standing a window up.
 fn state_tag(state: &ResearchState) -> String {
     match state {
@@ -971,10 +965,41 @@ mod tests {
         });
     }
 
+    /// The Perks page draws in the hub's content rect, narrower than the popup
+    /// the censuses above measure. Every shipped perk at its widest -- held,
+    /// so the level tag shows -- with the real preview line of the highlighted
+    /// one, held at every supported window.
+    #[test]
+    fn the_widest_perks_page_rows_fit_the_hub_content_rect() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let groups = game.perk_groups();
+        let held: Vec<Perk> = game.perk_defs().iter().map(|d| d.id).collect();
+        let previews: Vec<_> = game
+            .perk_defs()
+            .iter()
+            .map(|d| game.preview_perk(d.id))
+            .collect();
+        for (selected, preview) in previews.iter().enumerate() {
+            let preview = perk_preview_line(preview.as_ref());
+            let rows = perks_menu_rows(
+                u32::MAX,
+                u32::MAX,
+                &preview,
+                &groups,
+                &held,
+                selected,
+                u32::MAX,
+            );
+            super::base_report::assert_rows_fit(&rows, "Perks");
+        }
+    }
+
     /// The preview line is a header row of the menu, right under the
     /// instruction line, and nothing else draws it.
     #[test]
-    fn the_preview_line_is_the_row_under_the_instructions() {
+    fn the_preview_line_is_the_row_under_the_points() {
         let rows = perks_menu_rows(3, 2, "Next level: sentinel", &[], &[], 0, 500);
         let texts: Vec<&str> = rows
             .iter()
@@ -985,8 +1010,8 @@ mod tests {
             .collect();
         let at = texts
             .iter()
-            .position(|t| t.contains("[X] refunds"))
-            .expect("the instruction line");
+            .position(|t| t.contains("[S] spends"))
+            .expect("the stat points line");
         assert_eq!(texts[at + 1], "Next level: sentinel");
     }
 

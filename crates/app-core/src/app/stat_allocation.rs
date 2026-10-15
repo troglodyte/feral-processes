@@ -384,7 +384,7 @@ impl App {
                 self.menu_selected = parked;
                 self.mode = Mode::Manifest;
             }
-            (AllocationOrigin::Perks, _) => self.open_perks(),
+            (AllocationOrigin::Perks, _) => self.mode = Mode::Perks,
             (AllocationOrigin::LevelUp, true) if perk_points > 0 => self.open_level_up_perks(),
             (AllocationOrigin::LevelUp, _) => self.leave_level_up_flow(),
         }

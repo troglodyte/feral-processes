@@ -263,7 +263,7 @@ impl App {
             .unwrap_or_default()
     }
 
-    /// The party menu's "Read a manifest" row: the sheet opens on subject 0,
+    /// The Programs page's "Read a manifest" row: the sheet opens on subject 0,
     /// which is you, and ←/→ or a row key reaches everyone else.
     pub(crate) fn open_menu_manifest(&mut self) {
         let Some(&first) = self.manifest_subjects().first() else {
@@ -538,7 +538,7 @@ impl App {
     }
 
     /// Esc from the manifest: back to the screen it was opened from — the
-    /// party menu, the roster, or the map.
+    /// Programs page, the roster, or the map.
     ///
     /// The roster re-highlights whoever the sheet was *showing* rather than
     /// the row originally picked — after paging with ←/→ those differ. It

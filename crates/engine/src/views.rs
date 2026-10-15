@@ -3287,7 +3287,7 @@ pub struct WorkProfile {
 }
 
 /// An individual's four `Potential` rolls, surfaced separately rather than
-/// only as the aggregate tier the party menu shows.
+/// only as the aggregate tier the roster shows.
 #[derive(Debug, PartialEq)]
 pub struct ManifestPotential {
     pub hp_roll: f32,

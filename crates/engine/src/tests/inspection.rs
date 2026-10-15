@@ -2077,7 +2077,7 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
 }
 
 /// How many of a program's bounded upgrade slots are spent, on the manifest
-/// and on the party menu's own row — two surfaces, one count, so they cannot
+/// and on the Programs page's own row — two surfaces, one count, so they cannot
 /// disagree about what is left.
 ///
 /// The program's *zone tier* was asserted here too until the header tag that
@@ -2104,7 +2104,7 @@ fn the_manifest_shows_how_many_upgrade_slots_a_program_has_spent() {
     assert_eq!(
         game.owned_pets()[0].refactors,
         2,
-        "the party menu's own row carries the same count"
+        "the Programs page's own row carries the same count"
     );
 }
 

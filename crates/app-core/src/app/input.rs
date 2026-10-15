@@ -261,7 +261,6 @@ impl App {
             Mode::DepotFilter => self.handle_depot_filter_key(key),
             Mode::RigTool => self.handle_rig_tool_key(key),
             Mode::SpliceRig => self.handle_splice_rig_key(key),
-            Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),
             Mode::BattleItem => self.handle_battle_item_key(key),
@@ -370,9 +369,12 @@ impl App {
             Mode::Recipes => self.handle_recipes_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
-            Mode::BaseBuild | Mode::BaseResearch | Mode::BaseTrade | Mode::BaseCompile => {
-                self.handle_command_page_key(key)
-            }
+            Mode::BaseBuild
+            | Mode::BaseResearch
+            | Mode::BaseTrade
+            | Mode::BaseCompile
+            | Mode::PartyPrograms
+            | Mode::PartyRoutines => self.handle_command_page_key(key),
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }
@@ -433,6 +435,12 @@ impl App {
         // have changed meanwhile.
         if self.mode != mode_before && self.mode != Mode::DownedPrograms {
             self.pending_downed_program_index = None;
+        }
+        // The Perks page is reached by a rail turn, `p`, and the return from
+        // every sub-screen, none of which can be left to remember the
+        // refresh: the one writer of `perk_previews` is here.
+        if self.mode != mode_before && self.mode == Mode::Perks {
+            self.refresh_perk_previews();
         }
         // Every hub screen is reopened from where the player last was.
         if let Some((hub, ..)) = hub_of(self.mode) {

@@ -1216,7 +1216,7 @@ pub fn filtered_out_count(lines: &[LogLine], filter: LogFilter) -> usize {
 /// Which screen opened `Mode::Manifest`, and so where its Esc goes back to.
 ///
 /// An enum rather than the bool this replaced because there are now three
-/// answers and two of them are lists: the party menu and the roster are
+/// answers and two of them are lists: the Programs page and the roster are
 /// different screens indexing different sets — the roster holds programs
 /// only, so paging to the player with ←/→ has no row there to come back to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1583,10 +1583,6 @@ pub enum Mode {
     /// Build an implant into the player or cut one out — `[I]` in base
     /// space beside a Splice Rig. See `App::splice_rig`.
     SpliceRig,
-    /// The party menu, opened with `p`. Lists everything about the programs
-    /// you own that is currently possible and dispatches to its screen — see
-    /// `App::party_menu_rows`.
-    PartyMenu,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
     /// lives in exactly one place and the two renderers cannot drift.
@@ -2193,6 +2189,10 @@ pub enum Mode {
     BaseResearch,
     BaseTrade,
     BaseCompile,
+    /// The party hub's command pages (`p`): the program errands and the
+    /// routine errands, drawn from `App::command_rows` like the base's.
+    PartyPrograms,
+    PartyRoutines,
     /// The Staff page's first screen: every staff program, worst morale
     /// first, with its mood, health, needs and what it is doing — see
     /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
@@ -2400,7 +2400,6 @@ impl Mode {
             | Mode::LoadGame
             | Mode::SaveAction
             | Mode::Playing
-            | Mode::PartyMenu
             // Opened from the map only, so it never layers over a fight.
             | Mode::DevConsole
             | Mode::Build
@@ -2539,6 +2538,9 @@ impl Mode {
             | Mode::BaseResearch
             | Mode::BaseTrade
             | Mode::BaseCompile
+            // Opened from the map with `p`, the base command pages' reason.
+            | Mode::PartyPrograms
+            | Mode::PartyRoutines
             | Mode::StaffWellbeing
             | Mode::StaffCoverage
             | Mode::StaffDiscontent
@@ -2765,7 +2767,7 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
 ];
 
 /// The inventory's table, in rail order. Tools lives here rather than in the
-/// party menu: it is a kit you carry.
+/// party hub: it is a kit you carry.
 pub const INVENTORY_PAGES: &[HubPage] = &[
     HubPage {
         title: "Items",
@@ -2785,21 +2787,45 @@ pub const INVENTORY_PAGES: &[HubPage] = &[
     },
 ];
 
-/// A rail of pages with one cursor, shared by the base report and the
-/// inventory.
+/// The party's table, in rail order. The roster and Perks are pages in their
+/// own right; the two command pages hold the errands that act on programs
+/// and on routines.
+pub const PARTY_PAGES: &[HubPage] = &[
+    HubPage {
+        title: "Companions",
+        screens: &[Mode::Companion],
+    },
+    HubPage {
+        title: "Programs",
+        screens: &[Mode::PartyPrograms],
+    },
+    HubPage {
+        title: "Routines",
+        screens: &[Mode::PartyRoutines],
+    },
+    HubPage {
+        title: "Perks",
+        screens: &[Mode::Perks],
+    },
+];
+
+/// A rail of pages with one cursor, shared by the base report, the
+/// inventory and the party.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hub {
     Base,
     Inventory,
+    Party,
 }
 
 impl Hub {
-    pub const ALL: [Hub; 2] = [Hub::Base, Hub::Inventory];
+    pub const ALL: [Hub; 3] = [Hub::Base, Hub::Inventory, Hub::Party];
 
     pub fn title(self) -> &'static str {
         match self {
             Hub::Base => "BASE REPORT",
             Hub::Inventory => "INVENTORY",
+            Hub::Party => "PARTY",
         }
     }
 
@@ -2807,6 +2833,7 @@ impl Hub {
         match self {
             Hub::Base => BASE_REPORT_PAGES,
             Hub::Inventory => INVENTORY_PAGES,
+            Hub::Party => PARTY_PAGES,
         }
     }
 
@@ -2911,10 +2938,11 @@ pub struct App {
     ///
     /// Always a group menu.
     menu_origin: Option<Mode>,
-    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`
-    /// and `i` reopen where the player left off. `None` until a hub has been
-    /// opened, which lands on the base's Overview or the inventory's Items.
-    hub_last: [Option<Mode>; 2],
+    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`,
+    /// `i` and `p` reopen where the player left off. `None` until a hub has
+    /// been opened, which lands on the base's Overview, the inventory's Items
+    /// or the party's Companions.
+    hub_last: [Option<Mode>; 3],
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
@@ -2926,13 +2954,14 @@ pub struct App {
     /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
     /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
     /// the player is still holding open. `None` when the etch screen was
-    /// opened from the party menu in its own right, which falls back to
+    /// opened from the Routines page in its own right, which falls back to
     /// `App::close_screen`.
     ///
     /// Deliberately not `menu_origin`: that is a single slot already holding
-    /// `Mode::PartyMenu` for this chain, so borrowing it for the `[e]` detour
-    /// would make Esc out of `Mode::RoutineInstall` and `Mode::RoutineTarget`
-    /// skip the party menu on the way back to the map.
+    /// `Mode::PartyRoutines` for this chain, so borrowing it for the `[e]`
+    /// detour would make Esc out of `Mode::RoutineInstall` and
+    /// `Mode::RoutineTarget` skip the Routines page on the way back to the
+    /// map.
     etch_return: Option<Mode>,
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
@@ -2990,8 +3019,9 @@ pub struct App {
     pub allocation_duel: Option<DuelComparison>,
     /// What one more level of each perk would change, indexed as
     /// `Game::perk_defs`. The **one** writer is `App::refresh_perk_previews`,
-    /// reached only through `App::open_perks`, so no route into the Perks
-    /// menu shows a stale list.
+    /// run by `App::handle_key`'s hub bookkeeping on every entry to
+    /// `Mode::Perks`, so no route into the page (rail turn, `p`, a return
+    /// from a sub-screen) shows a stale list.
     pub perk_previews: Vec<Option<PerkPreview>>,
     /// The report on screen in `Mode::PerkBought`. Its one writer is
     /// `handle_perks_key`.

@@ -48,7 +48,7 @@ fn assert_previews_filled(app: &App, route: &str) {
 #[test]
 fn the_points_duel_is_drawn_on_open_and_moves_on_a_spend_key() {
     let mut app = app_holding_points(9601, 3, 0);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
     let open = app.allocation_duel.clone().expect("a duel on open");
@@ -65,7 +65,7 @@ fn the_points_duel_is_drawn_on_open_and_moves_on_a_spend_key() {
 #[test]
 fn a_point_moved_back_restores_the_open_figures() {
     let mut app = app_holding_points(9602, 3, 0);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     let open = app.allocation_duel.clone();
     app.menu_selected = analysis_row(&app);
@@ -98,17 +98,19 @@ fn every_route_into_the_perks_menu_fills_the_previews() {
     // Leaving the Points screen, by Esc and by a commit.
     for key in [GameKey::Esc, GameKey::Enter] {
         let mut app = app_holding_points(9606, 2, 1);
-        app.mode = Mode::Perks;
+        open_via_menu(&mut app, 'p', "Perks");
         app.handle_key(GameKey::Char('S'));
+        app.perk_previews.clear();
         app.handle_key(key);
         assert_previews_filled(&app, "leaving Points");
     }
 
     // The purchase page's return.
     let mut app = app_holding_points(9607, 0, 20);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::PerkBought, "{:?}", app.status_line);
+    app.perk_previews.clear();
     app.handle_key(GameKey::Enter);
     assert_previews_filled(&app, "purchase page");
 }
@@ -116,7 +118,7 @@ fn every_route_into_the_perks_menu_fills_the_previews() {
 #[test]
 fn a_perk_key_opens_the_purchase_page_and_enter_returns_with_the_highlight() {
     let mut app = app_holding_points(9608, 0, 20);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.menu_selected = 2;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::PerkBought, "{:?}", app.status_line);
@@ -139,7 +141,7 @@ fn a_perk_key_opens_the_purchase_page_and_enter_returns_with_the_highlight() {
 #[test]
 fn a_refused_buy_stays_on_the_menu() {
     let mut app = app_holding_points(9609, 0, 0);
-    app.mode = Mode::Perks;
+    open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Perks);
     assert!(app.pending_perk_report.is_none());

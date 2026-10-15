@@ -8,10 +8,6 @@ impl App {
     /// Picks a numbered perk to unlock; stays open so multiple can be
     /// unlocked in one visit if there are enough Perk Points.
     pub(crate) fn handle_perks_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
         // Through `perk_defs` rather than `Perk::all()` so the numbering the
         // player types against is the one the picker drew — a perk whose
         // `.ron` file is missing isn't listed and can't be bought by index.
@@ -53,18 +49,13 @@ impl App {
     pub(crate) fn handle_perk_bought_key(&mut self, key: GameKey) {
         if matches!(key, GameKey::Enter | GameKey::Esc) {
             self.pending_perk_report = None;
-            self.open_perks();
+            self.mode = Mode::Perks;
         }
     }
 
-    /// The one door into `Mode::Perks`: the previews are read here, so every
-    /// route in shows figures for the perks as they stand now.
-    pub(crate) fn open_perks(&mut self) {
-        self.refresh_perk_previews();
-        self.mode = Mode::Perks;
-    }
-
-    fn refresh_perk_previews(&mut self) {
+    /// The **one** writer of `perk_previews`, run by `handle_key` on every
+    /// entry to `Mode::Perks`.
+    pub(crate) fn refresh_perk_previews(&mut self) {
         let Some(game) = &mut self.game else {
             self.perk_previews.clear();
             return;
@@ -88,9 +79,9 @@ impl App {
                     let outcome = game.respec_perks();
                     self.report(outcome);
                 }
-                self.open_perks();
+                self.mode = Mode::Perks;
             }
-            Some(false) => self.open_perks(),
+            Some(false) => self.mode = Mode::Perks,
             None => {}
         }
     }

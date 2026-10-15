@@ -11,7 +11,7 @@ fn app_ready_to_develop(seed: u32) -> App {
 }
 
 #[test]
-fn the_party_menu_opens_the_develop_picker_and_esc_backs_all_the_way_out() {
+fn the_programs_page_opens_the_develop_picker_and_esc_backs_all_the_way_out() {
     let mut app = app_ready_to_develop(80);
     open_via_menu(&mut app, 'p', "Develop a program");
     assert_eq!(app.mode, Mode::Develop);
@@ -27,10 +27,10 @@ fn the_party_menu_opens_the_develop_picker_and_esc_backs_all_the_way_out() {
         "and forgets which program was picked, or the next visit develops the old one"
     );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::PartyPrograms);
 }
 
-/// Through `App::party_menu_rows` rather than a bespoke predicate: rows are
+/// Through `party_rows` (`App::command_rows`) rather than a bespoke predicate: rows are
 /// hidden dynamically and that table is the only source of them.
 #[test]
 fn the_develop_row_is_hidden_with_no_programs_to_develop() {
@@ -39,8 +39,7 @@ fn the_develop_row_is_hidden_with_no_programs_to_develop() {
         none.game.as_mut().unwrap().owned_pets().is_empty(),
         "test premise: a fresh run owns no programs yet"
     );
-    let rows: Vec<_> = none
-        .party_menu_rows()
+    let rows: Vec<_> = party_rows(&mut none)
         .iter()
         .map(|r| r.label)
         .collect::<Vec<_>>();
@@ -50,7 +49,7 @@ fn the_develop_row_is_hidden_with_no_programs_to_develop() {
     );
 
     let mut app = app_ready_to_develop(4080);
-    let rows: Vec<_> = app.party_menu_rows().iter().map(|r| r.label).collect();
+    let rows: Vec<_> = party_rows(&mut app).iter().map(|r| r.label).collect();
     assert!(
         rows.contains(&"Develop a program"),
         "one program is enough — the rings can be gone and the ladder still reads: {rows:?}"

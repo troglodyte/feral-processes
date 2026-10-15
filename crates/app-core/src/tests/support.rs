@@ -2702,24 +2702,42 @@ pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
     }
 }
 
-/// Opens a party-menu screen the way a player has to: through the menu.
+/// The party hub's two command pages, in rail order.
+pub(crate) const PARTY_COMMAND_PAGES: [Mode; 2] = [Mode::PartyPrograms, Mode::PartyRoutines];
+
+/// Every party command row on offer right now, Programs then Routines.
+pub(crate) fn party_rows(app: &mut App) -> Vec<GroupMenuRow> {
+    PARTY_COMMAND_PAGES
+        .iter()
+        .flat_map(|&page| app.command_rows(page).unwrap_or_default())
+        .collect()
+}
+
+/// Opens a party screen the way a player has to: through the hub.
 ///
 /// Tests go through this instead of hard-coding a row number — the rows are
-/// filtered by what is currently possible (see `App::party_menu_rows`), so a
+/// filtered by what is currently possible (see `App::command_rows`), so a
 /// row's position depends on the fixture and pinning it would make these
-/// tests break for the wrong reason.
+/// tests break for the wrong reason. "Companions" and "Perks" are pages, not
+/// rows, and are reached by walking the rail.
 pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
-    app.handle_key(GameKey::Char(group));
-    let rows = match group {
-        'p' => app.party_menu_rows(),
-        other => panic!("{other} is not a group menu key"),
-    };
-    let labels: Vec<_> = rows.iter().map(|r| r.label).collect();
-    let idx = rows
-        .iter()
-        .position(|r| r.label == label)
-        .unwrap_or_else(|| panic!("{label:?} is not offered right now; rows: {labels:?}"));
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    assert_eq!(group, 'p', "{group} is not a group menu key");
+    match label {
+        "Companions" => return open_hub_screen(app, Mode::Companion),
+        "Perks" => return open_hub_screen(app, Mode::Perks),
+        _ => {}
+    }
+    let mut offered = Vec::new();
+    for page in PARTY_COMMAND_PAGES {
+        let rows = app.command_rows(page).unwrap_or_default();
+        offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
+        if let Some(idx) = rows.iter().position(|r| r.label == label) {
+            open_hub_screen(app, page);
+            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            return;
+        }
+    }
+    panic!("{label:?} is not offered right now; pages: {offered:?}");
 }
 
 /// The four command pages, in rail order.
@@ -2764,6 +2782,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
+        Hub::Party => 'p',
     }));
     for _ in 0..hub.pages().len() {
         if hub_of(app.mode).map(|(_, p, _)| p) == Some(page) {

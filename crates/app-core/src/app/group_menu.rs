@@ -1,6 +1,6 @@
-//! The party menu (`p`), the base hub's four command pages (`b`, then
-//! Build / Research / Trade / Compile), and the rule that decides which of
-//! their rows are on screen right now.
+//! The hub command pages — the base's four (`b`, then Build / Research /
+//! Trade / Compile) and the party's two (`p`, then Programs / Routines) —
+//! and the rule that decides which of their rows are on screen right now.
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were
@@ -267,28 +267,7 @@ const COMPILE_ROWS: &[GroupEntry] = &[
     },
 ];
 
-const PARTY_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        // **Not `Locality::Base`, even though the two party verbs behind it
-        // are.** This row is the whole roster screen — gear, memories, the
-        // manifest, a rename — and only the join and the stand-down are
-        // decided at home. Hidden off-base it would take reading your own
-        // programs away four frames down along with the one thing that needed
-        // guarding. `add_companion` and `stand_down_companion` carry
-        // `require_base` themselves and refuse onto the status line, which is
-        // a sentence the player can act on rather than a row that is simply
-        // gone. See
-        // `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`
-        // guard table.
-        label: "Companions",
-        target: Mode::Companion,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| !g.owned_pets().is_empty())
-        },
-    },
+const PROGRAM_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Read a manifest",
         target: Mode::Manifest,
@@ -308,32 +287,6 @@ const PARTY_ROWS: &[GroupEntry] = &[
             app.game
                 .as_mut()
                 .is_some_and(|g| g.owned_pets().len() >= 2 && g.fusion_unlocked())
-        },
-    },
-    GroupEntry {
-        label: "Install a routine",
-        target: Mode::RoutineTarget,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| !g.routine_holders().is_empty())
-        },
-    },
-    GroupEntry {
-        // Its own row rather than only the `[e]` detour off the install
-        // screen: that detour opens from an *empty* slot, so a player whose
-        // slots were all full could not reach the screen that makes disks at
-        // all. It hides while `etchable_routines` is empty, which a run that
-        // took no starter routine and has researched nothing genuinely is —
-        // `decompile` is welded in and never counted.
-        label: "Etch a routine disk",
-        target: Mode::RoutineEtch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.etchable_routines().is_empty())
         },
     },
     GroupEntry {
@@ -364,6 +317,35 @@ const PARTY_ROWS: &[GroupEntry] = &[
                 .is_some_and(|g| !g.owned_pets().is_empty())
         },
     },
+];
+
+const ROUTINE_ROWS: &[GroupEntry] = &[
+    GroupEntry {
+        label: "Install a routine",
+        target: Mode::RoutineTarget,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| !g.routine_holders().is_empty())
+        },
+    },
+    GroupEntry {
+        // Its own row rather than only the `[e]` detour off the install
+        // screen: that detour opens from an *empty* slot, so a player whose
+        // slots were all full could not reach the screen that makes disks at
+        // all. It hides while `etchable_routines` is empty, which a run that
+        // took no starter routine and has researched nothing genuinely is —
+        // `decompile` is welded in and never counted.
+        label: "Etch a routine disk",
+        target: Mode::RoutineEtch,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| !g.etchable_routines().is_empty())
+        },
+    },
     GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
@@ -374,12 +356,6 @@ const PARTY_ROWS: &[GroupEntry] = &[
                 .is_some_and(|g| !g.owned_pets().is_empty())
         },
     },
-    GroupEntry {
-        label: "Perks",
-        target: Mode::Perks,
-        locality: Locality::Anywhere,
-        available: |app| app.game.as_ref().is_some_and(|g| !g.perk_defs().is_empty()),
-    },
 ];
 
 /// The static table behind a command page, or `None` for any other mode.
@@ -389,6 +365,8 @@ fn command_table(page: Mode) -> Option<&'static [GroupEntry]> {
         Mode::BaseResearch => Some(RESEARCH_ROWS),
         Mode::BaseTrade => Some(TRADE_ROWS),
         Mode::BaseCompile => Some(COMPILE_ROWS),
+        Mode::PartyPrograms => Some(PROGRAM_ROWS),
+        Mode::PartyRoutines => Some(ROUTINE_ROWS),
         _ => None,
     }
 }
@@ -408,11 +386,6 @@ impl App {
     pub fn command_rows(&mut self, page: Mode) -> Option<Vec<GroupMenuRow>> {
         let table = command_table(page)?;
         Some(self.group_rows(table))
-    }
-
-    /// The party menu's rows — same contract as `command_rows`.
-    pub fn party_menu_rows(&mut self) -> Vec<GroupMenuRow> {
-        self.group_rows(PARTY_ROWS)
     }
 
     /// A row survives when the party is standing where its action is legal,
@@ -441,27 +414,10 @@ impl App {
             .collect()
     }
 
-    pub(crate) fn handle_party_menu_key(&mut self, key: GameKey) {
-        self.handle_group_menu_key(key, PARTY_ROWS);
-    }
-
-    fn handle_group_menu_key(&mut self, key: GameKey, entries: &'static [GroupEntry]) {
-        if key == GameKey::Esc {
-            self.mode = Mode::Playing;
-            return;
-        }
-        let rows = self.group_rows(entries);
-        if let Some(idx) = self.selected_index(key, rows.len()) {
-            self.menu_origin = Some(self.mode);
-            self.open_row_target(rows[idx].target);
-        }
-    }
-
     /// Opens the screen a group-menu or command-page row points at. The
     /// callers have already set `menu_origin`, so Esc comes back to them.
     pub(crate) fn open_row_target(&mut self, target: Mode) {
         match target {
-            Mode::Perks => self.open_perks(),
             Mode::Manifest => self.open_menu_manifest(),
             Mode::Build => {
                 self.build_category = None;

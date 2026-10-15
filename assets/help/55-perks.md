@@ -1,7 +1,7 @@
 # Perks
 
 Perks are the player's own permanent upgrades, and the only progression that is spent rather than
-earned twice. Every level hands you two Perk Points; the Perks row on the party menu is where they
+earned twice. Every level hands you two Perk Points; the Perks page under p is where they
 go, from anywhere, at any time.
 
 A perk is bought over and over. Each purchase stacks another level on the last and costs exactly

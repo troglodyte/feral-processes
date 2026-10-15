@@ -8,14 +8,15 @@ fn labels(rows: &[GroupMenuRow]) -> Vec<&'static str> {
 }
 
 #[test]
-fn b_opens_the_hub_and_p_opens_the_party_menu() {
+fn b_opens_the_hub_and_p_opens_the_party_hub() {
     let mut app = test_app(4001);
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseOverview);
 
     let mut app = test_app(4001);
     app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.mode, Mode::PartyMenu);
+    assert_eq!(app.mode, Mode::Companion);
+    assert!(app.hub_on_rail);
 }
 
 /// The whole point of clause 2: a row is not offered when the screen behind
@@ -172,14 +173,15 @@ fn the_command_pages_drop_their_base_rows_underground_too() {
     }
 }
 
-/// The party menu is deliberately almost all non-surface — managing what you
+/// The party hub is deliberately almost all non-surface — managing what you
 /// brought with you is exactly what the Stack is for.
 #[test]
-fn the_party_menu_survives_going_underground() {
+fn the_party_hub_survives_going_underground() {
     let mut app = app_underground(4005);
-    let rows = labels(&app.party_menu_rows());
+    let rows = labels(&party_rows(&mut app));
     assert!(rows.contains(&"Read a manifest"), "{rows:?}");
-    assert!(rows.contains(&"Perks"), "{rows:?}");
+    open_via_menu(&mut app, 'p', "Perks");
+    assert_eq!(app.mode, Mode::Perks);
 }
 
 /// Fusion consumes both programs, so one companion is not enough to make the
@@ -187,11 +189,9 @@ fn the_party_menu_survives_going_underground() {
 #[test]
 fn fuse_needs_two_programs_to_be_offered() {
     let mut app = app_owning_a_program_and_a_compiler(4006, &[]);
-    let rows = labels(&app.party_menu_rows());
-    assert!(
-        rows.contains(&"Companions"),
-        "one program is enough: {rows:?}"
-    );
+    let rows = labels(&party_rows(&mut app));
+    open_via_menu(&mut app, 'p', "Companions");
+    assert_eq!(app.mode, Mode::Companion, "one program is enough");
     assert!(
         !rows.contains(&"Fuse two programs"),
         "one program has nothing to fuse with: {rows:?}"
@@ -203,14 +203,14 @@ fn fuse_needs_two_programs_to_be_offered() {
 #[test]
 fn fuse_row_is_hidden_until_fusion_is_researched_then_shown() {
     let mut app = app_owning_distant_programs(4008, 2);
-    let rows = labels(&app.party_menu_rows());
+    let rows = labels(&party_rows(&mut app));
     assert!(
         !rows.contains(&"Fuse two programs"),
         "fusion is unresearched on a fresh run: {rows:?}"
     );
 
     mark_researched(&mut app, "program_refactoring");
-    let rows = labels(&app.party_menu_rows());
+    let rows = labels(&party_rows(&mut app));
     assert!(
         rows.contains(&"Fuse two programs"),
         "researching program_refactoring should unlock the row: {rows:?}"
@@ -302,7 +302,7 @@ fn the_retired_map_keys_do_nothing() {
 }
 
 /// `i` moved from inspect to the pack, so inspect took `x` — freed by perks
-/// moving into the party menu.
+/// moving into the party hub.
 #[test]
 fn i_opens_the_pack_and_x_inspects() {
     let mut app = test_app(4013);
@@ -388,7 +388,7 @@ fn t_opens_the_trader_list_only_from_the_base() {
 #[test]
 fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
     let mut app = app_owning_a_program_and_a_compiler(4020, &[]);
-    let rows = labels(&app.party_menu_rows());
+    let rows = labels(&party_rows(&mut app));
     assert!(
         !rows.contains(&"Refactor a program"),
         "a program with nothing to spend on it has no screen: {rows:?}"
@@ -396,7 +396,7 @@ fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
 
     let mut app =
         app_owning_a_program_and_a_compiler_with_cargo(4020, &[], &[("buffer_extension", 1)]);
-    let rows = labels(&app.party_menu_rows());
+    let rows = labels(&party_rows(&mut app));
     assert!(
         rows.contains(&"Refactor a program"),
         "one upgrade in cargo is enough to open the row: {rows:?}"
@@ -410,12 +410,12 @@ fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
 fn refactoring_works_underground() {
     let mut surface =
         app_owning_a_program_and_a_compiler_with_cargo(4021, &[], &[("buffer_extension", 1)]);
-    assert!(labels(&surface.party_menu_rows()).contains(&"Refactor a program"));
+    assert!(labels(&party_rows(&mut surface)).contains(&"Refactor a program"));
 
     let mut app =
         app_owning_a_program_and_a_compiler_deep(4021, &[], &[("buffer_extension", 1)], true);
     assert!(
-        labels(&app.party_menu_rows()).contains(&"Refactor a program"),
+        labels(&party_rows(&mut app)).contains(&"Refactor a program"),
         "a refactor reaches no zone-map state through Position, so it is not surface-only"
     );
 }

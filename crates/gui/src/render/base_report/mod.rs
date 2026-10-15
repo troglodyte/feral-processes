@@ -24,7 +24,7 @@ use super::*;
 use feral_processes_app_core::{
     BASE_REPORT_PAGES, GroupMenuRow, Hub, HubPage, WorkOrderRow, base_popup_parent, hub_of,
 };
-use feral_processes_engine::WorkTable;
+use feral_processes_engine::{PerkPreview, WorkTable};
 
 /// What the screens that read `App` state rather than the `Game` are drawn
 /// from, taken off the app before `app.game` is borrowed — the same
@@ -40,6 +40,8 @@ pub(super) struct AppScreens<'a> {
     pub(super) commands: Option<&'a [GroupMenuRow]>,
     /// `(page index, row count)` for each command page, for the Overview.
     pub(super) command_counts: &'a [(usize, usize)],
+    /// `App::perk_previews`, one per perk, for the Perks page.
+    pub(super) perk_previews: &'a [Option<PerkPreview>],
 }
 
 /// Draws the hub at `mode`, which `hub_of` has already placed on a
@@ -116,7 +118,12 @@ fn screen_rows(
 ) -> Vec<Row> {
     match mode {
         Mode::BaseOverview => overview::overview_rows(flags, app_screens.command_counts, selected),
-        Mode::BaseBuild | Mode::BaseResearch | Mode::BaseTrade | Mode::BaseCompile => {
+        Mode::BaseBuild
+        | Mode::BaseResearch
+        | Mode::BaseTrade
+        | Mode::BaseCompile
+        | Mode::PartyPrograms
+        | Mode::PartyRoutines => {
             commands::command_rows(app_screens.commands.unwrap_or_default(), selected)
         }
         Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),
@@ -149,6 +156,8 @@ fn screen_rows(
         Mode::PhaseKeys => inventory::phase_key_rows(&game.phase_keys(), selected),
         Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
         Mode::Tools => tools::tools_rows(game, selected),
+        Mode::Companion => party::roster_rows(game, selected),
+        Mode::Perks => progression::perks_rows(game, app_screens.perk_previews, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
 }
@@ -213,8 +222,7 @@ pub(in crate::render) mod fit {
                 let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
                 let room = content.w - m.pad * 2.0;
                 for row in rows {
-                    // `draw_row` prefixes every `Row::Item` with two spaces.
-                    let line = format!("  {}", text_of(row));
+                    let line = row_label_text(row);
                     let drawn = p.measure_ui_advance(&line, m.font_size);
                     assert!(
                         drawn <= room,

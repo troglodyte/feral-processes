@@ -73,7 +73,7 @@ fn zero_picks_no_row_rather_than_underflowing() {
 }
 
 #[test]
-fn the_party_menu_opens_the_manifest_on_you_and_esc_backs_out() {
+fn the_companions_page_opens_the_manifest_on_you_and_esc_backs_out() {
     let mut app = test_app(70);
     open_via_menu(&mut app, 'p', "Read a manifest");
     assert_eq!(app.mode, Mode::Manifest);
@@ -84,7 +84,10 @@ fn the_party_menu_opens_the_manifest_on_you_and_esc_backs_out() {
         "the menu row opens subject 0, which is you"
     );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyMenu, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::PartyPrograms, "Esc walks back up one level");
+    assert!(!app.hub_on_rail, "into the page it was opened from");
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -268,8 +271,8 @@ fn esc_returns_to_the_menu_when_the_manifest_was_opened_from_it() {
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::PartyMenu,
-        "Esc leaves for the menu the manifest was opened from"
+        Mode::PartyPrograms,
+        "Esc leaves for the page the manifest was opened from"
     );
     assert_eq!(app.pending_manifest, None);
 }

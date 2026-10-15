@@ -289,6 +289,11 @@ pub(super) fn keybar_groups(
             keycap("I", "inspect"),
             keycap("D", "downed"),
         ],
+        Mode::Companion => party::ROSTER_KEYS
+            .iter()
+            .map(|(key, verb)| keycap(key, verb))
+            .collect(),
+        Mode::Perks => vec![keycap("a-z", "buy a level")],
         Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
         Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],
         Mode::Tools => vec![

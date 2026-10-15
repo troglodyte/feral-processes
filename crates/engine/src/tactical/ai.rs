@@ -739,6 +739,11 @@ impl Game {
         if self.step_along_walk(actor) {
             return AiBeat::Stepped;
         }
+        // A step can close the fight (`StepOutcome::Departed`), taking the
+        // resource with it; the reads below would panic on the missing board.
+        if self.world.get_resource::<TacticalBattle>().is_none() {
+            return AiBeat::Acted;
+        }
 
         // Carried across the walk rather than asked again on the beat that
         // acts: a profiled hostile's choice reads its distance to the target,

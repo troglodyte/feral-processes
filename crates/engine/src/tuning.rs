@@ -5840,12 +5840,15 @@ pub const PACK_TACTIC_ODDS: [(&str, [u32; 3]); 5] = [
 pub const PACK_ROLL_SALT: u64 = 0x9ac7_7ac7_1c5e_ed01;
 
 /// How hard `Together` pulls a body back toward its packmates' centroid, per
-/// step beyond `TACTICAL_COHESION_SLACK`.
+/// step beyond `TACTICAL_COHESION_SLACK`, as a multiple of the body's *own*
+/// profile closing weight.
 ///
-/// Above `TACTICAL_AI_CLOSING_WEIGHT`, or a step of closing would always pay
-/// for the step of straying it costs and the term would never hold anyone.
-/// Far below `TACTICAL_AI_REACH_SCORE`, so a body that can swing still swings.
-pub const TACTICAL_COHESION_WEIGHT: f32 = 1.5;
+/// Above one, or a step of closing would always pay for the step of straying
+/// it costs and the term would never hold anyone. Relative rather than
+/// absolute because profiles scale closing (a brute's is 1.5): an absolute
+/// figure held a body back only by an exact tie. Far below
+/// `TACTICAL_AI_REACH_SCORE`, so a body that can swing still swings.
+pub const TACTICAL_COHESION_FACTOR: f32 = 1.5;
 
 /// How far from its packmates' centroid a body may stand before `Together`
 /// starts to charge it for the distance, in steps.
@@ -5861,9 +5864,14 @@ pub const TACTICAL_COHESION_SLACK: u32 = 2;
 pub const TACTICAL_HOLD_COVER_BONUS: f32 = 6.0;
 
 /// How near a non-pack body must come to a pack member, in steps, for a hold
-/// to count it as sighted. Six, the thrown range: past it nobody on the pack
-/// could do anything about what it saw.
-pub const TACTICAL_HOLD_ALERT_RANGE: u32 = 6;
+/// to count it as sighted.
+///
+/// **Must stay clearly below `TACTICAL_DEPLOY_GAP`.** The two sides open that
+/// far apart, so a range at the gap (it was six) saw the party on the first
+/// hostile turn in about five fights in six and a hold played as `Rush`. At
+/// four a real fight holds past its first turn in every seed probed (40 of
+/// 40, against 6 of 40 at six).
+pub const TACTICAL_HOLD_ALERT_RANGE: u32 = 4;
 
 /// How many rounds a hold waits before giving up. Without it a player who
 /// also waits stalls the fight for good.

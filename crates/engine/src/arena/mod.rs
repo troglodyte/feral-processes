@@ -310,13 +310,14 @@ pub fn stage(
         behaviours.0.set_override(Some(id.clone()));
     }
     // Before the seat for the same reason: the roll and its opening line
-    // happen inside it.
-    if let Some(tactic) = scenario.tactic {
-        game.world
-            .resource_mut::<crate::resources::Behaviours>()
-            .0
-            .set_tactic_override(Some(tactic));
-    }
+    // happen inside it. **An absent `tactic:` is `Rush`, not a roll.** Every
+    // rep of a scenario shares one `BattleSpec`, so a roll would hand the whole
+    // run a single fixed tactic and shift every existing baseline; the roll is
+    // for real fights.
+    game.world
+        .resource_mut::<crate::resources::Behaviours>()
+        .0
+        .set_tactic_override(Some(scenario.tactic.unwrap_or_default()));
     // Armed here rather than by whoever installs the `Game`, because
     // `begin_battle` below is what emits `fight_start` — a game armed after
     // staging joins its own fight already in progress. `run_rep` passes

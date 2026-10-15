@@ -137,12 +137,15 @@ pub(super) fn log_texts(game: &Game) -> Vec<String> {
 pub(super) fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let pack = tactical_pack(game, count, hp);
     game.open_tactical_battle(pack.clone());
+    // Pinned: the fixture seats whatever the roll gives, and a test about
+    // something else must not depend on the seed happening to roll `Rush`.
+    game.set_pack_tactic(crate::tactical::pack::PackTactic::Rush);
     pack
 }
 
 /// `count` hostiles standing next to the player, with no fight opened around
 /// them yet — so a test may open one on a bearing of its own.
-fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+pub(super) fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let player = game.player_entity();
     let at = *game
         .world

@@ -20,7 +20,7 @@ use crate::tactical::ai::cover_share;
 use crate::tactical::map::BattleSpec;
 use crate::tactical::reach::{self, line_of_sight};
 use crate::tuning::{
-    PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_SLACK, TACTICAL_COHESION_WEIGHT,
+    PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_FACTOR, TACTICAL_COHESION_SLACK,
     TACTICAL_HOLD_ALERT_RANGE, TACTICAL_HOLD_COVER_BONUS, TACTICAL_HOLD_ROUNDS,
 };
 
@@ -104,38 +104,98 @@ pub(crate) fn members(game: &Game) -> Vec<Entity> {
         .collect()
 }
 
-/// Whether `body` is part of the pack the current tactic plays for.
-fn in_pack(game: &Game, body: Entity) -> bool {
-    game.acts_for_hostiles(body)
-}
-
-/// What `body` adds to a candidate cell's worth under the pack's tactic.
+/// Everything a turn's planner needs to know about the pack, read once per
+/// `scored_cells` call rather than once per candidate cell.
 ///
-/// Zero for `Rush` and for any body outside the pack, so a party body driven
-/// through `scored_cells` plans as it always has.
-pub(crate) fn cell_terms(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
-    if !in_pack(game, body) {
-        return 0.0;
-    }
-    match effective(game) {
-        PackTactic::Rush => 0.0,
-        PackTactic::Together => cohesion(game, body, cell),
-        PackTactic::Hold => hold_cover(game, body, cell),
-    }
+/// One path for the turn and the forecast: both build it through `plan`, so
+/// both plan under the tactic this turn will actually play.
+pub(crate) struct PackPlan {
+    tactic: PackTactic,
+    /// The mean of the packmates, one point per mate (a squad is one body).
+    mates: Option<(i32, i32)>,
+    targets: Vec<(i32, i32)>,
+    footprint: u8,
+    /// `TACTICAL_COHESION_FACTOR` times the body's own closing weight.
+    cohesion: f32,
 }
 
-/// What a holding body gains for standing where its targets cannot shoot it.
-fn hold_cover(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
+/// `body`'s plan under the pack's tactic. A body outside the pack, and any
+/// body under `Rush`, gets a plan that adds nothing and scales by one.
+pub(crate) fn plan(game: &Game, body: Entity) -> PackPlan {
     let battle = game.world.resource::<TacticalBattle>();
-    let stands = crate::tactical::footprint_cells_at(cell, battle.footprint_of(body));
-    let targets = game.tactical_sides(body).targets;
-    TACTICAL_HOLD_COVER_BONUS * cover_share(&battle.board, &stands, &targets)
+    let tactic = if game.acts_for_hostiles(body) {
+        effective(game)
+    } else {
+        PackTactic::Rush
+    };
+    let mut plan = PackPlan {
+        tactic,
+        mates: None,
+        targets: Vec::new(),
+        footprint: battle.footprint_of(body),
+        cohesion: game.cell_weights_of(body).closing * TACTICAL_COHESION_FACTOR,
+    };
+    match tactic {
+        PackTactic::Rush => {}
+        PackTactic::Together => {
+            let points: Vec<(f32, f32)> = members(game)
+                .into_iter()
+                .filter(|&mate| mate != body)
+                .filter_map(|mate| {
+                    let cells = battle.cells_of(mate);
+                    let n = cells.len() as f32;
+                    (n > 0.0).then(|| {
+                        (
+                            cells.iter().map(|c| c.0 as f32).sum::<f32>() / n,
+                            cells.iter().map(|c| c.1 as f32).sum::<f32>() / n,
+                        )
+                    })
+                })
+                .collect();
+            if !points.is_empty() {
+                let n = points.len() as f32;
+                plan.mates = Some((
+                    (points.iter().map(|p| p.0).sum::<f32>() / n).round() as i32,
+                    (points.iter().map(|p| p.1).sum::<f32>() / n).round() as i32,
+                ));
+            }
+        }
+        PackTactic::Hold => plan.targets = game.tactical_sides(body).targets,
+    }
+    plan
+}
+
+impl PackPlan {
+    /// The multiplier on the body's closing term.
+    pub(crate) fn closing_scale(&self) -> f32 {
+        match self.tactic {
+            PackTactic::Rush | PackTactic::Together => 1.0,
+            PackTactic::Hold => 0.0,
+        }
+    }
+
+    /// What standing at `cell` adds to its worth under the tactic.
+    pub(crate) fn cell_terms(&self, board: &crate::tactical::map::Board, cell: (i32, i32)) -> f32 {
+        let stands = crate::tactical::footprint_cells_at(cell, self.footprint);
+        match self.tactic {
+            PackTactic::Rush => 0.0,
+            // The slack-rope pull toward the packmates: free within
+            // `TACTICAL_COHESION_SLACK` of them, a linear charge beyond.
+            PackTactic::Together => self.mates.map_or(0.0, |centroid| {
+                let d = reach::gap(&stands, &[centroid]);
+                -self.cohesion * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
+            }),
+            PackTactic::Hold => {
+                TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, &self.targets)
+            }
+        }
+    }
 }
 
 /// The tactic the pack is playing **this turn**: the stored one, unless a hold
 /// has a reason to end.
 ///
-/// What `closing_scale` and `cell_terms` read, so a forecast (which cannot
+/// What `plan` reads, so a forecast (which cannot
 /// write) and the turn that follows it plan under the same tactic.
 fn effective(game: &Game) -> PackTactic {
     let state = &game.world.resource::<TacticalBattle>().pack;
@@ -195,37 +255,19 @@ pub(crate) fn check_transition(game: &mut Game) -> Option<&'static str> {
     Some("The pack breaks cover!")
 }
 
-/// The slack-rope pull toward the packmates' centroid: free within
-/// `TACTICAL_COHESION_SLACK` of it, a linear charge beyond.
-fn cohesion(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
-    let battle = game.world.resource::<TacticalBattle>();
-    let mates: Vec<(i32, i32)> = members(game)
-        .into_iter()
-        .filter(|&mate| mate != body)
-        .flat_map(|mate| battle.cells_of(mate))
-        .collect();
-    if mates.is_empty() {
-        return 0.0;
-    }
-    let n = mates.len() as i32;
-    let centroid = (
-        (mates.iter().map(|c| c.0).sum::<i32>() as f32 / n as f32).round() as i32,
-        (mates.iter().map(|c| c.1).sum::<i32>() as f32 / n as f32).round() as i32,
-    );
-    let stands = crate::tactical::footprint_cells_at(cell, battle.footprint_of(body));
-    let d = reach::gap(&stands, &[centroid]);
-    -TACTICAL_COHESION_WEIGHT * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
-}
-
-/// The multiplier on `body`'s closing term.
-pub(crate) fn closing_scale(game: &Game, body: Entity) -> f32 {
-    if !in_pack(game, body) {
-        return 1.0;
-    }
-    match effective(game) {
-        PackTactic::Rush | PackTactic::Together => 1.0,
-        PackTactic::Hold => 0.0,
-    }
+/// The fold the roll is drawn from: `spec`'s own words and a salt, so it is
+/// independent of the board drawn from the same spec.
+pub(crate) fn roll_seed(spec: BattleSpec) -> u64 {
+    fold(
+        FNV_BASIS,
+        &[
+            spec.world_seed as u64,
+            spec.site.0 as u32 as u64,
+            spec.site.1 as u32 as u64,
+            spec.tick,
+            PACK_ROLL_SALT,
+        ],
+    )
 }
 
 /// The odds row for behaviour `id`, falling back to `default`'s.
@@ -283,16 +325,7 @@ pub fn roll(spec: BattleSpec, members: &[Entity], game: &Game) -> PackTactic {
     if total == 0 {
         return PackTactic::Rush;
     }
-    let seed = fold(
-        FNV_BASIS,
-        &[
-            spec.world_seed as u64,
-            spec.site.0 as u32 as u64,
-            spec.site.1 as u32 as u64,
-            spec.tick,
-            PACK_ROLL_SALT,
-        ],
-    );
+    let seed = roll_seed(spec);
     let mut pick = index(seed, total as usize) as u32;
     for (tactic, weight) in PackTactic::ALL.iter().zip(weights) {
         if pick < weight {

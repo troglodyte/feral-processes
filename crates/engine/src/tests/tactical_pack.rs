@@ -13,6 +13,7 @@ use crate::components::{Routines, Tampered};
 use crate::resources::{Behaviours, DifficultyMode};
 use crate::tactical::TacticalBattle;
 use crate::tactical::ai::ForecastAction;
+use crate::tactical::pack;
 use crate::tactical::pack::PackTactic;
 use bevy_ecs::prelude::Entity;
 
@@ -94,7 +95,6 @@ mod roll {
     use crate::components::Stats;
     use crate::resources::GameRng;
     use crate::tactical::map::BattleSpec;
-    use crate::tactical::pack;
     use crate::world::Biome;
     use rand::RngExt;
 
@@ -153,6 +153,94 @@ mod roll {
     }
 
     #[test]
+    fn the_roll_varies_across_world_seed_and_across_site_at_a_fixed_tick() {
+        let (game, pack) = pack_of(3);
+        let across = |vary: &dyn Fn(u32) -> BattleSpec| -> usize {
+            (0..300)
+                .map(|i| pack::roll(vary(i), &pack, &game))
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+        };
+        let seeds = across(&|i| BattleSpec {
+            world_seed: i,
+            ..spec(9)
+        });
+        let sites = across(&|i| BattleSpec {
+            site: (i as i32, 0),
+            ..spec(9)
+        });
+        let rows = across(&|i| BattleSpec {
+            site: (0, i as i32),
+            ..spec(9)
+        });
+        assert!(seeds > 1, "world_seed is not in the fold");
+        assert!(sites > 1, "site.0 is not in the fold");
+        assert!(rows > 1, "site.1 is not in the fold");
+    }
+
+    #[test]
+    fn the_roll_seed_carries_its_own_salt() {
+        use crate::derive::{FNV_BASIS, fold};
+        let s = spec(9);
+        let saltless = fold(
+            FNV_BASIS,
+            &[
+                s.world_seed as u64,
+                s.site.0 as u32 as u64,
+                s.site.1 as u32 as u64,
+                s.tick,
+            ],
+        );
+        assert_ne!(pack::roll_seed(s), saltless);
+    }
+
+    /// Frequencies of each tactic over many ticks for a pack of `species`.
+    fn frequencies(species: &str, profile: Option<&str>) -> [f32; 3] {
+        let (mut game, pack) = pack_of(3);
+        for &body in &pack {
+            game.world
+                .get_mut::<crate::components::Creature>(body)
+                .unwrap()
+                .species = species.to_string();
+        }
+        if let Some(id) = profile {
+            game.world
+                .resource_mut::<crate::resources::Behaviours>()
+                .0
+                .set_override(Some(id.to_string()));
+        }
+        let n = 3000;
+        let mut counts = [0u32; 3];
+        for tick in 0..n {
+            let at = PackTactic::ALL
+                .iter()
+                .position(|t| *t == pack::roll(spec(tick), &pack, &game))
+                .unwrap();
+            counts[at] += 1;
+        }
+        counts.map(|c| c as f32 / n as f32)
+    }
+
+    #[test]
+    fn a_brute_led_pack_follows_the_brute_row_and_not_the_default_one() {
+        let brute = frequencies("rootkit", None);
+        let default = frequencies("construct", Some("default"));
+        let total = |row: [u32; 3]| row.iter().sum::<u32>() as f32;
+        for (i, (&got, &weight)) in brute.iter().zip(&pack::odds_row("brute")).enumerate() {
+            let want = weight as f32 / total(pack::odds_row("brute"));
+            assert!((got - want).abs() < 0.05, "column {i}: {got} vs {want}");
+        }
+        for (i, (&got, &weight)) in default.iter().zip(&pack::odds_row("default")).enumerate() {
+            let want = weight as f32 / total(pack::odds_row("default"));
+            assert!((got - want).abs() < 0.05, "column {i}: {got} vs {want}");
+        }
+        assert!(
+            brute[2] + 0.1 < default[2],
+            "a brute holds as often as default"
+        );
+    }
+
+    #[test]
     fn a_lone_body_is_never_rolled_together() {
         let (game, pack) = pack_of(1);
         for tick in 0..400 {
@@ -203,7 +291,6 @@ mod roll {
 mod arena_override {
     use super::*;
     use crate::arena::{CombatModel, Scenario, stage};
-    use crate::tactical::pack;
 
     fn scenario(extra: &str) -> Result<Scenario, String> {
         Scenario::from_ron(&format!(
@@ -219,17 +306,25 @@ mod arena_override {
     }
 
     #[test]
-    fn a_scenario_tactic_wins_over_the_roll_and_is_announced() {
-        // Seeds vary the staged fight's own spec, so a roll that was merely
-        // lucky would show up as a mismatch on one of them.
+    fn a_scenario_tactic_is_seated_and_announced() {
+        for forced in [PackTactic::Together, PackTactic::Hold] {
+            let (tactic, log) = staged_tactic(&format!("tactic: Some({forced:?})"), 5);
+            assert_eq!(tactic, forced);
+            let line = pack::opening_line(forced).unwrap();
+            assert!(log.iter().any(|l| l == line), "{log:?}");
+        }
+        let (tactic, log) = staged_tactic("tactic: Some(Rush)", 5);
+        assert_eq!(tactic, PackTactic::Rush);
+        assert!(!log.iter().any(|l| l.starts_with("The pack")), "{log:?}");
+    }
+
+    /// Every rep of a scenario shares one `BattleSpec`, so a rolled tactic
+    /// would be one fixed tactic for the whole run and would shift every
+    /// existing baseline.
+    #[test]
+    fn an_absent_tactic_is_rush_whatever_the_seed() {
         for seed in 0..12 {
-            for forced in [PackTactic::Together, PackTactic::Hold] {
-                let (tactic, log) = staged_tactic(&format!("tactic: Some({forced:?})"), seed);
-                assert_eq!(tactic, forced, "seed {seed}");
-                let line = pack::opening_line(forced).unwrap();
-                assert!(log.iter().any(|l| l == line), "seed {seed}: {log:?}");
-            }
-            let (tactic, log) = staged_tactic("tactic: Some(Rush)", seed);
+            let (tactic, log) = staged_tactic("", seed);
             assert_eq!(tactic, PackTactic::Rush, "seed {seed}");
             assert!(!log.iter().any(|l| l.starts_with("The pack")), "{log:?}");
         }
@@ -312,6 +407,28 @@ mod field {
         pack
     }
 
+    /// Plays the pack as a melee species, so the only reason it has to look
+    /// for cover is the tactic's own: a ranged body already walks for cover on
+    /// its profile's weight and would hide what the Hold bonus is worth.
+    pub fn melee(game: &mut Game, pack: &[Entity]) {
+        let ids: Vec<String> = game
+            .species_defs()
+            .into_iter()
+            .filter(|d| !d.is_hybrid())
+            .map(|d| d.id.clone())
+            .collect();
+        for &body in pack {
+            let found = ids.iter().find(|id| {
+                game.world
+                    .get_mut::<crate::components::Creature>(body)
+                    .unwrap()
+                    .species = (*id).clone();
+                game.swing_range(body) == 1
+            });
+            assert!(found.is_some(), "no melee species ships");
+        }
+    }
+
     pub fn step_distance(a: (i32, i32), b: (i32, i32)) -> u32 {
         reach::distance(a, b)
     }
@@ -365,7 +482,6 @@ mod hold {
     use super::field::*;
     use super::*;
     use crate::components::Stats;
-    use crate::tactical::pack;
     use crate::tactical::reach;
     use crate::tuning::TACTICAL_HOLD_ROUNDS;
 
@@ -380,28 +496,6 @@ mod hold {
         open_field_cover(&mut game);
         game.set_pack_tactic(PackTactic::Hold);
         (game, pack)
-    }
-
-    /// Plays the pack as a melee species, so the only reason it has to look
-    /// for cover is the tactic's own: a ranged body already walks for cover on
-    /// its profile's weight and would hide what the Hold bonus is worth.
-    fn melee(game: &mut Game, pack: &[Entity]) {
-        let ids: Vec<String> = game
-            .species_defs()
-            .into_iter()
-            .filter(|d| !d.is_hybrid())
-            .map(|d| d.id.clone())
-            .collect();
-        for &body in pack {
-            let found = ids.iter().find(|id| {
-                game.world
-                    .get_mut::<crate::components::Creature>(body)
-                    .unwrap()
-                    .species = (*id).clone();
-                game.swing_range(body) == 1
-            });
-            assert!(found.is_some(), "no melee species ships");
-        }
     }
 
     /// `open_field` again with the boulder in, bodies left where they stand.
@@ -463,8 +557,8 @@ mod hold {
         // a hold that is about to break already closes at full scale.
         let quiet = holding_pair((14, 8));
         let sighted = holding_pair((8, 8));
-        assert_eq!(pack::closing_scale(&quiet.0, quiet.1[0]), 0.0);
-        assert_eq!(pack::closing_scale(&sighted.0, sighted.1[0]), 1.0);
+        assert_eq!(pack::plan(&quiet.0, quiet.1[0]).closing_scale(), 0.0);
+        assert_eq!(pack::plan(&sighted.0, sighted.1[0]).closing_scale(), 1.0);
         assert_eq!(tactic_of(&sighted.0), PackTactic::Hold, "the read wrote");
     }
 
@@ -485,6 +579,9 @@ mod hold {
         let (mut game, pack) = holding_pair((11, 8));
         take_turn(&mut game, pack[0]);
         assert_eq!(tactic_of(&game), PackTactic::Hold);
+        // The stored field alone proves little: the planner must still be
+        // holding too.
+        assert_eq!(pack::plan(&game, pack[1]).closing_scale(), 0.0);
     }
 
     #[test]
@@ -521,16 +618,16 @@ mod hold {
     }
 
     #[test]
-    fn hold_breaks_on_the_timeout_round() {
-        let (mut game, pack) = holding_pair((14, 8));
+    fn hold_breaks_on_exactly_the_timeout_round() {
+        let (mut game, _pack) = holding_pair((14, 8));
         let start = game.world.resource::<TacticalBattle>().round;
-        game.world.resource_mut::<TacticalBattle>().round = start + TACTICAL_HOLD_ROUNDS - 2;
-        take_turn(&mut game, pack[0]);
-        assert_eq!(tactic_of(&game), PackTactic::Hold, "a round early");
+        // Set and checked directly, so no turn wrap moves the round between.
+        game.world.resource_mut::<TacticalBattle>().round = start + TACTICAL_HOLD_ROUNDS - 1;
+        assert_eq!(pack::check_transition(&mut game), None, "a round early");
+        assert_eq!(tactic_of(&game), PackTactic::Hold);
         game.world.resource_mut::<TacticalBattle>().round = start + TACTICAL_HOLD_ROUNDS;
-        take_turn(&mut game, pack[0]);
+        assert_eq!(pack::check_transition(&mut game), Some(BREAKS));
         assert_eq!(tactic_of(&game), PackTactic::Rush);
-        assert_eq!(breaks_logged(&game), 1);
     }
 
     #[test]
@@ -541,5 +638,185 @@ mod hold {
         take_turn(&mut game, pack[0]);
         assert_eq!(breaks_logged(&game), 1);
         assert_eq!(tactic_of(&game), PackTactic::Rush);
+    }
+}
+
+/// Fights opened the way the game opens them, not hand-placed boards.
+mod real_fights {
+    use super::*;
+
+    /// A Hold in a real fight must outlast the first hostile turn in most
+    /// seeds. The sides open `TACTICAL_DEPLOY_GAP` apart, so an alert range at
+    /// that gap sees the party at once and the hold plays as `Rush`.
+    #[test]
+    fn a_hold_survives_the_first_hostile_turn_in_most_real_fights() {
+        let seeds = 1..41u32;
+        let total = seeds.len();
+        let mut held = 0;
+        for seed in seeds {
+            let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let pack = tactical_fight(&mut game, 3, 100);
+            game.set_pack_tactic(PackTactic::Hold);
+            assert!(wait_for_turn(&mut game, pack[0]));
+            assert!(game.tactical_ai_turn_at(0.0));
+            if tactic_of(&game) == PackTactic::Hold {
+                held += 1;
+            }
+        }
+        assert!(held * 4 >= total * 3, "only {held} of {total} holds held");
+    }
+
+    #[test]
+    fn an_unforced_real_fight_can_seat_a_tactic_other_than_rush() {
+        let seated: std::collections::HashSet<PackTactic> = (1..41u32)
+            .map(|seed| {
+                let mut game =
+                    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+                let pack = super::super::tactical::tactical_pack(&mut game, 3, 100);
+                game.open_tactical_battle(pack);
+                tactic_of(&game)
+            })
+            .collect();
+        assert!(seated.len() > 1, "every fight rolled {seated:?}");
+    }
+}
+
+mod rush_and_forecast {
+    use super::field::*;
+    use super::*;
+    use crate::components::{AbilityCooldowns, Creature, Stats, Tampered};
+    use crate::tactical::map::Board;
+    use crate::tactical::reach;
+
+    /// `tactical_policy`'s `a_brute_walks_past_cover_and_a_skirmisher_walks_to_it`
+    /// under an explicit `Rush`: a fight that rolled nothing decides as it
+    /// always has.
+    fn ranged_stand(species: &str) -> bool {
+        let mut game = game();
+        let wild = tactical_fight(&mut game, 1, 10_000)[0];
+        game.world.get_mut::<Creature>(wild).unwrap().species = species.to_string();
+        game.world.entity_mut(wild).insert(Routines::default());
+        assert!(game.swing_range(wild) > 1, "{species} is not ranged");
+        game.set_pack_tactic(PackTactic::Rush);
+        let mut rows = vec![".".repeat(12); 12];
+        rows[3].replace_range(7..=7, "#");
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        game.world.resource_mut::<TacticalBattle>().board = Board::from_rows(&rows);
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().hp = 10_000;
+        game.world.get_mut::<Stats>(player).unwrap().max_hp = 10_000;
+        put(&mut game, player, (8, 4));
+        put(&mut game, wild, (5, 4));
+        assert!(wait_for_turn(&mut game, wild));
+        assert!(game.tactical_ai_turn_at(0.0));
+        let board = &game.world.resource::<TacticalBattle>().board;
+        reach::cover_between(board, (8, 4), cell_of(&game, wild))
+    }
+
+    #[test]
+    fn a_brute_walks_past_cover_and_a_skirmisher_walks_to_it_under_explicit_rush() {
+        assert!(ranged_stand("glitch"), "the skirmisher took no cover");
+        assert!(!ranged_stand("rootkit"), "the brute stopped for cover");
+    }
+
+    /// The forecast's destination against the cell the turn then takes, at
+    /// temperature zero and with the player out of alert range, so Hold's and
+    /// Together's terms are live rather than a hold about to break.
+    fn forecast_and_turn(
+        tactic: PackTactic,
+        profile: &str,
+        cells: &[(i32, i32)],
+        cover: bool,
+    ) -> ((i32, i32), (i32, i32), (i32, i32)) {
+        let mut game = game();
+        let pack = stand(&mut game, cells.len(), (14, 8), cells);
+        melee(&mut game, &pack);
+        if cover {
+            game.world.resource_mut::<TacticalBattle>().board.put(
+                6,
+                7,
+                crate::tactical::map::BattleCell::Cover,
+            );
+        }
+        game.set_pack_tactic(tactic);
+        game.world
+            .resource_mut::<Behaviours>()
+            .0
+            .set_override(Some(profile.to_string()));
+        let wild = pack[0];
+        let mut tampered = Tampered::default();
+        tampered.apply(TamperKind::Profiled, 9, false);
+        tampered.apply(TamperKind::Temperature(0.0), 9, false);
+        game.world.entity_mut(wild).insert(tampered);
+        assert!(wait_for_turn(&mut game, wild));
+        let from = cell_of(&game, wild);
+        let forecast = game.tactical_forecast(wild).expect("a profiled hostile");
+        let predicted = forecast.walk.last().copied().unwrap_or(from);
+        game.tactical_ai_turn();
+        let _ = game.world.get::<AbilityCooldowns>(wild);
+        (from, predicted, cell_of(&game, wild))
+    }
+
+    #[test]
+    fn the_forecast_walk_ends_where_the_turn_does_under_every_tactic_and_profile() {
+        let (db, _) = BehaviourDb::load_dir(&test_assets_dir().join("behaviours")).unwrap();
+        let ids: Vec<String> = db.ids().map(str::to_string).collect();
+        let mut moved = std::collections::HashSet::new();
+        for id in &ids {
+            for (tactic, cells, cover) in [
+                (PackTactic::Rush, vec![(2, 8), (1, 9)], false),
+                (PackTactic::Together, vec![(3, 8), (0, 8)], false),
+                (PackTactic::Hold, vec![(4, 8), (3, 9)], true),
+            ] {
+                let (from, predicted, took) = forecast_and_turn(tactic, id, &cells, cover);
+                assert_eq!(predicted, took, "{tactic:?}, profile {id:?}");
+                if took != from {
+                    moved.insert(tactic);
+                }
+            }
+        }
+        // Without this the loop could pass with every body standing still.
+        for tactic in [PackTactic::Rush, PackTactic::Together, PackTactic::Hold] {
+            assert!(moved.contains(&tactic), "{tactic:?} never moved a body");
+        }
+    }
+
+    /// The runner at the pack's front and its slow packmate behind; where the
+    /// runner ends its turn, with `weights` as its profile.
+    fn runner_under(tactic: PackTactic, closing: f32) -> u32 {
+        let mut game = game();
+        let pack = stand(&mut game, 2, (14, 8), &[(2, 8), (0, 8)]);
+        let mut def = crate::behaviours::BehaviourDef {
+            id: "test".into(),
+            name: "Test".into(),
+            ..Default::default()
+        };
+        def.cells.closing = closing;
+        {
+            let mut db = game.world.resource_mut::<Behaviours>();
+            db.0.insert(def);
+            db.0.set_override(Some("test".into()));
+        }
+        game.set_pack_tactic(tactic);
+        assert!(wait_for_turn(&mut game, pack[0]));
+        assert!(game.tactical_ai_turn_at(0.0));
+        step_distance(cell_of(&game, pack[0]), cell_of(&game, pack[1]))
+    }
+
+    #[test]
+    fn together_holds_back_a_body_whose_profile_closes_hard() {
+        use crate::tuning::TACTICAL_COHESION_SLACK;
+        // The shipped brute's weight, and one well past it: the pull scales
+        // with the profile, so neither is held back by a tie.
+        for closing in [1.5, 4.0] {
+            assert!(
+                runner_under(PackTactic::Rush, closing) > TACTICAL_COHESION_SLACK,
+                "control, closing {closing}"
+            );
+            assert!(
+                runner_under(PackTactic::Together, closing) <= TACTICAL_COHESION_SLACK,
+                "outran the pack at closing {closing}"
+            );
+        }
     }
 }

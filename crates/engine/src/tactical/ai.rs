@@ -722,6 +722,9 @@ impl Game {
         // a hold plans under `Rush` that same turn. Only on the opening beat:
         // a body walking up to the player mid-turn has not been sighted
         // *by the start of its turn*, which is what the hold is judged on.
+        // The planner (`pack::plan`) reads a pending break by itself, so a
+        // forecast and the turn it precedes agree whether or not this has
+        // written the transition yet; this only commits it and logs.
         if self.acts_for_hostiles(actor)
             && self.tactical_turn_opening()
             && let Some(line) = pack::check_transition(self)
@@ -1163,8 +1166,9 @@ impl Game {
         // The profile's weights with the pack's closing scale applied, so
         // the merit filter, the standing comparison and the score below all
         // read one figure.
+        let plan = pack::plan(self, actor);
         let scaled = CellWeights {
-            closing: w.closing * pack::closing_scale(self, actor),
+            closing: w.closing * plan.closing_scale(),
             ..*w
         };
         let w = &scaled;
@@ -1185,7 +1189,7 @@ impl Game {
         // whichever way it goes and holding does not reshuffle every roll
         // after it.
         let standing = cell_merit(&battle.board, &block(from), band, &sides.targets, w)
-            + pack::cell_terms(self, actor, from);
+            + plan.cell_terms(&battle.board, from);
         // **A party routine walks only where it can be aimed.** Band alone
         // would hold a body whose every aim from here covers a companion;
         // `party_routine_intent` chose the routine because some cell in reach
@@ -1212,7 +1216,7 @@ impl Game {
                 aimable(cell)
                     && (!hold_is_aimable
                         || cell_merit(&battle.board, &block(cell), band, &sides.targets, w)
-                            + pack::cell_terms(self, actor, cell)
+                            + plan.cell_terms(&battle.board, cell)
                             - self.walk_risk(actor, cell, w.reaction)
                             > standing)
             })
@@ -1234,7 +1238,7 @@ impl Game {
                     &sides.targets,
                     &sides.allies,
                     w,
-                ) + pack::cell_terms(self, actor, cell)
+                ) + plan.cell_terms(&battle.board, cell)
                     - self.walk_risk(actor, cell, w.reaction)
             })
             .collect();

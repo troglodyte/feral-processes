@@ -5816,6 +5816,30 @@ pub const TACTICAL_AI_REACTION_WEIGHT: f32 = 1.0;
 pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Tactical pack tactics
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The odds of each pack tactic, keyed by the behaviour id of the pack's
+/// toughest body (an id with no row rolls on `default`).
+///
+/// Columns are `PackTactic::ALL`'s order: `[Rush, Together, Hold]`. Integer
+/// weights, so a roll is `derive::index` over their sum and nothing in it is
+/// a float. `Rush` stays above zero in every row, which is what lets a roll
+/// whose other tactics are all ineligible still answer.
+pub const PACK_TACTIC_ODDS: [(&str, [u32; 3]); 5] = [
+    ("default", [2, 2, 2]),
+    ("brute", [5, 4, 1]),
+    ("hunter", [5, 2, 1]),
+    ("skirmisher", [2, 1, 6]),
+    ("cautious", [2, 1, 6]),
+];
+
+/// Added to the fold the pack roll is drawn from, so it is independent of
+/// the board drawn from the same `BattleSpec` (`BattleSpec::base_seed` ends
+/// on no such word).
+pub const PACK_ROLL_SALT: u64 = 0x9ac7_7ac7_1c5e_ed01;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Tactical squads
 // ─────────────────────────────────────────────────────────────────────────
 

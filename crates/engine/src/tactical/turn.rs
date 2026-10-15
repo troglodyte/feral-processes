@@ -157,12 +157,23 @@ impl Game {
 
         let standing: Vec<Entity> = battle.bodies().map(|(entity, _)| entity).collect();
         battle.set_initiative(self.roll_turn_order(&standing));
+        // **Rolled here, the one seat a rolled fight has**: `open_tactical_battle`
+        // and `arena::stage` both come through, and a siege never does, so it
+        // stays `Rush` with no branch of its own.
+        let hostile_side: Vec<Entity> = battle
+            .initiative()
+            .iter()
+            .copied()
+            .filter(|body| wild.contains(body))
+            .collect();
+        let tactic = crate::tactical::pack::roll(spec, &hostile_side, self);
         // Opened before the intercept line, so that line is the first thing
         // the battle pane shows — `begin_battle`'s ordering.
         self.world
             .resource_mut::<crate::resources::MessageLog>()
             .open_battle();
         self.world.insert_resource(battle);
+        self.set_pack_tactic(tactic);
 
         // After the resource is in place, deliberately: both telemetry
         // helpers read the fight back off it, so a record taken earlier
@@ -179,6 +190,9 @@ impl Game {
         });
         let line = self.intercept_line(wild.first().copied(), wild.len());
         self.log(line);
+        if let Some(line) = crate::tactical::pack::opening_line(tactic) {
+            self.log(line);
+        }
         // The same roll `begin_battle` makes: statuses live on the entity,
         // so both fight models read them alike.
         self.roll_implant_battle_start();

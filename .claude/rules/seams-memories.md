@@ -46,7 +46,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   is the stretch half.**
 - **A `Structure` memory names the kind, not the entity**, which is what
   lets it be written on the branch about to despawn the machine and what
-  makes a rebuilt Lathe the same Lathe.
+  makes a rebuilt Factory the same Factory.
 - **`MEMORY_TRIGGERS` in `tests/assets.rs` is the pairing census**, and a
   def shipped without a row in it fails the build.
 - **The memories page is one derivation and has no scroll.** `R` from the

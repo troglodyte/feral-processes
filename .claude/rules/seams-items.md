@@ -23,17 +23,17 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **An item's price is bounded twice, and the second bound is the
   non-obvious one.** A craftable worth more than its ingredients is an
-  infinite Credit loop; a `work.produces` structure makes its item out of
-  *nothing* on a timer, so that item's value is really a Credit-per-tick
-  rate the recipe ceiling cannot see.
+  infinite Credit loop; an `Extract` recipe (a `work` block or an Extractor's
+  recipe) makes its item out of *nothing* on a timer, so that item's value is really a
+  Credit-per-tick rate the recipe ceiling cannot see.
 - **A zone's material is a content decision, and two censuses are what hold
   it.** Nothing in `ItemDef` says Cache Grain is what zone 2 pays you, so
   `ZONE_MATERIALS` in `tests/assets.rs` plus
   `every_zone_gated_gear_recipe_asks_for_a_zone_material` and
   `every_upgrade_path_asks_for_a_zone_material` are the whole rule.
 - **A research node's material bill may only name what that node's own
-  prerequisites can make**, `min_zone` granting nothing and `assembles`
-  being no source.
+  prerequisites can make**, `min_zone` granting nothing and an `Assemble`
+  recipe being no source.
 - **A research bill is paid from the pack, topped up off the adjacent
   shelves**, and the whole bill is refused before a unit moves.
 - **A weapon's reach lives on `ItemDef` and is authored as an enemy-facing
@@ -158,7 +158,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A standing extraction bench buys time; upgrading it buys materials.**
   The yield term is `bench_tier - 1` (a never-upgraded structure reads as
   tier 1, so a `tier` term would pay a full `TOOL_TIER_SCALE_STEP` for
-  merely having built a Compiler); the tick term is the full tier, as a
+  merely having built an Assembler); the tick term is the full tier, as a
   divisor floored at one. Neither is a gate — extraction works in the
   field, at the base and in the Stack alike.
 - **`Game::take_routine` is the one place a routine comes off a program**,

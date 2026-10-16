@@ -179,7 +179,7 @@
   pointing `arena::set_level` at the zone cap silently clamps the five shipped
   scenarios authoring `level: 12`. `WORK_XP_LEVEL_CAP` is a third, lower gate
   beside the cap — it is what stops a developed program being ground up at a
-  Mining Node, and unifying it with the cap deletes that property.
+  Extractor, and unifying it with the cap deletes that property.
 
 - **XP at the cap is banked, not discarded, and banking and taxing share the
   one accumulator.** `add_xp` accumulates into `Experience::xp` and reports

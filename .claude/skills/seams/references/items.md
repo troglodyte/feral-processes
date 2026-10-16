@@ -2,8 +2,8 @@
 
 - **An item's price is bounded twice, and the second bound is the
   non-obvious one.** A craftable worth more than its ingredients is an
-  infinite Credit loop; a `work.produces` structure makes its item out of
-  *nothing* on a timer, so that item's value is really a Credit-per-tick rate
+  infinite Credit loop; an `Extract` recipe (a `work` block or an Extractor's
+  recipe) makes its item out of *nothing* on a timer, so that item's value is really a Credit-per-tick rate
   the recipe ceiling cannot see. The second bound is currently slack, not
   gone. Both are asserted over the real assets.
 - **A zone's material is a content decision, and two censuses are what hold
@@ -104,8 +104,8 @@
   `best_structure_tier` reads the **best** deployed bench, and a structure
   with no `StructureTier` is **tier 1**. **The trap is that the term was
   inert on shipped content**: every craftable-equipment recipe names the
-  Fabricator or the Armory and neither could be upgraded, which is why both
-  now carry an upgrade path that buys nothing but better gear.
+  Assembler and it could not be upgraded, which is why it
+  now carries an upgrade path that buys nothing but better gear.
 - **The careful surcharge is applied in `craft_cost`, and all three price
   questions take the flag.** Discount **then** surcharge, rounded up, or a
   fully perked recipe with every line floored at 1 is careful for free. A
@@ -277,9 +277,9 @@
   later rather than lost when the slot is wanted for something else.
 - **Hand-compiling is priced at `Game::hand_craft_ticks` — the cycle of the
   machine that exists to do the job times `HAND_CRAFT_TICK_MULT` — and
-  `Game::craft` is that loop drained to completion.** The lookup is the
-  `assembles` block naming the item, else the `work` block producing it, else
-  `HAND_CRAFT_DEFAULT_CYCLE`, over `StructureDb::all`'s sorted order so a mod
+  `Game::craft` is that loop drained to completion.** The lookup is `maker_of`: an
+  `Assemble` recipe naming the item, else an `Extract` one, over every
+  structure's `productions()`, else `HAND_CRAFT_DEFAULT_CYCLE`, over `StructureDb::all`'s sorted order so a mod
   with two machines for one item resolves the same way every session. **Two
   traps.** A second copy of `mult × cycle` — in the screen that draws the
   progress bar, most obviously — lets the quoted number and the spent number
@@ -370,7 +370,7 @@
   the asymmetry is load-bearing.** `Game::best_structure_tier` reads a
   never-upgraded structure as tier 1, so a `tier` term in the yield would
   pay `TOOL_TIER_SCALE_STEP`'s full step — +50% of the material economy on
-  the shipped `0.5` — for merely having built a Compiler most bases already
+  the shipped `0.5` — for merely having built an Assembler most bases already
   have. Standing the bench buys time; upgrading it buys materials. Neither
   is a gate: decision 7 keeps extraction working in the field, at the base
   and in the Stack alike, because the starting tool is useless otherwise.
@@ -447,12 +447,12 @@
   nothing** — a zone number says the player breached, not that they took any
   node, and breaching 1→2 demands no Cache Grain (the portal's line is
   `(2, "cache_grain", 10)`, from sector 2 onward), so a bill leaning on the
-  zone is an unstated prerequisite. **`work` is a source and `assembles` is
-  not**: an assembler runs its product's own `craftable.cost` and is already
+  zone is an unstated prerequisite. **An `Extract` recipe (or a `work` block) is a source and an `Assemble`
+  recipe is not**: an assembler runs its product's own `craftable.cost` and is already
   covered by the craft fixpoint, and counting it as a source is how the
-  Fabricator reads as a Trace Sniffer supply with no Logic Wafer in sight —
+  Assembler reads as a Trace Sniffer supply with no Logic Wafer in sight —
   modelled that way first, the census passed against a bill that could not be
-  paid. It is what found `weapon_bench` unlocking a Fabricator it could not
+  paid. It is what found `weapon_bench` unlocking an Assembler it could not
   feed, which is why that node requires `routine_fabrication` now. The
   reachability test passes **vacuously against a tree with no bills**, so
   `every_shipped_research_node_costs_materials` is the second half — a

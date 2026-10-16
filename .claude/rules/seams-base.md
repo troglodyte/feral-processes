@@ -132,7 +132,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   door**, read by the player's own put and the crew's haul alike, an absent
   `components::DepotFilter` meaning the shelf takes anything.
 - **A Depot pulls only what it accepts, only from a worked producer, and
-  `Game::auto_filter_depots` fires once, from `Game::spawn_structure` and only for the Depot.**
+  `Game::auto_filter_depots` fires once, from `Game::spawn_structure` and only for the Depot, with `Game::auto_filter_beside_machine` its one other trigger, on a machine's first recipe.**
 - **Taking and putting are one screen, one basket and one commit** —
   `Mode::Transfer`, opened with `c`.
 - **The put side is one budget and the take side is per row, and the screen
@@ -166,10 +166,16 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   only for that** — iteration order feeds the pull phase, and a `HashMap`
   would make the save encoding differ run to run.
 - **A machine's recipe is the assembled item's own `craftable.cost`**, via
-  `systems::assembly_recipe`.
-- **Every shipped `assembles` recipe is one ingredient, and that is a
-  property of the *items*.** A second ingredient on any of the four
-  intermediates silently turns its bench back into a corner puzzle.
+  `systems::assembly_recipe` on the placed instance's `Placed`.
+- **Every `Assemble`-role recipe is one ingredient, and that is a property of
+  the *items*.** A second ingredient on any of the four intermediates
+  silently turns its bench back into a corner puzzle.
+- **`structures::Placed` is the one door to what a placed structure makes**,
+  and an unset machine produces, draws, serves and staffs nothing because
+  every reader asks it.
+- **A machine's recipe is the player's: `Game::set_machine_recipe` is the
+  only writer of `MachineRecipe`**, and no order, auto-setup or load ever
+  sets one.
 - **A work order stores what was asked for, never how it will be done.** An
   item, a quantity and a `standing` flag — labels on the request, no plan.
 - **Every unsatisfied order is worked at once, and `settle_orders` is where
@@ -250,9 +256,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped.
 - **An attached building is one the base has a reason to run**, and the
-  recipe alone was never enough: an unstaffed assembler pulls nothing, so a
-  Lathe nothing has been ordered from reserved a Mining Node's whole buffer
-  for a machine that would never take a unit.
+  recipe alone was never enough: an unstaffed assembler pulls nothing, so an
+  Assembler set to a recipe nothing has been ordered from reserved an
+  Extractor's whole buffer for a machine that would never take a unit.
 - **`Carrying` is the only thing hauling stores**, and the carry cap is what
   lets it be one `(item, qty)` pair.
 - **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` drops its load on

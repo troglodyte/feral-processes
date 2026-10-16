@@ -94,7 +94,7 @@
   off.
 - **A `Structure` memory names the kind, not the entity**, which is what lets
   it be written on the branch about to despawn the machine and what makes a
-  rebuilt Lathe the same Lathe. `settled_in` and `jammed_here` share that
+  rebuilt Factory the same Factory. `settled_in` and `jammed_here` share that
   subject and oppose in sign. A digger gets the `Activity` memory and **no**
   `Structure` one — a `DigSite` is the one `Task` target that is not a
   structure, so the arm skips structurally rather than by a check.

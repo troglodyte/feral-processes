@@ -172,3 +172,102 @@ fn growth_stage_climbs_through_every_stage() {
     assert_eq!(growth_stage(1199, 1200, 4), 3);
     assert_eq!(growth_stage(5000, 1200, 4), 3);
 }
+
+fn sown_plot(game: &mut Game, a: (i32, i32), b: (i32, i32)) -> Vec<Entity> {
+    game.toggle_plot_box(a, b);
+    let plot = plot_of(game, a);
+    game.set_plot_recipe(plot, &"power_cell".into()).unwrap();
+    tiles_of(game)
+}
+
+fn tiles_of(game: &mut Game) -> Vec<Entity> {
+    game.world
+        .query_filtered::<Entity, With<FarmTile>>()
+        .iter(&game.world)
+        .collect()
+}
+
+fn elapsed_of(game: &Game, tile: Entity) -> Option<u32> {
+    match game.world.get::<FarmTile>(tile).unwrap().growth {
+        CropGrowth::Growing { elapsed } => Some(elapsed),
+        _ => None,
+    }
+}
+
+fn power_cell_grow_ticks(game: &Game) -> u32 {
+    game.crop_defs()
+        .into_iter()
+        .find(|d| d.id.as_str() == "power_cell")
+        .unwrap()
+        .grow_ticks
+}
+
+#[test]
+fn a_dimpled_tile_ripens_after_its_grow_time() {
+    let mut game = farm_base(10);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Growing { elapsed: 0 });
+    let grow = power_cell_grow_ticks(&game);
+    for _ in 0..grow - 1 {
+        game.grow_farms();
+    }
+    assert!(matches!(
+        game.world.get::<FarmTile>(tile).unwrap().growth,
+        CropGrowth::Growing { .. }
+    ));
+    game.grow_farms();
+    assert_eq!(
+        game.world.get::<FarmTile>(tile).unwrap().growth,
+        CropGrowth::Ripe
+    );
+}
+
+#[test]
+fn growth_waits_out_a_battle() {
+    let mut game = farm_base(11);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Growing { elapsed: 5 });
+    battle_with_a_pack_of(&mut game, 1, 10);
+    assert!(game.has_active_battle());
+    game.tick();
+    assert_eq!(elapsed_of(&game, tile), Some(5));
+}
+
+#[test]
+fn an_unsown_plot_never_grows() {
+    let mut game = farm_base(12);
+    game.toggle_plot_box((-3, 2), (-3, 2));
+    let tile = tiles_of(&mut game)[0];
+    set_growth(&mut game, tile, CropGrowth::Growing { elapsed: 0 });
+    game.grow_farms();
+    assert_eq!(elapsed_of(&game, tile), Some(0));
+}
+
+#[test]
+fn a_build_request_on_a_plot_tile_removes_only_that_tile() {
+    let mut game = farm_base(13);
+    let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    for tile in sown_plot(&mut game, (-3, 2), (-1, 2)) {
+        set_growth(&mut game, tile, CropGrowth::Growing { elapsed: 0 });
+    }
+    assert_eq!(game.farm_tiles().len(), 3);
+    file_build(&mut game, "depot", -2 - w, 2).unwrap();
+    // Filing a request is itself a tick, so measure from after it.
+    let first = tiles_of(&mut game)[0];
+    let before = elapsed_of(&game, first).unwrap();
+    game.tick();
+    let tiles = tiles_of(&mut game);
+    assert_eq!(tiles.len(), 2);
+    assert!(
+        tiles
+            .iter()
+            .all(|&t| elapsed_of(&game, t) == Some(before + 1))
+    );
+    assert_eq!(
+        game.world
+            .query::<&crate::components::FloorPile>()
+            .iter(&game.world)
+            .count(),
+        0
+    );
+}

@@ -295,6 +295,9 @@ impl Game {
         // progress this tick rather than standing at its machine for one.
         // Beside `maybe_spawn_wild_creature` for the same reason that one is
         // here: both are `&mut Game` work a bevy system cannot express.
+        // Before the scheduler so a tile that ripens this tick is a want this
+        // tick, not the next.
+        self.grow_farms();
         self.schedule_base_labour();
         // Immediately after the scheduler and before the schedule, for both
         // of that call's reasons: a digger posted this tick swings this

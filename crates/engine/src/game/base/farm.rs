@@ -108,6 +108,73 @@ impl Game {
         Ok(())
     }
 
+    /// One tick of the farm clock: prune, then every tile of a sown plot
+    /// advances. A tile ripens on the tick `elapsed` reaches `grow_ticks`;
+    /// `Fallow`, `Ripe` and unsown tiles stand still, and a tick lost to a
+    /// battle is lost — there is no catch-up.
+    pub(crate) fn grow_farms(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        self.prune_farm_tiles();
+        let mut plots = self.world.query::<(Entity, &FarmPlot)>();
+        let db = self.world.resource::<CropDb>();
+        let grow_ticks: HashMap<Entity, u32> = plots
+            .iter(&self.world)
+            .filter_map(|(plot, p)| {
+                let def = db.get(p.recipe.as_ref()?)?;
+                Some((plot, def.grow_ticks))
+            })
+            .collect();
+        let mut tiles = self.world.query::<&mut FarmTile>();
+        for mut tile in tiles.iter_mut(&mut self.world) {
+            let (Some(&grow), CropGrowth::Growing { elapsed }) =
+                (grow_ticks.get(&tile.plot), tile.growth)
+            else {
+                continue;
+            };
+            tile.growth = if elapsed + 1 >= grow {
+                CropGrowth::Ripe
+            } else {
+                CropGrowth::Growing {
+                    elapsed: elapsed + 1,
+                }
+            };
+        }
+    }
+
+    /// Despawns every tile whose cell is no longer laid floor or now holds a
+    /// structure or a filed build, and any plot that empties with them. One
+    /// lazy pass instead of a hook in each writer — a build request, a hand
+    /// deploy, `BaseGrid::revert` and a stale save all land here
+    /// (`prune_finishes`' precedent).
+    fn prune_farm_tiles(&mut self) {
+        let blocked: HashSet<(i32, i32)> = self
+            .structure_tiles()
+            .union(&self.build_site_tiles())
+            .copied()
+            .collect();
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<FarmTile>>();
+        let grid = self.world.resource::<BaseGrid>();
+        let doomed: Vec<Entity> = query
+            .iter(&self.world)
+            .filter(|(_, p)| !grid.is_floor(p.x, p.y) || blocked.contains(&(p.x, p.y)))
+            .map(|(e, _)| e)
+            .collect();
+        let mut touched = HashSet::new();
+        for tile in doomed {
+            if let Some(t) = self.world.get::<FarmTile>(tile) {
+                touched.insert(t.plot);
+            }
+            self.world.despawn(tile);
+        }
+        for plot in touched {
+            self.despawn_plot_if_empty(plot);
+        }
+    }
+
     pub fn plot_recipe(&self, plot: Entity) -> Option<CropId> {
         self.world.get::<FarmPlot>(plot)?.recipe.clone()
     }

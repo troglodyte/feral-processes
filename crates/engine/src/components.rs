@@ -985,6 +985,14 @@ pub struct Stranded {
     pub since: u64,
 }
 
+/// Marks a stranded carrier whose load has been held past
+/// `tuning::STRANDED_SET_DOWN_TICKS` on a route that is still failing.
+/// Written only by `haul_step_system`'s route-failed branch and consumed by
+/// `Game::set_down_stranded_loads`, so the set-down keeps that branch's
+/// gate: a stale `Stranded` left on a re-posted body cannot trigger it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SetDownLoad;
+
 /// A posted walker paying `tuning::SQUEEZE_EXTRA_TICKS` to step into a cell
 /// another body holds — the step it is waiting to take, and when the wait
 /// began. `hauling::stride` is the one reader.

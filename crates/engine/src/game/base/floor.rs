@@ -221,19 +221,20 @@ impl Game {
         self.set_down(pos, units);
     }
 
-    /// Sets down the load of every body that has been stranded long enough.
-    /// A `Game` pass because a set-down needs the whole `World`.
+    /// Sets down the load of every body `haul_step_system` marked
+    /// `SetDownLoad`. A `Game` pass because a set-down needs the whole
+    /// `World`.
     pub(crate) fn set_down_stranded_loads(&mut self) {
-        let tick = self.world.resource::<crate::resources::GameClock>().tick;
-        let mut stranded: Vec<Entity> = self
+        let mut marked: Vec<Entity> = self
             .world
-            .query_filtered::<(Entity, &crate::components::Stranded), With<Carrying>>()
+            .query_filtered::<Entity, With<crate::components::SetDownLoad>>()
             .iter(&self.world)
-            .filter(|(_, s)| tick.saturating_sub(s.since) >= crate::tuning::STRANDED_SET_DOWN_TICKS)
-            .map(|(e, _)| e)
             .collect();
-        stranded.sort();
-        for who in stranded {
+        marked.sort();
+        for who in marked {
+            self.world
+                .entity_mut(who)
+                .remove::<crate::components::SetDownLoad>();
             self.drop_load(who);
         }
     }

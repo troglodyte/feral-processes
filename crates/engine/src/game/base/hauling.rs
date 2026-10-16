@@ -12,7 +12,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
-use crate::components::FloorItem;
+use crate::components::{FloorItem, SetDownLoad};
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::floor::take_floor_unit;
 use crate::game::base::work_orders;
@@ -1630,13 +1630,23 @@ pub(crate) fn haul_step_system(
             // forever. Past `STRANDED_SET_DOWN_TICKS` the load goes on the
             // floor around the carrier, which a later errand brings home;
             // `Game::set_down_stranded_loads` does it, after the schedule,
-            // because a set-down needs the whole `Game`.
+            // because a set-down needs the whole `Game`. The marker is
+            // written only here, where the route is known to be failing
+            // now, and only for a body that holds something.
             //
             // `CarryingProgram` is not handled here because it never walks:
             // a rack's carrier is picked up only from a rack already in
             // reach and loaded the next beat, so it cannot be stranded by a
             // route, and what holds it — a full hopper — is the rig's to
             // clear. A program is not a stock line the floor could hold.
+            if carrying.is_some()
+                && clock
+                    .tick
+                    .saturating_sub(stranded.map_or(clock.tick, |s| s.since))
+                    >= tuning::STRANDED_SET_DOWN_TICKS
+            {
+                commands.entity(worker).insert(SetDownLoad);
+            }
             continue;
         };
         commands.entity(worker).remove::<Stranded>();

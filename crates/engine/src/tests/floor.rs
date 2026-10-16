@@ -239,6 +239,23 @@ fn loaded_staff(game: &mut Game, x: i32, y: i32) -> Entity {
     worker
 }
 
+/// A builder re-posted from a stranded haul keeps its stale `Stranded`; the
+/// load it then lifts for a site must not be set down by the stranded pass.
+#[test]
+fn a_builder_with_a_stale_stranded_keeps_its_load() {
+    let mut g = game_with_home();
+    let worker = loaded_staff(&mut g, 6, 6);
+    g.world
+        .entity_mut(worker)
+        .insert(crate::components::Stranded { since: 0 });
+    for _ in 0..crate::tuning::STRANDED_SET_DOWN_TICKS + 5 {
+        g.tick();
+    }
+    g.set_down_stranded_loads();
+    assert!(g.world.get::<Carrying>(worker).is_some());
+    assert!(floor_things(&mut g).is_empty());
+}
+
 fn assert_dropped(game: &mut Game, worker: Entity, x: i32, y: i32) {
     assert!(
         game.world.get::<Carrying>(worker).is_none(),

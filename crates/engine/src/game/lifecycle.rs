@@ -511,6 +511,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            crops: crop_db,
             rooms: room_db,
             props: prop_db,
             nemesis: nemesis_db,
@@ -562,6 +563,7 @@ impl Game {
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(floor_db);
+        world.insert_resource(crop_db);
         world.insert_resource(room_db);
         world.insert_resource(prop_db);
         world.insert_resource(nemesis_db);
@@ -1478,6 +1480,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            crops: crop_db,
             rooms: room_db,
             props: prop_db,
             nemesis: nemesis_db,
@@ -1620,6 +1623,7 @@ impl Game {
         // behind — `BaseGrid::revert`'s own rule, applied once at load.
         load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
         world.insert_resource(floor_db);
+        world.insert_resource(crop_db);
         world.insert_resource(room_db);
         world.insert_resource(prop_db);
         world.insert_resource(data.base_grid);
@@ -3787,6 +3791,7 @@ struct AssetDbs {
     research: ResearchDb,
     rock: crate::rock::RockDb,
     floors: crate::floors::FloorDb,
+    crops: crate::crops::CropDb,
     rooms: crate::rooms::RoomDb,
     props: crate::tactical::props::PropDb,
     items: ItemDb,
@@ -3986,6 +3991,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // the pre-finish game.
     let (floors, floor_warnings) = crate::floors::FloorDb::load_dir(&assets_dir.join("floors"))?;
     warnings.extend(floor_warnings);
+    // Absent is silent: no crop means a farm plot has nothing to sow.
+    let (mut crops, crop_warnings) = crate::crops::CropDb::load_dir(&assets_dir.join("crops"))?;
+    warnings.extend(crop_warnings);
     let (rooms, room_warnings) = crate::rooms::RoomDb::load_dir(&assets_dir.join("rooms"))?;
     warnings.extend(room_warnings);
     // Absent is silent: an empty catalogue is the pre-prop battle map.
@@ -4016,6 +4024,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ));
         }
     }
+    warnings.extend(crops.drop_unknown_products(&items));
     Ok(AssetDbs {
         abilities,
         tools,
@@ -4040,6 +4049,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         rock,
         floors,
+        crops,
         rooms,
         props,
         items,

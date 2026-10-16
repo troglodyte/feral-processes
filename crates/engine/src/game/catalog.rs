@@ -56,6 +56,16 @@ impl Game {
             .collect()
     }
 
+    /// Every loaded crop, id-sorted (`CropDb::iter`'s own order) — the
+    /// plot picker's order.
+    pub fn crop_defs(&self) -> Vec<crate::crops::CropDef> {
+        self.world
+            .resource::<crate::crops::CropDb>()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
     /// Every loaded item definition, id-sorted (see `ItemDb::all`).
     ///
     /// It was `cfg(test)` on the stated grounds that nothing outside the

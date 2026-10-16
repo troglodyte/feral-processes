@@ -6228,3 +6228,16 @@ fn shipped_species_name_the_personalities_the_spec_assigns() {
         }
     }
 }
+
+#[test]
+fn the_shipped_power_cell_crop_produces_power_cells() {
+    let game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let crops = game.crop_defs();
+    let cell = crops
+        .iter()
+        .find(|c| c.id.as_str() == "power_cell")
+        .expect("the shipped power_cell crop loads");
+    assert_eq!(cell.produces.0, "power_cell");
+    assert_eq!(cell.stages, 4);
+    assert_eq!(cell.grow_ticks, 1200);
+}

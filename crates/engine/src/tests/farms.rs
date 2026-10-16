@@ -402,6 +402,23 @@ use crate::items::FloorThing;
 use crate::tuning::{FARM_DIMPLE_TICKS, FARM_HARVEST_TICKS};
 
 /// Slack for the walk from wherever an idle body was drifting out to a tile,
+#[test]
+fn farm_wants_count_as_jobs_but_never_as_unworked() {
+    let mut game = farm_base(54);
+    sown_plot(&mut game, (-3, 2), (-1, 2));
+    spawn_tamed(&mut game, 10, 3);
+
+    pass(&mut game, 3);
+    let demand = game.labour_demand();
+    assert!(
+        demand.wanted > demand.staff,
+        "precondition: the plot outruns the spare staff ({} wanted, {} staff)",
+        demand.wanted,
+        demand.staff
+    );
+    assert_eq!(game.unworked_total(), 0);
+}
+
 /// `base_space.rs`'s allowance.
 const WALK: usize = 20;
 

@@ -1628,6 +1628,12 @@ impl Game {
     ) -> std::collections::BTreeMap<crate::duties::Duty, usize> {
         let mut tally = std::collections::BTreeMap::new();
         for (post, kind) in posts {
+            // Farms are unlimited background work: a plot always has another
+            // tile to tend, so counting them would raise the staffing flag
+            // through every farm cycle. They stay in `wanted`.
+            if matches!(kind, TaskKind::Tend(_)) {
+                continue;
+            }
             let desc = self.post_desc(post, kind);
             if let Some(duty) = crate::duties::Duty::ALL
                 .into_iter()

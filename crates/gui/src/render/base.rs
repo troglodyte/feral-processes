@@ -67,6 +67,16 @@ const fn wash(alpha: f32) -> Color {
 const MARK_FILL: Color = wash(0.18);
 const MARK_EDGE: Color = wash(0.45);
 const PREVIEW_FILL: Color = wash(0.35);
+/// A stockpile zone's wash, off `palette::STOCKPILE` at the same strength as
+/// a committed dig mark's, so a cell that is both reads as both.
+const STOCKPILE_FILL: Color = Color::new(
+    hud::palette::STOCKPILE.r,
+    hud::palette::STOCKPILE.g,
+    hud::palette::STOCKPILE.b,
+    0.18,
+);
+/// The header `Mode::Stockpile` shows where the brush label otherwise sits.
+const STOCKPILE_HEADER: &str = "Stockpile zone — Space marks a box, Esc leaves";
 
 /// How strongly an Alt-held room tint covers the ground. Low enough that the
 /// floor finish and the biome pattern still read through it.
@@ -281,7 +291,12 @@ pub(super) fn draw_playing_base(
     // the mode's rules.
     let plan = app
         .excavate_cursor
-        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
+        .filter(|_| {
+            matches!(
+                app.mode,
+                Mode::Excavate | Mode::ExcavateBrush | Mode::Stockpile
+            )
+        })
         .map(|cursor| PlanCursor {
             cursor,
             anchor: app.excavate_anchor,
@@ -293,9 +308,12 @@ pub(super) fn draw_playing_base(
     // Gated on the mode rather than left to `excavate_brush_label`'s own
     // `None`, `plan`'s reason: a brush left over from the last visit must
     // not draw a header on the ordinary playing map.
-    let excavate_label = app
-        .excavate_brush_label()
-        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush));
+    let excavate_label = if app.mode == Mode::Stockpile {
+        Some(STOCKPILE_HEADER.to_string())
+    } else {
+        app.excavate_brush_label()
+            .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
+    };
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the
@@ -756,6 +774,8 @@ fn draw_surface_map(
     } else {
         Vec::new()
     };
+    // `marked`'s space rule; the engine answers empty outside base itself.
+    let stockpiles = game.stockpile_cells();
     // Read once for the whole map rather than per tile, and gated on the
     // space rather than on the flag alone: the tools arm the player's own
     // bump into rock, base space is the only place there is rock to bump
@@ -1595,6 +1615,7 @@ fn draw_surface_map(
     if base_pos.is_some() {
         draw_excavation_plan(
             painter,
+            &stockpiles,
             &marked,
             plan,
             |world| {
@@ -1800,6 +1821,7 @@ fn draw_excavate_label(
 #[allow(clippy::too_many_arguments)]
 fn draw_excavation_plan(
     painter: &Painter,
+    stockpiles: &[(i32, i32)],
     marked: &[DigMark],
     plan: Option<PlanCursor>,
     at: impl Fn((i32, i32)) -> (f32, f32),
@@ -1827,6 +1849,11 @@ fn draw_excavation_plan(
         }
         Some((px, py))
     };
+    // Zones first, under the plan: a standing wash that a dig mark or the
+    // preview box is drawn over rather than hidden by.
+    for &cell in stockpiles {
+        tile(cell, Some(STOCKPILE_FILL), None);
+    }
     // The plan itself, drawn under the cursor: a wash rather than a glyph,
     // because the cell underneath is already saying whether it is rock, cut
     // or floor and the mark is a second reading on top of that one.
@@ -5311,6 +5338,35 @@ mod tests {
         assert_eq!(health_color(0.0), hud::palette::OFFLINE);
     }
 
+    #[test]
+    fn a_stockpile_cell_draws_its_wash() {
+        let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_excavation_plan(
+                p,
+                &[(1, 1)],
+                &[],
+                None,
+                |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
+                CELL,
+                pane,
+            )
+        });
+        let want = bevy_egui::egui::Color32::from_rgba_unmultiplied(
+            (STOCKPILE_FILL.r * 255.0).round() as u8,
+            (STOCKPILE_FILL.g * 255.0).round() as u8,
+            (STOCKPILE_FILL.b * 255.0).round() as u8,
+            (STOCKPILE_FILL.a * 255.0).round() as u8,
+        );
+        assert!(
+            shapes.iter().any(|cs| matches!(
+                &cs.shape,
+                bevy_egui::egui::Shape::Rect(r) if r.fill == want
+            )),
+            "{shapes:?}"
+        );
+    }
+
     /// The plan pass draws the wash for every mark and a cut meter for the
     /// ones that still have a wall — and the cull the meter rides has to go
     /// on culling the wash with it.
@@ -5321,6 +5377,7 @@ mod tests {
             let (_, shapes) = with_painter(|p| {
                 draw_excavation_plan(
                     p,
+                    &[],
                     marks,
                     None,
                     |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),

@@ -46,6 +46,7 @@ pub mod splice_rig;
 pub(crate) mod sprite_forge;
 pub(crate) mod stack_market;
 pub(crate) mod stat_allocation;
+mod stockpile;
 pub(crate) mod tactical;
 pub(crate) mod telemetry;
 mod tools;

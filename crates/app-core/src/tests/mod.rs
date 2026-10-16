@@ -65,6 +65,7 @@ mod splice_rig;
 mod sprite_forge;
 mod stack;
 mod stack_market;
+mod stockpile;
 mod tactical;
 mod telemetry;
 mod tools;

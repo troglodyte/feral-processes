@@ -253,6 +253,21 @@ impl App {
                 }
                 return;
             }
+            // Stockpile zones share the plan's cursor and box, and the plan's
+            // reason for refusing out here.
+            GameKey::Char('z') => {
+                match self.game.as_ref().and_then(|g| g.base_pos()) {
+                    Some(party) => {
+                        self.excavate_cursor = Some(party);
+                        self.excavate_anchor = None;
+                        self.mode = Mode::Stockpile;
+                    }
+                    None => self.refuse(
+                        "Nowhere to mark a stockpile out here — the floor is through the anchor.",
+                    ),
+                }
+                return;
+            }
             GameKey::Char('t') => {
                 // Underground the same key opens whoever is selling *here*.
                 // The trader list would otherwise scan from a `Position`

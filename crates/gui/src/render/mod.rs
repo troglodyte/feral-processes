@@ -1681,7 +1681,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 153] = [
+    const ALL_MODES: [Mode; 154] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1764,6 +1764,7 @@ mod tests {
         Mode::FieldRoutineCell,
         Mode::Excavate,
         Mode::ExcavateBrush,
+        Mode::Stockpile,
         Mode::PutDown,
         Mode::Refactor,
         Mode::RefactorItem,
@@ -1910,7 +1911,7 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 28] = [
+    const NEEDS_PENDING_STATE: [Mode; 29] = [
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,
         Mode::ModPickAffix,
@@ -1936,6 +1937,7 @@ mod tests {
         Mode::Routines,
         Mode::FieldRoutineAlly,
         Mode::Excavate,
+        Mode::Stockpile,
         Mode::RefactorItem,
         Mode::DevelopProgram,
         Mode::ExtractPick,

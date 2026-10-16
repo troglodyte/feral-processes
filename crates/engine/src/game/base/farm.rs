@@ -13,6 +13,7 @@ use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{CropGrowth, FarmPlot, FarmTile, Position};
 use crate::crops::{CropDb, CropId};
+use crate::save;
 use crate::views::{FarmTileState, FarmTileView};
 
 /// Which of a crop's `stages` looks a tile at `elapsed` of `grow_ticks`
@@ -227,5 +228,75 @@ impl Game {
             .iter(&self.world)
             .map(|(e, p)| ((p.x, p.y), e))
             .collect()
+    }
+
+    /// Every plot for the save file: plots ordered by their first tile and
+    /// tiles by position, so two saves of one state encode identically.
+    pub(crate) fn farm_plot_saves(&mut self) -> Vec<save::FarmPlotSave> {
+        let mut by_plot: HashMap<Entity, Vec<save::FarmTileSave>> = HashMap::new();
+        let mut query = self.world.query::<(&Position, &FarmTile)>();
+        for (pos, tile) in query.iter(&self.world) {
+            by_plot
+                .entry(tile.plot)
+                .or_default()
+                .push(save::FarmTileSave {
+                    position: (pos.x, pos.y),
+                    growth: tile.growth,
+                });
+        }
+        let mut plots: Vec<save::FarmPlotSave> = by_plot
+            .into_iter()
+            .map(|(plot, mut tiles)| {
+                tiles.sort_unstable_by_key(|t| t.position);
+                save::FarmPlotSave {
+                    recipe: self.plot_recipe(plot),
+                    tiles,
+                }
+            })
+            .collect();
+        plots.sort_unstable_by_key(|p| p.tiles[0].position);
+        plots
+    }
+
+    /// Re-spawns each saved plot and its cells. A recipe the loaded `CropDb`
+    /// no longer resolves loads unsown with every cell fallow, and says so
+    /// (`restore_dig_sites`' shape). Whether a cell is still floor is left to
+    /// `prune_farm_tiles` on the first tick.
+    pub(crate) fn restore_farm_plots(&mut self, plots: Vec<save::FarmPlotSave>) {
+        for p in plots {
+            let Some(first) = p.tiles.first() else {
+                continue;
+            };
+            let first = first.position;
+            let mut recipe = p.recipe;
+            let mut keep_growth = true;
+            if let Some(id) = &recipe
+                && self.world.resource::<CropDb>().get(id).is_none()
+            {
+                self.log(format!(
+                    "dropped crop {id:?} from a plot at ({}, {}): no such crop is loaded",
+                    first.0, first.1
+                ));
+                recipe = None;
+                keep_growth = false;
+            }
+            let plot = self.world.spawn(FarmPlot { recipe }).id();
+            for t in p.tiles {
+                self.world.spawn((
+                    Position {
+                        x: t.position.0,
+                        y: t.position.1,
+                    },
+                    FarmTile {
+                        plot,
+                        growth: if keep_growth {
+                            t.growth
+                        } else {
+                            CropGrowth::Fallow
+                        },
+                    },
+                ));
+            }
+        }
     }
 }

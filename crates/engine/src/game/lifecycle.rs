@@ -1832,6 +1832,7 @@ impl Game {
         ));
 
         game.restore_dig_sites(data.dig_sites);
+        game.restore_farm_plots(data.farm_plots);
 
         // At most one creature may claim the weapon hand. Taken defensively
         // — the first wins and any others are ignored — rather than trusting
@@ -3309,6 +3310,8 @@ impl Game {
 
         let dig_sites = self.dig_site_saves_for();
 
+        let farm_plots = self.farm_plot_saves();
+
         let build_sites = self.build_site_saves_for();
 
         let caravans = self.caravan_saves_for();
@@ -3338,6 +3341,7 @@ impl Game {
             nests,
             traps,
             dig_sites,
+            farm_plots,
             build_sites,
             ruins: self
                 .world

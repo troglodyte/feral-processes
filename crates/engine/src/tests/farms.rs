@@ -271,3 +271,112 @@ fn a_build_request_on_a_plot_tile_removes_only_that_tile() {
         0
     );
 }
+
+fn tile_at(game: &mut Game, cell: (i32, i32)) -> Entity {
+    game.plot_tiles_by_cell()[&cell]
+}
+
+fn farm_save_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "feral_processes_farms_{tag}_{}.bin",
+        std::process::id()
+    ))
+}
+
+/// Per-plot position sets, so two views compare without comparing the plot
+/// `Entity`, which a load re-spawns.
+fn plots_by_cells(game: &Game) -> Vec<Vec<(i32, i32)>> {
+    let mut by_plot: std::collections::HashMap<Entity, Vec<(i32, i32)>> = Default::default();
+    for t in game.farm_tiles() {
+        by_plot.entry(t.plot).or_default().push(t.pos);
+    }
+    let mut groups: Vec<_> = by_plot.into_values().collect();
+    groups.sort();
+    groups
+}
+
+#[test]
+fn plots_recipes_and_growth_survive_a_save_and_load() {
+    let mut game = farm_base(40);
+    game.toggle_plot_box((-3, 2), (-1, 2));
+    game.toggle_plot_box((-3, 3), (-1, 3));
+    let sown = plot_of(&game, (-3, 2));
+    game.set_plot_recipe(sown, &"power_cell".into()).unwrap();
+    for (cell, growth) in [
+        ((-3, 2), CropGrowth::Fallow),
+        ((-2, 2), CropGrowth::Growing { elapsed: 37 }),
+        ((-1, 2), CropGrowth::Ripe),
+    ] {
+        let tile = tile_at(&mut game, cell);
+        set_growth(&mut game, tile, growth);
+    }
+    let before = game.farm_tiles();
+    let groups = plots_by_cells(&game);
+    assert_eq!(groups.len(), 2);
+
+    let path = farm_save_path("roundtrip");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after = loaded.farm_tiles();
+    assert_eq!(after.len(), before.len());
+    for (b, a) in before.iter().zip(&after) {
+        assert_eq!((b.pos, &b.crop, b.state), (a.pos, &a.crop, a.state));
+    }
+    assert_eq!(plots_by_cells(&loaded), groups);
+}
+
+#[test]
+fn a_plot_whose_crop_is_gone_loads_unsown_with_a_warning() {
+    let mut game = farm_base(41);
+    game.toggle_plot_box((-3, 2), (-1, 2));
+    let plot = plot_of(&game, (-3, 2));
+    game.set_plot_recipe(plot, &"power_cell".into()).unwrap();
+    let path = farm_save_path("retired");
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.farm_plots[0].recipe = Some(CropId::from("retired_crop"));
+    for t in &mut data.farm_plots[0].tiles {
+        t.growth = CropGrowth::Ripe;
+    }
+    crate::save::save_to_file(&path, &data).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let tiles = loaded.farm_tiles();
+    assert_eq!(tiles.len(), 3);
+    assert!(
+        tiles
+            .iter()
+            .all(|t| t.crop.is_none() && t.state == FarmTileState::Fallow)
+    );
+    let warned = loaded
+        .message_log(200)
+        .iter()
+        .filter(|l| l.text.contains("retired_crop"))
+        .count();
+    assert_eq!(warned, 1);
+    assert!(
+        loaded
+            .set_plot_recipe(tiles[0].plot, &"power_cell".into())
+            .is_ok()
+    );
+}
+
+#[test]
+fn a_save_written_before_farms_loads_with_none() {
+    let mut game = farm_base(42);
+    game.toggle_plot_box((-3, 2), (-1, 2));
+    let path = farm_save_path("prefarms");
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let start = text.find("farm_plots:").expect("the field is written");
+    let end = start + text[start..].find("\n    ],\n").unwrap() + "\n    ],".len();
+    let older = format!("{}{}", &text[..start], &text[end..]);
+    assert!(!older.contains("farm_plots"));
+    std::fs::write(&path, older).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(loaded.farm_tiles().is_empty());
+}

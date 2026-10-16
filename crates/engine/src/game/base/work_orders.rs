@@ -213,13 +213,39 @@ fn settable_machine(game: &Game, item: &ItemId) -> Option<StructureDef> {
         .cloned()
 }
 
-/// `chain_break`, except that an item some standing machine could be set to
-/// make is not refused: the order waits, stalled, until one is.
+/// `chain_break`, except that a break some standing machine could be set to
+/// mend is not refused: the order waits, stalled, until one is. One rule at
+/// every depth — the ordered item's own machine or an ingredient's.
 pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
-    let reason = chain_break(game, item)?;
-    (producers_of(game, item).is_empty() && settable_machine(game, item).is_some())
-        .then_some(())
-        .map_or(Some(reason), |()| None)
+    find_break(game, item)
+        .filter(|b| !b.waits)
+        .map(|b| b.reason)
+}
+
+/// Why a line cannot move, and whether setting a standing machine is all it
+/// would take — the one fact `order_refusal` needs that the sentence alone
+/// does not carry.
+struct ChainBreak {
+    reason: String,
+    waits: bool,
+}
+
+impl ChainBreak {
+    fn refused(reason: String) -> Self {
+        Self {
+            reason,
+            waits: false,
+        }
+    }
+
+    /// `no_producer`'s sentence, waiting exactly when it names a machine to
+    /// set rather than one to build.
+    fn no_producer(game: &Game, item: &ItemId) -> Self {
+        Self {
+            reason: no_producer(game, item),
+            waits: settable_machine(game, item).is_some(),
+        }
+    }
 }
 
 /// "an Extractor", "a Factory": a def name is player-facing and a mod's may
@@ -265,20 +291,25 @@ pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
 /// and nothing can be fed from it. `research_data` is refused on those
 /// terms, with its Research Node standing.
 pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
+    find_break(game, item).map(|b| b.reason)
+}
+
+/// `chain_break`, keeping whether the break waits on a setting.
+fn find_break(game: &Game, item: &ItemId) -> Option<ChainBreak> {
     let items = game.world.resource::<ItemDb>();
     if items.get(item.as_str()).is_none() {
-        return Some("No such item.".into());
+        return Some(ChainBreak::refused("No such item.".into()));
     }
     if items.get(item.as_str()).is_some_and(|d| d.banked) {
         let name = game.item_name(item);
-        return Some(format!(
+        return Some(ChainBreak::refused(format!(
             "{name} is banked as it is gathered — the base never holds a stock of it to order \
              against."
-        ));
+        )));
     }
     let machines = producers_of(game, item);
     if machines.is_empty() {
-        return Some(no_producer(game, item));
+        return Some(ChainBreak::no_producer(game, item));
     }
     // **One whole line is enough.** A second bench standing somewhere with
     // nothing beside it is a half-built plan, not a reason to refuse an
@@ -404,7 +435,7 @@ fn break_at(
     by_tile: &std::collections::HashMap<(i32, i32), Entity>,
     machine: Entity,
     seen: &mut std::collections::HashSet<Entity>,
-) -> Option<String> {
+) -> Option<ChainBreak> {
     if !seen.insert(machine) {
         return None;
     }
@@ -425,7 +456,7 @@ fn break_at(
             // a producer that exists but was not offered means no Depot —
             // and "build one" would tell the player to buy what they own.
             let Some(&far) = producers_of(game, &ingredient).first() else {
-                return Some(no_producer(game, &ingredient));
+                return Some(ChainBreak::no_producer(game, &ingredient));
             };
             let want = game.item_name(&ingredient);
             let maker = game
@@ -433,11 +464,11 @@ fn break_at(
                 .get::<Structure>(far)
                 .and_then(|s| db.get(&s.kind))
                 .map_or_else(|| want.to_string(), |d| d.name.clone());
-            return Some(format!(
+            return Some(ChainBreak::refused(format!(
                 "The {} can't reach your {maker}'s {want} — build a {maker} beside it, or a \
                  Depot to carry it over.",
                 def.name
-            ));
+            )));
         };
         if let Some(deeper) = break_at(game, by_tile, feeder, seen) {
             return Some(deeper);

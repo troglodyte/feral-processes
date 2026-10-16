@@ -632,6 +632,44 @@ fn an_order_for_an_item_no_machine_is_set_to_make_waits_stalled() {
     panic!("setting the machine should wake the order");
 }
 
+/// The top-level rule above, one link down: an ingredient whose only
+/// machine stands unset waits for a setting rather than refusing the order.
+#[test]
+fn an_order_whose_ingredient_machine_is_unset_waits_stalled() {
+    let mut game = powered_base(21018);
+    let extractor = spawn_machine_at(&mut game, "extractor", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::batch(item("bytecode_block"), 5))
+        .expect("accepted, to wait for the Extractor's setting");
+    let report = game.work_order_report();
+    assert_eq!(report[0].state, crate::views::OrderState::Stalled);
+    assert_eq!(
+        report[0].blocked_by.as_deref(),
+        Some("No way to make this — set an Extractor to Core Fragment.")
+    );
+
+    set_recipe(&mut game, extractor, "core_fragment");
+    for _ in 0..200 {
+        game.tick();
+        if game.work_order_report()[0].state != crate::views::OrderState::Stalled {
+            return;
+        }
+    }
+    panic!("setting the ingredient's machine should wake the order");
+}
+
+#[test]
+fn an_order_whose_ingredient_no_standing_machine_can_make_is_refused() {
+    let mut game = powered_base(21019);
+    spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    assert_eq!(
+        game.queue_work_order(WorkOrder::batch(item("bytecode_block"), 5)),
+        Err("No Core Fragment — build an Extractor to make it.".to_string())
+    );
+    assert!(game.work_orders().is_empty());
+}
+
 #[test]
 fn a_standing_order_stalls_when_its_machine_is_switched_and_resumes_when_set_back() {
     use crate::game::base::work_orders::{OrderStanding, standing_of};

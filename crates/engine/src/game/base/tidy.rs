@@ -11,7 +11,7 @@ use bevy_ecs::prelude::*;
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    Carrying, CarryingProgram, Downed, FloorItem, OffShift, Position, Task, Tidying, UnderStudy,
+    Carrying, CarryingProgram, FloorItem, Position, Task, Tidying, UnderStudy,
 };
 use crate::game::base::floor::take_floor_item;
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
@@ -63,8 +63,11 @@ impl Game {
         Some(TidyBoard { cells, loose })
     }
 
-    /// Whether `worker` may spend this beat on the errand. A body holding a
-    /// hauler's load or a carried program is mid-trip for somebody else.
+    /// Whether `worker` may spend this beat on the errand: on shift by the
+    /// scheduler's own test (`is_on_shift`), so a body the assignment is about
+    /// to free and set down never picks up what that pass would drop. A body
+    /// holding a hauler's load or a carried program is mid-trip for somebody
+    /// else.
     pub(crate) fn may_tidy(&self, worker: Entity, amenities: &Amenities) -> bool {
         let w = self.world.get_entity(worker).ok();
         let Some(w) = w else { return false };
@@ -73,12 +76,10 @@ impl Game {
             .is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
         on_floor
             && w.get::<Task>().is_none()
-            && w.get::<Downed>().is_none()
-            && w.get::<OffShift>().is_none()
             && w.get::<UnderStudy>().is_none()
             && w.get::<Carrying>().is_none()
             && w.get::<CarryingProgram>().is_none()
-            && !self.on_respite(worker, amenities)
+            && self.is_on_shift(worker, amenities)
     }
 
     /// One beat of the errand. Returns whether the body spent it.

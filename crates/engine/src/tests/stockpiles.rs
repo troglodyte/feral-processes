@@ -306,3 +306,27 @@ fn a_base_without_stockpiles_never_tidies() {
     assert_eq!(floor_things(&mut g), vec![((-3, 0), core())]);
     let _ = g.world.query::<&FloorItem>();
 }
+
+#[test]
+fn a_body_that_has_downed_tools_never_tidies() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world
+        .entity_mut(worker)
+        .insert(crate::components::Disgruntled {
+            grievance: crate::components::Grievance::DownedTools,
+            stranded: false,
+            told: false,
+        });
+    loose(&mut g, -3, 0);
+    // The drift alone: a full tick would run `update_disgruntled`, which
+    // clears the marker of a body whose morale is neutral.
+    for _ in 0..40 {
+        let amenities = g.amenities_for_test();
+        let bays = g.repair_bays();
+        g.drift_idle_staff_for_test(&[worker], &amenities, &bays);
+        assert!(g.world.get::<Tidying>(worker).is_none());
+    }
+    assert_eq!(floor_things(&mut g), vec![((-3, 0), core())]);
+}

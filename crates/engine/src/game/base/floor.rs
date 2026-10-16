@@ -116,6 +116,9 @@ impl Game {
     /// from a single search. What finds no tile goes to `stow`, so a set-down
     /// never destroys anything.
     pub(crate) fn set_down(&mut self, from: Position, things: Vec<FloorThing>) {
+        if things.is_empty() {
+            return;
+        }
         let cells = self.free_floor_cells(from, things.len());
         let mut things = things.into_iter();
         for (cell, thing) in cells.into_iter().zip(things.by_ref()) {

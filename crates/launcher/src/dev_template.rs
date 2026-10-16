@@ -782,13 +782,22 @@ mod tests {
                 *assembled.entry(item).or_insert(0) += 1;
             }
         }
-        // Observed 15 / 43 / 62. Each floor sits above the producing
-        // machine's output capacity (patch printer 15, factory 20, ice printer 15), and
-        // below what the run makes, so only continuing flow clears it.
+        // Observed 19 / 40 / 70. Each floor is read from the producing
+        // machine's output capacity in the asset and sits strictly above it,
+        // so a layout that filled the buffer once and stalled cannot clear
+        // it; only continuing flow does.
+        let capacity = |kind: &str| {
+            game.structure_defs()
+                .iter()
+                .find(|d| d.id == kind)
+                .unwrap_or_else(|| panic!("no {kind} def"))
+                .capacity
+        };
+        let (printer, factory) = (capacity("printer"), capacity("factory"));
         for (item, floor) in [
-            ("patch_routine", 11),
-            ("bytecode_block", 25),
-            ("ice_breaker", 30),
+            ("patch_routine", printer + 1),
+            ("bytecode_block", (factory + 1).max(25)),
+            ("ice_breaker", (printer + 1).max(30)),
         ] {
             let made = assembled.get(item).copied().unwrap_or(0);
             assert!(

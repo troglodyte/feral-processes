@@ -12,11 +12,12 @@ use bevy_ecs::system::SystemParam;
 
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
-use crate::components::FloorPile;
+use crate::components::FloorItem;
 use crate::game::base::collect::ORTHOGONAL;
-use crate::game::base::floor::{drop_load, take_from_pile};
+use crate::game::base::floor::take_floor_unit;
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
+use crate::items::FloorThing;
 use crate::items::ItemId;
 use crate::systems::{intake_recipe, produced_item};
 use crate::tuning::haul_walk_radius;
@@ -805,7 +806,7 @@ pub struct HaulGround<'w, 's> {
     roles: crate::game::party::Roles<'w, 's>,
     /// Loads on the floor, for `Errand::Pickup`. `Without<Tamed>` keeps its
     /// `&Position` disjoint from `Hauler`'s `&mut`.
-    piles: Query<'w, 's, (Entity, &'static Position, &'static FloorPile), Without<Tamed>>,
+    piles: Query<'w, 's, (Entity, &'static Position, &'static FloorItem), Without<Tamed>>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
@@ -874,16 +875,15 @@ enum Errand {
     /// Nothing to move. Stand at the post — and pick a load up if this is a
     /// machine that has one to shed.
     Tend(Entity),
-    /// Walk to the floor pile on `at` and lift `want` of `item` off it.
-    /// Carries the tile rather than leaning on the pile entity because the
+    /// Walk to the floor item `thing` on `at` and lift one unit of `item`.
+    /// Carries the tile rather than leaning on the item entity because the
     /// walk resolves its destination through the structures query and a
-    /// pile is not a structure; a pile is a one-cell post, reached from a
+    /// floor item is not a structure; it is a one-cell post, reached from a
     /// neighbouring tile like any other.
     Pickup {
-        pile: Entity,
+        thing: Entity,
         at: Position,
         item: ItemId,
-        want: u32,
     },
 }
 
@@ -1016,52 +1016,51 @@ fn note_haul(
     });
 }
 
-/// The pile a hauler with nothing else to do should fetch, and only when the
-/// machine has no output of its own to clear (`Errand::Tend`'s job).
+/// The floor item a hauler with nothing else to do should fetch, and only
+/// when the machine has no output of its own to clear (`Errand::Tend`'s job).
 ///
-/// Piles are tried nearest first and a pile's items lowest first, and the
-/// first that the walk reaches *and* some reachable depot takes wins: one
-/// pile nobody can use must not hide every other. The depot has to be
-/// reachable, not merely willing — lifting for a walled-in shelf is the
-/// lift, strand, set down, lift-again loop `Errand::Tend` also refuses.
+/// Items are tried nearest first, and the first plain `Item` that the walk
+/// reaches *and* some reachable depot takes wins: one item nobody can use
+/// must not hide every other. Gear and programs keep their identity and are
+/// never lifted. The depot has to be reachable, not merely willing — lifting
+/// for a walled-in shelf is the lift, strand, set down, lift-again loop
+/// `Errand::Tend` also refuses.
 fn pickup_errand(
     machine_is_clear: bool,
-    piles: &Query<(Entity, &Position, &FloorPile), Without<Tamed>>,
+    things: &Query<(Entity, &Position, &FloorItem), Without<Tamed>>,
     depots: &[(Entity, Position)],
     accepts: &impl Fn(Entity, &ItemId) -> bool,
-    reach_pile: &impl Fn(Position) -> bool,
+    reach_item: &impl Fn(Position) -> bool,
     reach_depot: &impl Fn(Entity, Position) -> bool,
     from: Position,
 ) -> Option<Errand> {
     if !machine_is_clear {
         return None;
     }
-    let mut ranked: Vec<_> = piles.iter().map(|(e, p, c)| (e, *p, c)).collect();
+    let mut ranked: Vec<_> = things
+        .iter()
+        .filter_map(|(e, p, f)| match &f.0 {
+            FloorThing::Item(item) => Some((e, *p, item)),
+            _ => None,
+        })
+        .collect();
     ranked.sort_by_key(|(_, p, _)| (chebyshev(*p, from), p.x, p.y));
     let mut depot_reach: HashMap<Entity, bool> = HashMap::new();
-    for (pile, at, contents) in ranked {
+    for (thing, at, item) in ranked {
         // Willingness first: it is a filter lookup, where the walk to the
-        // pile is a Dijkstra field, so a pile nobody wants costs no field.
-        let wanted: Vec<_> = contents
-            .items
-            .iter()
-            .filter(|&(item, _)| depots.iter().any(|&(d, _)| accepts(d, item)))
-            .collect();
-        if wanted.is_empty() || !reach_pile(at) {
+        // item is a Dijkstra field, so an item nobody wants costs no field.
+        if !depots.iter().any(|&(d, _)| accepts(d, item)) || !reach_item(at) {
             continue;
         }
-        for (item, &qty) in wanted {
-            let takes = depots.iter().any(|&(d, p)| {
-                accepts(d, item) && *depot_reach.entry(d).or_insert_with(|| reach_depot(d, p))
+        let takes = depots.iter().any(|&(d, p)| {
+            accepts(d, item) && *depot_reach.entry(d).or_insert_with(|| reach_depot(d, p))
+        });
+        if takes {
+            return Some(Errand::Pickup {
+                thing,
+                at,
+                item: item.clone(),
             });
-            if takes {
-                return Some(Errand::Pickup {
-                    pile,
-                    at,
-                    item: item.clone(),
-                    want: qty.min(tuning::HAUL_CARRY_CAPACITY),
-                });
-            }
         }
     }
     None
@@ -1481,18 +1480,13 @@ pub(crate) fn haul_step_system(
                             .insert(Carrying { item, qty: taken });
                     }
                 }
-                Errand::Pickup {
-                    pile, item, want, ..
-                } => {
+                Errand::Pickup { thing, item, .. } => {
                     // Queued: the take needs the whole `World`. Two haulers
-                    // sent to one pile resolve in queue order, the second
-                    // finding less or nothing and re-deriving next tick.
+                    // sent to one item resolve in queue order, the second
+                    // finding it gone and re-deriving next tick.
                     commands.queue(move |world: &mut World| {
-                        let taken = take_from_pile(world, pile, &item, want);
-                        if taken > 0 {
-                            world
-                                .entity_mut(worker)
-                                .insert(Carrying { item, qty: taken });
+                        if take_floor_unit(world, thing, &item) {
+                            world.entity_mut(worker).insert(Carrying { item, qty: 1 });
                         }
                     });
                 }
@@ -1624,30 +1618,25 @@ pub(crate) fn haul_step_system(
             // rewriting it every tick would leave nothing able to tell a
             // route that has just broken from one broken an hour ago. See
             // `components::Stranded`.
-            let Some(episode) = stranded else {
+            if stranded.is_none() {
                 commands
                     .entity(worker)
                     .insert(Stranded { since: clock.tick });
                 continue;
-            };
+            }
             // **A load held too long goes on the floor, never into the
             // void.** A carrier is never freed while it holds one, so a
             // stranding that waiting will not fix holds a body on shift
-            // forever. Past `STRANDED_SET_DOWN_TICKS` the load becomes a
-            // `FloorPile` on the carrier's own tile (`floor::drop_load`),
-            // which a later errand brings home. Queued rather than applied
-            // here because the drop needs the whole `World`.
+            // forever. Past `STRANDED_SET_DOWN_TICKS` the load goes on the
+            // floor around the carrier, which a later errand brings home;
+            // `Game::set_down_stranded_loads` does it, after the schedule,
+            // because a set-down needs the whole `Game`.
             //
             // `CarryingProgram` is not handled here because it never walks:
             // a rack's carrier is picked up only from a rack already in
             // reach and loaded the next beat, so it cannot be stranded by a
             // route, and what holds it — a full hopper — is the rig's to
-            // clear. A program is not a stock line a pile could hold.
-            if carrying.is_some()
-                && clock.tick.saturating_sub(episode.since) >= tuning::STRANDED_SET_DOWN_TICKS
-            {
-                commands.queue(move |world: &mut World| drop_load(world, worker));
-            }
+            // clear. A program is not a stock line the floor could hold.
             continue;
         };
         commands.entity(worker).remove::<Stranded>();

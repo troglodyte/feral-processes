@@ -757,9 +757,9 @@ fn draw_surface_map(
     // anchor. Ungated, the ring follows the party onto the zone map and
     // claims something the ground there cannot answer.
     let cutting = base_pos.is_some() && game.mining();
-    // Base space only, and `floor_piles` already answers empty elsewhere.
+    // Base space only, and `floor_items` already answers empty elsewhere.
     let piles: std::collections::HashSet<(i32, i32)> =
-        game.floor_piles().into_iter().map(|p| p.pos).collect();
+        game.floor_items().into_iter().map(|p| p.pos).collect();
     // Alt shows the rooms. `view_rooms` answers empty outside base space.
     let rooms = if reveal {
         game.view_rooms()
@@ -6118,13 +6118,12 @@ mod tests {
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         if pile {
-            data.floor_piles
-                .push(feral_processes_engine::save::FloorPileSave {
+            data.floor_items
+                .push(feral_processes_engine::save::FloorItemSave {
                     position: (at.0 + 1, at.1),
-                    items: vec![(
+                    thing: feral_processes_engine::items::FloorThing::Item(
                         feral_processes_engine::items::ItemId::from("core_fragment"),
-                        3,
-                    )],
+                    ),
                 });
         }
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();

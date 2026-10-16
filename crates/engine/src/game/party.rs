@@ -1151,7 +1151,7 @@ impl Game {
         // this program again, but it does not undo a posting already made,
         // and a party member left holding a `Task` is a body the base still
         // counts as standing at a machine.
-        crate::game::base::floor::drop_load(&mut self.world, creature);
+        self.drop_load(creature);
         self.world.entity_mut(creature).remove::<Task>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
@@ -1731,8 +1731,8 @@ impl Game {
             .0
             .retain(|&e| e != a && e != b);
         // A parent mid-haul: its load is set on the floor, not despawned.
-        crate::game::base::floor::drop_load(&mut self.world, a);
-        crate::game::base::floor::drop_load(&mut self.world, b);
+        self.drop_load(a);
+        self.drop_load(b);
         self.world.despawn(a);
         self.world.despawn(b);
         // After both despawns, so neither parent is a holder of the other's

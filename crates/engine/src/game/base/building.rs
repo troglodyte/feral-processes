@@ -2,7 +2,7 @@
 //! to work them.
 
 use crate::base_grid::BaseGrid;
-use crate::game::base::floor::{drop_load, nearest_free_cells};
+use crate::game::base::floor::nearest_free_cells;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
 use crate::systems::SiteScales;
@@ -1588,7 +1588,7 @@ impl Game {
                 // the kill. See `Game::return_carried_program`.
                 self.return_carried_program(worker);
                 self.world.entity_mut(worker).remove::<Task>();
-                drop_load(&mut self.world, worker);
+                self.drop_load(worker);
             }
             // What the building was *holding*, as against the share of its
             // build cost accumulated above: a Depot's shelf, a machine's
@@ -1868,7 +1868,7 @@ impl Game {
         }?;
         // A hauler displaced mid-carry keeps no `Task` to deliver under, so
         // its load goes to the floor instead of freezing in its hands.
-        drop_load(&mut self.world, holder);
+        self.drop_load(holder);
         self.world.entity_mut(holder).remove::<Task>();
         if holder == self.player_entity() {
             self.log_base("You break off what you were doing.");

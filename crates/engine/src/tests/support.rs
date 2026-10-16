@@ -3573,6 +3573,22 @@ pub(crate) fn lay_floor_box(game: &mut Game, a: (i32, i32), b: (i32, i32)) {
     }
 }
 
+/// A load of `qty` plain `item` units lies on the floor, one of them on `at`.
+#[track_caller]
+pub(crate) fn assert_load_on_floor(game: &mut Game, at: Position, item: &str, qty: u32) {
+    let thing = crate::items::FloorThing::Item(ItemId::from(item));
+    let cells: Vec<_> = floor_things(game)
+        .into_iter()
+        .filter(|(_, t)| *t == thing)
+        .map(|(c, _)| c)
+        .collect();
+    assert_eq!(cells.len(), qty as usize, "units of {item} on the floor");
+    assert!(
+        cells.contains(&(at.x, at.y)),
+        "none on its own tile {at:?}: {cells:?}"
+    );
+}
+
 /// Every floor item as `(cell, thing)`, sorted by cell.
 pub(crate) fn floor_things(game: &mut Game) -> Vec<((i32, i32), crate::items::FloorThing)> {
     let mut rows: Vec<_> = game

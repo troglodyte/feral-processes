@@ -333,9 +333,9 @@ impl Game {
         let underfoot: Vec<String> = finish_name
             .map(|name| format!("{name} underfoot"))
             .into_iter()
-            .chain(self.describe_floor_pile(bx + dx, by + dy))
+            .chain(self.describe_floor_item(bx + dx, by + dy))
             .collect();
-        // Capitalised here so a pile that leads the line reads like the
+        // Capitalised here so a floor item that leads the line reads like the
         // other examine lines; a finish name already is.
         let underfoot = (!underfoot.is_empty()).then(|| {
             let line = underfoot.join("; ");

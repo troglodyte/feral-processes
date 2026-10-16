@@ -1434,15 +1434,21 @@ pub struct RoomView {
     pub tint: (u8, u8, u8),
 }
 
-/// One floor pile as the base map draws it — see `Game::floor_piles`.
-///
-/// No glyph or colour: a pile is one mark whatever it holds, and that mark is
-/// the renderer's. `items` is display names in `ItemId` order.
+/// One floor item as the base map draws it — see `Game::floor_items`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FloorPileView {
+pub struct FloorItemView {
     /// **Base-space** coordinates.
     pub pos: (i32, i32),
-    pub items: Vec<(String, u32)>,
+    pub look: FloorLook,
+    /// Display name, for the examine line.
+    pub name: String,
+}
+
+/// What a floor item draws as. Gear uses its item's `floor_glyph()`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloorLook {
+    Item(char),
+    Program,
 }
 
 /// One outpost as the surface map marks it — see `Game::outpost_marks`.

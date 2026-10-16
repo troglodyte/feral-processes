@@ -943,23 +943,12 @@ pub struct Carrying {
     pub qty: u32,
 }
 
-/// Items on a base tile's floor: what an interrupted carrier let go of, until
-/// a hauler brings it home. One pile per tile (`base::floor::spawn_floor_pile`
-/// merges), no capacity so a drop can never fail, never decays, and despawned
-/// the moment it is empty. Deliberately has no `Glyph`: the many queries over
-/// `(&Position, &Glyph)` must not see it, and the renderer reads
-/// `Game::floor_piles` instead.
-#[derive(Component, Clone, Debug, Default)]
-pub struct FloorPile {
-    pub items: std::collections::BTreeMap<ItemId, u32>,
-}
-
 /// One thing on a base tile's floor, one per tile
 /// (`base::floor::spawn_floor_item` is the only writer and asserts the tile
 /// is empty), so a drop spreads over tiles rather than stacking. Deliberately
-/// has no `Glyph`, `FloorPile`'s reason: the many queries over
-/// `(&Position, &Glyph)` must not see it, and the renderer reads a `Game`
-/// view instead.
+/// has no `Glyph`, for the reason the many queries over
+/// `(&Position, &Glyph)` must not see it: the renderer reads
+/// `Game::floor_items` instead.
 #[derive(Component, Clone, Debug)]
 pub struct FloorItem(pub crate::items::FloorThing);
 
@@ -1243,7 +1232,7 @@ pub enum TaskKind {
     /// it mid-trip, because those units have already left the shelf they
     /// came off and the builder is the one walking them to the site. Paths
     /// that free the body anyway (displacement, sale) set the load on the
-    /// floor (`floor::drop_load`) for a hauler to bring home.
+    /// floor (`Game::drop_load`) for a hauler to bring home.
     Construct,
 }
 

@@ -1,51 +1,22 @@
 //! Loads on the floor: where a carrier's cargo goes when the carrier stops
 //! holding it for any reason but delivery.
 //!
-//! `drop_load` is the only way a `Carrying` ends other than delivery
-//! (`deposit` / `Load` at arrival). A later hauling errand brings the pile
-//! home.
+//! `Game::drop_load` is the only way a `Carrying` ends other than delivery
+//! (`deposit` / `Load` at arrival). It lays one unit per tile, and a later
+//! hauling errand brings each home.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{Carrying, FloorItem, FloorPile, Position};
+use crate::components::{Carrying, FloorItem, Position};
 use crate::game::base::hauling::Occupancy;
 use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
-use crate::save::FloorPileSave;
-use crate::views::FloorPileView;
-
-/// The one place a pile's component list is written, `spawn_structure`'s
-/// reason: a hand-written copy drifts silently. Merges into the pile already
-/// on the tile, so there is at most one per tile. A zero `qty` spawns nothing.
-pub(crate) fn spawn_floor_pile(world: &mut World, pos: Position, item: ItemId, qty: u32) {
-    if qty == 0 {
-        return;
-    }
-    if let Some(pile) = floor_pile_at(world, pos) {
-        let mut pile = world.get_mut::<FloorPile>(pile).expect("pile just found");
-        *pile.items.entry(item).or_insert(0) += qty;
-        return;
-    }
-    world.spawn((
-        FloorPile {
-            items: BTreeMap::from([(item, qty)]),
-        },
-        pos,
-    ));
-}
-
-/// The pile standing on `pos`, if any. A linear query: piles are few.
-pub(crate) fn floor_pile_at(world: &mut World, pos: Position) -> Option<Entity> {
-    world
-        .query::<(Entity, &Position, &FloorPile)>()
-        .iter(world)
-        .find(|(_, p, _)| p.x == pos.x && p.y == pos.y)
-        .map(|(e, _, _)| e)
-}
+use crate::save::{FloorItemSave, FloorPileSave};
+use crate::views::{FloorItemView, FloorLook};
 
 /// The one place a floor item's component list is written. One item per
 /// tile: callers pick a free cell through `Game::set_down`, and a second
@@ -69,7 +40,7 @@ pub(crate) fn floor_item_at(world: &mut World, pos: Position) -> Option<Entity> 
 }
 
 /// Picks `e` up off the floor: despawns it and returns what it held.
-#[expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")]
+#[expect(dead_code, reason = "stockpile hauling is its first caller")]
 pub(crate) fn take_floor_item(world: &mut World, e: Entity) -> Option<FloorThing> {
     let FloorItem(thing) = world.entity_mut(e).take::<FloorItem>()?;
     world.despawn(e);
@@ -78,7 +49,6 @@ pub(crate) fn take_floor_item(world: &mut World, e: Entity) -> Option<FloorThing
 
 /// Picks up `e` only if it is a plain `Item(item)`; gear and programs keep
 /// their identity, so a unit-by-id request must not swallow them.
-#[expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")]
 pub(crate) fn take_floor_unit(world: &mut World, e: Entity, item: &ItemId) -> bool {
     let matches = world
         .get::<FloorItem>(e)
@@ -87,38 +57,6 @@ pub(crate) fn take_floor_unit(world: &mut World, e: Entity, item: &ItemId) -> bo
         world.despawn(e);
     }
     matches
-}
-
-/// Puts `who`'s load on the floor of its tile and ends the hold. A no-op if
-/// `who` carries nothing or has no tile.
-pub(crate) fn drop_load(world: &mut World, who: Entity) {
-    let Some(pos) = world.get::<Position>(who).copied() else {
-        return;
-    };
-    let Some(load) = world.entity_mut(who).take::<Carrying>() else {
-        return;
-    };
-    spawn_floor_pile(world, pos, load.item, load.qty);
-}
-
-/// Takes up to `qty` of `item` from `pile`, despawning it once empty.
-/// Returns what was taken; 0 for a vanished pile or an item it lacks.
-pub(crate) fn take_from_pile(world: &mut World, pile: Entity, item: &ItemId, qty: u32) -> u32 {
-    let Some(mut contents) = world.get_mut::<FloorPile>(pile) else {
-        return 0;
-    };
-    let Some(held) = contents.items.get_mut(item) else {
-        return 0;
-    };
-    let taken = qty.min(*held);
-    *held -= taken;
-    if *held == 0 {
-        contents.items.remove(item);
-    }
-    if contents.items.is_empty() {
-        world.despawn(pile);
-    }
-    taken
 }
 
 /// The one predicate for "an item may be set down here", and for which cells
@@ -178,10 +116,6 @@ impl Game {
     /// Lays `things` on the floor around `from`, one per tile, nearest first
     /// from a single search. What finds no tile goes to `stow`, so a set-down
     /// never destroys anything.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")
-    )]
     pub(crate) fn set_down(&mut self, from: Position, things: Vec<FloorThing>) {
         let cells = self.free_floor_cells(from, things.len());
         let mut things = things.into_iter();
@@ -272,68 +206,132 @@ impl Game {
             .find(|e| self.rack_room(*e) > 0)
     }
 
-    /// Every pile on the base floor, for the map and the examine line. Empty
-    /// outside base space: a pile's `Position` is a base cell, and the surface
-    /// map would draw it on whatever tile shares the coordinates.
-    pub fn floor_piles(&self) -> Vec<FloorPileView> {
+    /// Puts `who`'s load on the floor around its tile, one unit per tile, and
+    /// ends the hold. A no-op if `who` carries nothing or has no tile.
+    pub(crate) fn drop_load(&mut self, who: Entity) {
+        let Some(pos) = self.world.get::<Position>(who).copied() else {
+            return;
+        };
+        let Some(load) = self.world.entity_mut(who).take::<Carrying>() else {
+            return;
+        };
+        let units = (0..load.qty)
+            .map(|_| FloorThing::Item(load.item.clone()))
+            .collect();
+        self.set_down(pos, units);
+    }
+
+    /// Sets down the load of every body that has been stranded long enough.
+    /// A `Game` pass because a set-down needs the whole `World`.
+    pub(crate) fn set_down_stranded_loads(&mut self) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        let mut stranded: Vec<Entity> = self
+            .world
+            .query_filtered::<(Entity, &crate::components::Stranded), With<Carrying>>()
+            .iter(&self.world)
+            .filter(|(_, s)| tick.saturating_sub(s.since) >= crate::tuning::STRANDED_SET_DOWN_TICKS)
+            .map(|(e, _)| e)
+            .collect();
+        stranded.sort();
+        for who in stranded {
+            self.drop_load(who);
+        }
+    }
+
+    /// Every thing on the base floor, for the map and the examine line. Empty
+    /// outside base space: a floor item's `Position` is a base cell, and the
+    /// surface map would draw it on whatever tile shares the coordinates.
+    pub fn floor_items(&self) -> Vec<FloorItemView> {
         if self.base_pos().is_none() {
             return Vec::new();
         }
-        let Some(mut query) = self.world.try_query::<(&Position, &FloorPile)>() else {
+        let Some(mut query) = self.world.try_query::<(&Position, &FloorItem)>() else {
             return Vec::new();
         };
-        let db = self.world.resource::<ItemDb>();
-        let mut rows: Vec<FloorPileView> = query
+        let mut rows: Vec<FloorItemView> = query
             .iter(&self.world)
-            .map(|(p, pile)| FloorPileView {
-                pos: (p.x, p.y),
-                items: pile
-                    .items
-                    .iter()
-                    .map(|(id, qty)| {
-                        let name = db
-                            .get(&id.0)
-                            .map_or_else(|| id.to_string(), |d| d.name.clone());
-                        (name, *qty)
-                    })
-                    .collect(),
+            .map(|(p, FloorItem(thing))| {
+                let (look, name) = match thing {
+                    FloorThing::Item(id) => (
+                        FloorLook::Item(self.item_floor_glyph(id)),
+                        self.item_name(id).to_string(),
+                    ),
+                    FloorThing::Gear(copy) => (
+                        FloorLook::Item(self.item_floor_glyph(&copy.item)),
+                        self.copy_name(copy),
+                    ),
+                    FloorThing::Program(program) => {
+                        (FloorLook::Program, self.downed_program_label(program))
+                    }
+                };
+                FloorItemView {
+                    pos: (p.x, p.y),
+                    look,
+                    name,
+                }
             })
             .collect();
         rows.sort_unstable_by_key(|r| r.pos);
         rows
     }
 
-    /// "a pile on the floor: 3 scrap, 1 wire" for the pile on `(x, y)`.
-    pub(crate) fn describe_floor_pile(&self, x: i32, y: i32) -> Option<String> {
-        let row = self.floor_piles().into_iter().find(|r| r.pos == (x, y))?;
-        let held: Vec<String> = row
-            .items
-            .iter()
-            .map(|(name, qty)| format!("{qty} {name}"))
-            .collect();
-        Some(format!("a pile on the floor: {}", held.join(", ")))
-    }
-
-    pub(crate) fn floor_pile_saves(&mut self) -> Vec<FloorPileSave> {
+    fn item_floor_glyph(&self, id: &ItemId) -> char {
         self.world
-            .query::<(&Position, &FloorPile)>()
-            .iter(&self.world)
-            .map(|(p, pile)| FloorPileSave {
-                position: (p.x, p.y),
-                items: pile.items.iter().map(|(i, n)| (i.clone(), *n)).collect(),
-            })
-            .collect()
+            .resource::<ItemDb>()
+            .get(&id.0)
+            .map_or(crate::items_db::DEFAULT_FLOOR_GLYPH, |d| d.floor_glyph())
     }
 
-    pub(crate) fn restore_floor_piles(&mut self, piles: Vec<FloorPileSave>) {
-        for saved in piles {
+    /// "Core Fragment on the floor" for the thing on `(x, y)`.
+    pub(crate) fn describe_floor_item(&self, x: i32, y: i32) -> Option<String> {
+        let row = self.floor_items().into_iter().find(|r| r.pos == (x, y))?;
+        Some(match row.look {
+            FloorLook::Item(_) => format!("{} on the floor", row.name),
+            FloorLook::Program => format!("{}, downed, on the floor", row.name),
+        })
+    }
+
+    pub(crate) fn floor_item_saves(&mut self) -> Vec<FloorItemSave> {
+        let mut saves: Vec<FloorItemSave> = self
+            .world
+            .query::<(&Position, &FloorItem)>()
+            .iter(&self.world)
+            .map(|(p, FloorItem(thing))| FloorItemSave {
+                position: (p.x, p.y),
+                thing: thing.clone(),
+            })
+            .collect();
+        saves.sort_by_key(|s| s.position);
+        saves
+    }
+
+    /// Every saved thing, and every unit of an old pile, is set down from its
+    /// own position: a free saved tile lands exactly, an old pile spreads,
+    /// and an overflow is stowed. Runs after structures so the grid and build
+    /// sites are in place for the free-tile test.
+    pub(crate) fn restore_floor_items(
+        &mut self,
+        items: Vec<FloorItemSave>,
+        legacy: Vec<FloorPileSave>,
+    ) {
+        for saved in items {
             let pos = Position {
                 x: saved.position.0,
                 y: saved.position.1,
             };
-            for (item, qty) in saved.items {
-                spawn_floor_pile(&mut self.world, pos, item, qty);
-            }
+            self.set_down(pos, vec![saved.thing]);
+        }
+        for saved in legacy {
+            let pos = Position {
+                x: saved.position.0,
+                y: saved.position.1,
+            };
+            let units = saved
+                .items
+                .into_iter()
+                .flat_map(|(item, qty)| (0..qty).map(move |_| FloorThing::Item(item.clone())))
+                .collect();
+            self.set_down(pos, units);
         }
     }
 }

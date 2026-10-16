@@ -3,7 +3,6 @@
 
 use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
-use crate::game::base::floor::drop_load;
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -1093,7 +1092,7 @@ impl Game {
                 // the component goes with it.
                 self.return_carried_program(w);
                 self.world.entity_mut(w).remove::<Task>();
-                drop_load(&mut self.world, w);
+                self.drop_load(w);
             }
             // The second of the two destruction paths for the rig's tool
             // too — see `Game::return_rig_tool`.

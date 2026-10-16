@@ -3,7 +3,7 @@
 
 use bevy_ecs::prelude::{Entity, With};
 
-use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
+use super::support::{assert_load_on_floor, scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
 use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Rarity, Structure};
 use crate::game::party::ProgramRole;
@@ -729,8 +729,7 @@ fn a_dispatch_charges_and_takes_the_bodies() {
 /// away, it is out of the labour pool and nothing would ever relieve it.
 #[test]
 fn a_dispatched_carrier_leaves_its_load_on_the_floor() {
-    use crate::components::{Carrying, FloorPile};
-    use crate::game::base::floor::floor_pile_at;
+    use crate::components::Carrying;
     use crate::items::ItemId;
 
     let (mut game, site, staff) = a_base_ready_to_dispatch(4613, 4, 500);
@@ -746,11 +745,7 @@ fn a_dispatched_carrier_leaves_its_load_on_the_floor() {
         .expect("a legal dispatch");
 
     assert!(game.world.get::<Carrying>(carrier).is_none());
-    let pile = floor_pile_at(&mut game.world, at).expect("a pile where it stood");
-    assert_eq!(
-        game.world.get::<FloorPile>(pile).unwrap().items.get(&item),
-        Some(&3)
-    );
+    assert_load_on_floor(&mut game, at, "core_fragment", 3);
 }
 
 /// The record stores the whole resolved site, never the id: a board that

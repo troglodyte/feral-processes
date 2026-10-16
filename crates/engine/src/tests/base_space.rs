@@ -5657,3 +5657,33 @@ fn a_plan_order_keeps_its_provenance_across_a_save() {
     );
     assert_eq!(loaded.work_orders().len(), 1);
 }
+
+/// Rock is cut straight ahead only. A diagonal swing could open a cell that
+/// touches the base at a corner alone, and the siege board's fill is
+/// four-way (`siege::board`), so a room dug that way would stand where no
+/// raid could reach it. Refused like a disarmed bump: free, no tick.
+#[test]
+fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
+    let mut game = game_with_a_base(3129);
+    game.enter_base().unwrap();
+    game.toggle_mining();
+    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
+    stand_in_base_at(&mut game, edge.0, edge.1);
+    let target = (edge.0 + 1, edge.1 - 1);
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(target.0, target.1),
+        "the fixture must be shoving at real rock"
+    );
+    let tick = game.current_tick();
+
+    game.move_player(1, -1);
+
+    assert_eq!(game.base_pos(), Some(edge));
+    assert_eq!(
+        game.current_tick(),
+        tick,
+        "a refused diagonal costs no turn"
+    );
+}

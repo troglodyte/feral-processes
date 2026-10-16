@@ -1095,6 +1095,35 @@ impl Game {
         rock_or_unfloored || self.barrier_at(x, y).is_some()
     }
 
+    /// A bump into solid base-space rock from the player's cell: a swing
+    /// when the tools are out and the cell is straight ahead, a free refusal
+    /// otherwise.
+    fn bump_rock(&mut self, (nx, ny): (i32, i32), diagonal: bool) {
+        // Armed first, and this is the whole of the toggle. Slice 2 made
+        // every bump a swing, which meant walking a corridor at a
+        // developed level took the corridor's corners out with you. A
+        // disarmed bump is refused for exactly as slice 1 refused it —
+        // free, no tick, nothing damaged — so the cost of the safety is
+        // a keypress and not a turn.
+        if !self.mining() {
+            self.log(
+                "You put a shoulder to the entropy and stop short.                      (Press n to cut.)",
+            );
+            return;
+        }
+        // Straight ahead only: a diagonal cut can open a cell that
+        // touches the base at a corner alone, and the siege board fills
+        // four ways, so a room dug that way would stand out of every
+        // raid's reach. Refused as the disarmed bump is — free, no tick.
+        if diagonal {
+            self.log("You can only cut rock straight ahead.");
+            return;
+        }
+        let player = self.player_entity();
+        self.strike_rock(player, nx, ny);
+        self.tick();
+    }
+
     pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
         let Some((x, y)) = self.base_pos() else {
             return;
@@ -1107,21 +1136,7 @@ impl Game {
         // wall is a thing you attack, and a swing costs the turn a step
         // would have. There is no new key and no direction prompt.
         if self.world.resource::<BaseGrid>().is_solid(nx, ny) {
-            // Armed first, and this is the whole of the toggle. Slice 2 made
-            // every bump a swing, which meant walking a corridor at a
-            // developed level took the corridor's corners out with you. A
-            // disarmed bump is refused for exactly as slice 1 refused it —
-            // free, no tick, nothing damaged — so the cost of the safety is
-            // a keypress and not a turn.
-            if !self.mining() {
-                self.log(
-                    "You put a shoulder to the entropy and stop short.                      (Press n to cut.)",
-                );
-                return;
-            }
-            let player = self.player_entity();
-            self.strike_rock(player, nx, ny);
-            self.tick();
+            self.bump_rock((nx, ny), dx != 0 && dy != 0);
             return;
         }
         // Solid rock already returned above, so this is either the dead

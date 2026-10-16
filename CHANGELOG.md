@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.35
+
+**On a battle map, programs and your character now glide from cell to cell, and the camera follows them smoothly.** Before, a body jumped a whole cell at a time and the camera lurched after every jump, so a walk read as a stutter. Holding a direction key keeps your character on its cell as it runs, so a blow struck straight after a run lands where you are drawn.
+
 ## 0.18.34
 
 **The numpad's corner keys (7, 9, 1, 3) now walk you diagonally on the map and inside your base, not only in battle-map fights.** Before, they did nothing outside a battle-map fight. Underground they still do nothing, because there you move by facing and turning.

@@ -246,6 +246,7 @@ impl App {
                         self.excavate_cursor = Some(party);
                         self.excavate_anchor = None;
                         self.excavate_brush = None;
+                        self.excavate_plot = false;
                         self.mode = Mode::Excavate;
                     }
                     None => self

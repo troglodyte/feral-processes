@@ -1988,6 +1988,9 @@ pub enum Mode {
     /// plain, every loaded finish, strip. A detour off the plan — picking a
     /// row or Esc lands back on it with the cursor and anchor untouched.
     ExcavateBrush,
+    /// A farm plot's recipe picker, `[c]` beside the plot. A plan like the
+    /// plot tool itself: choosing a row sows the plot and ticks nothing.
+    FarmRecipe,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -2493,6 +2496,7 @@ impl Mode {
             | Mode::Excavate
             // Opened from the plan only, the plan's own reason.
             | Mode::ExcavateBrush
+            | Mode::FarmRecipe
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop
@@ -3165,6 +3169,11 @@ pub struct App {
     /// would paint the first box drawn this time with a choice the player
     /// never made this session.
     pub excavate_brush: Option<FinishOrder>,
+    /// Whether the Excavation plan's boxes mark farm plots instead of
+    /// rock. Reset whenever the plan opens, the brush's reason.
+    pub excavate_plot: bool,
+    /// The plot `Mode::FarmRecipe` is choosing a recipe for.
+    pub pending_plot: Option<Entity>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

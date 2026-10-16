@@ -18,6 +18,8 @@ pub enum InteractionKind {
     Transfer,
     /// Commit a program to the rebuild site (the entity) on that tile.
     RebuildProgram(Entity),
+    /// Pick what the farm plot (the entity) grows.
+    Plot(Entity),
 }
 
 impl Game {
@@ -59,7 +61,32 @@ impl Game {
                 });
             }
         }
+        found.extend(self.plot_interactions(px, py));
         found
+    }
+
+    /// One interaction per distinct farm plot with a tile orthogonally
+    /// beside the party. Standing on a tile alone offers nothing: `[c]`
+    /// aims at a neighbour. None when no crop is loaded, since a plot with
+    /// nothing to grow has no picker to open.
+    fn plot_interactions(&self, px: i32, py: i32) -> Vec<Interaction> {
+        if self.crop_defs().is_empty() {
+            return Vec::new();
+        }
+        let tiles = self.farm_tiles();
+        let mut out: Vec<Interaction> = Vec::new();
+        for (dx, dy) in ORTHOGONAL {
+            for t in tiles.iter().filter(|t| t.pos == (px + dx, py + dy)) {
+                let kind = InteractionKind::Plot(t.plot);
+                if out.iter().all(|i| i.kind != kind) {
+                    out.push(Interaction {
+                        dir: (dx, dy),
+                        kind,
+                    });
+                }
+            }
+        }
+        out
     }
 
     /// The side the transfer's first shelf or rack is on, falling back to

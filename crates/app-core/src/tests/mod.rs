@@ -22,6 +22,7 @@ mod dossier;
 mod ending;
 mod excavate;
 mod extraction;
+mod farms;
 mod field;
 mod fusion;
 mod gear_inspect;

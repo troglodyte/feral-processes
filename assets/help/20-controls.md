@@ -62,7 +62,7 @@ Acting on the world:
   own tile wears a blue ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and, with the default brush, floored; F opens the brush list to pick plain, a floor colour or
-  strip. Drawing a plan costs no time.
+  strip. P switches to marking a farm plot instead. Drawing a plan costs no time.
 - < — phase up into the base, standing on the anchor
 - > — phase back down to the grid, at the exit
 

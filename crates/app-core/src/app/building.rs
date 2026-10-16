@@ -759,6 +759,10 @@ impl App {
                 self.menu_selected = 0;
                 self.mode = Mode::BuildProgram;
             }
+            InteractionKind::Plot(plot) => {
+                self.pending_plot = Some(plot);
+                self.mode = Mode::FarmRecipe;
+            }
         }
     }
 

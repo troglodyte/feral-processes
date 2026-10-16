@@ -588,3 +588,32 @@ fn an_unreachable_plot_tile_is_dropped_silently() {
     });
     assert!(!said, "a sealed plot tile must be dropped without a word");
 }
+
+#[test]
+fn standing_beside_a_plot_offers_it_on_c() {
+    let mut game = farm_base(60);
+    let hw = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    game.toggle_plot_box((hw - 1, 0), (hw - 1, 0));
+    let plot = plot_of(&game, (hw - 1, 0));
+    let offered = game.adjacent_interactions();
+    let found = offered
+        .iter()
+        .find(|i| i.kind == InteractionKind::Plot(plot))
+        .expect("the plot beside the party is offered");
+    assert_eq!(found.dir, (-1, 0));
+
+    stand_in_base_at(&mut game, hw - 3, 0);
+    assert!(
+        game.adjacent_interactions()
+            .iter()
+            .all(|i| i.kind != InteractionKind::Plot(plot)),
+        "one step away the plot is not offered"
+    );
+    stand_in_base_at(&mut game, hw - 1, 0);
+    assert!(
+        game.adjacent_interactions()
+            .iter()
+            .all(|i| i.kind != InteractionKind::Plot(plot)),
+        "standing on a plot tile alone does not offer it"
+    );
+}

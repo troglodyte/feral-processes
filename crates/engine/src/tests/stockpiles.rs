@@ -181,6 +181,7 @@ fn a_program_handed_a_task_mid_carry_sets_its_item_down() {
         required: 10,
     });
     g.tick();
+    assert!(g.world.get::<Task>(worker).is_some(), "the task was kept");
     assert!(g.world.get::<Tidying>(worker).is_none());
     assert_eq!(floor_things(&mut g).len(), 1);
 }
@@ -540,4 +541,43 @@ fn a_pack_still_feeds_a_build_when_no_shelf_or_stockpile_holds_it() {
         g.tick();
         ticks += 1;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Final-review fixes: nothing a tidier holds is destroyed or hidden.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn committing_a_tidier_to_a_build_sets_its_item_down() {
+    let mut g = game_with_home();
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world
+        .entity_mut(worker)
+        .insert((at(6, 6), Tidying(core())));
+    let snapshot = g.commit_program(worker);
+    assert!(snapshot.is_some(), "premise: the commit went through");
+    assert_eq!(floor_things(&mut g), vec![((6, 6), core())]);
+}
+
+#[test]
+fn a_floor_item_under_a_standing_structure_is_moved_off_its_footprint() {
+    let mut g = game_with_home();
+    loose(&mut g, 3, 3);
+    spawn_structure_at(&mut g, "wall", 3, 3);
+    let before = floor_things(&mut g);
+    assert_eq!(before, vec![((3, 3), core())]);
+    g.displace_floor_items_from(&[(3, 3)]);
+    let after = floor_things(&mut g);
+    assert_eq!(after.len(), 1, "conserved: {after:?}");
+    assert_ne!(after[0].0, (3, 3));
+}
+
+#[test]
+fn placing_a_structure_over_a_floor_item_keeps_the_item_on_open_floor() {
+    let mut g = game_with_home();
+    loose(&mut g, 3, 3);
+    g.place_structure("wall", 3, 3, None).unwrap();
+    let things = floor_things(&mut g);
+    assert_eq!(things.len(), 1, "conserved: {things:?}");
+    assert_ne!(things[0].0, (3, 3), "left under the site");
 }

@@ -448,4 +448,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**
 
-- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is its one writer and `Game::set_down` its one door.**
+- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**

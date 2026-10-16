@@ -18,8 +18,9 @@ use crate::game::base::hauling::{at_station, crew_reach, reaches};
 use crate::game::base::offshift::Amenities;
 
 /// The beat's tidying work, both lists `(x, y)`-sorted. Shared by every
-/// tidier in the pass and shrunk as bodies claim from it, so two of them are
-/// not sent for the same item or the same cell in one beat.
+/// tidier in the pass. An entry leaves only when its item is picked up or its
+/// cell is filled, so two bodies may head for the same one; the arrival
+/// checks (a free cell, an item still lying there) are what keep that correct.
 pub(crate) struct TidyBoard {
     /// Free stockpile cells.
     cells: Vec<Position>,
@@ -99,6 +100,9 @@ impl Game {
         if holding && board.cells.is_empty() {
             self.drop_load(worker);
             return true;
+        }
+        if !holding && board.cells.is_empty() {
+            return false;
         }
         let blocked = self.blocked_tiles().rigid();
         let grid = self.world.resource::<BaseGrid>();

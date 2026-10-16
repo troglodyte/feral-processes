@@ -1299,6 +1299,7 @@ impl Game {
         if displaced {
             self.unequip(player, EquipmentSlot::Weapon)?;
         }
+        self.drop_load(creature);
         self.remove_companion(creature);
         self.world.insert_resource(WieldedProgram(Some(creature)));
         let name = self.creature_label(creature);
@@ -1972,6 +1973,9 @@ impl Game {
         if self.world.get::<crate::components::PostedAt>(e).is_some() {
             return None;
         }
+        // A tidier's item rides in the body, not the snapshot; the snapshot
+        // is what a finished build consumes, and the item would go with it.
+        self.drop_load(e);
         let snapshot = self.creature_save_for(e)?;
         self.world.resource_mut::<Party>().0.retain(|&x| x != e);
         self.world.despawn(e);

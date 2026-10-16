@@ -2552,6 +2552,7 @@ impl Game {
             // body with nothing else to do does. The wander is what a sharing
             // body gets, for the reason the rest of the arms are gated.
             if !sharing
+                && board.is_some()
                 && self.may_tidy(worker, amenities)
                 && board.as_mut().is_some_and(|b| self.tidy_step(worker, b))
             {

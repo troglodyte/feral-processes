@@ -583,11 +583,11 @@ impl Game {
                 // be standing on it now. Moved aside here rather than kept
                 // off the site for its whole life, because only the raise
                 // turns the ground into a building.
-                self.displace_bodies_from(&crate::tactical::footprint_cells_at(
-                    (target.x, target.y),
-                    def.footprint,
-                ));
+                let footprint =
+                    crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
+                self.displace_bodies_from(&footprint);
                 self.spawn_structure(&def, target.x, target.y, quality);
+                self.displace_floor_items_from(&footprint);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
             }
             BuildGoal::Upgrade { to_tier } => {

@@ -572,7 +572,7 @@
   Coils are spent per defence event, not per point (a turret authors
   `raid_defense: 1`, `damage: 8`), and the garrison is never gated.
 
-- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is its one writer and `Game::set_down` its one door.**
+- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**
   A merge or quantity field compiles and silently reintroduces stacking, and
   every reader of a tile then sees one thing where there may be two. A second
   search for free cells drifts from the walking-distance BFS
@@ -585,4 +585,6 @@
   a program does not fit it. Stockpile cells live on `BaseGrid` as a set, not
   in a new `Resource`, because a new `Resource` shifts query iteration order
   and every seeded test with it. Only `FloorThing::Item` on a stockpile cell
-  is stock, and only through `stock::stockpiled`.
+  is stock, and only through `stock::stockpiled`. A structure or site raised
+  over a floor item relocates it through `displace_floor_items_from`, and
+  committing, wielding or posting a tidier sets its item down first.

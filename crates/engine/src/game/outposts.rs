@@ -164,6 +164,7 @@ impl Game {
                 "That outpost's crew is full ({OUTPOST_CREW_CAP}/{OUTPOST_CREW_CAP})."
             ));
         }
+        self.drop_load(creature);
         // `pin_subject`'s own order: the marker first, the stale job after
         // — a posted program is `Staff` until this insert lands, so
         // `role_of` never sees the `Task` on its own and the job has to be
@@ -1095,6 +1096,41 @@ mod tests {
             "posting must free a stale job the same way pinning does"
         );
         assert_eq!(game.outpost_crew(tile), vec![program]);
+    }
+
+    #[test]
+    fn posting_a_tidier_sets_its_held_item_down() {
+        let mut game = game(22);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let program = staff(&mut game);
+        let core = crate::items::FloorThing::Item(crate::items::ItemId::from(
+            crate::items::ids::CORE_FRAGMENT,
+        ));
+        game.world
+            .entity_mut(program)
+            .insert(crate::components::Tidying(core));
+        let accounted = |game: &mut Game| {
+            let pack = game
+                .world
+                .get::<crate::components::Inventory>(game.player_entity())
+                .map_or(0, |i| {
+                    i.count(&crate::items::ItemId::from(
+                        crate::items::ids::CORE_FRAGMENT,
+                    ))
+                });
+            crate::tests::support::floor_things(game).len() + pack as usize
+        };
+        let before = accounted(&mut game);
+
+        game.post_to_outpost(tile, program).unwrap();
+
+        assert!(
+            game.world
+                .get::<crate::components::Tidying>(program)
+                .is_none()
+        );
+        let after = accounted(&mut game);
+        assert_eq!(after, before + 1, "the item is on the floor or in the pack");
     }
 
     #[test]

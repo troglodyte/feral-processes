@@ -49,6 +49,9 @@ pub(crate) fn output_buffers(game: &Game) -> impl Iterator<Item = (&Structure, &
 /// is not an `Item` and never appears here.
 pub(crate) fn stockpiled(game: &Game) -> Vec<(Position, Entity, ItemId)> {
     let grid = game.world.resource::<BaseGrid>();
+    if grid.stockpile_cells().next().is_none() {
+        return Vec::new();
+    }
     let mut rows: Vec<_> = game
         .world
         .iter_entities()

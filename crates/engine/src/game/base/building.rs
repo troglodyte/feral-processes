@@ -324,8 +324,10 @@ impl Game {
     /// a program standing on the footprint aside the same way.
     fn spawn_build_site(&mut self, site: BuildSite, x: i32, y: i32) -> Entity {
         let side = self.structure_footprint(&site.structure);
-        self.displace_bodies_from(&crate::tactical::footprint_cells_at((x, y), side));
-        self.world
+        let footprint = crate::tactical::footprint_cells_at((x, y), side);
+        self.displace_bodies_from(&footprint);
+        let site = self
+            .world
             .spawn((
                 site,
                 Position { x, y },
@@ -340,7 +342,9 @@ impl Game {
                     color: GlyphColor::Orange,
                 },
             ))
-            .id()
+            .id();
+        self.displace_floor_items_from(&footprint);
+        site
     }
 
     /// Whether a siege is under way: an open tactical fight seated as one.

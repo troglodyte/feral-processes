@@ -225,6 +225,26 @@ impl Game {
         self.set_down(pos, things);
     }
 
+    /// Lifts every floor item on `footprint` and sets it down again beside
+    /// it. Called once the structure or site exists, so the search skips the
+    /// footprint: an item under a building could not be picked up, and a
+    /// reload would move it.
+    pub(crate) fn displace_floor_items_from(&mut self, footprint: &[(i32, i32)]) {
+        let mut lifted: Vec<(Position, Entity)> = self
+            .world
+            .query::<(Entity, &Position, &FloorItem)>()
+            .iter(&self.world)
+            .filter(|(_, p, _)| footprint.contains(&(p.x, p.y)))
+            .map(|(e, p, _)| (*p, e))
+            .collect();
+        lifted.sort_by_key(|(p, e)| (p.x, p.y, *e));
+        for (at, e) in lifted {
+            if let Some(thing) = take_floor_item(&mut self.world, e) {
+                self.set_down(at, vec![thing]);
+            }
+        }
+    }
+
     /// Sets down the load of every body `haul_step_system` marked
     /// `SetDownLoad`. A `Game` pass because a set-down needs the whole
     /// `World`.

@@ -767,3 +767,36 @@ fn a_stall_line_names_the_product() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn an_unresearched_recipe_is_neither_listed_nor_orderable() {
+    let mut game = bare_game();
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "assembler")
+        .unwrap();
+    game.spawn_structure(&def, 40, 40, None);
+    let hardened = item("hardened_shell");
+    assert!(
+        !game.orderable_items().iter().any(|(id, _)| *id == hardened),
+        "the picker lists a row the recipe menu hides"
+    );
+    assert!(
+        game.queue_work_order(WorkOrder::batch(hardened, 1))
+            .is_err(),
+        "an order nothing can be set to satisfy is refused"
+    );
+}
+
+#[test]
+fn a_contract_never_asks_for_an_unresearched_machine_output() {
+    let mut game = bare_game();
+    let items = game.template_pools().items;
+    for gated in ["cache_grain", "raw_trace"] {
+        assert!(
+            !items.iter().any(|(id, _)| id.as_str() == gated),
+            "{gated} is only made by a recipe still behind research"
+        );
+    }
+}

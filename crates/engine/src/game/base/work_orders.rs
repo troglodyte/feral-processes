@@ -206,7 +206,10 @@ fn settable_machine(game: &Game, item: &ItemId) -> Option<StructureDef> {
     game.world
         .iter_entities()
         .filter_map(|e| db.get(&e.get::<Structure>()?.kind))
-        .find(|def| def.machine_recipe(item).is_some())
+        .find(|def| {
+            def.machine_recipe(item)
+                .is_some_and(|r| r.research.as_ref().is_none_or(|id| game.is_researched(id)))
+        })
         .cloned()
 }
 

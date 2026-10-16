@@ -731,7 +731,16 @@ impl Game {
         let printed: Vec<ItemId> = structures
             .all()
             .filter(|def| self.structure_unlocked(&def.id))
-            .flat_map(|def| def.productions().map(|p| p.recipe.produces.clone()))
+            .flat_map(|def| {
+                def.productions()
+                    .filter(|p| {
+                        p.recipe
+                            .research
+                            .as_ref()
+                            .is_none_or(|r| self.is_researched(r))
+                    })
+                    .map(|p| p.recipe.produces.clone())
+            })
             .collect();
         self.world
             .resource::<crate::items_db::ItemDb>()

@@ -1616,8 +1616,7 @@ fn draw_surface_map(
                     pane,
                 )
             },
-            tile_px,
-            glyph_px,
+            (tile_px, glyph_px),
             pane,
         );
     }
@@ -1849,8 +1848,7 @@ fn draw_farm_plots(
     occupied: &std::collections::HashSet<(i32, i32)>,
     dims: &std::collections::HashMap<(i32, i32), f32>,
     at: impl Fn((i32, i32)) -> (f32, f32),
-    tile_px: f32,
-    glyph_px: u16,
+    (tile_px, glyph_px): (f32, u16),
     pane: Rect,
 ) {
     for tile in tiles {
@@ -6257,6 +6255,12 @@ mod tests {
     /// A base with a Home and one farm plot a cell off the party's, with a
     /// pile under the same cell when `pile`.
     fn base_with_a_plot(seed: u32, recipe: Option<&str>, pile: bool) -> Game {
+        base_with_a_plot_at(seed, recipe, pile, 1)
+    }
+
+    /// `base_with_a_plot` with the plot `dx` cells east of the party, so 0
+    /// puts it under the party's own glyph.
+    fn base_with_a_plot_at(seed: u32, recipe: Option<&str>, pile: bool, dx: i32) -> Game {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
@@ -6267,7 +6271,7 @@ mod tests {
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
-        let cell = (at.0 + 1, at.1);
+        let cell = (at.0 + dx, at.1);
         data.farm_plots
             .push(feral_processes_engine::save::FarmPlotSave {
                 recipe: recipe.map(Into::into),
@@ -6331,8 +6335,7 @@ mod tests {
                 &occupied,
                 &dims,
                 |_| (10.0, 10.0),
-                32.0,
-                24,
+                (32.0, 24),
                 pane,
             );
         });
@@ -6373,6 +6376,13 @@ mod tests {
         };
         assert_eq!(count(Some("power_cell")), 1);
         assert_eq!(count(None), 0);
+    }
+
+    #[test]
+    fn a_crop_never_draws_over_a_glyph_already_on_the_cell() {
+        let drawn =
+            painted_on_a_plot_base(base_with_a_plot_at(560_302, Some("power_cell"), false, 0));
+        assert_eq!(drawn.iter().filter(|g| g.as_str() == "+").count(), 0);
     }
 
     #[test]

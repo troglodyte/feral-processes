@@ -2496,6 +2496,7 @@ impl Mode {
             | Mode::Excavate
             // Opened from the plan only, the plan's own reason.
             | Mode::ExcavateBrush
+            // Opened by `[c]` on the map beside a plot, a plan like the above.
             | Mode::FarmRecipe
             | Mode::Refactor
             | Mode::RefactorItem

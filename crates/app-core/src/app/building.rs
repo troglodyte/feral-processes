@@ -774,12 +774,25 @@ impl App {
         let Some(dir) = direction_of(key) else {
             return;
         };
-        let found = self
-            .game
-            .as_ref()
-            .and_then(|g| g.adjacent_interactions().into_iter().find(|i| i.dir == dir));
+        let found = self.game.as_ref().and_then(|g| {
+            let all = g.adjacent_interactions();
+            all.iter()
+                .find(|i| i.dir == dir)
+                .map(|i| i.kind)
+                .or_else(|| {
+                    // A plot is offered once, on the first side holding one of
+                    // its tiles; pressing any other side where a tile of it
+                    // visibly is must open it too.
+                    let (px, py) = g.base_pos()?;
+                    let cell = (px + dir.0, py + dir.1);
+                    let tile = g.farm_tiles().into_iter().find(|t| t.pos == cell)?;
+                    all.iter()
+                        .map(|i| i.kind)
+                        .find(|k| *k == InteractionKind::Plot(tile.plot))
+                })
+        });
         match found {
-            Some(i) => self.run_interaction(i.kind),
+            Some(kind) => self.run_interaction(kind),
             None => {
                 self.refuse("Nothing to do that way.");
                 self.mode = Mode::Playing;

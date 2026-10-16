@@ -42,6 +42,8 @@ when it:
 A crop whose `produces` names no loaded item is dropped with a warning once
 items have loaded.
 
+Two files with the same `id` do not warn: the last one in path order wins.
+
 ## No cost field
 
 There is deliberately no cost or input field: sowing is paid in labour, not

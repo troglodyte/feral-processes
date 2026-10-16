@@ -182,11 +182,12 @@ impl App {
         if self.excavate_plot {
             return Some("Tool: farm plot [P]".to_string());
         }
-        let defs = self.game.as_ref()?.floor_defs();
-        if defs.is_empty() {
-            return None;
-        }
-        Some(match &self.excavate_brush {
+        let game = self.game.as_ref()?;
+        let defs = game.floor_defs();
+        // `[P]` is advertised whenever it works, so a player with crops
+        // loaded can find the tool before ever pressing it.
+        let plot_hint = (!game.crop_defs().is_empty()).then_some("plot [P]");
+        let brush = (!defs.is_empty()).then(|| match &self.excavate_brush {
             None => "Brush: plain [F]".to_string(),
             Some(FinishOrder::Apply(id)) => {
                 let name = defs
@@ -197,7 +198,13 @@ impl App {
                 format!("Brush: {name} [F]")
             }
             Some(FinishOrder::Strip) => "Brush: strip [F]".to_string(),
-        })
+        });
+        match (brush, plot_hint) {
+            (Some(b), Some(h)) => Some(format!("{b} \u{b7} {h}")),
+            (Some(b), None) => Some(b),
+            (None, Some(h)) => Some(h.to_string()),
+            (None, None) => None,
+        }
     }
 
     /// The recipe picker's rows, every loaded crop in id order — the one

@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 8];
+    let mut seen = [false; 9];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -321,6 +321,7 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Hold { .. } => 5,
             Objective::Perform { .. } => 6,
             Objective::Standing { .. } => 7,
+            Objective::Configure { .. } => 8,
         };
         seen[slot] = true;
     }
@@ -2802,6 +2803,7 @@ fn hold_is_met_by_what_the_player_is_carrying() {
         depth: 0,
         zone: 1,
         standing: Vec::new(),
+        configured: Vec::new(),
         carried: vec![(ItemId::from(crate::items::ids::CORE_FRAGMENT), 11)],
         posted: false,
     };
@@ -2839,6 +2841,7 @@ fn hold_is_not_met_by_an_empty_pack() {
         depth: 0,
         zone: 1,
         standing: Vec::new(),
+        configured: Vec::new(),
         carried: Vec::new(),
         posted: false,
     };
@@ -4109,4 +4112,90 @@ fn the_widest_contract_pool_holds_no_hybrid() {
     for (id, _) in &pools.species {
         assert!(!hybrids.contains(id), "the widest pool lists {id}");
     }
+}
+
+fn configure_job(item: &str) -> crate::contracts::ContractDef {
+    def(
+        "configure",
+        Objective::Configure {
+            item: crate::items::ItemId::from(item),
+        },
+        vec![Reward::Xp(10)],
+    )
+}
+
+fn is_finished(game: &Game, id: &str) -> bool {
+    game.world
+        .resource::<ActiveContracts>()
+        .done
+        .contains(&ContractId::from(id))
+}
+
+#[test]
+fn a_configure_contract_completes_when_a_machine_is_set_to_its_item() {
+    let mut game = fresh();
+    give(&mut game, configure_job("bytecode_block"), 0);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    place_machine(&mut game, "factory", "bytecode_block", 1, 0).unwrap();
+    game.tick();
+    assert!(
+        is_finished(&game, "configure"),
+        "a Factory set to make Bytecode Blocks meets the job"
+    );
+}
+
+#[test]
+fn an_unset_machine_does_not_meet_a_configure_contract() {
+    let mut game = fresh();
+    give(&mut game, configure_job("bytecode_block"), 0);
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "factory")
+        .unwrap();
+    game.spawn_structure(&def, 3, 3, None);
+    game.tick();
+    assert!(!is_finished(&game, "configure"));
+    assert_eq!(progress_of(&game, "configure"), 0);
+}
+
+#[test]
+fn a_machine_set_to_another_item_does_not_meet_it() {
+    let mut game = fresh();
+    give(&mut game, configure_job("bytecode_block"), 0);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    place_machine(&mut game, "factory", "charge_coil", 1, 0).unwrap();
+    game.tick();
+    assert!(!is_finished(&game, "configure"));
+    assert_eq!(progress_of(&game, "configure"), 0);
+}
+
+#[test]
+fn a_configure_contract_is_one_step_and_never_asks_for_none() {
+    let objective = Objective::Configure {
+        item: crate::items::ItemId::from("bytecode_block"),
+    };
+    assert_eq!(objective.target(), 1);
+    assert!(!objective.asks_for_none());
+}
+
+#[test]
+fn a_configure_contract_is_worded_for_the_player() {
+    let game = fresh();
+    let row = game.contract_catalogue();
+    let line = row
+        .iter()
+        .find(|r| r.name == "Make Bytecode Blocks")
+        .expect("the shipped refinery job is a Configure");
+    assert_eq!(line.objective_line, "Set a machine to make Bytecode Block");
 }

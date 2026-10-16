@@ -39,6 +39,19 @@ fn contract_depth(locale: &Locale) -> u32 {
     }
 }
 
+/// What a standing structure is set to make, if it is a machine whose def
+/// still lists that recipe — `Placed::production` is the one judge, so a
+/// recipe a mod removed reads as unset here exactly as it does at the machine.
+fn configured_item(
+    defs: &crate::structures::StructureDb,
+    structure: &Structure,
+    recipe: Option<&crate::components::MachineRecipe>,
+) -> Option<crate::items::ItemId> {
+    let placed = crate::structures::Placed::of(defs.get(&structure.kind)?, recipe);
+    placed.production()?;
+    placed.recipe.cloned()
+}
+
 /// Raises `ActiveContract::progress` and nothing else. Completion is
 /// `Game::settle_contracts`' — a payout writes to the player's inventory and
 /// grants XP, which is `&mut Game` work rather than anything a system can
@@ -53,14 +66,25 @@ pub fn contract_system(
     locale: Res<Locale>,
     // One query rather than two: `StandingJob` only ever sits on a
     // structure, and both facts below are read off the same iteration.
-    structures: Query<(&Structure, Option<&crate::components::StandingJob>)>,
+    structures: Query<(
+        &Structure,
+        Option<&crate::components::StandingJob>,
+        Option<&crate::components::MachineRecipe>,
+    )>,
     player: Query<&Inventory, With<crate::components::Player>>,
-    standings: Res<crate::resources::Standings>,
+    (standings, defs): (
+        Res<crate::resources::Standings>,
+        Res<crate::structures::StructureDb>,
+    ),
 ) {
     let state = crate::contracts::ObjectiveState {
         depth: contract_depth(&locale),
         zone: zone.0,
-        standing: structures.iter().map(|(s, _)| s.kind.clone()).collect(),
+        standing: structures.iter().map(|(s, _, _)| s.kind.clone()).collect(),
+        configured: structures
+            .iter()
+            .filter_map(|(s, _, recipe)| configured_item(&defs, s, recipe))
+            .collect(),
         carried: player
             .iter()
             .next()
@@ -68,7 +92,7 @@ pub fn contract_system(
             .unwrap_or_default(),
         posted: structures
             .iter()
-            .any(|(_, job)| job.is_some_and(|j| j.work)),
+            .any(|(_, job, _)| job.is_some_and(|j| j.work)),
         best_standing: crate::settlements::relations::best_band(&standings),
     };
 
@@ -780,6 +804,7 @@ impl Game {
                 depth: 0,
                 zone,
                 standing: self.standing_structures(),
+                configured: self.configured_items(),
                 carried: Vec::new(),
                 // `depth`'s and `carried`'s reason exactly: a standing job
                 // is toggled from a screen, so a board answered from the
@@ -803,6 +828,21 @@ impl Game {
         self.world
             .iter_entities()
             .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect()
+    }
+
+    /// Every item a standing machine is set to make.
+    fn configured_items(&self) -> Vec<crate::items::ItemId> {
+        let defs = self.world.resource::<crate::structures::StructureDb>();
+        self.world
+            .iter_entities()
+            .filter_map(|e| {
+                configured_item(
+                    defs,
+                    e.get::<Structure>()?,
+                    e.get::<crate::components::MachineRecipe>(),
+                )
+            })
             .collect()
     }
 
@@ -1090,6 +1130,11 @@ impl Game {
                     .to_string(),
             ),
 
+            Objective::Configure { .. } => Some(
+                "Place a machine, stand beside it and press R to choose what it makes."
+                    .to_string(),
+            ),
+
             Objective::Build { .. } => Some(
                 "Deploy it from the Build page of the base report (b) and the crew raises it - a build is a \
                  request, not something your own hands finish."
@@ -1194,6 +1239,9 @@ impl Game {
                     .map(|def| def.name.clone())
                     .unwrap_or_else(|| structure.clone());
                 format!("Build a {name}")
+            }
+            Objective::Configure { item } => {
+                format!("Set a machine to make {}", self.item_name(item))
             }
             Objective::Hold { item, count } => {
                 format!("Carry {count} {} at once", self.item_name(item))

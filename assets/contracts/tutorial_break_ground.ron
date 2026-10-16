@@ -1,8 +1,8 @@
 (
     id: "tutorial_break_ground",
     name: "Break Ground",
-    description: "Mining by hand is a way to spend a run. Stand up a Mining Node ('b' for the base report, the Build page, 'Deploy a structure'), then put the program you decompiled on it ('b' again, then down the rail to the Staffing page, Right to the structure roster) and it digs while you do something else.",
-    objective: Build(structure: "mining_node"),
+    description: "Mining by hand is a way to spend a run. Stand up an Extractor ('b' for the base report, the Build page, 'Deploy a structure'), stand beside it and press R to set it to Core Fragments, then put the program you decompiled on it ('b' again, then down the rail to the Staffing page, Right to the structure roster) and it digs while you do something else.",
+    objective: Build(structure: "extractor"),
     reward: [Credits(30), Item("core_fragment", 10), Xp(100)],
     tutorial: Some(60),
 )

@@ -6523,3 +6523,23 @@ fn the_machines_cost_and_draw_what_the_spec_says() {
         assert!(db.get(kind).unwrap().upgrade.is_none(), "{kind}");
     }
 }
+
+#[test]
+fn every_configure_objective_names_an_item_some_machine_can_make() {
+    let assets = test_assets_dir();
+    let (contracts, _) = crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
+    let (structures, _) =
+        crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let mut seen = 0;
+    for def in contracts.iter() {
+        if let crate::contracts::Objective::Configure { item } = &def.objective {
+            seen += 1;
+            assert!(
+                structures.all().any(|s| s.machine_recipe(item).is_some()),
+                "{} asks for a machine set to make {item}, which no machine lists",
+                def.id
+            );
+        }
+    }
+    assert!(seen > 0, "the census must find a shipped Configure job");
+}

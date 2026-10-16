@@ -132,7 +132,9 @@ impl Specialty {
                 Specialty::Materials
             }
             Objective::Descend { .. } | Objective::Perform { .. } => Specialty::Routines,
-            Objective::Build { .. } | Objective::Breach { .. } => Specialty::Gear,
+            Objective::Build { .. } | Objective::Configure { .. } | Objective::Breach { .. } => {
+                Specialty::Gear
+            }
         }
     }
 

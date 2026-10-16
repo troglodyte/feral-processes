@@ -217,6 +217,12 @@ pub enum Objective {
     Breach { zone: u32 },
     /// One of these is deployed.
     Build { structure: StructureId },
+    /// Some standing machine is set to make this item.
+    ///
+    /// State-shaped like `Build`: the machine's recipe is read off the live
+    /// instance (`Game::placed`), so a machine switched away later does not
+    /// un-finish a job already credited.
+    Configure { item: ItemId },
     /// Some town holds the player at this band or better.
     ///
     /// **Any** town, not the issuer's: `already_met` is answered from an
@@ -272,6 +278,9 @@ pub struct ObjectiveState {
     pub zone: u32,
     /// Every deployed structure's kind.
     pub standing: Vec<StructureId>,
+    /// Every item some standing machine is set to make, for
+    /// `Objective::Configure`.
+    pub configured: Vec<ItemId>,
     /// What the player is carrying, for `Objective::Hold`.
     pub carried: Vec<(ItemId, u32)>,
     /// Whether any deployed structure is set to be kept worked —
@@ -316,6 +325,7 @@ impl Objective {
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
+            | Objective::Configure { .. }
             | Objective::Standing { .. }
             | Objective::Hold { .. } => 1,
         }
@@ -337,6 +347,7 @@ impl Objective {
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
+            | Objective::Configure { .. }
             | Objective::Standing { .. } => false,
         }
     }
@@ -378,6 +389,7 @@ impl Objective {
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),
+            Objective::Configure { item } => state.configured.contains(item),
             Objective::Standing { band } => state.best_standing >= *band,
             Objective::Hold { item, count } => state.count(item) >= *count,
         }

@@ -1892,8 +1892,9 @@
             standing_guard: false,
         ),
         (
-            kind: "refinery",
+            kind: "factory",
             position: (3, 0),
+            recipe: Some("bytecode_block"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -1962,8 +1963,9 @@
             standing_guard: false,
         ),
         (
-            kind: "power_conduit",
+            kind: "extractor",
             position: (4, 2),
+            recipe: Some("power_cell"),
             durability: Some(30),
             tier: None,
             stock_input: [],

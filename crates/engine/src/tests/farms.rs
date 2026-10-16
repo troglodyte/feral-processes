@@ -707,3 +707,14 @@ fn standing_beside_a_plot_offers_it_on_c() {
         "standing on a plot tile alone does not offer it"
     );
 }
+
+#[test]
+fn a_plot_and_a_stockpile_zone_overlap_without_clearing_each_other() {
+    let mut game = farm_base(55);
+    game.toggle_plot_box((-3, 2), (-2, 2));
+    game.toggle_stockpile_box((-3, 2), (-3, 3));
+    game.toggle_plot_box((-3, 3), (-3, 3));
+    let plotted: Vec<(i32, i32)> = game.farm_tiles().iter().map(|t| t.pos).collect();
+    assert_eq!(plotted, vec![(-3, 2), (-3, 3), (-2, 2)]);
+    assert_eq!(game.stockpile_cells(), vec![(-3, 2), (-3, 3)]);
+}

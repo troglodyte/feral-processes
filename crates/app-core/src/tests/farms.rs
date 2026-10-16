@@ -171,3 +171,22 @@ fn the_header_advertises_the_plot_tool_before_it_is_picked() {
     let label = app.excavate_brush_label().unwrap();
     assert!(label.ends_with("plot [P]"), "{label}");
 }
+
+#[test]
+fn the_stockpile_box_never_marks_a_plot_and_its_p_and_f_are_inert() {
+    let mut app = app_at_the_frontier(6010);
+    app.handle_key(GameKey::Char('m'));
+    app.handle_key(GameKey::Char('P'));
+    assert!(app.excavate_plot);
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('z'));
+    for k in ['P', 'F'] {
+        app.handle_key(GameKey::Char(k));
+        assert_eq!(app.mode, Mode::Stockpile, "{k} opens nothing over a zone");
+    }
+    for k in ['h', ' ', ' '] {
+        app.handle_key(GameKey::Char(k));
+    }
+    assert!(tiles(&app).is_empty(), "a zone box marks no plot");
+    assert!(!app.game.as_ref().unwrap().stockpile_cells().is_empty());
+}

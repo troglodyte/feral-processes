@@ -4122,6 +4122,62 @@ pub struct RigToolRow {
     pub carriers_held: u32,
 }
 
+/// What the recipe menu draws for one configurable machine.
+///
+/// `tile` is base space and the header, `RigToolView`'s reason: a base may
+/// stand several machines and the player has to be told which one they are
+/// setting. `held` is the units a change would empty (input plus output), so
+/// the screen can warn before the player makes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineRecipeView {
+    pub tile: (i32, i32),
+    pub name: String,
+    pub current: Option<ItemId>,
+    pub held: u32,
+    pub rows: Vec<MachineRecipeRow>,
+}
+
+/// One researched recipe on the menu. `inputs` is empty for an extraction.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineRecipeRow {
+    pub item: ItemId,
+    pub name: String,
+    pub inputs: Vec<(String, u32)>,
+    pub pace: RecipePace,
+    pub current: bool,
+}
+
+/// How long a recipe takes, as a word. Banded on `ticks_per_unit` by the
+/// `tuning::RECIPE_PACE_*` constants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecipePace {
+    Quick,
+    Steady,
+    Slow,
+    VerySlow,
+}
+
+impl RecipePace {
+    pub fn of(ticks_per_unit: u32) -> Self {
+        use crate::tuning::{RECIPE_PACE_QUICK_MAX, RECIPE_PACE_SLOW_MAX, RECIPE_PACE_STEADY_MAX};
+        match ticks_per_unit {
+            t if t <= RECIPE_PACE_QUICK_MAX => Self::Quick,
+            t if t <= RECIPE_PACE_STEADY_MAX => Self::Steady,
+            t if t <= RECIPE_PACE_SLOW_MAX => Self::Slow,
+            _ => Self::VerySlow,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Steady => "steady",
+            Self::Slow => "slow",
+            Self::VerySlow => "very slow",
+        }
+    }
+}
+
 /// The finish painted over one cell of laid floor — `Game::view_finishes_at`,
 /// `Tile`'s own shape widened for a layer gui draws over it rather than
 /// folded into `Tile` itself, since `Tile` rides the save through

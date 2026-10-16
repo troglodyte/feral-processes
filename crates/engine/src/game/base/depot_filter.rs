@@ -165,6 +165,41 @@ impl Game {
         }
     }
 
+    /// Lets a machine's buffered output into each Depot beside it, once, the
+    /// first time the machine is given a recipe. `auto_filter_depots`' rule
+    /// from the machine's side: a Depot with no filter becomes allow-only for
+    /// the output, and one that already has a filter is the player's and is
+    /// left alone. A banked product reaches no buffer, so it writes nothing.
+    pub(crate) fn auto_filter_beside_machine(&mut self, machine: Entity) {
+        let Some(&Position { x, y }) = self.world.get::<Position>(machine) else {
+            return;
+        };
+        let Some(item) = self
+            .world
+            .get::<crate::components::MachineRecipe>(machine)
+            .and_then(|r| r.0.clone())
+        else {
+            return;
+        };
+        let banked = self
+            .world
+            .resource::<ItemDb>()
+            .get(item.as_str())
+            .is_none_or(|def| def.banked);
+        if banked {
+            return;
+        }
+        let depots: Vec<Entity> = crate::game::base::collect::ORTHOGONAL
+            .iter()
+            .filter_map(|(dx, dy)| self.structure_at_tile((x + dx, y + dy)))
+            .filter(|&e| self.is_depot(e) && self.world.get::<DepotFilter>(e).is_none())
+            .collect();
+        for depot in depots {
+            self.set_all_depot_filters(depot, false);
+            self.set_depot_filter(depot, std::slice::from_ref(&item), true);
+        }
+    }
+
     /// Whether `depot` would pull `producer`'s output: it is a Depot, the
     /// producer makes something that reaches a buffer, and the filter lets it
     /// in. The worked and lit gates are the pull's alone — the drawn join is

@@ -1115,6 +1115,64 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) ->
         .id()
 }
 
+/// Stands a machine of `kind` beside the party through the real build path,
+/// then sets it to `recipe` the way the player does — researching the
+/// recipe's gate first so the refusal is not the thing under test.
+pub(super) fn place_machine(
+    game: &mut Game,
+    kind: &str,
+    recipe: &str,
+    dx: i32,
+    dy: i32,
+) -> Result<Entity, String> {
+    place_now(game, kind, dx, dy)?;
+    let (bx, by) = game.base_pos().expect("a test places machines in the base");
+    let machine = game
+        .world
+        .query::<(Entity, &Structure, &Position)>()
+        .iter(&game.world)
+        .find(|(_, s, p)| s.kind == kind && (p.x, p.y) == (bx + dx, by + dy))
+        .map(|(e, _, _)| e)
+        .unwrap_or_else(|| panic!("the {kind} should stand at the tile"));
+    set_recipe_researched(game, machine, recipe)?;
+    Ok(machine)
+}
+
+/// `place_machine` without the build: a machine of `kind` at an absolute
+/// tile, set to `recipe`. Named apart from `spawn_machine_at`, which stands a
+/// machine with nothing set for the older single-recipe fixtures.
+pub(super) fn spawn_machine_with_recipe_at(
+    game: &mut Game,
+    kind: &str,
+    recipe: &str,
+    x: i32,
+    y: i32,
+) -> Entity {
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == kind)
+        .unwrap_or_else(|| panic!("{kind} should be a shipped structure"));
+    let machine = game.spawn_structure(&def, x, y, None);
+    set_recipe_researched(game, machine, recipe).unwrap();
+    machine
+}
+
+fn set_recipe_researched(game: &mut Game, machine: Entity, recipe: &str) -> Result<(), String> {
+    let kind = game.world.get::<Structure>(machine).unwrap().kind.clone();
+    let gate = game
+        .world
+        .resource::<StructureDb>()
+        .get(&kind)
+        .and_then(|d| d.machine.as_ref())
+        .and_then(|m| m.recipes.iter().find(|r| r.produces.as_str() == recipe))
+        .and_then(|r| r.research.clone());
+    if let Some(gate) = gate {
+        unlock_research_chain(game, &gate);
+    }
+    game.set_machine_recipe(machine, &ItemId::from(recipe))
+}
+
 /// A walled 4x4 room (interior x and y in 2..=5) with a door, `finished`
 /// of its 16 cells in cobalt carpet. Scored by area and finish alone: 16
 /// finished cells is Superb, 8 is Fine, none is Cramped-to-Plain. Anything

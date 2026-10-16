@@ -2491,6 +2491,17 @@ pub const CONTRACT_HABITAT_SAMPLES: i32 = 32;
 /// how long a base runs unattended.
 pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 
+/// The slowest recipe, in ticks per unit, still called "quick" on a machine's
+/// recipe menu. The menu shows a band, never the figure, so the player picks
+/// by feel and the tick count stays out of player-facing text.
+pub const RECIPE_PACE_QUICK_MAX: u32 = 8;
+
+/// The slowest recipe still called "steady"; see `RECIPE_PACE_QUICK_MAX`.
+pub const RECIPE_PACE_STEADY_MAX: u32 = 14;
+
+/// The slowest recipe still called "slow"; anything beyond is "very slow".
+pub const RECIPE_PACE_SLOW_MAX: u32 = 20;
+
 /// How many ticks one Power Cell keeps a `power_upkeep` supplier lit — see
 /// `StructureDef::power_upkeep` and `systems::power_grid_system`.
 ///

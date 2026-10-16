@@ -26,6 +26,7 @@ pub(crate) mod hauling;
 pub(crate) mod healing;
 pub(crate) mod interact;
 pub(crate) mod lines;
+pub(crate) mod machine_recipe;
 pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;

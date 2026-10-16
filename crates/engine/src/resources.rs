@@ -2054,6 +2054,9 @@ pub struct Ruin {
     pub kind: crate::structures::StructureId,
     pub x: i32,
     pub y: i32,
+    /// What a wrecked machine was set to, so its rebuild stands set again:
+    /// the player's own choice is restored, not made.
+    pub recipe: Option<crate::items::ItemId>,
 }
 
 /// Wrecks waiting for the base to be quiet enough to file their rebuilds.

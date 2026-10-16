@@ -3001,6 +3001,10 @@ pub struct BuildSite {
     /// is about materials: it waits on the player, via
     /// `Game::commit_rebuild_program`. Saved.
     pub awaiting_program: bool,
+    /// What a rebuilt machine is set to when it is raised: carried from the
+    /// wreck (`resources::Ruin::recipe`), `None` for every fresh build.
+    /// Saved.
+    pub recipe: Option<ItemId>,
 }
 
 impl BuildSite {
@@ -3034,6 +3038,7 @@ impl BuildSite {
             goal,
             program: None,
             awaiting_program: false,
+            recipe: None,
         }
     }
 

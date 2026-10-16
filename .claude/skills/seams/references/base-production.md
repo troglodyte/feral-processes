@@ -360,7 +360,7 @@
 
 - **A machine's recipe is the player's: `Game::set_machine_recipe` is the
   only writer of `MachineRecipe`**, and no order, auto-setup or load ever
-  sets one. It refuses everything before it changes anything, then empties
+  sets one (a rebuilt wreck restores its own, `Game::restore_machine_recipe`). It refuses everything before it changes anything, then empties
   the machine (output to Depots, the rest through `Game::set_down`),
   unposts the worker, swaps the Extract-role `ResourceNode`, and
   never touches a Depot (the filter is the Depot's placement, not the

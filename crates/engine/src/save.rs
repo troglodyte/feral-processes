@@ -1295,6 +1295,10 @@ pub struct BuildSiteSave {
     /// `components::BuildSite::awaiting_program`. Written in v37.
     #[serde(default)]
     pub awaiting_program: bool,
+    /// The recipe a rebuilt machine is set to once raised — see
+    /// `components::BuildSite::recipe`.
+    #[serde(default)]
+    pub recipe: Option<crate::items::ItemId>,
 }
 
 /// A wreck waiting to be filed as a rebuild — see `resources::Ruins`.
@@ -1305,6 +1309,9 @@ pub struct RuinSave {
     /// **Base-space** coordinates, `BuildSiteSave::position`'s rule.
     pub x: i32,
     pub y: i32,
+    /// What a wrecked machine was set to — see `resources::Ruin::recipe`.
+    #[serde(default)]
+    pub recipe: Option<crate::items::ItemId>,
 }
 
 /// A caravan mid-journey — see `components::Caravan`.
@@ -2136,9 +2143,9 @@ pub struct SaveData {
 /// `BuildSiteSave::awaiting_program` are written; a v36 file would load with
 /// no wrecks to rebuild and every awaiting site as an ordinary one.
 ///
-/// 37 → 38: configurable machines. `StructureSave::recipe` is written and 17
-/// structure kinds are gone; a v37 base would load with its production
-/// structures missing.
+/// 37 → 38: configurable machines. `StructureSave::recipe`, `RuinSave::recipe`
+/// and `BuildSiteSave::recipe` are written and 16 structure kinds are gone; a
+/// v37 base would load with its production structures missing.
 pub const SAVE_FORMAT_VERSION: u32 = 38;
 
 /// `CreatureSave::power`'s serde default — see that field.

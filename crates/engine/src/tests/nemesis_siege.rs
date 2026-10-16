@@ -990,6 +990,7 @@ fn a_march_that_opens_this_tick_holds_a_pending_ruins_filing() {
             kind: "shield".to_string(),
             x: 0,
             y: 1,
+            recipe: None,
         });
     game.tick();
     assert!(

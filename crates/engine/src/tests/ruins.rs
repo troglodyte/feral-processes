@@ -2,6 +2,7 @@
 //! that needs a program waits for, and that all of it survives a save.
 
 use super::support::*;
+use crate::components::MachineRecipe;
 use crate::resources::{Ruin, Ruins};
 use crate::*;
 
@@ -32,6 +33,7 @@ fn ruin(kind: &str, x: i32, y: i32) -> Ruin {
         kind: kind.to_string(),
         x,
         y,
+        recipe: None,
     }
 }
 
@@ -584,4 +586,71 @@ fn the_build_orders_flag_follows_a_blocked_site() {
         Some(BuildBlock::Unreachable)
     );
     assert!(game.base_report_flags().build_orders.is_some());
+}
+
+#[test]
+fn a_wrecked_machine_is_rebuilt_set_to_what_it_made() {
+    let mut game = base(2209);
+    spawn_tamed(&mut game, 500, 3);
+    let (factory, x, y) = raidable(&mut game, "factory");
+    game.world
+        .entity_mut(factory)
+        .insert(MachineRecipe(Some(ItemId::from("bytecode_block"))));
+    game.damage_structure(factory, 10, "Factory", "a siege");
+    game.file_ruins();
+    let (site, awaiting) = sites(&mut game)[0];
+    assert!(awaiting, "a machine waits for its program");
+    let program = tame_at_zone(&mut game, 1);
+    let spare = tame_at_zone(&mut game, 1);
+    game.world.resource_mut::<Party>().0.push(spare);
+    game.commit_rebuild_program(site, program).unwrap();
+    for _ in 0..2000 {
+        if game.world.get::<BuildSite>(site).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    assert!(game.world.get::<BuildSite>(site).is_none(), "raised");
+    let rebuilt = {
+        let mut q = game.world.query::<(Entity, &Structure, &Position)>();
+        q.iter(&game.world)
+            .find(|(_, s, p)| s.kind == "factory" && (p.x, p.y) == (x, y))
+            .map(|(e, ..)| e)
+            .expect("the factory stands again")
+    };
+    assert_eq!(
+        game.world.get::<MachineRecipe>(rebuilt),
+        Some(&MachineRecipe(Some(ItemId::from("bytecode_block"))))
+    );
+}
+
+#[test]
+fn a_ruins_recipe_survives_a_save_and_load() {
+    let mut game = base(2210);
+    let (px, py) = game.base_pos().unwrap();
+    let mut wreck = ruin("factory", px + 1, py);
+    wreck.recipe = Some(ItemId::from("bytecode_block"));
+    game.world.resource_mut::<Ruins>().0.push(wreck.clone());
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_ruin_recipe_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(loaded.world.resource::<Ruins>().0, vec![wreck]);
+
+    loaded.file_ruins();
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_site_recipe_{}.bin",
+        std::process::id()
+    ));
+    loaded.save(&path).unwrap();
+    let mut again = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let site = sites(&mut again)[0].0;
+    assert_eq!(
+        again.world.get::<BuildSite>(site).unwrap().recipe,
+        Some(ItemId::from("bytecode_block"))
+    );
 }

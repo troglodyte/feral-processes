@@ -1114,6 +1114,10 @@ impl Game {
             // Recorded here and not in `remove_structure`: a wreck is a loss
             // and a demolish is the player's choice. Before the despawn,
             // which takes the `Position` with it.
+            let recipe = self
+                .world
+                .get::<crate::components::MachineRecipe>(structure)
+                .and_then(|r| r.0.clone());
             if let (Some(kind), Some(pos)) = (
                 self.world
                     .get::<Structure>(structure)
@@ -1125,6 +1129,7 @@ impl Game {
                         kind,
                         x: pos.x,
                         y: pos.y,
+                        recipe,
                     },
                 );
             }

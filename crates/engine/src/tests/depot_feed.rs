@@ -68,18 +68,18 @@ fn a_node_built_beside_an_unfiltered_depot_leaves_it_unfiltered() {
 
     assert!(
         game.world.get::<DepotFilter>(depot).is_none(),
-        "only placing a Depot, or setting a machine, filters it"
+        "only placing a Depot filters it"
     );
     assert!(takes(&game, depot, &ItemId::from(ids::POWER_CELL)));
 }
 
 #[test]
-fn setting_a_machine_beside_an_unfiltered_depot_filters_it_to_the_output() {
+fn setting_a_machine_beside_an_open_depot_leaves_it_open() {
     let mut game = base_game(9007);
     let depot = build(&mut game, "depot", 1, 0);
     build_machine(&mut game, "extractor", "core_fragment", 2, 0);
 
-    assert!(allow_only(&game, depot, &[frag()]));
+    assert!(game.world.get::<DepotFilter>(depot).is_none());
 }
 
 #[test]

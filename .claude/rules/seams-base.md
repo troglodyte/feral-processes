@@ -175,7 +175,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   every reader asks it.
 - **A machine's recipe is the player's: `Game::set_machine_recipe` is the
   only writer of `MachineRecipe`**, and no order, auto-setup or load ever
-  sets one.
+  sets one; a rebuilt wreck only restores its own through the same write path.
 - **A work order stores what was asked for, never how it will be done.** An
   item, a quantity and a `standing` flag — labels on the request, no plan.
 - **Every unsatisfied order is worked at once, and `settle_orders` is where

@@ -553,11 +553,14 @@ impl Game {
         // gives it back or spends it: the figure it leaves in the machine is
         // taken off the snapshot the request has been holding since it was
         // filed.
-        let Some((kind, goal, program)) = self
-            .world
-            .get::<BuildSite>(site)
-            .map(|b| (b.structure.clone(), b.goal, b.program.clone()))
-        else {
+        let Some((kind, goal, program, recipe)) = self.world.get::<BuildSite>(site).map(|b| {
+            (
+                b.structure.clone(),
+                b.goal,
+                b.program.clone(),
+                b.recipe.clone(),
+            )
+        }) else {
             return;
         };
         let Some(def) = self.world.resource::<StructureDb>().get(&kind).cloned() else {
@@ -586,7 +589,10 @@ impl Game {
                 let footprint =
                     crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
                 self.displace_bodies_from(&footprint);
-                self.spawn_structure(&def, target.x, target.y, quality);
+                let raised = self.spawn_structure(&def, target.x, target.y, quality);
+                if let Some(item) = recipe {
+                    self.restore_machine_recipe(raised, &item);
+                }
                 self.displace_floor_items_from(&footprint);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
             }

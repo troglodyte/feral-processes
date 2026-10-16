@@ -926,6 +926,7 @@ impl Game {
                     goal,
                     program: b.program,
                     awaiting_program: b.awaiting_program,
+                    recipe: b.recipe,
                 },
                 Position {
                     x: b.position.0,
@@ -1849,6 +1850,7 @@ impl Game {
                     kind: r.kind,
                     x: r.x,
                     y: r.y,
+                    recipe: r.recipe,
                 })
                 .collect(),
         ));
@@ -3072,6 +3074,7 @@ impl Game {
                 goal: site.goal,
                 program: site.program.clone(),
                 awaiting_program: site.awaiting_program,
+                recipe: site.recipe.clone(),
             });
         }
         build_sites
@@ -3387,6 +3390,7 @@ impl Game {
                     kind: r.kind.clone(),
                     x: r.x,
                     y: r.y,
+                    recipe: r.recipe.clone(),
                 })
                 .collect(),
             caravans,

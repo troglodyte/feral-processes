@@ -531,6 +531,7 @@ impl Game {
             }
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
+            site.recipe = ruin.recipe;
             self.spawn_build_site(site, ruin.x, ruin.y);
             self.log_base(format!(
                 "Your crew marks out the {} wreck at ({}, {}) to be rebuilt.",

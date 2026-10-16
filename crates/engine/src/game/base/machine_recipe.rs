@@ -15,7 +15,7 @@ use crate::game::base::{collect::ORTHOGONAL, stock};
 use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
 use crate::research::ResearchDb;
-use crate::structures::{MachineRole, Placed, StructureDb};
+use crate::structures::{MachineRole, Placed, RecipeDef, StructureDb};
 use crate::views::{MachineRecipeRow, MachineRecipeView, RecipePace};
 
 impl Game {
@@ -145,21 +145,7 @@ impl Game {
         let (to_depots, to_floor) = self.empty_machine(machine);
         self.unpost_worker(machine);
 
-        self.world
-            .entity_mut(machine)
-            .insert(MachineRecipe(Some(item.clone())));
-        match role {
-            MachineRole::Extract => {
-                let tier = self.world.get::<StructureTier>(machine).map_or(1, |t| t.0);
-                self.world.entity_mut(machine).insert(ResourceNode {
-                    resource: item.clone(),
-                    level: recipe.level.map(|_| tier),
-                });
-            }
-            MachineRole::Assemble => {
-                self.world.entity_mut(machine).remove::<ResourceNode>();
-            }
-        }
+        self.write_machine_recipe(machine, role, &recipe);
 
         let mut line = format!("The {kind} is set to make {item_name}.");
         if to_depots > 0 {
@@ -170,6 +156,40 @@ impl Game {
         }
         self.log_base(line);
         Ok(())
+    }
+
+    /// Writes `recipe` onto `machine`: the `MachineRecipe` and, for the
+    /// Extract role, the `ResourceNode` at the machine's tier. The one write
+    /// path `set_machine_recipe` and a rebuilt wreck share.
+    fn write_machine_recipe(&mut self, machine: Entity, role: MachineRole, recipe: &RecipeDef) {
+        self.world
+            .entity_mut(machine)
+            .insert(MachineRecipe(Some(recipe.produces.clone())));
+        match role {
+            MachineRole::Extract => {
+                let tier = self.world.get::<StructureTier>(machine).map_or(1, |t| t.0);
+                self.world.entity_mut(machine).insert(ResourceNode {
+                    resource: recipe.produces.clone(),
+                    level: recipe.level.map(|_| tier),
+                });
+            }
+            MachineRole::Assemble => {
+                self.world.entity_mut(machine).remove::<ResourceNode>();
+            }
+        }
+    }
+
+    /// Sets a freshly raised machine to the recipe its wreck made, if its
+    /// def still lists it. Restores the player's choice; nothing here picks
+    /// one, so it is not an auto-setup.
+    pub(crate) fn restore_machine_recipe(&mut self, machine: Entity, item: &ItemId) {
+        let Some((role, recipe)) = self.placed(machine).and_then(|p| {
+            let machine_def = p.def.machine.as_ref()?;
+            Some((machine_def.role, p.def.machine_recipe(item)?.clone()))
+        }) else {
+            return;
+        };
+        self.write_machine_recipe(machine, role, &recipe);
     }
 
     /// Empties both buffers: into the Depots as far as they have room, the

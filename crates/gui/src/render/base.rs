@@ -1945,6 +1945,7 @@ mod tests {
     /// A staff program as the map sees one, mending or not.
     fn patient_view(recovering: bool) -> EntityView {
         EntityView {
+            unconfigured: false,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'd',

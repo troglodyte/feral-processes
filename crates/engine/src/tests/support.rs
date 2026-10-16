@@ -1158,7 +1158,11 @@ pub(super) fn spawn_machine_with_recipe_at(
     machine
 }
 
-fn set_recipe_researched(game: &mut Game, machine: Entity, recipe: &str) -> Result<(), String> {
+pub(super) fn set_recipe_researched(
+    game: &mut Game,
+    machine: Entity,
+    recipe: &str,
+) -> Result<(), String> {
     let kind = game.world.get::<Structure>(machine).unwrap().kind.clone();
     let gate = game
         .world

@@ -721,3 +721,69 @@ fn a_posted_worker_on_an_upgraded_power_cell_extractor_pays_tier_one() {
     }
     assert_eq!(made(&mut game), crate::systems::node_payout(1, zone));
 }
+
+// ---- naming -------------------------------------------------------------
+
+#[test]
+fn a_set_machine_is_labelled_by_its_product() {
+    let mut game = bare_game();
+    let factory = spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 40, 40);
+    let report = game.structure_report();
+    let row = report.iter().find(|r| r.entity == factory).unwrap();
+    assert_eq!(row.label, "Factory (Bytecode Block)");
+    assert_eq!(row.recipe, Some(item("bytecode_block")));
+    let depot = depot_at(&mut game, 42, 40);
+    let report = game.structure_report();
+    let row = report.iter().find(|r| r.entity == depot).unwrap();
+    assert_eq!(row.recipe, None);
+    assert!(!row.label.contains('('));
+}
+
+#[test]
+fn an_unset_machine_reads_as_its_kind_and_is_flagged() {
+    let mut game = bare_game();
+    let factory = a_fresh_factory(&mut game, 40, 40);
+    let report = game.structure_report();
+    let row = report.iter().find(|r| r.entity == factory).unwrap();
+    assert_eq!(row.label, "Factory");
+    assert_eq!(row.recipe, None);
+    let view = game
+        .view_entities(60, 60)
+        .into_iter()
+        .find(|v| v.entity == factory)
+        .unwrap();
+    assert_eq!(view.label, "Factory");
+    assert!(view.unconfigured);
+    set_recipe_researched(&mut game, factory, "bytecode_block").unwrap();
+    let view = game
+        .view_entities(60, 60)
+        .into_iter()
+        .find(|v| v.entity == factory)
+        .unwrap();
+    assert_eq!(view.label, "Factory (Bytecode Block)");
+    assert!(!view.unconfigured);
+}
+
+#[test]
+fn a_stall_line_names_the_product() {
+    let mut game = bare_game();
+    let (factory, _worker) = staffed_full_factory(&mut game);
+    let capacity = game.world.get::<Stock>(factory).unwrap().capacity;
+    fill(&mut game, factory, 8, capacity);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text
+                == "The Factory (Bytecode Block) is clogged — its output buffer is full."),
+        "{:?}",
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .map(|l| &l.text)
+            .collect::<Vec<_>>()
+    );
+}

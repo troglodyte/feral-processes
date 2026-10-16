@@ -118,6 +118,21 @@ impl<'a> Placed<'a> {
         })
     }
 
+    /// "Factory (Bytecode Block)" for a machine that is set; the def's own
+    /// name for an unset machine and for every non-machine.
+    pub fn label(self, items: &crate::items_db::ItemDb) -> String {
+        match (self.def.machine.as_ref(), self.production()) {
+            (Some(_), Some(production)) => {
+                let product = items
+                    .get(production.recipe.produces.as_str())
+                    .map(|d| d.name.as_str())
+                    .unwrap_or(production.recipe.produces.as_str());
+                format!("{} ({product})", self.def.name)
+            }
+            _ => self.def.name.clone(),
+        }
+    }
+
     /// A configurable machine with nothing to run yet.
     pub fn is_unconfigured(self) -> bool {
         self.def.machine.is_some() && self.production().is_none()

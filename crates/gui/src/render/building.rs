@@ -2078,6 +2078,7 @@ mod tests {
 
     pub(super) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         EntityView {
+            unconfigured: false,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'n',
@@ -2739,6 +2740,7 @@ mod tests {
 
     fn structure_report(status: MachineStatus) -> StructureReport {
         StructureReport {
+            recipe: None,
             entity: Entity::PLACEHOLDER,
             kind: "mining_node".to_string(),
             label: "Mining Node".to_string(),

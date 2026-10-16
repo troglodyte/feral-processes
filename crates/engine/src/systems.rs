@@ -20,7 +20,7 @@ use crate::resources::{
     BattleTelemetry, GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel,
 };
 use crate::species::{AffinityClass, SpeciesDb};
-use crate::structures::StructureDb;
+use crate::structures::{Placed, StructureDb};
 use crate::tuning::{
     BUILD_QUALITY_TICK_WEIGHT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS, MEMORY_MORALE_MAX_SHIFT,
     MEMORY_MORALE_PER_POINT, MINING_EXTRACTION_CAP, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
@@ -1276,6 +1276,7 @@ pub fn idle_machine_system(
     mut machines: Query<IdleMachine>,
     tasks: Query<(Entity, &Task)>,
     structure_db: Res<StructureDb>,
+    item_db: Res<ItemDb>,
     grid: Res<PowerGrid>,
     clock: Res<GameClock>,
     mut log: ResMut<MessageLog>,
@@ -1284,7 +1285,8 @@ pub fn idle_machine_system(
 ) {
     for (machine, structure, pos, mut status, stock, recipe) in &mut machines {
         let def = structure_db.get(&structure.kind);
-        let name = def.map(|d| d.name.as_str()).unwrap_or("machine");
+        let label = def.map(|d| Placed::of(d, recipe).label(&item_db));
+        let name = label.as_deref().unwrap_or("machine");
         // Stated at each of the two sites rather than built by a closure:
         // the site borrows the telemetry buffer mutably, and a closure
         // handing one out lends a capture past its own body.
@@ -1555,8 +1557,8 @@ pub fn task_progress_system(
         };
         let machine_name = structure
             .and_then(|s| structure_db.get(&s.kind))
-            .map(|d| d.name.as_str())
-            .unwrap_or("machine");
+            .map(|d| Placed::of(d, machine_recipe).label(&item_db))
+            .unwrap_or_else(|| "machine".to_string());
         // The id, not the display name: a record is read months later by a
         // script, and `machine_name` is prose a mod may rewrite.
         let machine_kind = structure.map(|s| s.kind.as_str()).unwrap_or("unknown");
@@ -1582,7 +1584,7 @@ pub fn task_progress_system(
             set_machine_status(
                 &mut status,
                 away,
-                machine_name,
+                &machine_name,
                 &mut log,
                 &mut board,
                 StallSite {
@@ -1605,7 +1607,7 @@ pub fn task_progress_system(
             set_machine_status(
                 &mut status,
                 MachineStatus::Running,
-                machine_name,
+                &machine_name,
                 &mut log,
                 &mut board,
                 StallSite {
@@ -1633,7 +1635,7 @@ pub fn task_progress_system(
             set_machine_status(
                 &mut status,
                 held,
-                machine_name,
+                &machine_name,
                 &mut log,
                 &mut board,
                 StallSite {
@@ -1753,7 +1755,7 @@ pub fn task_progress_system(
         set_machine_status(
             &mut status,
             MachineStatus::Running,
-            machine_name,
+            &machine_name,
             &mut log,
             &mut board,
             StallSite {
@@ -1927,8 +1929,8 @@ pub fn player_gather_system(
         };
         let machine_name = structure
             .and_then(|s| structure_db.get(&s.kind))
-            .map(|d| d.name.as_str())
-            .unwrap_or("machine");
+            .map(|d| Placed::of(d, machine_recipe).label(&item_db))
+            .unwrap_or_else(|| "machine".to_string());
         // The id, not the display name: a record is read months later by a
         // script, and `machine_name` is prose a mod may rewrite.
         let machine_kind = structure.map(|s| s.kind.as_str()).unwrap_or("unknown");
@@ -1941,7 +1943,7 @@ pub fn player_gather_system(
             set_machine_status(
                 &mut status,
                 MachineStatus::Clogged,
-                machine_name,
+                &machine_name,
                 &mut log,
                 &mut board,
                 StallSite {
@@ -2035,7 +2037,7 @@ pub fn player_gather_system(
         set_machine_status(
             &mut status,
             MachineStatus::Running,
-            machine_name,
+            &machine_name,
             &mut log,
             &mut board,
             StallSite {
@@ -2229,6 +2231,7 @@ pub fn assembler_system(
         if grid.is_dark(machine) {
             continue;
         }
+        let label = placed.label(&item_db);
         let Some(recipe) = assembly_recipe(placed, &item_db) else {
             continue;
         };
@@ -2245,7 +2248,7 @@ pub fn assembler_system(
                 set_machine_status(
                     &mut status,
                     next,
-                    &def.name,
+                    &label,
                     log,
                     board,
                     StallSite {

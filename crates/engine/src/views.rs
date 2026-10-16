@@ -1072,6 +1072,8 @@ pub struct DepotFill {
 
 #[derive(Clone)]
 pub struct EntityView {
+    /// A configurable machine standing with nothing set to make.
+    pub unconfigured: bool,
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,
@@ -1724,6 +1726,9 @@ pub struct LineReport {
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {
+    /// What a configurable machine is set to make; `None` when unset and for
+    /// every structure that is not a configurable machine.
+    pub recipe: Option<ItemId>,
     pub entity: Entity,
     /// The def id, so a frontend can group identical structures without
     /// comparing display names.

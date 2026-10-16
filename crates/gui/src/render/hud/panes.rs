@@ -728,6 +728,7 @@ mod tests {
 
     fn structure(label: &str, idle: bool) -> StructureReport {
         StructureReport {
+            recipe: None,
             entity: entity(),
             kind: "mining_node".to_string(),
             label: label.to_string(),

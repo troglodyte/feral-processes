@@ -971,7 +971,10 @@ impl Game {
         } else if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
-            self.structure_name(&s.kind)
+            match self.placed(entity) {
+                Some(placed) => placed.label(self.world.resource::<ItemDb>()),
+                None => self.structure_name(&s.kind),
+            }
         } else if let Some(build) = self.world.get::<BuildSite>(entity) {
             // Named as the thing being raised rather than as "a build site",
             // because that is the question `x` is asking: the player wants to
@@ -1467,6 +1470,7 @@ impl Game {
                         capacity: s.capacity,
                     });
                 EntityView {
+                    unconfigured: self.placed(entity).is_some_and(|p| p.is_unconfigured()),
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,
@@ -1653,6 +1657,10 @@ impl Game {
                 };
                 let stock = self.world.get::<Stock>(entity);
                 StructureReport {
+                    recipe: self
+                        .world
+                        .get::<crate::components::MachineRecipe>(entity)
+                        .and_then(|r| r.0.clone()),
                     input: named(stock.map(|s| &s.input)),
                     output: named(stock.map(|s| &s.output)),
                     output_capacity: stock.map(|s| s.capacity).unwrap_or(0),

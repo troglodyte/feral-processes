@@ -855,7 +855,7 @@ impl CrewFields {
             return false;
         };
         let side = match kind {
-            TaskKind::Construct | TaskKind::Excavate => 1,
+            TaskKind::Construct | TaskKind::Excavate | TaskKind::Tend(_) => 1,
             TaskKind::GatherResource | TaskKind::Guard => game.structure_footprint_of(post),
         };
         let grid = game.world.resource::<BaseGrid>();
@@ -1068,6 +1068,10 @@ impl Game {
         for (site, kind) in self.dig_wants() {
             wanted.push((site, kind));
         }
+        // Farm tiles after the dig jobs: the lowest-priority base labour, for
+        // the reason above — anything inserted above these silently starves
+        // production.
+        wanted.extend(self.farm_wants());
         // **Last, so it sees every want the base holds**, and the line's
         // position is its first member's: collapsing earlier would let a
         // later source add a second want for the same line.
@@ -1207,7 +1211,10 @@ impl Game {
         if !on_shift.is_empty() {
             let mut unreachable: Vec<(Entity, TaskKind)> = Vec::new();
             for &(post, kind) in wanted.iter() {
-                if !matches!(kind, TaskKind::Construct | TaskKind::Excavate) {
+                if !matches!(
+                    kind,
+                    TaskKind::Construct | TaskKind::Excavate | TaskKind::Tend(_)
+                ) {
                     continue;
                 }
                 if self.world.get::<Position>(post).is_none() {
@@ -1223,6 +1230,10 @@ impl Game {
             for &(post, kind) in &unreachable {
                 match kind {
                     TaskKind::Construct => self.announce_cut_off(post),
+                    // A plot tile is dropped without a word: a sealed one is
+                    // the player's to notice on the map, and the farm is
+                    // never the base's only instruction worth a latch.
+                    TaskKind::Tend(_) => {}
                     _ => self.announce_dig_cut_off(post),
                 }
             }
@@ -1233,7 +1244,12 @@ impl Game {
             // rule: entering a state is news, staying in it is not.
             let reopened: Vec<(Entity, TaskKind)> = wanted
                 .iter()
-                .filter(|(_, kind)| matches!(kind, TaskKind::Construct | TaskKind::Excavate))
+                .filter(|(_, kind)| {
+                    matches!(
+                        kind,
+                        TaskKind::Construct | TaskKind::Excavate | TaskKind::Tend(_)
+                    )
+                })
                 .copied()
                 .collect();
             for (post, kind) in reopened {
@@ -1243,6 +1259,7 @@ impl Game {
                             build.announced_stuck = false;
                         }
                     }
+                    TaskKind::Tend(_) => {}
                     _ => {
                         if let Some(mut dig) = self.world.get_mut::<DigSite>(post) {
                             dig.announced_stuck = false;
@@ -1553,8 +1570,10 @@ impl Game {
                 .get::<Position>(worker)
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
-            if matches!(kind, TaskKind::GatherResource | TaskKind::Excavate)
-                && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
+            if matches!(
+                kind,
+                TaskKind::GatherResource | TaskKind::Excavate | TaskKind::Tend(_)
+            ) && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
                 walk_refused.push((post, kind));
                 continue;
@@ -1564,6 +1583,7 @@ impl Game {
                 TaskKind::Guard => self.post_guard(worker, post),
                 TaskKind::Excavate => self.post_digger(worker, post),
                 TaskKind::Construct => self.post_builder(worker, post),
+                TaskKind::Tend(job) => self.post_tender(worker, post, job),
             }
         }
         if !walk_refused.is_empty() {
@@ -1594,7 +1614,7 @@ impl Game {
                 self.world.get::<Structure>(post).map(|s| &s.kind)
             }
             TaskKind::Construct => self.world.get::<BuildSite>(post).map(|b| &b.structure),
-            TaskKind::Excavate => None,
+            TaskKind::Excavate | TaskKind::Tend(_) => None,
         };
         crate::duties::PostDesc { kind, structure }
     }
@@ -1608,6 +1628,12 @@ impl Game {
     ) -> std::collections::BTreeMap<crate::duties::Duty, usize> {
         let mut tally = std::collections::BTreeMap::new();
         for (post, kind) in posts {
+            // Farms are unlimited background work: a plot always has another
+            // tile to tend, so counting them would raise the staffing flag
+            // through every farm cycle. They stay in `wanted`.
+            if matches!(kind, TaskKind::Tend(_)) {
+                continue;
+            }
             let desc = self.post_desc(post, kind);
             if let Some(duty) = crate::duties::Duty::ALL
                 .into_iter()
@@ -2753,6 +2779,11 @@ impl Game {
                 .get::<Position>(task.target)
                 .map(|p| format!("cutting the entropy at {}, {}", p.x, p.y))
                 .unwrap_or_else(|| "cutting the entropy".to_string()),
+            TaskKind::Tend(_) => self
+                .world
+                .get::<Position>(task.target)
+                .map(|p| format!("tending the plot at {}, {}", p.x, p.y))
+                .unwrap_or_else(|| "tending the plot".to_string()),
             // A build site is not a structure either, but unlike a dig site
             // it knows what it is going to become — so it is named by the
             // thing being raised rather than by its tile alone, which is

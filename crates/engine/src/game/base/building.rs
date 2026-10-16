@@ -2,6 +2,7 @@
 //! to work them.
 
 use crate::base_grid::BaseGrid;
+use crate::components::FarmJob;
 use crate::game::base::floor::nearest_free_cells;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
@@ -1944,6 +1945,31 @@ impl Game {
             target: site,
             progress: 0,
             required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        });
+    }
+
+    /// `post_digger`'s counterpart for a farm tile: the crew job, posted by
+    /// `schedule_base_labour` and worked by `Game::run_farm_crew`. The rate
+    /// is the job's own tuning constant — a tile is not a structure and has
+    /// no def to read one off.
+    pub(crate) fn post_tender(&mut self, worker: Entity, tile: Entity, job: FarmJob) {
+        if self.world.resource::<Party>().0.contains(&worker) {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|&e| e != worker);
+            self.log_base("It stands down as your companion to tend the plot.");
+        }
+        self.displace_task_holder(tile, TaskKind::Tend(job));
+        let required = match job {
+            FarmJob::Dimple => crate::tuning::FARM_DIMPLE_TICKS,
+            FarmJob::Harvest => crate::tuning::FARM_HARVEST_TICKS,
+        };
+        self.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::Tend(job),
+            target: tile,
+            progress: 0,
+            required,
         });
     }
 

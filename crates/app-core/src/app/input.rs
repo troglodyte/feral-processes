@@ -194,6 +194,7 @@ impl App {
             | Mode::RespecTalentsConfirm
             | Mode::ExtractConfirm => 1,
             Mode::ExcavateBrush => self.excavate_brush_row(),
+            Mode::FarmRecipe => self.farm_recipe_row(),
             _ => 0,
         }
     }
@@ -334,6 +335,7 @@ impl App {
             Mode::TacticalAim => self.handle_tactical_aim_key(key),
             Mode::Excavate => self.handle_excavate_key(key),
             Mode::ExcavateBrush => self.handle_excavate_brush_key(key),
+            Mode::FarmRecipe => self.handle_farm_recipe_key(key),
             Mode::Stockpile => self.handle_stockpile_key(key),
             Mode::PutDown => self.handle_put_down_key(key),
             Mode::Refactor => self.handle_refactor_key(key),

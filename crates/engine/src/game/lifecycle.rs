@@ -511,6 +511,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            crops: crop_db,
             rooms: room_db,
             props: prop_db,
             nemesis: nemesis_db,
@@ -562,6 +563,7 @@ impl Game {
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(floor_db);
+        world.insert_resource(crop_db);
         world.insert_resource(room_db);
         world.insert_resource(prop_db);
         world.insert_resource(nemesis_db);
@@ -1478,6 +1480,7 @@ impl Game {
             caravans: caravan_db,
             rock: rock_db,
             floors: floor_db,
+            crops: crop_db,
             rooms: room_db,
             props: prop_db,
             nemesis: nemesis_db,
@@ -1620,6 +1623,7 @@ impl Game {
         // behind — `BaseGrid::revert`'s own rule, applied once at load.
         load_warnings.extend(data.base_grid.prune_finishes(&floor_db));
         world.insert_resource(floor_db);
+        world.insert_resource(crop_db);
         world.insert_resource(room_db);
         world.insert_resource(prop_db);
         world.insert_resource(data.base_grid);
@@ -1828,6 +1832,7 @@ impl Game {
         ));
 
         game.restore_dig_sites(data.dig_sites);
+        game.restore_farm_plots(data.farm_plots);
 
         // At most one creature may claim the weapon hand. Taken defensively
         // — the first wins and any others are ignored — rather than trusting
@@ -2607,7 +2612,12 @@ impl Game {
         let job = self
             .world
             .get::<Task>(e)
-            .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
+            .filter(|t| {
+                !matches!(
+                    t.kind,
+                    TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_)
+                )
+            })
             .map(|t| (t.kind, t.target, t.progress, t.required));
         let cronjob = job.and_then(|(kind, target, progress, required)| {
             self.world
@@ -2619,7 +2629,7 @@ impl Game {
                     kind: match kind {
                         TaskKind::GatherResource => save::CronjobKind::GatherResource,
                         TaskKind::Guard => save::CronjobKind::Guard,
-                        TaskKind::Excavate | TaskKind::Construct => {
+                        TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_) => {
                             unreachable!("filtered out above")
                         }
                     },
@@ -3315,6 +3325,8 @@ impl Game {
 
         let dig_sites = self.dig_site_saves_for();
 
+        let farm_plots = self.farm_plot_saves();
+
         let build_sites = self.build_site_saves_for();
 
         let caravans = self.caravan_saves_for();
@@ -3345,6 +3357,7 @@ impl Game {
             nests,
             traps,
             dig_sites,
+            farm_plots,
             build_sites,
             ruins: self
                 .world
@@ -3798,6 +3811,7 @@ struct AssetDbs {
     research: ResearchDb,
     rock: crate::rock::RockDb,
     floors: crate::floors::FloorDb,
+    crops: crate::crops::CropDb,
     rooms: crate::rooms::RoomDb,
     props: crate::tactical::props::PropDb,
     items: ItemDb,
@@ -3997,6 +4011,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // the pre-finish game.
     let (floors, floor_warnings) = crate::floors::FloorDb::load_dir(&assets_dir.join("floors"))?;
     warnings.extend(floor_warnings);
+    // Absent is silent: no crop means a farm plot has nothing to sow.
+    let (mut crops, crop_warnings) = crate::crops::CropDb::load_dir(&assets_dir.join("crops"))?;
+    warnings.extend(crop_warnings);
     let (rooms, room_warnings) = crate::rooms::RoomDb::load_dir(&assets_dir.join("rooms"))?;
     warnings.extend(room_warnings);
     // Absent is silent: an empty catalogue is the pre-prop battle map.
@@ -4027,6 +4044,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
             ));
         }
     }
+    warnings.extend(crops.drop_unknown_products(&items));
     Ok(AssetDbs {
         abilities,
         tools,
@@ -4051,6 +4069,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         rock,
         floors,
+        crops,
         rooms,
         props,
         items,

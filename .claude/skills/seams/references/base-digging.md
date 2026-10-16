@@ -246,3 +246,20 @@
     clean over the dimmed fill beneath it, so a finished tile stops
     answering to the Power vignette and to cloud dimming the way a plain
     floor tile does. All three layers must scale by the same `dim`.
+
+- **Farm wants are appended after dig wants, and `run_farm_crew` drops a
+  tender's `Task` on every landing and every tile/job mismatch.** `farm_wants`
+  is extended onto `base_wants` after `dig_wants`, so farming is the
+  lowest-priority labour in the same pool: a farm want above dig or production
+  silently starves production, because `assign_by_priority` never un-seats an
+  earlier want. Like `dig_wants` it is structural and `has_station`-filtered,
+  so an unreachable tile takes no body. The crew re-validates its job against
+  the tile every step (`tile_still_wants`) and removes the `Task` on every
+  landing, so a want that vanishes mid-route (a tile dimpled, a harvest
+  brought in) frees its tender instead of stranding it; that is what keeps a
+  farm-only base moving, pinned by
+  `a_farm_alone_keeps_its_tender_moving_between_tiles`. There is deliberately
+  no `any_plot_sown` term in `queue_is_empty` (an earlier one survived the
+  whole suite and only held the empty-queue guard off for ever on any base
+  with a sown plot). `FarmTile` is another non-`Structure` entity carrying a
+  base-space `Position`, after a posted program, `DigSite` and a besieger.

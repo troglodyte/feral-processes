@@ -1418,6 +1418,29 @@ pub struct DigMark {
     pub cut: Option<f32>,
 }
 
+/// One farm cell as the base map draws it — see `Game::farm_tiles`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FarmTileView {
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    pub plot: Entity,
+    /// The recipe's glyph and colour; `None` when the plot is unsown.
+    pub crop: Option<(String, GlyphColor)>,
+    pub state: FarmTileState,
+}
+
+/// How far a farm cell has grown, as a look rather than a count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarmTileState {
+    Fallow,
+    /// `stage` is in `0..stages`.
+    Growing {
+        stage: u8,
+        stages: u8,
+    },
+    Ripe,
+}
+
 /// One room with a role, for the base map's Alt overlay — see
 /// `Game::view_rooms`. Rooms with no role (the commons, bare space) are not
 /// listed.

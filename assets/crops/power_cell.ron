@@ -1,0 +1,10 @@
+(
+    id: "power_cell",
+    name: "Power Cell",
+    description: "Staff dimple phase space here, and a cell slowly grows.",
+    produces: "power_cell",
+    grow_ticks: 1200,
+    stages: 4,
+    glyph: "+",
+    color: Yellow,
+)

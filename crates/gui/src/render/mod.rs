@@ -49,6 +49,7 @@ mod dossier;
 mod ending;
 mod excavate_brush;
 mod extraction;
+mod farm_recipe;
 mod field;
 mod frame_map;
 mod group_menu;
@@ -132,6 +133,7 @@ use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
 use excavate_brush::draw_excavate_brush;
 use extraction::draw_extraction_options;
+use farm_recipe::draw_farm_recipe;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::draw_dev_console;
@@ -1040,6 +1042,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::ExcavateBrush => app.excavate_brush_rows(),
         _ => Vec::new(),
     };
+    let farm_recipe = match app.mode {
+        Mode::FarmRecipe => app.farm_recipe_rows(),
+        _ => Vec::new(),
+    };
     let put_down = match app.mode {
         Mode::PutDown => app.put_down_rows(),
         _ => Vec::new(),
@@ -1195,6 +1201,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
+        Mode::FarmRecipe => draw_farm_recipe(&farm_recipe, selected, refusal, painter, m),
         Mode::PutDown => draw_put_down(&put_down, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
@@ -1681,7 +1688,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 154] = [
+    const ALL_MODES: [Mode; 155] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1764,6 +1771,7 @@ mod tests {
         Mode::FieldRoutineCell,
         Mode::Excavate,
         Mode::ExcavateBrush,
+        Mode::FarmRecipe,
         Mode::Stockpile,
         Mode::PutDown,
         Mode::Refactor,

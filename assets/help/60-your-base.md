@@ -49,6 +49,12 @@ at the bottom, so move them up if the floor matters more than what you are makin
 is how they go away. Your own swings are never held back this way — with your cutting
 tools out, walking into a wall still cuts it, whatever the shelves hold.
 
+Farm plots are drawn in the same plan. Press P to switch the box from rock to a plot, draw it on
+open floor, and press P again to go back. Stand beside a plot and press c to pick what it grows;
+every tile in it takes that crop. Your staff dimple each tile, wait out the crop's grow time, then
+harvest the result onto the floor, and start over, for as long as the plot stands. Drawing a box
+that starts on a plot tile unmarks it, which is how you stop.
+
 Building works the same way, and the Home is the one exception. Every other structure you pick out
 of the build menu is a *request*: it marks the cell with a dark slab and an orange caret, and one of
 your programs comes and raises it. No materials are charged when you file it, so you may ask for a machine

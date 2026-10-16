@@ -1803,6 +1803,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         nests: Vec::new(),
         traps: Vec::new(),
         dig_sites: Vec::new(),
+        farm_plots: Vec::new(),
         ruins: Vec::new(),
         build_sites: Vec::new(),
         caravans: Vec::new(),

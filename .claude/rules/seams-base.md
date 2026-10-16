@@ -447,3 +447,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
 
 - **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**
+
+- **Farm wants are appended after dig wants, and a sown plot keeps the quiet-base guard open** (`FarmTile` is the third non-`Structure` entity with a base-space `Position`).

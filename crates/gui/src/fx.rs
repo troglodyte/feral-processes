@@ -67,6 +67,13 @@ pub const CAMERA_DWELL_SECONDS: f64 =
 /// longest a glide takes, not the only figure: see `Fx::slid_cell`.
 pub(crate) const SLIDE_SECONDS: f64 =
     1.0 / feral_processes_app_core::TACTICAL_STEPS_PER_SECOND as f64;
+/// How much shorter than a whole glide the gap since a body's last step has
+/// to be before the next glide is paced to it instead. A wild walk is paced
+/// against frames, so where the refresh rate does not divide a walk step its
+/// gaps alternate a frame either side of `SLIDE_SECONDS` — and a glide
+/// paced to the short one lands a frame early and stands still for a frame.
+/// A held key's repeat is well under this; a frame of jitter never is.
+const FAST_STEP_FRACTION: f64 = 0.75;
 
 /// A hold that ends inside the flash it is there to show is the bug this
 /// whole mechanism exists to fix, so it is a build failure. That the *pan*
@@ -1838,7 +1845,14 @@ impl Fx {
                     from: slide.position(now),
                     to: cell,
                     start: now,
-                    seconds: (now - slide.start).clamp(0.0, SLIDE_SECONDS),
+                    seconds: {
+                        let gap = (now - slide.start).max(0.0);
+                        if gap < SLIDE_SECONDS * FAST_STEP_FRACTION {
+                            gap
+                        } else {
+                            SLIDE_SECONDS
+                        }
+                    },
                 }
             } else {
                 Slide::at_rest(cell, now)
@@ -3020,12 +3034,49 @@ mod tests {
             battle_at(&mut fx, pair[1] - 1e-6);
             let (drawn, _) = fx.slid_cell(entity, (x, 0));
             // Step 2 is the one glide paced to the repeat *delay* before the
-            // interval is learnt; every step after it lands.
-            if x != 2 {
-                assert!(
-                    (drawn - x as f32).abs() < 1e-3,
-                    "step {x}: drawn at {drawn}, behind its cell"
-                );
+            // interval is learnt, so it is still short of its cell when step
+            // 3 comes — by under half a cell. Every step after it lands.
+            let behind = x as f32 - drawn;
+            let bound = if x == 2 { 0.5 } else { 1e-3 };
+            assert!(
+                behind < bound,
+                "step {x}: drawn at {drawn}, behind its cell"
+            );
+        }
+    }
+
+    /// A wild walk is paced against frames, so at a refresh rate that does
+    /// not divide a walk step its gaps alternate a frame short and a frame
+    /// long. A glide shortened to the short gap lands a frame early and the
+    /// body stands still for a frame every other step — so it must move on
+    /// every frame of the walk, at every common rate.
+    #[test]
+    fn a_frame_quantised_walk_never_stalls_a_frame() {
+        let step = 1.0 / f64::from(feral_processes_app_core::TACTICAL_STEPS_PER_SECOND);
+        for hz in [60.0, 75.0, 144.0, 165.0] {
+            let mut fx = Fx::new();
+            let entity = Entity::from_raw_u32(1).unwrap();
+            let dt = 1.0 / hz;
+            battle_at(&mut fx, 1.0);
+            fx.slid_cell(entity, (0, 0));
+            let (mut now, mut carry, mut cell) = (1.0, 0.0, 0);
+            let mut last = 0.0;
+            for frame in 0..(hz as usize * 2) {
+                now += dt;
+                carry += dt;
+                if carry >= step {
+                    carry -= step;
+                    cell += 1;
+                }
+                battle_at(&mut fx, now);
+                let (x, _) = fx.slid_cell(entity, (cell, 0));
+                if cell > 1 {
+                    assert!(
+                        x > last,
+                        "{hz} Hz, frame {frame}: the body stood still at {x}"
+                    );
+                }
+                last = x;
             }
         }
     }

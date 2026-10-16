@@ -53,6 +53,18 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.0
+
+**Saves from earlier versions no longer load.** The base's production buildings were replaced, so an older base would load without them. Start a new game.
+
+**Four machines replace the sixteen one-job production buildings: the Extractor, Factory, Assembler and Printer. Stand beside one and press `R` to choose what it makes.** Before, each product needed its own building (a Mining Node for Core Fragments, a Refinery for Bytecode Blocks, a Disk Press for Routine Disks and so on). Now one Factory can make any of five parts, and the menu lists only the recipes you have researched, with how quick each one is. A machine is named by what it makes, such as "Factory (Bytecode Block)".
+
+**A new machine makes nothing until you choose, and it wears a `?` on the map until then.** A machine with nothing set is never staffed, draws no power and pulls nothing from its neighbours. Switching a machine to another recipe asks first. Everything it held goes to your Depots, or onto the floor beside it if they are full, so nothing is lost.
+
+**Hand compiling happens at one Workbench, and you must stand beside it.** It replaces the Armory, Fabricator, Refactor Bench and the Compiler's bench recipes. Each recipe keeps the research it needed before, and the tier of the Workbench you are touching sets the quality of what you compile. A Workbench anywhere in the base, with Automation researched, still lets you extract routines.
+
+**A work order for something no machine is set to make is accepted and waits, marked with a red `!` and the machine to set.** It starts on its own once you set a machine to the item or to a missing ingredient. A siege-wrecked machine comes back from its rebuild still set to what it made.
+
 ## 0.18.37
 
 **Your base can grow Power Cells on farm plots.** In the Excavation plan (`m`), `P` switches the box to marking a farm plot on laid floor; one box is one plot. Stand beside a plot and press `c` to pick what it grows. From then on staff tend it with no further orders: they dimple phase space on each tile, the cell grows larger through four stages, and when it is ripe they harvest one Power Cell onto the floor and start again, until you unmark the plot.

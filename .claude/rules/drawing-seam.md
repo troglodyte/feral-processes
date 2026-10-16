@@ -40,7 +40,8 @@ the test asserts the mesh *and* the absent `@`. Sprites are 16x16 because
 bevy_egui binds the image's own sampler and Bevy's default is linear.
 **The player's drawn icon is the one sprite drawn untinted, and the
 player tile's fallback is three-step**: the runtime-only `"@drawn"` key,
-then `player.png` under `"player"`, then the `@` glyph. It is the
+then `player.png` under `"player"`, then the `@` glyph — on the map and
+the battle map's body alike, gated by the one `render::wears_drawing`. It is the
 exception to "art is authored near-white" because it is the one tile
 that inherits none of the hues that rule protects — no species colour,
 no `biome_tint`, no damage dimming — so putting the hue back reads as a

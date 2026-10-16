@@ -1053,3 +1053,50 @@ fn zoom_in_outside_playing_does_nothing() {
     app.zoom_in();
     assert_eq!(app.zoom, before);
 }
+
+/// The numpad's corners walk the map diagonally, both on the clock and
+/// paused — before this they were dropped everywhere but the battle map, so
+/// a player steering with the numpad lost four of its eight keys the moment
+/// the fight ended.
+#[test]
+fn the_numpad_corners_step_the_party_diagonally() {
+    for (key, (dx, dy)) in [
+        (GameKey::UpLeft, (-1, -1)),
+        (GameKey::UpRight, (1, -1)),
+        (GameKey::DownLeft, (-1, 1)),
+        (GameKey::DownRight, (1, 1)),
+    ] {
+        let mut app = test_app(2604);
+        clear_the_area_around_player(&mut app);
+        let start = player_pos(&app);
+        app.handle_key(key);
+        app.update_realtime(1.0 / app.world_speed.ticks_per_second());
+        assert_eq!(
+            player_pos(&app),
+            (start.0 + dx, start.1 + dy),
+            "{key:?} did not step the party on the clock"
+        );
+
+        let mut app = test_app(2604);
+        clear_the_area_around_player(&mut app);
+        app.handle_key(GameKey::Char(' '));
+        let start = player_pos(&app);
+        app.handle_key(key);
+        assert_eq!(
+            player_pos(&app),
+            (start.0 + dx, start.1 + dy),
+            "{key:?} did not step the party while paused"
+        );
+    }
+}
+
+/// Underground the party has a facing and no diagonal: a corner is inert
+/// there rather than folded onto a turn the player did not ask for.
+#[test]
+fn the_numpad_corners_are_inert_underground() {
+    let mut app = app_underground(2605);
+    let start = tick_of(&app);
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::UpLeft);
+    assert_eq!(tick_of(&app), start, "a corner spent a turn in the Stack");
+}

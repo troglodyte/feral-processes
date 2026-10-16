@@ -916,9 +916,10 @@ pub enum GameKey {
     /// **Where they differ from the modified arrows is the fold**:
     /// `App::handle_key` collapses `ShiftLeft` to `Left` for every mode but
     /// the one that reads it, and a diagonal has no honest orthogonal fold.
-    /// Turning `UpLeft` into `Up` on the world map walks the player
-    /// somewhere they did not ask to go, so off the battle map these are
-    /// ignored instead.
+    /// Turning `UpLeft` into `Up` walks the player somewhere they did not
+    /// ask to go, so they reach every mode unfolded: the battle map and the
+    /// surface walk (`app::playing::step_delta`) step diagonally, and
+    /// everywhere else — the Stack's facing included — ignores them.
     UpLeft,
     UpRight,
     DownLeft,

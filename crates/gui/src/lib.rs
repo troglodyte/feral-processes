@@ -55,8 +55,8 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
         KeyCode::ArrowLeft | KeyCode::Numpad4 => Some(GameKey::Left),
         KeyCode::ArrowRight | KeyCode::Numpad6 => Some(GameKey::Right),
         // Physical key codes, so the numpad steers whether or not NumLock is
-        // on — the digits it types when it is are read from
-        // `KeyboardInput::text` and belong to whatever screen binds them.
+        // on — and the digit it types when it is never reaches the game
+        // (`types_text`).
         KeyCode::Numpad7 => Some(GameKey::UpLeft),
         KeyCode::Numpad9 => Some(GameKey::UpRight),
         KeyCode::Numpad1 => Some(GameKey::DownLeft),
@@ -67,6 +67,14 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
         KeyCode::Tab => Some(GameKey::Tab),
         _ => None,
     }
+}
+
+/// Whether a key's typed text reaches the game. A key `map_special_key`
+/// reads is one gesture already: with NumLock on, the numpad's `1` also
+/// types `'1'`, and on the map that both stepped the party and switched
+/// the info tab in one press.
+fn types_text(key: KeyCode) -> bool {
+    map_special_key(key).is_none()
 }
 
 /// Delivered from the held state via `KeyRepeat` rather than from
@@ -870,7 +878,7 @@ fn frame(
     // layout instead of assuming QWERTY positions. `TextGate` is what stops
     // the OS auto-repeat riding along that path into the screen the press
     // just opened — `block_held` below cannot reach these.
-    for event in input.typed.read() {
+    for event in input.typed.read().filter(|e| types_text(e.key_code)) {
         let app = &mut fe.app;
         fe.text_gate
             .feed(event.key_code, event.state, event.text.as_deref(), |c| {
@@ -2326,6 +2334,28 @@ mod tests {
                 "{direction:?} is not on any polled key"
             );
         }
+    }
+
+    /// A steering key never also types: NumLock's digits off the numpad's
+    /// eight directions are dropped, while the top row's digits still type.
+    #[test]
+    fn a_steering_numpad_key_types_nothing() {
+        for key in [
+            KeyCode::Numpad1,
+            KeyCode::Numpad2,
+            KeyCode::Numpad3,
+            KeyCode::Numpad4,
+            KeyCode::Numpad6,
+            KeyCode::Numpad7,
+            KeyCode::Numpad8,
+            KeyCode::Numpad9,
+        ] {
+            assert!(!types_text(key), "{key:?} must steer only");
+        }
+        assert!(
+            types_text(KeyCode::Digit1),
+            "the top row still types digits"
+        );
     }
 
     /// The numpad's corners are the diagonals, and each is its own. Pinned

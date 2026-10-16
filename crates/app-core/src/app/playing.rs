@@ -68,40 +68,35 @@ fn stepped_paced(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> (bool, u3
 
 /// Which keys hand the map's camera back to the party — see `App::watching`.
 ///
-/// Esc is the advertised way out. The eight movement keys are here because
+/// Esc is the advertised way out. The movement keys are here because
 /// walking while the camera sits somewhere else is walking blind, and the
 /// player who presses a direction has already stopped watching whether or
 /// not they thought of it that way.
 fn releases_the_camera(key: GameKey) -> bool {
-    matches!(
-        key,
-        GameKey::Esc
-            | GameKey::Up
-            | GameKey::Down
-            | GameKey::Left
-            | GameKey::Right
-            | GameKey::Char('k')
-            | GameKey::Char('j')
-            | GameKey::Char('h')
-            | GameKey::Char('l')
-    )
+    key == GameKey::Esc || is_move_key(key)
 }
 
-/// The eight keys that step the party on this screen — arrows and their
-/// `hjkl` aliases. Shared by the walk-queueing arm below and the Stack
-/// hand-off, so the one set of keys can't drift between the two readings.
+/// The step a key asks of the party on this screen — arrows, their `hjkl`
+/// aliases, and the numpad's corners as the four diagonals. Shared by the
+/// walk-queueing arm, the paused arm and the Stack hand-off, so the one set
+/// of keys can't drift between the readings. The engine's step is a bare
+/// `(dx, dy)` onto the destination tile, so a diagonal needs nothing of it.
+fn step_delta(key: GameKey) -> Option<(i32, i32)> {
+    match key {
+        GameKey::Up | GameKey::Char('k') => Some((0, -1)),
+        GameKey::Down | GameKey::Char('j') => Some((0, 1)),
+        GameKey::Left | GameKey::Char('h') => Some((-1, 0)),
+        GameKey::Right | GameKey::Char('l') => Some((1, 0)),
+        GameKey::UpLeft => Some((-1, -1)),
+        GameKey::UpRight => Some((1, -1)),
+        GameKey::DownLeft => Some((-1, 1)),
+        GameKey::DownRight => Some((1, 1)),
+        _ => None,
+    }
+}
+
 fn is_move_key(key: GameKey) -> bool {
-    matches!(
-        key,
-        GameKey::Up
-            | GameKey::Down
-            | GameKey::Left
-            | GameKey::Right
-            | GameKey::Char('k')
-            | GameKey::Char('j')
-            | GameKey::Char('h')
-            | GameKey::Char('l')
-    )
+    step_delta(key).is_some()
 }
 
 /// SPACE (pause) and `,` (world speed) — the two keys `handle_playing_key`'s
@@ -459,15 +454,10 @@ impl App {
         // queued, travel included, so at most one step is ever pending.
         // Paused leaves this alone: `acting_while_paused_still_spends_a_turn`
         // is the turn-based path below, unchanged.
-        if is_move_key && !self.paused {
-            let delta = match key {
-                GameKey::Up | GameKey::Char('k') => (0, -1),
-                GameKey::Down | GameKey::Char('j') => (0, 1),
-                GameKey::Left | GameKey::Char('h') => (-1, 0),
-                GameKey::Right | GameKey::Char('l') => (1, 0),
-                _ => unreachable!("is_move_key guards this to the four directions"),
-            };
-            self.walk = Some(Walk::Step(delta.0, delta.1));
+        if !self.paused
+            && let Some((dx, dy)) = step_delta(key)
+        {
+            self.walk = Some(Walk::Step(dx, dy));
             return;
         }
 
@@ -486,10 +476,9 @@ impl App {
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
-                GameKey::Up | GameKey::Char('k') => stepped(game, 0, -1, &mut ground_bite),
-                GameKey::Down | GameKey::Char('j') => stepped(game, 0, 1, &mut ground_bite),
-                GameKey::Left | GameKey::Char('h') => stepped(game, -1, 0, &mut ground_bite),
-                GameKey::Right | GameKey::Char('l') => stepped(game, 1, 0, &mut ground_bite),
+                _ if let Some((dx, dy)) = step_delta(key) => {
+                    stepped(game, dx, dy, &mut ground_bite)
+                }
                 // Zone surface only on this path — the Stack binds its own
                 // `.` below, and base space binds none at all. Falling
                 // through the guard to `_ => false` leaves it a **dead key**:

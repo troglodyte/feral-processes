@@ -411,6 +411,18 @@ pub(super) fn player_sprite_name(sprite: &str) -> Option<&str> {
     (!sprite.is_empty()).then_some(sprite)
 }
 
+/// Whether the player's own drawing stands on their cell — the top rung of
+/// the same ladder on the map and on the battle board, so the two cannot
+/// disagree about when a player is wearing it. An emulating player draws
+/// the image's sprite instead, never the drawing: the two would substitute
+/// for the same glyph on the same cell.
+pub(super) fn wears_drawing(
+    look: Option<&feral_processes_engine::views::PlayerLook>,
+    emulating: bool,
+) -> bool {
+    !emulating && look.is_some_and(|look| look.icon.is_some())
+}
+
 /// One row of the image picker (`Mode::BattleEmulate`/
 /// `Mode::TacticalEmulate`, todo #100 Task 6), shared so the group model's
 /// `draw_battle_emulate_menu` and the battle map's `draw_tactical_emulate`

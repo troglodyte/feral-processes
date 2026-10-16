@@ -1195,9 +1195,7 @@ fn draw_surface_map(
                 // way round, since the two would otherwise substitute for
                 // the same glyph on the same tile.
                 let drawn_icon = actor.is_some_and(|ev| {
-                    ev.is_player
-                        && ev.form.is_none()
-                        && ev.look.as_ref().is_some_and(|look| look.icon.is_some())
+                    ev.is_player && super::wears_drawing(ev.look.as_ref(), ev.form.is_some())
                 });
                 // **An actor's sprite outranks a structure's, exactly as its
                 // glyph already does above** — `structure` is only reached

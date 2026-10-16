@@ -1051,21 +1051,40 @@ fn draw_body(
     // table has nothing under falls back to the glyph, and that glyph is
     // free to carry the con rung. `form`'s own sprite outranks `body.sprite`
     // for the same reason `ink` above does.
-    let sprite = body
-        .form
-        .as_ref()
-        .and_then(|f| f.sprite.as_deref())
-        .or(body.sprite.as_deref());
-    let drew_sprite = sprite.is_some_and(|name| {
-        painter.sprite(
-            name,
+    //
+    // The player's own rungs are the map's (`render/base.rs`): their drawing,
+    // untinted for that file's reason with only the cloak's fade kept, then
+    // the sprite their look names. The player has no species, so without
+    // these `body.sprite` is `None` and the `@` was all this board drew.
+    let look = body.look.as_ref().filter(|_| body.is_player);
+    let drew_drawing = body.is_player
+        && super::wears_drawing(look, body.form.is_some())
+        && painter.sprite(
+            crate::sprites::DRAWN_ICON_KEY,
             px + inset,
             py + inset,
             body_glyph_px as f32,
-            ink,
+            Color::new(1.0, 1.0, 1.0, ink.a),
             body.entity.to_bits(),
-        )
-    });
+        );
+    let sprite = body.form.as_ref().map_or_else(
+        || {
+            look.and_then(|look| super::player_sprite_name(&look.sprite))
+                .or(body.sprite.as_deref())
+        },
+        |f| f.sprite.as_deref(),
+    );
+    let drew_sprite = drew_drawing
+        || sprite.is_some_and(|name| {
+            painter.sprite(
+                name,
+                px + inset,
+                py + inset,
+                body_glyph_px as f32,
+                ink,
+                body.entity.to_bits(),
+            )
+        });
     let con = ConRead::of(
         body.difficulty,
         body.is_boss || body.form.is_some(),
@@ -2068,6 +2087,105 @@ mod tests {
             painted_rect_stroke_count(&shapes, outline) > 0,
             "the emulating player's own body must keep an outline in their \
              colour, since the hue is spent on boss magenta"
+        );
+    }
+
+    /// The board's view of `fighting()` with the player wearing `look` —
+    /// written onto the view rather than the game, since a drawing has no
+    /// writer short of character creation and the renderer reads only the
+    /// view.
+    fn player_wearing(
+        sprite: &str,
+        icon: Option<feral_processes_engine::PlayerIcon>,
+    ) -> feral_processes_engine::tactical::view::TacticalView {
+        let mut view = fighting().tactical_view().expect("the fight is open");
+        let player = view
+            .bodies
+            .iter_mut()
+            .find(|b| b.is_player)
+            .expect("the player is on the board");
+        let look = player.look.as_mut().expect("the player carries a look");
+        look.sprite = sprite.to_string();
+        look.icon = icon;
+        view
+    }
+
+    fn a_drawing() -> feral_processes_engine::PlayerIcon {
+        let mut icon = feral_processes_engine::PlayerIcon::default();
+        icon.set(3, 4, 7);
+        icon
+    }
+
+    /// The player's own drawing stands on their body on this board as it
+    /// does on the map — top rung over a named sprite, in place of the `@`
+    /// rather than over it, and untinted for `render/base.rs`'s reason.
+    #[test]
+    fn the_players_drawing_stands_in_for_the_at_sign() {
+        use crate::paint::{SpriteTable, with_sprites};
+
+        let view = player_wearing("hero", Some(a_drawing()));
+        let mut table = SpriteTable::default();
+        table.insert_still(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+        table.insert_still("hero", bevy_egui::egui::TextureId::User(4));
+
+        let mut fx = Fx::new();
+        let (_, shapes) = with_sprites(table, |p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let images = crate::paint::painted_images(&shapes);
+        let painted = painted_text(&shapes);
+
+        let drawing: Vec<_> = images
+            .iter()
+            .filter(|(id, _, _)| *id == bevy_egui::egui::TextureId::User(9))
+            .collect();
+        assert_eq!(drawing.len(), 1, "the drawing must be painted once");
+        assert!(
+            !images
+                .iter()
+                .any(|(id, _, _)| *id == bevy_egui::egui::TextureId::User(4)),
+            "the drawing must win the body from the named sprite"
+        );
+        let tint = drawing[0].2;
+        assert!(
+            tint.r() == tint.g() && tint.g() == tint.b(),
+            "a drawing is drawn untinted, not in a hue: {tint:?}"
+        );
+        assert!(
+            !painted.iter().any(|t| t == "@"),
+            "the '@' must give way to the drawing, not sit under it: {painted:?}"
+        );
+    }
+
+    /// With no drawing, the player's named sprite is the next rung, as on
+    /// the map.
+    #[test]
+    fn the_players_named_sprite_stands_in_without_a_drawing() {
+        use crate::paint::{SpriteTable, with_sprites};
+
+        let view = player_wearing("hero", None);
+        let mut table = SpriteTable::default();
+        table.insert_still("hero", bevy_egui::egui::TextureId::User(4));
+
+        let mut fx = Fx::new();
+        let (_, shapes) = with_sprites(table, |p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let images = crate::paint::painted_images(&shapes);
+        let painted = painted_text(&shapes);
+
+        assert!(
+            images
+                .iter()
+                .any(|(id, _, _)| *id == bevy_egui::egui::TextureId::User(4)),
+            "the player's named sprite must draw on the board"
+        );
+        assert!(
+            !painted.iter().any(|t| t == "@"),
+            "the '@' must give way to the sprite: {painted:?}"
         );
     }
 

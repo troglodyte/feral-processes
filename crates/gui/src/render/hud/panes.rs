@@ -325,18 +325,48 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         return out;
     }
 
+    let rows: Vec<(&StructureReport, String)> = d
+        .structures
+        .iter()
+        .filter(|s| s.workable)
+        .map(|s| {
+            let program = s
+                .assignees
+                .first()
+                .map(|a| a.label.clone())
+                .unwrap_or_else(|| "\u{2014} none \u{2014}".to_string());
+            (s, program)
+        })
+        .collect();
+    // Each column is as wide as the widest cell drawn in it, plus a gap: a
+    // machine label ("Assembler (Recompile Kernel)") outgrows any fixed cell,
+    // and a cut name would run into the program beside it.
+    let name_w = rows
+        .iter()
+        .map(|(s, _)| s.label.chars().count())
+        .chain(["NAME".len()])
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let program_w = rows
+        .iter()
+        .map(|(_, p)| p.chars().count())
+        .chain(["PROGRAM".len()])
+        .max()
+        .unwrap_or(0)
+        + 1;
     out.push(text(vec![(
-        format!("{}{}{}", cell("  NAME", 20), cell("PROGRAM", 13), "OUT"),
+        format!(
+            "  {}{}{}",
+            cell("NAME", name_w),
+            cell("PROGRAM", program_w),
+            "OUT"
+        ),
         palette::LABEL,
         false,
     )]));
-    for s in d.structures.iter().filter(|s| s.workable) {
+    for (s, program) in &rows {
         let idle = s.assignees.is_empty();
-        let program = s
-            .assignees
-            .first()
-            .map(|a| a.label.clone())
-            .unwrap_or_else(|| "\u{2014} none \u{2014}".to_string());
         let out_qty: u32 = s.output.iter().map(|(_, q)| q).sum();
         let mark = if idle { "! " } else { "  " };
         let colour = if idle {
@@ -347,8 +377,8 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         out.push(text(vec![(
             format!(
                 "{mark}{}{}{}",
-                cell(&s.label, 18),
-                cell(&program, 13),
+                cell(&s.label, name_w),
+                cell(program, program_w),
                 out_qty
             ),
             colour,
@@ -995,6 +1025,76 @@ mod tests {
                 tab.label()
             );
         }
+    }
+
+    /// **The BASE name column takes its width from the widest label drawn**:
+    /// a machine row reads "Assembler (Recompile Kernel)", longer than any
+    /// fixed cell, and a cut name runs into the program column beside it
+    /// ("Extractor (Core Fr0x000000"). The label is the longest the shipped
+    /// machines build, and the program is a real handle.
+    #[test]
+    fn a_base_row_draws_the_longest_machine_label_whole_beside_its_program() {
+        use feral_processes_engine::components::ProgramId;
+        use feral_processes_engine::{Game, handles, structures::MachineRole};
+
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            41,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets");
+        let longest = game
+            .structure_defs()
+            .iter()
+            .filter_map(|def| def.machine.as_ref().map(|m| (def, m)))
+            .flat_map(|(def, m)| {
+                let _: MachineRole = m.role;
+                m.recipes
+                    .iter()
+                    .map(|r| format!("{} ({})", def.name, game.item_name(&r.produces)))
+            })
+            .max_by_key(|l| l.chars().count())
+            .expect("the shipped machines list recipes");
+
+        let mut row = structure(&longest, false);
+        let handle = handles::of(ProgramId(1));
+        row.assignees[0].label = handle.clone();
+        let mut other = structure("Extractor (Core Fragment)", false);
+        other.assignees[0].label = handle.clone();
+        let structures = [row, other];
+        let d = busy(&[], &structures, &[], &[], &[], &[]);
+
+        let m = ui_metrics(720.0);
+        let room = column_body(&m).w - m.inset * 2.0;
+        with_painter(|p| {
+            for r in rows(InfoTab::Base, &d) {
+                let Row::Text { left, right } = &r else {
+                    continue;
+                };
+                let joined: String = left
+                    .iter()
+                    .chain(right.iter())
+                    .map(|(t, _, _)| t.as_str())
+                    .collect();
+                if !joined.contains(&handle) {
+                    continue;
+                }
+                // Both rows are measured for fit; the cut is checked on the
+                // one that starts the same way as the longest label.
+                let is_longest = joined.contains(&longest[..9]);
+                assert!(
+                    !is_longest || joined.contains(&format!("{longest} ")),
+                    "the name was cut into the program column: {joined:?}"
+                );
+                let drawn = p.measure_ui_advance(&joined, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the row overflows the column by {:.0}px: {joined:?}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// The column truncates through [`cell`], so a wide name cannot overflow

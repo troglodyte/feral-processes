@@ -330,3 +330,184 @@ fn a_body_that_has_downed_tools_never_tidies() {
     }
     assert_eq!(floor_things(&mut g), vec![((-3, 0), core())]);
 }
+
+// ---------------------------------------------------------------------------
+// Stock: a plain item on a stockpile cell is the base's.
+// ---------------------------------------------------------------------------
+
+use crate::components::Stock;
+use crate::game::base::work_orders::base_holding;
+
+fn frag() -> ItemId {
+    ItemId::from(ids::CORE_FRAGMENT)
+}
+
+fn shelf_with(g: &mut Game, x: i32, y: i32, qty: u32) -> Entity {
+    let shelf = spawn_machine_at(g, "mining_node", x, y);
+    g.world
+        .get_mut::<Stock>(shelf)
+        .unwrap()
+        .output
+        .insert(frag(), qty);
+    shelf
+}
+
+fn shelf_qty(g: &Game, shelf: Entity) -> u32 {
+    g.world
+        .get::<Stock>(shelf)
+        .unwrap()
+        .output
+        .get(&frag())
+        .copied()
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_stockpiled_item_counts_and_a_loose_one_does_not() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    shelf_with(&mut g, 2, 0, 3);
+    assert_eq!(base_holding(&g, &frag()), 3);
+    loose(&mut g, -3, 0);
+    assert_eq!(base_holding(&g, &frag()), 3, "loose does not count");
+    loose(&mut g, 4, 0);
+    assert_eq!(base_holding(&g, &frag()), 4);
+}
+
+#[test]
+fn spending_takes_shelves_first_then_stockpiles_in_tile_order() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    let shelf = shelf_with(&mut g, 2, 0, 1);
+    loose(&mut g, 5, 0);
+    loose(&mut g, 4, 0);
+    let taken = crate::game::base::stock::spend_from_base(
+        &mut g,
+        &frag(),
+        2,
+        crate::base_ledger::ConsumeSource::Base,
+    );
+    assert_eq!(taken, 2);
+    assert_eq!(shelf_qty(&g, shelf), 0);
+    assert_eq!(floor_things(&mut g), vec![((5, 0), core())]);
+}
+
+#[test]
+fn a_bill_is_checked_and_paid_across_shelf_and_stockpile() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    shelf_with(&mut g, 2, 0, 1);
+    loose(&mut g, 4, 0);
+    let bill = [(frag(), 3)];
+    assert!(!crate::game::base::stock::spend_bill_from_base(
+        &mut g,
+        &bill,
+        crate::base_ledger::ConsumeSource::Base
+    ));
+    assert_eq!(
+        floor_things(&mut g).len(),
+        1,
+        "a refused bill moves nothing"
+    );
+    assert!(crate::game::base::stock::spend_bill_from_base(
+        &mut g,
+        &[(frag(), 2)],
+        crate::base_ledger::ConsumeSource::Base
+    ));
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn the_stock_block_counts_stockpiled_items() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    shelf_with(&mut g, 2, 0, 2);
+    loose(&mut g, 4, 0);
+    loose(&mut g, -3, 0);
+    let row = g
+        .base_stock()
+        .into_iter()
+        .find(|r| r.item == frag())
+        .expect("a row");
+    assert_eq!(row.qty, 3);
+}
+
+#[test]
+fn a_stockpiled_gear_copy_or_program_is_not_stock() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    let copy = crate::items::GearCopy::plain(frag());
+    spawn_floor_item(&mut g.world, at(4, 0), FloorThing::Gear(copy));
+    assert!(crate::game::base::stock::stockpiled(&g).is_empty());
+    assert_eq!(base_holding(&g, &frag()), 0);
+    assert!(
+        g.base_stock()
+            .iter()
+            .all(|r| r.item != frag() || r.qty == 0)
+    );
+    let taken = crate::game::base::stock::spend_from_base(
+        &mut g,
+        &frag(),
+        1,
+        crate::base_ledger::ConsumeSource::Base,
+    );
+    assert_eq!(taken, 0);
+    assert_eq!(floor_things(&mut g).len(), 1, "gear is left where it lies");
+}
+
+fn pack_frags(g: &Game) -> u32 {
+    g.world
+        .get::<Inventory>(g.player_entity())
+        .unwrap()
+        .count(&frag())
+}
+
+#[test]
+fn a_builder_fetches_from_a_stockpile_before_the_pack() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    g.world
+        .get_mut::<Inventory>(g.player_entity())
+        .unwrap()
+        .add(frag(), 500);
+    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    let builder = spawn_tamed(&mut g, 500, 3);
+    // Strictly nearer the pile than the pack: distance and tile rank ahead of
+    // the store, which only breaks a tie on the very same tile.
+    g.world.entity_mut(builder).insert(at(5, 1));
+    spawn_floor_item(&mut g.world, at(4, 0), core());
+    let pack = pack_frags(&g);
+    let mut ticks = 0;
+    while g
+        .world
+        .get::<crate::components::Carrying>(builder)
+        .is_none()
+    {
+        assert!(ticks < 200, "the builder never picked anything up");
+        g.tick();
+        ticks += 1;
+    }
+    assert!(
+        floor_things(&mut g).is_empty(),
+        "the stockpile was drawn on"
+    );
+    assert!(pack_frags(&g) >= pack, "the pack was drawn on first");
+}
+
+#[test]
+fn a_pack_still_feeds_a_build_when_no_shelf_or_stockpile_holds_it() {
+    let mut g = game_with_home();
+    with_pile(&mut g);
+    g.world
+        .get_mut::<Inventory>(g.player_entity())
+        .unwrap()
+        .add(frag(), 500);
+    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    spawn_tamed(&mut g, 500, 3);
+    let mut ticks = 0;
+    while pack_frags(&g) == 500 {
+        assert!(ticks < 200, "the pack never fed the build");
+        g.tick();
+        ticks += 1;
+    }
+}

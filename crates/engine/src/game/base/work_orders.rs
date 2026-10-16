@@ -750,15 +750,21 @@ pub(crate) fn wander_step(from: Position, index: usize, step: u64) -> Option<Pos
 }
 
 /// How many of `item` the **base** is holding — every Depot
-/// (`StructureDef::stores`) and every machine output buffer.
+/// (`StructureDef::stores`), every machine output buffer, and every plain
+/// item on a stockpile cell.
 ///
 /// Deliberately not the player's inventory: an order says what the base
 /// should hold, and where it holds it does not matter. What you are carrying
 /// is yours.
 pub(crate) fn base_holding(game: &Game, item: &ItemId) -> u32 {
-    stock::output_buffers(game)
+    let shelved: u32 = stock::output_buffers(game)
         .map(|(_, s)| s.output.get(item).copied().unwrap_or(0))
-        .sum()
+        .sum();
+    let piled = stock::stockpiled(game)
+        .iter()
+        .filter(|(_, _, held)| held == item)
+        .count() as u32;
+    shelved + piled
 }
 
 /// Every item the queue has asked for, each order's own item together with

@@ -839,6 +839,9 @@ pub enum BuildEffect {
     Cycle { shipped: u32, built: u32 },
     /// This structure runs no cycle, so build quality cannot reach it.
     NoCycle,
+    /// A configurable machine: it has no recipe yet, so there is no pace to
+    /// quote, but build quality scales whichever recipe it is set to.
+    ScalesRecipe,
 }
 
 /// One row of the build picker: a program, the aptitude this particular

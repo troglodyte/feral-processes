@@ -4119,6 +4119,7 @@ mod tests {
                     progress: 0,
                     goal: feral_processes_engine::components::BuildGoal::New,
                     program: None,
+                    recipe: None,
                     awaiting_program,
                 });
             feral_processes_engine::save::save_to_file(&path, &data).unwrap();

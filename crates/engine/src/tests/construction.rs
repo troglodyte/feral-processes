@@ -2132,7 +2132,7 @@ fn the_quoted_cycle_is_the_one_the_finished_machine_runs() {
         .expect("the program the fixture is about is on the list");
     let built = match quoted.effect {
         crate::views::BuildEffect::Cycle { built, .. } => built,
-        crate::views::BuildEffect::NoCycle => panic!("a Research Node runs a cycle"),
+        _ => panic!("a Research Node runs a cycle"),
     };
 
     game.place_structure("research_node", 1, 0, Some(program))
@@ -2227,6 +2227,21 @@ fn a_depot_reports_no_cycle_at_all() {
             crate::views::BuildEffect::NoCycle,
             "a Depot has no rate to change"
         );
+    }
+}
+
+/// A machine has no recipe until it is placed and set, so its preview quotes
+/// no pace — but quality scales whichever recipe is set, so it must not say
+/// the program is irrelevant.
+#[test]
+fn a_machine_preview_says_quality_scales_its_recipes() {
+    let mut game = roster_ranked_opposite(1164);
+    for kind in ["factory", "extractor", "assembler", "printer"] {
+        let candidates = game.build_candidates(&kind.to_string(), BuildGoal::New);
+        assert!(!candidates.is_empty(), "the fixture staged a roster");
+        for c in &candidates {
+            assert_eq!(c.effect, crate::views::BuildEffect::ScalesRecipe, "{kind}");
+        }
     }
 }
 

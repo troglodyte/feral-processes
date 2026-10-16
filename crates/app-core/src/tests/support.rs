@@ -3253,6 +3253,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
         goal: feral_processes_engine::components::BuildGoal::New,
         program: None,
         awaiting_program: true,
+        recipe: None,
     });
     if depot {
         data.structures.push(save::StructureSave {

@@ -915,7 +915,7 @@ impl Game {
         let tier = crate::game::catalog::program_tier_required(goal);
         let extracts = def.extracts();
         // A kind-level preview: a machine has no recipe until it is placed
-        // and set, so it previews as `NoCycle`.
+        // and set, so it quotes no pace (`ScalesRecipe`).
         let unset = crate::structures::Placed {
             def: &def,
             recipe: None,
@@ -950,6 +950,7 @@ impl Game {
                     ),
                 ) {
                     (Some(shipped), Some(built)) => BuildEffect::Cycle { shipped, built },
+                    _ if def.machine.is_some() => BuildEffect::ScalesRecipe,
                     _ => BuildEffect::NoCycle,
                 };
                 (

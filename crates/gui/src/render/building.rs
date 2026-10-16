@@ -691,6 +691,11 @@ const REBUILD_PICKER_PROMPT: &str =
 const NO_CYCLE_NOTE: &str =
     "This build does not run a work cycle, so it does not care which program you spend.";
 
+/// A configurable machine has no recipe to quote a pace for, but the program
+/// you spend sets its pace whatever it is later set to make.
+const MACHINE_NOTE: &str =
+    "The program you spend sets how fast this machine works, whatever you set it to make.";
+
 /// The program picker's rows: the warning, then one entry per program the
 /// order could be paid with.
 ///
@@ -747,6 +752,17 @@ pub(super) fn build_program_rows(
     if !candidates.is_empty() && candidates.iter().all(|c| c.effect == BuildEffect::NoCycle) {
         rows.extend(
             wrap_text(NO_CYCLE_NOTE, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        );
+    }
+    if !candidates.is_empty()
+        && candidates
+            .iter()
+            .all(|c| c.effect == BuildEffect::ScalesRecipe)
+    {
+        rows.extend(
+            wrap_text(MACHINE_NOTE, DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
                 .map(text_row),
         );
@@ -3233,6 +3249,18 @@ mod build_program_tests {
                 row_text(row)
             );
         }
+    }
+
+    /// A configurable machine quotes no pace but never claims the program
+    /// does not matter.
+    #[test]
+    fn a_machine_build_says_the_program_sets_its_pace() {
+        let candidates = vec![candidate("Sparkgrub", BuildEffect::ScalesRecipe)];
+        let rows = build_program_rows(Some(&deploy("Factory")), &candidates, 0);
+        let text = rows.iter().map(row_text).collect::<Vec<_>>().join(" ");
+        assert!(text.contains("sets how fast this machine works"), "{text}");
+        assert!(!text.contains("does not run a work cycle"), "{text}");
+        assert!(!text.contains("cycle"), "{text}");
     }
 
     /// The role headings did not survive the sort, so what each program is

@@ -21,6 +21,7 @@ pub(crate) mod defences;
 pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;
+pub(crate) mod farm;
 pub(crate) mod floor;
 pub(crate) mod hauling;
 pub(crate) mod healing;

@@ -2814,6 +2814,37 @@ pub struct DigSite {
     pub finish: Option<FinishOrder>,
 }
 
+/// One farm plot: the recipe every one of its `FarmTile` cells grows.
+///
+/// A plot entity apart from its cells because "one box is one plot, one
+/// recipe" must be a single write, and a crew's interaction needs one `Copy`
+/// handle for the plot. It carries no `Position` — the cells do.
+#[derive(Component, Clone, Debug)]
+pub struct FarmPlot {
+    /// `None` until the player picks a crop.
+    pub recipe: Option<crate::crops::CropId>,
+}
+
+/// One cell of a plot, in **base space** like a `DigSite`: a task targets one
+/// `Entity`, so the crew's target is the cell. The renderer draws it from
+/// `Game::farm_tiles`, so it carries no `Glyph`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct FarmTile {
+    pub plot: Entity,
+    pub growth: CropGrowth,
+}
+
+/// Where one farm cell is in its crop's life.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CropGrowth {
+    #[default]
+    Fallow,
+    Growing {
+        elapsed: u32,
+    },
+    Ripe,
+}
+
 /// What a finish mark asks the crew to do — `Game::toggle_mark_box`'s brush,
 /// carried on the `DigSite` it marks.
 ///

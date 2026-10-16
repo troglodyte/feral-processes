@@ -571,6 +571,9 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // scratch install without it arms nothing and every status test on
         // it passes vacuously.
         "statuses",
+        // Absent loads an empty `CropDb` silently, so a farm test on a
+        // scratch install would find no crop to sow.
+        "crops",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();

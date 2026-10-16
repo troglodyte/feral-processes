@@ -770,6 +770,10 @@ fn draw_surface_map(
         .filter(|t| !matches!(t.state, FarmTileState::Fallow))
         .map(|t| t.pos)
         .collect();
+    // Each plot cell's ambient `dim`, recorded by the tile loop so the plot
+    // pass after it scales its outline and crop by the same light the
+    // ground beneath took.
+    let mut plot_dim: std::collections::HashMap<(i32, i32), f32> = Default::default();
     // Alt shows the rooms. `view_rooms` answers empty outside base space.
     let rooms = if reveal {
         game.view_rooms()
@@ -1051,6 +1055,9 @@ fn draw_surface_map(
                     .is_some_and(|&s| s != Sight::InSight)
             });
             let dim = shade * vig;
+            if !farm_tiles.is_empty() {
+                plot_dim.insert(world, dim);
+            }
             let mut bg = at_level(bg_source, GROUND_LEVEL * dim);
             if critical {
                 bg = Color::new((bg.r + GROUND_LEVEL).min(1.0), bg.g, bg.b, bg.a);
@@ -1598,6 +1605,7 @@ fn draw_surface_map(
             painter,
             &farm_tiles,
             &occupied,
+            &plot_dim,
             |world| {
                 tile_origin_px(
                     world,
@@ -1839,6 +1847,7 @@ fn draw_farm_plots(
     painter: &Painter,
     tiles: &[FarmTileView],
     occupied: &std::collections::HashSet<(i32, i32)>,
+    dims: &std::collections::HashMap<(i32, i32), f32>,
     at: impl Fn((i32, i32)) -> (f32, f32),
     tile_px: f32,
     glyph_px: u16,
@@ -1853,7 +1862,18 @@ fn draw_farm_plots(
         {
             continue;
         }
-        painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 1.0, PLOT_EDGE);
+        // The finish seam's rule: every layer scales by the tile's own
+        // `dim`, so a plot dims with the ground under the Power vignette and
+        // the fog of a remembered cell rather than glowing through them.
+        let dim = dims.get(&tile.pos).copied().unwrap_or(1.0);
+        painter.rect_lines(
+            px,
+            py,
+            tile_px - 1.0,
+            tile_px - 1.0,
+            1.0,
+            at_level(PLOT_EDGE, dim),
+        );
         if tile.state == FarmTileState::Ripe {
             painter.rect_lines(
                 px,
@@ -1861,7 +1881,7 @@ fn draw_farm_plots(
                 tile_px - 1.0,
                 tile_px - 1.0,
                 RIPE_EDGE_PX,
-                RIPE_EDGE,
+                at_level(RIPE_EDGE, dim),
             );
         }
         let (Some((glyph, hue)), Some(size)) = (&tile.crop, crop_glyph_px(glyph_px, tile.state))
@@ -1877,7 +1897,7 @@ fn draw_farm_plots(
             px + (tile_px - dims.width) / 2.0,
             py + (tile_px + dims.height) / 2.0,
             size,
-            glyph_color(*hue),
+            at_level(glyph_color(*hue), dim),
         );
     }
 }
@@ -6291,6 +6311,41 @@ mod tests {
             );
         });
         painted_text(&shapes)
+    }
+
+    #[test]
+    fn a_plot_dims_with_its_tile_light() {
+        let tile = |state| FarmTileView {
+            pos: (0, 0),
+            plot: feral_processes_engine::Entity::PLACEHOLDER,
+            crop: Some(("+".to_string(), GlyphColor::Yellow)),
+            state,
+        };
+        let pane = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let occupied = Default::default();
+        let dims = std::collections::HashMap::from([((0, 0), 0.5_f32)]);
+        let (_, shapes) = with_painter(|p| {
+            draw_farm_plots(
+                p,
+                &[tile(FarmTileState::Ripe)],
+                &occupied,
+                &dims,
+                |_| (10.0, 10.0),
+                32.0,
+                24,
+                pane,
+            );
+        });
+        assert_eq!(
+            painted_rect_stroke_count(&shapes, at_level(PLOT_EDGE, 0.5)),
+            1
+        );
+        assert_eq!(painted_rect_stroke_count(&shapes, PLOT_EDGE), 0);
+        assert_eq!(
+            painted_rect_stroke_count(&shapes, at_level(RIPE_EDGE, 0.5)),
+            1
+        );
+        assert_eq!(painted_rect_stroke_count(&shapes, RIPE_EDGE), 0);
     }
 
     #[test]

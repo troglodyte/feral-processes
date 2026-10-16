@@ -202,8 +202,9 @@ stdout. `tune` reads `economy.ron`: targets are *ranges* on named measures
 knobs are fields of `assets/structures/*.ron`, `assets/items/*.ron`,
 `assets/needs/*.ron`, `assets/thoughts/*.ron`, `assets/memories/*.ron` or
 `assets/interactions/*.ron` with a min and max.
-Structure and item knobs: `work.ticks_per_unit`, `assembles.ticks_per_unit`,
-`capacity`, `power_draw`, `craftable.cost.<item>`, and
+Structure and item knobs: `work.ticks_per_unit`,
+`machine.recipes.<item>.ticks_per_unit` (the one recipe of that machine
+producing `<item>`; none is an error), `capacity`, `power_draw`, `craftable.cost.<item>`, and
 `services.<need>.per_tick` / `services.<need>.radius` (the one service entry
 serving that need; none or several is an error). Need knobs: `drain_per_tick`,
 `working_multiplier`, `critical`, `content`, `morale_weight`. Thought knob:
@@ -216,7 +217,7 @@ file's directory, so `valence` under `thoughts/` or `intensity` under
 and no shipped file sets them: a knob on a field the file does not spell out
 is refused when the objective loads, naming the path (add the line to the file
 first). Whole-number fields (`capacity`, `power_draw`, `work.ticks_per_unit`,
-`assembles.ticks_per_unit`, `craftable.cost.<item>`, `services.<need>.radius`,
+`machine.recipes.<item>.ticks_per_unit`, `craftable.cost.<item>`, `services.<need>.radius`,
 `half_life` and `strike_cap`) are rounded; every other field (`per_tick`, the
 need knobs, `intensity`, the other memory and interaction knobs) keeps six
 decimals. A `half_life` or `strike_cap` knob needs `min` of at least 1.

@@ -164,7 +164,7 @@ fn the_battle_pane_leaves_base_news_out() {
 fn the_battle_pane_truncates_before_it_filters() {
     let lines = vec![
         field("── round 1 ──"),
-        base("The Mining Node is clogged."),
+        base("The Extractor is clogged."),
         field("not revealed yet"),
     ];
     let shown = texts(battle_rows(&lines, 2));

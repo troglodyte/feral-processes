@@ -39,16 +39,16 @@ Objective(
         // Shipped ~0.22. Asked for alongside the output counts on purpose:
         // slowing the bay would raise this by itself, and the patch_routine
         // target is what should stop that being a win.
-        Target(measure: "economy.running_share.assembly_bay", min: 0.30, max: 0.50),
+        Target(measure: "economy.running_share.patch_routine", min: 0.30, max: 0.50),
     ],
 
     // Every knob is observed by at least one target above.
     knobs: [
-        Knob(file: "structures/mining_node.ron", field: "work.ticks_per_unit", min: 5.0, max: 14.0),
-        Knob(file: "structures/power_conduit.ron", field: "work.ticks_per_unit", min: 3.0, max: 9.0),
-        Knob(file: "structures/winding_node.ron", field: "assembles.ticks_per_unit", min: 6.0, max: 16.0),
-        Knob(file: "structures/assembly_bay.ron", field: "assembles.ticks_per_unit", min: 8.0, max: 30.0),
-        Knob(file: "structures/refinery.ron", field: "assembles.ticks_per_unit", min: 6.0, max: 16.0),
-        Knob(file: "structures/compiler.ron", field: "assembles.ticks_per_unit", min: 4.0, max: 12.0),
+        Knob(file: "structures/extractor.ron", field: "machine.recipes.core_fragment.ticks_per_unit", min: 5.0, max: 14.0),
+        Knob(file: "structures/extractor.ron", field: "machine.recipes.power_cell.ticks_per_unit", min: 3.0, max: 9.0),
+        Knob(file: "structures/factory.ron", field: "machine.recipes.charge_coil.ticks_per_unit", min: 6.0, max: 16.0),
+        Knob(file: "structures/printer.ron", field: "machine.recipes.patch_routine.ticks_per_unit", min: 8.0, max: 30.0),
+        Knob(file: "structures/factory.ron", field: "machine.recipes.bytecode_block.ticks_per_unit", min: 6.0, max: 16.0),
+        Knob(file: "structures/printer.ron", field: "machine.recipes.ice_breaker.ticks_per_unit", min: 4.0, max: 12.0),
     ],
 )

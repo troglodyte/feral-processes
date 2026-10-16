@@ -2062,7 +2062,7 @@ mod tests {
         let mut fx = Fx::new();
         app.mode = Mode::BuildProgram;
         app.pending_build = Some(feral_processes_app_core::PendingBuild::Deploy {
-            structure: "mining_node".to_string(),
+            structure: "extractor".to_string(),
             dx: 1,
             dy: 0,
         });
@@ -2076,7 +2076,7 @@ mod tests {
             "the picker drew no title: {drawn:?}"
         );
         assert!(
-            says("Mining Node"),
+            says("Extractor"),
             "the prompt names the structure the order is for: {drawn:?}"
         );
         assert!(
@@ -2100,20 +2100,20 @@ mod tests {
     /// prior review round named this gap alongside the empty-picker one
     /// above.
     ///
-    /// `app_in_base_with_a_compiler` (`render/test_support.rs`) gives this a
-    /// real, scan-reachable Compiler to upgrade: `App::upgradeable_structures`
+    /// `app_in_base_with_an_extractor` (`render/test_support.rs`) gives this a
+    /// real, scan-reachable Extractor to upgrade: `App::upgradeable_structures`
     /// finds the same `Entity` this test then hands `PendingBuild::Upgrade`,
     /// so the prompt painted here is the one a genuine upgrade order would
     /// show, not a fabricated stand-in the `.find` could never have matched.
     #[test]
     fn an_upgrade_prompt_names_the_real_structure_it_would_spend_a_program_on() {
-        let mut app = test_support::app_in_base_with_a_compiler(4002);
+        let mut app = test_support::app_in_base_with_an_extractor(4002);
         let mut fx = Fx::new();
         let structure = app
             .upgradeable_structures()
             .into_iter()
-            .find(|s| s.label == "Compiler")
-            .expect("the fixture placed a Compiler within scan range")
+            .find(|s| s.label.starts_with("Extractor"))
+            .expect("the fixture placed an Extractor within scan range")
             .entity;
         app.mode = Mode::BuildProgram;
         app.pending_build = Some(feral_processes_app_core::PendingBuild::Upgrade {
@@ -2125,7 +2125,7 @@ mod tests {
         let drawn = crate::paint::painted_text(&shapes);
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
         assert!(
-            says("Upgrading the Compiler to Mk2"),
+            says("Upgrading the Extractor"),
             "the real structure's own name, not the generic fallback: {drawn:?}"
         );
         assert!(

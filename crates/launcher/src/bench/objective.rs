@@ -183,12 +183,25 @@ mod tests {
         assert!((narrow - 0.25).abs() < 1e-12);
     }
 
+    #[test]
+    fn the_shipped_economy_objectives_check_against_the_assets() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for name in ["economy.ron", "economy-bench.ron"] {
+            let objective = Objective::load(&root.join("dev-tuning").join(name))
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            for knob in &objective.knobs {
+                super::super::knob::check(&root.join("assets"), knob)
+                    .unwrap_or_else(|e| panic!("{name}: {e}"));
+            }
+        }
+    }
+
     fn ron_with(extra: &str) -> String {
         format!(
             r#"(template: "chains", ticks: 100, seeds: [1, 2], holdout_seeds: [3],
             iterations: 2, population: 2, search_seed: 7,
             targets: [(measure: "economy.labour_unworked", min: 0.0, max: 1.0)],
-            knobs: [(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)]
+            knobs: [(file: "structures/printer.ron", field: "capacity", min: 1.0, max: 9.0)]
             {extra})"#
         )
     }
@@ -251,7 +264,7 @@ mod tests {
     fn a_memory_half_life_or_strike_cap_below_one_is_rejected() {
         for field in ["half_life", "strike_cap"] {
             let text = ron_with("").replace(
-                r#"file: "structures/assembly_bay.ron", field: "capacity", min: 1.0"#,
+                r#"file: "structures/printer.ron", field: "capacity", min: 1.0"#,
                 &format!(r#"file: "memories/hard_won.ron", field: "{field}", min: 0.0"#),
             );
             let e = err_of(&text);
@@ -280,21 +293,19 @@ mod tests {
 
     #[test]
     fn a_duplicate_knob_is_rejected() {
-        let knob =
-            r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
+        let knob = r#"(file: "structures/printer.ron", field: "capacity", min: 1.0, max: 9.0)"#;
         let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {knob}")));
         assert!(e.contains("twice"), "{e}");
     }
 
     #[test]
     fn a_dot_slash_duplicate_is_caught_and_the_path_is_stored_bare() {
-        let knob =
-            r#"(file: "structures/assembly_bay.ron", field: "capacity", min: 1.0, max: 9.0)"#;
+        let knob = r#"(file: "structures/printer.ron", field: "capacity", min: 1.0, max: 9.0)"#;
         let dotted = knob.replace("structures/", "./structures/");
         let e = err_of(&ron_with("").replace(knob, &format!("{knob}, {dotted}")));
         assert!(e.contains("twice"), "{e}");
         let obj = Objective::from_ron(&ron_with("").replace(knob, &dotted)).unwrap();
-        assert_eq!(obj.knobs[0].file, "structures/assembly_bay.ron");
+        assert_eq!(obj.knobs[0].file, "structures/printer.ron");
     }
 
     #[test]
@@ -304,7 +315,7 @@ mod tests {
             "/memories/x.ron",
             "memories/../../x.ron",
         ] {
-            let text = ron_with("").replace("structures/assembly_bay.ron", file);
+            let text = ron_with("").replace("structures/printer.ron", file);
             let e = err_of(&text);
             assert!(
                 e.contains(file) && e.contains("under assets"),

@@ -3293,7 +3293,7 @@ pub struct App {
     ///
     /// **`None` is "no Depot beside you"; `Some(0)` is "a Depot with nothing
     /// left".** Keeping those distinguishable is what stops the screen
-    /// drawing a room line reading 0 beside a Mining Node, which would claim
+    /// drawing a room line reading 0 beside a Extractor, which would claim
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,

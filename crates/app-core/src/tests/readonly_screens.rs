@@ -20,7 +20,7 @@ fn l_opens_the_history_and_esc_returns_to_the_map() {
 
 #[test]
 fn the_hub_opens_the_structure_roster_and_esc_leaves_to_the_map() {
-    let mut app = app_owning_a_program_and_a_compiler(91, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(91, &[]);
     open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.mode, Mode::Structures);
     app.handle_key(GameKey::Esc);
@@ -105,7 +105,7 @@ fn repeated_lines_are_one_scrollable_row() {
 /// from.
 #[test]
 fn up_and_down_scroll_the_roster_without_leaving_it() {
-    let mut app = app_owning_a_program_and_a_compiler(93, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(93, &[]);
     open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.menu_selected, 0, "the roster opens at its first row");
     app.handle_key(GameKey::Down);
@@ -123,7 +123,7 @@ fn up_and_down_scroll_the_roster_without_leaving_it() {
 /// doesn't tick, which is a weaker claim wearing this one's name.
 #[test]
 fn scrolling_a_list_does_not_advance_the_game() {
-    let mut app = app_owning_a_program_and_a_compiler(94, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(94, &[]);
     let before = app.game.as_ref().unwrap().current_tick();
     open_hub_screen(&mut app, Mode::Structures);
     for key in [
@@ -148,7 +148,7 @@ fn scrolling_a_list_does_not_advance_the_game() {
 /// a way out either.
 #[test]
 fn enter_and_row_shortcuts_do_nothing_on_the_history() {
-    let mut app = app_owning_a_program_and_a_compiler(95, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(95, &[]);
     app.handle_key(GameKey::Char('L'));
     for key in [GameKey::Enter, GameKey::Char('1'), GameKey::Char('a')] {
         app.handle_key(key);

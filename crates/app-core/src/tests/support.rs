@@ -257,7 +257,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
 pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[("privilege_ring", 3)]);
+        app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[("privilege_ring", 3)]);
     let path = scratch_path("developed", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
@@ -372,7 +372,7 @@ pub(crate) fn app_beside_a_holding_cell(
     app.game = Game::load(&path, &test_assets_dir()).ok();
     let _ = std::fs::remove_file(&path);
     app.mode = Mode::Playing;
-    stand_beside_the_compiler(&mut app);
+    stand_beside_the_extractor(&mut app);
     app
 }
 
@@ -493,7 +493,7 @@ pub(crate) fn app_on_inventory_with_many_items(seed: u32) -> App {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    // Merged, `app_owning_a_program_and_a_compiler_deep`'s reason: pushing a
+    // Merged, `app_owning_a_program_and_an_extractor_deep`'s reason: pushing a
     // second row for something the starting kit already carries is
     // invisible, since `Inventory::count` reads the first match and
     // `Game::load` restores the `Vec` verbatim.
@@ -1011,7 +1011,7 @@ pub(crate) fn place_damaged_outpost_east_of_player(app: &mut App, integrity: u32
 
 /// Merges `items` into the player's pack via a save round trip — extended
 /// row by row rather than assigned over, `app_owning_a_program_and_a_
-/// compiler_with_cargo`'s reason one screen over: replacing the whole
+/// extractor_with_cargo`'s reason one screen over: replacing the whole
 /// inventory would silently delete whatever `Game::new`'s starting kit
 /// already granted.
 pub(crate) fn give_player_items(app: &mut App, items: &[(&str, u32)]) {
@@ -1450,29 +1450,29 @@ fn generic_settlement_def() -> feral_processes_engine::settlements::SettlementDe
 }
 
 /// A game where the player owns one tamed program carrying `routines` and
-/// has a Compiler standing, so the extraction flow has both of its
-/// preconditions. Built by editing a save and reloading it, for the same
+/// has an Extractor standing beside the party and a Workbench far off, so
+/// the extraction flow has both of its preconditions. Built by editing a save and reloading it, for the same
 /// reason `app_owning_distant_programs` is.
-pub(crate) fn app_owning_a_program_and_a_compiler(seed: u32, routines: &[&str]) -> App {
-    app_owning_a_program_and_a_compiler_with_cargo(seed, routines, &[])
+pub(crate) fn app_owning_a_program_and_an_extractor(seed: u32, routines: &[&str]) -> App {
+    app_owning_a_program_and_an_extractor_with_cargo(seed, routines, &[])
 }
 
 /// The same, plus exactly `cargo` in the player's inventory — the refactor
 /// flow needs a program *and* something to spend on it, and the second half
 /// is the one that changes during a run.
-pub(crate) fn app_owning_a_program_and_a_compiler_with_cargo(
+pub(crate) fn app_owning_a_program_and_an_extractor_with_cargo(
     seed: u32,
     routines: &[&str],
     cargo: &[(&str, u32)],
 ) -> App {
-    app_owning_a_program_and_a_compiler_deep(seed, routines, cargo, false)
+    app_owning_a_program_and_an_extractor_deep(seed, routines, cargo, false)
 }
 
 /// The same again, optionally four frames down. `underground` is a parameter
 /// rather than a second fixture because the point of the Stack variant is
 /// that *nothing else about the game differs* — a row that changes has
 /// changed because of the locale and not because two fixtures drifted.
-pub(crate) fn app_owning_a_program_and_a_compiler_deep(
+pub(crate) fn app_owning_a_program_and_an_extractor_deep(
     seed: u32,
     routines: &[&str],
     cargo: &[(&str, u32)],
@@ -1590,8 +1590,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         data.researched.push("automation".to_string());
     }
     data.structures.push(save::StructureSave {
-        recipe: None,
-        kind: "compiler".to_string(),
+        recipe: Some("core_fragment".into()),
+        kind: "extractor".to_string(),
         // Base space, two cells east of the Home the fixture just founded.
         position: (2, 0),
         durability: None,
@@ -1650,14 +1650,14 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
 
 /// A base with a founded Home, one program on the base staff, and a
 /// standing Research Station — `Mode::PinSubject`'s own fixture,
-/// `app_owning_a_program_and_a_compiler`'s shape with the structure swapped
+/// `app_owning_a_program_and_an_extractor`'s shape with the structure swapped
 /// for one that declares `studies`. The Station is written straight into
 /// the save rather than raised through `Game::place_structure`, which would
 /// file a build request and spend the one program this fixture exists to
-/// keep free to pin — `app_owning_a_program_and_a_compiler_deep`'s own
-/// reason for doing the same with its Compiler.
+/// keep free to pin — `app_owning_a_program_and_an_extractor_deep`'s own
+/// reason for doing the same with its Extractor.
 ///
-/// Leaves `data.locale` untouched, `app_owning_a_program_and_a_compiler`'s
+/// Leaves `data.locale` untouched, `app_owning_a_program_and_an_extractor`'s
 /// own shape: a caller that needs the party inside calls `stand_in_base`
 /// itself, since the row this fixture exists for is `Locality::Base`.
 pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
@@ -1666,7 +1666,7 @@ pub(crate) fn app_owning_a_program_and_a_research_station(seed: u32) -> App {
 
 /// `app_owning_a_program_and_a_research_station`'s fixture with the standing
 /// structure's kind chosen — one program on the staff and one `kind` at
-/// base-space `(2, 0)`, so `stand_beside_the_compiler` puts the party next to it.
+/// base-space `(2, 0)`, so `stand_beside_the_extractor` puts the party next to it.
 pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
@@ -1791,13 +1791,13 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
     app
 }
 
-/// The upgrade-picker counterpart to `app_owning_a_program_and_a_compiler`:
-/// a base with a Compiler and exactly **one** tamed program, caught at
+/// The upgrade-picker counterpart to `app_owning_a_program_and_an_extractor`:
+/// a base with an Extractor and exactly **one** tamed program, caught at
 /// `program_zone`, with the run itself breached to `breach_zone` first
 /// (`Game::warp_to_zone` — the real breach `tests::achievements`'s
 /// `breach_and_tick` drives, not a stand-in for it).
 ///
-/// `app_owning_a_program_and_a_compiler`'s own program sits at zone 1 and
+/// `app_owning_a_program_and_an_extractor`'s own program sits at zone 1 and
 /// its base is never breached past zone 1 — fine for testing that the
 /// picker opens and computes `to_tier`, but a Mk2 upgrade confirmed against
 /// that fixture is refused by `upgrade_ceiling` (zone 1 caps every
@@ -1806,20 +1806,20 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
 /// the ceiling and into those rules — see
 /// `the_upgrade_pickers_confirm_surfaces_the_engines_refusal`.
 ///
-/// Built the same way `app_owning_a_program_and_a_compiler_deep` is (a save
+/// Built the same way `app_owning_a_program_and_an_extractor_deep` is (a save
 /// edited by hand, then reloaded — "the engine exposes no way to hand-place
 /// a structure from outside the crate", `app_at_a_contract_broker`'s
-/// reason), because a hand-placed Compiler costs no program to stand up,
+/// reason), because a hand-placed Extractor costs no program to stand up,
 /// where `Game::place_structure` would spend the one program this fixture
 /// needs to keep.
-pub(crate) fn app_owning_one_deep_program_and_a_compiler(
+pub(crate) fn app_owning_one_deep_program_and_an_extractor(
     seed: u32,
     breach_zone: u32,
     program_zone: u32,
 ) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
-    let path = scratch_path("deep_compiler", seed);
+    let path = scratch_path("deep_extractor", seed);
     found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     game.warp_to_zone(breach_zone).unwrap();
@@ -1908,8 +1908,8 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         breed_ready_at: 0,
     });
     data.structures.push(save::StructureSave {
-        recipe: None,
-        kind: "compiler".to_string(),
+        recipe: Some("core_fragment".into()),
+        kind: "extractor".to_string(),
         // Base space, two cells east of the Home the fixture just founded.
         position: (2, 0),
         durability: None,
@@ -1939,7 +1939,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
 /// trader that buys programs as well as items — holding exactly
 /// `inventory`, and owning one tamed program so the trader's program rows
 /// are populated too. Built by editing a save and reloading it, for the
-/// same reason `app_owning_a_program_and_a_compiler` is: staging a trading
+/// same reason `app_owning_a_program_and_an_extractor` is: staging a trading
 /// post through the build flow needs a Home, build clearance and 16 Core
 /// Fragments, and the player starts with 5.
 pub(crate) fn app_at_a_trading_post(seed: u32, inventory: &[(&str, u32)]) -> App {
@@ -2125,14 +2125,14 @@ pub(crate) fn stand_in_base(app: &mut App) {
     stand_in_base_at(app, 0, 0);
 }
 
-/// Stands the party on the one cell orthogonally adjacent to the Compiler
-/// `app_owning_a_program_and_a_compiler` plants at base-space `(2, 0)`.
+/// Stands the party on the one cell orthogonally adjacent to the Extractor
+/// `app_owning_a_program_and_an_extractor` plants at base-space `(2, 0)`.
 ///
 /// `Mode::UpgradeDirection` aims at a *neighbour*, so an upgrade test has to
 /// say where the party is standing before it can press a direction — the
 /// exit cell `stand_in_base` leaves it on is two tiles west of that machine
 /// and every arrow key from there finds nothing.
-pub(crate) fn stand_beside_the_compiler(app: &mut App) {
+pub(crate) fn stand_beside_the_extractor(app: &mut App) {
     stand_in_base_at(app, 1, 0);
 }
 
@@ -2268,7 +2268,7 @@ pub(crate) fn clear_player_routines(app: &mut App) {
 /// default `decompile`) and `hunger` set to a chosen level, so a field-routine
 /// test can pin affordability on either side of a routine's `power_cost`
 /// exactly. Built by editing a save and reloading it, for the same reason
-/// `app_owning_a_program_and_a_compiler` is.
+/// `app_owning_a_program_and_an_extractor` is.
 pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
@@ -2429,7 +2429,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
 /// A game where the player has one program standing in the active `Party`,
 /// so a battle opens with two planning slots rather than the single one
 /// every other battle fixture here produces. Built by editing a save and
-/// reloading it, for the reason `app_owning_a_program_and_a_compiler` is:
+/// reloading it, for the reason `app_owning_a_program_and_an_extractor` is:
 /// nothing outside the engine can hand-place a tamed program, and
 /// `party_slot` is the save field that puts one on the roster.
 pub(crate) fn app_with_companions_in_the_party(seed: u32, count: u32) -> App {
@@ -2458,7 +2458,7 @@ pub(crate) fn app_with_companions_and_cargo(
 
     let mut data = save::load_from_file(&path).unwrap();
     // Extended rather than assigned over, for the reason
-    // `app_owning_a_program_and_a_compiler_deep` gives.
+    // `app_owning_a_program_and_an_extractor_deep` gives.
     data.player.inventory.extend(
         extra_cargo
             .iter()
@@ -2847,10 +2847,10 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
 }
 
 /// A base the player is standing inside: a Home one tile north and an
-/// ordinary Mining Node one tile east, with nothing to the south or west.
+/// ordinary Extractor one tile east, with nothing to the south or west.
 ///
-/// Built by editing a save for the same reason `app_owning_a_program_and_a_
-/// compiler` is — deploying a second structure through the build flow needs
+/// Built by editing a save for the same reason `app_owning_a_program_and_an_
+/// extractor` is — deploying a second structure through the build flow needs
 /// materials the player does not start with, and the layout is the whole
 /// point here: the direct demolish key has to tell a Home from anything else
 /// and both from an empty tile, which is three neighbours of one tile.
@@ -2886,8 +2886,8 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     // The Home is already standing on base space's origin, laid down by
     // `found_the_base`; this is the machine beside it.
     data.structures.push(save::StructureSave {
-        recipe: None,
-        kind: "mining_node".to_string(),
+        recipe: Some("core_fragment".into()),
+        kind: "extractor".to_string(),
         position: (1, 0),
         durability: None,
         tier: None,
@@ -3233,7 +3233,7 @@ pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
 }
 
 /// A base with two tamed programs and the party at `(0, 0)` in base space,
-/// with a Mining Node rebuild site awaiting a program at `(1, 0)` and, when
+/// with a Extractor rebuild site awaiting a program at `(1, 0)` and, when
 /// `depot` is set, a Depot at `(-1, 0)`.
 ///
 /// The site is written into the save as filed, rather than waited for: a
@@ -3246,7 +3246,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
     let mut data = save::load_from_file(&path).unwrap();
     data.build_sites.push(save::BuildSiteSave {
         position: (1, 0),
-        structure: "mining_node".to_string(),
+        structure: "extractor".to_string(),
         cost: Vec::new(),
         delivered: Vec::new(),
         progress: 0,
@@ -3282,7 +3282,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
     app
 }
 
-/// A base standing inside base space with a Research Node and the Mining Node
+/// A base standing inside base space with a Research Node and the Extractor
 /// its bills draw on, so `Game::select_research` has something to accept.
 ///
 /// Built by editing a save, `app_inside_a_small_base`' reason: deploying two
@@ -3298,12 +3298,18 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
     let _cleanup = RemoveOnDrop(&path);
 
     let mut data = save::load_from_file(&path).unwrap();
-    // The Research Node makes the currency a project runs on; the Mining Node
+    // The Research Node makes the currency a project runs on; the Extractor
     // is what makes every shipped bill's material, which
     // `work_orders::chain_break` refuses a project without.
-    for (index, kind) in ["research_node", "mining_node"].into_iter().enumerate() {
+    for (index, (kind, recipe)) in [
+        ("research_node", None),
+        ("extractor", Some("core_fragment")),
+    ]
+    .into_iter()
+    .enumerate()
+    {
         data.structures.push(save::StructureSave {
-            recipe: None,
+            recipe: recipe.map(Into::into),
             kind: kind.to_string(),
             position: (2 + index as i32, 2),
             durability: None,
@@ -3334,7 +3340,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
 /// among them) are listed — `routine/symlink` is the fixed point every
 /// `Mode::RoutineResearch` test picks against. Carries a Research Node so
 /// `Game::select_research` doesn't refuse a listed node for having nowhere
-/// to run — no Mining Node, since a synthesised node's bill is empty
+/// to run — no Extractor, since a synthesised node's bill is empty
 /// (spec §2 "Cost").
 ///
 /// Built by editing a save, `app_in_base_with_a_research_node`'s reason:
@@ -3527,8 +3533,8 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
         .collect();
     for x in [-1, 1] {
         data.structures.push(save::StructureSave {
-            recipe: None,
-            kind: "mining_node".to_string(),
+            recipe: Some("core_fragment".into()),
+            kind: "extractor".to_string(),
             position: (x, 0),
             durability: None,
             tier: None,
@@ -3661,8 +3667,8 @@ pub(crate) fn app_at_a_refit_bench_wearing(
     )
 }
 
-/// The small base with a Lathe east of its Mining Node, so the two are one
-/// production line: Home, Lathe, Mining Node in roster order.
+/// The small base with a Lathe east of its Extractor, so the two are one
+/// production line: Home, Lathe, Extractor in roster order.
 pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = app_inside_a_small_base_with_programs(seed, false, 1);
@@ -3670,8 +3676,8 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     let lathe = save::StructureSave {
-        recipe: None,
-        kind: "lathe".to_string(),
+        recipe: Some("blank_substrate".into()),
+        kind: "factory".to_string(),
         position: (2, 0),
         durability: None,
         tier: None,

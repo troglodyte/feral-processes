@@ -79,7 +79,7 @@ fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
     // Neither routine may be one the player already knows — extraction
     // teaches, and refuses what it has nothing to teach. A new game knows
     // nothing at all, so any two ordinary routines will do.
-    let mut app = app_owning_a_program_and_a_compiler(64, &[FALLBACK_ABILITY_ID, "sandbox"]);
+    let mut app = app_owning_a_program_and_an_extractor(64, &[FALLBACK_ABILITY_ID, "sandbox"]);
     open_via_menu(&mut app, 'p', "Extract a routine");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::ExtractPick);
@@ -107,7 +107,7 @@ fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
 
 #[test]
 fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
-    let mut app = app_owning_a_program_and_a_compiler(63, &[FALLBACK_ABILITY_ID]);
+    let mut app = app_owning_a_program_and_an_extractor(63, &[FALLBACK_ABILITY_ID]);
     open_via_menu(&mut app, 'p', "Extract a routine");
     assert_eq!(app.mode, Mode::Extract);
     app.handle_key(GameKey::Char('1'));
@@ -201,7 +201,7 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
 
 /// Standing on the extract confirm for the fixture's one program.
 fn on_the_extract_confirm(seed: u32) -> App {
-    let mut app = app_owning_a_program_and_a_compiler(seed, &[FALLBACK_ABILITY_ID]);
+    let mut app = app_owning_a_program_and_an_extractor(seed, &[FALLBACK_ABILITY_ID]);
     open_via_menu(&mut app, 'p', "Extract a routine");
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Char('1'));

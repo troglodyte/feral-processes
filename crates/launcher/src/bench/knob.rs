@@ -30,7 +30,7 @@ const FIELDS: &[(&str, bool)] = &[
     ("capacity", true),
     ("power_draw", true),
     ("work.ticks_per_unit", true),
-    ("assembles.ticks_per_unit", true),
+    ("machine.recipes.<item>.ticks_per_unit", true),
     ("craftable.cost.<item>", true),
     ("services.<need>.per_tick", false),
     ("services.<need>.radius", true),
@@ -106,6 +106,9 @@ fn locate(text: &str, field: &str) -> Result<(usize, usize), String> {
     let segments: Vec<&str> = field.split('.').collect();
     let (scopes, tail) = match segments.as_slice() {
         ["craftable", "cost", id] => (&segments[..1], Tail::CostAmount(id)),
+        ["machine", "recipes", item, "ticks_per_unit"] => {
+            (&segments[..1], Tail::Recipe(item, "ticks_per_unit"))
+        }
         ["services", need, leaf @ ("per_tick" | "radius")] => {
             (&segments[..0], Tail::Service(need, leaf))
         }
@@ -158,10 +161,29 @@ fn locate(text: &str, field: &str) -> Result<(usize, usize), String> {
                 return Err(no_match("`services` is not a list"));
             }
             let list_close = matching(text, list).ok_or_else(|| no_match("unbalanced brackets"))?;
-            let entries = entries_serving(text, list, list_close, need);
+            let entries = entries_keyed(text, list, list_close, "need", need);
             let [entry] = entries.as_slice() else {
                 return Err(no_match(&format!(
                     "`services` has {} entries serving `{need}`",
+                    entries.len()
+                )));
+            };
+            let value = one(text, *entry, leaf)
+                .map_err(|n| no_match(&format!("`{leaf}` matched {n} times")))?;
+            number_at(text, value).ok_or_else(|| no_match(&format!("`{leaf}` is not a number")))
+        }
+        Tail::Recipe(item, leaf) => {
+            let value = one(text, open, "recipes")
+                .map_err(|n| no_match(&format!("`recipes` matched {n} times")))?;
+            let list = skip_ws(text, value);
+            if text.as_bytes().get(list) != Some(&b'[') {
+                return Err(no_match("`recipes` is not a list"));
+            }
+            let list_close = matching(text, list).ok_or_else(|| no_match("unbalanced brackets"))?;
+            let entries = entries_keyed(text, list, list_close, "produces", item);
+            let [entry] = entries.as_slice() else {
+                return Err(no_match(&format!(
+                    "`recipes` has {} entries producing `{item}`",
                     entries.len()
                 )));
             };
@@ -177,13 +199,15 @@ enum Tail<'a> {
     CostAmount(&'a str),
     /// `(need id, leaf)` of the one `services` entry serving that need.
     Service(&'a str, &'a str),
+    /// `(item id, leaf)` of the one `machine.recipes` entry producing that item.
+    Recipe(&'a str, &'a str),
 }
 
 /// The `(` of every struct directly inside the list `list..close` whose
-/// `need:` is the string `need`.
-fn entries_serving(text: &str, list: usize, close: usize, need: &str) -> Vec<usize> {
+/// `key:` is the string `id`.
+fn entries_keyed(text: &str, list: usize, close: usize, key: &str, id: &str) -> Vec<usize> {
     let bytes = text.as_bytes();
-    let wanted = format!("\"{need}\"");
+    let wanted = format!("\"{id}\"");
     let mut out = Vec::new();
     let mut i = list + 1;
     while i < close {
@@ -191,7 +215,7 @@ fn entries_serving(text: &str, list: usize, close: usize, need: &str) -> Vec<usi
             i = next;
         } else if bytes[i] == b'(' {
             let Some(end) = matching(text, i) else { break };
-            if let Ok(value) = one(text, i, "need") {
+            if let Ok(value) = one(text, i, key) {
                 let at = skip_ws(text, value);
                 if text[at..].starts_with(&wanted) {
                     out.push(i);
@@ -435,9 +459,11 @@ pub fn read_back(assets: &Path, knob: &Knob) -> Result<f64, String> {
         ["work", "ticks_per_unit"] => Ok(f64::from(
             structure()?.work.ok_or_else(missing)?.ticks_per_unit,
         )),
-        ["assembles", "ticks_per_unit"] => Ok(f64::from(
-            structure()?.assembles.ok_or_else(missing)?.ticks_per_unit,
-        )),
+        ["machine", "recipes", id, "ticks_per_unit"] => structure()?
+            .machine
+            .and_then(|m| m.recipes.into_iter().find(|r| r.produces.as_str() == *id))
+            .map(|r| f64::from(r.ticks_per_unit))
+            .ok_or_else(missing),
         ["craftable", "cost", id] => {
             let item =
                 ron::from_str::<ItemDef>(&text).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -508,7 +534,10 @@ mod tests {
     // a comment
     work: None,
     capacity: 10,
-    assembles: Some((item: "patch_routine", ticks_per_unit: 20)),
+    machine: Some((role: Assemble, recipes: [
+        (produces: "ice_breaker", ticks_per_unit: 8),
+        (produces: "patch_routine", ticks_per_unit: 20),
+    ])),
     power_draw: 3,
 )"#;
 
@@ -525,11 +554,11 @@ mod tests {
     fn round_trip_on_a_real_structure_file() {
         let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
         for (field, v, expect) in [
-            ("assembles.ticks_per_unit", 33.0, 33.0),
+            ("machine.recipes.patch_routine.ticks_per_unit", 33.0, 33.0),
             ("capacity", 41.0, 41.0),
             ("power_draw", 7.0, 7.0),
         ] {
-            let k = knob("structures/assembly_bay.ron", field);
+            let k = knob("structures/printer.ron", field);
             let path = scratch.dir().join(&k.file);
             let text = std::fs::read_to_string(&path).unwrap();
             std::fs::write(&path, patch(&text, field, v, true).unwrap()).unwrap();
@@ -556,9 +585,9 @@ mod tests {
                 "work.ticks_per_unit",
             ),
             (
-                "assembles.ticks_per_unit",
-                "structures/assembly_bay.ron",
-                "assembles.ticks_per_unit",
+                "machine.recipes.<item>.ticks_per_unit",
+                "structures/printer.ron",
+                "machine.recipes.patch_routine.ticks_per_unit",
             ),
             (
                 "craftable.cost.<item>",
@@ -617,9 +646,51 @@ mod tests {
     }
 
     #[test]
+    fn a_recipe_knob_reads_and_patches_one_recipes_cycle() {
+        let path = assets().join("structures/printer.ron");
+        let text = std::fs::read_to_string(path).unwrap();
+        let field = "machine.recipes.patch_routine.ticks_per_unit";
+        let out = patch(&text, field, 33.0, true).unwrap();
+        let def = ron::from_str::<StructureDef>(&out).unwrap();
+        let cycles: Vec<(&str, u32)> = def
+            .machine
+            .as_ref()
+            .unwrap()
+            .recipes
+            .iter()
+            .map(|r| (r.produces.as_str(), r.ticks_per_unit))
+            .collect();
+        assert_eq!(cycles, [("ice_breaker", 8), ("patch_routine", 33)]);
+        let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
+        let k = knob("structures/printer.ron", field);
+        assert_eq!(read_back(scratch.dir(), &k).unwrap(), 20.0);
+        assert!(k.is_integer());
+    }
+
+    #[test]
+    fn a_recipe_knob_on_a_missing_item_is_an_error() {
+        let k = knob(
+            "structures/printer.ron",
+            "machine.recipes.core_fragment.ticks_per_unit",
+        );
+        let e = read_back(&assets(), &k).unwrap_err();
+        assert!(e.contains("core_fragment"), "{e}");
+        let text = std::fs::read_to_string(assets().join(&k.file)).unwrap();
+        let e = patch(&text, &k.field, 5.0, true).unwrap_err();
+        assert!(e.contains("core_fragment"), "{e}");
+    }
+
+    #[test]
     fn only_the_named_scope_is_touched() {
-        let out = patch(BAY, "assembles.ticks_per_unit", 99.0, true).unwrap();
-        assert!(out.contains("ticks_per_unit: 99"));
+        let out = patch(
+            BAY,
+            "machine.recipes.patch_routine.ticks_per_unit",
+            99.0,
+            true,
+        )
+        .unwrap();
+        assert!(out.contains("(produces: \"patch_routine\", ticks_per_unit: 99)"));
+        assert!(out.contains("ticks_per_unit: 8)"));
         assert!(out.contains("capacity: 10") && out.contains("// a comment"));
     }
 

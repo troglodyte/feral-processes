@@ -8,7 +8,7 @@ const SIPHON: &str = "power_siphon";
 /// A base with a staff program and a siphon, the party standing beside it.
 fn app_beside_a_siphon(seed: u32) -> App {
     let mut app = app_owning_a_program_and_a_station_of("siphon", SIPHON, seed);
-    stand_beside_the_compiler(&mut app);
+    stand_beside_the_extractor(&mut app);
     app
 }
 
@@ -36,7 +36,7 @@ fn log_has(app: &App, fragment: &str) -> bool {
 #[test]
 fn p_at_no_siphon_refuses_and_logs() {
     let mut app = app_owning_a_program_and_a_station_of("no_siphon", "research_node", 9101);
-    stand_beside_the_compiler(&mut app);
+    stand_beside_the_extractor(&mut app);
 
     app.handle_key(GameKey::Char('P'));
 

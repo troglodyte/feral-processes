@@ -34,7 +34,7 @@ pub(crate) fn drain_compile(app: &mut App) {
 
 /// An app with a base founded and enough material to compile a batch.
 fn stocked_app(seed: u32) -> App {
-    app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[("core_fragment", 200)])
+    app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[("core_fragment", 200)])
 }
 
 /// Opens Compile and picks `item`'s row by name — the recipe list is sorted

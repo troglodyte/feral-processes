@@ -57,7 +57,7 @@ fn n_opens_the_board_from_the_surface_and_marks_everything_read() {
 
 #[test]
 fn n_opens_the_board_from_the_stack() {
-    let mut app = app_owning_a_program_and_a_compiler_deep(20002, &[], &[], true);
+    let mut app = app_owning_a_program_and_an_extractor_deep(20002, &[], &[], true);
     assert!(app.game.as_ref().unwrap().is_underground());
 
     app.handle_key(GameKey::Char('N'));

@@ -278,7 +278,7 @@ fn a_full_depot_closes_every_put_and_touches_no_take() {
 #[test]
 fn basket_room_tells_no_depot_apart_from_a_full_one() {
     let app = picker(979);
-    assert_eq!(app.basket_room, None, "a Mining Node has no room");
+    assert_eq!(app.basket_room, None, "a Extractor has no room");
 
     let app = depot_picker(980, depot_capacity(), &[(ITEM, 1)]);
     assert_eq!(app.basket_room, Some(0), "a Depot with nothing left");

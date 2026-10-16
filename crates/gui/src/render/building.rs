@@ -2758,10 +2758,10 @@ mod tests {
 
     fn structure_report(status: MachineStatus) -> StructureReport {
         StructureReport {
-            recipe: None,
+            recipe: Some("core_fragment".into()),
             entity: Entity::PLACEHOLDER,
-            kind: "mining_node".to_string(),
-            label: "Mining Node".to_string(),
+            kind: "extractor".to_string(),
+            label: "Extractor (Core Fragment)".to_string(),
             pos: (0, 0),
             distance: 0,
             tier: None,
@@ -3010,7 +3010,7 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: None,
-            structure: "fabricator".to_string(),
+            structure: "assembler".to_string(),
             cost: Vec::new(),
             rebuild: false,
         }
@@ -3026,7 +3026,7 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: Some(to_tier),
-            structure: "mining_node".to_string(),
+            structure: "extractor".to_string(),
             cost,
             rebuild: false,
         }

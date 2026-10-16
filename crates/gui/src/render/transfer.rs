@@ -87,7 +87,7 @@ pub(super) fn draw_transfer(
 /// The hint lines, the column header, and then the item rows.
 ///
 /// The room line is **omitted entirely** when there is no Depot beside the
-/// party: a Mining Node has no room to report, and a line reading 0 there
+/// party: an Extractor has no room to report, and a line reading 0 there
 /// claims the base is full when it has no shelf at all. `Some(0)` still
 /// draws it — that is a Depot with nothing left, which is exactly the thing
 /// the player needs told.
@@ -535,7 +535,7 @@ mod tests {
         };
         assert!(
             !heads(None).starts_with("Depot room"),
-            "a Mining Node has no room to report"
+            "an Extractor has no room to report"
         );
         assert_eq!(heads(Some(0)), "Depot room remaining: 0");
     }

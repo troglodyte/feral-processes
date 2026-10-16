@@ -4110,7 +4110,7 @@ mod tests {
             data.build_sites
                 .push(feral_processes_engine::save::BuildSiteSave {
                     position: (px + 1, py),
-                    structure: "mining_node".to_string(),
+                    structure: "extractor".to_string(),
                     cost: vec![(
                         feral_processes_engine::items::ItemId::from("core_fragment"),
                         5,
@@ -6227,7 +6227,7 @@ mod tests {
     /// `Game::place_structure` would file a build *request* for anything but
     /// Home rather than raising it (`Game::spawn_structure`'s doc), so the
     /// Station is written straight into the save the way
-    /// `test_support::app_in_base_with_a_compiler` stands its Compiler up:
+    /// `test_support::app_in_base_with_an_extractor` stands its Compiler up:
     /// `place_structure` would spend a tamed program this fixture has no need
     /// to own, and the engine exposes no cheaper way to stand a structure up
     /// from outside its own crate.

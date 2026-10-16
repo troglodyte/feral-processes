@@ -50,7 +50,7 @@ fn the_command_pages_hide_rows_whose_screen_would_be_empty() {
 /// offer.
 #[test]
 fn a_program_in_range_brings_back_the_rows_that_need_one() {
-    let mut app = app_owning_a_program_and_a_compiler(4003, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(4003, &[]);
     stand_in_base(&mut app);
     let rows = command_labels_all(&mut app);
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
@@ -126,11 +126,11 @@ fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
     let mut covered: Vec<&'static str> = Vec::new();
 
     // Two fixtures because no single one stands up every guarded row: the
-    // compiler fixture has something to upgrade and clearance to deploy, the
+    // extractor fixture has something to upgrade and clearance to deploy, the
     // small base has an extractor whose product can be ordered.
-    let mut compiler = app_owning_a_program_and_a_compiler(4004, &[]);
-    stand_in_base(&mut compiler);
-    covered.extend(base_rows_lost_on_leaving(compiler));
+    let mut extractor = app_owning_a_program_and_an_extractor(4004, &[]);
+    stand_in_base(&mut extractor);
+    covered.extend(base_rows_lost_on_leaving(extractor));
     covered.extend(base_rows_lost_on_leaving(
         app_inside_a_small_base_with_programs(4006, false, 1),
     ));
@@ -149,7 +149,7 @@ fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
 #[test]
 fn the_command_pages_drop_their_base_rows_underground_too() {
     for mut app in [
-        app_owning_a_program_and_a_compiler_deep(4005, &[], &[], true),
+        app_owning_a_program_and_an_extractor_deep(4005, &[], &[], true),
         app_inside_a_small_base_with_programs(4007, true, 1),
     ] {
         assert!(
@@ -188,7 +188,7 @@ fn the_party_hub_survives_going_underground() {
 /// row worth offering — the second picker would be empty.
 #[test]
 fn fuse_needs_two_programs_to_be_offered() {
-    let mut app = app_owning_a_program_and_a_compiler(4006, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(4006, &[]);
     let rows = labels(&party_rows(&mut app));
     open_via_menu(&mut app, 'p', "Companions");
     assert_eq!(app.mode, Mode::Companion, "one program is enough");
@@ -387,7 +387,7 @@ fn t_opens_the_trader_list_only_from_the_base() {
 /// changes during a run, so it is the half worth pinning.
 #[test]
 fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
-    let mut app = app_owning_a_program_and_a_compiler(4020, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(4020, &[]);
     let rows = labels(&party_rows(&mut app));
     assert!(
         !rows.contains(&"Refactor a program"),
@@ -395,7 +395,7 @@ fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
     );
 
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(4020, &[], &[("buffer_extension", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(4020, &[], &[("buffer_extension", 1)]);
     let rows = labels(&party_rows(&mut app));
     assert!(
         rows.contains(&"Refactor a program"),
@@ -409,11 +409,11 @@ fn refactor_needs_both_a_program_and_an_upgrade_in_cargo() {
 #[test]
 fn refactoring_works_underground() {
     let mut surface =
-        app_owning_a_program_and_a_compiler_with_cargo(4021, &[], &[("buffer_extension", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(4021, &[], &[("buffer_extension", 1)]);
     assert!(labels(&party_rows(&mut surface)).contains(&"Refactor a program"));
 
     let mut app =
-        app_owning_a_program_and_a_compiler_deep(4021, &[], &[("buffer_extension", 1)], true);
+        app_owning_a_program_and_an_extractor_deep(4021, &[], &[("buffer_extension", 1)], true);
     assert!(
         labels(&party_rows(&mut app)).contains(&"Refactor a program"),
         "a refactor reaches no zone-map state through Position, so it is not surface-only"
@@ -426,7 +426,7 @@ fn refactoring_works_underground() {
 /// program to the base.
 #[test]
 fn the_build_page_offers_work_orders_and_staff_rather_than_manual_posting() {
-    let mut app = app_owning_a_program_and_a_compiler(4030, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(4030, &[]);
     stand_in_base(&mut app);
     let rows = command_labels_all(&mut app);
 
@@ -446,11 +446,11 @@ fn the_build_page_offers_work_orders_and_staff_rather_than_manual_posting() {
 /// here.
 #[test]
 fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
-    let mut app = app_owning_a_program_and_a_compiler(883, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(883, &[]);
     stand_in_base(&mut app);
     assert!(
         !command_labels_all(&mut app).contains(&"Study a program"),
-        "a Compiler alone declares no `studies` pen"
+        "an Extractor alone declares no `studies` pen"
     );
 
     let mut app = app_owning_a_program_and_a_research_station(884);
@@ -464,7 +464,7 @@ fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
 /// `Mode::PinPrisoner`'s row: hidden until a Holding Cell stands.
 #[test]
 fn the_hold_row_is_hidden_with_no_cell_and_shown_with_one() {
-    let mut app = app_owning_a_program_and_a_compiler(887, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(887, &[]);
     stand_in_base(&mut app);
     assert!(!command_labels_all(&mut app).contains(&"Hold a program"));
 

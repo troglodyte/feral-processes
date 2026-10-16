@@ -587,7 +587,8 @@ mod tests {
             r#"(template: "chains", ticks: 200, seeds: [1], holdout_seeds: [2],
             iterations: 2, population: 2, search_seed: 7,
             targets: [(measure: "economy.labour_unworked", min: 0.0, max: 0.5)],
-            knobs: [(file: "structures/assembly_bay.ron", field: "assembles.ticks_per_unit",
+            knobs: [(file: "structures/printer.ron",
+                     field: "machine.recipes.patch_routine.ticks_per_unit",
                      min: 5.0, max: 60.0)])"#,
         )
         .unwrap()

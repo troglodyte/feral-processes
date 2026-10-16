@@ -180,7 +180,7 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
     assert_eq!(row.can_put, 0, "and nothing may be put where it is refused");
 }
 
-/// A Mining Node has a shelf but no filter, so the key that opens this
+/// A Extractor has a shelf but no filter, so the key that opens this
 /// screen has to say so rather than opening an empty one.
 #[test]
 fn the_key_is_refused_where_there_is_no_depot() {

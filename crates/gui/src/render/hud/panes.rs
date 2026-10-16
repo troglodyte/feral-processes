@@ -728,9 +728,9 @@ mod tests {
 
     fn structure(label: &str, idle: bool) -> StructureReport {
         StructureReport {
-            recipe: None,
+            recipe: Some("core_fragment".into()),
             entity: entity(),
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
             label: label.to_string(),
             pos: (0, 0),
             distance: 3,

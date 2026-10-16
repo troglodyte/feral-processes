@@ -5,13 +5,15 @@
 //! (`deposit` / `Load` at arrival). A later hauling errand brings the pile
 //! home.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use bevy_ecs::prelude::*;
 
 use crate::Game;
-use crate::components::{Carrying, FloorPile, Position};
-use crate::items::ItemId;
+use crate::base_grid::BaseGrid;
+use crate::components::{Carrying, FloorItem, FloorPile, Position};
+use crate::game::base::hauling::Occupancy;
+use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
 use crate::save::FloorPileSave;
 use crate::views::FloorPileView;
@@ -43,6 +45,48 @@ pub(crate) fn floor_pile_at(world: &mut World, pos: Position) -> Option<Entity> 
         .iter(world)
         .find(|(_, p, _)| p.x == pos.x && p.y == pos.y)
         .map(|(e, _, _)| e)
+}
+
+/// The one place a floor item's component list is written. One item per
+/// tile: callers pick a free cell through `Game::set_down`, and a second
+/// writer onto an occupied tile would hide a thing from every
+/// `floor_item_at` lookup.
+pub(crate) fn spawn_floor_item(world: &mut World, pos: Position, thing: FloorThing) -> Entity {
+    debug_assert!(
+        floor_item_at(world, pos).is_none(),
+        "a floor tile holds one item"
+    );
+    world.spawn((FloorItem(thing), pos)).id()
+}
+
+/// The item lying on `pos`, if any. A linear query: floor items are few.
+pub(crate) fn floor_item_at(world: &mut World, pos: Position) -> Option<Entity> {
+    world
+        .query::<(Entity, &Position, &FloorItem)>()
+        .iter(world)
+        .find(|(_, p, _)| p.x == pos.x && p.y == pos.y)
+        .map(|(e, _, _)| e)
+}
+
+/// Picks `e` up off the floor: despawns it and returns what it held.
+#[expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")]
+pub(crate) fn take_floor_item(world: &mut World, e: Entity) -> Option<FloorThing> {
+    let FloorItem(thing) = world.entity_mut(e).take::<FloorItem>()?;
+    world.despawn(e);
+    Some(thing)
+}
+
+/// Picks up `e` only if it is a plain `Item(item)`; gear and programs keep
+/// their identity, so a unit-by-id request must not swallow them.
+#[expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")]
+pub(crate) fn take_floor_unit(world: &mut World, e: Entity, item: &ItemId) -> bool {
+    let matches = world
+        .get::<FloorItem>(e)
+        .is_some_and(|f| matches!(&f.0, FloorThing::Item(i) if i == item));
+    if matches {
+        world.despawn(e);
+    }
+    matches
 }
 
 /// Puts `who`'s load on the floor of its tile and ends the hold. A no-op if
@@ -77,7 +121,157 @@ pub(crate) fn take_from_pile(world: &mut World, pile: Entity, item: &ItemId, qty
     taken
 }
 
+/// The one predicate for "an item may be set down here", and for which cells
+/// a drop's search may pass through. Bodies are left out on purpose: they
+/// move, and a tile a body stands on is no less a place to leave something.
+pub(crate) struct FreeFloor {
+    taken: HashSet<(i32, i32)>,
+    walls: Occupancy,
+}
+
+impl FreeFloor {
+    /// Laid floor, walkable, and not spoken for by a structure, a build site
+    /// or another floor item.
+    fn free(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
+        grid.is_floor(cell.0, cell.1)
+            && grid.walkable(cell.0, cell.1)
+            && !self.walls.walls(cell)
+            && !self.taken.contains(&cell)
+    }
+
+    /// Whether the search may walk on through `cell`: a structure's anchor
+    /// is a wall, so nothing lands behind one that a body could not reach.
+    fn crossable(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
+        grid.walkable(cell.0, cell.1) && !self.walls.walls(cell)
+    }
+}
+
 impl Game {
+    /// Snapshot of what blocks a set-down right now.
+    pub(crate) fn free_floor(&mut self) -> FreeFloor {
+        let mut taken = self.structure_tiles();
+        taken.extend(self.build_site_tiles());
+        taken.extend(
+            self.world
+                .query::<(&Position, &FloorItem)>()
+                .iter(&self.world)
+                .map(|(p, _)| (p.x, p.y)),
+        );
+        FreeFloor {
+            taken,
+            walls: self.blocked_tiles(),
+        }
+    }
+
+    /// Up to `count` free floor cells around `from`, nearest first.
+    pub(crate) fn free_floor_cells(&mut self, from: Position, count: usize) -> Vec<(i32, i32)> {
+        let floor = self.free_floor();
+        let grid = self.world.resource::<BaseGrid>();
+        nearest_free_cells(
+            (from.x, from.y),
+            count,
+            |c| floor.free(grid, c),
+            |c| floor.crossable(grid, c),
+        )
+    }
+
+    /// Lays `things` on the floor around `from`, one per tile, nearest first
+    /// from a single search. What finds no tile goes to `stow`, so a set-down
+    /// never destroys anything.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 4 wires the pile paths onto floor items")
+    )]
+    pub(crate) fn set_down(&mut self, from: Position, things: Vec<FloorThing>) {
+        let cells = self.free_floor_cells(from, things.len());
+        let mut things = things.into_iter();
+        for (cell, thing) in cells.into_iter().zip(things.by_ref()) {
+            let pos = Position {
+                x: cell.0,
+                y: cell.1,
+            };
+            spawn_floor_item(&mut self.world, pos, thing);
+        }
+        for thing in things {
+            self.stow(thing, from);
+        }
+    }
+
+    /// The fallback for a thing with no floor to lie on, saying so in the
+    /// log: pack for items and gear; for a program the downed store, then
+    /// the nearest rack with room, then the store past its cap.
+    fn stow(&mut self, thing: FloorThing, from: Position) {
+        let player = self.player_entity();
+        match thing {
+            FloorThing::Item(id) => {
+                let name = self.item_name(&id).to_string();
+                self.log_base(format!(
+                    "No free floor for {name} — it goes into your pack."
+                ));
+                if let Some(mut inv) = self.world.get_mut::<crate::components::Inventory>(player) {
+                    inv.add(id, 1);
+                }
+            }
+            FloorThing::Gear(copy) => {
+                let name = self.copy_name(&copy);
+                self.log_base(format!(
+                    "No free floor for {name} — it goes into your pack."
+                ));
+                if let Some(mut copies) =
+                    self.world.get_mut::<crate::components::GearCopies>(player)
+                {
+                    copies.add(copy, 1);
+                }
+            }
+            FloorThing::Program(program) => self.stow_program(program, from),
+        }
+    }
+
+    fn stow_program(&mut self, program: crate::items::DownedProgram, from: Position) {
+        use crate::components::{DownedPrograms, Racked};
+        let player = self.player_entity();
+        let label = self.downed_program_label(&program);
+        let under_cap = self
+            .world
+            .get::<DownedPrograms>(player)
+            .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
+        let rack = if under_cap {
+            None
+        } else {
+            self.nearest_rack_with_room(from)
+        };
+        let ending = if under_cap {
+            "it goes to your downed store."
+        } else if rack.is_some() {
+            "it goes onto the Quarantine Rack."
+        } else {
+            "it squeezes into your downed store past its limit."
+        };
+        self.log_base(format!("No free floor for {label} — {ending}"));
+        if let Some(rack) = rack
+            && let Some(mut shelf) = self.world.get_mut::<Racked>(rack)
+        {
+            shelf.0.push(program);
+        } else if let Some(mut store) = self.world.get_mut::<DownedPrograms>(player) {
+            store.0.push(program);
+        }
+    }
+
+    /// The rack nearest `from` by `(chebyshev, x, y)` that has a free slot.
+    fn nearest_rack_with_room(&mut self, from: Position) -> Option<Entity> {
+        let mut racks: Vec<(i32, i32, i32, Entity)> = self
+            .world
+            .query::<(Entity, &Position, &crate::components::Racked)>()
+            .iter(&self.world)
+            .map(|(e, p, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y, e))
+            .collect();
+        racks.sort();
+        racks
+            .into_iter()
+            .map(|(.., e)| e)
+            .find(|e| self.rack_room(*e) > 0)
+    }
+
     /// Every pile on the base floor, for the map and the examine line. Empty
     /// outside base space: a pile's `Position` is a base cell, and the surface
     /// map would draw it on whatever tile shares the coordinates.

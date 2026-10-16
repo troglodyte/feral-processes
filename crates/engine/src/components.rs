@@ -954,6 +954,15 @@ pub struct FloorPile {
     pub items: std::collections::BTreeMap<ItemId, u32>,
 }
 
+/// One thing on a base tile's floor, one per tile
+/// (`base::floor::spawn_floor_item` is the only writer and asserts the tile
+/// is empty), so a drop spreads over tiles rather than stacking. Deliberately
+/// has no `Glyph`, `FloorPile`'s reason: the many queries over
+/// `(&Position, &Glyph)` must not see it, and the renderer reads a `Game`
+/// view instead.
+#[derive(Component, Clone, Debug)]
+pub struct FloorItem(pub crate::items::FloorThing);
+
 /// A posted program that found no route to where it is trying to get, and the
 /// tick it stopped being able to. Written and cleared by
 /// `game::base::hauling::haul_step_system`, the one system that walks a field

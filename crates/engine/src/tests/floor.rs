@@ -6,6 +6,7 @@ use crate::floors::FloorId;
 use crate::game::base::floor::{
     drop_load, floor_pile_at, nearest_free_cells, spawn_floor_pile, take_from_pile,
 };
+use crate::items::FloorThing;
 use crate::*;
 
 fn game() -> Game {
@@ -402,4 +403,96 @@ fn nearest_free_cells_never_reaches_past_what_cannot_be_crossed() {
     let free = |c: (i32, i32)| c == (2, 0) || c == (0, 2);
     let crossable = |c: (i32, i32)| c.0 == 0 && (0..=2).contains(&c.1);
     assert_eq!(nearest_free_cells((0, 0), 2, free, crossable), vec![(0, 2)]);
+}
+
+fn scrap() -> FloorThing {
+    FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT))
+}
+
+#[test]
+fn set_down_spreads_one_unit_per_tile_nearest_first() {
+    let mut g = game();
+    lay_floor_box(&mut g, (0, 0), (4, 0));
+    g.set_down(Position { x: 2, y: 0 }, vec![scrap(); 3]);
+    let cells: Vec<_> = floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells, vec![(1, 0), (2, 0), (3, 0)]);
+}
+
+#[test]
+fn set_down_skips_a_tile_that_already_holds_an_item_or_a_structure() {
+    let mut g = game();
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    lay_floor_box(&mut g, (0, 0), (3, 0));
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap()]);
+    spawn_structure_at(&mut g, "wall", 1, 0); // anchors a wall: not free and not crossable
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap()]);
+    assert_eq!(
+        floor_things(&mut g).len(),
+        1,
+        "nothing past the wall is reachable"
+    );
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 1);
+}
+
+#[test]
+fn a_drop_beside_a_wall_never_lands_behind_it() {
+    let mut g = game();
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    // Walls stand on laid floor, so only the wall check keeps the far side out.
+    lay_floor_box(&mut g, (0, 0), (2, 1));
+    spawn_structure_at(&mut g, "wall", 1, 0);
+    spawn_structure_at(&mut g, "wall", 1, 1);
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap(); 3]);
+    let cells: Vec<_> = floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells, vec![(0, 0), (0, 1)], "(2,0) is behind the wall");
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 1);
+}
+
+#[test]
+fn set_down_with_no_free_floor_puts_items_in_the_pack_and_says_so() {
+    let mut g = game(); // empty BaseGrid: nothing is floor
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    g.set_down(Position { x: 5, y: 5 }, vec![scrap(); 2]);
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 2);
+    assert!(
+        g.message_history(5)
+            .iter()
+            .any(|e| e.text.contains("goes into your pack"))
+    );
+}
+
+#[test]
+fn a_program_with_no_floor_goes_to_the_downed_store_then_a_rack() {
+    use crate::components::{DownedPrograms, Racked};
+    let mut g = game();
+    let player = g.player_entity();
+    let program = || crate::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 3,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    let rack = spawn_structure_at(&mut g, "quarantine_rack", 9, 9);
+    g.world.entity_mut(rack).insert(Racked::default());
+    let at = Position { x: 5, y: 5 };
+
+    g.set_down(at, vec![FloorThing::Program(program())]);
+    assert_eq!(g.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(g.world.get::<Racked>(rack).unwrap().0.is_empty());
+
+    g.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(); crate::tuning::MAX_DOWNED_PROGRAMS];
+    g.set_down(at, vec![FloorThing::Program(program())]);
+    assert_eq!(g.world.get::<Racked>(rack).unwrap().0.len(), 1);
+    assert_eq!(
+        g.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS
+    );
+    assert!(
+        g.message_history(5)
+            .iter()
+            .any(|e| e.text.contains("onto the Quarantine Rack"))
+    );
 }

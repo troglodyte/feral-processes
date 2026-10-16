@@ -1,6 +1,7 @@
 (
     id: "outlet",
     name: "Power Outlet",
+    glyph: Some('*'),
     description: "Spent to power down and repair away from your base. At the base, resting is free.",
     value: Some(5),
     craftable: Some((cost: [("core_fragment", 5)])),

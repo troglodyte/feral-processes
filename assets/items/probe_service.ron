@@ -1,6 +1,7 @@
 (
     id: "probe_service",
     name: "Probe Service",
+    glyph: Some(':'),
     description: "Scavenged module. A small edge on decompile odds.",
     value: Some(5),
     equipment: Some((Module, (decompiler: 1))),

@@ -1,6 +1,7 @@
 (
     id: "scrap_ward",
     name: "Scrap Ward",
+    glyph: Some('"'),
     description: "Scavenged armor. Thin plating bolted over the worst of the gaps.",
     value: Some(4),
     equipment: Some((Armor, (mitigation: 1, evasion: 3))),

@@ -2,6 +2,7 @@
     id: "kinetic_edge",
     fx: Some("slash"),
     name: "Kinetic Edge",
+    glyph: Some('\''),
     description: "Scavenged weapon. A cleaner strike than anything else you'll find lying around.",
     value: Some(7),
     equipment: Some((Weapon, (atk: 2, damage: (min: 4, max: 7), accuracy: 2))),

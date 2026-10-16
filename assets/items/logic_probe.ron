@@ -1,6 +1,7 @@
 (
     id: "logic_probe",
     name: "Logic Probe",
+    glyph: Some(':'),
     description: "Standard module. Sharpens both your strike and your capture.",
     value: Some(15),
     equipment: Some((Module, (decompiler: 2, atk: 1))),

@@ -1,6 +1,7 @@
 (
     id: "ablative_plating",
     name: "Ablative Plating",
+    glyph: Some('"'),
     description: "Researched armor. Sheds a layer per hit.",
     value: Some(25),
     equipment: Some((Armor, (mitigation: 12))),

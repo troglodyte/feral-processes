@@ -53,7 +53,7 @@ come later; for now a stockpile takes anything.
   crafting stock. Only stockpiled items count (see *Stockpiles as stock*).
 - Floor items anywhere but base space (zones, settlements, the Stack,
   tactical maps).
-- Picking up from or dropping onto a tile other than the player's own.
+- Picking up from a tile other than the player's own.
 
 ## Anti-goals (a failure even if it works)
 
@@ -115,8 +115,9 @@ come later; for now a stockpile takes anything.
   - `t`: put down, opening a picker over Inventory, gear copies and downed
     programs (reuse the transfer picker / `downed_program_list_rows`
     patterns).
-- The drop target is the player's own tile, and only if it is a free floor
-  tile; otherwise the drop is refused with a message. Pick-up respects
+- A drop goes onto the player's own tile when it is free; otherwise it
+  overflows to the next nearest free tile, through the same set-down path
+  and fallback as every other drop *(user decided)*. Pick-up respects
   `MAX_DOWNED_PROGRAMS`.
 - Map draw: an item's glyph, under bodies and structures as the `%` mark
   is today. Stockpile cells get a faint mark or tint distinct from

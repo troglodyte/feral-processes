@@ -3,7 +3,9 @@
 use super::support::*;
 use crate::components::{Carrying, FloorPile};
 use crate::floors::FloorId;
-use crate::game::base::floor::{drop_load, floor_pile_at, spawn_floor_pile, take_from_pile};
+use crate::game::base::floor::{
+    drop_load, floor_pile_at, nearest_free_cells, spawn_floor_pile, take_from_pile,
+};
 use crate::*;
 
 fn game() -> Game {
@@ -384,4 +386,20 @@ fn a_fine_workshop_works_faster_than_the_commons() {
 #[test]
 fn a_machine_in_quarters_gets_no_workshop_scale() {
     assert_eq!(lathe_ticks(Some((8, true))), lathe_ticks(None));
+}
+
+#[test]
+fn nearest_free_cells_takes_the_drop_point_first_then_walks_outward() {
+    let corridor = |c: (i32, i32)| c.1 == 0 && (0..5).contains(&c.0);
+    assert_eq!(
+        nearest_free_cells((2, 0), 3, corridor, corridor),
+        vec![(2, 0), (1, 0), (3, 0)]
+    );
+}
+
+#[test]
+fn nearest_free_cells_never_reaches_past_what_cannot_be_crossed() {
+    let free = |c: (i32, i32)| c == (2, 0) || c == (0, 2);
+    let crossable = |c: (i32, i32)| c.0 == 0 && (0..=2).contains(&c.1);
+    assert_eq!(nearest_free_cells((0, 0), 2, free, crossable), vec![(0, 2)]);
 }

@@ -143,3 +143,44 @@ impl Game {
         }
     }
 }
+
+/// Up to `count` cells `free` admits, nearest first: `from` itself if free,
+/// then breadth-first over `world::NEIGHBOURS`, searching only through cells
+/// `crossable` admits (`from` is always expanded). One search that stops at
+/// `count`; fewer come back once every reachable crossable cell has been
+/// tried — the grid is finite, so the search always ends.
+pub(crate) fn nearest_free_cells(
+    from: (i32, i32),
+    count: usize,
+    free: impl Fn((i32, i32)) -> bool,
+    crossable: impl Fn((i32, i32)) -> bool,
+) -> Vec<(i32, i32)> {
+    let mut found = Vec::new();
+    if count == 0 {
+        return found;
+    }
+    if free(from) {
+        found.push(from);
+    }
+    let mut seen = std::collections::HashSet::from([from]);
+    let mut queue = std::collections::VecDeque::from([from]);
+    while found.len() < count {
+        let Some(at) = queue.pop_front() else { break };
+        for (dx, dy) in crate::world::NEIGHBOURS {
+            let next = (at.0 + dx, at.1 + dy);
+            if !seen.insert(next) {
+                continue;
+            }
+            if free(next) {
+                found.push(next);
+                if found.len() == count {
+                    return found;
+                }
+            }
+            if crossable(next) {
+                queue.push_back(next);
+            }
+        }
+    }
+    found
+}

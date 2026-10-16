@@ -2358,7 +2358,9 @@ impl Game {
     /// what everyone else gets. There are two such errands and **repair
     /// outranks an amenity** — a downed program is not going back to work
     /// whatever its reserves say, so a coherent order between the two is
-    /// the Bay first.
+    /// the Bay first. A third, lowest errand sits between the amenity and the
+    /// wander: with a stockpile marked, a body with nothing else to do
+    /// carries a loose floor item to a free cell (`Game::tidy_step`).
     fn drift_idle_staff(
         &mut self,
         staff: &[Entity],

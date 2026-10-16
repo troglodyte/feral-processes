@@ -5,6 +5,11 @@ the neighbour's four orthogonal tiles and its output is something the neighbour 
 as an ingredient or as the power it burns. A Mining Node beside a Lathe is a line. Two Mining Nodes
 side by side are not, because neither makes anything the other needs.
 
+An Extractor, Factory, Assembler or Printer makes nothing until you tell it what to. Place the
+machine, stand beside it and press R to pick a recipe from the ones you have researched. A machine
+with no recipe wears a ? on the map. Changing a machine that is already set asks first, and the
+change empties what the machine held to the Depots.
+
 A line is one job, and one worker staffs it. Setting a standing job on any machine in a line sets
 it on every machine in that line, and the base posts a single program to run the line rather than
 one to each machine. The roster, on the second screen of the base report's Staffing page (Right past the duty table's last column),

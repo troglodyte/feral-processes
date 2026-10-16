@@ -36,6 +36,7 @@ mod key_names;
 mod keys;
 mod level_up;
 mod log_filter;
+mod machine_recipe;
 mod menus;
 mod mod_copy;
 mod notifications;

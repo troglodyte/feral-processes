@@ -3753,3 +3753,44 @@ pub(crate) fn open_the_bay_sheet(app: &mut App) -> Entity {
     app.mode = Mode::StructureManifest;
     bay
 }
+
+/// The party in base space beside one machine of `kind` at `(1, 0)`, set to
+/// `recipe` (`None` for an unset machine). Built through the save round
+/// trip, `app_beside_a_teardown_rig_holding`'s reason. `recipe` must be one
+/// that needs no research, since a save restores it verbatim.
+pub(crate) fn app_beside_a_machine(seed: u32, kind: &str, recipe: Option<&str>) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("machine", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    data.structures.push(save::StructureSave {
+        recipe: recipe.map(ItemId::from),
+        kind: kind.to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}

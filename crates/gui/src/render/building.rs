@@ -1087,11 +1087,29 @@ pub(super) fn work_order_screen_rows(
     for (i, row) in rows_in.iter().enumerate() {
         let mut lines = work_order_lines(row, i, i == selected).into_iter();
         if let Some(head) = lines.next() {
-            rows.push(item_row(head, i == selected));
+            rows.push(work_order_head_row(row, head, i == selected));
         }
         rows.extend(lines.map(text_row));
     }
     rows
+}
+
+/// A work order's head row. A stalled order wears a red `!` in the icon
+/// column — its reason sits on the continuation rows beneath — so the one
+/// order that will not run without the player is findable at a glance in a
+/// long queue. `OFFLINE`, the red for "stopped and will not start again on
+/// its own".
+fn work_order_head_row(row: &WorkOrderRow, head: String, selected: bool) -> Row {
+    let stalled = row
+        .order
+        .as_ref()
+        .is_some_and(|o| o.state == OrderState::Stalled);
+    let item = item_row(head, selected);
+    if stalled {
+        with_icon(item, '!', hud::palette::OFFLINE)
+    } else {
+        item
+    }
 }
 
 /// How many bodies short the base is, or `None` when it has enough.
@@ -3635,6 +3653,43 @@ mod work_order_tests {
     /// can actually run off, and it is measured here against the longest
     /// shipped item name and four-digit counts rather than a convenient
     /// short one.
+    /// A stalled order wears a red `!` and shows the reason it is stalled; a
+    /// queued one wears neither.
+    #[test]
+    fn a_stalled_work_order_wears_a_red_bang_and_its_reason() {
+        let order = |state, blocked_by: Option<&str>| WorkOrderRow {
+            order: Some(WorkOrderReport {
+                item: ItemId::from("bytecode_block"),
+                label: "Bytecode Block".to_string(),
+                have: 0,
+                target: 5,
+                state,
+                blocked_by: blocked_by.map(str::to_string),
+                machines: Vec::new(),
+            }),
+        };
+        let stalled = order(
+            OrderState::Stalled,
+            Some("No way to make this \u{2014} set a Factory to Bytecode Block."),
+        );
+        let queued = order(OrderState::Queued, None);
+        let rows = work_order_screen_rows(&[stalled, queued], LabourDemand::default(), 0);
+        let icons: Vec<Option<(char, Color)>> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { icon, .. } => Some(*icon),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(icons, vec![Some(('!', hud::palette::OFFLINE)), None]);
+        let text: Vec<String> = rows.iter().map(row_label_text).collect();
+        assert!(
+            text.iter()
+                .any(|t| t.contains("No way to make this") && t.contains("set a Factory")),
+            "the reason is on the screen: {text:?}"
+        );
+    }
+
     #[test]
     fn no_work_order_row_runs_past_the_popup_body() {
         let report = WorkOrderReport {

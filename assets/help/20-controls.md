@@ -52,6 +52,7 @@ Acting on the world:
   Depot beside you will accept
 - t — trade
 - F — fit a tool to the Teardown Rig beside you, or pull the one it has
+- R — choose what the machine beside you makes
 - I — open the Splice Rig beside you, to build an implant into your body or take one out
 - P — load a staff program into the Power Siphon beside you, or release the one in it
 - a — call a routine

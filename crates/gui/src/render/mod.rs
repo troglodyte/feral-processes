@@ -59,6 +59,7 @@ mod icon_editor;
 mod inventory;
 mod level_up;
 mod lighting;
+mod machine_recipe;
 mod manifest;
 mod marks;
 mod meta;
@@ -140,6 +141,7 @@ use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory_item_action,
     effect_lines,
 };
+use machine_recipe::{draw_machine_recipe, draw_machine_recipe_confirm};
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
     draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
@@ -1034,6 +1036,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RigTool => app.rig_tool.clone(),
         _ => None,
     };
+    let machine_recipe = match app.mode {
+        Mode::MachineRecipe | Mode::MachineRecipeConfirm => app.machine_recipe.clone(),
+        _ => None,
+    };
     let excavate_brush = match app.mode {
         Mode::ExcavateBrush => app.excavate_brush_rows(),
         _ => Vec::new(),
@@ -1188,6 +1194,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
+        Mode::MachineRecipe => {
+            draw_machine_recipe(machine_recipe.as_ref(), selected, refusal, painter, m)
+        }
+        Mode::MachineRecipeConfirm => {
+            draw_machine_recipe_confirm(machine_recipe.as_ref(), selected, refusal, painter, m)
+        }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
@@ -1674,7 +1686,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 152] = [
+    const ALL_MODES: [Mode; 154] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1690,6 +1702,8 @@ mod tests {
         Mode::Transfer,
         Mode::DepotFilter,
         Mode::RigTool,
+        Mode::MachineRecipe,
+        Mode::MachineRecipeConfirm,
         Mode::SpliceRig,
         Mode::Battle,
         Mode::BattleTarget,

@@ -49,7 +49,7 @@ pub(super) fn stock_rows(report: &[StockReportRow], selected: usize) -> Vec<Row>
             } else {
                 TEXT
             };
-            colored_item_row(
+            let row = colored_item_row(
                 format!(
                     "{:<name_w$}  {:>qty_w$}{target}",
                     elide(&r.name, name_w),
@@ -57,7 +57,13 @@ pub(super) fn stock_rows(report: &[StockReportRow], selected: usize) -> Vec<Row>
                 ),
                 i == selected,
                 color,
-            )
+            );
+            // A stalled order wears the same red `!` the Work Orders screen
+            // gives it; the sentence naming why lives there.
+            match r.order {
+                Some((_, OrderState::Stalled)) => with_icon(row, '!', hud::palette::OFFLINE),
+                _ => row,
+            }
         })
         .collect()
 }
@@ -84,6 +90,16 @@ mod tests {
         let t = text_of(&rows[0]);
         assert!(t.contains("Core Fragment") && t.contains("2"), "{t}");
         assert!(t.contains("of 5 ordered - stalled"), "{t}");
+        assert!(
+            matches!(
+                rows[0],
+                Row::Item {
+                    icon: Some(('!', _)),
+                    ..
+                }
+            ),
+            "a stalled order wears a bang"
+        );
         assert!(matches!(&rows[0], Row::Item { color, .. } if *color == RED));
         let rows = stock_rows(&[row(9, None)], 0);
         assert!(!text_of(&rows[0]).contains("ordered"));

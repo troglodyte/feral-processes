@@ -29,6 +29,7 @@ mod inspection;
 mod inventory;
 pub(crate) mod level_up;
 mod lifecycle;
+pub mod machine_recipe;
 mod menus;
 mod mod_copy;
 pub(crate) mod outposts;

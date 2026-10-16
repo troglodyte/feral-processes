@@ -525,6 +525,9 @@ impl App {
                 // beside you" on the transfer picker, where `[F]` opens a
                 // Depot's filter.
                 GameKey::Char('F') => self.open_rig_tool(),
+                // `R` because it is unbound on the map and not a hidden key.
+                // Uppercase, as every map action is.
+                GameKey::Char('R') => self.open_machine_recipe(),
                 // `P` because it is unbound on the map: `D`, `L`, `N`, `F`
                 // and `Z` are taken, and `T` and `W` are hidden keys
                 // `no_shipped_help_page_names_a_hidden_key` forbids a page

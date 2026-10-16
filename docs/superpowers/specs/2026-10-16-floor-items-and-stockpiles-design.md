@@ -79,9 +79,13 @@ come later; for now a stockpile takes anything.
   Model it on the predicate in `Game::displace_bodies_from`
   (`building.rs` ~425) and the BFS `nearest_free_floor` (`building.rs`
   ~2006). Promote that BFS to a shared helper, not a copy.
-- **Setting down** = place on the nearest free floor tile to the body,
-  searched over all of base space. **If no free floor tile exists
-  anywhere:** a plain item or gear copy goes into the player's
+- **Setting down** = place on the drop point's own tile if free, else
+  search outward ring by ring (Chebyshev radius 1, then 2, then 3, …) and
+  take the free tiles in the first ring that has any, so a dump of ten
+  items lands on the floor closest to where it was dropped *(user
+  decided)*. Pick within a ring in a stable `(y, x)` order so a reload
+  places the same way. Distance is distance, not path length: reachability
+  plays no part. **If no free floor tile exists anywhere:** a plain item or gear copy goes into the player's
   `Inventory`/`GearCopies`, and a downed program goes into
   `DownedPrograms` if under the cap, otherwise the nearest Quarantine Rack
   hopper. If none of those can take it, the drop is refused. Log a message
@@ -116,7 +120,7 @@ come later; for now a stockpile takes anything.
     programs (reuse the transfer picker / `downed_program_list_rows`
     patterns).
 - A drop goes onto the player's own tile when it is free; otherwise it
-  overflows to the next nearest free tile, through the same set-down path
+  overflows ring by ring to the nearest free tiles, through the same set-down path
   and fallback as every other drop *(user decided)*. Pick-up respects
   `MAX_DOWNED_PROGRAMS`.
 - Map draw: an item's glyph, under bodies and structures as the `%` mark
@@ -186,13 +190,13 @@ lifts one unit per trip, because a tile holds one unit.
   - The old-save migration uses the same path, so it cannot lose items.
   - Run one BFS per load and take the first `qty` free tiles it reaches.
     Don't run one BFS per unit.
-- **Set-down search order:**
-  1. The nearest free tile reachable from the body.
-  2. If none is reachable, the nearest free tile anywhere in base space.
-  3. If there is none at all, the player's stores.
-
-  The shared helper therefore takes a predicate for "free" plus a
-  crossable predicate, as `nearest_free_floor` does now.
+- **Set-down search** is the ring search in *Setting down*, for every
+  drop: the player's, a program's load, cleanup, and the old-save
+  migration. The player's stores are the fallback only when the whole base
+  has no free tile. One helper takes the drop point, a count and the "free"
+  predicate, and returns up to `count` tiles. `nearest_free_floor`'s BFS
+  over crossable tiles is not that helper, because it walks paths and
+  rings do not.
 - **Downed programs and gear copies on the floor** are plain data:
   `DownedProgram`'s condition is rolled once and never ticks, and
   `GearCopy` is a value. No system scans or ages them. Both are already

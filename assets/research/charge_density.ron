@@ -12,12 +12,12 @@
         (
             result: "buffered_cell",
             cost: [("power_cell", 3), ("logic_wafer", 1), ("cache_grain", 3), ("bytecode_block", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "sustain_cell",
             cost: [("power_cell", 2), ("logic_wafer", 2), ("cache_grain", 2), ("bytecode_block", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

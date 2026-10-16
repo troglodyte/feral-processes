@@ -602,7 +602,66 @@ impl Game {
                         })
                     }),
             )
+            .chain(structures.all().flat_map(|structure| {
+                structure.productions().filter_map(move |production| {
+                    if production.recipe.research.as_deref() != Some(def.id.as_str()) {
+                        return None;
+                    }
+                    let placed = crate::structures::Placed {
+                        def: structure,
+                        recipe: Some(&production.recipe.produces),
+                    };
+                    let cost = crate::systems::assembly_recipe(placed, items)?;
+                    Some((cost, &production.recipe.produces))
+                })
+            }))
+            .chain(
+                items
+                    .all()
+                    .filter(|item| {
+                        item.craftable
+                            .as_ref()
+                            .is_some_and(|c| c.research.as_deref() == Some(def.id.as_str()))
+                    })
+                    .filter_map(|item| Some((item.craftable.as_ref()?.cost.as_slice(), &item.id))),
+            )
             .map(|(cost, result)| self.conversion_line(cost, result))
+            .fold(Vec::new(), |mut lines: Vec<String>, line| {
+                // A recipe reachable by hand and at a machine is one conversion.
+                if !lines.contains(&line) {
+                    lines.push(line);
+                }
+                lines
+            })
+    }
+
+    /// "Printer: ICE Breaker" for each machine recipe this node gates.
+    fn machine_recipes_gated_by(&self, node: &str) -> Vec<String> {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .flat_map(|structure| {
+                structure
+                    .productions()
+                    .filter(|p| p.recipe.research.as_deref() == Some(node))
+                    .map(move |p| {
+                        format!("{}: {}", structure.name, self.item_name(&p.recipe.produces))
+                    })
+            })
+            .collect()
+    }
+
+    /// Hand-compiled items this node gates, by name.
+    fn item_recipes_gated_by(&self, node: &str) -> Vec<String> {
+        self.world
+            .resource::<ItemDb>()
+            .all()
+            .filter(|item| {
+                item.craftable
+                    .as_ref()
+                    .is_some_and(|c| c.research.as_deref() == Some(node))
+            })
+            .map(|item| item.name.clone())
             .collect()
     }
 
@@ -618,22 +677,24 @@ impl Game {
     /// nothing resolves is dropped rather than printed raw: the loader has
     /// already dropped an unknown ability or tool id off the def, so a
     /// leftover here would be a name only the engine could see.
-    fn research_unlocks(&self, def: &crate::research::ResearchDef) -> Option<String> {
+    pub(crate) fn research_unlocks(&self, def: &crate::research::ResearchDef) -> Option<String> {
         let structures = self.world.resource::<StructureDb>();
         let tools = self.world.resource::<ToolDb>();
-        let names: Vec<&str> = def
+        let names: Vec<String> = def
             .unlocks_structures
             .iter()
-            .filter_map(|id| structures.get(id).map(|s| s.name.as_str()))
+            .filter_map(|id| structures.get(id).map(|s| s.name.clone()))
             .chain(
                 def.unlocks_recipes
                     .iter()
-                    .map(|r| self.item_name(&r.result)),
+                    .map(|r| self.item_name(&r.result).to_string()),
             )
+            .chain(self.machine_recipes_gated_by(&def.id))
+            .chain(self.item_recipes_gated_by(&def.id))
             .chain(
                 def.unlocks_tools
                     .iter()
-                    .filter_map(|id| tools.get(id.as_str()).map(|t| t.name.as_str())),
+                    .filter_map(|id| tools.get(id.as_str()).map(|t| t.name.clone())),
             )
             .collect();
         let mut lines = Vec::new();

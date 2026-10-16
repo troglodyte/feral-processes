@@ -272,12 +272,16 @@ any non-finite `taming_potency`, `consume.power`, or
     //
     // `requires_structure` is optional and defaults to none. Without it the
     // recipe is always available ("starter"), like the Power Cell and ICE
-    // Breaker. Naming a structure id instead gates the recipe on one of
-    // those being deployed — it only appears in the compile menu while the
-    // bench stands, exactly like a researched recipe's own bench rule. The
-    // bench is the entire unlock: an item-declared recipe needs no research
-    // node of its own (though the bench itself may be research-gated to
-    // build, which is what paces this).
+    // Breaker, anywhere including the field. Naming a structure id instead
+    // gates the recipe on the player standing orthogonally beside one of
+    // those in base space — it only appears in the compile menu while the
+    // bench is touched, and the touched bench's tier sets the quality
+    // floor. Every shipped hand-compile bench recipe names "workbench".
+    //
+    // `research` is optional and defaults to none. A research node id that
+    // must be done before the recipe is offered; it carries the gate of the
+    // bench the recipe used to need. The node's screen lists the item among
+    // what it unlocks.
     //
     // `cost` is ALSO what an automated machine runs. A structure whose
     // `assembles` field names this item (see assets/structures/README.md)
@@ -296,7 +300,8 @@ any non-finite `taming_potency`, `consume.power`, or
     // the base floor, the same as one naming a bench nobody has upgraded.
     craftable: Some((
         cost: [("core_fragment", 12)],
-        requires_structure: Some("fabricator"),
+        requires_structure: Some("workbench"),
+        research: Some("weapon_bench"),
     )),
 
     // Optional; can be left out entirely (defaults to no drops). Species

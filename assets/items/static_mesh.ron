@@ -4,7 +4,7 @@
     description: "Standard armor. Bleeds off the charge that makes a capture fail.",
     value: Some(14),
     equipment: Some((Armor, (mitigation: 2, decompiler: 1, evasion: 5))),
-    craftable: Some((cost: [("bytecode_block", 2), ("charge_coil", 1), ("logic_wafer", 1)], requires_structure: Some("armory"))),
+    craftable: Some((cost: [("bytecode_block", 2), ("charge_coil", 1), ("logic_wafer", 1)], requires_structure: Some("workbench"), research: Some("armor_bench"))),
     droppable: Some([("crawler", 0.08), ("worm", 0.07)]),
     cache_drop: Some(0.08),
 )

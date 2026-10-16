@@ -1230,7 +1230,7 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
         shape,
         vec![
             (vec![("Core Fragment", 2)], None, "Power Cell"),
-            (vec![("Power Cell", 3)], Some("Winding Node"), "Charge Coil"),
+            (vec![("Power Cell", 3)], Some("Workbench"), "Charge Coil"),
             (
                 vec![("Charge Coil", 3)],
                 Some("Assembly Bay"),

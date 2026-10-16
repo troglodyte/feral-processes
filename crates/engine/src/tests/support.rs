@@ -1115,6 +1115,20 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) ->
         .id()
 }
 
+/// A Workbench standing at `(x, y)` with Automation done: the pair that makes
+/// `Game::can_extract_routines` true, by ownership rather than touch.
+pub(super) fn stand_an_extraction_bench(game: &mut Game, x: i32, y: i32) -> Entity {
+    unlock_research_chain(game, "automation");
+    spawn_structure_at(game, "workbench", x, y)
+}
+
+/// Stands the party in base space with a Workbench orthogonally beside it:
+/// the touch a bench recipe is offered under. Returns the bench.
+pub(super) fn touch_a_workbench(game: &mut Game) -> Entity {
+    stand_in_base_at(game, 0, 0);
+    spawn_structure_at(game, "workbench", 1, 0)
+}
+
 /// Stands a machine of `kind` beside the party through the real build path,
 /// then sets it to `recipe` the way the player does — researching the
 /// recipe's gate first so the refusal is not the thing under test.

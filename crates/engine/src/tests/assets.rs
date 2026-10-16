@@ -1776,42 +1776,113 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
     );
 }
 
-/// A machine runs the assembled item's own `craftable.cost` (see
-/// `systems::assembly_recipe`), so a machine whose product named a
-/// *different* bench would build something its own owner could not craft by
-/// hand — and hand-crafting is the manual fallback for a machine you own,
-/// not a way around building one.
-///
-/// Naming no bench at all is the other legal answer, and the Compiler is why:
-/// its product, the ICE Breaker, is one of the three consumable starters a
-/// run is expected to be able to compile from turn one. Automating a starter
-/// must not retroactively gate it. What stops that permission spreading is
-/// `only_the_starters_and_scavenged_gear_need_no_research_or_bench`, which
-/// pins the ungated set by name — so a *new* machine whose product went
-/// benchless to satisfy this test would fail that one instead.
+/// The hand-compile gates that moved onto the Workbench, item by item: a
+/// merged bench must not make a recipe cheaper to reach than it was.
 #[test]
-fn no_shipped_assembler_builds_another_benchs_product() {
-    let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn every_bench_recipe_moved_to_the_workbench_keeps_its_gate() {
+    let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let items = game.world.resource::<crate::items_db::ItemDb>();
-    for def in game
-        .world
-        .resource::<crate::structures::StructureDb>()
-        .all()
-    {
-        let Some(assembles) = &def.assembles else {
-            continue;
-        };
-        let recipe = items
-            .get(assembles.item.as_str())
-            .and_then(|d| d.craftable.as_ref())
-            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
-        if let Some(other) = recipe.requires_structure.as_deref()
-            && other != def.id.as_str()
+    let gates: [(&[&str], Option<&str>); 7] = [
+        (
+            &[
+                "annealed_core",
+                "recompile_kernel",
+                "bounds_check",
+                "buffer_extension",
+                "inline_cache",
+            ],
+            Some("program_refactoring"),
+        ),
+        (
+            &[
+                "bastion_lattice",
+                "hardened_shell",
+                "null_weave",
+                "nullsteel_plate",
+                "phase_carapace",
+                "static_mesh",
+            ],
+            Some("armor_bench"),
+        ),
+        (
+            &[
+                "arc_lance",
+                "black_ice_pick",
+                "entropy_damper",
+                "kernel_key",
+                "logic_probe",
+                "oracle_core",
+                "plasma_router",
+                "recursion_blade",
+                "reinitialization_protocol",
+                "scatter_lance",
+                "shim_blade",
+                "siege_compiler",
+                "singularity_matrix",
+                "sync_governor",
+                "trace_sniffer",
+            ],
+            Some("weapon_bench"),
+        ),
+        (
+            &["blank_substrate", "routine_disk", "logic_wafer"],
+            Some("routine_fabrication"),
+        ),
+        (&["honeypot"], Some("deception")),
+        (&["patch_routine", "bytecode_block", "charge_coil"], None),
+        (&[], None),
+    ];
+    let mut checked = 0;
+    for (ids, gate) in gates {
+        for id in ids {
+            let c = items
+                .get(id)
+                .and_then(|d| d.craftable.as_ref())
+                .unwrap_or_else(|| panic!("{id} should be craftable"));
+            assert_eq!(c.requires_structure.as_deref(), Some("workbench"), "{id}");
+            assert_eq!(c.research.as_deref(), gate, "{id}");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 33);
+}
+
+#[test]
+fn no_shipped_recipe_names_a_removed_bench() {
+    let game = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let removed = [
+        "compiler",
+        "armory",
+        "fabricator",
+        "refactor_bench",
+        "mining_node",
+        "log_scraper",
+        "cache_tap",
+        "power_conduit",
+        "lathe",
+        "refinery",
+        "annealing_node",
+        "transcriber",
+        "winding_node",
+        "disk_press",
+        "decoy_bench",
+        "assembly_bay",
+    ];
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    for def in items.all() {
+        if let Some(bench) = def
+            .craftable
+            .as_ref()
+            .and_then(|c| c.requires_structure.as_deref())
         {
-            panic!(
-                "{} builds {:?}, whose recipe points at {other}'s bench",
-                def.id, assembles.item
-            );
+            assert!(!removed.contains(&bench), "{} names {bench}", def.id);
+        }
+    }
+    for node in game.world.resource::<crate::research::ResearchDb>().all() {
+        for r in &node.unlocks_recipes {
+            if let Some(bench) = r.requires_structure.as_deref() {
+                assert!(!removed.contains(&bench), "{} names {bench}", node.id);
+            }
         }
     }
 }
@@ -2098,8 +2169,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 11,
-        "expected the eleven upgradeable structures — the Extractor, the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
+        checked, 12,
+        "expected the twelve upgradeable structures — the Workbench, the Extractor, the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
     );
 }
 
@@ -4893,7 +4964,7 @@ fn every_amenity_and_repair_bay_declares_a_footprint_of_one() {
 /// Compiler keeps its own flag — moving it would silently downgrade
 /// manual extraction for a run in progress (spec 10.3).
 #[test]
-fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
+fn the_teardown_rig_is_also_an_extraction_bench_and_the_workbench_is() {
     let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structures = game.world.resource::<StructureDb>();
 
@@ -4906,13 +4977,11 @@ fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
         "the rig should be a manual bench too"
     );
 
-    let compiler = structures
-        .get("compiler")
-        .expect("compiler should be a shipped structure");
-    assert!(
-        compiler.extracts_programs,
-        "the Compiler keeps its bench flag — moving it downgrades a run in progress"
-    );
+    let workbench = structures
+        .get("workbench")
+        .expect("workbench should be a shipped structure");
+    assert!(workbench.extracts_programs && workbench.extracts_routines);
+    assert_eq!(workbench.extracts_research.as_deref(), Some("automation"));
 }
 
 /// **`runs_a_job` is doubly load-bearing.** `spawn_structure` only inserts
@@ -5549,8 +5618,16 @@ fn the_honeypot_is_gated_by_deception_and_nothing_else() {
             .as_ref()
             .and_then(|c| c.requires_structure.as_ref())
             .map(|s| s.as_str()),
-        Some("decoy_bench"),
+        Some("workbench"),
         "a honeypot is compiled at the bench, never by hand"
+    );
+    assert_eq!(
+        honeypot
+            .craftable
+            .as_ref()
+            .and_then(|c| c.research.as_deref()),
+        Some("deception"),
+        "and it keeps the gate of the Decoy Bench it came from"
     );
 
     let unlockers: Vec<String> = game

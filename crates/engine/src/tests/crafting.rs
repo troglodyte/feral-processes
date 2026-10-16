@@ -235,7 +235,7 @@ fn the_compile_list_comes_back_in_category_order() {
 #[test]
 fn a_researched_recipe_sorts_into_its_category_rather_than_trailing() {
     let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "fabricator", 3, 0);
+    touch_a_workbench(&mut game);
     unlock_research_chain(&mut game, "overclock");
     let core = ItemId::from("overclock_core");
 
@@ -434,7 +434,8 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
         "being careful about it raises the floor on its own"
     );
 
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
     let benched = recipe_for(&mut game, "arc_lance");
     let tier_one = game.player_craft_order(&benched, false);
     assert_eq!(
@@ -443,7 +444,7 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
         "a bench at its first tier is worth no more than no bench at all"
     );
 
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(3));
     let tier_three = game.player_craft_order(&benched, false);
     assert_eq!(
@@ -460,8 +461,9 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
 fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
     use crate::tuning::QUALITY_MAX;
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(9_000));
 
     let recipe = recipe_for(&mut game, "arc_lance");
@@ -648,7 +650,8 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
     };
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let lance = ItemId::from("arc_lance");
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 5)]);
 
     game.craft(&lance, 5, false).unwrap();
@@ -660,7 +663,7 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
         bare.iter().map(|c| c.quality).collect::<Vec<_>>()
     );
 
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(5));
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 5)]);
     fill_power(&mut game);

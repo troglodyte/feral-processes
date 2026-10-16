@@ -85,8 +85,9 @@ impl Game {
                 let bench_ready = c
                     .requires_structure
                     .as_ref()
-                    .is_none_or(|s| self.has_structure(s));
-                bench_ready.then(|| CraftRecipe {
+                    .is_none_or(|s| self.touched_bench(s).is_some());
+                let researched = c.research.as_ref().is_none_or(|r| self.is_researched(r));
+                (bench_ready && researched).then(|| CraftRecipe {
                     result: def.id.clone(),
                     cost: charged(&c.cost),
                     requires_structure: c.requires_structure.clone(),
@@ -101,7 +102,7 @@ impl Game {
                 let bench_ready = recipe
                     .requires_structure
                     .as_ref()
-                    .is_none_or(|s| self.has_structure(s));
+                    .is_none_or(|s| self.touched_bench(s).is_some());
                 if bench_ready {
                     recipes.push(CraftRecipe {
                         result: recipe.result.clone(),
@@ -119,6 +120,28 @@ impl Game {
         // different `craft_recipes` call than the one the screen draws.
         recipes.sort_by_key(|r| self.category_sort_key(&r.result));
         recipes
+    }
+
+    /// The standing structure of `kind` the party is touching: orthogonally
+    /// adjacent to the base cell it stands in, highest tier first, ties to the
+    /// lowest tile so every call names the same one. `None` outside base
+    /// space, where nothing is touched. A structure with no `StructureTier`
+    /// reads as tier 1, `best_structure_tier`'s rule.
+    pub(crate) fn touched_bench(&self, kind: &str) -> Option<(Entity, u32)> {
+        let (bx, by) = self.base_pos()?;
+        let beside = [(bx + 1, by), (bx - 1, by), (bx, by + 1), (bx, by - 1)];
+        self.world
+            .iter_entities()
+            .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
+            .filter_map(|e| {
+                let at = e.get::<Position>()?;
+                beside.contains(&(at.x, at.y)).then(|| {
+                    let tier = e.get::<StructureTier>().map(|t| t.0).unwrap_or(1);
+                    (e.id(), tier, (at.x, at.y))
+                })
+            })
+            .min_by_key(|(_, tier, at)| (std::cmp::Reverse(*tier), *at))
+            .map(|(entity, tier, _)| (entity, tier))
     }
 
     /// Whether a structure of `kind` exists anywhere right now. Every
@@ -221,8 +244,8 @@ impl Game {
             bench_tier: recipe
                 .requires_structure
                 .as_ref()
-                .and_then(|kind| self.best_structure_tier(kind))
-                .unwrap_or(1),
+                .and_then(|kind| self.touched_bench(kind))
+                .map_or(1, |(_, tier)| tier),
             perk_level: self.player_perk_level(Perk::TightenTolerances),
             careful,
         }

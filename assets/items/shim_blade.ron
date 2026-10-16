@@ -5,6 +5,6 @@
     description: "Standard weapon. Cuts and pries at ICE at the same time.",
     value: Some(14),
     equipment: Some((Weapon, (atk: 2, decompiler: 1, damage: (min: 3, max: 7), accuracy: 2))),
-    craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("core_fragment", 14)], requires_structure: Some("workbench"), research: Some("weapon_bench"))),
     droppable: Some([("worm", 0.09), ("scrapper", 0.07)]),
 )

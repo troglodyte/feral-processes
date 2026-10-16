@@ -629,11 +629,11 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
     let pet = spawn_tamed(&mut game, 10, 3);
     let err = game.extract_routine(pet, 0).unwrap_err();
     assert!(
-        err.contains("Compiler"),
+        err.contains("Workbench"),
         "the refusal should name the bench: {err}"
     );
 
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     assert!(
         game.can_extract_routines(),
         "a bench 30 tiles away still counts — extraction has no proximity rule"
@@ -648,7 +648,7 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
 #[test]
 fn extract_routine_refuses_a_posted_program() {
     let mut game = Game::new(20260925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(pet)
@@ -666,7 +666,7 @@ fn extract_routine_refuses_a_posted_program() {
 fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5); // both of its unlocks installed
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
 
     let offered = game.extractable_routines(medic);
     assert_eq!(offered.len(), 2, "both installed routines are on offer");
@@ -707,7 +707,7 @@ fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_re
 #[test]
 fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let wild = spawn_wild_on_player_tile(&mut game);
     let err = game.extract_routine(wild, 0).unwrap_err();
     assert!(err.contains("control"), "{err}");
@@ -724,7 +724,7 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
 #[test]
 fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     let installed = game.extractable_routines(pet)[0].ability.clone();
     // A known routine counts as its family being discovered too — see
@@ -748,7 +748,7 @@ fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
 #[test]
 fn extracting_a_routine_logs_no_routine_name() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     let ability = game.extractable_routines(pet)[0].ability.clone();
     let name = game.ability_display_name(&ability);

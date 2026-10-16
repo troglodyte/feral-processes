@@ -3,5 +3,5 @@
     name: "Reinitialization Protocol",
     description: "Revives a downed program in a Holding Cell.",
     value: Some(10),
-    craftable: Some((cost: [("ice_breaker", 1), ("logic_wafer", 2), ("charge_coil", 1), ("cache_grain", 1)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("ice_breaker", 1), ("logic_wafer", 2), ("charge_coil", 1), ("cache_grain", 1)], requires_structure: Some("workbench"), research: Some("weapon_bench"))),
 )

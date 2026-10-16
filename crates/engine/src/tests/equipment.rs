@@ -1080,7 +1080,7 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
 fn extracting_a_routine_from_a_geared_program_returns_its_gear() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5);
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let armor = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &armor, 1);
     game.equip(medic, &gear(&armor, 0)).unwrap();

@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "ablative_plating",
         cost: [("portal_fragment", 12), ("cache_grain", 3)],
-        requires_structure: Some("armory"),
+        requires_structure: Some("workbench"),
     )],
 )

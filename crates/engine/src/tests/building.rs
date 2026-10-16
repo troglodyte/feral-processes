@@ -454,7 +454,7 @@ fn armory_and_fabricator_are_not_cronjob_workable() {
 }
 
 #[test]
-fn researching_and_building_an_armory_unlocks_firewall_plating() {
+fn researching_and_building_a_workbench_unlocks_firewall_plating() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "firewall");
@@ -462,7 +462,7 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         game.craft_recipes()
             .iter()
             .all(|r| r.result != ItemId::from(ids::FIREWALL_PLATING)),
-        "Firewall Plating shouldn't be craftable before an Armory is built"
+        "Firewall Plating shouldn't be craftable before a Workbench is built"
     );
 
     place_home(&mut game);
@@ -470,13 +470,13 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 18);
-    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_now(&mut game, "workbench", 1, 0).unwrap();
 
     let recipe = game
         .craft_recipes()
         .into_iter()
         .find(|r| r.result == ItemId::from(ids::FIREWALL_PLATING))
-        .expect("researching it and building an Armory should unlock the recipe");
+        .expect("researching it and building a Workbench should unlock the recipe");
     assert_eq!(
         recipe.cost,
         vec![

@@ -3,6 +3,6 @@
     name: "Inline Cache",
     description: "Folds a tamed program's hot path flat for good. +5% ATK, and one upgrade slot.",
     value: Some(5),
-    craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("refactor_bench"))),
+    craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("workbench"), research: Some("program_refactoring"))),
     upgrade: Some((atk_percent: 5.0)),
 )

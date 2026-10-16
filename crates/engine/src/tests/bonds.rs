@@ -266,7 +266,7 @@ fn an_extraction_is_let_go() {
         .get_mut::<crate::components::Routines>(leaving)
         .unwrap()
         .0 = vec![prize];
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let id = id_of(&game, leaving);
     let cast = cast_around(&mut game, leaving);
 

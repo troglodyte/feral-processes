@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "cortex_hack",
         cost: [("portal_fragment", 12), ("cache_grain", 3)],
-        requires_structure: Some("fabricator"),
+        requires_structure: Some("workbench"),
     )],
 )

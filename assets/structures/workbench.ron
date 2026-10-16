@@ -1,0 +1,15 @@
+(
+    id: "workbench",
+    name: "Workbench",
+    description: "Where gear and bench parts are compiled by hand. Stand beside it to compile.",
+    glyph: 'W',
+    color: Green,
+    build_cost: [("core_fragment", 16)],
+    capacity: 20,
+    extracts_routines: true,
+    extracts_programs: true,
+    extracts_research: Some("automation"),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
+    power_draw: 0,
+    room_tags: ["workshop"],
+)

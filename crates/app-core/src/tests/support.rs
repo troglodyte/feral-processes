@@ -1578,11 +1578,36 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         generation: 0,
         breed_ready_at: 0,
     });
+    // The Workbench is the extraction bench, and counts once Automation is done.
+    if !data.researched.iter().any(|r| r == "automation") {
+        data.researched.push("automation".to_string());
+    }
     data.structures.push(save::StructureSave {
         recipe: None,
         kind: "compiler".to_string(),
         // Base space, two cells east of the Home the fixture just founded.
         position: (2, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+    });
+    data.structures.push(save::StructureSave {
+        recipe: None,
+        kind: "workbench".to_string(),
+        // Far from the party: extraction is ownership, not touch.
+        position: (40, 40),
         durability: None,
         tier: None,
         stock_input: Vec::new(),

@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "firewall_plating",
         cost: [("portal_fragment", 6), ("cache_grain", 2)],
-        requires_structure: Some("armory"),
+        requires_structure: Some("workbench"),
     )],
 )

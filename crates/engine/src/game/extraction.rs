@@ -91,6 +91,15 @@ impl Game {
         def.rich_in.clone().or_else(|| def.work_resource.clone())
     }
 
+    /// Whether a flagged bench counts yet: one naming `extracts_research`
+    /// is inert until that node is done. The Workbench holds extraction
+    /// behind Automation, as the Compiler's recipe was.
+    pub(crate) fn extraction_researched(&self, def: &StructureDef) -> bool {
+        def.extracts_research
+            .as_ref()
+            .is_none_or(|r| self.is_researched(r))
+    }
+
     /// The standing structure whose `StructureDef::extracts_programs` is set
     /// and whose tier is the best of them, with that tier — `None` when none
     /// stands. Ownership rather than proximity,
@@ -111,6 +120,7 @@ impl Game {
             .resource::<StructureDb>()
             .all()
             .filter(|def| def.extracts_programs)
+            .filter(|def| self.extraction_researched(def))
             .filter_map(|def| Some((def, self.best_structure_tier(&def.id)?)))
             .max_by_key(|(_, tier)| *tier)
     }

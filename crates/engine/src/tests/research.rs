@@ -298,7 +298,7 @@ fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "fabricator", 0, 1).unwrap();
+    place_now(&mut game, "workbench", 0, 1).unwrap();
 
     let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
     assert!(results.contains(&ItemId::from(ids::OVERCLOCK_CORE)));
@@ -315,7 +315,7 @@ fn a_built_bench_alone_does_not_unlock_its_recipe() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "fabricator", 0, 1).unwrap();
+    place_now(&mut game, "workbench", 0, 1).unwrap();
 
     let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
     assert!(
@@ -347,7 +347,7 @@ fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "fabricator", 0, 1).unwrap();
+    place_now(&mut game, "workbench", 0, 1).unwrap();
 
     assert!(
         game.craft_recipes().iter().any(|r| r.result == arc_lance),
@@ -429,7 +429,7 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "fabricator", 0, 1).unwrap();
+    place_now(&mut game, "workbench", 0, 1).unwrap();
 
     assert_eq!(
         game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE), false),
@@ -483,6 +483,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             // something to earn.
             "wall".to_string(),
             "winding_node".to_string(),
+            "workbench".to_string(),
         ],
         "exactly the structures named by no research file start available"
     );
@@ -2022,10 +2023,14 @@ fn a_research_node_reports_everything_it_hands_over() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     discover_all_research(&mut game);
 
-    assert_eq!(
-        research_node(&game, "weapon_bench").unlocks.as_deref(),
-        Some("Unlocks: Fabricator"),
-        "a structure is named by its own display name"
+    let weapon_bench = research_node(&game, "weapon_bench").unlocks.unwrap();
+    assert!(
+        weapon_bench.starts_with("Unlocks: Fabricator, Assembler: Trace Sniffer, "),
+        "a structure is named by its own display name, then the machine recipes it gates: {weapon_bench}"
+    );
+    assert!(
+        weapon_bench.contains(", Arc Lance"),
+        "and the hand-compiled items it gates: {weapon_bench}"
     );
     assert_eq!(
         research_node(&game, "ablative").unlocks.as_deref(),

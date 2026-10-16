@@ -355,7 +355,7 @@ fn a_prisoner_joins_no_party_sortie_or_sale() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ring.clone(), 4);
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let market = spawn_market(&mut game);
     game.jail_program(0).unwrap();
     let body = the_prisoner(&game, cell);
@@ -897,7 +897,7 @@ fn a_breakdown_is_priced_without_the_bench_bonus() {
     let paid = |bench_tier: Option<u32>| -> Vec<(ItemId, u32)> {
         let (mut game, cell, body) = a_warded_cell(7301);
         if let Some(t) = bench_tier {
-            let bench = spawn_structure_at(&mut game, "compiler", 9, 9);
+            let bench = stand_an_extraction_bench(&mut game, 9, 9);
             game.world.entity_mut(bench).insert(StructureTier(t));
             assert!(game.extraction_bench_tier() >= t, "precondition");
         }

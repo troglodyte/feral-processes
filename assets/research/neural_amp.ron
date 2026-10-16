@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "neural_amplifier",
         cost: [("portal_fragment", 6), ("cache_grain", 2)],
-        requires_structure: Some("fabricator"),
+        requires_structure: Some("workbench"),
     )],
 )

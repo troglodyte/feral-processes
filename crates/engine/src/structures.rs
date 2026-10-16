@@ -473,7 +473,9 @@ pub struct StructureDef {
     /// picks one. `#[serde(default)]` so existing and modded files parse.
     #[serde(default)]
     pub machine: Option<MachineDef>,
-    /// Research a placed extractor of this kind extracts. `#[serde(default)]`.
+    /// Research that must be done before this kind counts as an extraction
+    /// bench (`extracts_routines` / `extracts_programs`). `None` counts from
+    /// the moment one stands. `#[serde(default)]`.
     #[serde(default)]
     pub extracts_research: Option<crate::research::ResearchId>,
     /// How many units this structure's output buffer holds before it clogs

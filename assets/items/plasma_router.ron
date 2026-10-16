@@ -6,6 +6,6 @@
     value: Some(80),
     equipment: Some((Weapon, (atk: 4, damage: (min: 5, max: 15)))),
     range: Some(3),
-    craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("fabricator"))),
+    craftable: Some((cost: [("portal_fragment", 16)], requires_structure: Some("workbench"), research: Some("weapon_bench"))),
     droppable: Some([("construct", 0.08), ("virus", 0.06)]),
 )

@@ -606,7 +606,7 @@ fn extract_routine_refuses_a_held_program() {
         .get_mut::<components::Routines>(program)
         .unwrap()
         .0 = vec![prize];
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     game.siphon_program(program, siphon).unwrap();
 
     assert_held_refusal(&game.extract_routine(program, 0).unwrap_err());

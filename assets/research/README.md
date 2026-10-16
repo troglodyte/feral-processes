@@ -81,9 +81,10 @@ Core Fragments.
         // What one unit costs, as (item id, quantity) pairs.
         cost: [("portal_fragment", 6)],
         // Optional; defaults to no bench requirement. The recipe only
-        // appears in the compile menu while a structure of this kind is
-        // deployed — researching the blueprint is not enough on its own.
-        requires_structure: Some("fabricator"),
+        // appears in the compile menu while the player stands beside a
+        // structure of this kind in base space — researching the blueprint is
+        // not enough on its own. Shipped recipes name "workbench".
+        requires_structure: Some("workbench"),
     )],
 
     // Optional; defaults to none. Tool ids this node hands over the

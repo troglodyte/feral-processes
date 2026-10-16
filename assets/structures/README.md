@@ -128,9 +128,11 @@ is skipped with a warning logged in-game rather than crashing startup.
         (produces: "core_fragment", ticks_per_unit: 10, level: Some(1)),
     ])),
 
-    // Optional; defaults to absent. A research id naming the research a
-    // placed extractor of this kind extracts.
-    extracts_research: None,
+    // Optional; defaults to absent. A research id that must be done before
+    // this kind counts as an extraction bench (`extracts_routines` /
+    // `extracts_programs`). Absent counts from the moment one stands. The
+    // Workbench names "automation".
+    extracts_research: Some("automation"),
 
     // Optional; defaults to 20. How many units this structure's *output
     // buffer* holds before it clogs and stops producing. Every deployed
@@ -721,7 +723,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // a program they own, destroying it and losing every other routine it
     // carried — see `Game::extract_routine`. Checked by ownership
     // (`Game::has_structure`), not proximity, so a bench built anywhere on
-    // the map counts. This is how the Compiler works.
+    // the map counts (once its `extracts_research`, if any, is done). This is how
+    // the Workbench works.
     extracts_routines: true,
 
     // Optional; can be left out entirely (defaults to false). If true,
@@ -731,7 +734,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // makes an extraction faster, and every tier above the first raises
     // what it yields, but a player with no bench at all can still extract.
     // Ownership, not proximity, the same rule as above. This is how the
-    // Compiler works.
+    // Workbench and the Teardown Rig work.
     extracts_programs: true,
 
     // Optional; can be left out entirely (defaults to 1). The side of a

@@ -99,6 +99,11 @@ pub struct CraftableDef {
     pub cost: Vec<(ItemId, u32)>,
     #[serde(default)]
     pub requires_structure: Option<StructureId>,
+    /// The research node that must be done before the item is offered at its
+    /// bench. A bench recipe keeps the gate of the structure it came from, so
+    /// merging the benches into the Workbench loses no progression.
+    #[serde(default)]
+    pub research: Option<crate::research::ResearchId>,
 }
 
 /// What a placeable trap catches — see `components::Trap` and

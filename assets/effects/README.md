@@ -45,7 +45,7 @@ flight when the next body acts.
 | `Sparks` | the blow's own hit burst, drawn only when damage lands; listing it adds nothing over `impact: []` |
 | `Explosion(radius: r)` | an expanding ring and a heavier burst |
 | `Zap` | short crackle lines |
-| `Slash` | an arc swipe across the cell |
+| `Slash` | a swipe from the attacker's centre on through the cell |
 | `Smoke` | a grey puff that drifts up and fades |
 | `Flash` | the whole tile tinted in the effect's `color`, fading out; drawn on every covered cell of an area |
 

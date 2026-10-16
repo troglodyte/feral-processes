@@ -154,7 +154,7 @@ impl Game {
     /// `Excavate` want is never refused here — the arm skips structurally
     /// rather than by a check.
     pub(crate) fn refuses_post(&self, worker: Entity, post: Entity, kind: TaskKind) -> bool {
-        if kind == TaskKind::Excavate {
+        if matches!(kind, TaskKind::Excavate | TaskKind::Tend(_)) {
             return false;
         }
         if self

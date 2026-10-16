@@ -60,6 +60,7 @@ mod environment;
 mod equipment;
 mod exclusive_routines;
 mod extraction;
+mod farms;
 mod field;
 mod floor;
 mod gear_detail;

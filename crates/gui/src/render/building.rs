@@ -1969,6 +1969,7 @@ fn assignee_line(a: &Assignee) -> String {
         // for the same reason the one above it is. It reads like the cronjob
         // one for the day something puts a builder on this screen.
         TaskKind::Construct => format!("{who} — building {}/{}", a.progress, a.required),
+        TaskKind::Tend(_) => format!("{who} — tending {}/{}", a.progress, a.required),
     }
 }
 

@@ -1221,6 +1221,26 @@ pub struct TrapSave {
     pub caught: Option<DownedProgram>,
 }
 
+/// One farm plot — see `components::FarmPlot` — with its cells. A plot has
+/// no id of its own: its tiles are the group, so the entity a tile points at
+/// is re-made on load.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FarmPlotSave {
+    /// `None` for an unsown plot, and what a recipe the loaded `CropDb` no
+    /// longer resolves becomes.
+    #[serde(default)]
+    pub recipe: Option<crate::crops::CropId>,
+    pub tiles: Vec<FarmTileSave>,
+}
+
+/// One cell of a plot, in **base-space** coordinates like `DigSiteSave`.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FarmTileSave {
+    pub position: (i32, i32),
+    #[serde(default)]
+    pub growth: crate::components::CropGrowth,
+}
+
 /// A cell of base-space rock the player has started on — see
 /// `components::DigSite`, whose `Durability` and mark this carries.
 ///
@@ -1646,6 +1666,12 @@ pub struct SaveData {
     /// what that run had.
     #[serde(default)]
     pub dig_sites: Vec<DigSiteSave>,
+    /// Marked farm plots, their recipes and each cell's growth — see
+    /// `components::FarmPlot`. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump: a file written before farms existed loads
+    /// with no plots, which is what that run had.
+    #[serde(default)]
+    pub farm_plots: Vec<FarmPlotSave>,
     /// Destroyed structures not yet filed as rebuilds — see
     /// `resources::Ruins`. `#[serde(default)]` keeps `dev-saves/` templates
     /// (field-named RON with no version line) loading; the v37 bump is for
@@ -2448,6 +2474,7 @@ mod tests {
             nests: Vec::new(),
             traps: Vec::new(),
             dig_sites: Vec::new(),
+            farm_plots: Vec::new(),
             ruins: Vec::new(),
             build_sites: Vec::new(),
             caravans: Vec::new(),

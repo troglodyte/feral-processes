@@ -454,4 +454,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**
 
+- **Farm wants are appended after dig wants, and `run_farm_crew` drops a tender's `Task` on every landing and every tile/job mismatch** — that, not the quiet-base guard, is what keeps a farm-only base from stranding its tender (`FarmTile` is another non-`Structure` entity with a base-space `Position`).
 - **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**

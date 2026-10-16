@@ -1235,3 +1235,16 @@ fn move_staff_row_moves_within_the_displayed_order_not_raw_rank_order() {
          away row sitting between them in raw rank order"
     );
 }
+
+#[test]
+fn only_the_dig_column_admits_tending() {
+    use crate::components::FarmJob;
+    for job in [FarmJob::Dimple, FarmJob::Harvest] {
+        let post = PostDesc {
+            kind: TaskKind::Tend(job),
+            structure: None,
+        };
+        let admitting: Vec<Duty> = Duty::ALL.into_iter().filter(|d| d.admits(&post)).collect();
+        assert_eq!(admitting, vec![Duty::Dig], "{job:?}");
+    }
+}

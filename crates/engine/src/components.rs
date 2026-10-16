@@ -1266,14 +1266,33 @@ pub enum TaskKind {
     /// that free the body anyway (displacement, sale) set the load on the
     /// floor (`Game::drop_load`) for a hauler to bring home.
     Construct,
+    /// Posted to a `FarmTile`: dimple a fallow one or bring in a ripe one's
+    /// harvest — see `Game::run_farm_crew`.
+    ///
+    /// **The third kind whose `target` is not a `Structure`**, with every
+    /// consequence `Excavate` documents. The job rides in the variant so the
+    /// crew step can tell the work a body was posted for from the tile's
+    /// state now, which is how a recipe change mid-labour drops it.
+    Tend(FarmJob),
+}
+
+/// What a body posted to a farm tile is there to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FarmJob {
+    /// Sow a fallow tile.
+    Dimple,
+    /// Bring in a ripe tile's crop.
+    Harvest,
 }
 
 impl TaskKind {
-    pub const ALL: [TaskKind; 4] = [
+    pub const ALL: [TaskKind; 6] = [
         TaskKind::GatherResource,
         TaskKind::Guard,
         TaskKind::Excavate,
         TaskKind::Construct,
+        TaskKind::Tend(FarmJob::Dimple),
+        TaskKind::Tend(FarmJob::Harvest),
     ];
 
     /// How a memory or a conversation names this activity as a topic.
@@ -1283,6 +1302,8 @@ impl TaskKind {
             TaskKind::Guard => "standing guard",
             TaskKind::Excavate => "cutting rock",
             TaskKind::Construct => "raising a structure",
+            TaskKind::Tend(FarmJob::Dimple) => "dimpling phase space",
+            TaskKind::Tend(FarmJob::Harvest) => "bringing in a harvest",
         }
     }
 }
@@ -2842,6 +2863,37 @@ pub struct DigSite {
     /// site can be unmarked and still carry the finish it was last asked
     /// for while it holds no chip progress to keep it alive.
     pub finish: Option<FinishOrder>,
+}
+
+/// One farm plot: the recipe every one of its `FarmTile` cells grows.
+///
+/// A plot entity apart from its cells because "one box is one plot, one
+/// recipe" must be a single write, and a crew's interaction needs one `Copy`
+/// handle for the plot. It carries no `Position` — the cells do.
+#[derive(Component, Clone, Debug)]
+pub struct FarmPlot {
+    /// `None` until the player picks a crop.
+    pub recipe: Option<crate::crops::CropId>,
+}
+
+/// One cell of a plot, in **base space** like a `DigSite`: a task targets one
+/// `Entity`, so the crew's target is the cell. The renderer draws it from
+/// `Game::farm_tiles`, so it carries no `Glyph`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct FarmTile {
+    pub plot: Entity,
+    pub growth: CropGrowth,
+}
+
+/// Where one farm cell is in its crop's life.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CropGrowth {
+    #[default]
+    Fallow,
+    Growing {
+        elapsed: u32,
+    },
+    Ripe,
 }
 
 /// What a finish mark asks the crew to do — `Game::toggle_mark_box`'s brush,

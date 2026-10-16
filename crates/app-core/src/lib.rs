@@ -19,7 +19,7 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
-pub use app::excavate::BrushRow;
+pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -1994,6 +1994,9 @@ pub enum Mode {
     /// plain, every loaded finish, strip. A detour off the plan — picking a
     /// row or Esc lands back on it with the cursor and anchor untouched.
     ExcavateBrush,
+    /// A farm plot's recipe picker, `[c]` beside the plot. A plan like the
+    /// plot tool itself: choosing a row sows the plot and ticks nothing.
+    FarmRecipe,
     /// Zoning stockpiles, `z` in base space: the Excavation plan's cursor and
     /// box, committing through `Game::toggle_stockpile_box` instead. Like
     /// `Excavate`, a mode and not an action — it spends no turn.
@@ -2510,6 +2513,8 @@ impl Mode {
             | Mode::Excavate
             // Opened from the plan only, the plan's own reason.
             | Mode::ExcavateBrush
+            // Opened by `[c]` on the map beside a plot, a plan like the above.
+            | Mode::FarmRecipe
             // Opened from the base map only, so it never layers over a fight.
             | Mode::Stockpile
             // Opened from the base map only, so it never layers over a fight.
@@ -3188,6 +3193,11 @@ pub struct App {
     /// would paint the first box drawn this time with a choice the player
     /// never made this session.
     pub excavate_brush: Option<FinishOrder>,
+    /// Whether the Excavation plan's boxes mark farm plots instead of
+    /// rock. Reset whenever the plan opens, the brush's reason.
+    pub excavate_plot: bool,
+    /// The plot `Mode::FarmRecipe` is choosing a recipe for.
+    pub pending_plot: Option<Entity>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

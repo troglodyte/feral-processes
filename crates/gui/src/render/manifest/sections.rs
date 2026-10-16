@@ -542,6 +542,7 @@ fn post_label(kind: TaskKind) -> &'static str {
         // The value beside it is `entity_label`'s name for the site —
         // "Building  Depot (under construction)".
         TaskKind::Construct => "Building",
+        TaskKind::Tend(_) => "Tending",
     }
 }
 

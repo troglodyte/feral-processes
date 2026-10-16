@@ -6493,6 +6493,19 @@ fn every_configure_objective_names_an_item_some_machine_can_make() {
     assert!(seen > 0, "the census must find a shipped Configure job");
 }
 
+#[test]
+fn the_shipped_power_cell_crop_produces_power_cells() {
+    let game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let crops = game.crop_defs();
+    let cell = crops
+        .iter()
+        .find(|c| c.id.as_str() == "power_cell")
+        .expect("the shipped power_cell crop loads");
+    assert_eq!(cell.produces.0, "power_cell");
+    assert_eq!(cell.stages, 4);
+    assert_eq!(cell.grow_ticks, 1200);
+}
+
 const FLOOR_GLYPHS: [char; 8] = ['.', '*', ',', '"', '\'', '`', '~', ':'];
 
 #[test]

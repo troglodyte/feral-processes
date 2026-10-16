@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.37
+
+**Your base can grow Power Cells on farm plots.** In the Excavation plan (`m`), `P` switches the box to marking a farm plot on laid floor; one box is one plot. Stand beside a plot and press `c` to pick what it grows. From then on staff tend it with no further orders: they dimple phase space on each tile, the cell grows larger through four stages, and when it is ripe they harvest one Power Cell onto the floor and start again, until you unmark the plot.
+
+**Farm work is the lowest-priority base labour.** Staff only tend plots when production, building and digging have the bodies they need, and waiting farm work never raises the base report's unworked-staff warning. Building on a plot tile takes just that tile out of the plot.
+
+**Crops are data.** Each crop is a file in `assets/crops/` (schema in its README), so mods can add their own. A save that names a crop no longer loaded keeps the plot with nothing planted and says so, and you can pick a crop again.
+
 ## 0.18.36
 
 **Inside your base you can put things down and pick them up: `y` sets one item, gear copy or downed program on the floor, and `o` picks up whatever is underfoot.** Each thing on the floor is drawn with its own mark, and a downed program shows the grey `x` of a disabled body. A floor tile holds one thing, never a stack, so floor space runs out and depots are worth building.

@@ -458,7 +458,7 @@ fn excavate_brush_label_names_every_state() {
     app.handle_key(GameKey::Char('m'));
     assert_eq!(
         app.excavate_brush_label().as_deref(),
-        Some("Brush: plain [F]")
+        Some("Brush: plain [F] \u{b7} plot [P]")
     );
 
     pick_brush(
@@ -467,12 +467,12 @@ fn excavate_brush_label_names_every_state() {
     );
     assert_eq!(
         app.excavate_brush_label().as_deref(),
-        Some("Brush: Cobalt Carpet [F]")
+        Some("Brush: Cobalt Carpet [F] \u{b7} plot [P]")
     );
     pick_brush(&mut app, Some(FinishOrder::Strip));
     assert_eq!(
         app.excavate_brush_label().as_deref(),
-        Some("Brush: strip [F]")
+        Some("Brush: strip [F] \u{b7} plot [P]")
     );
 
     let (mut empty, _assets) = app_without_floors(4311);

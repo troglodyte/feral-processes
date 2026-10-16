@@ -7,6 +7,7 @@
 //! mark.
 
 use crate::*;
+use feral_processes_engine::crops::CropId;
 
 /// How far from the party the cursor may be walked, in cells.
 ///
@@ -17,6 +18,14 @@ use crate::*;
 /// keypress can mark, which is what stops a mis-drawn box becoming a plan
 /// the player has to erase cell by cell.
 const CURSOR_RANGE: i32 = 12;
+
+/// One row of the farm plot's recipe picker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CropRow {
+    pub id: CropId,
+    pub label: String,
+    pub description: String,
+}
 
 /// One row of the brush picker — what picking it sets, what it is called,
 /// and the swatch a finish row draws beside its name.
@@ -104,7 +113,22 @@ impl App {
         match self.box_cursor_key(key) {
             BoxKey::Commit { anchor, corner } => {
                 if let Some(game) = &mut self.game {
-                    game.toggle_mark_box(anchor, corner, self.excavate_brush.as_ref());
+                    if self.excavate_plot {
+                        game.toggle_plot_box(anchor, corner);
+                    } else {
+                        game.toggle_mark_box(anchor, corner, self.excavate_brush.as_ref());
+                    }
+                }
+            }
+            BoxKey::Unhandled(GameKey::Char('P')) => {
+                // Inert with no crop loaded, `[F]`'s rule: a plot with
+                // nothing to grow is a tool that does nothing.
+                if self
+                    .game
+                    .as_ref()
+                    .is_some_and(|g| !g.crop_defs().is_empty())
+                {
+                    self.excavate_plot = !self.excavate_plot;
                 }
             }
             BoxKey::Unhandled(GameKey::Char('F')) => {
@@ -168,6 +192,7 @@ impl App {
         let mut rows = self.excavate_brush_rows();
         if let Some(idx) = self.selected_index(key, rows.len()) {
             self.excavate_brush = rows.swap_remove(idx).brush;
+            self.excavate_plot = false;
             self.mode = Mode::Excavate;
         }
     }
@@ -176,11 +201,15 @@ impl App {
     /// no finish content loaded at all, so a base with an empty
     /// `assets/floors/` draws exactly today's screen.
     pub fn excavate_brush_label(&self) -> Option<String> {
-        let defs = self.game.as_ref()?.floor_defs();
-        if defs.is_empty() {
-            return None;
+        if self.excavate_plot {
+            return Some("Tool: farm plot [P]".to_string());
         }
-        Some(match &self.excavate_brush {
+        let game = self.game.as_ref()?;
+        let defs = game.floor_defs();
+        // `[P]` is advertised whenever it works, so a player with crops
+        // loaded can find the tool before ever pressing it.
+        let plot_hint = (!game.crop_defs().is_empty()).then_some("plot [P]");
+        let brush = (!defs.is_empty()).then(|| match &self.excavate_brush {
             None => "Brush: plain [F]".to_string(),
             Some(FinishOrder::Apply(id)) => {
                 let name = defs
@@ -191,6 +220,62 @@ impl App {
                 format!("Brush: {name} [F]")
             }
             Some(FinishOrder::Strip) => "Brush: strip [F]".to_string(),
-        })
+        });
+        match (brush, plot_hint) {
+            (Some(b), Some(h)) => Some(format!("{b} \u{b7} {h}")),
+            (Some(b), None) => Some(b),
+            (None, Some(h)) => Some(h.to_string()),
+            (None, None) => None,
+        }
+    }
+
+    /// The recipe picker's rows, every loaded crop in id order — the one
+    /// list the keys and the popup both read.
+    pub fn farm_recipe_rows(&self) -> Vec<CropRow> {
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
+        game.crop_defs()
+            .into_iter()
+            .map(|d| CropRow {
+                id: d.id,
+                label: d.name,
+                description: d.description,
+            })
+            .collect()
+    }
+
+    /// The row the plot's current recipe sits on, so the picker opens
+    /// there; row 0 for an unsown plot.
+    pub(crate) fn farm_recipe_row(&self) -> usize {
+        let current = self
+            .game
+            .as_ref()
+            .zip(self.pending_plot)
+            .and_then(|(g, plot)| g.plot_recipe(plot));
+        self.farm_recipe_rows()
+            .iter()
+            .position(|r| Some(&r.id) == current.as_ref())
+            .unwrap_or(0)
+    }
+
+    /// A plan, like marking: no tick, whatever the row.
+    pub(crate) fn handle_farm_recipe_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_plot = None;
+            self.mode = Mode::Playing;
+            return;
+        }
+        let mut rows = self.farm_recipe_rows();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let id = rows.swap_remove(idx).id;
+        if let (Some(plot), Some(game)) = (self.pending_plot.take(), self.game.as_mut())
+            && let Err(reason) = game.set_plot_recipe(plot, &id)
+        {
+            self.refuse(reason);
+        }
+        self.mode = Mode::Playing;
     }
 }

@@ -134,11 +134,14 @@ pub(crate) fn ball_along(t: f32) -> f32 {
     (t / BALL_ARRIVE_FRACTION).clamp(0.0, 1.0)
 }
 
-/// Where a slash across the body at `at` starts and ends, for a blow swung
-/// from `from`: the swing's own bearing turned 45 degrees, so the cut runs on
-/// through the body rather than back at the swinger and still reads as a
-/// cut rather than a stab. A blow from the left is the top-left to
-/// bottom-right diagonal; one with no bearing (`from == at`) takes that too.
+/// Where a slash at the body at `at` starts and ends, for a blow swung from
+/// `from`: it leaves the swinger's own centre and ends past the target on
+/// the swing's bearing turned 45 degrees, so the cut runs on through the
+/// body rather than back at the swinger and still reads as a swipe rather
+/// than a stab. A `slash` effect has no travel, so this line is the only
+/// thing that shows who swung; one that began at the target's corner read
+/// as an attack from nowhere. A blow with no bearing (`from == at`) has no
+/// swinger to leave and keeps the top-left to bottom-right diagonal.
 pub(crate) fn slash_span(from: Px, at: Px, half: f32) -> (Px, Px) {
     let (gx, gy) = (at.0 - from.0, at.1 - from.1);
     let len = (gx * gx + gy * gy).sqrt();
@@ -150,7 +153,12 @@ pub(crate) fn slash_span(from: Px, at: Px, half: f32) -> (Px, Px) {
     // The unit bearing turned 45 degrees and scaled by sqrt 2, which is
     // what puts a bearing of (1, 0) on the (half, half) corner.
     let (ox, oy) = ((dx - dy) * half, (dx + dy) * half);
-    ((at.0 - ox, at.1 - oy), (at.0 + ox, at.1 + oy))
+    let start = if len > f32::EPSILON {
+        from
+    } else {
+        (at.0 - ox, at.1 - oy)
+    };
+    (start, (at.0 + ox, at.1 + oy))
 }
 
 /// A flash's opacity at impact progress `u` (0..1): its peak, fading to 0.
@@ -420,16 +428,28 @@ mod tests {
         }
     }
 
-    /// A blow from the left keeps the diagonal the slash always drew, and so
-    /// does one with no direction to read.
+    /// The cut leaves the swinger's own centre, not a corner of the body it
+    /// lands on: with no travel, a slash that began at the target's corner
+    /// was an attack that never visibly came from the attacker.
     #[test]
-    fn a_slash_from_the_left_or_from_nowhere_is_the_old_diagonal() {
+    fn a_slash_starts_at_the_swingers_centre() {
         let at = (100.0, 100.0);
-        for from in [(84.0, 100.0), at] {
-            let (start, end) = slash_span(from, at, 6.0);
-            assert!((start.0 - 94.0).abs() < 1e-4 && (start.1 - 94.0).abs() < 1e-4);
-            assert!((end.0 - 106.0).abs() < 1e-4 && (end.1 - 106.0).abs() < 1e-4);
+        for from in [(84.0, 100.0), (100.0, 116.0), (116.0, 84.0), (68.0, 100.0)] {
+            let (start, _) = slash_span(from, at, 6.0);
+            assert_eq!(start, from, "a blow from {from:?} did not start there");
         }
+    }
+
+    /// A blow from the left ends on the far corner the slash always ended
+    /// on, and one with no direction to read keeps the whole old diagonal.
+    #[test]
+    fn a_slash_from_the_left_or_from_nowhere_ends_on_the_old_diagonal() {
+        let at = (100.0, 100.0);
+        let (_, end) = slash_span((84.0, 100.0), at, 6.0);
+        assert!((end.0 - 106.0).abs() < 1e-4 && (end.1 - 106.0).abs() < 1e-4);
+        let (start, end) = slash_span(at, at, 6.0);
+        assert!((start.0 - 94.0).abs() < 1e-4 && (start.1 - 94.0).abs() < 1e-4);
+        assert!((end.0 - 106.0).abs() < 1e-4 && (end.1 - 106.0).abs() < 1e-4);
     }
 
     #[test]

@@ -2483,8 +2483,9 @@
             power_fuel: 20,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-1, 0),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],

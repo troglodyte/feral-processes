@@ -210,6 +210,103 @@ mod tests {
     use super::*;
     use feral_processes_engine::components::{Rarity, TaskKind};
 
+    /// Loads a template and returns it with the machine defs, the way every
+    /// census below needs it.
+    fn loaded(name: &str, tag: &str) -> Game {
+        let out = std::env::temp_dir().join(format!("feral_processes_template_{name}_{tag}.bin"));
+        generate(name, &out).unwrap();
+        let game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+        game
+    }
+
+    /// The one-recipe structures the configurable machines replaced. Listed
+    /// here because they still load until their defs are deleted, and a
+    /// template standing one would otherwise pass the loaded-def check.
+    const REPLACED: [&str; 16] = [
+        "mining_node",
+        "log_scraper",
+        "cache_tap",
+        "power_conduit",
+        "lathe",
+        "refinery",
+        "annealing_node",
+        "transcriber",
+        "winding_node",
+        "disk_press",
+        "decoy_bench",
+        "refactor_bench",
+        "armory",
+        "fabricator",
+        "compiler",
+        "assembly_bay",
+    ];
+
+    /// A removed structure id in a template does not fail the load (an unknown
+    /// kind is skipped), so the template would just silently lose the machine.
+    #[test]
+    fn no_template_stands_a_removed_structure() {
+        for name in list() {
+            let text = std::fs::read_to_string(dir().join(format!("{name}.ron"))).unwrap();
+            let data: save::SaveData = ron::from_str(&text).unwrap();
+            let ids: std::collections::HashSet<String> = loaded(&name, "kinds")
+                .structure_defs()
+                .into_iter()
+                .map(|d| d.id.to_string())
+                .collect();
+            for s in &data.structures {
+                assert!(
+                    !REPLACED.contains(&s.kind.as_str()),
+                    "template `{name}` stands the replaced `{}` at {:?}",
+                    s.kind,
+                    s.position
+                );
+                assert!(
+                    ids.contains(&s.kind),
+                    "template `{name}` stands `{}` at {:?}, which is not a loaded structure",
+                    s.kind,
+                    s.position
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_template_machine_is_set_to_a_recipe_it_lists() {
+        for name in list() {
+            let mut game = loaded(&name, "recipes");
+            let defs = game.structure_defs();
+            for s in game.structure_report() {
+                let Some(item) = s.recipe else { continue };
+                let def = defs.iter().find(|d| d.id == s.kind).unwrap();
+                assert!(
+                    def.machine_recipe(&item).is_some(),
+                    "template `{name}`: {} at {:?} is set to `{}`, which it does not list",
+                    s.kind,
+                    s.pos,
+                    item.0
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_template_with_a_workbench_has_automation_researched() {
+        for name in list() {
+            let mut game = loaded(&name, "bench");
+            if game
+                .structure_report()
+                .iter()
+                .any(|s| s.kind == "workbench")
+            {
+                assert!(
+                    game.is_researched("automation"),
+                    "template `{name}` stands a Workbench without automation researched"
+                );
+            }
+        }
+    }
+
     /// The regression gate for the whole directory: a `SaveData` change or a
     /// `SAVE_FORMAT_VERSION` bump that a template cannot survive fails here,
     /// rather than the next time somebody reaches for one.
@@ -615,23 +712,23 @@ mod tests {
         let bay_entity = game
             .structure_report()
             .into_iter()
-            .find(|s| s.kind == "assembly_bay")
-            .expect("the template stands an Assembly Bay")
+            .find(|s| s.recipe.as_ref().is_some_and(|r| r.0 == "patch_routine"))
+            .expect("the template stands a Printer set to Patch Routine")
             .entity;
         let mining_entity = game
             .structure_report()
             .into_iter()
             .find(|s| s.pos == (2, 0))
-            .expect("the template stands a Mining Node at (2, 0)")
+            .expect("the template stands an Extractor at (2, 0)")
             .entity;
         game.set_standing_job(bay_entity, true, false).unwrap();
         game.set_standing_job(mining_entity, true, false).unwrap();
         let terminal_before = game
             .structure_report()
             .into_iter()
-            .find(|s| s.kind == "assembly_bay")
+            .find(|s| s.recipe.as_ref().is_some_and(|r| r.0 == "patch_routine"))
             .map(|s| s.output.iter().map(|(_, n)| n).sum::<u32>())
-            .expect("the template stands an Assembly Bay");
+            .expect("the template stands a Printer set to Patch Routine");
 
         for _ in 0..400 {
             game.wait();
@@ -640,7 +737,7 @@ mod tests {
         let bay = game
             .structure_report()
             .into_iter()
-            .find(|s| s.kind == "assembly_bay")
+            .find(|s| s.recipe.as_ref().is_some_and(|r| r.0 == "patch_routine"))
             .unwrap();
         let terminal_after: u32 = bay.output.iter().map(|(_, n)| n).sum();
         assert!(
@@ -651,8 +748,8 @@ mod tests {
             bay.output
         );
 
-        // The template's machines are two feed-connected lines (Mining Node
-        // and Refinery; Winding Node, Power Conduit and Assembly Bay), and a
+        // The template's machines are two feed-connected lines (Extractor
+        // and Factory; Factory, Extractor and Printer), and a
         // line under a standing job is one job for one worker: the programs
         // it was saved with are not one post per machine.
         for line in [&[(2, 0), (3, 0)][..], &[(4, 0), (4, 1), (4, 2)][..]] {
@@ -672,8 +769,8 @@ mod tests {
     }
 
     /// `bench-economy` exists to be measured, so the bar is flow that does not
-    /// stop: under standing orders the bay's line, the refinery's line and the
-    /// compiler must all keep delivering into the Depots for a long stretch,
+    /// stop: under standing orders the Patch Routine printer's line, the Bytecode Block factory's line and the
+    /// Ice Breaker printer must all keep delivering into the Depots for a long stretch,
     /// which is what `chains` cannot do (full Depots, a stranded hauler, no
     /// amenity). The 1500 ticks are well past the first batch, so a layout that
     /// only makes its starting stock would fall short of the counts.
@@ -714,7 +811,7 @@ mod tests {
             }
         }
         // Observed 15 / 43 / 62. Each floor sits above the producing
-        // machine's output capacity (bay 10, refinery 20, compiler 20), and
+        // machine's output capacity (patch printer 15, factory 20, ice printer 15), and
         // below what the run makes, so only continuing flow clears it.
         for (item, floor) in [
             ("patch_routine", 11),

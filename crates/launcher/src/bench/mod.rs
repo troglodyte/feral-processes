@@ -81,10 +81,21 @@ mod tests {
             .economy
             .machines
             .iter()
-            .find(|m| m.kind == "assembly_bay")
+            .find(|m| m.kind == "printer" && m.recipe.as_deref() == Some("patch_routine"))
             .unwrap();
-        let capacity = 10; // assets/structures/assembly_bay.ron
-        assert!(bay.units > capacity, "no drain: {bay:?}");
+        let capacity = u64::from(
+            ron::from_str::<feral_processes_engine::structures::StructureDef>(
+                &std::fs::read_to_string(assets_dir().join("structures/printer.ron")).unwrap(),
+            )
+            .unwrap()
+            .capacity,
+        );
+        // The line is bounded by the Power Cells it starts with (about 46
+        // coils, 15 Patch Routines), which the Printer's capacity of 15 now
+        // equals, so passing the capacity is out of reach; reaching it
+        // still needs the order's workers (the old Bay's 10 sat below the
+        // bound). See the with-orders section of the chains measurement doc.
+        assert!(bay.units >= capacity, "no drain: {bay:?}");
         assert!(report.economy.labour.mean_wanted > 0.0);
         for m in &report.economy.machines {
             assert_eq!(m.status_ticks.values().sum::<u64>(), ticks, "{m:?}");

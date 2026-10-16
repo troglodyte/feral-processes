@@ -7,6 +7,7 @@ use super::terrain::*;
 use super::*;
 use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
+use feral_processes_engine::views::FloorLook;
 use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
 use feral_processes_engine::views::{Sight, shown_at};
@@ -101,10 +102,15 @@ fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
 const EXCAVATE_LABEL_INSET: f32 = 4.0;
 const EXCAVATE_LABEL_SIZE: u16 = 14;
 
-/// What a floor pile draws as, whatever it holds: one mark, so the map says
-/// "something is lying here" and the examine line says what. Amber, the hue
-/// of cargo, and not a program's glyph so it is never read as a body.
-pub(crate) const FLOOR_PILE_MARK: (char, Color) = ('%', hud::palette::WARN);
+/// What a floor item draws as: an item in its own glyph, in the amber of
+/// cargo; a downed program in the gray `x` the battle map gives a fallen
+/// body, so the two boards say "disabled" the same way.
+pub(crate) fn floor_item_mark(look: &FloorLook) -> (char, Color) {
+    match look {
+        FloorLook::Item(glyph) => (*glyph, hud::palette::WARN),
+        FloorLook::Program => super::tactical::FALLEN_MARK,
+    }
+}
 
 /// The ring the party's own tile wears while cutting tools are armed.
 ///
@@ -758,8 +764,11 @@ fn draw_surface_map(
     // claims something the ground there cannot answer.
     let cutting = base_pos.is_some() && game.mining();
     // Base space only, and `floor_items` already answers empty elsewhere.
-    let piles: std::collections::HashSet<(i32, i32)> =
-        game.floor_items().into_iter().map(|p| p.pos).collect();
+    let floor_marks: std::collections::HashMap<(i32, i32), (char, Color)> = game
+        .floor_items()
+        .into_iter()
+        .map(|item| (item.pos, floor_item_mark(&item.look)))
+        .collect();
     // Alt shows the rooms. `view_rooms` answers empty outside base space.
     let rooms = if reveal {
         game.view_rooms()
@@ -1000,10 +1009,12 @@ fn draw_surface_map(
                     glyph_color(ev.color)
                 };
             }
-            // Under programs and structures, above the floor: a pile only
-            // takes a glyph nothing else has claimed.
-            if ch.is_none() && piles.contains(&world) {
-                (ch, color) = (Some(FLOOR_PILE_MARK.0), FLOOR_PILE_MARK.1);
+            // Under programs and structures, above the floor: a floor item
+            // only takes a glyph nothing else has claimed.
+            if ch.is_none()
+                && let Some(&(glyph, hue)) = floor_marks.get(&world)
+            {
+                (ch, color) = (Some(glyph), hue);
             }
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
@@ -6103,10 +6114,13 @@ mod tests {
         Game::load(&path, &test_assets()).unwrap()
     }
 
-    /// A base with a Home, and `pile` laid on the floor one cell off the
+    /// A base with a Home, and `thing` laid on the floor one cell off the
     /// party's own when `Some`. Written through the save, the engine's only
-    /// door for a pile from outside its crate.
-    fn base_with_a_pile(seed: u32, pile: bool) -> Game {
+    /// door for a floor item from outside its crate.
+    fn base_with_a_floor_item(
+        seed: u32,
+        thing: Option<feral_processes_engine::items::FloorThing>,
+    ) -> Game {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
@@ -6117,51 +6131,82 @@ mod tests {
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
-        if pile {
+        if let Some(thing) = thing {
             data.floor_items
                 .push(feral_processes_engine::save::FloorItemSave {
                     position: (at.0 + 1, at.1),
-                    thing: feral_processes_engine::items::FloorThing::Item(
-                        feral_processes_engine::items::ItemId::from("core_fragment"),
-                    ),
+                    thing,
                 });
         }
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
     }
 
-    /// The pile glyph is drawn in base space, and only because a pile is
-    /// there: the identical base without one paints no such glyph.
-    #[test]
-    fn a_floor_pile_draws_its_mark_in_base_space() {
-        let drawn = |pile: bool| {
-            let mut game = base_with_a_pile(560_200, pile);
-            let mut fx = Fx::new();
-            let (tile_px, glyph_px) = crate::text::map_cell(1);
-            let (_, shapes) = with_painter(|p| {
-                let status = game.player_status();
-                let centre = game.base_pos().unwrap();
-                draw_surface_map(
-                    &mut game,
-                    &mut fx,
-                    p,
-                    Rect::new(0.0, 0.0, 800.0, 600.0),
-                    tile_px,
-                    glyph_px,
-                    &status,
-                    None,
-                    None,
-                    centre,
-                    false,
-                );
-            });
-            painted_text(&shapes)
-                .iter()
-                .filter(|g| g.as_str() == FLOOR_PILE_MARK.0.to_string())
-                .count()
+    /// How many glyphs `text` the base map paints within a rounding step of
+    /// `want`. A distance and not an equality: the map multiplies every glyph
+    /// by the vignette and a tile shade. The colour is what keeps the floor's
+    /// own marks from aliasing the glyph.
+    fn floor_glyphs_drawn(game: &mut Game, text: &str, want: Color) -> usize {
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            let centre = game.base_pos().unwrap();
+            draw_surface_map(
+                game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                None,
+                centre,
+                false,
+            );
+        });
+        let gap = |a: Color, b: Color| {
+            ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
         };
-        assert_eq!(drawn(true), 1);
-        assert_eq!(drawn(false), 0);
+        crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .filter(|(t, c)| t == text && gap(*c, want) < 0.08)
+            .count()
+    }
+
+    /// A floor item draws its own glyph, and only because it is there: the
+    /// identical base without one paints no such glyph in that colour.
+    #[test]
+    fn a_floor_item_draws_its_items_glyph_in_base_space() {
+        use feral_processes_engine::items::{FloorThing, ItemId};
+        let drawn = |thing: Option<FloorThing>| {
+            let mut game = base_with_a_floor_item(560_200, thing);
+            floor_glyphs_drawn(&mut game, ".", hud::palette::WARN)
+        };
+        let with = drawn(Some(FloorThing::Item(ItemId::from("core_fragment"))));
+        let without = drawn(None);
+        assert_eq!(with, without + 1);
+    }
+
+    #[test]
+    fn a_downed_program_on_the_floor_draws_the_fallen_mark() {
+        use feral_processes_engine::items::{DownedProgram, FloorThing};
+        let program = DownedProgram {
+            species: "scrapper".to_string(),
+            level: 3,
+            rarity: feral_processes_engine::components::Rarity::Ordinary,
+            boss: false,
+            condition: 70,
+            carried: None,
+        };
+        let drawn = |thing: Option<FloorThing>| {
+            let mut game = base_with_a_floor_item(560_201, thing);
+            floor_glyphs_drawn(&mut game, "x", hud::palette::FALLEN)
+        };
+        let with = drawn(Some(FloorThing::Program(program)));
+        let without = drawn(None);
+        assert_eq!(with, without + 1);
     }
 
     /// Whether a painted fill is `STATION_FLOOR_FILL`, up to the vignette's

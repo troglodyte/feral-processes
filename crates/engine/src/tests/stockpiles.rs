@@ -491,7 +491,37 @@ fn a_builder_fetches_from_a_stockpile_before_the_pack() {
         floor_things(&mut g).is_empty(),
         "the stockpile was drawn on"
     );
-    assert!(pack_frags(&g) >= pack, "the pack was drawn on first");
+    assert_eq!(pack_frags(&g), pack, "the pack was drawn on first");
+}
+
+#[test]
+fn on_the_pack_s_own_tile_a_stockpile_ranks_before_the_pack() {
+    let mut g = game_with_home();
+    let (bx, by) = g.base_pos().unwrap();
+    g.toggle_stockpile_box((bx, by), (bx, by));
+    g.world
+        .get_mut::<Inventory>(g.player_entity())
+        .unwrap()
+        .add(frag(), 500);
+    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    let builder = spawn_tamed(&mut g, 500, 3);
+    spawn_floor_item(&mut g.world, at(bx, by), core());
+    let pack = pack_frags(&g);
+    let mut ticks = 0;
+    while g
+        .world
+        .get::<crate::components::Carrying>(builder)
+        .is_none()
+    {
+        assert!(ticks < 200, "the builder never picked anything up");
+        g.tick();
+        ticks += 1;
+    }
+    assert!(
+        floor_things(&mut g).is_empty(),
+        "the stockpile was drawn on"
+    );
+    assert_eq!(pack_frags(&g), pack, "the pack was drawn on first");
 }
 
 #[test]

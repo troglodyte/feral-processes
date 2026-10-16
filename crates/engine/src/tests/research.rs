@@ -947,7 +947,7 @@ fn selecting_files_one_order_per_material_line_at_the_top() {
 fn abandoning_withdraws_the_projects_orders_and_keeps_its_progress() {
     let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
-    spawn_machine_at(&mut game, "mining_node", 4, 4);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 4, 4);
     game.select_research("automation").unwrap();
     let mine = game.work_orders()[0].item.clone();
     game.queue_work_order(WorkOrder::batch(mine.clone(), 3))

@@ -144,7 +144,7 @@ mod seams {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 3, y: 4 },
                 ResourceNode {
@@ -182,7 +182,7 @@ mod seams {
         light_the_grid(&mut game);
         game.world.spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -343,7 +343,7 @@ mod seams {
         // Nobody posted to it, which is what `idle_machine_system` reports.
         game.world.spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -374,7 +374,7 @@ mod seams {
             .collect();
         assert_eq!(
             stalls,
-            vec![("mining_node".to_string(), "idle".to_string())],
+            vec![("extractor".to_string(), "idle".to_string())],
             "five ticks in one status must be one record, and it names the \
              def id rather than the display name"
         );
@@ -390,7 +390,7 @@ mod seams {
         light_the_grid(&mut game);
         game.world.spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -423,7 +423,7 @@ mod seams {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 3, y: 3 },
                 ResourceNode {

@@ -540,7 +540,7 @@ fn deploying_a_structure_is_refused_underground() {
     place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     descend(&mut game);
-    let Err(reason) = place_now(&mut game, "mining_node", 1, 0) else {
+    let Err(reason) = place_machine(&mut game, "extractor", "core_fragment", 1, 0) else {
         panic!("a machine should not go up inside the Stack");
     };
     assert!(

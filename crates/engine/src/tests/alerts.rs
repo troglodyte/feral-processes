@@ -221,8 +221,9 @@ fn alert_mining_node_at(game: &mut Game, x: i32, y: i32) -> Entity {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
+            crate::components::MachineRecipe(Some(ItemId::from(ids::CORE_FRAGMENT))),
             Position { x, y },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
@@ -717,7 +718,7 @@ fn an_unreachable_build_site_posts_a_site_cut_off_alert_once() {
 
     file_build(
         &mut game,
-        "mining_node",
+        "extractor",
         ALERT_STRANDED_STATION.0,
         ALERT_STRANDED_STATION.1,
     )
@@ -761,7 +762,7 @@ fn alert_structure_at(game: &mut Game, x: i32, y: i32) -> Entity {
 fn depots_full_posts_once_across_repeated_failed_hauls() {
     let mut game = alert_base_for_hauling(19403);
     let (bx, by) = game.base_pos().unwrap();
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
     let depot = alert_structure_at(&mut game, bx + 4, by);
@@ -839,7 +840,7 @@ fn depots_full_posts_once_across_repeated_failed_hauls() {
 fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
     let mut game = alert_base_for_hauling(19404);
     let (bx, by) = game.base_pos().unwrap();
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
     let depot = alert_structure_at(&mut game, bx + 4, by);
@@ -947,9 +948,9 @@ fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
 fn a_second_bounce_does_not_repost_once_the_latch_correctly_holds() {
     let mut game = alert_base_for_hauling(19405);
     let (bx, by) = game.base_pos().unwrap();
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node1 = alert_structure_at(&mut game, bx + 1, by);
-    place_now(&mut game, "mining_node", -1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", -1, 0).unwrap();
     let node2 = alert_structure_at(&mut game, bx - 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
     let depot = alert_structure_at(&mut game, bx + 4, by);
@@ -1031,7 +1032,7 @@ fn a_second_bounce_does_not_repost_once_the_latch_correctly_holds() {
 fn the_message_does_not_claim_every_depot_is_full_when_one_merely_refuses_the_item() {
     let mut game = alert_base_for_hauling(19406);
     let (bx, by) = game.base_pos().unwrap();
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
     let depot_a = alert_structure_at(&mut game, bx + 4, by);

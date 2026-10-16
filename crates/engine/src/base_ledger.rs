@@ -580,7 +580,7 @@ mod tests {
             tick: 0,
             zone: 1,
             machine: (0, 0),
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
             tier: 1,
             worker_species: None,
             item: "core_fragment".to_string(),

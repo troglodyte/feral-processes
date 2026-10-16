@@ -368,14 +368,14 @@ fn best_structure_tier_reads_the_best_deployed_one() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         None,
         "a bench nobody built is not a bench at tier 1"
     );
 
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    spawn_structure_at(&mut game, "workbench", 4, 4);
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         Some(1),
         "a structure carrying no StructureTier is standing at tier 1"
     );
@@ -383,19 +383,19 @@ fn best_structure_tier_reads_the_best_deployed_one() {
     for (x, tier) in [(5, 3), (6, 2)] {
         game.world.spawn((
             Structure {
-                kind: "fabricator".to_string(),
+                kind: "workbench".to_string(),
             },
             Position { x, y: 4 },
             StructureTier(tier),
         ));
     }
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         Some(3),
         "the player compiles at their best bench, not their newest or their worst"
     );
     assert_eq!(
-        game.best_structure_tier("armory"),
+        game.best_structure_tier("assembler"),
         None,
         "and a different kind is a different bench"
     );
@@ -783,37 +783,30 @@ fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
 
 /// The cycle a hand-compile is priced off is the machine's own, so the
 /// number moves with the content rather than with a literal in the test.
-fn assembler_cycle(game: &Game, kind: &str) -> u32 {
+fn recipe_cycle(game: &Game, kind: &str, item: &str) -> u32 {
     game.world
         .resource::<StructureDb>()
         .get(kind)
         .unwrap()
-        .assembles
+        .machine
         .as_ref()
         .unwrap()
-        .ticks_per_unit
-}
-
-fn work_cycle(game: &Game, kind: &str) -> u32 {
-    game.world
-        .resource::<StructureDb>()
-        .get(kind)
-        .unwrap()
-        .work
-        .as_ref()
+        .recipes
+        .iter()
+        .find(|r| r.produces.as_str() == item)
         .unwrap()
         .ticks_per_unit
 }
 
 /// The machine exists to do this, so hand-compiling is priced off the
-/// machine's own cycle — the Lathe's, for a Blank Substrate.
+/// machine's own cycle — the Factory's, for a Blank Substrate.
 #[test]
 fn a_hand_compile_is_priced_off_the_assembler_that_makes_it() {
     let game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert_eq!(
         game.hand_craft_ticks(&ItemId::from(ids::BLANK_SUBSTRATE)),
-        crate::tuning::HAND_CRAFT_TICK_MULT * assembler_cycle(&game, "lathe"),
+        crate::tuning::HAND_CRAFT_TICK_MULT * recipe_cycle(&game, "factory", ids::BLANK_SUBSTRATE),
     );
 }
 
@@ -825,7 +818,7 @@ fn a_hand_compile_falls_back_to_the_extractor_that_produces_it() {
 
     assert_eq!(
         game.hand_craft_ticks(&ItemId::from(ids::POWER_CELL)),
-        crate::tuning::HAND_CRAFT_TICK_MULT * work_cycle(&game, "power_conduit"),
+        crate::tuning::HAND_CRAFT_TICK_MULT * recipe_cycle(&game, "extractor", ids::POWER_CELL),
     );
 }
 

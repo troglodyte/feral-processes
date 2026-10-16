@@ -866,7 +866,7 @@ fn the_tick_draws_no_rng_when_nothing_preys() {
 /// regardless, so a dispatch can spend from here while nothing exists that
 /// could ever receive a deposit back.
 fn deploy_non_storing_buffer(game: &mut Game, x: i32, y: i32, item: &ItemId, qty: u32) {
-    let node = deploy_structure(game, "mining_node", x, y);
+    let node = deploy_structure(game, "extractor", x, y);
     game.world.entity_mut(node).insert(Stock {
         output: [(item.clone(), qty)].into_iter().collect(),
         capacity: 9_999,

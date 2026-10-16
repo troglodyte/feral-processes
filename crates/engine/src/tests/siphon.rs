@@ -260,9 +260,9 @@ fn a_held_program_is_never_handed_a_task_and_never_moves() {
     let mut game = game();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
-    spawn_machine_at(&mut game, "disk_press", 4, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
     let siphon = spawn_structure_at(&mut game, SIPHON, 5, 5);
     let held_one = spawn_tamed(&mut game, 100, 5);
     let crew = [

@@ -61,7 +61,7 @@ fn every_objective_variant_parses_and_states_its_target() {
             (
                 "build.ron",
                 r#"(id: "build", name: "Build", description: "d",
-                    objective: Build(structure: "mining_node"),
+                    objective: Build(structure: "extractor"),
                     reward: [Item("core_fragment", 5)])"#,
             ),
         ],
@@ -744,7 +744,7 @@ fn a_build_contract_advances_only_once_one_is_standing() {
         def(
             "refine",
             Objective::Build {
-                structure: "refinery".to_string(),
+                structure: "factory".to_string(),
             },
             vec![Reward::Xp(10)],
         ),
@@ -756,7 +756,7 @@ fn a_build_contract_advances_only_once_one_is_standing() {
     // A different structure is not the one asked for.
     game.world.spawn((
         Structure {
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
         },
         Position { x: 3, y: 3 },
     ));
@@ -765,7 +765,7 @@ fn a_build_contract_advances_only_once_one_is_standing() {
 
     game.world.spawn((
         Structure {
-            kind: "refinery".to_string(),
+            kind: "factory".to_string(),
         },
         Position { x: 4, y: 3 },
     ));
@@ -1213,7 +1213,7 @@ fn a_deployed_broker_reports_the_flag_and_nothing_else_does() {
     stand_in_base(&mut game);
     let pos = game.base_pos().unwrap();
     deploy(&mut game, "contract_broker", pos.0 + 1, pos.1);
-    deploy(&mut game, "mining_node", pos.0 + 2, pos.1);
+    deploy(&mut game, "extractor", pos.0 + 2, pos.1);
 
     let views = game.view_entities(10, 10);
     let broker = views
@@ -1905,7 +1905,7 @@ fn one_of_each(zone: u32) -> TemplatePools {
     TemplatePools {
         species: vec![("drone".to_string(), "Drone".to_string())],
         items: vec![(ItemId::from("core_fragment"), "Core Fragment".to_string())],
-        structures: vec![("refinery".to_string(), "Refinery".to_string())],
+        structures: vec![("factory".to_string(), "Refinery".to_string())],
         zone,
     }
 }
@@ -2388,7 +2388,7 @@ fn a_contract_the_run_has_already_done_is_never_offered() {
     let refinery = def(
         "already_built",
         Objective::Build {
-            structure: "refinery".to_string(),
+            structure: "factory".to_string(),
         },
         vec![Reward::Credits(45)],
     );
@@ -2403,7 +2403,7 @@ fn a_contract_the_run_has_already_done_is_never_offered() {
     );
     assert!(!game.offerable_contracts_for_test(&breached), "zone 1 >= 1");
 
-    deploy(&mut game, "refinery", 3, 0);
+    deploy(&mut game, "factory", 3, 0);
     assert!(
         !game.offerable_contracts_for_test(&refinery),
         "a Build of something already deployed completes on acceptance"
@@ -2421,7 +2421,7 @@ fn no_shipped_contract_or_template_can_be_offered_already_finished() {
     // fresh zone-1 game with an empty base neither can be met, and this
     // census passes against the bug.
     set_zone(&mut game, 3);
-    deploy(&mut game, "refinery", 3, 0);
+    deploy(&mut game, "factory", 3, 0);
 
     for _ in 0..12 {
         let offers = board_ids(&mut game);
@@ -3070,7 +3070,7 @@ mod deed_sites {
         // Base-space coordinates: `stand_in_base` puts the party at the
         // base's own origin, and `Position` is the surface tile.
         stand_in_base(&mut game);
-        stocked(&mut game, "mining_node", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
+        stocked(&mut game, "extractor", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
         let (taken, _) = game.transfer_items(&TransferBasket::items(
             &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
             &[],
@@ -3102,7 +3102,7 @@ mod deed_sites {
     fn a_standing_work_order_writes_a_deed() {
         let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 1, 0);
         game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 20))
             .unwrap();
         assert!(deeds(&game).contains(&Deed::QueuedStandingOrder));
@@ -3114,7 +3114,7 @@ mod deed_sites {
     fn a_one_off_work_order_writes_no_deed() {
         let mut game = Game::new(25, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 1, 0);
         game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 20))
             .unwrap();
         assert!(!deeds(&game).contains(&Deed::QueuedStandingOrder));
@@ -3147,7 +3147,7 @@ mod deed_sites {
     fn setting_a_machine_to_be_kept_staffed_writes_a_deed() {
         let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let machine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         game.set_standing_job(machine, true, false).unwrap();
         assert!(deeds(&game).contains(&Deed::PostedStaff));
     }
@@ -3158,7 +3158,7 @@ mod deed_sites {
     fn clearing_a_standing_job_writes_no_deed() {
         let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let machine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         game.set_standing_job(machine, false, false).unwrap();
         assert!(!deeds(&game).contains(&Deed::PostedStaff));
     }
@@ -3174,7 +3174,7 @@ mod deed_sites {
     fn a_machine_already_kept_worked_finishes_the_mission() {
         let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let machine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         game.set_standing_job(machine, true, false).unwrap();
         // The tick that drains the deed, long before the mission exists.
         game.tick();
@@ -3209,7 +3209,7 @@ mod deed_sites {
     fn a_base_with_nothing_kept_worked_does_not_finish_the_mission() {
         let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        spawn_machine_at(&mut game, "mining_node", 2, 0);
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
 
         give(
             &mut game,
@@ -3241,7 +3241,7 @@ mod deed_sites {
     fn a_standing_guard_alone_does_not_finish_the_mission() {
         let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let machine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         game.set_standing_job(machine, false, true).unwrap();
         game.tick();
 
@@ -3278,7 +3278,7 @@ mod deed_sites {
     fn the_scheduler_posting_a_body_writes_no_deed() {
         let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
-        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let machine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         let worker = spawn_tamed(&mut game, 10, 3);
         game.post_worker(worker, machine);
         assert!(
@@ -4012,7 +4012,7 @@ fn a_standing_condition_cannot_fill_a_counted_deed_job() {
     // The condition the deed describes is already true, which is exactly the
     // case `Deed::already_true` exists for.
     deploy_broker(&mut game);
-    let machine = deploy(&mut game, "mining_node", 2, 0);
+    let machine = deploy(&mut game, "extractor", 2, 0);
     game.world
         .entity_mut(machine)
         .insert(crate::components::StandingJob {

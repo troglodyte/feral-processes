@@ -925,7 +925,7 @@ fn a_build_sites_program_survives_a_save_and_load() {
     game.world.spawn((
         BuildSite {
             program: Some(snapshot.clone()),
-            ..BuildSite::new("fabricator".to_string(), vec![])
+            ..BuildSite::new("assembler".to_string(), vec![])
         },
         Position { x: 1, y: 1 },
     ));
@@ -1005,7 +1005,7 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
     let program_id = game.world.get::<ProgramId>(spend).unwrap().0;
     assert_ne!(program_id, 0, "the fixture minted a real id");
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     game.save(&path).expect("save");
 
@@ -1207,7 +1207,7 @@ fn a_study_station_takes_precedence_over_a_stale_cronjob_on_restore() {
     let station = game
         .find_blocking_structure_at(1, -3)
         .expect("the Station was just deployed");
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
 
     let program = spawn_tamed(&mut game, 10, 3);
     game.rename_companion(program, Some("Analyst".to_string()))
@@ -1486,7 +1486,7 @@ fn a_build_sites_tamed_program_without_a_base_is_refused_on_load() {
     game.world.spawn((
         BuildSite {
             program: Some(snapshot),
-            ..BuildSite::new("fabricator".to_string(), vec![])
+            ..BuildSite::new("assembler".to_string(), vec![])
         },
         Position { x: 1, y: 1 },
     ));

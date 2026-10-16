@@ -513,16 +513,16 @@ mod tests {
     }
 
     #[test]
-    fn a_bed_outranks_a_lathe_and_recreation_outranks_a_workshop() {
+    fn a_bed_outranks_a_factory_and_recreation_outranks_a_workshop() {
         let g = block(4, 1);
         let bed = def("defrag_bay", &["bed"], false, false);
-        let lathe = def("lathe", &["workshop"], false, false);
+        let factory = def("factory", &["workshop"], false, false);
         let sandbox = def("sandbox", &["recreation"], false, false);
-        let r = run(&g, &[(&bed, (0, 0)), (&lathe, (1, 0))], (99, 99));
+        let r = run(&g, &[(&bed, (0, 0)), (&factory, (1, 0))], (99, 99));
         assert_eq!(role(&r, (0, 0)), Some("quarters"));
-        let r = run(&g, &[(&sandbox, (0, 0)), (&lathe, (1, 0))], (99, 99));
+        let r = run(&g, &[(&sandbox, (0, 0)), (&factory, (1, 0))], (99, 99));
         assert_eq!(role(&r, (0, 0)), Some("rec_room"));
-        let r = run(&g, &[(&lathe, (1, 0))], (99, 99));
+        let r = run(&g, &[(&factory, (1, 0))], (99, 99));
         assert_eq!(role(&r, (0, 0)), Some("workshop"));
         assert!(!r.room_at(0, 0).unwrap().living);
     }

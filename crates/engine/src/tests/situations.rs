@@ -193,7 +193,7 @@ fn the_situation_tips_a_program_already_soured_by_memories() {
         worker,
         "jammed_here",
         1,
-        MemorySubject::Structure("mining_node".to_string()),
+        MemorySubject::Structure("extractor".to_string()),
     );
     assert!(
         (game.morale(worker) + 4.0).abs() < 1e-3,
@@ -335,7 +335,7 @@ fn a_program_that_leaves_the_staff_loses_its_situation() {
         worker,
         "jammed_here",
         1,
-        MemorySubject::Structure("mining_node".to_string()),
+        MemorySubject::Structure("extractor".to_string()),
     );
     let remembered = game.morale(worker);
     set_situation(&mut game, worker, &EVERY_NEGATIVE);

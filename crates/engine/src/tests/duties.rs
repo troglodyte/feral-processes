@@ -453,9 +453,9 @@ fn mixed_base(seed: u32) -> MixedBase {
     place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 10);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let mine_b = spawn_machine_at(&mut game, "mining_node", 3, 0);
-    let mine_c = spawn_machine_at(&mut game, "mining_node", 4, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let mine_b = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 3, 0);
+    let mine_c = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 4, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5_000))
         .unwrap();
@@ -771,7 +771,7 @@ fn a_clogged_machines_keep_respects_the_table() {
         let mut game = Game::new(20261008, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
         place_home(&mut game);
-        let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
         spawn_machine_at(&mut game, "depot", -2, 2);
         game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5000))
             .unwrap();

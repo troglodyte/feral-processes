@@ -88,7 +88,7 @@ fn a_sweep_never_lands_on_a_wall() {
             Game::new(4200 + seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         ready_base(&mut game);
         let wall_def = def(&game, "wall");
-        let node_def = def(&game, "mining_node");
+        let node_def = def(&game, "extractor");
         let wall = game.spawn_structure(&wall_def, 1, 0, None);
         let node = game.spawn_structure(&node_def, 2, 1, None);
         let wall_hp = game.world.get::<Durability>(wall).unwrap().hp;

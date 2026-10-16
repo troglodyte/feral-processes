@@ -166,7 +166,7 @@ fn a_repair_bay_beside_stocked_patches_is_still_hauled_to() {
 fn a_shield_is_not_supplied_from_a_production_output() {
     let mut game = base(9306);
     let shield = deploy(&mut game, "shield", 1, 0);
-    let winding = deploy(&mut game, "winding_node", 4, 0);
+    let winding = place_machine(&mut game, "factory", "charge_coil", 4, 0).unwrap();
     fill_output(&mut game, winding, ids::CHARGE_COIL, 20);
     let worker = spawn_tamed(&mut game, 500, 3);
     park_at_post(&mut game, worker, shield);
@@ -183,7 +183,7 @@ fn a_shield_is_not_supplied_from_a_production_output() {
 fn an_unstocked_shield_does_not_crew_the_coil_maker() {
     let mut game = base(9307);
     let shield = deploy(&mut game, "shield", 1, 0);
-    let winding = deploy(&mut game, "winding_node", 4, 0);
+    let winding = place_machine(&mut game, "factory", "charge_coil", 4, 0).unwrap();
     game.world
         .get_mut::<Stock>(winding)
         .unwrap()
@@ -216,7 +216,7 @@ fn the_uncharged_reason_does_not_name_an_item() {
 fn a_shield_takes_the_shelf_not_the_nearer_production_output() {
     let mut game = base(9308);
     let shield = deploy(&mut game, "shield", 1, 0);
-    let winding = deploy(&mut game, "winding_node", 3, 0);
+    let winding = place_machine(&mut game, "factory", "charge_coil", 3, 0).unwrap();
     let depot = deploy(&mut game, "depot", 6, 0);
     fill_output(&mut game, winding, ids::CHARGE_COIL, 20);
     fill_output(&mut game, depot, ids::CHARGE_COIL, 20);
@@ -239,7 +239,7 @@ fn a_shield_takes_the_shelf_not_the_nearer_production_output() {
 fn a_shield_beside_the_coil_maker_does_not_hold_its_buffer() {
     let mut game = base(9309);
     deploy(&mut game, "shield", 1, 0);
-    let winding = deploy(&mut game, "winding_node", 2, 0);
+    let winding = place_machine(&mut game, "factory", "charge_coil", 2, 0).unwrap();
     let depot = deploy(&mut game, "depot", 5, 0);
     let worker = spawn_tamed(&mut game, 500, 3);
     game.assign_cronjob(worker, winding).unwrap();

@@ -835,7 +835,7 @@ fn portal_cost_grows_by_half_the_base_rate_per_zone() {
     let node = game
         .structure_defs()
         .into_iter()
-        .find(|d| d.id == "mining_node")
+        .find(|d| d.id == "extractor")
         .expect("mining_node.ron should load");
     assert_eq!(
         game.structure_build_cost(&node),

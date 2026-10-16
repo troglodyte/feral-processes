@@ -682,10 +682,7 @@ fn a_non_program_topic_is_named_from_the_catalogue_even_when_stamped_empty() {
     let (mut game, b) = established("view_topic_kinds", &[TALK_SAYS]);
     let o = id_of(&game, b[1]);
     for (subject, want) in [
-        (
-            MemorySubject::Structure("annealing_node".into()),
-            "About Annealing Node.",
-        ),
+        (MemorySubject::Structure("factory".into()), "About Factory."),
         (MemorySubject::Species("cipher".into()), "About Cipher."),
         (
             MemorySubject::BaseTile { x: 3, y: 4 },

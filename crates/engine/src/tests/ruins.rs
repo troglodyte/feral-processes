@@ -190,7 +190,7 @@ fn an_awaiting_site_is_never_worked_or_announced_dry_until_a_program_is_committe
     game.world
         .resource_mut::<Ruins>()
         .0
-        .push(ruin("mining_node", px + 1, py));
+        .push(ruin("extractor", px + 1, py));
     game.file_ruins();
     let (site, awaiting) = sites(&mut game)[0];
     assert!(awaiting, "a node runs a job, so it waits for a program");
@@ -238,7 +238,7 @@ fn ruins_and_an_awaiting_site_survive_a_real_save_and_load() {
     game.world
         .resource_mut::<Ruins>()
         .0
-        .push(ruin("mining_node", px + 1, py));
+        .push(ruin("extractor", px + 1, py));
     game.file_ruins();
     game.world
         .resource_mut::<Ruins>()
@@ -267,7 +267,7 @@ fn ruins_and_an_awaiting_site_survive_a_real_save_and_load() {
     );
     assert_eq!(
         (awaiting[0].structure.as_str(), awaiting[0].x, awaiting[0].y),
-        ("mining_node", px + 1, py)
+        ("extractor", px + 1, py)
     );
 }
 
@@ -280,7 +280,7 @@ mod adjacent {
         game.world
             .resource_mut::<Ruins>()
             .0
-            .push(ruin("mining_node", px + 1, py));
+            .push(ruin("extractor", px + 1, py));
         game.file_ruins();
         sites(game)[0].0
     }
@@ -311,7 +311,7 @@ mod adjacent {
         game.world
             .resource_mut::<Ruins>()
             .0
-            .push(ruin("mining_node", px + 3, py));
+            .push(ruin("extractor", px + 3, py));
         game.file_ruins();
         assert!(game.adjacent_interactions().is_empty());
 
@@ -439,7 +439,7 @@ fn an_awaiting_sites_examine_line_says_it_needs_a_program() {
     game.world
         .resource_mut::<Ruins>()
         .0
-        .push(ruin("mining_node", px + 1, py));
+        .push(ruin("extractor", px + 1, py));
     game.file_ruins();
     let (site, _) = sites(&mut game)[0];
     let blurb = game.build_site_blurb(site).unwrap();
@@ -531,7 +531,7 @@ fn the_build_orders_flag_follows_a_site_awaiting_a_program() {
     game.world
         .resource_mut::<Ruins>()
         .0
-        .push(ruin("mining_node", px + 1, py));
+        .push(ruin("extractor", px + 1, py));
     game.file_ruins();
     assert!(
         game.build_order_report().iter().any(|b| b.awaiting_program),
@@ -558,7 +558,7 @@ fn the_build_orders_flag_follows_a_blocked_site() {
     game.world
         .resource_mut::<Ruins>()
         .0
-        .push(ruin("mining_node", px + 1, py));
+        .push(ruin("extractor", px + 1, py));
     game.file_ruins();
     let (site, _) = sites(&mut game)[0];
     let program = tame_at_zone(&mut game, 1);

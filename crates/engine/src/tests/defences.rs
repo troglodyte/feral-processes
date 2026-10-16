@@ -80,7 +80,7 @@ fn a_sweep_spends_one_coil_from_each_contributing_defence() {
     let shield = defence(&mut game, "shield", 1, 3);
     let turret = defence(&mut game, "turret", 2, 3);
     let dry = defence(&mut game, "shield", 3, 0);
-    spawn_structure_at(&mut game, "mining_node", 5, 5);
+    spawn_structure_at(&mut game, "extractor", 5, 5);
     let target = game
         .world
         .query_filtered::<Entity, With<Structure>>()

@@ -631,7 +631,7 @@ fn over_the_cap_the_weakest_goes_and_the_strongest_survives() {
 fn remember_is_a_no_op_on_a_hostile_a_structure_and_the_player() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let hostile = spawn_wild_on_player_tile(&mut game);
-    let structure = spawn_machine_at(&mut game, "lathe", 6, 6);
+    let structure = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 6, 6);
     let player = game.player_entity();
 
     for (what, who) in [
@@ -1420,7 +1420,7 @@ fn every_subject_kind_survives_the_round_trip() {
         MemorySubject::Nothing,
         MemorySubject::Program(id_of(&game, comrade)),
         MemorySubject::Species("scrapper".to_string()),
-        MemorySubject::Structure("mining_node".to_string()),
+        MemorySubject::Structure("extractor".to_string()),
         MemorySubject::BaseTile { x: -3, y: 7 },
         MemorySubject::Activity(crate::components::TaskKind::Excavate),
     ];
@@ -1850,7 +1850,7 @@ fn a_posted_worker(game: &mut Game) -> (Entity, Entity) {
         .add(ItemId::from(crate::items::ids::CORE_FRAGMENT), 500);
     stand_in_base(game);
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
-    place_now(game, "mining_node", 1, 0).unwrap();
+    place_machine(game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = {
         let mut query = game.world.query::<(Entity, &Position, &Structure)>();
         query
@@ -2576,7 +2576,7 @@ fn a_sweep_that_spares_the_machine_is_still_remembered_by_the_worker_on_it() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 20, max_hp: 30 },
@@ -2601,7 +2601,7 @@ fn a_sweep_that_spares_the_machine_is_still_remembered_by_the_worker_on_it() {
     assert_eq!(held[0].def, MemoryId::from("swept_here"));
     assert_eq!(
         held[0].subject,
-        MemorySubject::Structure("mining_node".to_string()),
+        MemorySubject::Structure("extractor".to_string()),
         "the subject is the machine's kind, so the memory outlives the machine"
     );
 }
@@ -2620,7 +2620,7 @@ fn a_sweep_that_destroys_the_machine_is_remembered_after_it_is_gone() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -2644,7 +2644,7 @@ fn a_sweep_that_destroys_the_machine_is_remembered_after_it_is_gone() {
     assert_eq!(held.len(), 1, "{held:?}");
     assert_eq!(
         held[0].subject,
-        MemorySubject::Structure("mining_node".to_string())
+        MemorySubject::Structure("extractor".to_string())
     );
 }
 
@@ -2657,7 +2657,7 @@ fn a_sweep_on_an_unstaffed_machine_is_remembered_by_nobody() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 20, max_hp: 30 },
@@ -2687,7 +2687,7 @@ fn a_posted_program_settles_in_on_the_period_and_not_before() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
         ))
@@ -2715,7 +2715,7 @@ fn a_posted_program_settles_in_on_the_period_and_not_before() {
     assert_eq!(held[0].def, MemoryId::from("settled_in"));
     assert_eq!(
         held[0].subject,
-        MemorySubject::Structure("mining_node".to_string())
+        MemorySubject::Structure("extractor".to_string())
     );
 }
 
@@ -2733,7 +2733,7 @@ fn a_posting_at_a_clogged_machine_is_remembered_against_it() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             MachineStatus::Clogged,
@@ -2810,7 +2810,7 @@ fn service_compounds_to_the_cap_and_no_further() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
         ))
@@ -2849,7 +2849,7 @@ fn service_moves_morale_off_zero() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
         ))
@@ -2900,7 +2900,7 @@ fn a_program_on_a_comfort_finish_is_at_ease_on_the_period() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 50, y: 50 },
         ))
@@ -3079,8 +3079,14 @@ fn the_manifests_mood_is_the_report_and_the_whole_sum() {
         ("hard_won", MemorySubject::Nothing),
         ("cutting_rock", MemorySubject::Activity(TaskKind::Excavate)),
         ("stranded_at", MemorySubject::BaseTile { x: 2, y: 3 }),
-        ("swept_here", MemorySubject::Structure("lathe".to_string())),
-        ("frayed_here", MemorySubject::Structure("lathe".to_string())),
+        (
+            "swept_here",
+            MemorySubject::Structure("factory".to_string()),
+        ),
+        (
+            "frayed_here",
+            MemorySubject::Structure("factory".to_string()),
+        ),
     ] {
         game.remember(program, def, subject);
     }

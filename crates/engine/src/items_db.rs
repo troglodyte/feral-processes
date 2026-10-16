@@ -1252,7 +1252,7 @@ mod tests {
                 id: "gear",
                 name: "Gear",
                 equipment: Some((Weapon, (atk: 2, mitigation: 1))),
-                craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("fabricator"))),
+                craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("workbench"))),
                 droppable: Some([("scrapper", 0.15), ("worm", 0.05)]),
             )"#,
         )]);
@@ -1264,7 +1264,7 @@ mod tests {
                 .unwrap()
                 .requires_structure
                 .as_deref(),
-            Some("fabricator")
+            Some("workbench")
         );
         assert_eq!(
             def.droppable.as_deref(),

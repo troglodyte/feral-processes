@@ -54,7 +54,7 @@ fn deploying_files_a_request_rather_than_standing_a_structure_up() {
     let mut game = base(1101);
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
 
     assert!(
         structure_at(&mut game, 1, 0).is_none(),
@@ -67,7 +67,7 @@ fn deploying_files_a_request_rather_than_standing_a_structure_up() {
         "filing charges nothing: the materials are fetched by hand later"
     );
     let build = game.world.get::<BuildSite>(site).expect("it is a site");
-    assert_eq!(build.structure, "mining_node");
+    assert_eq!(build.structure, "extractor");
     assert!(
         build.delivered.is_empty(),
         "nothing has been carried there yet"
@@ -89,7 +89,7 @@ fn the_crew_fetches_the_materials_and_raises_the_structure() {
     let mut game = base(1102);
     builder(&mut game);
 
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let cost: u32 = game.world.get::<BuildSite>(site).unwrap().total_materials();
     let held_before = count_item(&game, ids::CORE_FRAGMENT);
@@ -107,6 +107,7 @@ fn the_crew_fetches_the_materials_and_raises_the_structure() {
         held_before - cost,
         "and every unit it cost came out of the pack the crew fetched from"
     );
+    set_recipe_researched(&mut game, built, ids::CORE_FRAGMENT).unwrap();
     assert!(
         game.world.get::<ResourceNode>(built).is_some(),
         "a crew-built extractor is a real extractor — `spawn_structure` is the one component list"
@@ -132,7 +133,7 @@ fn a_builder_draws_from_a_base_shelf_with_the_party_away() {
     let mut game = base(1103);
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let cost: u32 = game.world.get::<BuildSite>(site).unwrap().total_materials();
 
@@ -189,7 +190,7 @@ fn a_bill_bigger_than_one_carry_takes_several_trips() {
     let mut game = base(1104);
     builder(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
-    file_build(&mut game, "armory", 1, 0).unwrap();
+    file_build(&mut game, "assembler", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let total = game.world.get::<BuildSite>(site).unwrap().total_materials();
     assert!(
@@ -236,7 +237,7 @@ fn a_bill_bigger_than_one_carry_takes_several_trips() {
 fn a_build_request_takes_the_body_off_a_work_order() {
     let mut game = base(1105);
     let body = builder(&mut game);
-    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -272,7 +273,7 @@ fn cancelling_returns_what_was_already_carried_to_the_site() {
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
     let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     // Let the crew carry at least one load to the cell.
@@ -329,7 +330,7 @@ fn cancelling_returns_what_was_already_carried_to_the_site() {
 fn a_part_supplied_request_survives_a_reload() {
     let mut game = base(1107);
     builder(&mut game);
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let mut delivered = 0;
     for _ in 0..400 {
@@ -403,7 +404,7 @@ fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
 #[test]
 fn a_cell_already_on_order_refuses_a_second_request() {
     let mut game = base(1109);
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
 
     let err = game
         .place_structure("depot", 1, 0, None)
@@ -468,7 +469,7 @@ fn requests_count_against_the_deployment_ceiling() {
 fn a_request_no_program_can_reach_does_not_starve_the_base() {
     let mut game = base(1112);
     let body = builder(&mut game);
-    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -523,7 +524,7 @@ fn a_request_no_program_can_reach_does_not_starve_the_base() {
 fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() {
     let mut game = base(1113);
     let body = builder(&mut game);
-    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -585,7 +586,7 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .take(ItemId::from(ids::CORE_FRAGMENT), held);
-    file_build(&mut game, "armory", 1, 0).unwrap();
+    file_build(&mut game, "assembler", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     // **Counted through `repeats`, not by counting entries.**
@@ -642,7 +643,7 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
 fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
     let mut game = base(1115);
     file_build(&mut game, "depot", 1, 0).unwrap();
-    file_build(&mut game, "mining_node", -1, 0).unwrap();
+    file_build(&mut game, "extractor", -1, 0).unwrap();
 
     let report = game.build_order_report();
     assert_eq!(report.len(), 2, "both requests are listed");
@@ -658,7 +659,7 @@ fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
 
     let node = report
         .iter()
-        .find(|r| r.structure.contains("Mining Node"))
+        .find(|r| r.structure.contains("Extractor"))
         .expect("the node is in the list under its display name, not its id");
     assert!(
         node.materials > 0,
@@ -698,7 +699,7 @@ fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
 fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
     let mut game = base(1116);
     let body = builder(&mut game);
-    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
     // Nothing anywhere: the only way to get a Core Fragment is to mine one.
     let held = count_item(&game, ids::CORE_FRAGMENT);
@@ -790,14 +791,14 @@ fn a_builder_fetches_the_line_it_can_get_when_the_line_above_it_is_dry() {
 #[test]
 fn examining_a_site_says_what_is_going_up_and_what_it_is_short_of() {
     let mut game = base(1111);
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     let blurb = game
         .build_site_blurb(site)
         .expect("a site has something to say");
     assert!(
-        blurb.contains("Mining Node"),
+        blurb.contains("Extractor"),
         "it names what is going up: {blurb}"
     );
     assert!(
@@ -818,7 +819,7 @@ fn examining_a_site_says_what_is_going_up_and_what_it_is_short_of() {
 /// fixture that skips it reads as the feature being broken.
 fn base_with_a_node(seed: u32) -> (Game, Entity) {
     let mut game = base(seed);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = structure_at(&mut game, 1, 0).expect("the fixture stands one up");
     set_zone(&mut game, 2);
     give(&mut game, &ItemId::from("cache_grain"), 20);
@@ -850,7 +851,7 @@ fn filing_an_upgrade_charges_nothing_and_leaves_the_tier_alone() {
         build.goal,
         crate::components::BuildGoal::Upgrade { to_tier: 2 }
     );
-    assert_eq!(build.structure, "mining_node", "the machine's own kind");
+    assert_eq!(build.structure, "extractor", "the machine's own kind");
     assert_eq!(
         build.total_materials(),
         22,
@@ -1119,7 +1120,7 @@ fn a_part_supplied_upgrade_request_survives_a_reload() {
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
     game.world.spawn((
         BuildSite {
-            structure: "mining_node".to_string(),
+            structure: "extractor".to_string(),
             cost: vec![
                 (ItemId::from(ids::CORE_FRAGMENT), 20),
                 (ItemId::from("cache_grain"), 2),
@@ -1377,7 +1378,7 @@ fn a_builder_is_drawn_on_the_map_for_the_whole_job() {
         color: GlyphColor::Cyan,
     });
 
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
 
     let mut posted_ticks = 0;
     for _ in 0..400 {
@@ -1819,7 +1820,7 @@ fn a_filed_portal_request_keeps_the_price_it_was_filed_at_across_a_zone_change()
 fn a_cancelled_order_gives_back_a_program_with_its_build_rolls() {
     let mut game = base(1108);
     builder(&mut game);
-    file_build_with_rolls(&mut game, "mining_node", 1, 0, 1.17, 0.83);
+    file_build_with_rolls(&mut game, "extractor", 1, 0, 1.17, 0.83);
     let site = site_at(&mut game, 1, 0);
 
     game.cancel_build_request(site).unwrap();
@@ -1845,7 +1846,13 @@ fn a_cancelled_order_gives_back_a_program_with_its_build_rolls() {
 
 /// A helper for the build-quality tests: raise `kind` on `(1, 0)` with a
 /// program of the given rolls and return the machine.
-fn machine_built_by(seed: u32, kind: &str, assembly: f32, extraction: f32) -> (Game, Entity) {
+fn machine_built_by(
+    seed: u32,
+    kind: &str,
+    recipe: &str,
+    assembly: f32,
+    extraction: f32,
+) -> (Game, Entity) {
     let mut game = base(seed);
     builder(&mut game);
     file_build_with_rolls(&mut game, kind, 1, 0, assembly, extraction);
@@ -1856,6 +1863,7 @@ fn machine_built_by(seed: u32, kind: &str, assembly: f32, extraction: f32) -> (G
         game.tick();
     }
     let machine = structure_at(&mut game, 1, 0).expect("the crew finished the build");
+    set_recipe_researched(&mut game, machine, recipe).unwrap();
     (game, machine)
 }
 
@@ -1879,12 +1887,12 @@ fn build_quality_reads_extraction_for_a_node_and_assembly_for_a_bench() {
     };
 
     let node = crate::game::base::building::build_quality(
-        &def_of(&game, "mining_node"),
+        &def_of(&game, "extractor"),
         potential,
         Rarity::Ordinary,
     );
     let bench = crate::game::base::building::build_quality(
-        &def_of(&game, "assembly_bay"),
+        &def_of(&game, "printer"),
         potential,
         Rarity::Ordinary,
     );
@@ -1897,7 +1905,7 @@ fn build_quality_reads_extraction_for_a_node_and_assembly_for_a_bench() {
 #[test]
 fn rarity_lifts_a_build_by_exactly_one_rung_per_rung() {
     let game = base(1151);
-    let def = def_of(&game, "assembly_bay");
+    let def = def_of(&game, "printer");
     let poor = Potential {
         assembly_roll: crate::tuning::MIN_INDIVIDUAL_ROLL,
         ..Potential::NEUTRAL
@@ -1925,15 +1933,23 @@ fn a_structure_with_no_cycle_has_no_shipped_ticks() {
     let game = base(1152);
     assert_eq!(
         crate::structures::cycle_ticks(crate::structures::Placed {
-            def: &def_of(&game, "mining_node"),
-            recipe: None,
+            def: &def_of(&game, "extractor"),
+            recipe: Some(&ItemId::from(ids::CORE_FRAGMENT)),
         }),
         Some(10)
     );
     assert_eq!(
         crate::structures::cycle_ticks(crate::structures::Placed {
-            def: &def_of(&game, "assembly_bay"),
+            def: &def_of(&game, "extractor"),
             recipe: None,
+        }),
+        None,
+        "an unset machine runs no cycle"
+    );
+    assert_eq!(
+        crate::structures::cycle_ticks(crate::structures::Placed {
+            def: &def_of(&game, "printer"),
+            recipe: Some(&ItemId::from("patch_routine")),
         }),
         Some(20)
     );
@@ -1951,9 +1967,10 @@ fn a_structure_with_no_cycle_has_no_shipped_ticks() {
 /// passes against a bonus-only implementation.
 #[test]
 fn an_excellent_builder_leaves_a_faster_machine_than_a_poor_one() {
-    let shipped = 10; // mining_node's `ticks_per_unit`
-    let (mut good, good_machine) = machine_built_by(1153, "mining_node", 1.0, 1.2);
-    let (mut bad, bad_machine) = machine_built_by(1153, "mining_node", 1.0, 0.8);
+    let shipped = 10; // the core_fragment recipe's `ticks_per_unit`
+    let (mut good, good_machine) =
+        machine_built_by(1153, "extractor", ids::CORE_FRAGMENT, 1.0, 1.2);
+    let (mut bad, bad_machine) = machine_built_by(1153, "extractor", ids::CORE_FRAGMENT, 1.0, 0.8);
 
     let fast = good.work_ticks_for(good_machine, crate::tuning::DEFAULT_BASE_SPEED);
     let slow = bad.work_ticks_for(bad_machine, crate::tuning::DEFAULT_BASE_SPEED);
@@ -1968,7 +1985,7 @@ fn an_excellent_builder_leaves_a_faster_machine_than_a_poor_one() {
 #[test]
 fn a_machine_with_no_build_quality_cycles_at_its_shipped_rate() {
     let mut game = base(1154);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = structure_at(&mut game, 1, 0).expect("a node stands there");
     game.world
         .entity_mut(node)
@@ -2010,7 +2027,7 @@ fn the_home_stands_up_carrying_no_build_quality() {
 /// just finished.
 #[test]
 fn an_upgrade_overwrites_the_figure_with_the_new_programs() {
-    let (mut game, node) = machine_built_by(1156, "mining_node", 1.0, 1.2);
+    let (mut game, node) = machine_built_by(1156, "extractor", ids::CORE_FRAGMENT, 1.0, 1.2);
     let raised = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
     set_zone(&mut game, 2);
     give(&mut game, &ItemId::from("cache_grain"), 40);
@@ -2078,8 +2095,8 @@ fn assembly_rolls(candidates: &[crate::views::BuildCandidate], game: &Game) -> V
 fn the_picker_orders_candidates_by_the_roll_this_build_reads() {
     let mut game = roster_ranked_opposite(1160);
 
-    let bench = game.build_candidates(&"assembly_bay".to_string(), BuildGoal::New);
-    let node = game.build_candidates(&"mining_node".to_string(), BuildGoal::New);
+    let bench = game.build_candidates(&"printer".to_string(), BuildGoal::New);
+    let node = game.build_candidates(&"extractor".to_string(), BuildGoal::New);
     assert_eq!(bench.len(), 3, "every program qualifies for a tier-1 build");
     assert_eq!(node.len(), 3);
 
@@ -2108,16 +2125,16 @@ fn the_quoted_cycle_is_the_one_the_finished_machine_runs() {
     set_build_rolls(&mut game, program, 1.0, 1.16);
 
     let quoted = game
-        .build_candidates(&"mining_node".to_string(), BuildGoal::New)
+        .build_candidates(&"research_node".to_string(), BuildGoal::New)
         .into_iter()
         .find(|c| c.pet.entity == program)
         .expect("the program the fixture is about is on the list");
     let built = match quoted.effect {
         crate::views::BuildEffect::Cycle { built, .. } => built,
-        crate::views::BuildEffect::NoCycle => panic!("a Mining Node runs a cycle"),
+        crate::views::BuildEffect::NoCycle => panic!("a Research Node runs a cycle"),
     };
 
-    game.place_structure("mining_node", 1, 0, Some(program))
+    game.place_structure("research_node", 1, 0, Some(program))
         .unwrap();
     for _ in 0..400 {
         if structure_at(&mut game, 1, 0).is_some() {
@@ -2536,8 +2553,8 @@ fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
     builder(&mut game);
     builder(&mut game);
     give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
-    file_build(&mut game, "assembly_bay", -1, 0).unwrap();
-    file_build(&mut game, "mining_node", 1, 0).unwrap();
+    file_build(&mut game, "printer", -1, 0).unwrap();
+    file_build(&mut game, "extractor", 1, 0).unwrap();
 
     let (px, py) = game.base_pos().unwrap();
     let mut raised = false;
@@ -2563,31 +2580,6 @@ fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
     assert!(raised, "the miner is raised");
 }
 
-/// A dry miner never freezes the base: the assembler is worked instead.
-#[test]
-fn a_dry_miner_does_not_hold_the_assembler_back() {
-    let mut game = base(1202);
-    builder(&mut game);
-    let held = count_item(&game, ids::CORE_FRAGMENT);
-    let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .take(ItemId::from(ids::CORE_FRAGMENT), held);
-    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
-    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
-    file_build(&mut game, "mining_node", -1, 0).unwrap();
-
-    for _ in 0..40 {
-        game.tick();
-    }
-
-    assert!(
-        delivered_total(&mut game, 1, 0) > 0,
-        "the miner has nothing to fetch, so the assembler's coils are carried"
-    );
-}
-
 /// A miner nobody can walk to is dropped as cut off, and must not have
 /// already held the assemblers above it back: the level cut counts only
 /// sites the crew can reach.
@@ -2603,8 +2595,8 @@ fn a_cut_off_miner_does_not_hold_the_assembler_back() {
         grid.lay_floor(px + far, py + far);
         grid.lay_floor(px + far + 1, py + far);
     }
-    file_build(&mut game, "mining_node", far, far).unwrap();
-    file_build(&mut game, "assembly_bay", 1, 0).unwrap();
+    file_build(&mut game, "extractor", far, far).unwrap();
+    file_build(&mut game, "printer", 1, 0).unwrap();
 
     for _ in 0..40 {
         game.tick();

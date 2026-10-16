@@ -318,9 +318,9 @@ fn a_prisoner_occupies_ground_but_is_not_staff() {
 fn a_prisoner_is_never_handed_a_task_and_never_moves() {
     let (mut game, cell) = base_with_a_cell();
     place_home(&mut game);
-    spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
-    spawn_machine_at(&mut game, "disk_press", 4, 0);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
     let crew = [
         spawn_tamed(&mut game, 100, 5),
         spawn_tamed(&mut game, 100, 5),

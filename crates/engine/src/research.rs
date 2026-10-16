@@ -420,7 +420,7 @@ mod tests {
         name: "Automation",
         description: "Self-running compile jobs.",
         cost: 8,
-        unlocks_structures: ["compiler"],
+        unlocks_structures: ["workbench"],
     )"#;
 
     #[test]
@@ -432,7 +432,7 @@ mod tests {
         assert!(def.requires.is_empty(), "requires defaults to empty");
         assert!(def.unlocks_recipes.is_empty(), "recipes default to empty");
         assert_eq!(def.min_zone, 0, "an absent min_zone means ungated");
-        assert_eq!(def.unlocks_structures, vec!["compiler".to_string()]);
+        assert_eq!(def.unlocks_structures, vec!["workbench".to_string()]);
         assert!(warnings.is_empty(), "a valid node warns about nothing");
     }
 
@@ -485,7 +485,7 @@ mod tests {
             name: "Automation",
             description: "Self-running compile jobs.",
             cost: 8,
-            unlocks_structures: ["compiler"],
+            unlocks_structures: ["workbench"],
             unlocks_tools: ["salvage_clamp", "no_such_tool"],
         )"#;
         let (db, warnings) = load("unknown_tool", &[("automation", node)]);
@@ -497,7 +497,7 @@ mod tests {
         );
         assert_eq!(
             def.unlocks_structures,
-            vec!["compiler".to_string()],
+            vec!["workbench".to_string()],
             "the node's other unlocks are untouched"
         );
         assert_eq!(warnings.len(), 1, "the dropped id explains itself");

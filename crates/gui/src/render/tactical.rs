@@ -39,13 +39,13 @@ use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
 
-/// The ground, by kind. Brightness and nothing else carries passability,
-/// `RockDb`'s rule from base space: hue is spoken for by what is standing
-/// on a cell, and a kind may not spend it.
 /// The mark of a disabled body, on the battle map and, for a downed program
 /// lying on the floor, the base map: one constant so the two cannot drift.
 pub(crate) const FALLEN_MARK: (char, Color) = ('x', palette::FALLEN);
 
+/// The ground, by kind. Brightness and nothing else carries passability,
+/// `RockDb`'s rule from base space: hue is spoken for by what is standing
+/// on a cell, and a kind may not spend it.
 fn cell_color(kind: BattleCell) -> Color {
     match kind {
         BattleCell::Open => Color::new(0.13, 0.15, 0.18, 1.0),

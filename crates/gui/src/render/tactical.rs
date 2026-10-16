@@ -3886,6 +3886,61 @@ mod tests {
         );
     }
 
+    /// A body that steps is drawn part-way between its two cells while it
+    /// glides, not on the cell it has already reached — the renderer half
+    /// of `Fx::slid_cell`, which drawing at `body.cell` would undo without
+    /// any `Fx` test noticing. A body other than the acting one, so the
+    /// camera stays still and the glyph's own movement is all that shows.
+    #[test]
+    fn a_stepping_body_is_drawn_mid_glide() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let acting = acting_body(&view).expect("somebody is acting").entity;
+        let walker = view
+            .bodies
+            .iter()
+            .find(|b| {
+                b.entity != acting && view.bodies.iter().filter(|o| o.glyph == b.glyph).count() == 1
+            })
+            .expect("a body other than the acting one wears a glyph of its own");
+        let (entity, glyph) = (walker.entity, walker.glyph);
+        let mut stepped = view.clone();
+        let body = stepped
+            .bodies
+            .iter_mut()
+            .find(|b| b.entity == entity)
+            .expect("the walker is still on the board");
+        body.cell.0 += 1;
+
+        let mut fx = Fx::new();
+        let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
+            fx.begin_frame(at, FrameCues::default(), true);
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
+            glyph_box(&shapes, glyph).expect("the walker was drawn")
+        };
+        let before = frame(&mut fx, 1.0, &view);
+        frame(&mut fx, 1.0 + 1e-3, &stepped);
+        let mid = frame(
+            &mut fx,
+            1.0 + 1e-3 + crate::fx::SLIDE_SECONDS / 2.0,
+            &stepped,
+        );
+        let after = frame(&mut fx, 1.0 + 1e-3 + crate::fx::SLIDE_SECONDS, &stepped);
+
+        assert!(
+            (mid.x - (before.x + 16.0)).abs() < 1.0,
+            "halfway through the glide the body was drawn at {} (from {} to {})",
+            mid.x,
+            before.x,
+            after.x
+        );
+        assert!(
+            (after.x - (before.x + 32.0)).abs() < 1.0,
+            "the glide never landed"
+        );
+    }
+
     /// Nothing is drawn outside the map pane, even mid-pan.
     ///
     /// The acting body's tile used to be within one tile of pane centre by

@@ -19,9 +19,9 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyCode;
 
 /// How long a key must be held before it starts repeating.
-const REPEAT_DELAY: f64 = 0.25;
+pub(crate) const REPEAT_DELAY: f64 = 0.25;
 /// Spacing between repeats once one has started.
-const REPEAT_INTERVAL: f64 = 0.09;
+pub(crate) const REPEAT_INTERVAL: f64 = 0.09;
 
 enum Held {
     /// Wall-clock time this key is next due to fire.

@@ -616,3 +616,231 @@ fn a_program_with_no_floor_goes_to_the_downed_store_then_a_rack() {
             .any(|e| e.text.contains("onto the Quarantine Rack"))
     );
 }
+
+fn party_cell(g: &Game) -> (i32, i32) {
+    g.base_pos().expect("standing in base space")
+}
+
+/// The Home stands on the origin, so the party stands off it where its own
+/// tile is free floor.
+fn hands_game() -> Game {
+    let mut g = game_with_home();
+    stand_in_base_at(&mut g, 4, 4);
+    g
+}
+
+fn give_core(g: &mut Game, qty: u32) {
+    let p = g.player_entity();
+    let mut inv = g.world.get_mut::<crate::components::Inventory>(p).unwrap();
+    let have = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
+    inv.take(ItemId::from(ids::CORE_FRAGMENT), have);
+    inv.add(ItemId::from(ids::CORE_FRAGMENT), qty);
+}
+
+fn core_in_pack(g: &Game) -> u32 {
+    let p = g.player_entity();
+    g.world
+        .get::<crate::components::Inventory>(p)
+        .unwrap()
+        .count(&ItemId::from(ids::CORE_FRAGMENT))
+}
+
+fn core_choice() -> PutDownChoice {
+    PutDownChoice::Item(ItemId::from(ids::CORE_FRAGMENT))
+}
+
+#[test]
+fn putting_down_takes_one_unit_onto_the_players_tile() {
+    let mut g = hands_game();
+    give_core(&mut g, 3);
+    let before = core_in_pack(&g);
+    g.put_down(&core_choice()).unwrap();
+    assert_eq!(core_in_pack(&g), before - 1);
+    assert_eq!(floor_things(&mut g), vec![(party_cell(&g), core_unit())]);
+}
+
+#[test]
+fn putting_down_overflows_to_the_nearest_free_tile_when_underfoot_is_taken() {
+    let mut g = hands_game();
+    give_core(&mut g, 3);
+    g.put_down(&core_choice()).unwrap();
+    g.put_down(&core_choice()).unwrap();
+    let cells: std::collections::HashSet<_> =
+        floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells.len(), 2, "one thing per tile");
+    assert!(cells.contains(&party_cell(&g)));
+}
+
+#[test]
+fn putting_down_with_no_free_floor_moves_nothing() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 4, 4);
+    give_core(&mut g, 3);
+    let before = core_in_pack(&g);
+    let err = g.put_down(&core_choice()).unwrap_err();
+    assert!(err.contains("no free floor"), "{err}");
+    assert_eq!(core_in_pack(&g), before);
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn putting_down_what_is_no_longer_held_refuses() {
+    let mut g = hands_game();
+    let err = g
+        .put_down(&PutDownChoice::Gear(crate::items::GearCopy::plain(
+            ItemId::from(ids::MONOFILAMENT_WHIP),
+        )))
+        .unwrap_err();
+    assert_eq!(err, "That's no longer in your pack.");
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn put_down_options_list_items_then_gear_then_programs() {
+    let mut g = hands_game();
+    give_core(&mut g, 2);
+    let p = g.player_entity();
+    g.world
+        .get_mut::<crate::components::GearCopies>(p)
+        .unwrap()
+        .add(
+            crate::items::GearCopy::plain(ItemId::from(ids::MONOFILAMENT_WHIP)),
+            1,
+        );
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0
+        .push(prog);
+    let rows = g.put_down_options();
+    let core = rows
+        .iter()
+        .position(|r| r.choice == core_choice())
+        .expect("core row");
+    assert!(rows[core].label.ends_with("x2"), "{}", rows[core].label);
+    let gear = rows
+        .iter()
+        .position(|r| matches!(r.choice, PutDownChoice::Gear(_)))
+        .expect("gear row");
+    let prog = rows
+        .iter()
+        .position(|r| r.choice == PutDownChoice::Program(0))
+        .expect("program row");
+    assert!(core < gear && gear < prog);
+    assert!(
+        rows[prog].label.starts_with(char::is_uppercase),
+        "{}",
+        rows[prog].label
+    );
+}
+
+#[test]
+fn putting_down_a_program_moves_it_out_of_the_store() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0
+        .push(prog);
+    g.put_down(&PutDownChoice::Program(0)).unwrap();
+    assert!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert_eq!(
+        floor_things(&mut g),
+        vec![(party_cell(&g), a_downed_program())]
+    );
+}
+
+fn lay_under_party(g: &mut Game, thing: FloorThing) {
+    let c = party_cell(g);
+    g.set_down(Position { x: c.0, y: c.1 }, vec![thing]);
+    assert_eq!(floor_things(g)[0].0, c);
+}
+
+#[test]
+fn picking_up_returns_the_thing_underfoot_to_its_store() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+
+    lay_under_party(&mut g, core_unit());
+    let before = core_in_pack(&g);
+    g.pick_up().unwrap();
+    assert_eq!(core_in_pack(&g), before + 1);
+    assert!(floor_things(&mut g).is_empty());
+
+    lay_under_party(&mut g, a_gear_copy());
+    g.pick_up().unwrap();
+    let FloorThing::Gear(copy) = a_gear_copy() else {
+        unreachable!()
+    };
+    assert_eq!(
+        g.world
+            .get::<crate::components::GearCopies>(p)
+            .unwrap()
+            .count(&copy),
+        1
+    );
+
+    lay_under_party(&mut g, a_downed_program());
+    g.pick_up().unwrap();
+    assert_eq!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .len(),
+        1
+    );
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn picking_up_a_program_at_the_cap_is_refused_and_leaves_it() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0 = vec![prog; crate::tuning::MAX_DOWNED_PROGRAMS];
+    lay_under_party(&mut g, a_downed_program());
+    let err = g.pick_up().unwrap_err();
+    assert!(err.contains("downed store is full"), "{err}");
+    assert_eq!(floor_things(&mut g).len(), 1, "the program stays");
+    assert_eq!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS
+    );
+}
+
+#[test]
+fn nothing_underfoot_refuses_pick_up() {
+    let mut g = hands_game();
+    assert_eq!(g.pick_up().unwrap_err(), "There's nothing here to pick up.");
+}
+
+#[test]
+fn pick_up_and_put_down_refuse_outside_base_space() {
+    let mut g = game();
+    give_core(&mut g, 1);
+    assert!(g.put_down(&core_choice()).is_err());
+    assert!(g.pick_up().is_err());
+}

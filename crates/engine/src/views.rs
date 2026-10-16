@@ -1444,6 +1444,22 @@ pub struct FloorItemView {
     pub name: String,
 }
 
+/// What the player chose to set on the floor. A program is named by its
+/// index in the downed store, since two programs can look alike.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PutDownChoice {
+    Item(ItemId),
+    Gear(GearCopy),
+    Program(usize),
+}
+
+/// One row of the put-down picker — see `Game::put_down_options`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PutDownOption {
+    pub label: String,
+    pub choice: PutDownChoice,
+}
+
 /// What a floor item draws as. Gear uses its item's `floor_glyph()`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FloorLook {

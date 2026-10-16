@@ -21,6 +21,7 @@ mod ending;
 pub(crate) mod excavate;
 mod extraction;
 mod field;
+mod floor_hands;
 pub(crate) mod group_menu;
 mod hover;
 pub(crate) mod icon_editor;

@@ -22,6 +22,7 @@ pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;
 pub(crate) mod floor;
+pub(crate) mod floor_hands;
 pub(crate) mod hauling;
 pub(crate) mod healing;
 pub(crate) mod interact;

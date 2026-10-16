@@ -334,6 +334,7 @@ impl App {
             Mode::TacticalAim => self.handle_tactical_aim_key(key),
             Mode::Excavate => self.handle_excavate_key(key),
             Mode::ExcavateBrush => self.handle_excavate_brush_key(key),
+            Mode::PutDown => self.handle_put_down_key(key),
             Mode::Refactor => self.handle_refactor_key(key),
             Mode::RefactorItem => self.handle_refactor_item_key(key),
             Mode::Develop => self.handle_develop_key(key),

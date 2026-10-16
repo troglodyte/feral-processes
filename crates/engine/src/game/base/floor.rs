@@ -40,7 +40,6 @@ pub(crate) fn floor_item_at(world: &mut World, pos: Position) -> Option<Entity> 
 }
 
 /// Picks `e` up off the floor: despawns it and returns what it held.
-#[expect(dead_code, reason = "stockpile hauling is its first caller")]
 pub(crate) fn take_floor_item(world: &mut World, e: Entity) -> Option<FloorThing> {
     let FloorItem(thing) = world.entity_mut(e).take::<FloorItem>()?;
     world.despawn(e);

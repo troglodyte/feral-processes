@@ -70,6 +70,7 @@ mod perk_bought;
 mod points;
 mod popup;
 mod progression;
+mod put_down;
 mod refit_copy;
 mod research_graph;
 mod rig_tool;
@@ -153,6 +154,7 @@ use party::{
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_research_menu, draw_respec_confirm};
+use put_down::draw_put_down;
 use refit_copy::draw_refit_copy;
 use rig_tool::draw_rig_tool;
 use routines::{
@@ -1038,6 +1040,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::ExcavateBrush => app.excavate_brush_rows(),
         _ => Vec::new(),
     };
+    let put_down = match app.mode {
+        Mode::PutDown => app.put_down_rows(),
+        _ => Vec::new(),
+    };
     // The name is resolved here rather than in the renderer, because a
     // carrier row has no `ItemId` to look one up by: its label is the
     // engine's own sentence, and the table is a table of *names* either way.
@@ -1189,6 +1195,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
+        Mode::PutDown => draw_put_down(&put_down, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
@@ -1674,7 +1681,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 152] = [
+    const ALL_MODES: [Mode; 153] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1757,6 +1764,7 @@ mod tests {
         Mode::FieldRoutineCell,
         Mode::Excavate,
         Mode::ExcavateBrush,
+        Mode::PutDown,
         Mode::Refactor,
         Mode::RefactorItem,
         Mode::Develop,

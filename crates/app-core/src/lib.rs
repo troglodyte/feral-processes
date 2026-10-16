@@ -1988,6 +1988,10 @@ pub enum Mode {
     /// plain, every loaded finish, strip. A detour off the plan — picking a
     /// row or Esc lands back on it with the cursor and anchor untouched.
     ExcavateBrush,
+    /// Picking one thing from the pack to set on the floor, `y` on the base
+    /// map. Choosing a row puts it down and spends a turn; Esc leaves
+    /// without one.
+    PutDown,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -2493,6 +2497,8 @@ impl Mode {
             | Mode::Excavate
             // Opened from the plan only, the plan's own reason.
             | Mode::ExcavateBrush
+            // Opened from the base map only, so it never layers over a fight.
+            | Mode::PutDown
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop

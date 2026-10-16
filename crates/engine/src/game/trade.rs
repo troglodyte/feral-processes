@@ -541,7 +541,7 @@ impl Game {
             Some((TaskKind::Guard, target)) => format!("guarding {target}"),
             Some((TaskKind::Excavate, target)) => format!("cutting {target}"),
             Some((TaskKind::Construct, target)) => format!("building {target}"),
-            Some((TaskKind::Tend(_), _)) => "tending a plot".to_string(),
+            Some((TaskKind::Tend(_), target)) => format!("tending {target}"),
             None => IDLE_ACTIVITY.to_string(),
         }
     }
@@ -579,7 +579,7 @@ impl Game {
                 TaskKind::Guard => format!("stops guarding {target}"),
                 TaskKind::Excavate => format!("stops cutting {target}"),
                 TaskKind::Construct => format!("stops building {target}"),
-                TaskKind::Tend(_) => "stops tending a plot".to_string(),
+                TaskKind::Tend(_) => format!("stops tending {target}"),
             });
         }
         out

@@ -177,13 +177,6 @@ impl Game {
         }
     }
 
-    /// Whether any plot has a crop chosen — "a base with instructions" for
-    /// `assign_base_labour`'s quiet-base guard, `any_dig_marked`'s carve-out.
-    pub(crate) fn any_plot_sown(&mut self) -> bool {
-        let mut plots = self.world.query::<&FarmPlot>();
-        plots.iter(&self.world).any(|p| p.recipe.is_some())
-    }
-
     /// Tiles of sown plots that want a body: every `Ripe` one as a harvest
     /// (it is the one that pays out), then every `Fallow` one as a dimple,
     /// each block in `(x, y)` order. Structural, `dig_wants`' rule, and
@@ -316,10 +309,9 @@ impl Game {
                     t.growth = CropGrowth::Fallow;
                 }
                 let name = self.item_name(&crop.produces).to_string();
-                self.log_base(format!(
-                    "Your crew brings in a {name} at ({}, {}).",
-                    at.x, at.y
-                ));
+                // No cell and no article: repeats condense in the history, and
+                // a modded crop's name may start with a vowel.
+                self.log_base(format!("Your crew brings in a harvest: {name}."));
             }
         }
     }

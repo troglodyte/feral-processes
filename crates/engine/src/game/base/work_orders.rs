@@ -1434,14 +1434,9 @@ impl Game {
                     .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
                     .is_some_and(|def| def.spends_supply().is_some())
         });
-        // A sown plot is "a base with instructions" as a dig mark is: a
-        // want that vanishes (a tile dimpled, a harvest brought in) must not
-        // read as an empty base and stand its tender down mid-route.
-        let any_plot_sown = self.any_plot_sown();
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
             && !any_dig_marked
-            && !any_plot_sown
             && !a_burner_holds_a_body;
         // **A body standing at a post it is no longer allowed to hold is
         // work to do**, even when the queue is empty and every want is

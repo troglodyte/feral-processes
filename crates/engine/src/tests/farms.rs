@@ -118,9 +118,9 @@ fn setting_a_recipe_sows_the_whole_plot() {
     }
 }
 
-#[test]
-fn changing_the_recipe_discards_growth_and_the_same_recipe_keeps_it() {
-    let scratch = scratch_assets_dir("farm_recipe");
+/// A base whose crop catalogue also holds a second crop, `moss`.
+fn moss_base(seed: u32, tag: &str) -> Game {
+    let scratch = scratch_assets_dir(tag);
     std::fs::create_dir_all(&scratch).unwrap();
     copy_shipped_assets(&scratch, &[]);
     std::fs::write(
@@ -129,11 +129,16 @@ fn changing_the_recipe_discards_growth_and_the_same_recipe_keeps_it() {
             grow_ticks: 100, stages: 2, glyph: "m", color: Green)"#,
     )
     .unwrap();
-    let mut game = Game::new(6, DifficultyMode::Forgiving, &scratch).unwrap();
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &scratch).unwrap();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     place_now(&mut game, "home", 1, 0).unwrap();
     stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    game
+}
 
+#[test]
+fn changing_the_recipe_discards_growth_and_the_same_recipe_keeps_it() {
+    let mut game = moss_base(6, "farm_recipe");
     game.toggle_plot_box((-3, 2), (-2, 2));
     let plot = plot_of(&game, (-3, 2));
     game.set_plot_recipe(plot, &"power_cell".into()).unwrap();
@@ -351,6 +356,13 @@ fn a_plot_whose_crop_is_gone_loads_unsown_with_a_warning() {
             .iter()
             .all(|t| t.crop.is_none() && t.state == FarmTileState::Fallow)
     );
+    for t in loaded.world.query::<&FarmTile>().iter(&loaded.world) {
+        assert_eq!(
+            t.growth,
+            CropGrowth::Fallow,
+            "a dropped crop forgets growth"
+        );
+    }
     let warned = loaded
         .message_log(200)
         .iter()
@@ -454,11 +466,17 @@ fn a_harvest_stacks_into_a_pile_already_on_the_tile() {
         ItemId::from("power_cell"),
         3,
     );
-    set_growth(&mut game, tile, CropGrowth::Ripe);
+    // Fallow, not ripe: the pile on the cell must not stop the dimple, and
+    // the harvest that follows stacks onto it.
     spawn_tamed(&mut game, 10, 3);
+    pass(&mut game, FARM_DIMPLE_TICKS as usize + WALK);
+    assert!(
+        elapsed_of(&game, tile).is_some(),
+        "a pile never blocked the dimple"
+    );
 
-    pass(&mut game, FARM_HARVEST_TICKS as usize + WALK);
-
+    let grow = power_cell_grow_ticks(&game) as usize;
+    pass(&mut game, grow + FARM_HARVEST_TICKS as usize + WALK);
     assert_eq!(power_cells_at(&mut game, (-3, 2)), 4);
 }
 
@@ -520,13 +538,16 @@ fn tender_standing_at(game: &mut Game, tile: Entity, job: FarmJob, progress: u32
 
 #[test]
 fn a_recipe_change_mid_harvest_drops_the_labour_and_spawns_nothing() {
-    let mut game = farm_base(54);
-    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    let mut game = moss_base(54, "farm_recipe_mid_harvest");
+    game.toggle_plot_box((-3, 2), (-3, 2));
+    let plot = plot_of(&game, (-3, 2));
+    game.set_plot_recipe(plot, &"power_cell".into()).unwrap();
+    let tile = tile_at(&mut game, (-3, 2));
     set_growth(&mut game, tile, CropGrowth::Ripe);
     let worker = tender_standing_at(&mut game, tile, FarmJob::Harvest, FARM_HARVEST_TICKS - 1);
     // A different recipe leaves every tile fallow: the job posted for no
     // longer matches the tile.
-    set_growth(&mut game, tile, CropGrowth::Fallow);
+    game.set_plot_recipe(plot, &"moss".into()).unwrap();
 
     // The crew step alone: a full `tick()` would let the scheduler re-post
     // the body to the dimple the tile now wants and hide the landing check.
@@ -551,6 +572,40 @@ fn clearing_the_plot_mid_harvest_drops_the_labour_and_spawns_nothing() {
 
     assert_eq!(power_cells_at(&mut game, (-3, 2)), 0);
     assert!(game.world.get::<Task>(worker).is_none());
+}
+
+#[test]
+fn a_posted_tenders_manifest_row_names_the_plot_cell() {
+    let mut game = farm_base(58);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    let worker = tender_standing_at(&mut game, tile, FarmJob::Dimple, 0);
+
+    let (kind, target) = game.program_post(worker).unwrap();
+
+    assert_eq!(kind, TaskKind::Tend(FarmJob::Dimple));
+    assert_eq!(target, "Farm Plot (-3, 2)");
+    assert_eq!(game.program_activity(worker), "tending Farm Plot (-3, 2)");
+}
+
+#[test]
+fn a_harvest_log_line_carries_no_coordinates_so_repeats_condense() {
+    let mut game = farm_base(59);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Ripe);
+    let before = game.message_log(500).len();
+    tender_standing_at(&mut game, tile, FarmJob::Harvest, FARM_HARVEST_TICKS - 1);
+
+    game.run_farm_crew();
+
+    let lines: Vec<String> = game
+        .message_log(500)
+        .iter()
+        .skip(before)
+        .map(|l| l.text.clone())
+        .filter(|t| t.contains("harvest"))
+        .collect();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(!lines[0].contains('('), "{}", lines[0]);
 }
 
 #[test]

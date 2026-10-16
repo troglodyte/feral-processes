@@ -1,7 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect targeting.
 
-use crate::components::{HoldPoints, StatPoints};
+use crate::components::{FarmTile, HoldPoints, StatPoints};
 use crate::game::base::hauling::at_station;
 use crate::game::trade::IDLE_ACTIVITY;
 use crate::settlements::CompassTarget;
@@ -1059,6 +1059,13 @@ impl Game {
             match at {
                 Some(p) => format!("{what} ({}, {})", p.x, p.y),
                 None => what.to_string(),
+            }
+        } else if self.world.get::<FarmTile>(entity).is_some() {
+            // A plot cell has no def, species or glyph either: without this
+            // arm a posted tender's manifest row reads "Tending: You".
+            match self.world.get::<Position>(entity) {
+                Some(p) => format!("Farm Plot ({}, {})", p.x, p.y),
+                None => "Farm Plot".to_string(),
             }
         } else {
             "You".to_string()

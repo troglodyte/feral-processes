@@ -42,6 +42,13 @@ any non-finite `taming_potency`, `consume.power`, or
     // yours is yours to settle.
     abbrev: Some("R"),
 
+    // Optional; defaults to `'*'`. The one character this item is drawn as
+    // when it lies on the base floor. Suggested set: `'.'` currency, `'*'`
+    // general goods, `','` disks, `'"'` armor, `'\''` weapons, `'`'` traps,
+    // `'~'` consumables, `':'` modules. A downed program is drawn by the
+    // game and never by an item.
+    glyph: Some('*'),
+
     // Optional; can be left out entirely (defaults to false, ordinary cargo).
     // A banked item is a pool rather than something the player carries, and
     // that one flag carries every consequence:

@@ -1,6 +1,7 @@
 (
     id: "breeding_seed",
     name: "Breeding Seed",
+    glyph: Some('*'),
     description: "Spent at a Breeding Bay to grow a child program from two of yours. Wild programs shed them now and then.",
     value: Some(25),
     abbrev: Some("BD"),

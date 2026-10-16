@@ -333,9 +333,15 @@ impl Game {
         let underfoot: Vec<String> = finish_name
             .map(|name| format!("{name} underfoot"))
             .into_iter()
-            .chain(self.describe_floor_pile(bx + dx, by + dy))
+            .chain(self.describe_floor_item(bx + dx, by + dy))
+            .chain(
+                self.world
+                    .resource::<BaseGrid>()
+                    .is_stockpile(bx + dx, by + dy)
+                    .then(|| "a stockpile".to_string()),
+            )
             .collect();
-        // Capitalised here so a pile that leads the line reads like the
+        // Capitalised here so a floor item that leads the line reads like the
         // other examine lines; a finish name already is.
         let underfoot = (!underfoot.is_empty()).then(|| {
             let line = underfoot.join("; ");
@@ -554,6 +560,33 @@ impl Game {
                 self.set_mark(&mut sites, x, y, marking, brush);
             }
         }
+    }
+
+    /// Zones — or un-zones — every laid-floor cell in the inclusive box
+    /// spanned by `a` and `b`.
+    ///
+    /// **The anchor decides**, the rule `toggle_mark_box` states: a box whose
+    /// `a` cell is already a stockpile clears, otherwise it marks. Marking
+    /// skips anything that is not laid floor. The box is normalised.
+    pub fn toggle_stockpile_box(&mut self, a: (i32, i32), b: (i32, i32)) {
+        let mut grid = self.world.resource_mut::<BaseGrid>();
+        let marking = !grid.is_stockpile(a.0, a.1);
+        for y in a.1.min(b.1)..=a.1.max(b.1) {
+            for x in a.0.min(b.0)..=a.0.max(b.0) {
+                grid.set_stockpile(x, y, marking);
+            }
+        }
+    }
+
+    /// Every stockpile cell, in `(x, y)` order; empty outside base space.
+    pub fn stockpile_cells(&self) -> Vec<(i32, i32)> {
+        if self.base_pos().is_none() {
+            return Vec::new();
+        }
+        self.world
+            .resource::<BaseGrid>()
+            .stockpile_cells()
+            .collect()
     }
 
     /// Every marked cell and how far through it the crew is, in `(x, y)`

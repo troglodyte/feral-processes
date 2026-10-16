@@ -1,6 +1,7 @@
 (
     id: "bastion_lattice",
     name: "Bastion Lattice",
+    glyph: Some('"'),
     description: "Premium armor. The best flat protection in the Basin.",
     value: Some(80),
     equipment: Some((Armor, (mitigation: 12))),

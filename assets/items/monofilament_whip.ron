@@ -2,6 +2,7 @@
     id: "monofilament_whip",
     fx: Some("laser_pulse"),
     name: "Monofilament Whip",
+    glyph: Some('\''),
     description: "Researched weapon. A filament one molecule wide, and the hardest hit at its tier.",
     value: Some(60),
     equipment: Some((Weapon, (atk: 4, damage: (min: 5, max: 15)))),

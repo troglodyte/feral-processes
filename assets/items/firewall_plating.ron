@@ -1,6 +1,7 @@
 (
     id: "firewall_plating",
     name: "Firewall Plating",
+    glyph: Some('"'),
     description: "Researched armor. Purpose-built to stop hostile traffic.",
     value: Some(20),
     equipment: Some((Armor, (mitigation: 9))),

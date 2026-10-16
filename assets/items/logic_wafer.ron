@@ -1,6 +1,7 @@
 (
     id: "logic_wafer",
     name: "Logic Wafer",
+    glyph: Some('*'),
     description: "Raw Trace transcribed into something that can hold a circuit. What the Fabricator builds modules out of.",
     value: Some(3),
     craftable: Some((cost: [("raw_trace", 4)], requires_structure: Some("workbench"), research: Some("routine_fabrication"))),

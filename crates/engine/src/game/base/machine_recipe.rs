@@ -11,8 +11,8 @@ use crate::Game;
 use crate::components::{
     MachineRecipe, Position, ResourceNode, Stock, Structure, StructureTier, Task,
 };
-use crate::game::base::{collect::ORTHOGONAL, floor, stock};
-use crate::items::ItemId;
+use crate::game::base::{collect::ORTHOGONAL, stock};
+use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
 use crate::research::ResearchDb;
 use crate::structures::{MachineRole, Placed, StructureDb};
@@ -177,7 +177,8 @@ impl Game {
     }
 
     /// Empties both buffers: into the Depots as far as they have room, the
-    /// rest onto the floor. Returns the units that went to each.
+    /// rest set down on the floor around the machine. Returns the units that
+    /// went to each.
     fn empty_machine(&mut self, machine: Entity) -> (u32, u32) {
         let Some(mut stock) = self.world.get_mut::<Stock>(machine) else {
             return (0, 0);
@@ -191,28 +192,16 @@ impl Game {
             .world
             .get::<Position>(machine)
             .expect("a machine stands on a tile");
-        let spot = self.drop_tile(pos);
         let (mut to_depots, mut to_floor) = (0, 0);
+        let mut things = Vec::new();
         for (item, qty) in held {
             let landed = stock::return_to_depots(self, &item, qty);
             to_depots += landed;
             to_floor += qty - landed;
-            floor::spawn_floor_pile(&mut self.world, spot, item, qty - landed);
+            things.extend((landed..qty).map(|_| FloorThing::Item(item.clone())));
         }
+        self.set_down(pos, things);
         (to_depots, to_floor)
-    }
-
-    /// The first walkable orthogonal neighbour of `pos`, or `pos` itself.
-    fn drop_tile(&self, pos: Position) -> Position {
-        let grid = self.world.resource::<crate::base_grid::BaseGrid>();
-        ORTHOGONAL
-            .iter()
-            .map(|(dx, dy)| Position {
-                x: pos.x + dx,
-                y: pos.y + dy,
-            })
-            .find(|p| grid.walkable(p.x, p.y))
-            .unwrap_or(pos)
     }
 
     /// Takes the posted worker off `machine`, its load on the floor; the
@@ -223,7 +212,7 @@ impl Game {
             crate::systems::worker_of(tasks.iter(&self.world), machine)
         };
         if let Some(worker) = worker {
-            floor::drop_load(&mut self.world, worker);
+            self.drop_load(worker);
             self.world.entity_mut(worker).remove::<Task>();
         }
     }

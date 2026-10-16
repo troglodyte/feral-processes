@@ -3,7 +3,6 @@
 
 use crate::alerts::AlertKind;
 use crate::components::Downed;
-use crate::game::base::floor::drop_load;
 use crate::*;
 
 /// What `program_activity` says of a program with nothing to do, named so
@@ -635,7 +634,7 @@ impl Game {
             .retain(|&e| e != creature);
         // Before the despawn every caller follows with: a load is never
         // destroyed with its carrier.
-        drop_load(&mut self.world, creature);
+        self.drop_load(creature);
         self.world
             .entity_mut(creature)
             .remove::<Task>()

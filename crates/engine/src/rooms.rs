@@ -356,7 +356,7 @@ pub fn of_parts<'a>(
 
 impl crate::Game {
     /// Every room that has a role, for the Alt overlay. Empty outside base
-    /// space, `floor_piles`' reason: the cells are base cells.
+    /// space, `floor_items`' reason: the cells are base cells.
     pub fn view_rooms(&mut self) -> Vec<RoomView> {
         if self.base_pos().is_none() {
             return Vec::new();

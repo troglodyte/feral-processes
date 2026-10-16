@@ -1,6 +1,7 @@
 (
     id: "sandbox_liner",
     name: "Sandbox Liner",
+    glyph: Some('"'),
     description: "Scavenged armour. A thin isolation layer between the wearer and whatever just got through.",
     value: Some(115),
     equipment: Some((Armor, (mitigation: 2, evasion: 4))),

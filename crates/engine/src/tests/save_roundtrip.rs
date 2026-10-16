@@ -388,6 +388,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         pursuing: _,
         carrying: _,
         carrying_program: _,
+        tidying: _,
         rarity: _,
         boss: _,
         equipment: _,
@@ -500,6 +501,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
     assert!(saved.carrying_program.is_none(), "carrying_program");
+    assert!(saved.tidying.is_none(), "tidying");
     assert_eq!(saved.rarity, Rarity::Gold, "rarity");
     assert!(!saved.boss, "boss");
     assert_eq!(

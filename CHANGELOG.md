@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.36
+
+**Inside your base you can put things down and pick them up: `y` sets one item, gear copy or downed program on the floor, and `o` picks up whatever is underfoot.** Each thing on the floor is drawn with its own mark, and a downed program shows the grey `x` of a disabled body. A floor tile holds one thing, never a stack, so floor space runs out and depots are worth building.
+
+**`z` marks stockpile zones on laid floor with the same box as the Excavation plan, and idle programs carry loose items onto them one at a time.** Plain items on a stockpile count as base stock for building and spending, so a build can be paid from the floor. Work, needs and rest always come before tidying.
+
+**A dropped load now spreads one item per tile across the nearest floor, and is never lost.** Before, a load landed as one pile on a single tile. When no free floor can be reached, it goes into your pack (a downed program goes to your downed store or a Quarantine Rack), with a message, and a building raised over floor items moves them aside. Floor piles in older saves spread out the same way when the save loads.
+
 ## 0.18.35
 
 **On a battle map, programs and your character now glide from cell to cell, and the camera follows them smoothly.** Before, a body jumped a whole cell at a time and the camera lurched after every jump, so a walk read as a stutter. Holding a direction key keeps your character on its cell as it runs, so a blow struck straight after a run lands where you are drawn.

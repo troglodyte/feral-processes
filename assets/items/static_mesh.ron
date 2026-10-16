@@ -1,6 +1,7 @@
 (
     id: "static_mesh",
     name: "Static Mesh",
+    glyph: Some('"'),
     description: "Standard armor. Bleeds off the charge that makes a capture fail.",
     value: Some(14),
     equipment: Some((Armor, (mitigation: 2, decompiler: 1, evasion: 5))),

@@ -2661,7 +2661,7 @@ pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
 pub const AMENITY_CAPACITY: usize = 2;
 
 /// How long a carrier stands `Stranded` holding a load before it drops the
-/// load on its own tile as a `FloorPile`.
+/// load on the floor around it, one unit per tile.
 ///
 /// A route lost mid-carry strands a carrier: structures raised across it, a
 /// body standing on a face of the destination (or on a non-destination face

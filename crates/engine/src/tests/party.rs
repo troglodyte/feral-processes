@@ -2736,14 +2736,9 @@ fn fusing_a_carrying_parent_leaves_its_load_on_the_floor() {
         qty: 3,
     });
     let at = *game.world.get::<Position>(a).unwrap();
+    lay_floor_box(&mut game, (at.x - 3, at.y - 3), (at.x + 3, at.y + 3));
 
     game.fuse_companions(a, b, None).unwrap();
 
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at).expect("a pile");
-    let held = &game
-        .world
-        .get::<crate::components::FloorPile>(pile)
-        .unwrap()
-        .items;
-    assert_eq!(held.get(&ItemId::from("cache_grain")), Some(&3));
+    assert_load_on_floor(&mut game, at, "cache_grain", 3);
 }

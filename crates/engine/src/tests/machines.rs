@@ -2,7 +2,8 @@
 //! was set to survives a save.
 
 use super::support::*;
-use crate::components::{FloorPile, MachineRecipe};
+use crate::components::{FloorItem, MachineRecipe};
+use crate::items::FloorThing;
 use crate::*;
 
 fn save_path(tag: &str) -> std::path::PathBuf {
@@ -163,12 +164,13 @@ fn units(game: &Game, e: Entity, which: &str) -> u32 {
     map.values().sum()
 }
 
-fn pile_total(game: &mut Game) -> u32 {
+/// Plain item units lying on the floor: one per floor item.
+fn floor_units(game: &mut Game) -> u32 {
     game.world
-        .query::<&FloorPile>()
+        .query::<&FloorItem>()
         .iter(&game.world)
-        .flat_map(|p| p.items.values())
-        .sum()
+        .filter(|f| matches!(f.0, FloorThing::Item(_)))
+        .count() as u32
 }
 
 fn fill(game: &mut Game, e: Entity, input: u32, output: u32) {
@@ -350,21 +352,13 @@ fn changing_a_recipe_with_no_depot_leaves_the_units_beside_it() {
     stand_in_base(&mut game);
     let factory = place_machine(&mut game, "factory", "bytecode_block", 1, 0).unwrap();
     fill(&mut game, factory, 3, 2);
-    let at = *game.world.get::<Position>(factory).unwrap();
     game.set_machine_recipe(factory, &item("charge_coil"))
         .unwrap();
     assert_eq!(
         units(&game, factory, "input") + units(&game, factory, "output"),
         0
     );
-    let total: u32 = {
-        let mut q = game.world.query::<(&FloorPile, &Position)>();
-        q.iter(&game.world)
-            .filter(|(_, p)| (p.x - at.x).abs() + (p.y - at.y).abs() == 1)
-            .flat_map(|(pile, _)| pile.items.values())
-            .sum()
-    };
-    assert_eq!(total, 5);
+    assert_eq!(floor_units(&mut game), 5);
 }
 
 #[test]
@@ -372,6 +366,8 @@ fn changing_a_recipe_unposts_its_worker_and_loses_nothing() {
     let mut game = bare_game();
     let (factory, worker) = staffed_full_factory(&mut game);
     fill(&mut game, factory, 0, 0);
+    // Laid floor around the worker, or `set_down` stows the load in the pack.
+    lay_floor_box(&mut game, (38, 38), (42, 43));
     game.world.entity_mut(worker).insert(Carrying {
         item: item("bytecode_block"),
         qty: 2,
@@ -380,7 +376,7 @@ fn changing_a_recipe_unposts_its_worker_and_loses_nothing() {
         .unwrap();
     assert!(game.world.get::<Task>(worker).is_none());
     assert!(game.world.get::<Carrying>(worker).is_none());
-    assert_eq!(pile_total(&mut game), 2);
+    assert_eq!(floor_units(&mut game), 2);
 }
 
 #[test]

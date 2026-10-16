@@ -1309,11 +1309,5 @@ fn selling_a_carrier_leaves_its_load_on_the_floor() {
     game.sell_companion(market, pet)
         .expect("the sale goes through");
 
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at).expect("a pile");
-    let held = &game
-        .world
-        .get::<crate::components::FloorPile>(pile)
-        .unwrap()
-        .items;
-    assert_eq!(held.get(&ItemId::from("cache_grain")), Some(&3));
+    assert_load_on_floor(&mut game, at, "cache_grain", 3);
 }

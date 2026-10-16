@@ -6543,3 +6543,23 @@ fn every_configure_objective_names_an_item_some_machine_can_make() {
     }
     assert!(seen > 0, "the census must find a shipped Configure job");
 }
+
+const FLOOR_GLYPHS: [char; 8] = ['.', '*', ',', '"', '\'', '`', '~', ':'];
+
+#[test]
+fn every_shipped_item_authors_a_floor_glyph_from_the_generic_set() {
+    let game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // item_defs includes the synthesised disks and carriers.
+    for def in game.item_defs() {
+        let g = def
+            .glyph
+            .unwrap_or_else(|| panic!("{} authors no glyph", def.id));
+        assert!(FLOOR_GLYPHS.contains(&g), "{} glyph {g:?}", def.id);
+    }
+}
+
+#[test]
+fn an_item_without_a_glyph_floors_as_the_default() {
+    let def: ItemDef = ron::from_str(r#"(id: "x", name: "X")"#).unwrap();
+    assert_eq!(def.floor_glyph(), crate::items_db::DEFAULT_FLOOR_GLYPH);
+}

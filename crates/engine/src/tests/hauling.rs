@@ -2152,16 +2152,11 @@ fn a_carrier_stranded_by_structures_drops_its_load_on_the_floor() {
         game.world.get::<Carrying>(worker).is_none(),
         "still holding the load past the timeout"
     );
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at)
-        .expect("a pile where the carrier stood");
-    assert_eq!(
-        game.world
-            .get::<crate::components::FloorPile>(pile)
-            .unwrap()
-            .items
-            .get(&ItemId::from(ids::CORE_FRAGMENT))
-            .copied(),
-        Some(tuning::HAUL_CARRY_CAPACITY)
+    assert_load_on_floor(
+        &mut game,
+        at,
+        ids::CORE_FRAGMENT,
+        tuning::HAUL_CARRY_CAPACITY,
     );
     assert_eq!(node_output(&game, near, ids::CORE_FRAGMENT), 0);
     assert_eq!(node_output(&game, far, ids::CORE_FRAGMENT), 0);
@@ -2210,6 +2205,7 @@ fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
     };
     game.world.entity_mut(worker).insert(load.clone());
     let node_before = node_output(&game, node, ids::CORE_FRAGMENT);
+    let pack_before = held(&game, &load.item);
     tick_until(&mut game, 10, |g| g.world.get::<Stranded>(worker).is_some());
     assert!(
         game.world.get::<Stranded>(worker).is_some(),
@@ -2221,18 +2217,10 @@ fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
     }
 
     assert!(game.world.get::<Carrying>(worker).is_none());
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, Position { x: -3, y: -3 })
-        .expect("a pile where the carrier stood");
-    assert_eq!(
-        game.world
-            .get::<crate::components::FloorPile>(pile)
-            .unwrap()
-            .items
-            .get(&load.item)
-            .copied(),
-        Some(load.qty),
-        "the load is on the floor whole"
-    );
+    // Sealed into one cell, so one unit lies there and the rest are stowed in
+    // the pack rather than lost.
+    assert_load_on_floor(&mut game, Position { x: -3, y: -3 }, load.item.as_str(), 1);
+    assert_eq!(held(&game, &load.item), pack_before + load.qty - 1);
     assert_eq!(
         node_output(&game, depot, ids::CORE_FRAGMENT),
         capacity_of(&game, depot)
@@ -2429,21 +2417,24 @@ fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
     );
 }
 
-fn pile_on(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) {
-    crate::game::base::floor::spawn_floor_pile(
+/// One unit of `item` on the floor at `(x, y)`, whether or not it is floor.
+fn unit_on(game: &mut Game, x: i32, y: i32, item: &str) {
+    crate::game::base::floor::spawn_floor_item(
         &mut game.world,
         Position { x, y },
-        ItemId::from(item),
-        qty,
+        crate::items::FloorThing::Item(ItemId::from(item)),
     );
 }
 
+/// `qty` units of `item` in a row from `(x, y)` eastward, one per tile.
+fn pile_on(game: &mut Game, x: i32, y: i32, item: &str, qty: i32) {
+    for i in 0..qty {
+        unit_on(game, x + i, y, item);
+    }
+}
+
 fn pile_total(game: &mut Game) -> u32 {
-    game.world
-        .query::<&crate::components::FloorPile>()
-        .iter(&game.world)
-        .flat_map(|p| p.items.values().copied())
-        .sum()
+    floor_things(game).len() as u32
 }
 
 /// A node, a depot and a posted hauler on a clear tile apart from the pile.
@@ -2465,10 +2456,12 @@ fn a_posted_hauler_brings_a_floor_pile_home_to_the_depot() {
     let (px, py) = game.base_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
-    tick_until(&mut game, 300, |g| node_output(g, depot, "cache_grain") > 0);
+    tick_until(&mut game, 600, |g| {
+        node_output(g, depot, "cache_grain") >= 3
+    });
 
     assert_eq!(node_output(&game, depot, "cache_grain"), 3);
-    assert_eq!(pile_total(&mut game), 0, "an emptied pile despawns");
+    assert_eq!(pile_total(&mut game), 0, "a lifted unit leaves the floor");
 }
 
 #[test]
@@ -2512,10 +2505,9 @@ fn a_hauler_with_a_machine_to_clear_does_not_divert_to_a_pile() {
 }
 
 #[test]
-fn a_mixed_pile_is_lifted_lowest_item_first() {
+fn a_hauler_lifts_one_unit_per_pickup() {
     let (mut game, _, _, worker) = pickup_fixture(34);
     let (px, py) = game.base_pos().unwrap();
-    pile_on(&mut game, px + 2, py + 2, ids::CORE_FRAGMENT, 2);
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
     tick_until(&mut game, 300, |g| {
@@ -2524,7 +2516,29 @@ fn a_mixed_pile_is_lifted_lowest_item_first() {
 
     let load = game.world.get::<Carrying>(worker).expect("lifted a load");
     assert_eq!(load.item, ItemId::from("cache_grain"));
-    assert_eq!(load.qty, 3);
+    assert_eq!(load.qty, 1);
+    assert_eq!(pile_total(&mut game), 2, "the other two stay put");
+}
+
+#[test]
+fn a_hauler_never_lifts_gear_or_a_downed_program() {
+    let (mut game, _, _, worker) = pickup_fixture(34);
+    let (px, py) = game.base_pos().unwrap();
+    crate::game::base::floor::spawn_floor_item(
+        &mut game.world,
+        Position {
+            x: px + 2,
+            y: py + 2,
+        },
+        crate::items::FloorThing::Gear(crate::items::GearCopy::plain(ItemId::from(
+            ids::MONOFILAMENT_WHIP,
+        ))),
+    );
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert!(game.world.get::<Carrying>(worker).is_none());
+    assert_eq!(pile_total(&mut game), 1);
 }
 
 #[test]
@@ -2536,7 +2550,7 @@ fn two_haulers_sent_to_one_pile_conserve_the_total() {
     let (px, py) = game.base_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
-    tick_until(&mut game, 400, |g| {
+    tick_until(&mut game, 1000, |g| {
         node_output(g, depot, "cache_grain") >= 3
     });
 
@@ -2577,7 +2591,7 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
     pile_on(&mut game, px + 1, py + 1, ids::CORE_FRAGMENT, 2);
     pile_on(&mut game, px + 5, py + 1, "cache_grain", 4);
 
-    tick_until(&mut game, 400, |g| {
+    tick_until(&mut game, 1200, |g| {
         node_output(g, depot, "cache_grain") >= 4
     });
 
@@ -2608,15 +2622,15 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     let (px, py) = game.base_pos().unwrap();
-    pile_on(&mut game, px + 1, py + 2, ids::CORE_FRAGMENT, 2);
+    unit_on(&mut game, px + 1, py + 2, ids::CORE_FRAGMENT);
     pile_on(&mut game, px + 4, py + 2, "cache_grain", 4);
 
-    tick_until(&mut game, 400, |g| {
+    tick_until(&mut game, 1200, |g| {
         node_output(g, depot, "cache_grain") >= 4
     });
 
     assert_eq!(node_output(&game, depot, "cache_grain"), 4);
-    assert_eq!(pile_total(&mut game), 2, "the walled-in pile stays");
+    assert_eq!(pile_total(&mut game), 1, "the walled-in unit stays");
 }
 
 /// A walkable base cell that `from` can reach under `blocked`, asked the way

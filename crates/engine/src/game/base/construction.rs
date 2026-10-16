@@ -33,17 +33,20 @@ use crate::{Game, tuning};
 /// Where a unit of material can be picked up from, and the tile a body has
 /// to reach to do it.
 ///
-/// **Two variants because there are two stores, not because there are two
-/// kinds of shelf.** Every deployed structure's output buffer is one store
-/// — the same set `stock::spend_from_base` drains and the stock block
-/// counts, so a block reading `Blank Substrate 12` is a block saying the base can build
-/// — and the player's pack is the other. A Depot has no privilege here: a
+/// **Three variants because there are three stores, not because there are
+/// two kinds of shelf.** Every deployed structure's output buffer is one
+/// store, a plain item on a stockpile cell is another — together the set
+/// `stock::spend_from_base` drains and the stock block counts, so a block
+/// reading `Blank Substrate 12` is a block saying the base can build — and
+/// the player's pack is the third. A Depot has no privilege here: a
 /// Mining Node's own shelf is as fetchable as a Depot's, which is what
 /// keeps "the base is holding it" one answer rather than two.
 #[derive(Clone, Copy)]
 enum Source {
     /// A deployed structure's output buffer.
     Shelf(Entity, Position),
+    /// A floor item lying on a stockpile cell.
+    Stockpile(Entity, Position),
     /// The party's own pack, reachable only while the party is standing in
     /// base space — a builder walks over and takes it out of your hands, so
     /// there has to be a pair of hands there to take it from. Four frames
@@ -54,7 +57,7 @@ enum Source {
 impl Source {
     fn tile(self) -> Position {
         match self {
-            Source::Shelf(_, pos) | Source::Pack(pos) => pos,
+            Source::Shelf(_, pos) | Source::Stockpile(_, pos) | Source::Pack(pos) => pos,
         }
     }
 }
@@ -267,9 +270,11 @@ impl Game {
             }
             Errand::Deliver(dest)
             | Errand::Raise(dest)
-            | Errand::Fetch(_, _, Source::Shelf(_, dest) | Source::Pack(dest))
-                if !hauling::at_station(from, dest, side) =>
-            {
+            | Errand::Fetch(
+                _,
+                _,
+                Source::Shelf(_, dest) | Source::Stockpile(_, dest) | Source::Pack(dest),
+            ) if !hauling::at_station(from, dest, side) => {
                 self.walk_builder(worker, from, dest, side, blocked, pocket_radius);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
@@ -346,9 +351,20 @@ impl Game {
                 .map(|(e, p, _)| (chebyshev(from, *p), p.x, p.y, 0, Source::Shelf(e, *p)))
                 .collect()
         };
+        for (pos, e, held) in stock::stockpiled(self) {
+            if held == *item {
+                candidates.push((
+                    chebyshev(from, pos),
+                    pos.x,
+                    pos.y,
+                    1,
+                    Source::Stockpile(e, pos),
+                ));
+            }
+        }
         if let Some(pack) = self.pack_source(item) {
             let tile = pack.tile();
-            candidates.push((chebyshev(from, tile), tile.x, tile.y, 1, pack));
+            candidates.push((chebyshev(from, tile), tile.x, tile.y, 2, pack));
         }
         candidates.sort_by_key(|(d, x, y, store, _)| (*d, *x, *y, *store));
         candidates.into_iter().next().map(|(.., source)| source)
@@ -413,6 +429,11 @@ impl Game {
                 Some(mut stock) => hauling::take_from(&mut stock, item, want),
                 None => 0,
             },
+            Source::Stockpile(e, _) => u32::from(crate::game::base::floor::take_floor_unit(
+                &mut self.world,
+                e,
+                item,
+            )),
             Source::Pack(_) => {
                 let player = self.player_entity();
                 match self.world.get_mut::<Inventory>(player) {
@@ -562,11 +583,11 @@ impl Game {
                 // be standing on it now. Moved aside here rather than kept
                 // off the site for its whole life, because only the raise
                 // turns the ground into a building.
-                self.displace_bodies_from(&crate::tactical::footprint_cells_at(
-                    (target.x, target.y),
-                    def.footprint,
-                ));
+                let footprint =
+                    crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
+                self.displace_bodies_from(&footprint);
                 self.spawn_structure(&def, target.x, target.y, quality);
+                self.displace_floor_items_from(&footprint);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
             }
             BuildGoal::Upgrade { to_tier } => {

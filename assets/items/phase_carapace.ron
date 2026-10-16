@@ -1,6 +1,7 @@
 (
     id: "phase_carapace",
     name: "Phase Carapace",
+    glyph: Some('"'),
     description: "Premium armor. Phases with you, so it strikes as well as it holds.",
     value: Some(90),
     equipment: Some((Armor, (mitigation: 9, atk: 2))),

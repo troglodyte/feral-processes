@@ -1,9 +1,10 @@
-//! Floor piles: where an interrupted carrier's load goes.
+//! Floor items: where an interrupted carrier's load goes.
 
 use super::support::*;
-use crate::components::{Carrying, FloorPile};
+use crate::components::{Carrying, FloorItem};
 use crate::floors::FloorId;
-use crate::game::base::floor::{drop_load, floor_pile_at, spawn_floor_pile, take_from_pile};
+use crate::game::base::floor::{nearest_free_cells, take_floor_unit};
+use crate::items::FloorThing;
 use crate::*;
 
 fn game() -> Game {
@@ -22,111 +23,194 @@ fn carrier(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) -> Entity {
         .id()
 }
 
-fn pile_items(game: &mut Game, x: i32, y: i32) -> Vec<(ItemId, u32)> {
-    let e = floor_pile_at(&mut game.world, Position { x, y }).expect("a pile");
-    game.world
-        .get::<FloorPile>(e)
-        .unwrap()
-        .items
-        .iter()
-        .map(|(i, n)| (i.clone(), *n))
-        .collect()
-}
-
-fn pile_count(game: &mut Game) -> usize {
-    game.world.query::<&FloorPile>().iter(&game.world).count()
+fn core_unit() -> FloorThing {
+    FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT))
 }
 
 #[test]
-fn drop_makes_a_pile_on_the_carriers_tile_and_ends_the_hold() {
-    let mut g = game();
-    let who = carrier(&mut g, 3, 4, ids::CORE_FRAGMENT, 5);
-    drop_load(&mut g.world, who);
+fn a_dropped_load_lands_one_unit_per_tile_and_ends_the_hold() {
+    let mut g = game_with_home();
+    let who = loaded_staff(&mut g, 6, 6);
+    g.drop_load(who);
     assert!(g.world.get::<Carrying>(who).is_none());
-    assert_eq!(
-        pile_items(&mut g, 3, 4),
-        vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]
+    let things = floor_things(&mut g);
+    assert_eq!(things.len(), LOAD as usize);
+    assert!(
+        things.iter().any(|(c, _)| *c == (6, 6)),
+        "its own tile first"
     );
+    assert!(things.iter().all(|(_, t)| *t == core_unit()));
 }
 
 #[test]
-fn two_drops_on_one_tile_merge_into_one_pile() {
+fn two_drops_on_one_tile_spread_instead_of_merging() {
     let mut g = game();
+    lay_floor_box(&mut g, (0, 0), (4, 4));
     let a = carrier(&mut g, 1, 1, ids::CORE_FRAGMENT, 2);
     let b = carrier(&mut g, 1, 1, ids::CORE_FRAGMENT, 3);
-    drop_load(&mut g.world, a);
-    drop_load(&mut g.world, b);
-    assert_eq!(pile_count(&mut g), 1);
-    assert_eq!(
-        pile_items(&mut g, 1, 1),
-        vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]
-    );
+    g.drop_load(a);
+    g.drop_load(b);
+    let cells: std::collections::HashSet<_> =
+        floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells.len(), 5, "one unit per tile");
 }
 
 #[test]
 fn drop_with_no_load_is_a_no_op() {
     let mut g = game();
     let who = g.world.spawn(Position { x: 0, y: 0 }).id();
-    drop_load(&mut g.world, who);
-    assert_eq!(pile_count(&mut g), 0);
+    g.drop_load(who);
+    assert!(floor_things(&mut g).is_empty());
 }
 
 #[test]
-fn take_from_pile_takes_partial_then_whole_and_despawns() {
+fn take_floor_unit_takes_a_plain_item_and_despawns_it() {
     let mut g = game();
-    let who = carrier(&mut g, 2, 2, ids::CORE_FRAGMENT, 5);
-    drop_load(&mut g.world, who);
-    let pile = floor_pile_at(&mut g.world, Position { x: 2, y: 2 }).unwrap();
+    lay_floor_box(&mut g, (2, 2), (2, 2));
+    g.set_down(Position { x: 2, y: 2 }, vec![core_unit()]);
+    let e = crate::game::base::floor::floor_item_at(&mut g.world, Position { x: 2, y: 2 }).unwrap();
     let item = ItemId::from(ids::CORE_FRAGMENT);
-    assert_eq!(take_from_pile(&mut g.world, pile, &item, 2), 2);
-    assert_eq!(pile_items(&mut g, 2, 2), vec![(item.clone(), 3)]);
-    assert_eq!(take_from_pile(&mut g.world, pile, &item, 99), 3);
-    assert!(g.world.get_entity(pile).is_err(), "emptied pile despawns");
+    assert!(take_floor_unit(&mut g.world, e, &item));
+    assert!(g.world.get_entity(e).is_err());
+    assert!(!take_floor_unit(&mut g.world, e, &item), "already gone");
 }
 
 #[test]
-fn take_from_a_missing_pile_returns_zero() {
+fn take_floor_unit_leaves_gear_and_programs_on_their_tile() {
     let mut g = game();
-    let who = carrier(&mut g, 2, 2, ids::CORE_FRAGMENT, 1);
-    drop_load(&mut g.world, who);
-    let pile = floor_pile_at(&mut g.world, Position { x: 2, y: 2 }).unwrap();
-    let item = ItemId::from(ids::CORE_FRAGMENT);
-    take_from_pile(&mut g.world, pile, &item, 1);
-    assert_eq!(take_from_pile(&mut g.world, pile, &item, 1), 0);
+    lay_floor_box(&mut g, (0, 0), (1, 0));
+    let gear = FloorThing::Gear(crate::items::GearCopy::plain(ItemId::from(
+        ids::MONOFILAMENT_WHIP,
+    )));
+    let program = FloorThing::Program(crate::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 3,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    });
+    g.set_down(Position { x: 0, y: 0 }, vec![gear, program]);
+    let rows: Vec<_> = g
+        .world
+        .query::<(Entity, &FloorItem)>()
+        .iter(&g.world)
+        .map(|(e, _)| e)
+        .collect();
+    assert_eq!(rows.len(), 2);
+    for e in rows {
+        for id in [ids::MONOFILAMENT_WHIP, ids::CORE_FRAGMENT] {
+            assert!(!take_floor_unit(&mut g.world, e, &ItemId::from(id)));
+        }
+    }
+    assert_eq!(floor_things(&mut g).len(), 2, "both still lie there");
 }
 
-#[test]
-fn a_pile_survives_save_and_load() {
-    let mut g = game();
-    let who = carrier(&mut g, -3, 7, ids::CORE_FRAGMENT, 4);
-    drop_load(&mut g.world, who);
-    let dir = std::env::temp_dir().join("feral-floor-pile-save");
+fn save_and_load(g: &mut Game, name: &str) -> Game {
+    let dir = std::env::temp_dir().join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("floor.bin");
     g.save(&path).unwrap();
-    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    assert_eq!(pile_count(&mut loaded), 1);
-    assert_eq!(
-        pile_items(&mut loaded, -3, 7),
-        vec![(ItemId::from(ids::CORE_FRAGMENT), 4)]
-    );
+    Game::load(&path, &test_assets_dir()).unwrap()
+}
+
+fn a_gear_copy() -> FloorThing {
+    FloorThing::Gear(crate::items::GearCopy::plain(ItemId::from(
+        ids::MONOFILAMENT_WHIP,
+    )))
+}
+
+fn a_downed_program() -> FloorThing {
+    FloorThing::Program(crate::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 3,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    })
 }
 
 #[test]
-fn a_save_without_the_field_loads_with_no_piles() {
+fn floor_items_of_every_kind_survive_save_and_load() {
+    let mut g = game_with_home();
+    lay_floor_box(&mut g, (10, 10), (12, 10));
+    for (x, thing) in [
+        (10, core_unit()),
+        (11, a_gear_copy()),
+        (12, a_downed_program()),
+    ] {
+        g.set_down(Position { x, y: 10 }, vec![thing]);
+    }
+    let before = floor_things(&mut g);
+    assert_eq!(before.len(), 3);
+    let mut loaded = save_and_load(&mut g, "feral-floor-items-save");
+    assert_eq!(floor_things(&mut loaded), before);
+}
+
+/// Loads `g` after splicing an old-format `floor_piles` field into its save:
+/// the field is load-only now, so the writer cannot produce it.
+fn legacy_pile_save(g: &mut Game, name: &str, pile_ron: &str) -> Game {
+    let dir = std::env::temp_dir().join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.bin");
+    g.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("floor_piles"), "never written any more");
+    let spliced = text.replacen(
+        "floor_items:",
+        &format!("floor_piles: [{pile_ron}],\nfloor_items:"),
+        1,
+    );
+    assert_ne!(text, spliced, "the field is serialised by name");
+    std::fs::write(&path, spliced).unwrap();
+    Game::load(&path, &test_assets_dir()).unwrap()
+}
+
+#[test]
+fn an_old_pile_spreads_one_unit_per_tile_on_load() {
+    let mut g = game_with_home();
+    let pile = format!(
+        r#"(position: (6, 6), items: [("{}", 4)])"#,
+        ids::CORE_FRAGMENT
+    );
+    let mut loaded = legacy_pile_save(&mut g, "feral-floor-old-pile", &pile);
+    let things = floor_things(&mut loaded);
+    assert_eq!(things.len(), 4);
+    let cells: std::collections::HashSet<_> = things.iter().map(|(c, _)| *c).collect();
+    assert_eq!(cells.len(), 4, "distinct cells");
+    assert!(things.iter().all(|(_, t)| *t == core_unit()));
+}
+
+#[test]
+fn an_old_pile_too_big_for_its_pocket_spills_into_the_pack_on_load() {
+    let mut g = game();
+    lay_floor_box(&mut g, (0, 0), (1, 0));
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    let pile = format!(
+        r#"(position: (0, 0), items: [("{}", 10)])"#,
+        ids::CORE_FRAGMENT
+    );
+    let mut loaded = legacy_pile_save(&mut g, "feral-floor-old-pile-big", &pile);
+    assert_eq!(floor_things(&mut loaded).len(), 2);
+    assert_eq!(held(&loaded, &ItemId::from(ids::CORE_FRAGMENT)), before + 8);
+}
+
+#[test]
+fn a_save_without_floor_items_loads_with_none() {
     let data: crate::save::SaveData = {
         let mut g = game();
-        let dir = std::env::temp_dir().join("feral-floor-pile-old");
+        let dir = std::env::temp_dir().join("feral-floor-items-old");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("old.bin");
         g.save(&path).unwrap();
         crate::save::load_from_file(&path).unwrap()
     };
     let text = ron::to_string(&data).unwrap();
-    let stripped = text.replacen("floor_piles:[],", "", 1);
+    let stripped = text.replacen("floor_items:[],", "", 1);
     assert_ne!(text, stripped, "the field is serialised by name");
     let parsed: crate::save::SaveData = ron::from_str(&stripped).unwrap();
-    assert!(parsed.floor_piles.is_empty());
+    assert!(parsed.floor_items.is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +231,7 @@ fn load() -> Carrying {
 
 /// A staff program on its own tile, holding a load.
 fn loaded_staff(game: &mut Game, x: i32, y: i32) -> Entity {
+    floor_the_pocket(game);
     let worker = spawn_tamed(game, 100, 3);
     game.world
         .entity_mut(worker)
@@ -154,14 +239,34 @@ fn loaded_staff(game: &mut Game, x: i32, y: i32) -> Entity {
     worker
 }
 
+/// A builder re-posted from a stranded haul keeps its stale `Stranded`; the
+/// load it then lifts for a site must not be set down by the stranded pass.
+#[test]
+fn a_builder_with_a_stale_stranded_keeps_its_load() {
+    let mut g = game_with_home();
+    let worker = loaded_staff(&mut g, 6, 6);
+    g.world
+        .entity_mut(worker)
+        .insert(crate::components::Stranded { since: 0 });
+    for _ in 0..crate::tuning::STRANDED_SET_DOWN_TICKS + 5 {
+        g.tick();
+    }
+    g.set_down_stranded_loads();
+    assert!(g.world.get::<Carrying>(worker).is_some());
+    assert!(floor_things(&mut g).is_empty());
+}
+
 fn assert_dropped(game: &mut Game, worker: Entity, x: i32, y: i32) {
     assert!(
         game.world.get::<Carrying>(worker).is_none(),
         "still holding the load"
     );
-    assert_eq!(
-        pile_items(game, x, y),
-        vec![(ItemId::from(ids::CORE_FRAGMENT), LOAD)]
+    let things = floor_things(game);
+    assert_eq!(things.len(), LOAD as usize);
+    assert!(things.iter().all(|(_, t)| *t == core_unit()));
+    assert!(
+        things.iter().any(|(c, _)| *c == (x, y)),
+        "its own tile first"
     );
 }
 
@@ -218,6 +323,7 @@ fn pinning_for_study_drops_the_load() {
     give(&mut g, &ItemId::from(ids::CORE_FRAGMENT), 50);
     place_now(&mut g, "research_node", 1, -3).unwrap();
     let station = g.find_blocking_structure_at(1, -3).unwrap();
+    floor_the_pocket(&mut g);
     let worker = spawn_tamed(&mut g, 100, 3);
     g.world.entity_mut(worker).insert(load());
     let at = *g.world.get::<Position>(worker).unwrap();
@@ -238,6 +344,7 @@ fn ordered_carrier(game: &mut Game) -> Entity {
         game.world.get::<Task>(worker).is_some(),
         "precondition: posted by the scheduler"
     );
+    floor_the_pocket(game);
     game.world.entity_mut(worker).insert(load());
     worker
 }
@@ -253,8 +360,9 @@ fn freeing_a_downed_carrier_drops_the_load() {
     assert_dropped(&mut g, worker, at.x, at.y);
 }
 
-fn put_pile(game: &mut Game, x: i32, y: i32, item: &str, qty: u32) {
-    spawn_floor_pile(&mut game.world, Position { x, y }, ItemId::from(item), qty);
+fn put_item(game: &mut Game, x: i32, y: i32, thing: FloorThing) {
+    lay_floor_box(game, (x, y), (x, y));
+    game.set_down(Position { x, y }, vec![thing]);
 }
 
 fn name_of(game: &Game, item: &str) -> String {
@@ -267,41 +375,45 @@ fn name_of(game: &Game, item: &str) -> String {
 }
 
 #[test]
-fn a_pile_in_base_space_has_a_view_row_naming_its_contents() {
+fn a_floor_item_in_base_space_has_a_view_row_naming_it() {
     let mut g = game();
     stand_in_base_at(&mut g, 0, 0);
-    put_pile(&mut g, 2, 1, ids::CORE_FRAGMENT, 3);
-    let rows = g.floor_piles();
+    put_item(&mut g, 2, 1, core_unit());
+    let rows = g.floor_items();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].pos, (2, 1));
-    assert_eq!(rows[0].items, vec![(name_of(&g, ids::CORE_FRAGMENT), 3)]);
+    assert_eq!(rows[0].name, name_of(&g, ids::CORE_FRAGMENT));
+    assert!(matches!(rows[0].look, crate::views::FloorLook::Item(_)));
 }
 
 #[test]
-fn a_pile_is_not_a_view_row_on_a_zone_surface() {
+fn a_floor_item_is_not_a_view_row_on_a_zone_surface() {
     let mut g = game();
-    put_pile(&mut g, 2, 1, ids::CORE_FRAGMENT, 3);
-    assert!(g.floor_piles().is_empty());
+    put_item(&mut g, 2, 1, core_unit());
+    assert!(g.floor_items().is_empty());
 }
 
 #[test]
-fn examining_a_pile_names_what_it_holds() {
+fn examining_a_floor_item_names_it() {
     let mut g = game();
     stand_in_base_at(&mut g, 0, 0);
-    g.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .lay_floor(1, 0);
-    put_pile(&mut g, 1, 0, ids::CORE_FRAGMENT, 3);
-    let line = g.describe_base_rock(1, 0, 5).expect("a pile answers");
+    put_item(&mut g, 1, 0, core_unit());
+    let line = g.describe_base_rock(1, 0, 5).expect("a floor item answers");
     let name = name_of(&g, ids::CORE_FRAGMENT);
-    assert!(
-        line.starts_with(&format!("A pile on the floor: 3 {name}")),
-        "{line}"
-    );
+    assert!(line.starts_with(&format!("{name} on the floor")), "{line}");
 }
 
 #[test]
-fn examining_a_pile_on_a_finish_names_both() {
+fn examining_a_downed_program_on_the_floor_names_it() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 0, 0);
+    put_item(&mut g, 1, 0, a_downed_program());
+    let line = g.describe_base_rock(1, 0, 5).expect("a floor item answers");
+    assert!(line.contains(", downed, on the floor"), "{line}");
+}
+
+#[test]
+fn examining_a_floor_item_on_a_finish_names_both() {
     let mut g = game();
     stand_in_base_at(&mut g, 0, 0);
     {
@@ -309,10 +421,14 @@ fn examining_a_pile_on_a_finish_names_both() {
         grid.lay_floor(1, 0);
         assert!(grid.set_finish(1, 0, FloorId::from("cobalt_carpet")));
     }
-    put_pile(&mut g, 1, 0, ids::CORE_FRAGMENT, 3);
+    g.set_down(Position { x: 1, y: 0 }, vec![core_unit()]);
     let line = g.describe_base_rock(1, 0, 5).unwrap();
     assert!(line.contains("Cobalt Carpet underfoot"), "{line}");
-    assert!(line.contains("; a pile on the floor: 3 "), "{line}");
+    assert!(
+        line.contains("; Core Fragment on the floor")
+            || line.contains("; ") && line.contains(" on the floor"),
+        "{line}"
+    );
 }
 
 /// A walled one-cell room on the real grid with one door and a bed in it, on the
@@ -327,10 +443,17 @@ fn walled_room_with_a_bed(game: &mut Game) {
     spawn_structure_at(game, "defrag_bay", 2, 2);
 }
 
+/// Floor under the whole starting pocket: `open` cells are walkable but a
+/// set-down only lands on laid floor.
+fn floor_the_pocket(game: &mut Game) {
+    lay_floor_box(game, (-10, -10), (10, 10));
+}
+
 fn game_with_home() -> Game {
     let mut game = game();
     place_home(&mut game);
     stand_in_base(&mut game);
+    floor_the_pocket(&mut game);
     game
 }
 
@@ -384,4 +507,340 @@ fn a_fine_workshop_works_faster_than_the_commons() {
 #[test]
 fn a_machine_in_quarters_gets_no_workshop_scale() {
     assert_eq!(lathe_ticks(Some((8, true))), lathe_ticks(None));
+}
+
+#[test]
+fn nearest_free_cells_takes_the_drop_point_first_then_walks_outward() {
+    let corridor = |c: (i32, i32)| c.1 == 0 && (0..5).contains(&c.0);
+    assert_eq!(
+        nearest_free_cells((2, 0), 3, corridor, corridor),
+        vec![(2, 0), (1, 0), (3, 0)]
+    );
+}
+
+#[test]
+fn nearest_free_cells_never_reaches_past_what_cannot_be_crossed() {
+    let free = |c: (i32, i32)| c == (2, 0) || c == (0, 2);
+    let crossable = |c: (i32, i32)| c.0 == 0 && (0..=2).contains(&c.1);
+    assert_eq!(nearest_free_cells((0, 0), 2, free, crossable), vec![(0, 2)]);
+}
+
+fn scrap() -> FloorThing {
+    FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT))
+}
+
+#[test]
+fn set_down_spreads_one_unit_per_tile_nearest_first() {
+    let mut g = game();
+    lay_floor_box(&mut g, (0, 0), (4, 0));
+    g.set_down(Position { x: 2, y: 0 }, vec![scrap(); 3]);
+    let cells: Vec<_> = floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells, vec![(1, 0), (2, 0), (3, 0)]);
+}
+
+#[test]
+fn set_down_skips_a_tile_that_already_holds_an_item_or_a_structure() {
+    let mut g = game();
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    lay_floor_box(&mut g, (0, 0), (3, 0));
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap()]);
+    spawn_structure_at(&mut g, "wall", 1, 0); // anchors a wall: not free and not crossable
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap()]);
+    assert_eq!(
+        floor_things(&mut g).len(),
+        1,
+        "nothing past the wall is reachable"
+    );
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 1);
+}
+
+#[test]
+fn a_drop_beside_a_wall_never_lands_behind_it() {
+    let mut g = game();
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    // Walls stand on laid floor, so only the wall check keeps the far side out.
+    lay_floor_box(&mut g, (0, 0), (2, 1));
+    spawn_structure_at(&mut g, "wall", 1, 0);
+    spawn_structure_at(&mut g, "wall", 1, 1);
+    g.set_down(Position { x: 0, y: 0 }, vec![scrap(); 3]);
+    let cells: Vec<_> = floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells, vec![(0, 0), (0, 1)], "(2,0) is behind the wall");
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 1);
+}
+
+#[test]
+fn set_down_with_no_free_floor_puts_items_in_the_pack_and_says_so() {
+    let mut g = game(); // empty BaseGrid: nothing is floor
+    let before = held(&g, &ItemId::from(ids::CORE_FRAGMENT));
+    g.set_down(Position { x: 5, y: 5 }, vec![scrap(); 2]);
+    assert_eq!(held(&g, &ItemId::from(ids::CORE_FRAGMENT)), before + 2);
+    assert!(
+        g.message_history(5)
+            .iter()
+            .any(|e| e.text.contains("goes into your pack"))
+    );
+}
+
+#[test]
+fn a_program_with_no_floor_goes_to_the_downed_store_then_a_rack() {
+    use crate::components::{DownedPrograms, Racked};
+    let mut g = game();
+    let player = g.player_entity();
+    let program = || crate::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 3,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    let rack = spawn_structure_at(&mut g, "quarantine_rack", 9, 9);
+    g.world.entity_mut(rack).insert(Racked::default());
+    let at = Position { x: 5, y: 5 };
+
+    g.set_down(at, vec![FloorThing::Program(program())]);
+    assert_eq!(g.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(g.world.get::<Racked>(rack).unwrap().0.is_empty());
+
+    g.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(); crate::tuning::MAX_DOWNED_PROGRAMS];
+    g.set_down(at, vec![FloorThing::Program(program())]);
+    assert_eq!(g.world.get::<Racked>(rack).unwrap().0.len(), 1);
+    assert_eq!(
+        g.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS
+    );
+    assert!(
+        g.message_history(5)
+            .iter()
+            .any(|e| e.text.contains("onto the Quarantine Rack"))
+    );
+}
+
+fn party_cell(g: &Game) -> (i32, i32) {
+    g.base_pos().expect("standing in base space")
+}
+
+/// The Home stands on the origin, so the party stands off it where its own
+/// tile is free floor.
+fn hands_game() -> Game {
+    let mut g = game_with_home();
+    stand_in_base_at(&mut g, 4, 4);
+    g
+}
+
+fn give_core(g: &mut Game, qty: u32) {
+    let p = g.player_entity();
+    let mut inv = g.world.get_mut::<crate::components::Inventory>(p).unwrap();
+    let have = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
+    inv.take(ItemId::from(ids::CORE_FRAGMENT), have);
+    inv.add(ItemId::from(ids::CORE_FRAGMENT), qty);
+}
+
+fn core_in_pack(g: &Game) -> u32 {
+    let p = g.player_entity();
+    g.world
+        .get::<crate::components::Inventory>(p)
+        .unwrap()
+        .count(&ItemId::from(ids::CORE_FRAGMENT))
+}
+
+fn core_choice() -> PutDownChoice {
+    PutDownChoice::Item(ItemId::from(ids::CORE_FRAGMENT))
+}
+
+#[test]
+fn putting_down_takes_one_unit_onto_the_players_tile() {
+    let mut g = hands_game();
+    give_core(&mut g, 3);
+    let before = core_in_pack(&g);
+    g.put_down(&core_choice()).unwrap();
+    assert_eq!(core_in_pack(&g), before - 1);
+    assert_eq!(floor_things(&mut g), vec![(party_cell(&g), core_unit())]);
+}
+
+#[test]
+fn putting_down_overflows_to_the_nearest_free_tile_when_underfoot_is_taken() {
+    let mut g = hands_game();
+    give_core(&mut g, 3);
+    g.put_down(&core_choice()).unwrap();
+    g.put_down(&core_choice()).unwrap();
+    let cells: std::collections::HashSet<_> =
+        floor_things(&mut g).into_iter().map(|(c, _)| c).collect();
+    assert_eq!(cells.len(), 2, "one thing per tile");
+    assert!(cells.contains(&party_cell(&g)));
+}
+
+#[test]
+fn putting_down_with_no_free_floor_moves_nothing() {
+    let mut g = game();
+    stand_in_base_at(&mut g, 4, 4);
+    give_core(&mut g, 3);
+    let before = core_in_pack(&g);
+    let err = g.put_down(&core_choice()).unwrap_err();
+    assert!(err.contains("no free floor"), "{err}");
+    assert_eq!(core_in_pack(&g), before);
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn putting_down_what_is_no_longer_held_refuses() {
+    let mut g = hands_game();
+    let err = g
+        .put_down(&PutDownChoice::Gear(crate::items::GearCopy::plain(
+            ItemId::from(ids::MONOFILAMENT_WHIP),
+        )))
+        .unwrap_err();
+    assert_eq!(err, "That's no longer in your pack.");
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn put_down_options_list_items_then_gear_then_programs() {
+    let mut g = hands_game();
+    give_core(&mut g, 2);
+    let p = g.player_entity();
+    g.world
+        .get_mut::<crate::components::GearCopies>(p)
+        .unwrap()
+        .add(
+            crate::items::GearCopy::plain(ItemId::from(ids::MONOFILAMENT_WHIP)),
+            1,
+        );
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0
+        .push(prog);
+    let rows = g.put_down_options();
+    let core = rows
+        .iter()
+        .position(|r| r.choice == core_choice())
+        .expect("core row");
+    assert!(rows[core].label.ends_with("x2"), "{}", rows[core].label);
+    let gear = rows
+        .iter()
+        .position(|r| matches!(r.choice, PutDownChoice::Gear(_)))
+        .expect("gear row");
+    let prog = rows
+        .iter()
+        .position(|r| r.choice == PutDownChoice::Program(0))
+        .expect("program row");
+    assert!(core < gear && gear < prog);
+    assert!(
+        rows[prog].label.starts_with(char::is_uppercase),
+        "{}",
+        rows[prog].label
+    );
+}
+
+#[test]
+fn putting_down_a_program_moves_it_out_of_the_store() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0
+        .push(prog);
+    g.put_down(&PutDownChoice::Program(0)).unwrap();
+    assert!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert_eq!(
+        floor_things(&mut g),
+        vec![(party_cell(&g), a_downed_program())]
+    );
+}
+
+fn lay_under_party(g: &mut Game, thing: FloorThing) {
+    let c = party_cell(g);
+    g.set_down(Position { x: c.0, y: c.1 }, vec![thing]);
+    assert_eq!(floor_things(g)[0].0, c);
+}
+
+#[test]
+fn picking_up_returns_the_thing_underfoot_to_its_store() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+
+    lay_under_party(&mut g, core_unit());
+    let before = core_in_pack(&g);
+    g.pick_up().unwrap();
+    assert_eq!(core_in_pack(&g), before + 1);
+    assert!(floor_things(&mut g).is_empty());
+
+    lay_under_party(&mut g, a_gear_copy());
+    g.pick_up().unwrap();
+    let FloorThing::Gear(copy) = a_gear_copy() else {
+        unreachable!()
+    };
+    assert_eq!(
+        g.world
+            .get::<crate::components::GearCopies>(p)
+            .unwrap()
+            .count(&copy),
+        1
+    );
+
+    lay_under_party(&mut g, a_downed_program());
+    g.pick_up().unwrap();
+    assert_eq!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .len(),
+        1
+    );
+    assert!(floor_things(&mut g).is_empty());
+}
+
+#[test]
+fn picking_up_a_program_at_the_cap_is_refused_and_leaves_it() {
+    let mut g = hands_game();
+    let p = g.player_entity();
+    let FloorThing::Program(prog) = a_downed_program() else {
+        unreachable!()
+    };
+    g.world
+        .get_mut::<crate::components::DownedPrograms>(p)
+        .unwrap()
+        .0 = vec![prog; crate::tuning::MAX_DOWNED_PROGRAMS];
+    lay_under_party(&mut g, a_downed_program());
+    let err = g.pick_up().unwrap_err();
+    assert!(err.contains("downed store is full"), "{err}");
+    assert_eq!(floor_things(&mut g).len(), 1, "the program stays");
+    assert_eq!(
+        g.world
+            .get::<crate::components::DownedPrograms>(p)
+            .unwrap()
+            .0
+            .len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS
+    );
+}
+
+#[test]
+fn nothing_underfoot_refuses_pick_up() {
+    let mut g = hands_game();
+    assert_eq!(g.pick_up().unwrap_err(), "There's nothing here to pick up.");
+}
+
+#[test]
+fn pick_up_and_put_down_refuse_outside_base_space() {
+    let mut g = game();
+    give_core(&mut g, 1);
+    assert!(g.put_down(&core_choice()).is_err());
+    assert!(g.pick_up().is_err());
 }

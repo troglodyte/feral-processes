@@ -2,6 +2,7 @@
     id: "recursion_blade",
     fx: Some("slash"),
     name: "Recursion Blade",
+    glyph: Some('\''),
     description: "Standard weapon. Trades some bite for plating that folds back over you.",
     value: Some(14),
     equipment: Some((Weapon, (atk: 2, mitigation: 3, damage: (min: 3, max: 7), accuracy: 2))),

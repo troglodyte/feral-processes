@@ -2,6 +2,7 @@
     id: "scatter_lance",
     fx: Some("laser_pulse"),
     name: "Scatter Lance",
+    glyph: Some('\''),
     description: "Broadcasts the payload across a whole hostile group. It hits softer than a directed lance, and it hits everything.",
     value: Some(20),
     equipment: Some((Weapon, (atk: 2, damage: (min: 3, max: 6), accuracy: 1))),

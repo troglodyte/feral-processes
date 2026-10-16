@@ -1,6 +1,7 @@
 (
     id: "null_weave",
     name: "Null Weave",
+    glyph: Some('"'),
     description: "Standard armor. Weave that hits back a little as it absorbs.",
     value: Some(14),
     equipment: Some((Armor, (mitigation: 6, atk: 1))),

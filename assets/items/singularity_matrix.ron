@@ -1,6 +1,7 @@
 (
     id: "singularity_matrix",
     name: "Singularity Matrix",
+    glyph: Some(':'),
     description: "Premium module. Everything at once, and the rarest thing you can compile.",
     value: Some(120),
     equipment: Some((Module, (atk: 3, mitigation: 9, decompiler: 3))),

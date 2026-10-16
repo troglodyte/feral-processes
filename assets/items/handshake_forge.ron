@@ -1,6 +1,7 @@
 (
     id: "handshake_forge",
     name: "Handshake Forge",
+    glyph: Some(':'),
     description: "Scavenged module. Fakes the greeting a hostile program expects, easing a capture.",
     value: Some(8),
     equipment: Some((Module, (decompiler: 2))),

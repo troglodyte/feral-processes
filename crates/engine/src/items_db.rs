@@ -124,6 +124,9 @@ pub struct TrapDef {
 /// it — see `Game::base_stock`.
 const TAG_LEN: usize = 2;
 
+/// The mark an item without its own `glyph` leaves on the base floor.
+pub const DEFAULT_FLOOR_GLYPH: char = '*';
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemDef {
     pub id: ItemId,
@@ -272,6 +275,12 @@ pub struct ItemDef {
     /// letters, so a column of tags never shows one twice.
     #[serde(default)]
     pub abbrev: Option<String>,
+    /// The one character this item is drawn as when it lies on the base
+    /// floor. Optional: `ItemDef::floor_glyph` falls back to
+    /// `DEFAULT_FLOOR_GLYPH`. `#[serde(default)]` so existing and modded
+    /// items keep parsing.
+    #[serde(default)]
+    pub glyph: Option<char>,
     /// Names the battle effect (`assets/effects/`) a swing with this weapon
     /// plays. Presentational: the engine copies it onto a `BoltCue` and never
     /// reads it. `#[serde(default)]`, absent meaning the renderer's default.
@@ -296,6 +305,11 @@ impl ItemDef {
             };
         }
         Some((slot, stats))
+    }
+
+    /// The character this item is drawn as on the base floor.
+    pub fn floor_glyph(&self) -> char {
+        self.glyph.unwrap_or(DEFAULT_FLOOR_GLYPH)
     }
 
     /// The short tag the base pane's PRODUCTION rows list this item under.
@@ -634,6 +648,8 @@ impl ItemDb {
                     // family because no per-disk `abbrev` could be authored
                     // for a derived item anyway.
                     abbrev: None,
+                    // One shared mark: a disk has no per-item art to author.
+                    glyph: Some(','),
                     fx: None,
                 },
             );
@@ -721,6 +737,8 @@ impl ItemDb {
                     // one shipped case — because there is no `ToolDef` field
                     // to author this one from.
                     abbrev: None,
+                    // One shared mark: no `ToolDef` field to author one from.
+                    glyph: Some(','),
                     fx: None,
                 },
             );

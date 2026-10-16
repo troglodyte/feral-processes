@@ -2,6 +2,7 @@
     id: "black_ice_pick",
     fx: Some("slash"),
     name: "Black ICE Pick",
+    glyph: Some('\''),
     description: "Premium weapon. Built for black ICE, and it captures as well as it kills.",
     value: Some(90),
     equipment: Some((Weapon, (atk: 3, decompiler: 2, damage: (min: 6, max: 9), accuracy: 2))),

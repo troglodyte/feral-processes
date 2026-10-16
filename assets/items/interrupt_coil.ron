@@ -2,6 +2,7 @@
     id: "interrupt_coil",
     fx: Some("laser_pulse"),
     name: "Interrupt Coil",
+    glyph: Some('\''),
     description: "Scavenged weapon. Holds a charge across the round boundary and dumps it the moment the next one opens.",
     // Priced above its stat line on purpose: three points of ATK is a
     // scavenged weapon's worth, and the routine it carries is the rest.

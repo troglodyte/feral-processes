@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 
 use crate::base_grid::BaseGrid;
-use crate::game::base::floor::drop_load;
 use crate::game::base::hauling::NoPost;
 use crate::game::pursuit::walk_field;
 use crate::resources::ActiveResearch;
@@ -316,7 +315,7 @@ impl Game {
         // free loop does for a body that is no longer in the pool: the
         // scheduler re-posts someone else next tick exactly as it does when
         // staff shrinks any other way.
-        drop_load(&mut self.world, program);
+        self.drop_load(program);
         self.world
             .entity_mut(program)
             .insert(components::UnderStudy { station })

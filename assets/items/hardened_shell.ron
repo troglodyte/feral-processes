@@ -1,6 +1,7 @@
 (
     id: "hardened_shell",
     name: "Hardened Shell",
+    glyph: Some('"'),
     description: "Standard armor. Solid, unglamorous protection.",
     value: Some(12),
     equipment: Some((Armor, (mitigation: 9))),

@@ -1,6 +1,7 @@
 (
     id: "nullsteel_plate",
     name: "Nullsteel Plate",
+    glyph: Some('"'),
     description: "Premium armor. Plating that leaves hostile ICE unsure you're there.",
     value: Some(90),
     equipment: Some((Armor, (mitigation: 9, decompiler: 2))),

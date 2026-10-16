@@ -1,6 +1,7 @@
 (
     id: "oracle_core",
     name: "Oracle Core",
+    glyph: Some(':'),
     description: "Premium module. Predicts the opening before it appears.",
     value: Some(90),
     equipment: Some((Module, (decompiler: 3, atk: 2))),

@@ -290,7 +290,7 @@ impl Game {
         // Away, a body is out of the labour pool, so nothing would ever
         // relieve a hauler of a load it took with it.
         for &member in members {
-            crate::game::base::floor::drop_load(&mut self.world, member);
+            self.drop_load(member);
         }
         let names: Vec<String> = members.iter().map(|&e| self.creature_label(e)).collect();
         self.queue_squad_walk(members, true);

@@ -711,6 +711,16 @@ pub struct Hopper {
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
 
+/// A loose floor item an idle program is carrying to a stockpile cell.
+///
+/// The cleanup carry state, kept separate from `Carrying`, which stays one
+/// `(item, qty)`: a tidied thing may be a gear copy or a downed program, and
+/// a hauler's trip has a capacity this errand does not. `Game::drop_load`
+/// ends both holds, so every path that stops a carrier holding sets this
+/// down too.
+#[derive(Component, Clone, Debug)]
+pub struct Tidying(pub crate::items::FloorThing);
+
 /// How many breedings deep a program's lineage runs. Absent reads as 0:
 /// wild, tamed, bought and fused programs are all generation 0, and only a
 /// hatched child carries one.
@@ -943,16 +953,14 @@ pub struct Carrying {
     pub qty: u32,
 }
 
-/// Items on a base tile's floor: what an interrupted carrier let go of, until
-/// a hauler brings it home. One pile per tile (`base::floor::spawn_floor_pile`
-/// merges), no capacity so a drop can never fail, never decays, and despawned
-/// the moment it is empty. Deliberately has no `Glyph`: the many queries over
-/// `(&Position, &Glyph)` must not see it, and the renderer reads
-/// `Game::floor_piles` instead.
-#[derive(Component, Clone, Debug, Default)]
-pub struct FloorPile {
-    pub items: std::collections::BTreeMap<ItemId, u32>,
-}
+/// One thing on a base tile's floor, one per tile
+/// (`base::floor::spawn_floor_item` is the only writer and asserts the tile
+/// is empty), so a drop spreads over tiles rather than stacking. Deliberately
+/// has no `Glyph`, for the reason the many queries over
+/// `(&Position, &Glyph)` must not see it: the renderer reads
+/// `Game::floor_items` instead.
+#[derive(Component, Clone, Debug)]
+pub struct FloorItem(pub crate::items::FloorThing);
 
 /// A posted program that found no route to where it is trying to get, and the
 /// tick it stopped being able to. Written and cleared by
@@ -986,6 +994,14 @@ pub struct Stranded {
     /// The `GameClock` tick the worker entered the state on.
     pub since: u64,
 }
+
+/// Marks a stranded carrier whose load has been held past
+/// `tuning::STRANDED_SET_DOWN_TICKS` on a route that is still failing.
+/// Written only by `haul_step_system`'s route-failed branch and consumed by
+/// `Game::set_down_stranded_loads`, so the set-down keeps that branch's
+/// gate: a stale `Stranded` left on a re-posted body cannot trigger it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SetDownLoad;
 
 /// A posted walker paying `tuning::SQUEEZE_EXTRA_TICKS` to step into a cell
 /// another body holds — the step it is waiting to take, and when the wait
@@ -1234,7 +1250,7 @@ pub enum TaskKind {
     /// it mid-trip, because those units have already left the shelf they
     /// came off and the builder is the one walking them to the site. Paths
     /// that free the body anyway (displacement, sale) set the load on the
-    /// floor (`floor::drop_load`) for a hauler to bring home.
+    /// floor (`Game::drop_load`) for a hauler to bring home.
     Construct,
 }
 

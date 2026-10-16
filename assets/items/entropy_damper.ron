@@ -1,6 +1,7 @@
 (
     id: "entropy_damper",
     name: "Entropy Damper",
+    glyph: Some(':'),
     description: "Standard module. Steadies you while you work an ICE wall open.",
     value: Some(15),
     equipment: Some((Module, (decompiler: 2, mitigation: 3))),

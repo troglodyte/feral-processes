@@ -1427,15 +1427,15 @@ fn a_second_cronjob_on_one_structure_displaces_the_first() {
     );
 }
 
-/// How much `cache_grain` lies on the floor at `at`, if there is a pile.
+/// How many `cache_grain` units lie on the floor, if any do and one is on `at`.
 fn load_on_floor(game: &mut Game, at: Position) -> Option<u32> {
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, at)?;
-    game.world
-        .get::<crate::components::FloorPile>(pile)
-        .unwrap()
-        .items
-        .get(&ItemId::from("cache_grain"))
-        .copied()
+    let grain = crate::items::FloorThing::Item(ItemId::from("cache_grain"));
+    let cells: Vec<_> = floor_things(game)
+        .into_iter()
+        .filter(|(_, t)| *t == grain)
+        .map(|(c, _)| c)
+        .collect();
+    (cells.contains(&(at.x, at.y))).then_some(cells.len() as u32)
 }
 
 fn hand_a_load(game: &mut Game, who: Entity) -> Position {

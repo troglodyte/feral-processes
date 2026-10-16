@@ -528,6 +528,7 @@ fn a_called_trooper_drops_its_load_on_its_base_tile() {
     let mut game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     terminal_at(&mut game, 10, 10);
     let trooper = trooper_at(&mut game, 11, 10, 0);
+    lay_floor_box(&mut game, (9, 9), (13, 11));
     game.world
         .entity_mut(trooper)
         .insert(crate::components::Carrying {
@@ -543,13 +544,10 @@ fn a_called_trooper_drops_its_load_on_its_base_tile() {
             .get::<crate::components::Carrying>(trooper)
             .is_none()
     );
-    let pile = crate::game::base::floor::floor_pile_at(&mut game.world, Position { x: 11, y: 10 })
-        .expect("a pile on the trooper's base tile");
-    assert_eq!(
-        game.world
-            .get::<crate::components::FloorPile>(pile)
-            .unwrap()
-            .items,
-        std::collections::BTreeMap::from([(ItemId::from(ids::CORE_FRAGMENT), 3)])
-    );
+    // The trooper stood on the terminal's own footprint, which is no place to
+    // set anything down, so the units land beside it.
+    let units = floor_things(&mut game);
+    assert_eq!(units.len(), 3);
+    let core = crate::items::FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT));
+    assert!(units.iter().all(|(_, t)| *t == core));
 }

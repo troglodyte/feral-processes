@@ -1,6 +1,7 @@
 (
     id: "redundant_bank",
     name: "Redundant Bank",
+    glyph: Some(':'),
     description: "Scavenged module. Capacity held back and idle, for the moment the wearer needs it most.",
     value: Some(120),
     equipment: Some((Module, (mitigation: 3))),

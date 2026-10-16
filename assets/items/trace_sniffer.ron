@@ -1,6 +1,7 @@
 (
     id: "trace_sniffer",
     name: "Trace Sniffer",
+    glyph: Some(':'),
     description: "Standard module. Reads a target's weak points before you commit.",
     value: Some(13),
     equipment: Some((Module, (decompiler: 3))),

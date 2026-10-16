@@ -10,7 +10,7 @@
 //! run to run, or the same base produces a different save file depending
 //! on insertion history alone.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,17 @@ pub struct BaseGrid {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     finishes: BTreeMap<(i32, i32), FloorId>,
+    /// Cells the player has zoned as a stockpile: a fourth mark beside the
+    /// dig, floor and finish marks, and like a finish never stored in
+    /// `cells`, so `is_floor`, `walkable` and structure placement keep
+    /// answering for a plain `Floor`. A zone is a standing preference, not a
+    /// property of the cell: building over a marked cell leaves the mark in
+    /// place, and the floor-item search simply finds no free tile there.
+    ///
+    /// `#[serde(default)]`, additive under field-named RON — no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    stockpiles: BTreeSet<(i32, i32)>,
 }
 
 impl BaseGrid {
@@ -209,6 +220,31 @@ impl BaseGrid {
         }
         self.finishes.insert((x, y), id);
         true
+    }
+
+    /// Whether `(x, y)` is zoned as a stockpile.
+    pub fn is_stockpile(&self, x: i32, y: i32) -> bool {
+        self.stockpiles.contains(&(x, y))
+    }
+
+    /// Zones or un-zones `(x, y)`. Marking is refused — and changes nothing —
+    /// unless the cell is laid floor; clearing always succeeds, so a mark
+    /// left under a structure can still be taken off.
+    pub(crate) fn set_stockpile(&mut self, x: i32, y: i32, on: bool) -> bool {
+        if !on {
+            self.stockpiles.remove(&(x, y));
+            return true;
+        }
+        if !self.is_floor(x, y) {
+            return false;
+        }
+        self.stockpiles.insert((x, y));
+        true
+    }
+
+    /// Every stockpile cell, in `(x, y)` order.
+    pub fn stockpile_cells(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
+        self.stockpiles.iter().copied()
     }
 
     /// Strips `(x, y)`'s finish, if it has one, leaving the cell `Floor`.

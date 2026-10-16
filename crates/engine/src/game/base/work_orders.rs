@@ -27,7 +27,6 @@ use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
-use crate::game::base::floor::drop_load;
 use crate::game::base::hauling;
 use crate::game::base::lines::{self, Line};
 use crate::game::base::offshift;
@@ -751,15 +750,21 @@ pub(crate) fn wander_step(from: Position, index: usize, step: u64) -> Option<Pos
 }
 
 /// How many of `item` the **base** is holding — every Depot
-/// (`StructureDef::stores`) and every machine output buffer.
+/// (`StructureDef::stores`), every machine output buffer, and every plain
+/// item on a stockpile cell.
 ///
 /// Deliberately not the player's inventory: an order says what the base
 /// should hold, and where it holds it does not matter. What you are carrying
 /// is yours.
 pub(crate) fn base_holding(game: &Game, item: &ItemId) -> u32 {
-    stock::output_buffers(game)
+    let shelved: u32 = stock::output_buffers(game)
         .map(|(_, s)| s.output.get(item).copied().unwrap_or(0))
-        .sum()
+        .sum();
+    let piled = stock::stockpiled(game)
+        .iter()
+        .filter(|(_, _, held)| held == item)
+        .count() as u32;
+    shelved + piled
 }
 
 /// Every item the queue has asked for, each order's own item together with
@@ -972,6 +977,10 @@ impl Game {
             self.drift_idle_staff(&walkers, &amenities, &bays);
         }
         self.assign_base_labour(wanted, &lines, &staff, &amenities);
+        // After the pass rather than at the end of it: `assign_base_labour`
+        // has early returns, and a body posted by any other route still
+        // must not keep a tidied item through its job.
+        self.set_down_posted_tidiers();
     }
 
     /// The posting half of `schedule_base_labour` alone, for a change the
@@ -995,6 +1004,10 @@ impl Game {
         let wanted = self.base_wants(&lines, &staff);
         let amenities = self.amenities();
         self.assign_base_labour(wanted, &lines, &staff, &amenities);
+        // After the pass rather than at the end of it: `assign_base_labour`
+        // has early returns, and a body posted by any other route still
+        // must not keep a tidied item through its job.
+        self.set_down_posted_tidiers();
     }
 
     /// Every want the base holds this pass, in priority order — **the
@@ -1488,7 +1501,7 @@ impl Game {
         for &worker in staff {
             if !self.is_on_shift(worker, amenities) {
                 self.world.entity_mut(worker).remove::<Task>();
-                drop_load(&mut self.world, worker);
+                self.drop_load(worker);
             }
         }
         let mut matched: Vec<Option<(Entity, TaskKind)>> = vec![None; pool.len()];
@@ -1500,7 +1513,7 @@ impl Game {
         for (body, &worker) in pool.iter().enumerate() {
             if held[body].is_some() && held[body] != matched[body] {
                 self.world.entity_mut(worker).remove::<Task>();
-                drop_load(&mut self.world, worker);
+                self.drop_load(worker);
             }
         }
 
@@ -2351,7 +2364,9 @@ impl Game {
     /// what everyone else gets. There are two such errands and **repair
     /// outranks an amenity** — a downed program is not going back to work
     /// whatever its reserves say, so a coherent order between the two is
-    /// the Bay first.
+    /// the Bay first. A third, lowest errand sits between the amenity and the
+    /// wander: with a stockpile marked, a body with nothing else to do
+    /// carries a loose floor item to a free cell (`Game::tidy_step`).
     fn drift_idle_staff(
         &mut self,
         staff: &[Entity],
@@ -2421,6 +2436,7 @@ impl Game {
         // `Game::base_bodies` rather than off `staff`, because an idle body
         // that is not in this pass's list (a party member) still holds a
         // cell.
+        let mut board = self.tidy_board();
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -2437,6 +2453,19 @@ impl Game {
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
+            }
+            let sharing = self
+                .world
+                .get::<Position>(worker)
+                .is_some_and(|p| crowded.contains(&(p.x, p.y)));
+            // A sharing body keeps its item through the wander beat; any
+            // other body that may no longer tidy sets it down before the
+            // errands below walk it somewhere else with its hands full.
+            if !sharing
+                && self.world.get::<components::Tidying>(worker).is_some()
+                && !self.may_tidy(worker, amenities)
+            {
+                self.drop_load(worker);
             }
             // **The Bay first, and only once the body has a cell in this
             // space to walk from.** A program beaten on the surface — or
@@ -2455,10 +2484,6 @@ impl Game {
                 .world
                 .get::<Position>(worker)
                 .is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
-            let sharing = self
-                .world
-                .get::<Position>(worker)
-                .is_some_and(|p| crowded.contains(&(p.x, p.y)));
             // **Above the Bay arm**, `components::UnderStudy`'s own doc's
             // reason: the two are disjoint in practice — a benched program
             // cannot be pinned — so the order only states a claim a test can
@@ -2518,6 +2543,19 @@ impl Game {
                 if self.step_respite(worker, amenities).is_err() {
                     self.strand_respite(worker);
                 }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // **Below every errand and above the wander**: tidying is what a
+            // body with nothing else to do does. The wander is what a sharing
+            // body gets, for the reason the rest of the arms are gated.
+            if !sharing
+                && board.is_some()
+                && self.may_tidy(worker, amenities)
+                && board.as_mut().is_some_and(|b| self.tidy_step(worker, b))
+            {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     held.insert((p.x, p.y));
                 }

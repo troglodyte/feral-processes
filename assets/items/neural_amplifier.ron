@@ -1,6 +1,7 @@
 (
     id: "neural_amplifier",
     name: "Neural Amplifier",
+    glyph: Some(':'),
     description: "Researched module. Amplifies the signal a decompile rides in on.",
     value: Some(20),
     equipment: Some((Module, (decompiler: 2))),

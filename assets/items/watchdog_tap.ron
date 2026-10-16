@@ -1,6 +1,7 @@
 (
     id: "watchdog_tap",
     name: "Watchdog Tap",
+    glyph: Some(':'),
     description: "Scavenged module. Bleeds a hostile Overseer's own watchdog line back into the party.",
     // Grants a routine that already ships, which is the case a modder hits
     // most and the one worth having in the shipped set. `watchdog` is

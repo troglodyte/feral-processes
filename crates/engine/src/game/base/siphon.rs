@@ -7,7 +7,6 @@
 //! counts the siphon's supply only while some program holds a marker
 //! pointing at it (`power::ledger`).
 
-use crate::game::base::floor::drop_load;
 use crate::tuning::SIPHON_RELEASE_INTEGRITY_LOSS;
 use crate::*;
 
@@ -64,7 +63,7 @@ impl Game {
         // `note_respites`, which selects on it, would top `unwound_at` up for
         // the whole hold.
         self.return_carried_program(program);
-        drop_load(&mut self.world, program);
+        self.drop_load(program);
         self.world
             .entity_mut(program)
             .insert(components::Siphoned { siphon })

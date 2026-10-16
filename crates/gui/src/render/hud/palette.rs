@@ -88,6 +88,14 @@ pub(crate) const WARN: Color = rgb(0xb8943f);
 /// washes sat 0.11 from it — close enough that a cell the player had marked
 /// and a machine that had stalled read as the same news.
 pub(crate) const PLAN: Color = rgb(0x4a7fd0);
+/// muted green — **a stockpile zone**: floor the player has set aside for
+/// things to be put down on.
+///
+/// Not [`PLAN`], though both are drawn with the same box on the same map: a
+/// plan is work ordered, and it is spent when the crew has done it, while a
+/// stockpile is a standing zone that stays for as long as the base does. One
+/// hue for both would read a finished room's storage as a job still waiting.
+pub(crate) const STOCKPILE: Color = rgb(0x5f8a5a);
 /// white — **where a click sent the party**: the outline on the cell a
 /// pending travel is headed for, or on the hostile it is chasing.
 ///

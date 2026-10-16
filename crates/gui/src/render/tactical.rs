@@ -39,6 +39,10 @@ use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
 
+/// The mark of a disabled body, on the battle map and, for a downed program
+/// lying on the floor, the base map: one constant so the two cannot drift.
+pub(crate) const FALLEN_MARK: (char, Color) = ('x', palette::FALLEN);
+
 /// The ground, by kind. Brightness and nothing else carries passability,
 /// `RockDb`'s rule from base space: hue is spoken for by what is standing
 /// on a cell, and a kind may not spend it.
@@ -771,10 +775,11 @@ pub(super) fn draw_tactical_map(
         let footprint = fallen.footprint.max(1) as f32;
         let cell_px = tile_px * footprint;
         let mark_px = (glyph_px as f32 * footprint).round() as u16;
-        let dims = painter.measure_map("x", mark_px);
+        let mark = FALLEN_MARK.0.to_string();
+        let dims = painter.measure_map(&mark, mark_px);
         let tx = px + (cell_px - dims.width) / 2.0;
         let ty = py + (cell_px + dims.height) / 2.0;
-        painter.map("x", tx, ty, mark_px, palette::FALLEN);
+        painter.map(&mark, tx, ty, mark_px, FALLEN_MARK.1);
     }
 
     // A Hallucination's fakes, **before** the bodies: a hallucinating body

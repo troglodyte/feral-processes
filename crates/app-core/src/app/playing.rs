@@ -253,6 +253,21 @@ impl App {
                 }
                 return;
             }
+            // Stockpile zones share the plan's cursor and box, and the plan's
+            // reason for refusing out here.
+            GameKey::Char('z') => {
+                match self.game.as_ref().and_then(|g| g.base_pos()) {
+                    Some(party) => {
+                        self.excavate_cursor = Some(party);
+                        self.excavate_anchor = None;
+                        self.mode = Mode::Stockpile;
+                    }
+                    None => self.refuse(
+                        "Nowhere to mark a stockpile out here — the floor is through the anchor.",
+                    ),
+                }
+                return;
+            }
             GameKey::Char('t') => {
                 // Underground the same key opens whoever is selling *here*.
                 // The trader list would otherwise scan from a `Position`
@@ -446,6 +461,14 @@ impl App {
             return;
         }
 
+        // `y`, not `t`, which is trade. After the Stack hand-off above, so the
+        // picker is only ever asked for from the surface or the base, where
+        // it can say why it refuses.
+        if key == GameKey::Char('y') {
+            self.open_put_down();
+            return;
+        }
+
         // Not paused: queue the step for the clock to spend on its next
         // tick (`App::spend_walk_tick`) instead of moving right here — the
         // whole of `travel-on-the-clock`'s fix, since `handle_key` used to
@@ -623,6 +646,17 @@ impl App {
                 // pressing it on the open grid gets the engine's own words
                 // instead of a second opinion from here.
                 GameKey::Char('v') => match game.lay_tile() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
+                // Here and not with the Stack's own `o` (`adopt_orphan`), which
+                // the underground hand-off above has already taken: this is
+                // only reached on the surface and in the base, and the engine
+                // refuses it anywhere but the base.
+                GameKey::Char('o') => match game.pick_up() {
                     Ok(()) => true,
                     Err(reason) => {
                         refusal = Some(reason);

@@ -1,6 +1,7 @@
 (
     id: "deadman_relay",
     name: "Deadman Relay",
+    glyph: Some(':'),
     description: "Scavenged module. Wintermute's own switch, cut out of the wreck and wired to the party bus.",
     // The second item to grant a routine that already ships, and the louder
     // case: `deadman` is `exclusive`, an Everyone-scope routine three times

@@ -2,7 +2,7 @@
 //! to work them.
 
 use crate::base_grid::BaseGrid;
-use crate::game::base::floor::drop_load;
+use crate::game::base::floor::nearest_free_cells;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
 use crate::systems::SiteScales;
@@ -324,8 +324,10 @@ impl Game {
     /// a program standing on the footprint aside the same way.
     fn spawn_build_site(&mut self, site: BuildSite, x: i32, y: i32) -> Entity {
         let side = self.structure_footprint(&site.structure);
-        self.displace_bodies_from(&crate::tactical::footprint_cells_at((x, y), side));
-        self.world
+        let footprint = crate::tactical::footprint_cells_at((x, y), side);
+        self.displace_bodies_from(&footprint);
+        let site = self
+            .world
             .spawn((
                 site,
                 Position { x, y },
@@ -340,7 +342,9 @@ impl Game {
                     color: GlyphColor::Orange,
                 },
             ))
-            .id()
+            .id();
+        self.displace_floor_items_from(&footprint);
+        site
     }
 
     /// Whether a siege is under way: an open tactical fight seated as one.
@@ -441,8 +445,9 @@ impl Game {
             }
             let free = {
                 let grid = self.world.resource::<BaseGrid>();
-                nearest_free_floor(
+                nearest_free_cells(
                     (at.x, at.y),
+                    1,
                     |cell| {
                         grid.is_floor(cell.0, cell.1)
                             && !footprint.contains(&cell)
@@ -454,6 +459,8 @@ impl Game {
                     },
                     |cell| grid.walkable(cell.0, cell.1) && !blocked.walls(cell),
                 )
+                .first()
+                .copied()
             };
             let Some((x, y)) = free else {
                 continue;
@@ -1585,7 +1592,7 @@ impl Game {
                 // the kill. See `Game::return_carried_program`.
                 self.return_carried_program(worker);
                 self.world.entity_mut(worker).remove::<Task>();
-                drop_load(&mut self.world, worker);
+                self.drop_load(worker);
             }
             // What the building was *holding*, as against the share of its
             // build cost accumulated above: a Depot's shelf, a machine's
@@ -1865,7 +1872,7 @@ impl Game {
         }?;
         // A hauler displaced mid-carry keeps no `Task` to deliver under, so
         // its load goes to the floor instead of freezing in its hands.
-        drop_load(&mut self.world, holder);
+        self.drop_load(holder);
         self.world.entity_mut(holder).remove::<Task>();
         if holder == self.player_entity() {
             self.log_base("You break off what you were doing.");
@@ -1997,32 +2004,4 @@ pub(crate) fn build_quality(def: &StructureDef, potential: Potential, rarity: Ra
 /// program is a `CreatureSave`, not an entity.
 pub(crate) fn build_quality_of(def: &StructureDef, program: &crate::save::CreatureSave) -> f32 {
     build_quality(def, program.potential(), program.rarity)
-}
-
-/// The nearest cell to `from`, breadth-first over `world::NEIGHBOURS`, that
-/// `free` admits, searching only through cells `crossable` admits. `None`
-/// once every crossable cell reachable from `from` has been tried — the grid
-/// is finite, so the search always ends.
-fn nearest_free_floor(
-    from: (i32, i32),
-    free: impl Fn((i32, i32)) -> bool,
-    crossable: impl Fn((i32, i32)) -> bool,
-) -> Option<(i32, i32)> {
-    let mut seen = std::collections::HashSet::from([from]);
-    let mut queue = std::collections::VecDeque::from([from]);
-    while let Some(at) = queue.pop_front() {
-        for (dx, dy) in crate::world::NEIGHBOURS {
-            let next = (at.0 + dx, at.1 + dy);
-            if !seen.insert(next) {
-                continue;
-            }
-            if free(next) {
-                return Some(next);
-            }
-            if crossable(next) {
-                queue.push_back(next);
-            }
-        }
-    }
-    None
 }

@@ -758,6 +758,11 @@ pub struct CreatureSave {
     /// are written to avoid.
     #[serde(default)]
     pub carrying_program: Option<crate::items::DownedProgram>,
+    /// The loose floor item this body is carrying to a stockpile — see
+    /// `components::Tidying`. Saved for `carrying_program`'s reason: quitting
+    /// mid-errand must not destroy the thing.
+    #[serde(default)]
+    pub tidying: Option<crate::items::FloorThing>,
     /// The rare-spawn tier this creature rolled — see `components::Rarity`.
     ///
     /// Persisted as the *tag* only. The multiplier it names was already
@@ -1404,6 +1409,13 @@ pub struct JailedSave {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct FloorItemSave {
+    pub position: (i32, i32),
+    pub thing: crate::items::FloorThing,
+}
+
+/// **Legacy, load-only** — see `SaveData::floor_piles`.
+#[derive(Serialize, Deserialize)]
 pub struct FloorPileSave {
     pub position: (i32, i32),
     pub items: Vec<(ItemId, u32)>,
@@ -1598,9 +1610,13 @@ pub struct SaveData {
     pub player: PlayerSave,
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
-    /// Loads already dropped on base tiles — `components::FloorPile`.
-    /// Additive behind `#[serde(default)]`: an older save has no piles.
+    /// Everything lying on a base tile's floor — `components::FloorItem`.
+    /// Additive behind `#[serde(default)]`: an older save has none.
     #[serde(default)]
+    pub floor_items: Vec<FloorItemSave>,
+    /// **Legacy, load-only**: the one-pile-per-tile form an older save wrote.
+    /// Never written now; each unit is set down as its own floor item on load.
+    #[serde(default, skip_serializing)]
     pub floor_piles: Vec<FloorPileSave>,
     /// Every nest standing in the zone — see `components::Nest`. Without
     /// this, a save/reload silently deleted every nest: a free way out of
@@ -2411,6 +2427,7 @@ mod tests {
             },
             creatures: Vec::new(),
             structures: Vec::new(),
+            floor_items: Vec::new(),
             floor_piles: Vec::new(),
             nests: Vec::new(),
             traps: Vec::new(),
@@ -2507,6 +2524,7 @@ mod tests {
             pursuing: false,
             carrying: None,
             carrying_program: None,
+            tidying: None,
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,

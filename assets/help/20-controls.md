@@ -63,6 +63,11 @@ Acting on the world:
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and, with the default brush, floored; F opens the brush list to pick plain, a floor colour or
   strip. Drawing a plan costs no time.
+- z — stockpile zone: the same box as the Excavation plan, but it sets floor aside as a place for
+  loose things. Starting a box on a cell that is already zoned clears the box instead. Drawing a zone costs
+  no time.
+- o — pick up the thing lying on the cell you are standing on and keep it with you
+- y — put something down: a list of what you carry, and the chosen thing is set on the floor
 - < — phase up into the base, standing on the anchor
 - > — phase back down to the grid, at the exit
 

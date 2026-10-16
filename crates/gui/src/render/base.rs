@@ -7,6 +7,7 @@ use super::terrain::*;
 use super::*;
 use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
+use feral_processes_engine::views::FloorLook;
 use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
 use feral_processes_engine::views::{Sight, shown_at};
@@ -66,6 +67,16 @@ const fn wash(alpha: f32) -> Color {
 const MARK_FILL: Color = wash(0.18);
 const MARK_EDGE: Color = wash(0.45);
 const PREVIEW_FILL: Color = wash(0.35);
+/// A stockpile zone's wash, off `palette::STOCKPILE` at the same strength as
+/// a committed dig mark's, so a cell that is both reads as both.
+const STOCKPILE_FILL: Color = Color::new(
+    hud::palette::STOCKPILE.r,
+    hud::palette::STOCKPILE.g,
+    hud::palette::STOCKPILE.b,
+    0.18,
+);
+/// The header `Mode::Stockpile` shows where the brush label otherwise sits.
+const STOCKPILE_HEADER: &str = "Stockpile zone — Space marks a box, Esc leaves";
 
 /// How strongly an Alt-held room tint covers the ground. Low enough that the
 /// floor finish and the biome pattern still read through it.
@@ -101,10 +112,15 @@ fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
 const EXCAVATE_LABEL_INSET: f32 = 4.0;
 const EXCAVATE_LABEL_SIZE: u16 = 14;
 
-/// What a floor pile draws as, whatever it holds: one mark, so the map says
-/// "something is lying here" and the examine line says what. Amber, the hue
-/// of cargo, and not a program's glyph so it is never read as a body.
-pub(crate) const FLOOR_PILE_MARK: (char, Color) = ('%', hud::palette::WARN);
+/// What a floor item draws as: an item in its own glyph, in the amber of
+/// cargo; a downed program in the gray `x` the battle map gives a fallen
+/// body, so the two boards say "disabled" the same way.
+pub(crate) fn floor_item_mark(look: &FloorLook) -> (char, Color) {
+    match look {
+        FloorLook::Item(glyph) => (*glyph, hud::palette::WARN),
+        FloorLook::Program => super::tactical::FALLEN_MARK,
+    }
+}
 
 /// The ring the party's own tile wears while cutting tools are armed.
 ///
@@ -275,7 +291,12 @@ pub(super) fn draw_playing_base(
     // the mode's rules.
     let plan = app
         .excavate_cursor
-        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
+        .filter(|_| {
+            matches!(
+                app.mode,
+                Mode::Excavate | Mode::ExcavateBrush | Mode::Stockpile
+            )
+        })
         .map(|cursor| PlanCursor {
             cursor,
             anchor: app.excavate_anchor,
@@ -287,9 +308,12 @@ pub(super) fn draw_playing_base(
     // Gated on the mode rather than left to `excavate_brush_label`'s own
     // `None`, `plan`'s reason: a brush left over from the last visit must
     // not draw a header on the ordinary playing map.
-    let excavate_label = app
-        .excavate_brush_label()
-        .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush));
+    let excavate_label = if app.mode == Mode::Stockpile {
+        Some(STOCKPILE_HEADER.to_string())
+    } else {
+        app.excavate_brush_label()
+            .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
+    };
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the
@@ -750,6 +774,8 @@ fn draw_surface_map(
     } else {
         Vec::new()
     };
+    // `marked`'s space rule; the engine answers empty outside base itself.
+    let stockpiles = game.stockpile_cells();
     // Read once for the whole map rather than per tile, and gated on the
     // space rather than on the flag alone: the tools arm the player's own
     // bump into rock, base space is the only place there is rock to bump
@@ -757,9 +783,12 @@ fn draw_surface_map(
     // anchor. Ungated, the ring follows the party onto the zone map and
     // claims something the ground there cannot answer.
     let cutting = base_pos.is_some() && game.mining();
-    // Base space only, and `floor_piles` already answers empty elsewhere.
-    let piles: std::collections::HashSet<(i32, i32)> =
-        game.floor_piles().into_iter().map(|p| p.pos).collect();
+    // Base space only, and `floor_items` already answers empty elsewhere.
+    let floor_marks: std::collections::HashMap<(i32, i32), (char, Color)> = game
+        .floor_items()
+        .into_iter()
+        .map(|item| (item.pos, floor_item_mark(&item.look)))
+        .collect();
     // Alt shows the rooms. `view_rooms` answers empty outside base space.
     let rooms = if reveal {
         game.view_rooms()
@@ -1000,10 +1029,12 @@ fn draw_surface_map(
                     glyph_color(ev.color)
                 };
             }
-            // Under programs and structures, above the floor: a pile only
-            // takes a glyph nothing else has claimed.
-            if ch.is_none() && piles.contains(&world) {
-                (ch, color) = (Some(FLOOR_PILE_MARK.0), FLOOR_PILE_MARK.1);
+            // Under programs and structures, above the floor: a floor item
+            // only takes a glyph nothing else has claimed.
+            if ch.is_none()
+                && let Some(&(glyph, hue)) = floor_marks.get(&world)
+            {
+                (ch, color) = (Some(glyph), hue);
             }
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
@@ -1584,6 +1615,7 @@ fn draw_surface_map(
     if base_pos.is_some() {
         draw_excavation_plan(
             painter,
+            &stockpiles,
             &marked,
             plan,
             |world| {
@@ -1789,6 +1821,7 @@ fn draw_excavate_label(
 #[allow(clippy::too_many_arguments)]
 fn draw_excavation_plan(
     painter: &Painter,
+    stockpiles: &[(i32, i32)],
     marked: &[DigMark],
     plan: Option<PlanCursor>,
     at: impl Fn((i32, i32)) -> (f32, f32),
@@ -1816,6 +1849,11 @@ fn draw_excavation_plan(
         }
         Some((px, py))
     };
+    // Zones first, under the plan: a standing wash that a dig mark or the
+    // preview box is drawn over rather than hidden by.
+    for &cell in stockpiles {
+        tile(cell, Some(STOCKPILE_FILL), None);
+    }
     // The plan itself, drawn under the cursor: a wash rather than a glyph,
     // because the cell underneath is already saying whether it is rock, cut
     // or floor and the mark is a second reading on top of that one.
@@ -5300,6 +5338,35 @@ mod tests {
         assert_eq!(health_color(0.0), hud::palette::OFFLINE);
     }
 
+    #[test]
+    fn a_stockpile_cell_draws_its_wash() {
+        let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_excavation_plan(
+                p,
+                &[(1, 1)],
+                &[],
+                None,
+                |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
+                CELL,
+                pane,
+            )
+        });
+        let want = bevy_egui::egui::Color32::from_rgba_unmultiplied(
+            (STOCKPILE_FILL.r * 255.0).round() as u8,
+            (STOCKPILE_FILL.g * 255.0).round() as u8,
+            (STOCKPILE_FILL.b * 255.0).round() as u8,
+            (STOCKPILE_FILL.a * 255.0).round() as u8,
+        );
+        assert!(
+            shapes.iter().any(|cs| matches!(
+                &cs.shape,
+                bevy_egui::egui::Shape::Rect(r) if r.fill == want
+            )),
+            "{shapes:?}"
+        );
+    }
+
     /// The plan pass draws the wash for every mark and a cut meter for the
     /// ones that still have a wall — and the cull the meter rides has to go
     /// on culling the wash with it.
@@ -5310,6 +5377,7 @@ mod tests {
             let (_, shapes) = with_painter(|p| {
                 draw_excavation_plan(
                     p,
+                    &[],
                     marks,
                     None,
                     |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
@@ -6103,10 +6171,13 @@ mod tests {
         Game::load(&path, &test_assets()).unwrap()
     }
 
-    /// A base with a Home, and `pile` laid on the floor one cell off the
+    /// A base with a Home, and `thing` laid on the floor one cell off the
     /// party's own when `Some`. Written through the save, the engine's only
-    /// door for a pile from outside its crate.
-    fn base_with_a_pile(seed: u32, pile: bool) -> Game {
+    /// door for a floor item from outside its crate.
+    fn base_with_a_floor_item(
+        seed: u32,
+        thing: Option<feral_processes_engine::items::FloorThing>,
+    ) -> Game {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
@@ -6117,52 +6188,82 @@ mod tests {
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
-        if pile {
-            data.floor_piles
-                .push(feral_processes_engine::save::FloorPileSave {
+        if let Some(thing) = thing {
+            data.floor_items
+                .push(feral_processes_engine::save::FloorItemSave {
                     position: (at.0 + 1, at.1),
-                    items: vec![(
-                        feral_processes_engine::items::ItemId::from("core_fragment"),
-                        3,
-                    )],
+                    thing,
                 });
         }
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
     }
 
-    /// The pile glyph is drawn in base space, and only because a pile is
-    /// there: the identical base without one paints no such glyph.
-    #[test]
-    fn a_floor_pile_draws_its_mark_in_base_space() {
-        let drawn = |pile: bool| {
-            let mut game = base_with_a_pile(560_200, pile);
-            let mut fx = Fx::new();
-            let (tile_px, glyph_px) = crate::text::map_cell(1);
-            let (_, shapes) = with_painter(|p| {
-                let status = game.player_status();
-                let centre = game.base_pos().unwrap();
-                draw_surface_map(
-                    &mut game,
-                    &mut fx,
-                    p,
-                    Rect::new(0.0, 0.0, 800.0, 600.0),
-                    tile_px,
-                    glyph_px,
-                    &status,
-                    None,
-                    None,
-                    centre,
-                    false,
-                );
-            });
-            painted_text(&shapes)
-                .iter()
-                .filter(|g| g.as_str() == FLOOR_PILE_MARK.0.to_string())
-                .count()
+    /// How many glyphs `text` the base map paints within a rounding step of
+    /// `want`. A distance and not an equality: the map multiplies every glyph
+    /// by the vignette and a tile shade. The colour is what keeps the floor's
+    /// own marks from aliasing the glyph.
+    fn floor_glyphs_drawn(game: &mut Game, text: &str, want: Color) -> usize {
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            let centre = game.base_pos().unwrap();
+            draw_surface_map(
+                game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                None,
+                centre,
+                false,
+            );
+        });
+        let gap = |a: Color, b: Color| {
+            ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
         };
-        assert_eq!(drawn(true), 1);
-        assert_eq!(drawn(false), 0);
+        crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .filter(|(t, c)| t == text && gap(*c, want) < 0.08)
+            .count()
+    }
+
+    /// A floor item draws its own glyph, and only because it is there: the
+    /// identical base without one paints no such glyph in that colour.
+    #[test]
+    fn a_floor_item_draws_its_items_glyph_in_base_space() {
+        use feral_processes_engine::items::{FloorThing, ItemId};
+        let drawn = |thing: Option<FloorThing>| {
+            let mut game = base_with_a_floor_item(560_200, thing);
+            floor_glyphs_drawn(&mut game, ".", hud::palette::WARN)
+        };
+        let with = drawn(Some(FloorThing::Item(ItemId::from("core_fragment"))));
+        let without = drawn(None);
+        assert_eq!(with, without + 1);
+    }
+
+    #[test]
+    fn a_downed_program_on_the_floor_draws_the_fallen_mark() {
+        use feral_processes_engine::items::{DownedProgram, FloorThing};
+        let program = DownedProgram {
+            species: "scrapper".to_string(),
+            level: 3,
+            rarity: feral_processes_engine::components::Rarity::Ordinary,
+            boss: false,
+            condition: 70,
+            carried: None,
+        };
+        let drawn = |thing: Option<FloorThing>| {
+            let mut game = base_with_a_floor_item(560_201, thing);
+            floor_glyphs_drawn(&mut game, "x", hud::palette::FALLEN)
+        };
+        let with = drawn(Some(FloorThing::Program(program)));
+        let without = drawn(None);
+        assert_eq!(with, without + 1);
     }
 
     /// Whether a painted fill is `STATION_FLOOR_FILL`, up to the vignette's
@@ -6458,6 +6559,7 @@ mod tests {
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,
+                tidying: None,
                 rarity: Default::default(),
                 nemesis_grudges: 0,
                 nemesis_muster_ticks: 0,

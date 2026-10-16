@@ -6,7 +6,6 @@
 //! `call_reinforcement` acts on it after, so the two cannot disagree.
 
 use crate::components::{DropPod, Reinforcement};
-use crate::game::base::floor::drop_load;
 use crate::game::base::offshift::Amenities;
 use crate::game::combat::RoutineRefusal;
 use crate::resources::Party;
@@ -136,7 +135,7 @@ impl Game {
         self.spend_pod(pod);
         // The load stays behind on the base tile: the trooper's `Position` is
         // still the base cell it was called from.
-        drop_load(&mut self.world, trooper);
+        self.drop_load(trooper);
         self.world
             .entity_mut(trooper)
             .remove::<Task>()

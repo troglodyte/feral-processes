@@ -1,6 +1,7 @@
 (
     id: "inline_cache",
     name: "Inline Cache",
+    glyph: Some('*'),
     description: "Folds a tamed program's hot path flat for good. +5% ATK, and one upgrade slot.",
     value: Some(5),
     craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("refactor_bench"))),

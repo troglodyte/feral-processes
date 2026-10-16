@@ -1988,6 +1988,14 @@ pub enum Mode {
     /// plain, every loaded finish, strip. A detour off the plan — picking a
     /// row or Esc lands back on it with the cursor and anchor untouched.
     ExcavateBrush,
+    /// Zoning stockpiles, `z` in base space: the Excavation plan's cursor and
+    /// box, committing through `Game::toggle_stockpile_box` instead. Like
+    /// `Excavate`, a mode and not an action — it spends no turn.
+    Stockpile,
+    /// Picking one thing from the pack to set on the floor, `y` on the base
+    /// map. Choosing a row puts it down and spends a turn; Esc leaves
+    /// without one.
+    PutDown,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -2493,6 +2501,10 @@ impl Mode {
             | Mode::Excavate
             // Opened from the plan only, the plan's own reason.
             | Mode::ExcavateBrush
+            // Opened from the base map only, so it never layers over a fight.
+            | Mode::Stockpile
+            // Opened from the base map only, so it never layers over a fight.
+            | Mode::PutDown
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop
@@ -3145,8 +3157,9 @@ pub struct App {
     /// more: a fight the player did not open hands-off is a fight they can
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
-    /// Where the Excavation plan's cursor is aimed, in **base-space**
-    /// coordinates. `None` outside `Mode::Excavate` and its brush picker —
+    /// Where the box cursor is aimed, in **base-space** coordinates, shared
+    /// by `Mode::Excavate` and `Mode::Stockpile`. `None` outside those and
+    /// the brush picker —
     /// opening the mode puts it on the party's own cell and leaving clears
     /// it.
     ///
@@ -3154,7 +3167,8 @@ pub struct App {
     /// in Stack frame coordinates. Nothing converts between them and nothing
     /// should: the two modes are reachable from different locales.
     pub excavate_cursor: Option<(i32, i32)>,
-    /// The far corner of the box being drawn, once `space` has dropped it.
+    /// The far corner of the box being drawn in either box mode, once
+    /// `space` has dropped it.
     /// `None` while the cursor is loose, which is what makes `space` a
     /// two-press verb rather than a drag.
     pub excavate_anchor: Option<(i32, i32)>,

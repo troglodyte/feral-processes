@@ -481,10 +481,10 @@ fn the_report_names_the_room_a_structure_stands_in_and_not_the_commons() {
     assert_eq!(at((0, 0)).room, None, "the home sits in the commons");
 }
 
-/// Ticks for one cycle at a substrate_factory standing in a walled room with
+/// Ticks for one cycle at a Factory standing in a walled room with
 /// `finished` carpet cells, `with_bed` making it quarters rather than a
-/// workshop; `None` leaves the substrate_factory in the commons.
-fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
+/// workshop; `None` leaves the Factory in the commons.
+fn factory_ticks(room: Option<(usize, bool)>) -> u32 {
     let mut game = game_with_home();
     if let Some((finished, with_bed)) = room {
         walled_room_with_finish(&mut game, finished);
@@ -499,15 +499,15 @@ fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
 
 #[test]
 fn a_fine_workshop_works_faster_than_the_commons() {
-    let commons = lathe_ticks(None);
-    let fine = lathe_ticks(Some((8, false)));
+    let commons = factory_ticks(None);
+    let fine = factory_ticks(Some((8, false)));
     assert_eq!(commons, 12);
     assert_eq!(fine, 11, "12 ticks at the Fine scale, rounded");
 }
 
 #[test]
 fn a_machine_in_quarters_gets_no_workshop_scale() {
-    assert_eq!(lathe_ticks(Some((8, true))), lathe_ticks(None));
+    assert_eq!(factory_ticks(Some((8, true))), factory_ticks(None));
 }
 
 #[test]

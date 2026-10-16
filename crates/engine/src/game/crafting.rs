@@ -129,13 +129,14 @@ impl Game {
     /// reads as tier 1, `best_structure_tier`'s rule.
     pub(crate) fn touched_bench(&self, kind: &str) -> Option<(Entity, u32)> {
         let (bx, by) = self.base_pos()?;
-        let beside = [(bx + 1, by), (bx - 1, by), (bx, by + 1), (bx, by - 1)];
+        let here = Position { x: bx, y: by };
+        let side = self.structure_footprint(&kind.to_string());
         self.world
             .iter_entities()
             .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
             .filter_map(|e| {
                 let at = e.get::<Position>()?;
-                beside.contains(&(at.x, at.y)).then(|| {
+                crate::game::base::hauling::at_station(here, *at, side).then(|| {
                     let tier = e.get::<StructureTier>().map(|t| t.0).unwrap_or(1);
                     (e.id(), tier, (at.x, at.y))
                 })

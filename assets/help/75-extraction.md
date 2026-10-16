@@ -45,8 +45,8 @@ attempt at intervals, each failure making the next likelier. A success joins it 
 every attempt fails it breaks down, and the cell is left holding a little salvage. A boss's record
 will not reinitialize.
 
-A Workbench changes both halves of that. Standing one anywhere makes every extraction quicker, and
-every tier you upgrade it past the first makes the same tool draw more out of the same body — more
+A Workbench changes both halves of that. Once Automation is researched, standing one anywhere
+makes every extraction quicker, and every tier you upgrade it past the first makes the same tool draw more out of the same body — more
 material through a material tool, better odds through the Gear Puller. It is worth building
 before it is worth upgrading, and worth upgrading for a long time after that.
 

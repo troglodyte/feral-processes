@@ -52,6 +52,14 @@ fn configured_item(
     placed.recipe.cloned()
 }
 
+/// What `contract_system` reads beyond its queries, bundled to stay under
+/// clippy's argument-count threshold.
+#[derive(bevy_ecs::system::SystemParam)]
+pub struct ContractLookups<'w> {
+    standings: Res<'w, crate::resources::Standings>,
+    defs: Res<'w, crate::structures::StructureDb>,
+}
+
 /// Raises `ActiveContract::progress` and nothing else. Completion is
 /// `Game::settle_contracts`' — a payout writes to the player's inventory and
 /// grants XP, which is `&mut Game` work rather than anything a system can
@@ -72,11 +80,9 @@ pub fn contract_system(
         Option<&crate::components::MachineRecipe>,
     )>,
     player: Query<&Inventory, With<crate::components::Player>>,
-    (standings, defs): (
-        Res<crate::resources::Standings>,
-        Res<crate::structures::StructureDb>,
-    ),
+    lookups: ContractLookups,
 ) {
+    let ContractLookups { standings, defs } = lookups;
     let state = crate::contracts::ObjectiveState {
         depth: contract_depth(&locale),
         zone: zone.0,

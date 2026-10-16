@@ -11,7 +11,8 @@ Where power comes from:
 - [Perks](perks). Permanent passive upgrades, bought over and over — each purchase stacks another
   level on the last, at the same price every time.
 - Gear. Weapons, armour and modules, scavenged in the field or built at a bench once the research
-  behind them is done. Fusing two copies of the same piece raises its tier.
+  behind them is done. Bench recipes appear in the Compile list only while you stand beside a
+  Workbench. Fusing two copies of the same piece raises its tier.
 - [Your roster](companions). A compiled program fights beside you or works your base. Its
   [routines](routines), talents and refactors are its own progression, and a developed program is
   worth more than a fresh one of the same species.

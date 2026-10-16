@@ -118,3 +118,23 @@ fn a_research_node_names_the_machine_recipes_it_gates() {
     let text = game.research_unlocks(&def).unwrap_or_default();
     assert!(text.contains("Printer: ICE Breaker"), "{text}");
 }
+
+#[test]
+fn a_wide_bench_is_touched_from_any_of_its_cells() {
+    let mut game = game_for(606);
+    let mut def = game
+        .world
+        .resource::<StructureDb>()
+        .get("workbench")
+        .cloned()
+        .expect("workbench ships");
+    def.id = "wide_bench".to_string();
+    def.footprint = 2;
+    game.world.resource_mut::<StructureDb>().insert(def);
+    let bench = spawn_structure_at(&mut game, "wide_bench", 1, 0);
+    // East of the footprint's far column: not orthogonal to the anchor.
+    stand_in_base_at(&mut game, 3, 1);
+    assert_eq!(game.touched_bench("wide_bench"), Some((bench, 1)));
+    stand_in_base_at(&mut game, 5, 1);
+    assert_eq!(game.touched_bench("wide_bench"), None);
+}

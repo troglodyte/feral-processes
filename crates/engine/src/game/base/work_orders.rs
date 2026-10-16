@@ -822,8 +822,8 @@ pub(crate) fn queue_needs(
 ///
 /// **The one walk down a recipe tree by item**, with two readers:
 /// `queue_needs` takes only the keys, and `power::fuel_chain` takes the
-/// depths, which is what ranks an Extractor above the Extractor whose
-/// fragments a Power Cell is made of. Breadth-first because the depth has to
+/// depths, which is what ranks a Power Cell Extractor above the
+/// Core Fragment Extractor whose fragments a Power Cell is made of. Breadth-first because the depth has to
 /// be the *shortest* one — an item that is both a seed and an ingredient of
 /// another seed is a seed. The map doubles as the seen set, so a mod's pair
 /// of items that list each other as ingredients terminates rather than
@@ -3163,7 +3163,7 @@ impl Game {
             // `standing_wants`' gate, and it is inert for the shipped extractor:
             // a Research Node needs no input, so `can_progress` is always true
             // for it. It matters for a mod whose research-currency producer
-            // `assembles` — without it a body parks at a starved bench above the
+            // assembles its output — without it a body parks at a starved bench above the
             // whole queue, which is C1's shape with a different cause.
             .filter(|&machine| can_progress(self, machine))
             .map(|machine| (machine, TaskKind::GatherResource))

@@ -1300,6 +1300,13 @@ impl Game {
         // the assignment is silently dropped rather than crashing.
         for (worker, cronjob) in pending {
             if let Some(&target) = structure_positions.get(&cronjob.target_position) {
+                // A machine that loaded unset (its saved recipe is no longer
+                // listed) runs no job, so a program posted to it would idle.
+                if matches!(cronjob.kind, save::CronjobKind::GatherResource)
+                    && !self.accepts_a_program(target)
+                {
+                    continue;
+                }
                 self.world.entity_mut(worker).insert(Task {
                     kind: match cronjob.kind {
                         save::CronjobKind::GatherResource => TaskKind::GatherResource,
@@ -3915,8 +3922,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
-    structures.compute_levels(&items);
     warnings.extend(structures.validate_machines(&items));
+    structures.compute_levels(&items);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty
@@ -3946,6 +3953,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         &affixes,
     )?;
     warnings.extend(research_warnings);
+    warnings.extend(structures.unknown_research_references(&items, &research));
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.

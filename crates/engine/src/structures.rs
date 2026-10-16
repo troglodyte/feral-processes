@@ -1247,6 +1247,47 @@ impl StructureDb {
         warnings
     }
 
+    /// A warning for every recipe, and every item recipe, gated behind a
+    /// research node that does not exist: such a recipe would stay
+    /// unreachable with nothing said. The recipe is kept, as an unknown tool
+    /// id is.
+    pub fn unknown_research_references(
+        &self,
+        items: &crate::items_db::ItemDb,
+        research: &crate::research::ResearchDb,
+    ) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for def in self.structures.values() {
+            for p in def.productions() {
+                if let Some(id) = p
+                    .recipe
+                    .research
+                    .as_ref()
+                    .filter(|id| research.get(id).is_none())
+                {
+                    warnings.push(format!(
+                        "structure '{}': recipe '{}' is gated behind unknown research '{id}'",
+                        def.id, p.recipe.produces.0
+                    ));
+                }
+            }
+        }
+        for item in items.all() {
+            if let Some(id) = item
+                .craftable
+                .as_ref()
+                .and_then(|c| c.research.as_ref())
+                .filter(|id| research.get(id).is_none())
+            {
+                warnings.push(format!(
+                    "item '{}': craftable behind unknown research '{id}'",
+                    item.id
+                ));
+            }
+        }
+        warnings
+    }
+
     /// Production level (see `structure_levels`); 0 for an unknown id.
     pub fn level(&self, id: &str) -> u32 {
         self.levels.get(id).copied().unwrap_or(0)

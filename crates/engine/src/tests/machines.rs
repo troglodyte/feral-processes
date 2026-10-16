@@ -104,6 +104,23 @@ fn a_saved_recipe_the_def_no_longer_lists_loads_unconfigured() {
 }
 
 #[test]
+fn a_posted_program_is_not_restored_onto_a_machine_that_loads_unset() {
+    let mut game = bare_game();
+    let (_factory, worker) = staffed_full_factory(&mut game);
+    assert!(game.world.get::<Task>(worker).is_some(), "precondition");
+    let mut loaded = reload(&mut game, "unlisted_posted", |text| {
+        text.replace("Some(\"bytecode_block\")", "Some(\"honeypot\")")
+    });
+    let posted = loaded
+        .world
+        .query::<&Task>()
+        .iter(&loaded.world)
+        .filter(|t| matches!(t.kind, TaskKind::GatherResource))
+        .count();
+    assert_eq!(posted, 0, "an unset machine consumes no worker");
+}
+
+#[test]
 fn a_reloaded_extractor_rebuilds_its_node_from_the_saved_recipe() {
     let mut game = base_with("extractor");
     let extractor = first_structure(&mut game, "extractor");
@@ -377,6 +394,27 @@ fn changing_a_recipe_unposts_its_worker_and_loses_nothing() {
     assert!(game.world.get::<Task>(worker).is_none());
     assert!(game.world.get::<Carrying>(worker).is_none());
     assert_eq!(floor_units(&mut game), 2);
+}
+
+#[test]
+fn changing_a_recipe_frees_every_body_holding_a_task_on_it() {
+    let mut game = bare_game();
+    let (factory, worker) = staffed_full_factory(&mut game);
+    fill(&mut game, factory, 0, 0);
+    let hand = spawn_tamed(&mut game, 41, 41);
+    game.world.entity_mut(hand).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: factory,
+        progress: 0,
+        required: 10,
+    });
+    game.set_machine_recipe(factory, &item("charge_coil"))
+        .unwrap();
+    assert!(game.world.get::<Task>(worker).is_none());
+    assert!(
+        game.world.get::<Task>(hand).is_none(),
+        "the second holder keeps producing at the old pace"
+    );
 }
 
 #[test]

@@ -444,19 +444,17 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
 }
 
 #[test]
-fn armory_and_fabricator_are_not_cronjob_workable() {
+fn the_workbench_runs_no_job() {
     let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for id in ["assembler", "assembler"] {
-        let def = game
-            .structure_defs()
-            .into_iter()
-            .find(|d| d.id == id)
-            .unwrap_or_else(|| panic!("{id}.ron should load as a structure"));
-        assert!(
-            def.work.is_none(),
-            "{id} should unlock crafting instead of being cronjob-workable"
-        );
-    }
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "workbench")
+        .expect("workbench.ron should load as a structure");
+    assert!(
+        !def.runs_a_job(),
+        "a Workbench unlocks crafting instead of being cronjob-workable"
+    );
 }
 
 #[test]
@@ -1184,7 +1182,7 @@ fn a_banked_resource_never_scales_with_zone_depth() {
 ///
 /// Asserted against `resolve_gather_cycle` directly rather than through a
 /// deployed node, because no shipped structure sets the flag any more: the
-/// Compiler, which used to, now assembles its catalysts out of Core
+/// machines that replaced the Compiler assemble their catalysts out of Core
 /// Fragments pulled from a neighbour instead of printing them from nothing.
 /// The field is mod-facing now, and a test routed through a real structure
 /// would have to invent shipped content to have a subject —
@@ -1726,7 +1724,7 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
 
 /// Every deployed structure carries a buffer, not just the ones that
 /// produce: a collect must be able to reach any of them, and a storage
-/// building declares neither `work` nor `assembles` and still needs an
+/// building declares neither `work` nor `machine` and still needs an
 /// output size.
 #[test]
 fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
@@ -4669,7 +4667,7 @@ fn idle_wander_never_stops_on_a_filed_build_site() {
 // footprint 1, so every anchor-measuring reader stayed green across 5,964
 // passing tests. `footprint_fixture`/`base_with_footprint_fixture`
 // (`support.rs`) clone `shell_assembler` wholesale — same build cost, same
-// `assembles` (so `file_build` tames a program the same way) — and differ
+// `machine` (so `file_build` tames a program the same way) — and differ
 // from a shipped-def test only in the one field under test, which is the
 // point: a 2x2 fixture that matters is one that could otherwise have been a
 // 1x1 in disguise. Shared with `tests::hauling` and `tests::work_orders`,

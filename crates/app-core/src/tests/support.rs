@@ -3233,7 +3233,7 @@ pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
 }
 
 /// A base with two tamed programs and the party at `(0, 0)` in base space,
-/// with a Extractor rebuild site awaiting a program at `(1, 0)` and, when
+/// with an Extractor rebuild site awaiting a program at `(1, 0)` and, when
 /// `depot` is set, a Depot at `(-1, 0)`.
 ///
 /// The site is written into the save as filed, rather than waited for: a

@@ -8,7 +8,7 @@ making Core Fragments side by side are not, because neither makes anything the o
 An Extractor, Factory, Assembler or Printer makes nothing until you tell it what to. Place the
 machine, stand beside it and press R to pick a recipe from the ones you have researched. A machine
 with no recipe wears a ? on the map. Changing a machine that is already set asks first, and the
-change empties what the machine held to the Depots.
+change empties what the machine held to the Depots, or onto the floor beside it when they are full.
 
 A line is one job, and one worker staffs it. Setting a standing job on any machine in a line sets
 it on every machine in that line, and the base posts a single program to run the line rather than

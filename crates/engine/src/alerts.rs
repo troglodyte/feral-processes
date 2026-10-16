@@ -165,7 +165,7 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "substrate_factory@1,1",
+            "factory@1,1",
             "The Factory is clogged.",
         );
         post(
@@ -178,7 +178,7 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "substrate_factory@1,1",
+            "factory@1,1",
             "The Factory is clogged again.",
         );
 
@@ -189,7 +189,7 @@ mod tests {
         );
         let front = &board.alerts[0];
         assert_eq!(front.kind, stalled(MachineStatus::Clogged));
-        assert_eq!(front.subject, "substrate_factory@1,1");
+        assert_eq!(front.subject, "factory@1,1");
         assert_eq!(front.count, 2);
         assert!(front.unread);
         assert_eq!(front.text, "The Factory is clogged again.");
@@ -201,13 +201,13 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "substrate_factory@1,1",
+            "factory@1,1",
             "The Factory is clogged.",
         );
         post(
             &mut board,
             stalled(MachineStatus::Unpowered),
-            "substrate_factory@1,1",
+            "factory@1,1",
             "The Factory is dark.",
         );
 

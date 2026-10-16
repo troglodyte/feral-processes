@@ -92,8 +92,8 @@ pub(crate) fn fuel_chain(items: &ItemDb) -> HashMap<ItemId, u32> {
 /// first key of `ledger`'s cut, lowest first, and `None` for a machine whose
 /// output is nowhere in `fuel_chain`.
 ///
-/// **A rung, not a flag.** An Extractor makes cells out of nothing and
-/// sits at `0`; an Extractor makes what a cell is made of and sits at `1`,
+/// **A rung, not a flag.** An Extractor set to Power Cell makes cells out
+/// of nothing and sits at `0`; one set to what a cell is made of sits at `1`,
 /// and nothing on the grid assembles that into a cell without somebody's
 /// hands. Treated as one tier, four nodes west of every Conduit take the
 /// whole of the Home's bootstrap and the one machine that could relight the

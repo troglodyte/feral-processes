@@ -2596,6 +2596,45 @@ fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
     assert!(raised, "the miner is raised");
 }
 
+/// A dry miner never freezes the base: the assembler is worked instead.
+///
+/// Every shipped machine costs only Core Fragments, so the assembler is
+/// priced in coils by a fixture def to give it something other than what the
+/// dry miner would fetch.
+#[test]
+fn a_dry_miner_does_not_hold_the_assembler_back() {
+    let mut game = base(1202);
+    builder(&mut game);
+    let mut def = game
+        .world
+        .resource::<StructureDb>()
+        .get("printer")
+        .cloned()
+        .expect("printer ships");
+    def.id = "coil_printer".to_string();
+    def.build_cost = vec![(ItemId::from(ids::CHARGE_COIL), 4)];
+    game.world.resource_mut::<StructureDb>().insert(def);
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(ItemId::from(ids::CORE_FRAGMENT), held);
+    give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
+    file_build(&mut game, "coil_printer", 1, 0).unwrap();
+    file_build(&mut game, "extractor", -1, 0).unwrap();
+
+    for _ in 0..40 {
+        game.tick();
+    }
+
+    let raised = structure_at(&mut game, 1, 0).is_some();
+    assert!(
+        raised || delivered_total(&mut game, 1, 0) > 0,
+        "the miner has nothing to fetch, so the assembler's coils are carried"
+    );
+}
+
 /// A miner nobody can walk to is dropped as cut off, and must not have
 /// already held the assemblers above it back: the level cut counts only
 /// sites the crew can reach.

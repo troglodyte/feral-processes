@@ -1714,7 +1714,7 @@ impl Game {
     }
 
     /// The work-tick scale of the room `structure` stands in: only the
-    /// workshop room speeds a machine, so a substrate_factory in quarters or the commons
+    /// workshop room speeds a machine, so an Assembler in quarters or the commons
     /// gets none.
     fn workshop_scale(&self, structure: Entity) -> f64 {
         let Some(at) = self.world.get::<Position>(structure) else {
@@ -1766,7 +1766,7 @@ impl Game {
     }
 
     /// Whether a program can be posted to `structure` — an extractor
-    /// (`ResourceNode`) or an assembler (`StructureDef::assembles`). Named
+    /// (`ResourceNode`) or an assembling machine (`StructureDef::machine`). Named
     /// once because the cronjob menu and the assignment itself have to agree:
     /// a structure the menu offers and the assignment refuses is a dead end,
     /// and one the menu hides but the assignment would take is unreachable.

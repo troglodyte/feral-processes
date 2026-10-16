@@ -2125,7 +2125,7 @@ mod tests {
         let drawn = crate::paint::painted_text(&shapes);
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
         assert!(
-            says("Upgrading the Extractor"),
+            says("Upgrading the Extractor (Core Fragment) to Mk2"),
             "the real structure's own name, not the generic fallback: {drawn:?}"
         );
         assert!(

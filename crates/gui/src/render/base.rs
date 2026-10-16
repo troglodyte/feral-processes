@@ -1779,18 +1779,6 @@ pub(super) struct PlanCursor {
     pub anchor: Option<(i32, i32)>,
 }
 
-/// The brush's own header, in the map pane's top-left corner — the same
-/// corner the frame's THREAT strip and the stock block both claim first.
-/// **Call after both**, and pass the stock block's own returned rect: the
-/// label lands below it when one was drawn, or below the frame's strip
-/// quad (`strip_inset`) when the corner is otherwise empty. Drawn
-/// unconditionally on `label` rather than gated on a plan being previewed:
-/// the brush is set and read independently of that.
-///
-/// The origin is always derived from `pane` and the block it sits under,
-/// never a literal offset — a literal draws under one or the other of them
-/// the moment either is present, which is what shipped this needing a
-/// fix.
 /// A `?` in the top-right quarter of a machine's tile: it has been placed and
 /// nothing has been chosen for it to make, so it does no work and draws no
 /// power. `ATTENTION`, "the player must act".
@@ -1811,6 +1799,18 @@ fn draw_unconfigured_mark(painter: &Painter, px: f32, py: f32, tile_px: f32) {
     );
 }
 
+/// The brush's own header, in the map pane's top-left corner — the same
+/// corner the frame's THREAT strip and the stock block both claim first.
+/// **Call after both**, and pass the stock block's own returned rect: the
+/// label lands below it when one was drawn, or below the frame's strip
+/// quad (`strip_inset`) when the corner is otherwise empty. Drawn
+/// unconditionally on `label` rather than gated on a plan being previewed:
+/// the brush is set and read independently of that.
+///
+/// The origin is always derived from `pane` and the block it sits under,
+/// never a literal offset — a literal draws under one or the other of them
+/// the moment either is present, which is what shipped this needing a
+/// fix.
 fn draw_excavate_label(
     pane: Rect,
     label: Option<&str>,

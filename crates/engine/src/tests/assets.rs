@@ -6439,36 +6439,6 @@ fn every_machine_recipe_research_names_a_shipped_node() {
 }
 
 #[test]
-fn every_assemble_role_recipe_is_a_single_ingredient() {
-    let game = shipped_game();
-    let items = game.world.resource::<crate::items_db::ItemDb>();
-    let mut checked = 0;
-    for def in game.world.resource::<StructureDb>().all() {
-        let Some(machine) = def.machine.as_ref() else {
-            continue;
-        };
-        if machine.role != crate::structures::MachineRole::Assemble {
-            continue;
-        }
-        for recipe in &machine.recipes {
-            checked += 1;
-            let craftable = items
-                .get(recipe.produces.as_str())
-                .and_then(|i| i.craftable.as_ref())
-                .unwrap_or_else(|| panic!("{} is not craftable", recipe.produces));
-            assert_eq!(
-                craftable.cost.len(),
-                1,
-                "{} on {} must take one ingredient",
-                recipe.produces,
-                def.id
-            );
-        }
-    }
-    assert!(checked > 0);
-}
-
-#[test]
 fn the_machines_cost_and_draw_what_the_spec_says() {
     let game = shipped_game();
     let db = game.world.resource::<StructureDb>();

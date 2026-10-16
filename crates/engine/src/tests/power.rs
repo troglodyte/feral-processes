@@ -31,7 +31,7 @@ use crate::items_db::ItemDb;
 use crate::structures::StructureDb;
 use crate::{DifficultyMode, Game};
 
-/// A structure that never runs a job: no `work`, no `assembles`. `power_draw`
+/// A structure that never runs a job: no `work`, no `machine`. `power_draw`
 /// is deliberately settable and non-zero on some fixtures even though no
 /// shipped structure would ever author one there — that is what makes
 /// `draw_sums_only_over_structures_that_run_a_job` a real test of the
@@ -477,7 +477,7 @@ const GREEDY_NODE: &str = r#"(
 )"#;
 
 /// The same, for the *other* guard: `assembler_system` visits only structures
-/// declaring `assembles`, so the extractor above is invisible to it and one
+/// declaring a `machine`, so the extractor above is invisible to it and one
 /// fixture cannot cover both. `blank_substrate` is the shipped item whose
 /// `craftable.cost` becomes the recipe (see `systems::assembly_recipe`).
 const GREEDY_BENCH: &str = r#"(

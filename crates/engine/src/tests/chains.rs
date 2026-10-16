@@ -891,7 +891,7 @@ fn the_refactor_chain_produces_a_recompile_kernel() {
 ///   T S *      T trace_extractor  S wafer_factory  * sniffer_assembler
 /// ```
 #[test]
-fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
+fn the_trace_sniffer_chain_runs_off_the_raw_trace_extractor() {
     let mut game = Game::new(1104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     let sniffer_assembler = staffed(&mut game, "assembler", Some("trace_sniffer"), 42, 40);
@@ -1197,7 +1197,7 @@ const LOOP_ITEM: &str = r#"(
 /// screen exists: what to build, and in what order, to automate a Patch
 /// Routine.
 #[test]
-fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
+fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
     let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let chains = game.recipe_chains();
 
@@ -1344,7 +1344,7 @@ fn a_self_referential_recipe_does_not_recurse_forever() {
 /// The feeder is stocked rather than mined so the assertion is about the
 /// chain and not about `mining_success_chance`'s roll.
 #[test]
-fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
+fn a_machine_assembles_catalysts_out_of_an_adjacent_extractor() {
     let mut game = Game::new(1012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_ample_grid_supply(&mut game);
     let batch = game

@@ -68,7 +68,7 @@ pub(crate) fn stockpiled(game: &Game) -> Vec<(Position, Entity, ItemId)> {
 }
 
 /// Every item a deployed structure is set up to make — its `work.produces`
-/// or its `assembles.item`.
+/// or the recipe its machine is set to.
 ///
 /// **What "unlocked" means to the strip.** A pile whose tag only exists
 /// while the buffer behind it is non-empty makes the row reshuffle every

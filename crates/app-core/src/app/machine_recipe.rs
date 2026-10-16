@@ -37,7 +37,7 @@ impl MachineRecipeScreen {
         let mut prompt = format!("Switch the {} to {}?", self.view.name, item);
         if self.view.held > 0 {
             prompt.push_str(&format!(
-                " It empties {} units to the Depots.",
+                " It empties {} units to the Depots or the floor beside it.",
                 self.view.held
             ));
         }

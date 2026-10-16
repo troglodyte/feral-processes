@@ -9,7 +9,7 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::components::{
-    MachineRecipe, Position, ResourceNode, Stock, Structure, StructureTier, Task,
+    MachineRecipe, Position, ResourceNode, Stock, Structure, StructureTier, Task, TaskKind,
 };
 use crate::game::base::{collect::ORTHOGONAL, stock};
 use crate::items::{FloorThing, ItemId};
@@ -220,14 +220,19 @@ impl Game {
         (to_depots, to_floor)
     }
 
-    /// Takes the posted worker off `machine`, its load on the floor; the
-    /// scheduler re-posts it and bakes the new pace.
+    /// Takes every body working `machine` off it, loads on the floor: a
+    /// posted program and a hand-worker can both hold a task here, and each
+    /// has the old pace baked in. The scheduler re-posts the program at the
+    /// new pace.
     fn unpost_worker(&mut self, machine: Entity) {
-        let worker = {
-            let mut tasks = self.world.query::<(Entity, &Task)>();
-            crate::systems::worker_of(tasks.iter(&self.world), machine)
-        };
-        if let Some(worker) = worker {
+        let workers: Vec<Entity> = self
+            .world
+            .query::<(Entity, &Task)>()
+            .iter(&self.world)
+            .filter(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
+            .map(|(e, _)| e)
+            .collect();
+        for worker in workers {
             self.drop_load(worker);
             self.world.entity_mut(worker).remove::<Task>();
         }

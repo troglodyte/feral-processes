@@ -1292,7 +1292,7 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
     assert_eq!(
         mining[1],
         mining[0] + 1,
-        "both nodes should be adjacent rows, not split by the armory"
+        "both nodes should be adjacent rows, not split by the shell_assembler"
     );
 }
 
@@ -1399,7 +1399,7 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
     // A `Structure` only answers this ray inside base space.
     let base = stand_in_base_and_get_origin(&mut game);
 
-    let refinery = game
+    let block_factory = game
         .world
         .spawn((
             Structure {
@@ -1414,7 +1414,7 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
 
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Structure(refinery))
+        Some(InspectTarget::Structure(block_factory))
     );
 }
 
@@ -1695,7 +1695,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
 fn a_structure_manifest_is_the_same_row_the_roster_shows() {
     let mut game = Game::new(1403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let refinery = game
+    let block_factory = game
         .world
         .spawn((
             Structure {
@@ -1711,10 +1711,10 @@ fn a_structure_manifest_is_the_same_row_the_roster_shows() {
     let from_roster = game
         .structure_report()
         .into_iter()
-        .find(|r| r.entity == refinery)
+        .find(|r| r.entity == block_factory)
         .expect("the roster lists it");
     let from_manifest = game
-        .structure_manifest(refinery)
+        .structure_manifest(block_factory)
         .expect("and so does the inspector");
 
     assert_eq!(from_manifest.kind, from_roster.kind);
@@ -2678,13 +2678,13 @@ fn view_entities_carries_a_wild_creatures_resolved_sprite_name() {
 fn view_entities_carries_a_structures_resolved_sprite_name() {
     let mut game = Game::new(9041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let origin = stand_in_base_and_get_origin(&mut game);
-    let refinery = game
+    let block_factory = game
         .world
         .resource::<StructureDb>()
         .get("factory")
         .cloned()
-        .expect("refinery ships with the game");
-    let entity = game.spawn_structure(&refinery, origin.x, origin.y, None);
+        .expect("block_factory ships with the game");
+    let entity = game.spawn_structure(&block_factory, origin.x, origin.y, None);
 
     let view = game
         .view_entities(5, 5)

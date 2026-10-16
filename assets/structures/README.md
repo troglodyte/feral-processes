@@ -40,14 +40,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // means nothing checks it against those fields, so if you change a
     // structure's capabilities, update the description to match by hand.
     //
-    // One rule is checked, and only for a structure that sets `assembles`
-    // below: the line has to name the recipe's ingredients and then its
-    // product, in that order — "Core Fragments into Blank Substrate", never
-    // "Blank Substrate out of Core Fragments". A base is planned in the
-    // build menu, and a chain is only plannable if every link reads in the
-    // direction it runs. The rest of the sentence is yours; the Lathe adds
-    // where to put it, the Fabricator its bench role. See
-    // `every_assembling_structure_describes_its_conversion_in_that_order`.
+    // Nothing checks the text against the capability fields; for a machine
+    // that lists several recipes, name the role rather than one conversion.
     description: "Extracts Core Fragments while a program is posted to it. The cheapest thing you can deploy.",
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`
@@ -99,9 +93,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // one per decompile attempt, so a Mk5 in zone 5 paying nine a cycle
     // outruns the sink entirely. Leave it off for salvage.
     //
-    // No shipped structure sets it — the Compiler used to, and now assembles
-    // its catalysts out of Core Fragments instead. The field is here for
-    // mods, and `flat_payout_takes_a_node_off_the_tier_and_depth_curve` is
+    // No shipped structure sets it. The field is here for mods, and `flat_payout_takes_a_node_off_the_tier_and_depth_curve` is
     // what keeps it working.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, level: Some(1))),
 
@@ -163,41 +155,33 @@ is skipped with a warning logged in-game rather than crashing startup.
     // This flag says one thing only: a hauler may empty into it. The shipped
     // shelves are also free to build, but that is not this flag saying so —
     // a build costs a program only when the structure runs a job (`work`,
-    // `assembles` or `strips`), and a shelf runs none.
+    // `machine` or `strips`), and a shelf runs none.
     stores: true,
 
-    // Optional; can be left out entirely (defaults to no assembling). If
-    // set, this structure automatically builds `item` out of ingredients it
-    // pulls from the output buffers of the four structures orthogonally
-    // touching it. Diagonals feed nothing. `ticks_per_unit` is this
-    // machine's baseline rate the same way `work`'s is above — one unit
-    // every that many ticks at the baseline, scaled by whatever program is
-    // posted to it. Like `work`, it needs a program assigned to it via the
-    // cronjob menu; unlike `work`, it consumes, which is what lets machines
-    // form a chain across the base.
+    // An `Assemble` machine (see `machine` above) builds its item out of
+    // ingredients it pulls from the output buffers of the four structures
+    // orthogonally touching it. Diagonals feed nothing. Its recipe's
+    // `ticks_per_unit` is the machine's baseline rate the same way `work`'s
+    // is above, scaled by whatever program is posted to it. Like `work`, it
+    // needs a program assigned via the cronjob menu; unlike `work`, it
+    // consumes, which is what lets machines form a chain across the base.
     //
-    // There is no recipe here, and that's deliberate: the machine runs the
-    // named item's OWN `craftable.cost` from assets/items/*.ron. So a recipe
-    // is written once and can never drift between the crafting bench and the
-    // machine, and any craftable item you add — including one with several
-    // ingredients — is automatable for free.
+    // There is no ingredient list on the machine, and that's deliberate: it
+    // runs the named item's OWN `craftable.cost` from assets/items/*.ron. A
+    // recipe is written once and can never drift between the crafting bench
+    // and the machine, and any craftable item you add — including one with
+    // several ingredients — is automatable for free. A listed item that does
+    // not declare `craftable` is skipped with a warning at load.
     //
-    // `item` must name an item that actually declares `craftable`. One that
-    // doesn't builds a machine that can never run and says nothing about it.
-    //
-    // A machine can also be a crafting bench. The Armory and Fabricator each
-    // assemble one item while every other recipe naming them stays
-    // hand-compiled — so setting this does not cost a structure its bench
-    // role. It does change its category: `category()` files a structure by
-    // `assembles` when it is set, because that is what decides whether it
-    // wants a program and feeders touching it.
-    assembles: Some((item: "patch_routine", ticks_per_unit: 8)),
+    // Hand-compiling is separate: the Workbench is the one bench you stand
+    // at, and an item's `craftable.requires_structure` names it. Listing an
+    // item on an assembling machine does not touch that.
 
     // Optional; can be left out entirely (defaults to stripping nothing).
     // If set, the structure is a Teardown Rig: the player standing beside it
     // hands it downed programs out of their pack, and it strips them into
     // its own output buffer over ticks while they are elsewhere. Like
-    // `assembles`, it needs a program posted to it via the cronjob menu and
+    // an assembling machine, it needs a program posted to it via the cronjob menu and
     // power on the grid.
     //
     // `hopper` is how many downed programs the queue holds before the rig
@@ -216,7 +200,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // hopper is private. A rig that cannot hold a whole payout holds the
     // program instead and reports as clogged; nothing is destroyed.
     //
-    // Like `assembles`, this changes the structure's category to Assembler:
+    // Like an `Assemble` machine, this files the structure under Assembler:
     // it is a machine that wants a program and pays items out.
     strips: Some((hopper: 6)),
 
@@ -370,7 +354,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // fetching for it puts a cell — and then reaches ORTHOGONALLY ADJACENT
     // for a feeder's output. Base staff will walk it one, so what a bad
     // placement costs now is a body's round trip rather than the grid; a
-    // burning supplier still wants a Depot or a Power Conduit on one of its
+    // burning supplier still wants a Depot or an Extractor making cells on one of its
     // four neighbouring tiles, and a row of them wants a feeder per node.
     //
     // The item named here is the fuel this supplier *prefers* and the one a
@@ -388,7 +372,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Only worth setting on a structure that supplies or regenerates
     // something: upkeep on one that does neither costs the player a unit to
     // change no number. Home deliberately does not set it, because a base
-    // holding no Power Cells could otherwise never run the Power Conduit
+    // holding no Power Cells could otherwise never run the Extractor
     // that makes the first one.
     power_upkeep: Some("power_cell"),
 
@@ -791,7 +775,7 @@ name it after the structure for readability, e.g. `data_cache.ron`.
 
 Filing a build order commits one tamed program — the body goes into the
 machine and does not come back. **A structure costs one exactly when it runs
-a job**, which is when it declares `work`, `assembles` or `strips`: a program
+a job**, which is when it declares `work`, `machine` or `strips`: a program
 is spent on the thing a program will afterwards be posted to. Everything
 else is free of it. A Shield, a Patch Node, a Relay, a Data Cache, a shelf
 and the Zone Portal all cost materials, crew and ticks like any other build,
@@ -810,7 +794,7 @@ order was holding, with everything about it intact.
 A structure named in some research node's `unlocks_structures` can't be
 built until that node is researched — see `assets/research/README.md`. A
 structure named by **no** research file is buildable from turn one, which is
-how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
+how the Home, Extractor, Research Station, Recharger Node and Zone Portal
 stay available at the start, and why a structure mod that ships no research
 file keeps working unchanged.
 

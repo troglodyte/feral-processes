@@ -5,7 +5,7 @@
 //! has caught up with the player, which is what bounds it, and the
 //! **percentage buffs** raise one stat apiece and are bounded instead by
 //! `MAX_COMPANION_REFACTORS`, because they come off a chain rooted in a
-//! Mining Node that produces forever.
+//! Extractor that produces forever.
 //!
 //! The third is a **Kernel Ring** (`open_kernel_ring`), which spends Privilege
 //! Rings to raise one program's level ceiling. It has its own entry point

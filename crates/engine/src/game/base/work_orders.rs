@@ -164,7 +164,7 @@ impl WorkOrder {
 /// **Every** deployed structure whose def puts `item` into an output
 /// buffer, empty if nothing standing makes it.
 ///
-/// All of them, not the first: a base that builds a second Mining Node
+/// All of them, not the first: a base that builds a second Extractor
 /// because the first one's output is being eaten by the assembler beside it
 /// has doubled its own capacity, and an order that rooted its walk at one
 /// arbitrary machine would leave the one just paid for standing empty
@@ -194,16 +194,9 @@ pub(crate) fn producers_of(game: &Game, item: &ItemId) -> Vec<Entity> {
 /// Whether any structure the game ships or a mod supplies could produce
 /// `item` at all, deployed or not. Separates "you have not built it yet"
 /// from "nothing in this game makes that", which are different errands.
-///
-/// A fixed-recipe kind is named before a configurable machine, so a sentence
-/// about an item both can make keeps naming the one it always did.
 pub(crate) fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
     let makes = |def: &StructureDef| def.productions().any(|p| &p.recipe.produces == item);
-    let defs = game.structure_defs();
-    let fixed = defs.iter().find(|def| def.machine.is_none() && makes(def));
-    fixed
-        .or_else(|| defs.iter().find(|def| makes(def)))
-        .cloned()
+    game.structure_defs().iter().find(|def| makes(def)).cloned()
 }
 
 /// A standing machine whose kind could make `item` but is set to something
@@ -226,16 +219,29 @@ pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
         .map_or(Some(reason), |()| None)
 }
 
+/// "an Extractor", "a Factory": a def name is player-facing and a mod's may
+/// start with either sound.
+fn with_article(name: &str) -> String {
+    let vowel = name
+        .chars()
+        .next()
+        .is_some_and(|c| "aeiouAEIOU".contains(c));
+    format!("{} {name}", if vowel { "an" } else { "a" })
+}
+
 /// The sentence for an `item` no deployed machine makes: the machine to
 /// build, by name. Shared by `chain_break`'s two depths and the research
 /// tree's "no Research Node" block, so the three cannot word it apart.
 pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
     let name = game.item_name(item);
     if let Some(def) = settable_machine(game, item) {
-        return format!("No way to make this — set a {} to {name}.", def.name);
+        return format!(
+            "No way to make this — set {} to {name}.",
+            with_article(&def.name)
+        );
     }
     match makeable_by(game, item) {
-        Some(def) => format!("No {name} — build a {} to make it.", def.name),
+        Some(def) => format!("No {name} — build {} to make it.", with_article(&def.name)),
         None => format!("Nothing the base can build makes {name}."),
     }
 }
@@ -813,7 +819,7 @@ pub(crate) fn queue_needs(
 ///
 /// **The one walk down a recipe tree by item**, with two readers:
 /// `queue_needs` takes only the keys, and `power::fuel_chain` takes the
-/// depths, which is what ranks a Power Conduit above the Mining Node whose
+/// depths, which is what ranks an Extractor above the Extractor whose
 /// fragments a Power Cell is made of. Breadth-first because the depth has to
 /// be the *shortest* one — an item that is both a seed and an ingredient of
 /// another seed is a seed. The map doubles as the seen set, so a mod's pair
@@ -1763,7 +1769,7 @@ impl Game {
     /// **And a short burner with nothing in store asks for its fuel to be
     /// made instead**, which is the gate's other half. Left at "nothing to
     /// fetch, so nothing to want", a base whose Recharger Nodes all ran dry
-    /// kept every body on its work orders while a Power Conduit — the one
+    /// kept every body on its work orders while an Extractor — the one
     /// machine that makes cells out of nothing — stood `Idle` beside them,
     /// and the grid never came back: no order names Power Cells, so nothing
     /// else would ever post to it. The make want is `wants` asked about the
@@ -2142,7 +2148,7 @@ impl Game {
     ///
     /// **A dry job is not a want**, `build_is_workable`'s rule crossed over:
     /// a body pinned to a job it cannot afford is a body that cannot go run
-    /// the Mining Node or the Lathe that would make what it is short of, and
+    /// the Extractor or the Factory that would make what it is short of, and
     /// a one-program base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
@@ -2162,7 +2168,7 @@ impl Game {
     /// **The plan asks for every tile and finish it will spend**, one
     /// standing order per item through `Game::sync_dig_order`: the Mining
     /// Node for the tiles' fragments — a solid cell's future tile included,
-    /// though it claims nothing from the budget yet — and the Lathe for the
+    /// though it claims nothing from the budget yet — and the Factory for the
     /// finishes' substrate. It is handed over from here because this is the
     /// one pass that has priced every site the crew can reach. A cut cell
     /// waiting on a shelf nobody is told to fill would stay bare for the
@@ -2257,7 +2263,7 @@ impl Game {
     /// **Filed at the bottom, once**, like any player order —
     /// `move_work_order` is how the player promotes it, and a resize keeps
     /// whatever position it has. Filed only where `queue_work_order` would
-    /// accept it: a base with no Lathe gets no order the chain rule would
+    /// accept it: a base with no Factory gets no order the chain rule would
     /// refuse by hand, and the dry lines already say what is short. An
     /// order already standing when the chain later breaks stays, and stalls
     /// the way a player's does.

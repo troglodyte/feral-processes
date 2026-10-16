@@ -810,7 +810,7 @@ pub struct ProgramSaleOption {
     /// says what it was in the middle of.
     pub activity: String,
     /// What this sale would also cancel, worded for display: e.g. "leaves
-    /// your battle party", "stops working the Mining Node". Empty when the
+    /// your battle party", "stops working the Extractor". Empty when the
     /// program is idle. The same facts as `activity`, worded as consequences
     /// — the confirmation screen warns, the row informs.
     pub detaches: Vec<String>,
@@ -2461,7 +2461,7 @@ pub struct RecipeInput {
     /// How many one batch consumes.
     pub qty: u32,
     /// The extractor that taps this, for an ingredient no recipe makes —
-    /// Core Fragment naming the Mining Node. `None` when an earlier step of
+    /// Core Fragment naming the Extractor. `None` when an earlier step of
     /// the same chain already produces it, and for a drop nothing produces at
     /// all. See `Game::recipe_chains`.
     pub source: Option<String>,
@@ -3526,7 +3526,7 @@ impl BuildBlock {
 }
 
 impl BuildOrderRow {
-    /// What a screen calls this request — `Lathe`, or `Lathe → Mk3`.
+    /// What a screen calls this request — `Factory`, or `Factory → Mk3`.
     ///
     /// Composed here rather than baked into `structure`, so the name and the
     /// tier cannot be split back apart by a caller that wants only one.

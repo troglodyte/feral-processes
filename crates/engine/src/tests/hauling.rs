@@ -114,7 +114,8 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // fixture put it — and it takes the order below to make it a consumer at
     // all, which is
     // `a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building`.
-    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
     // Somewhere to take a load: with no depot there is no errand, which is
     // `with_no_depot_a_clogged_machine_just_stays_clogged` below.
     deploy(&mut game, "depot", 4, 0);
@@ -128,8 +129,8 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // Lathe that pulls, which would drain the very clog this test is about.
     // Backed up it is still a consumer, because `consumer_beside` asks the
     // recipe rather than whether the neighbour is currently pulling.
-    let lathe_cap = capacity_of(&game, lathe);
-    fill_output(&mut game, lathe, "blank_substrate", lathe_cap);
+    let lathe_cap = capacity_of(&game, substrate_factory);
+    fill_output(&mut game, substrate_factory, "blank_substrate", lathe_cap);
     // Ordered past what that fill holds, or the order would be *satisfied*
     // by it — a filled queue drops the Lathe out of `queue_needs`, which
     // makes it a bystander rather than an attached building and turns this
@@ -1070,7 +1071,7 @@ fn a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it() {
     let mut game = base(35);
     let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    let lathe = spawn_machine_with_recipe_at(
+    let substrate_factory = spawn_machine_with_recipe_at(
         &mut game,
         "factory",
         "blank_substrate",
@@ -1082,10 +1083,12 @@ fn a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it() {
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
-    game.world.entity_mut(lathe).insert(StandingJob {
-        work: true,
-        guard: false,
-    });
+    game.world
+        .entity_mut(substrate_factory)
+        .insert(StandingJob {
+            work: true,
+            guard: false,
+        });
 
     for _ in 0..20 {
         game.tick();
@@ -2073,13 +2076,14 @@ fn a_cut_off_machine_with_a_consumer_beside_it_stays_stranded() {
     let mut game = base(44);
     lay_long_floor(&mut game);
     let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
-    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
     walled_depot(&mut game, 4);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
-    let lathe_cap = capacity_of(&game, lathe);
-    fill_output(&mut game, lathe, "blank_substrate", lathe_cap);
+    let lathe_cap = capacity_of(&game, substrate_factory);
+    fill_output(&mut game, substrate_factory, "blank_substrate", lathe_cap);
     game.queue_work_order(WorkOrder::batch(
         ItemId::from("blank_substrate"),
         lathe_cap + 5,

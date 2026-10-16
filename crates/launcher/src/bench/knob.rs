@@ -15,7 +15,7 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Knob {
-    /// Path under the assets directory, e.g. `structures/assembly_bay.ron`.
+    /// Path under the assets directory, e.g. `structures/printer.ron`.
     pub file: String,
     /// Dotted field path, one of `FIELDS`.
     pub field: String,
@@ -564,7 +564,7 @@ mod tests {
             std::fs::write(&path, patch(&text, field, v, true).unwrap()).unwrap();
             assert_eq!(read_back(scratch.dir(), &k).unwrap(), expect, "{field}");
         }
-        let k = knob("structures/power_conduit.ron", "work.ticks_per_unit");
+        let k = knob("structures/research_node.ron", "work.ticks_per_unit");
         let path = scratch.dir().join(&k.file);
         let text = std::fs::read_to_string(&path).unwrap();
         std::fs::write(&path, patch(&text, &k.field, 9.0, true).unwrap()).unwrap();
@@ -577,11 +577,11 @@ mod tests {
     #[test]
     fn every_listed_field_reads_back_and_matches_its_integer_flag() {
         let examples = [
-            ("capacity", "structures/assembly_bay.ron", "capacity"),
-            ("power_draw", "structures/assembly_bay.ron", "power_draw"),
+            ("capacity", "structures/printer.ron", "capacity"),
+            ("power_draw", "structures/printer.ron", "power_draw"),
             (
                 "work.ticks_per_unit",
-                "structures/power_conduit.ron",
+                "structures/research_node.ron",
                 "work.ticks_per_unit",
             ),
             (
@@ -853,8 +853,7 @@ mod tests {
     #[test]
     fn read_back_refuses_other_fields() {
         let scratch = ScratchAssets::new(&assets(), "knob_test").unwrap();
-        let e =
-            read_back(scratch.dir(), &knob("structures/assembly_bay.ron", "glyph")).unwrap_err();
+        let e = read_back(scratch.dir(), &knob("structures/printer.ron", "glyph")).unwrap_err();
         assert!(e.contains("not a supported knob field"), "{e}");
         assert!(
             e.contains("intensity") && e.contains("services.<need>.radius"),

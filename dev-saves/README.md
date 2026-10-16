@@ -18,15 +18,15 @@ cargo run --bin savetool -- template # what's available
 structures became five configurable machines. Each template's structures were
 rewritten as text (kind plus `recipe: Some(...)`, `tier` kept):
 
-| Old | Now |
+| The one-recipe machine that made | Now stands as |
 |---|---|
-| mining_node, log_scraper, cache_tap, power_conduit | extractor: core_fragment, raw_trace, cache_grain, power_cell |
-| lathe, refinery, annealing_node, transcriber, winding_node | factory: blank_substrate, bytecode_block, annealed_core, logic_wafer, charge_coil |
-| disk_press, decoy_bench, refactor_bench, armory, fabricator | assembler: routine_disk, honeypot, recompile_kernel, hardened_shell, trace_sniffer |
-| assembly_bay | printer: patch_routine |
-| compiler | printer: ice_breaker where the template is measured or staffed for it (`bench-economy`, `breeding`, `rooms`, `deep-lair`); a workbench everywhere else |
+| core fragments, raw trace, cache grain, power cells | extractor set to that item |
+| blank substrate, bytecode blocks, annealed cores, logic wafers, charge coils | factory set to that item |
+| routine disks, honeypots, recompile kernels, hardened shells, trace sniffers | assembler set to that item |
+| patch routines | printer set to patch_routine |
+| ICE breakers (and hand-compiling) | printer set to ice_breaker where the template is measured or staffed for it (`bench-economy`, `breeding`, `rooms`, `deep-lair`); a workbench everywhere else |
 
-`deep-lair`'s armory became a Workbench. Any program on a cronjob against a
+`deep-lair`'s armor bench became a Workbench. Any program on a cronjob against a
 tile that became a Workbench was set to no cronjob (a Workbench runs no job,
 so the program turns idle). Every template that gained a Workbench already had
 `automation` researched, and `every_template_with_a_workbench_has_automation_researched`

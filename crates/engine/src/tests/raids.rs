@@ -155,7 +155,7 @@ fn home_loads_as_non_raidable_and_other_structures_default_to_raidable() {
     let mining = defs
         .iter()
         .find(|d| d.id == "extractor")
-        .expect("mining_node should load");
+        .expect("extractor should load");
     assert!(
         mining.raidable,
         "a structure file that omits `raidable` must default to raidable"
@@ -1323,7 +1323,7 @@ fn a_structure_survives_seven_raids_worth_of_damage() {
         .structure_defs()
         .into_iter()
         .find(|d| d.id == "extractor")
-        .expect("mining_node.ron should load")
+        .expect("extractor.ron should load")
         .durability;
     let structure = game
         .world

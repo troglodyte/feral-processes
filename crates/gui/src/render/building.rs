@@ -3095,7 +3095,7 @@ mod build_program_tests {
     }
 
     /// An upgrade names the tier it is buying, because that is what decides
-    /// how deep a program it costs — "Mining Node" alone would leave the
+    /// how deep a program it costs — "Extractor" alone would leave the
     /// player reading a zone requirement with nothing to attach it to.
     #[test]
     fn an_upgrade_prompt_names_the_tier_the_program_is_buying() {
@@ -3587,7 +3587,7 @@ mod build_program_tests {
             "precondition: one owned program is the roster floor, not an empty roster"
         );
 
-        // The deploy menu, opened on the Mining Node's category: one line
+        // The deploy menu, opened on the Extractor's category: one line
         // for the screen, and every non-Home row dimmed.
         let (_, shapes) = crate::paint::with_painter(|p| {
             draw_build_menu(
@@ -3611,7 +3611,7 @@ mod build_program_tests {
         );
         let dimmed = crate::paint::painted_runs_in(&shapes, TEXT_DIM, false);
         assert!(
-            dimmed.iter().any(|t| t.contains("Mining Node")),
+            dimmed.iter().any(|t| t.contains("Extractor")),
             "an unaffordable structure row is greyed, not hidden: {dimmed:?}"
         );
 

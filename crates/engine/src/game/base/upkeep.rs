@@ -16,7 +16,7 @@ use crate::*;
 /// How much of a structure's *maximum* Durability one forced hit takes.
 ///
 /// A percentage rather than a flat figure so the row behaves the same on a
-/// Home as on a Mining Node, and so repeated presses converge on 1 HP rather
+/// Home as on an Extractor, and so repeated presses converge on 1 HP rather
 /// than eventually destroying the thing being watched — see
 /// `repeated_forced_hits_never_destroy_the_structure`.
 ///
@@ -883,7 +883,7 @@ impl Game {
             // defender *by* this `Task`, so the program is always working the
             // structure the line above already names — leaving the `Task` on
             // would have `sale_detachments` add a redundant "stops working
-            // the Mining Node" directly beneath it.
+            // the Extractor" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
             self.bench_or_dissolve(worker);
         }
@@ -1074,7 +1074,7 @@ impl Game {
         // The subject is the machine's *kind* and not the entity, so the
         // memory outlives the structure — which is what lets it be formed on
         // the branch that is about to despawn it, and what makes a rebuilt
-        // Lathe the same Lathe to a program that was hurt at one.
+        // Factory the same Factory to a program that was hurt at one.
         if let Some(kind) = kind {
             for &w in &workers {
                 self.remember(w, "swept_here", MemorySubject::Structure(kind.clone()));

@@ -2,8 +2,8 @@
 
 Machines that feed each other form a line. A machine feeds its neighbour when it stands on one of
 the neighbour's four orthogonal tiles and its output is something the neighbour takes in, either
-as an ingredient or as the power it burns. A Mining Node beside a Lathe is a line. Two Mining Nodes
-side by side are not, because neither makes anything the other needs.
+as an ingredient or as the power it burns. An Extractor making Core Fragments beside a Factory making Bytecode Blocks is a line. Two Extractors
+making Core Fragments side by side are not, because neither makes anything the other needs.
 
 An Extractor, Factory, Assembler or Printer makes nothing until you tell it what to. Place the
 machine, stand beside it and press R to pick a recipe from the ones you have researched. A machine

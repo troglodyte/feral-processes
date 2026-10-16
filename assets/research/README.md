@@ -6,7 +6,7 @@ recompiling required. A malformed file is skipped with a warning logged
 in-game rather than crashing startup.
 
 Research Data is the currency. It comes from a Research Station structure
-worked by an assigned tamed program, the same way a Mining Node produces
+worked by an assigned tamed program, the same way an Extractor produces
 Core Fragments.
 
 ## Schema
@@ -30,11 +30,10 @@ Core Fragments.
     // tree" below.
     //
     // Below it, one cyan line per conversion the node makes possible — a
-    // recipe in `unlocks_recipes` below, or a structure in
-    // `unlocks_structures` that sets `assembles` — derived from the recipe
-    // itself.
+    // recipe in `unlocks_recipes` below, or a machine recipe whose
+    // `research` names this node — derived from the recipe itself.
     name: "Weapon Fabrication",
-    description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
+    description: "Opens the weapon and module recipes at the Workbench, and lets an Assembler turn Logic Wafers into Trace Sniffers.",
 
     // Research Data a project on this node has to accumulate before it
     // completes. Research Stations feed it in while the node is the base's active
@@ -71,7 +70,7 @@ Core Fragments.
 
     // Optional; defaults to none. Structure ids this node makes buildable.
     // A structure named by NO research file is buildable from turn one.
-    unlocks_structures: ["fabricator"],
+    unlocks_structures: ["line_driver"],
 
     // Optional; defaults to none. Craft recipes this node makes available.
     unlocks_recipes: [(
@@ -222,7 +221,7 @@ whenever any affix node exists; the screen itself stays empty until the
   point — in flagging every step. A tree that flags nothing simply offers no
   advice; the menu then draws every available node the same.
 - **A structure named by no research file is buildable by default.** That is
-  how the Home, Mining Node, Research Station, Recharger Node and Zone Portal
+  how the Home, Extractor, Research Station, Recharger Node and Zone Portal
   stay available from the start, and it means a structure mod that ships no
   research file keeps working unchanged.
 - A node naming an unknown prerequisite, or an unknown structure in
@@ -250,9 +249,10 @@ whenever any affix node exists; the screen itself stays empty until the
   `every_research_material_is_reachable_through_that_nodes_own_prerequisites`
   exists to catch. A node whose bill names something out of reach fails the
   build.
-- A structure with a `work` block makes its product out of nothing on a timer
-  and so counts as a source; one with `assembles` does not, because it runs
-  its product's own `craftable.cost` and is already covered by that recipe.
+- A `work` block, or an Extractor recipe the node's prerequisites have
+  researched, makes its product out of nothing on a timer and so counts as a
+  source; an assembling machine's recipe does not, because it runs its
+  product's own `craftable.cost` and is already covered by that recipe.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
 - **A discoverable node must be reachable from the visible tree.** Its

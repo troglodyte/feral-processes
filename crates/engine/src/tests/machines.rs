@@ -459,20 +459,6 @@ fn powered_base(seed: u32) -> Game {
     game
 }
 
-/// The cycle a worker of the standard speed bakes onto its `Task` when posted
-/// to a freshly built `kind` set to `recipe` (a fixed-recipe kind ignores it).
-fn baked_required(kind: &str, recipe: Option<&str>) -> u32 {
-    let mut game = powered_base(21010);
-    let machine = match recipe {
-        Some(recipe) => spawn_machine_with_recipe_at(&mut game, kind, recipe, 2, 0),
-        None => spawn_machine_at(&mut game, kind, 2, 0),
-    };
-    let worker = spawn_tamed(&mut game, 10, 3);
-    stand_player_at_post(&mut game, machine);
-    game.assign_cronjob(worker, machine).unwrap();
-    game.world.get::<Task>(worker).unwrap().required
-}
-
 #[test]
 fn a_configured_line_runs_like_the_structures_it_replaces() {
     let mut game = powered_base(21011);
@@ -487,9 +473,7 @@ fn a_configured_line_runs_like_the_structures_it_replaces() {
     park_at_post(&mut game, builder, factory);
 
     let required = game.world.get::<Task>(builder).unwrap().required;
-    // 12 is what the Refinery's worker bakes at the same speed (recorded for
-    // Task 14, which deletes the Refinery and pins this to the number).
-    assert_eq!(required, baked_required("refinery", None));
+    // 12 is what the one-recipe Refinery's worker baked at the same speed.
     assert_eq!(required, 12);
 
     for _ in 0..200 {

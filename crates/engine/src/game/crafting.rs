@@ -272,8 +272,7 @@ impl Game {
     }
 
     /// The kind (and its recipe) that exists to make `item`: an assembling
-    /// bench before an extractor, and a fixed-recipe kind before a
-    /// configurable machine. `StructureDb::all` is sorted, so a mod shipping
+    /// recipe before an extraction. `StructureDb::all` is sorted, so a mod shipping
     /// two makers for one item resolves the same way every session.
     fn maker_of(
         &self,
@@ -284,15 +283,15 @@ impl Game {
             .all()
             .flat_map(|d| d.productions().map(move |p| (d, p)))
             .filter(|(_, p)| &p.recipe.produces == item)
-            .min_by_key(|(d, p)| (d.machine.is_some(), p.extracts))
+            .min_by_key(|(_, p)| p.extracts)
     }
 
     /// How long compiling one unit of `item` by hand takes, in ticks.
     ///
     /// **The one door onto the number**, so the screen that quotes it and
     /// the loop that spends it cannot disagree: `HAND_CRAFT_TICK_MULT`
-    /// times the cycle of the machine that exists to do the job — the
-    /// `assembles` block naming this item, else the `work` block producing
+    /// times the cycle of the machine that exists to do the job — an
+    /// assembling recipe naming this item, else the extraction producing
     /// it, else `HAND_CRAFT_DEFAULT_CYCLE`. A screen recomputing the
     /// product from the constant is the second copy this exists to prevent.
     ///

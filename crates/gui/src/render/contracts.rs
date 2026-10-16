@@ -258,7 +258,7 @@ mod tests {
     /// paragraph simply leaves the popup and takes its own tail with it.
     #[test]
     fn a_long_description_wraps_rather_than_running_off_the_popup() {
-        let long = "Mining by hand is a way to spend a run. Stand up a Mining Node \
+        let long = "Mining by hand is a way to spend a run. Stand up an Extractor \
                     and let it work while you do something else — post a program to \
                     it, then stay in the base a while and watch your crew haul what \
                     it cuts across to a buffer on their own.";

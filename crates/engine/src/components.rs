@@ -1021,7 +1021,7 @@ pub struct Squeezing {
 }
 
 /// Why a machine is or isn't producing. Present on a structure that runs a
-/// job (`StructureDef::work` or `::assembles`) and on one that burns to keep
+/// job (`StructureDef::work` or `::machine`) and on one that burns to keep
 /// supplying (`StructureDef::power_upkeep`) — absence means "nothing here
 /// can stall", which is why a Home never reports a status it could not
 /// possibly leave.

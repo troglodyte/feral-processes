@@ -45,46 +45,22 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
             }
         }
 
-        // The chain groups together rather than scattering by id —
-        // `assembly_bay` sorted third overall under the old id-pinned order,
-        // ahead of every machine that feeds it.
+        // The chain groups together rather than scattering by id — the
+        // patch-routine bench sorted third overall under the old id-pinned
+        // order, ahead of every machine that feeds it. The three assembling
+        // machines and the Assembler stand here by their `machine` role; the
+        // Teardown Rig joins them on `category()` reading `strips`, since a
+        // rig wants a posted program and pays items out, which is what
+        // `Assembler` means here rather than a seventh variant every menu
+        // would have to learn to draw.
         let assemblers: Vec<&str> = defs
             .iter()
             .filter(|d| d.category() == StructureCategory::Assembler)
             .map(|d| d.id.as_str())
             .collect();
-        // The Armory and Fabricator sit here because `category()` reads
-        // `assembles`, and that is the right group for them: they now want a
-        // program and adjacent feeders like any machine. They are still the
-        // hand-craft bench for the rest of their gear class, which no category
-        // expresses — a structure is filed by what it needs, not by every use.
-        // The Compiler moved here off the same rule when it stopped printing
-        // catalysts from nothing; it is still the routine-extraction bench,
-        // which is the same "filed by what it needs" case. The Teardown Rig
-        // joins them on that rule too: `category()` reads `strips`, and a rig
-        // wants a posted program and pays items out, which is what
-        // `Assembler` means here rather than a seventh variant every menu
-        // would have to learn to draw.
         assert_eq!(
             assemblers,
-            [
-                "annealing_node",
-                "armory",
-                "assembler",
-                "assembly_bay",
-                "compiler",
-                "decoy_bench",
-                "disk_press",
-                "fabricator",
-                "factory",
-                "lathe",
-                "printer",
-                "refactor_bench",
-                "refinery",
-                "teardown_rig",
-                "transcriber",
-                "winding_node"
-            ]
+            ["assembler", "factory", "printer", "teardown_rig"]
         );
 
         orders.push(defs.into_iter().map(|d| d.id).collect::<Vec<_>>());

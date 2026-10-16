@@ -2,7 +2,7 @@
     id: "charge_coil",
     name: "Charge Coil",
     glyph: Some('*'),
-    description: "Power Cells wound into a store that holds under load. What the Assembly Bay builds Patch Routines out of.",
+    description: "Power Cells wound into a store that holds under load. What the Printer builds Patch Routines out of.",
     value: Some(3),
     craftable: Some((cost: [("power_cell", 3)], requires_structure: Some("workbench"))),
 )

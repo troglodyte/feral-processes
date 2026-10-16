@@ -360,7 +360,7 @@ impl Objective {
     /// this, and `Game::offerable` refuses to put one on the board while it is
     /// already true. They were one expression in the system alone until a
     /// board was read against the `contracts` template and offered
-    /// *Stand Up a Refinery* to a base with a Refinery standing in it — 45
+    /// *Stand Up a Factory* to a base with a Factory standing in it — 45
     /// Credits, 5 Power Cells and 140 XP for pressing a key — and offered
     /// *Reach sector 3* to a run already in sector 3.
     ///

@@ -90,7 +90,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
     // Which perk this file describes. One of exactly these twenty-one,
     // written as a bare identifier (not a quoted string):
     //
-    //   KeenScavenger   raises a mining node's per-cycle success chance
+    //   KeenScavenger   raises an extractor's per-cycle success chance
     //   LowPowerMode    slows Power drain, down to not draining at all
     //   ExploitFocus    softens how much a decompile target's remaining
     //                   Integrity counts against the attempt

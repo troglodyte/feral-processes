@@ -2,7 +2,7 @@
 
 An implant is a piece of hardware built into your own body. It changes what you can do for as long
 as it stays in, and it asks something of you in return. Research Wetware Splicing and build a
-Splice Rig in your [base](your-base). Implants themselves are forged at a Fabricator from that
+Splice Rig in your [base](your-base). Implants themselves are forged at a Workbench from that
 research.
 
 Stand beside a Splice Rig and press I. The screen lists what is already built in, then the

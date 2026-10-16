@@ -481,9 +481,9 @@ fn the_report_names_the_room_a_structure_stands_in_and_not_the_commons() {
     assert_eq!(at((0, 0)).room, None, "the home sits in the commons");
 }
 
-/// Ticks for one cycle at a lathe standing in a walled room with
+/// Ticks for one cycle at a substrate_factory standing in a walled room with
 /// `finished` carpet cells, `with_bed` making it quarters rather than a
-/// workshop; `None` leaves the lathe in the commons.
+/// workshop; `None` leaves the substrate_factory in the commons.
 fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
     let mut game = game_with_home();
     if let Some((finished, with_bed)) = room {
@@ -492,8 +492,9 @@ fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
             spawn_structure_at(&mut game, "defrag_bay", 4, 4);
         }
     }
-    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 3);
-    game.work_ticks_for(lathe, crate::tuning::DEFAULT_BASE_SPEED)
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 3);
+    game.work_ticks_for(substrate_factory, crate::tuning::DEFAULT_BASE_SPEED)
 }
 
 #[test]

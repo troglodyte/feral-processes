@@ -758,12 +758,12 @@ fn extract_record(
     }
 }
 
-/// The ingredient list a machine declaring `assembles` runs, which is the
+/// The ingredient list an `Assemble` machine's recipe runs, which is the
 /// assembled item's own `CraftableDef::cost` — there is no second recipe
 /// format, so a machine's recipe and the bench recipe for the same item
 /// cannot drift apart.
 ///
-/// `None` for a structure that assembles nothing, and also for one naming an
+/// `None` for a structure that is not an assembling machine, and also for one naming an
 /// item that isn't craftable (a typo, or a mod whose item file was removed).
 /// Both are the same thing to a caller: nothing to run. The shipped-assets
 /// test is what stops the second case reaching a player.
@@ -812,8 +812,8 @@ pub(crate) fn intake_recipe(
 }
 
 /// What a structure puts into its *own* output buffer, or `None` for one
-/// that produces nothing. An extractor's `work.produces` and an assembler's
-/// `assembles.item` are the only two ways anything reaches an `output`, so
+/// that produces nothing. An extractor's `work.produces` and a machine's
+/// set recipe are the only two ways anything reaches an `output`, so
 /// this is the whole answer to "could this structure feed a neighbour".
 ///
 /// One narrowing: a structure producing a banked item reaches no `output` at
@@ -1232,7 +1232,7 @@ fn burn_grid_upkeep(world: &mut World) {
 ///
 /// One pass for every kind of machine, because "nobody is working this" is
 /// one fact. It used to be a branch inside `assembler_system`, which visits
-/// only structures declaring `assembles` — so an *extractor* with no program
+/// only assembling machines — so an *extractor* with no program
 /// was never visited by anything at all. `MachineStatus` defaults to
 /// `Running`, and nothing else writes a status for a machine with no `Task`
 /// pointed at it, so a freshly deployed Research Node drew green on the map
@@ -1788,7 +1788,7 @@ pub fn task_progress_system(
                 // The zone cap, like every other XP site. `WORK_XP_LEVEL_CAP`
                 // above is a *separate* and lower gate and is not folded into
                 // it: that one is what stops a developed program being ground
-                // up at a Mining Node, and unifying the two deletes the
+                // up at an Extractor, and unifying the two deletes the
                 // property.
                 Some(crate::tuning::zone_level_cap(zone.0)),
                 xp_boost_pct,

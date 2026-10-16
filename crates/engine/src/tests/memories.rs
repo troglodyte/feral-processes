@@ -1028,7 +1028,7 @@ fn mining_morale_is_game_morale() {
             .world
             .get::<crate::components::ResourceNode>(node)
             .and_then(|n| n.level)
-            .expect("mining_node.ron declares level: Some(1)");
+            .expect("extractor.ron declares level: Some(1)");
         expected_chance.get_or_insert_with(|| {
             crate::systems::mining_success_chance(level, 0, 0, 0.0, 0.0, 0.0)
         });

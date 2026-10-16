@@ -574,7 +574,7 @@ pub struct CreatureSave {
     /// How many percentage upgrades have been spent on this program — see
     /// `components::Refactors`. Persisted for exactly the reason `fusions`
     /// above is: `MAX_COMPANION_REFACTORS` is the only bound on a buff
-    /// chain that runs off a Mining Node forever, and a count that reset to
+    /// chain that runs off an Extractor forever, and a count that reset to
     /// 0 on load would refill the budget on every reload.
     ///
     /// `#[serde(default)]` does nothing for the bincode save — that

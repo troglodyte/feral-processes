@@ -1,11 +1,10 @@
 (
     id: "armor_bench",
     name: "Reactive Armor",
-    description: "The bench where armor is made. Researched armor recipes only show up while one is standing.",
+    description: "Lets an Assembler make Hardened Shells, and opens the armor recipes at the Workbench. Researched armor recipes only show up while a Workbench is standing.",
     cost: 24,
     materials: [("bytecode_block", 12), ("charge_coil", 4)],
     requires: ["automation"],
     requires_subject: true,
     discoverable: true,
-    unlocks_structures: ["armory"],
 )

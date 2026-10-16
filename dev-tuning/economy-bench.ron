@@ -31,10 +31,10 @@ Objective(
         // Shipped ~33 per 3000 ticks. The bay line is the longest chain
         // (conduit, winding, bay) and the one the game is for.
         Target(measure: "economy.items.patch_routine", min: 45.0, max: 70.0),
-        // Shipped ~111. The compiler is starved a third of the run for
+        // Shipped ~111. The printer is starved a third of the run for
         // Core Fragments.
         Target(measure: "economy.items.ice_breaker", min: 140.0, max: 200.0),
-        // Shipped ~83. The refinery's line shares its mining node.
+        // Shipped ~83. The Bytecode Block line shares its Core Fragment extractor.
         Target(measure: "economy.items.bytecode_block", min: 100.0, max: 150.0),
         // Shipped ~0.22. Asked for alongside the output counts on purpose:
         // slowing the bay would raise this by itself, and the patch_routine

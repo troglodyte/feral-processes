@@ -2263,7 +2263,7 @@ fn a_rolled_contract_inherits_its_templates_repeatability() {
         "hunt is repeatable, so every contract it rolls is"
     );
     assert!(
-        !db.repeatable(&ContractId::from("commission#refinery")),
+        !db.repeatable(&ContractId::from("commission#block_factory")),
         "commission is not"
     );
     assert!(
@@ -2385,7 +2385,7 @@ fn a_contract_the_run_has_already_done_is_never_offered() {
     // Refinery* to a base with a Refinery already standing, and *Push the
     // Sector* (reach sector 3) to a run already in sector 3. Either paid out
     // in full for pressing a key.
-    let refinery = def(
+    let block_factory = def(
         "already_built",
         Objective::Build {
             structure: "factory".to_string(),
@@ -2398,14 +2398,14 @@ fn a_contract_the_run_has_already_done_is_never_offered() {
         vec![Reward::Credits(120)],
     );
     assert!(
-        game.offerable_contracts_for_test(&refinery),
+        game.offerable_contracts_for_test(&block_factory),
         "with no Refinery standing it is a real contract"
     );
     assert!(!game.offerable_contracts_for_test(&breached), "zone 1 >= 1");
 
     deploy(&mut game, "factory", 3, 0);
     assert!(
-        !game.offerable_contracts_for_test(&refinery),
+        !game.offerable_contracts_for_test(&block_factory),
         "a Build of something already deployed completes on acceptance"
     );
 }
@@ -4196,6 +4196,6 @@ fn a_configure_contract_is_worded_for_the_player() {
     let line = row
         .iter()
         .find(|r| r.name == "Make Bytecode Blocks")
-        .expect("the shipped refinery job is a Configure");
+        .expect("the shipped block_factory job is a Configure");
     assert_eq!(line.objective_line, "Set a machine to make Bytecode Block");
 }

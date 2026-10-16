@@ -57,7 +57,7 @@ impl Game {
     /// Whether `depot` will take `item` in.
     ///
     /// True for any entity with no `DepotFilter` at all, which is what
-    /// makes this safe to ask of a Mining Node's buffer or of a structure
+    /// makes this safe to ask of an Extractor's buffer or of a structure
     /// spawned by a test fixture.
     pub(crate) fn depot_accepts(&self, depot: Entity, item: &ItemId) -> bool {
         filter_accepts(self.world.get::<DepotFilter>(depot), item)

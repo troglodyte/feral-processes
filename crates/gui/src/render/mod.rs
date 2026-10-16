@@ -1647,7 +1647,7 @@ fn draw_direction_prompt(
 }
 
 /// A program's current activity as a bracketed suffix — `" (in party)"`,
-/// `" (Mining Node)"`, `" (guarding Data Cache)"`, `" (idle)"`. The wording
+/// `" (Extractor)"`, `" (guarding Data Cache)"`, `" (idle)"`. The wording
 /// itself is `Game::program_activity`'s; every dialog that lists programs
 /// appends it through here so they cannot drift apart.
 fn activity_tag(activity: &str) -> String {

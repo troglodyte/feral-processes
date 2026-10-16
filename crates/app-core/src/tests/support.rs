@@ -3153,7 +3153,7 @@ pub(crate) fn walk_far_from_the_base(app: &mut App) {
 ///
 /// The machines go in through a save edit rather than through play: the
 /// engine hands app-core no way to write a `Stock`, which is the seam
-/// working rather than a limitation of the test. `mining_node` on both sides
+/// working rather than a limitation of the test. `extractor` on both sides
 /// so the pair pools into one row, and the western one is the *lower* tile,
 /// so a take that spans them has an order to be right about.
 /// The party in base space beside `depots` Depots, each already holding
@@ -3675,7 +3675,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
     let path = scratch_path("line_base", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    let lathe = save::StructureSave {
+    let substrate_factory = save::StructureSave {
         recipe: Some("blank_substrate".into()),
         kind: "factory".to_string(),
         position: (2, 0),
@@ -3695,7 +3695,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
         pod_charged: None,
         incubating: Vec::new(),
     };
-    data.structures.push(lathe);
+    data.structures.push(substrate_factory);
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);

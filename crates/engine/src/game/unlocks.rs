@@ -579,7 +579,7 @@ impl Game {
     /// quote different ingredients.
     ///
     /// A structure that assembles nothing contributes nothing, silently: a
-    /// Depot and a Log Scraper are perfectly good things for a node to
+    /// Depot and an Extractor are perfectly good things for a node to
     /// unlock and simply have no conversion to state.
     fn research_conversions(&self, def: &crate::research::ResearchDef) -> Vec<String> {
         let structures = self.world.resource::<StructureDb>();

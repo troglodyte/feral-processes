@@ -1464,30 +1464,59 @@ pub(super) fn base_with_a_research_node(game: &mut Game) -> Entity {
             .collect();
     // Sorted so the tiles these land on do not depend on set iteration order.
     needed.sort();
-    let mut kinds: Vec<String> = Vec::new();
+    // One machine per (kind, product): a configurable machine makes one thing,
+    // so a bill of three items on the Extractor needs three Extractors.
+    let mut machines: Vec<(String, Option<ItemId>)> = Vec::new();
     for item in needed {
         let Some(def) = crate::game::base::work_orders::makeable_by(game, &item) else {
             continue;
         };
-        if !kinds.contains(&def.id) {
-            kinds.push(def.id);
+        let recipe = def.machine.is_some().then(|| item.clone());
+        let stand = (def.id, recipe);
+        if !machines.contains(&stand) {
+            machines.push(stand);
         }
     }
     // The shelf `feeders_for` falls back to when no producer is a neighbour.
-    kinds.push("depot".to_string());
+    machines.push(("depot".to_string(), None));
     // **Laid floor, or none of this is reachable.** The starting pocket is four
     // cells across, which does not hold a Research Node plus a producer per
     // shipped bill; a machine off the floor is one `can_walk_to_post` refuses,
     // so the scheduler posts nobody and the base reads as having no work — the
     // failure looks like a scheduler bug and is a fixture that stood its
     // machines in the rock.
-    for (lane, kind) in kinds.into_iter().enumerate() {
-        let (x, y) = (2 + lane as i32 * 2, 4);
+    for (lane, (kind, recipe)) in machines.into_iter().enumerate() {
+        // Four to a row so the farthest machine stays within a walk of the
+        // pocket; two tiles apart so none is another's neighbour.
+        let (x, y) = (2 + (lane as i32 % 4) * 2, 4 + (lane as i32 / 4) * 3);
         for step in 0..=y {
             game.floor_cell(x, step);
             game.floor_cell(x - 1, step);
         }
-        spawn_machine_at(game, &kind, x, y);
+        if let Some(item) = recipe {
+            // `spawn_structure` is the real component list; the recipe is set
+            // directly because a fixture must not research its way to one.
+            let def = game
+                .structure_defs()
+                .into_iter()
+                .find(|d| d.id == kind)
+                .expect("a shipped machine");
+            let machine = game.spawn_structure(&def, x, y, None);
+            let node = def
+                .machine_recipe(&item)
+                .filter(|_| def.extracts())
+                .map(|r| ResourceNode {
+                    resource: item.clone(),
+                    level: r.level,
+                });
+            let mut entity = game.world.entity_mut(machine);
+            entity.insert(crate::components::MachineRecipe(Some(item)));
+            if let Some(node) = node {
+                entity.insert(node);
+            }
+        } else {
+            spawn_machine_at(game, &kind, x, y);
+        }
     }
     node
 }
@@ -1805,7 +1834,7 @@ pub(super) fn place_home(game: &mut Game) {
 }
 
 /// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
-/// `armory` so it needs a program and a real bill exactly like a shipped
+/// `shell_assembler` so it needs a program and a real bill exactly like a shipped
 /// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
 /// of that and is for what a standing structure *enables*, not for the
 /// placement or reach machinery a footprint test is about.

@@ -7,7 +7,7 @@ Three things are worth never leaving home without, and only one of them is optio
   one, an iso Market sells them, and caches in the Stack drop them.
 - Power Cells. 25 Power each, drained with e. Power drains every tick whatever you are doing, your
   own attacks weaken below half, and at zero it takes Integrity off you every tick until you find
-  some. Two Core Fragments each, and a Power Conduit is the fastest cronjob a base can run.
+  some. Two Core Fragments each, and an Extractor set to Power Cells is the fastest cronjob a base can run.
 - Patch Routines. The one thing your base builds that helps you in the field: run before a fight,
   it blunts incoming damage for the next 120 ticks. Its clock is its own, so it stacks under a
   routine of the same kind rather than replacing it.
@@ -51,7 +51,7 @@ An iso Market takes anything at a Credit a unit, sells back at double, and buys
 programs at a tenth of their power. That last one is the sink to remember for a roster full of
 duplicates you were never going to develop.
 
-Research Deception and you can build a Decoy Bench, which compiles Honeypots out of ICE Breakers.
+Research Deception and you can set an Assembler to Honeypots, or compile them by hand at a Workbench, out of ICE Breakers.
 A honeypot is a decoy you leave on the ground, and it is the one way to take a program without
 fighting it.
 

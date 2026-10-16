@@ -55,7 +55,7 @@ pub struct RecipeDef {
 pub enum MachineRole {
     /// Produces from nothing, like a `work` node.
     Extract,
-    /// Consumes the item's own `craftable.cost`, like an `assembles` bench.
+    /// Consumes the item's own `craftable.cost`, consuming its inputs.
     Assemble,
 }
 
@@ -93,9 +93,7 @@ impl<'a> Placed<'a> {
     }
 
     /// A fixed `work` block wins and extracts; otherwise the machine recipe
-    /// this instance is set to, if the def still lists it. A third,
-    /// temporary arm reads the old `assembles` block; it goes with that
-    /// field in Task 14.
+    /// this instance is set to, if the def still lists it.
     pub fn production(self) -> Option<Production<'a>> {
         if let Some(work) = &self.def.work {
             return Some(Production {
@@ -103,14 +101,7 @@ impl<'a> Placed<'a> {
                 extracts: true,
             });
         }
-        let Some(machine) = self.def.machine.as_ref() else {
-            // Temporary: the old one-recipe benches, until the field is
-            // deleted with its structures (factory overhaul, Task 14).
-            return self.def.assembles.as_ref().map(|a| Production {
-                recipe: &a.recipe,
-                extracts: false,
-            });
-        };
+        let machine = self.def.machine.as_ref()?;
         let recipe = machine_recipe_in(machine, self.recipe?)?;
         Some(Production {
             recipe,
@@ -160,7 +151,7 @@ pub enum StructureCategory {
     /// Produces from nothing, given a program — see `StructureDef::work`.
     Extractor,
     /// Consumes its neighbours' output, given a program — see
-    /// `StructureDef::assembles`.
+    /// `MachineRole::Assemble`.
     Assembler,
     Utility,
     /// Keeps programs running: refills a need, heals the downed, or adds
@@ -170,56 +161,10 @@ pub enum StructureCategory {
     Defence,
 }
 
-/// A structure's automated-crafting capability — see
-/// `StructureDef::assembles` and `systems::assembler_system`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(from = "AssembleFile")]
-pub struct AssembleDef {
-    /// What this machine builds. Deliberately an *item id* and not a recipe:
-    /// the machine runs that item's own `ItemDef::craftable.cost`, so there
-    /// is exactly one recipe format in the game and a modder who adds a
-    /// craftable item gets an automatable one for free.
-    pub item: ItemId,
-    /// Ticks of progress a completed unit costs, once the machine has a full
-    /// batch of ingredients staged, room in its output, and a program
-    /// assigned.
-    pub ticks_per_unit: u32,
-    /// The same recipe as a `RecipeDef`, so `Placed::production` answers for
-    /// an old bench like a machine. Temporary: goes with `assembles` in
-    /// Task 14 of the factory overhaul.
-    #[serde(skip)]
-    pub recipe: RecipeDef,
-}
-
-#[derive(Deserialize)]
-struct AssembleFile {
-    item: ItemId,
-    ticks_per_unit: u32,
-}
-
-impl From<AssembleFile> for AssembleDef {
-    fn from(file: AssembleFile) -> Self {
-        let recipe = RecipeDef {
-            produces: file.item.clone(),
-            ticks_per_unit: file.ticks_per_unit,
-            level: None,
-            flat_payout: false,
-            research: None,
-            tierless: false,
-        };
-        AssembleDef {
-            item: file.item,
-            ticks_per_unit: file.ticks_per_unit,
-            recipe,
-        }
-    }
-}
-
 /// A structure's automated-teardown capability — see
 /// `StructureDef::strips` and `Game::run_teardown_rigs`.
 ///
-/// Mirrors `AssembleDef` rung for rung, decision 6's rule that a second
-/// shape for the same idea is a second thing to get wrong. It carries no
+/// It carries no
 /// tick figure of its own: what a program costs to strip is
 /// `Game::extraction_ticks`, the same derivation the player's own
 /// extraction is priced by, so a rig and a hand cannot disagree.
@@ -480,7 +425,7 @@ pub struct StructureDef {
     pub extracts_research: Option<crate::research::ResearchId>,
     /// How many units this structure's output buffer holds before it clogs
     /// (see `components::Stock`). Top-level rather than inside `work`
-    /// because an assembler declares `assembles` and no `work` block at all,
+    /// because an assembler machine declares no `work` block at all,
     /// and a storage building declares neither — both still need an output
     /// size. `#[serde(default = "default_output_capacity")]` so existing
     /// structure files (including mods) get a usable buffer rather than 0,
@@ -496,14 +441,6 @@ pub struct StructureDef {
     /// hauler ignores.
     #[serde(default)]
     pub stores: bool,
-    /// If set, this structure automatically builds the named item from
-    /// ingredients pulled out of its orthogonal neighbours' output buffers,
-    /// once a program is assigned to it. Unlike `work`, which produces from
-    /// nothing, this consumes — which is what lets machines form a chain.
-    /// `#[serde(default)]` so existing structure files (including mods)
-    /// written before this field existed still parse.
-    #[serde(default)]
-    pub assembles: Option<AssembleDef>,
     /// If set, this structure takes downed programs the player hands it and
     /// strips them into its output buffer over ticks, once a program is
     /// assigned to it — see `Game::run_teardown_rigs` and spec §10.
@@ -912,12 +849,11 @@ fn consumed_items<'a>(
     recipe: &impl Fn(&ItemId) -> Option<&'a [(ItemId, u32)]>,
 ) -> Vec<&'a ItemId> {
     let mut items: Vec<&ItemId> = def.build_cost.iter().map(|(i, _)| i).collect();
-    let assembled = def.assembles.as_ref().map(|a| &a.item);
     let machine = def
         .productions()
         .filter(|p| !p.extracts)
         .map(|p| &p.recipe.produces);
-    for item in assembled.into_iter().chain(machine) {
+    for item in machine {
         if let Some(inputs) = recipe(item) {
             items.extend(inputs.iter().map(|(i, _)| i));
         }
@@ -948,9 +884,6 @@ pub fn structure_levels<'a>(
                 .entry(&production.recipe.produces)
                 .or_default()
                 .push(i);
-        }
-        if let Some(assembles) = &def.assembles {
-            producers.entry(&assembles.item).or_default().push(i);
         }
     }
     let deps: Vec<Vec<usize>> = list
@@ -1014,7 +947,7 @@ pub fn structure_levels<'a>(
 
 impl StructureDef {
     /// Whether this structure runs a job a program can be posted to — an
-    /// extractor (`work`) or an assembler (`assembles`).
+    /// extractor (`work`) or a configurable machine.
     ///
     /// Named once because three things have to agree about it and one of
     /// them already drifted: deploy inserts `components::MachineStatus` on a
@@ -1027,7 +960,6 @@ impl StructureDef {
     pub fn runs_a_job(&self) -> bool {
         self.work.is_some()
             || self.machine.is_some()
-            || self.assembles.is_some()
             || self.strips.is_some()
             || self.holds_prisoner.is_some()
     }
@@ -1048,12 +980,7 @@ impl StructureDef {
             .iter()
             .flat_map(|m| m.recipes.iter())
             .map(move |recipe| Production { recipe, extracts });
-        // Temporary, with `assembles` (removed in Task 14).
-        let assembled = self.assembles.iter().map(|a| Production {
-            recipe: &a.recipe,
-            extracts: false,
-        });
-        fixed.chain(listed).chain(assembled)
+        fixed.chain(listed)
     }
 
     /// The listed machine recipe producing `item`, if any.
@@ -1152,9 +1079,6 @@ impl StructureDef {
         }
         if self.work.is_some() {
             return StructureCategory::Extractor;
-        }
-        if self.assembles.is_some() {
-            return StructureCategory::Assembler;
         }
         if let Some(machine) = &self.machine {
             return match machine.role {
@@ -1349,13 +1273,12 @@ impl StructureDb {
     /// without a sort here the build menu's `[1]`, `[2]`, ... numbering would
     /// shuffle unpredictably from one session to the next even though nothing
     /// about the mod files changed — the same digit could mean a
-    /// 2-Core-Fragment Mining Node in one session and an 8-Core-Fragment
-    /// Fabricator in the next.
+    /// 12-Core-Fragment Extractor in one session and a 16-Core-Fragment
+    /// Printer in the next.
     ///
-    /// This used to pin `home`, `mining_node`, `research_node` and `compiler`
-    /// first by id and sort the rest alphabetically. That put a modded
+    /// This used to pin four structures first by id and sort the rest alphabetically. That put a modded
     /// structure wherever its id fell in the alphabet, which stopped being
-    /// tolerable once the production chain landed: `assembly_bay` sorted
+    /// tolerable once the production chain landed: the patch-routine bench sorted
     /// third overall, ahead of every machine that feeds it. Grouping by what
     /// a structure *does* puts a mod's assembler with the assemblers for
     /// free, and costs only that the four hand-pinned ids now sort by name
@@ -1373,14 +1296,12 @@ impl StructureDb {
 }
 
 /// The cycle this structure ships, or `None` for one that runs no cycle at
-/// all. The `(work, assembles)` split `Game::work_ticks_for` already made,
-/// named once so the picker's preview and the real rate cannot disagree
+/// all. Named once so the picker's preview and the real rate cannot disagree
 /// about which structures even have a rate.
 pub(crate) fn cycle_ticks(placed: Placed<'_>) -> Option<u32> {
-    if let Some(production) = placed.production() {
-        return Some(production.recipe.ticks_per_unit);
-    }
-    placed.def.assembles.as_ref().map(|a| a.ticks_per_unit)
+    placed
+        .production()
+        .map(|production| production.recipe.ticks_per_unit)
 }
 
 #[cfg(test)]
@@ -1512,7 +1433,7 @@ mod tests {
     #[test]
     fn a_structure_that_services_nothing_still_parses() {
         let db = test_db();
-        let node = db.get("mining_node").expect("mining_node.ron should load");
+        let node = db.get("extractor").expect("extractor.ron should load");
         assert!(node.services.is_empty());
         // Same rule, same file, one field along: what `#[serde(default)]` is
         // for needs an assertion rather than an assumption.
@@ -1524,7 +1445,7 @@ mod tests {
     #[test]
     fn a_drop_pod_is_declared_by_its_field() {
         let db = test_db();
-        assert!(db.get("mining_node").unwrap().drop_pod.is_none());
+        assert!(db.get("extractor").unwrap().drop_pod.is_none());
         let pod = db
             .get("drop_pod_terminal")
             .and_then(|def| def.drop_pod.as_ref())
@@ -1614,12 +1535,12 @@ mod tests {
         let bench = fixture(
             "bench",
             "(\"ore\", 5)",
-            "assembles: Some((item: \"plate\", ticks_per_unit: 10))",
+            "machine: Some((role: Assemble, recipes: [(produces: \"plate\", ticks_per_unit: 10)]))",
         );
         let press = fixture(
             "press",
             "",
-            "assembles: Some((item: \"gear\", ticks_per_unit: 10))",
+            "machine: Some((role: Assemble, recipes: [(produces: \"gear\", ticks_per_unit: 10)]))",
         );
         let levels = levels_of(
             &[&mine, &bench, &press],
@@ -1640,12 +1561,12 @@ mod tests {
         let a = fixture(
             "a",
             "(\"b_out\", 1)",
-            "assembles: Some((item: \"a_out\", ticks_per_unit: 10))",
+            "machine: Some((role: Assemble, recipes: [(produces: \"a_out\", ticks_per_unit: 10)]))",
         );
         let b = fixture(
             "b",
             "(\"a_out\", 1)",
-            "assembles: Some((item: \"b_out\", ticks_per_unit: 10))",
+            "machine: Some((role: Assemble, recipes: [(produces: \"b_out\", ticks_per_unit: 10)]))",
         );
         let levels = levels_of(
             &[&mine, &a, &b],
@@ -1838,7 +1759,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mining_node_sits_below_an_assembly_bay_in_the_shipped_assets() {
+    fn an_extractor_sits_below_a_printer_in_the_shipped_assets() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let (mut db, _) = StructureDb::load_dir(&dir.join("structures")).unwrap();
         let (items, _) = crate::items_db::ItemDb::load_dir(
@@ -1849,6 +1770,6 @@ mod tests {
         )
         .unwrap();
         db.compute_levels(&items);
-        assert!(db.level("mining_node") < db.level("assembly_bay"));
+        assert!(db.level("extractor") < db.level("printer"));
     }
 }

@@ -861,7 +861,7 @@ fn the_tick_draws_no_rng_when_nothing_preys() {
 // 2026-09-05-settlements-phase-6-routes.md`'s branch.
 
 /// A structure that holds cargo in its own output buffer but is **not** a
-/// Depot (`stores: false` on `mining_node`, the only field `return_to_depots`
+/// Depot (`stores: false` on `extractor`, the only field `return_to_depots`
 /// reads) — `spend_from_base` draws from every `Structure + Stock` entity
 /// regardless, so a dispatch can spend from here while nothing exists that
 /// could ever receive a deposit back.

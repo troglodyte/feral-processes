@@ -76,8 +76,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // from 10* exactly the way the Analysis attribute explains for
     // extraction odds — 10 costs nothing either side, above it is faster,
     // below it is slower. The shipped extremes: Construct at 6 takes a
-    // fifth longer per cycle (a Mining Node's 10 ticks becomes 12, a
-    // Fabricator's 30 becomes 36), Sprite at 14 takes a fifth less (10
+    // fifth longer per cycle (an Extractor's 10 ticks becomes 12, an
+    // Assembler's 30 becomes 36), Sprite at 14 takes a fifth less (10
     // becomes 8, 30 becomes 24), and it can never scale below one cycle per
     // tick, however extreme a modded value. The player has no species and
     // works at the baseline, so a machine's own `ticks_per_unit` (see
@@ -406,7 +406,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // not change a body that already exists.
     //
     // `analysis` is also this species' extraction aptitude: posted to a
-    // Mining Node or any other producing structure, a program's own Analysis
+    // Extractor or any other producing structure, a program's own Analysis
     // (its attribute once it has one, else this figure, else 10) changes how
     // often a cycle fizzles rather than what a success pays. Read as a
     // distance from 10, so 10 costs nothing, above helps and below hurts. It

@@ -717,7 +717,7 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
         // `Dry` already has the capacity and needs fuel next to them.
         //
         // Not `palette::THREAT`. Br red is reserved for hostility and inbound
-        // harm, and a clogged Mining Node is neither.
+        // harm, and a clogged Extractor is neither.
         MachineStatus::Clogged
         | MachineStatus::Stranded
         | MachineStatus::Unpowered

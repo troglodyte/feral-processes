@@ -1713,7 +1713,7 @@ impl Game {
     }
 
     /// The work-tick scale of the room `structure` stands in: only the
-    /// workshop room speeds a machine, so a lathe in quarters or the commons
+    /// workshop room speeds a machine, so a substrate_factory in quarters or the commons
     /// gets none.
     fn workshop_scale(&self, structure: Entity) -> f64 {
         let Some(at) = self.world.get::<Position>(structure) else {

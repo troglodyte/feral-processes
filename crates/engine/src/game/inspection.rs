@@ -720,7 +720,7 @@ impl Game {
     /// Both scans need it and neither may differ from the other, since the
     /// pickers built from them are lists of the same base. The position
     /// tiebreak is not cosmetic — bevy's query iteration order is
-    /// not stable, so two Mining Nodes with nothing else to separate them
+    /// not stable, so two Extractors with nothing else to separate them
     /// would otherwise swap rows between openings of the same menu, and a
     /// list nobody can learn the shape of is worse than an unsorted one.
     fn sort_by_label(views: &mut [EntityView]) {
@@ -1526,8 +1526,8 @@ impl Game {
     /// joined to for production — the sides the map leaves un-outlined so a
     /// chain draws as one continuous shape.
     ///
-    /// **Symmetric, though the feeding relation is not.** A Refinery names
-    /// the Mining Node beside it; the Mining Node names nobody, because it
+    /// **Symmetric, though the feeding relation is not.** A Factory names
+    /// the Extractor beside it; the Extractor names nobody, because it
     /// has no recipe to want anything. Both walls between a joined pair have
     /// to go or the single remaining line reads as a rendering fault rather
     /// than as a join, so every link found is recorded from both ends.

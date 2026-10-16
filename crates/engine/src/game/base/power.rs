@@ -92,8 +92,8 @@ pub(crate) fn fuel_chain(items: &ItemDb) -> HashMap<ItemId, u32> {
 /// first key of `ledger`'s cut, lowest first, and `None` for a machine whose
 /// output is nowhere in `fuel_chain`.
 ///
-/// **A rung, not a flag.** A Power Conduit makes cells out of nothing and
-/// sits at `0`; a Mining Node makes what a cell is made of and sits at `1`,
+/// **A rung, not a flag.** An Extractor makes cells out of nothing and
+/// sits at `0`; an Extractor makes what a cell is made of and sits at `1`,
 /// and nothing on the grid assembles that into a cell without somebody's
 /// hands. Treated as one tier, four nodes west of every Conduit take the
 /// whole of the Home's bootstrap and the one machine that could relight the
@@ -120,7 +120,7 @@ pub(crate) fn grid_rung(
 ///
 /// **The cut favours the machines that can restart the grid**, closest to
 /// the fuel first, and only then falls back to position. A base whose supply has collapsed to the Home's
-/// free 4 recovers by mining Core Fragments and running the Power Conduit
+/// free 4 recovers by mining Core Fragments and running the Extractor
 /// that turns them into Power Cells; cut in tile order alone, that supply
 /// goes to whichever machines happen to sit at the lowest `(x, y)` — so a
 /// Compiler drawing 3 in the corner of the base could darken a working

@@ -357,7 +357,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
     place_home(&mut game);
     place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
-    let armory = game
+    let shell_assembler = game
         .view_entities(10, 10)
         .into_iter()
         .find(|e| e.is_structure && !e.is_home)
@@ -369,7 +369,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .get::<Inventory>(player)
         .unwrap()
         .count(&ItemId::from(ids::CORE_FRAGMENT));
-    game.remove_structure(armory).unwrap();
+    game.remove_structure(shell_assembler).unwrap();
     let after = game
         .world
         .get::<Inventory>(player)
@@ -386,7 +386,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
             .filter(|e| e.is_structure)
             .count(),
         1,
-        "only the Home should remain after demolishing the armory"
+        "only the Home should remain after demolishing the shell_assembler"
     );
 }
 
@@ -397,7 +397,7 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
     unlock_research_chain(&mut game, "armor_bench");
     unlock_research_chain(&mut game, "weapon_bench");
     let player = game.player_entity();
-    // Just enough Core Fragments to afford Home + armory + fabricator
+    // Just enough Core Fragments to afford Home + shell_assembler + sniffer_assembler
     // and no more: a big surplus (as a naive "plenty of buffer" amount
     // would be) leaves cargo sitting at or above capacity once combined
     // with starting gear, which would clamp the refund this test exists
@@ -1379,24 +1379,7 @@ fn a_diagonal_neighbour_is_not_close_enough_to_work() {
 /// working it both walk `BaseGrid`, and a machine standing in unmined rock
 /// is refused as walled in whatever else the test set up.
 fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
-    game.lay_starting_pocket();
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.work.is_some() && d.raidable)
-        .expect("a workable, raidable structure should exist");
-    game.world
-        .spawn((
-            Structure {
-                kind: def.id.clone(),
-            },
-            Position { x, y },
-            ResourceNode {
-                resource: def.work.as_ref().unwrap().produces.clone(),
-                level: None,
-            },
-        ))
-        .id()
+    spawn_machine_with_recipe_at(game, "extractor", "core_fragment", x, y)
 }
 
 /// Every entity currently carrying a `Task` of `kind` aimed at `structure`.
@@ -1761,7 +1744,7 @@ fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
     assert_eq!(
         stock.capacity,
         crate::tuning::DEFAULT_OUTPUT_CAPACITY,
-        "mining_node.ron sets no capacity, so it takes the default"
+        "extractor.ron sets no capacity, so it takes the default"
     );
 
     let home = find_home(&mut game).unwrap();
@@ -3162,8 +3145,8 @@ fn a_posted_program_is_not_offered_to_a_build() {
 /// This calls the real `upgrade_ceiling`, not a restated copy of its
 /// formula — a hardcoded `ceiling = zone` would still pass after
 /// `upgrade_ceiling` itself changed, which is exactly the silent drift this
-/// test exists to catch. `mining_node`'s `upgrade.max_tier` is 5
-/// (`assets/structures/mining_node.ron`), matching every other shipped
+/// test exists to catch. `extractor`'s `upgrade.max_tier` is 5
+/// (`assets/structures/extractor.ron`), matching every other shipped
 /// upgradeable structure, so `upgrade_ceiling` reduces to `zone` for every
 /// zone in this loop — but it is `upgrade_ceiling` computing that, not the
 /// test asserting it.
@@ -4384,15 +4367,16 @@ fn demolishing_a_machine_returns_both_of_its_buffers() {
     place_home(&mut game);
     let cell = ItemId::from(ids::POWER_CELL);
     let frag = ItemId::from(ids::PORTAL_FRAGMENT);
-    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 1, 0);
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 1, 0);
     {
-        let mut stock = game.world.get_mut::<Stock>(lathe).unwrap();
+        let mut stock = game.world.get_mut::<Stock>(substrate_factory).unwrap();
         stock.input.insert(cell.clone(), 5);
         stock.output.insert(frag.clone(), 3);
     }
 
     let (cell_before, frag_before) = (carried(&game, &cell), carried(&game, &frag));
-    game.remove_structure(lathe).unwrap();
+    game.remove_structure(substrate_factory).unwrap();
 
     assert_eq!(
         carried(&game, &cell) - cell_before,
@@ -4684,7 +4668,7 @@ fn idle_wander_never_stops_on_a_filed_build_site() {
 // The squad seam's failure was that every fixture was hand-built at
 // footprint 1, so every anchor-measuring reader stayed green across 5,964
 // passing tests. `footprint_fixture`/`base_with_footprint_fixture`
-// (`support.rs`) clone `armory` wholesale — same build cost, same
+// (`support.rs`) clone `shell_assembler` wholesale — same build cost, same
 // `assembles` (so `file_build` tames a program the same way) — and differ
 // from a shipped-def test only in the one field under test, which is the
 // point: a 2x2 fixture that matters is one that could otherwise have been a

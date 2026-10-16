@@ -149,7 +149,7 @@ type Consumer = (Position, Vec<(ItemId, u32)>);
 /// currently pulling — a consumer that is unstaffed, starved or clogged is
 /// still the building this output belongs to. What it is **not** asked of is
 /// every machine standing there: `haul_step_system` builds `consumers` from
-/// the assemblers the base has a reason to run, so a Lathe nothing has been
+/// the assemblers the base has a reason to run, so a Factory nothing has been
 /// ordered from is a bystander rather than a feed target.
 fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
     consumers
@@ -191,7 +191,7 @@ fn chebyshev(a: Position, b: Position) -> i32 {
 /// **Ranking is not choosing, though: a depot nothing can stand beside is
 /// skipped.** Taken on distance alone, a Depot whose one free face was held
 /// by an idle body — itself hemmed in by the worker waiting on it — stranded
-/// two Mining Nodes for five hundred ticks beside a second Depot with three
+/// two Extractors for five hundred ticks beside a second Depot with three
 /// open sides. `reachable` is asked in rank order and the first yes wins, so
 /// the ranking still decides between depots that all work. With none
 /// reachable the nearest is the answer anyway, and the worker reads

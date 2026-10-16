@@ -122,7 +122,7 @@ mod seams {
     /// A node with `level: None` skips the reliability roll entirely, so this
     /// is a payout every time rather than a seeded one — the fizzle arm has
     /// its own unit test and does not need luck here.
-    /// A `mining_node` authors `power_draw: 1`, so a hand-spawned one with
+    /// An `extractor` authors `power_draw: 1`, so a hand-spawned one with
     /// nothing supplying the grid is dark and produces nothing at all —
     /// which reads exactly like a broken seam. The Home's free 4 is the
     /// bootstrap the real game uses, so it is what these fixtures use.

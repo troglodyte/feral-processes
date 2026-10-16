@@ -132,7 +132,7 @@ impl Game {
     /// one lookup rather than two that could drift.
     ///
     /// An item can legitimately appear twice with different makers — Power
-    /// Cell is a Power Conduit's whole output and is also bench-craftable
+    /// Cell is an Extractor's whole output and is also bench-craftable
     /// from fragments, and ICE Breaker the same with the Compiler. A root
     /// step reports the structure; an expanded dependency reports the item's
     /// own `requires_structure`. Both are true, and the screen shows the one
@@ -140,8 +140,8 @@ impl Game {
     ///
     /// An *ingredient* names its tap only when no recipe makes it (see
     /// `RecipeInput::source`), which is the same rule seen from the other
-    /// end: Core Fragment names the Mining Node because nothing on screen
-    /// makes one, while Power Cell names no Power Conduit because the bench
+    /// end: Core Fragment names the Extractor because nothing on screen
+    /// makes one, while Power Cell names no Extractor because the bench
     /// step that makes these ones is already a line of this chain. Without
     /// that clause a chain would claim two sources for a single item.
     ///
@@ -153,18 +153,6 @@ impl Game {
         let mut chains: Vec<RecipeChain> = structures
             .all()
             .flat_map(|def| def.productions().map(move |production| (def, production)))
-            // Temporary, until the fixed-recipe kinds are deleted (factory
-            // overhaul, Task 14): a machine recipe a fixed kind already
-            // lists would show the same product twice.
-            .filter(|(def, production)| {
-                def.machine.is_none()
-                    || !structures.all().any(|other| {
-                        other.machine.is_none()
-                            && other
-                                .productions()
-                                .any(|p| p.recipe.produces == production.recipe.produces)
-                    })
-            })
             .map(|(def, production)| {
                 let placed = crate::structures::Placed {
                     def,
@@ -262,14 +250,7 @@ impl Game {
                 .any(|p| p.extracts && &p.recipe.produces == item)
         };
         let structures = self.world.resource::<StructureDb>();
-        // A fixed tap before a configurable extractor, so the name a player
-        // knows is the one quoted while both ship.
-        structures
-            .all()
-            .filter(|def| def.machine.is_none())
-            .find(taps)
-            .or_else(|| structures.all().find(taps))
-            .map(|def| def.name.clone())
+        structures.all().find(taps).map(|def| def.name.clone())
     }
 
     /// Which group this item lists under. An id with no definition behind it
@@ -813,7 +794,7 @@ impl Game {
 
     /// Whether `structure_id` may be built right now. A structure named by
     /// no research file is unlocked by default — that's what keeps Home, the
-    /// Mining Node, the Research Node, the Recharger Node and the Zone
+    /// Extractor, the Research Node, the Recharger Node and the Zone
     /// Portal available from turn one without a hardcoded whitelist, and
     /// what keeps a structure mod that ships no research file working
     /// unchanged.

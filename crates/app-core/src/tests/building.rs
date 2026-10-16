@@ -1121,7 +1121,7 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// ahead of every other category, see `StructureDef::category`), and this
 /// fixture has already founded one — picking it again would hit the
 /// "already deployed" refusal on the old direct path rather than the
-/// picker this task adds. Row 1, `mining_node`, is the first structure that
+/// picker this task adds. Row 1, `extractor`, is the first structure that
 /// actually costs a program, and `selected_index` labels rows `1`-`9`
 /// before it starts spending letters (`DIGIT_ROWS`), so row 1 is key `'2'`,
 /// not `'b'`.
@@ -1989,4 +1989,47 @@ fn the_hold_screen_refuses_with_the_blockers_text_and_spends_nothing() {
     let game = app.game.as_mut().unwrap();
     assert_eq!(game.downed_program_rows().len(), 1);
     assert_eq!(game.pet_count(), pets);
+}
+
+/// The five configurable structures are what a fresh base builds production
+/// from; the sixteen one-recipe machines and benches they replaced are gone
+/// from the menu, not merely hidden.
+#[test]
+fn the_build_menu_offers_the_machines_and_the_workbench_and_none_of_the_removed() {
+    let mut app = test_app(102);
+    deploy_home(&mut app);
+    let ids: Vec<String> = app
+        .game
+        .as_mut()
+        .unwrap()
+        .buildable_structure_defs()
+        .into_iter()
+        .map(|d| d.id.to_string())
+        .collect();
+    for wanted in ["extractor", "factory", "assembler", "printer", "workbench"] {
+        assert!(
+            ids.iter().any(|i| i == wanted),
+            "{wanted} missing from {ids:?}"
+        );
+    }
+    for gone in [
+        "mining_node",
+        "log_scraper",
+        "cache_tap",
+        "power_conduit",
+        "lathe",
+        "refinery",
+        "annealing_node",
+        "transcriber",
+        "winding_node",
+        "disk_press",
+        "decoy_bench",
+        "assembly_bay",
+        "compiler",
+        "armory",
+        "fabricator",
+        "refactor_bench",
+    ] {
+        assert!(!ids.iter().any(|i| i == gone), "{gone} still in {ids:?}");
+    }
 }

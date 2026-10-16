@@ -220,28 +220,6 @@ mod tests {
         game
     }
 
-    /// The one-recipe structures the configurable machines replaced. Listed
-    /// here because they still load until their defs are deleted, and a
-    /// template standing one would otherwise pass the loaded-def check.
-    const REPLACED: [&str; 16] = [
-        "mining_node",
-        "log_scraper",
-        "cache_tap",
-        "power_conduit",
-        "lathe",
-        "refinery",
-        "annealing_node",
-        "transcriber",
-        "winding_node",
-        "disk_press",
-        "decoy_bench",
-        "refactor_bench",
-        "armory",
-        "fabricator",
-        "compiler",
-        "assembly_bay",
-    ];
-
     /// A removed structure id in a template does not fail the load (an unknown
     /// kind is skipped), so the template would just silently lose the machine.
     #[test]
@@ -255,12 +233,6 @@ mod tests {
                 .map(|d| d.id.to_string())
                 .collect();
             for s in &data.structures {
-                assert!(
-                    !REPLACED.contains(&s.kind.as_str()),
-                    "template `{name}` stands the replaced `{}` at {:?}",
-                    s.kind,
-                    s.position
-                );
                 assert!(
                     ids.contains(&s.kind),
                     "template `{name}` stands `{}` at {:?}, which is not a loaded structure",

@@ -231,7 +231,7 @@ pub(crate) fn spend_bill_from_base(
 /// cost is drawn from every output buffer in the base, because that is what
 /// the stock block counts and a block that promised more than the base
 /// would spend is a block lying about the base. A *refund* goes to Depots
-/// alone: a unit pushed into a Mining Node's output buffer is
+/// alone: a unit pushed into an Extractor's output buffer is
 /// indistinguishable from a unit that node produced, and would be hauled
 /// away and counted as a cycle's yield. The dig crew's tile and finish draw
 /// already carries this same asymmetry.

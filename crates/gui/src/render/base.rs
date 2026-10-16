@@ -1134,7 +1134,7 @@ fn draw_surface_map(
             // What is going up here is not the question a player glances at
             // this cell to answer — the caret says "work is happening", the
             // examine page says what and how far along, and a dim `M` would
-            // read as a Mining Node that had gone dark. It also keeps the
+            // read as an Extractor that had gone dark. It also keeps the
             // cell legible as *not yet a thing*: nothing else on this map is
             // a filled block, so a site is never mistaken for a machine.
             //

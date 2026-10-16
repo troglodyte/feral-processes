@@ -1,9 +1,8 @@
 (
     id: "automation",
     name: "Automation",
-    description: "A machine that makes ICE Breakers for you, so you no longer have to compile them by hand.",
+    description: "Lets a Printer make ICE Breakers for you, so you no longer have to compile them by hand.",
     cost: 8,
     materials: [("core_fragment", 30)],
     recommended: true,
-    unlocks_structures: ["compiler"],
 )

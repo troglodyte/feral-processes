@@ -92,7 +92,7 @@ place to edit.
 | `Deliver(item: "core_fragment", count: 25)` | you hand that many over at a Broker |
 | `Descend(depth: 3)` | the party stands in a Stack frame 3 or more levels down |
 | `Breach(zone: 3)` | the run reaches sector 3 or deeper |
-| `Build(structure: "refinery")` | one of those is deployed |
+| `Build(structure: "workbench")` | one of those is deployed |
 | `Configure(item: "bytecode_block")` | some standing machine is set to make that item |
 | `Hold(item: "core_fragment", count: 12)` | you have that many in your pack at once |
 | `Standing(band: Warm)` | any settlement holds you at that band or better |

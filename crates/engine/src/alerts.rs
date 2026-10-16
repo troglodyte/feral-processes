@@ -22,9 +22,9 @@ use crate::tuning::ALERT_BOARD_CAP;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlertKind {
     /// One of the six stall states `components::MachineStatus` can carry.
-    /// The status rides inside the kind, so a Lathe that goes Clogged then
+    /// The status rides inside the kind, so a Factory that goes Clogged then
     /// Unpowered is two alerts — they need different fixes — while the same
-    /// Lathe clogging twice collapses into one.
+    /// Factory clogging twice collapses into one.
     MachineStalled(MachineStatus),
     ProgramDowned,
     SweepIncoming,
@@ -165,8 +165,8 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "lathe@1,1",
-            "The Lathe is clogged.",
+            "substrate_factory@1,1",
+            "The Factory is clogged.",
         );
         post(
             &mut board,
@@ -178,8 +178,8 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "lathe@1,1",
-            "The Lathe is clogged again.",
+            "substrate_factory@1,1",
+            "The Factory is clogged again.",
         );
 
         assert_eq!(
@@ -189,10 +189,10 @@ mod tests {
         );
         let front = &board.alerts[0];
         assert_eq!(front.kind, stalled(MachineStatus::Clogged));
-        assert_eq!(front.subject, "lathe@1,1");
+        assert_eq!(front.subject, "substrate_factory@1,1");
         assert_eq!(front.count, 2);
         assert!(front.unread);
-        assert_eq!(front.text, "The Lathe is clogged again.");
+        assert_eq!(front.text, "The Factory is clogged again.");
     }
 
     #[test]
@@ -201,14 +201,14 @@ mod tests {
         post(
             &mut board,
             stalled(MachineStatus::Clogged),
-            "lathe@1,1",
-            "The Lathe is clogged.",
+            "substrate_factory@1,1",
+            "The Factory is clogged.",
         );
         post(
             &mut board,
             stalled(MachineStatus::Unpowered),
-            "lathe@1,1",
-            "The Lathe is dark.",
+            "substrate_factory@1,1",
+            "The Factory is dark.",
         );
 
         assert_eq!(board.alerts.len(), 2, "different status, different alert");

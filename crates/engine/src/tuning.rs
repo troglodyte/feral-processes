@@ -1620,7 +1620,7 @@ pub const STACK_MARKET_PROGRAM_PRICE_PER_POWER: u32 = 2;
 /// The same 1 the surface trader pays (`black_market.ron`'s `sell_rate`),
 /// and that is the point: a Stack market is worth stopping at for *where*
 /// it is and what is on the shelf, never for a better price. A rate above
-/// the surface one would make hauling a Mining Node's output down a hole
+/// the surface one would make hauling an Extractor's output down a hole
 /// the best-paying thing in the game, on a curve nothing gates.
 pub const STACK_MARKET_SELL_RATE: u32 = 1;
 
@@ -2005,7 +2005,7 @@ pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 /// exists to do the job would spend on one unit — see
 /// `Game::hand_craft_ticks`, which is the one place the two are multiplied.
 ///
-/// The base is a factory nobody has to visit while a recipe the Lathe runs
+/// The base is a factory nobody has to visit while a recipe the Factory runs
 /// in twelve ticks is also a free instant action at the player's own hands.
 /// Blocking the recipe outright was the alternative and was rejected: every
 /// recipe stays reachable, and what is priced is the *convenience*.
@@ -2029,7 +2029,7 @@ pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 pub const HAND_CRAFT_TICK_MULT: u32 = 1;
 
 /// The cycle `Game::hand_craft_ticks` prices a recipe off when **no**
-/// structure assembles or produces it.
+/// structure produces it.
 ///
 /// Most craftables — every piece of gear among them — have no machine at
 /// all, so this is the common case rather than the fallback it reads as. It
@@ -2307,7 +2307,7 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 ///
 /// Doubled from `1..=2` on 2026-08-02, when deleting the scan action left
 /// kills as the only source of Core Fragments outside a built base. At 1..=2
-/// the first Mining Node — 12 fragments, on top of Home's 5 — was about eight
+/// the first Extractor — 12 fragments, on top of Home's 5 — was about eight
 /// kills away, and a rest cost five of them.
 ///
 /// The range is shared by every resource rather than split per item, and the
@@ -2342,7 +2342,7 @@ pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 /// What one point of `SpeciesDef::base_speed` **either side of**
 /// `DEFAULT_BASE_SPEED` is worth on the length of a work cycle. The shipped
 /// roster spans 6 (Construct) to 14 (Sprite), so a cycle ranges 1.2x to
-/// 0.8x the machine's own rate — a Mining Node's 10 ticks becomes 12 or 8,
+/// 0.8x the machine's own rate — an Extractor's 10 ticks becomes 12 or 8,
 /// and a Fabricator's 30 becomes 36 or 24.
 ///
 /// Sized like `MINING_SUCCESS_PER_INT`: enough that swapping the posted
@@ -2742,7 +2742,7 @@ pub const MAX_FUSIONS: u32 = 3;
 /// `components::Refactors`), in the same spirit as `MAX_FUSIONS` above.
 ///
 /// The cap is what stands between a craftable buff and infinite stats: those
-/// buffs come off a chain rooted in a Mining Node, which produces Core
+/// buffs come off a chain rooted in an Extractor, which produces Core
 /// Fragments forever, and turns are free — so nothing else bounds how many a
 /// player can compile. The zone-bump track needs no such cap because it
 /// bounds itself, refusing once the program has caught up with the player.
@@ -3059,7 +3059,7 @@ pub const BASE_ROCK_MIN_SWINGS: u32 = 2;
 
 /// Chance, 0.0-1.0, that opening a cell of rock yields one Core Fragment.
 ///
-/// **Bounded above by the Mining Node's rate**, and that bound is the whole
+/// **Bounded above by the Extractor's rate**, and that bound is the whole
 /// rule: a dug cell has to return a trickle or the wall becomes a fragment
 /// tap that undercuts the machine built to be one.
 /// `mining_a_wall_never_undercuts_a_mining_node` holds it against the real
@@ -3091,10 +3091,10 @@ pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 /// the crew.
 ///
 /// **Fragments, not Blank Substrate**, because the floor is what grows the
-/// base and a Lathe sitting between the mine and every tile made expansion
+/// base and a Factory sitting between the mine and every tile made expansion
 /// wait on a 12-tick press per cell. Half a substrate's four fragments, so
 /// the plain floor is cheaper than it was as well as quicker; finishes stay
-/// on substrate (`FLOOR_FINISH_COST`) as the Lathe-fed decoration.
+/// on substrate (`FLOOR_FINISH_COST`) as the Factory-fed decoration.
 ///
 /// Above `BASE_MINE_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
 /// so a dig plan never floors itself out of its own rubble.

@@ -59,7 +59,7 @@ any non-finite `taming_potency`, `consume.power`, or
     //   - a work node that produces it (`work.produces`) delivers it straight
     //     to the player instead of filling its own output buffer, so it is
     //     never collected by hand and can never feed a neighbouring machine.
-    //     An `assembles` machine is NOT yet wired this way — a banked item as
+    //     An `Assemble` machine is NOT yet wired this way — a banked item as
     //     an assembler's product still fills that machine's buffer and still
     //     has to be collected;
     //   - it is not listed in the inventory and cannot be bought or sold.
@@ -87,7 +87,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // press, and a mod that breaks either one prints money:
     //
     //   1. Don't price an item above the total value of its `craftable`
-    //      ingredients. Build salvage is sellable and a Mining Node produces
+    //      ingredients. Build salvage is sellable and an Extractor produces
     //      it forever, so a profitable recipe is an infinite Credit loop.
     //   2. Don't price an item a structure `produces` (see the structures
     //      schema) above the default. Such an item is made from nothing on a
@@ -291,7 +291,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // what it unlocks.
     //
     // `cost` is ALSO what an automated machine runs. A structure whose
-    // `assembles` field names this item (see assets/structures/README.md)
+    // `Assemble` machine lists this item (see assets/structures/README.md)
     // builds it from exactly this recipe — there is no second recipe format
     // anywhere in the game, so the bench and the machine can never drift
     // apart, and a multi-ingredient recipe you add here is automatable for

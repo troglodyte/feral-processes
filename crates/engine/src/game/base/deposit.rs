@@ -7,7 +7,7 @@ use crate::*;
 impl Game {
     /// The adjacent structures a deposit can reach, in `(x, y)` order.
     ///
-    /// `adjacent_stock()` filtered to `StructureDef::stores` — a Mining Node
+    /// `adjacent_stock()` filtered to `StructureDef::stores` — an Extractor
     /// has a `Stock` too, and mirroring collect exactly would let the player
     /// push cargo into a machine's own output as though that machine had
     /// produced it. Filtered rather than re-sorted, so `adjacent_stock`'s

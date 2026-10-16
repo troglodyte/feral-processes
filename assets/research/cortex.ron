@@ -1,7 +1,7 @@
 (
     id: "cortex",
     name: "Cortex Hacking",
-    description: "A module that makes decompiling hostile programs more likely to succeed, made at a Fabricator.",
+    description: "A module that makes decompiling hostile programs more likely to succeed, made at a Workbench.",
     cost: 125,
     materials: [("trace_sniffer", 6), ("logic_wafer", 12)],
     min_zone: 3,

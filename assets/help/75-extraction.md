@@ -45,7 +45,7 @@ attempt at intervals, each failure making the next likelier. A success joins it 
 every attempt fails it breaks down, and the cell is left holding a little salvage. A boss's record
 will not reinitialize.
 
-A Compiler changes both halves of that. Standing one anywhere makes every extraction quicker, and
+A Workbench changes both halves of that. Standing one anywhere makes every extraction quicker, and
 every tier you upgrade it past the first makes the same tool draw more out of the same body — more
 material through a material tool, better odds through the Gear Puller. It is worth building
 before it is worth upgrading, and worth upgrading for a long time after that.
@@ -83,7 +83,7 @@ to pull it out entirely, which stops the rig until something else is fitted.
   is a material a buffer could hold, so the rig will not take any of them.
 
 A Teardown Rig is also an extraction bench, so building one makes your own teardowns quicker too,
-and upgrading it pays them richer — the same way a Compiler does.
+and upgrading it pays them richer — the same way a Workbench does.
 
 Gear pulled this way is added to what the world already drops, not moved out of it. Kills, nest
 caches, Stack caches and the surface boss all still pay exactly as they did, so a Gear Puller is

@@ -25,16 +25,16 @@ of them; that is not this change.
 - Staff dimple, then (when ripe) harvest, each tile with no player order —
   harvest is generated automatically.
 - Growth is visible: the crop's icon is drawn larger at each stage.
-- Harvest drops 1 product item per tile as a floor pile on that tile.
+- Harvest sets 1 product item per tile down from that tile (`Game::set_down`:
+  on the tile when free, else the nearest free floor, else the pack).
 - Crops are data (`assets/crops/`), so mods can add them.
 - Plots, recipes and per-tile growth survive save/load.
 
 ## Non-goals
 
-- Hauling harvest to stockpiles. Stockpiles are another thread's work; the
-  end state here is a Power Cell on the ground. (Existing idle haulers
-  already fetch floor piles to depots — fine, but not something this design
-  relies on or changes.)
+- Hauling harvest to stockpiles. The end state here is a Power Cell on the
+  floor; idle programs tidying it onto a stockpile zone (0.18.36) is fine,
+  but not something this design relies on or changes.
 - Removing or rebalancing the Power Conduit.
 - Any cost, cap, input item, fertility, light, season or soil rule.
 - Crops other than power cells shipping now (the schema allows them).
@@ -70,8 +70,8 @@ growing plot discards all growth; every tile returns to needing dimpling.
 
 **Per-tile cycle.** `Fallow` (needs dimpling) → staff dimple (labour time)
 → `Growing` through N stages over the crop's grow time → `Ripe` (needs
-harvesting) → staff harvest (labour time) → 1 product item spawned as a
-floor pile on the tile (`spawn_floor_pile`, `game/base/floor.rs`) → back to
+harvesting) → staff harvest (labour time) → 1 product item set down from
+the tile (`Game::set_down`, `game/base/floor.rs`) → back to
 `Fallow`. Growth advances on its own; it does not need a worker present.
 
 **Labour.** Dimple and harvest are new staff tasks, scheduled through
@@ -87,7 +87,7 @@ player's `WorkOrders` queue.
 **Visual.** Each growing tile draws the crop's icon at a size that grows
 with stage (about four stages, same icon scaled — my call). Fallow plot
 tiles get a quiet plot marking so the plot's extent is visible; ripe tiles
-should read as ready. Engine exposes a view list (pattern: `floor_piles`,
+should read as ready. Engine exposes a view list (pattern: `floor_items`,
 `marked_cells`); `render/base.rs` draws it through `Painter` only
 (`.claude/rules/drawing-seam.md`).
 
@@ -127,11 +127,15 @@ real save→load test (a RON round-trip cannot catch a skipped field). Bump
 
 ## Settled after the builder check (my calls)
 
-- **Piles never block a plot.** A floor pile on a plot tile does not stop
-  dimpling or growth; harvests stack into the existing pile
-  (`spawn_floor_pile` already merges same-tile items, no cap). "Nothing
-  standing on it" means no structure/build site — a pile is not standing.
-  Unbounded piles are acceptable; clearing them is the stockpile thread's.
+- **Floor items never block a plot.** A floor item on a plot tile does not
+  stop dimpling or growth. A tile holds one floor item (0.18.36), so a ripe
+  tile already holding one sets its harvest down on the nearest free floor
+  and leaves the item untouched. "Nothing standing on it" means no
+  structure/build site — a floor item is not standing. On the map a floor
+  item's glyph claims the cell from the crop's; the plot outline and ripe
+  edge still draw.
+- **Stockpile zones and plots are independent marks** and may overlap;
+  neither box clears the other.
 - **Clock:** growth runs on the same engine clock as dig/build crews —
   whenever base labour is simulated. No catch-up or offline growth beyond
   what that clock already does.

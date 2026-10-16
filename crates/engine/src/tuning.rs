@@ -3076,6 +3076,17 @@ pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 /// it said under `docs/measurements/`.
 pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 
+// --- Farm labour ---
+
+/// How many ticks a posted program spends dimpling one fallow farm tile —
+/// one dig swing's cadence, since it is comparable hand-work. A crop's own
+/// grow time lives in its `assets/crops/*.ron`, not here.
+pub const FARM_DIMPLE_TICKS: u32 = 12;
+
+/// How many ticks a posted program spends bringing in one ripe farm tile.
+/// Half a dimple: the crop is already made, the body only has to carry it.
+pub const FARM_HARVEST_TICKS: u32 = 6;
+
 /// How many Core Fragments one VectorStasis Tile costs, laid by hand or by
 /// the crew.
 ///

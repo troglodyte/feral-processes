@@ -2606,7 +2606,12 @@ impl Game {
         let job = self
             .world
             .get::<Task>(e)
-            .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
+            .filter(|t| {
+                !matches!(
+                    t.kind,
+                    TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_)
+                )
+            })
             .map(|t| (t.kind, t.target, t.progress, t.required));
         let cronjob = job.and_then(|(kind, target, progress, required)| {
             self.world
@@ -2618,7 +2623,7 @@ impl Game {
                     kind: match kind {
                         TaskKind::GatherResource => save::CronjobKind::GatherResource,
                         TaskKind::Guard => save::CronjobKind::Guard,
-                        TaskKind::Excavate | TaskKind::Construct => {
+                        TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_) => {
                             unreachable!("filtered out above")
                         }
                     },

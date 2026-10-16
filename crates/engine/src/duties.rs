@@ -72,24 +72,28 @@ impl Duty {
             (Duty::Operate, TaskKind::Guard) => false,
             (Duty::Operate, TaskKind::Excavate) => false,
             (Duty::Operate, TaskKind::Construct) => false,
+            (Duty::Operate, TaskKind::Tend(_)) => false,
             (Duty::Guard, TaskKind::GatherResource) => false,
             (Duty::Guard, TaskKind::Guard) => true,
             (Duty::Guard, TaskKind::Excavate) => false,
             (Duty::Guard, TaskKind::Construct) => false,
+            (Duty::Guard, TaskKind::Tend(_)) => false,
             (Duty::Dig, TaskKind::GatherResource) => false,
             (Duty::Dig, TaskKind::Guard) => false,
             (Duty::Dig, TaskKind::Excavate) => true,
             (Duty::Dig, TaskKind::Construct) => false,
+            (Duty::Dig, TaskKind::Tend(_)) => true,
             (Duty::Build, TaskKind::GatherResource) => false,
             (Duty::Build, TaskKind::Guard) => false,
             (Duty::Build, TaskKind::Excavate) => false,
             (Duty::Build, TaskKind::Construct) => true,
+            (Duty::Build, TaskKind::Tend(_)) => false,
         }
     }
 }
 
 /// A post's job kind and, when it has one, the structure def id it names —
-/// a build site's goal, or `None` for a dig site (which is not a
+/// a build site's goal, or `None` for a dig site or farm tile (neither is a
 /// `Structure` at all — see `TaskKind::Excavate`'s doc). v1's four `Duty`
 /// variants partition `TaskKind` alone and never read this field; it exists
 /// so the scheduler already has it in hand the day a structure-kind column

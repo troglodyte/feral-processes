@@ -2,7 +2,7 @@
 
 use super::support::*;
 use crate::base_grid::BaseGrid;
-use crate::components::{CropGrowth, FarmPlot, FarmTile, GlyphColor};
+use crate::components::{CropGrowth, FarmPlot, FarmTile, GlyphColor, Task};
 use crate::crops::CropId;
 use crate::game::base::farm::growth_stage;
 use crate::views::FarmTileState;
@@ -379,4 +379,212 @@ fn a_save_written_before_farms_loads_with_none() {
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
     assert!(loaded.farm_tiles().is_empty());
+}
+
+// ---------------------------------------------------------------------
+// Labour: dimple and harvest
+// ---------------------------------------------------------------------
+
+use crate::components::{FarmJob, FloorPile};
+use crate::tuning::{FARM_DIMPLE_TICKS, FARM_HARVEST_TICKS};
+
+/// Slack for the walk from wherever an idle body was drifting out to a tile,
+/// `base_space.rs`'s allowance.
+const WALK: usize = 20;
+
+fn pass(game: &mut Game, ticks: usize) {
+    for _ in 0..ticks {
+        game.tick();
+    }
+}
+
+fn power_cells_at(game: &mut Game, pos: (i32, i32)) -> u32 {
+    let mut query = game.world.query::<(&Position, &FloorPile)>();
+    query
+        .iter(&game.world)
+        .filter(|(p, _)| (p.x, p.y) == pos)
+        .map(|(_, pile)| {
+            pile.items
+                .get(&ItemId::from("power_cell"))
+                .copied()
+                .unwrap_or(0)
+        })
+        .sum()
+}
+
+fn tending(game: &mut Game) -> Vec<(Entity, FarmJob)> {
+    let mut query = game.world.query::<(Entity, &Task)>();
+    query
+        .iter(&game.world)
+        .filter_map(|(e, t)| match t.kind {
+            TaskKind::Tend(job) => Some((e, job)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_tender_dimples_then_harvests_a_power_cell_onto_the_tile() {
+    let mut game = farm_base(50);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    spawn_tamed(&mut game, 10, 3);
+
+    pass(&mut game, FARM_DIMPLE_TICKS as usize + WALK);
+    assert!(
+        elapsed_of(&game, tile).is_some(),
+        "the tile should be dimpled and growing"
+    );
+
+    let grow = power_cell_grow_ticks(&game) as usize;
+    pass(&mut game, grow + FARM_HARVEST_TICKS as usize + WALK);
+    assert_eq!(power_cells_at(&mut game, (-3, 2)), 1);
+    assert_ne!(
+        game.world.get::<FarmTile>(tile).unwrap().growth,
+        CropGrowth::Ripe
+    );
+}
+
+#[test]
+fn a_harvest_stacks_into_a_pile_already_on_the_tile() {
+    let mut game = farm_base(51);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    crate::game::base::floor::spawn_floor_pile(
+        &mut game.world,
+        Position { x: -3, y: 2 },
+        ItemId::from("power_cell"),
+        3,
+    );
+    set_growth(&mut game, tile, CropGrowth::Ripe);
+    spawn_tamed(&mut game, 10, 3);
+
+    pass(&mut game, FARM_HARVEST_TICKS as usize + WALK);
+
+    assert_eq!(power_cells_at(&mut game, (-3, 2)), 4);
+}
+
+#[test]
+fn an_unsown_plot_gets_no_tender() {
+    let mut game = farm_base(52);
+    game.toggle_plot_box((-3, 2), (-2, 2));
+    spawn_tamed(&mut game, 10, 3);
+
+    for _ in 0..(FARM_DIMPLE_TICKS as usize + WALK) {
+        game.tick();
+        assert!(tending(&mut game).is_empty());
+    }
+}
+
+#[test]
+fn farm_wants_go_unserved_when_production_and_digging_take_every_body() {
+    let mut game = farm_base(53);
+    spawn_machine_at(&mut game, "mining_node", -4, 0);
+    game.queue_work_order(crate::WorkOrder::batch(ItemId::from("core_fragment"), 50))
+        .unwrap();
+    let wall = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+    game.toggle_mark_box(wall, wall, None);
+    sown_plot(&mut game, (-3, 2), (-3, 2));
+    spawn_tamed(&mut game, 10, 3);
+    spawn_tamed(&mut game, 10, 3);
+
+    pass(&mut game, 3);
+    assert!(
+        tending(&mut game).is_empty(),
+        "the farm is the last want and two bodies are spoken for"
+    );
+
+    spawn_tamed(&mut game, 10, 3);
+    pass(&mut game, 3);
+    assert_eq!(tending(&mut game).len(), 1);
+}
+
+fn tender_standing_at(game: &mut Game, tile: Entity, job: FarmJob, progress: u32) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    let at = *game.world.get::<Position>(tile).unwrap();
+    game.world.entity_mut(worker).insert((
+        Position {
+            x: at.x + 1,
+            y: at.y,
+        },
+        Task {
+            kind: TaskKind::Tend(job),
+            target: tile,
+            progress,
+            required: match job {
+                FarmJob::Dimple => FARM_DIMPLE_TICKS,
+                FarmJob::Harvest => FARM_HARVEST_TICKS,
+            },
+        },
+    ));
+    worker
+}
+
+#[test]
+fn a_recipe_change_mid_harvest_drops_the_labour_and_spawns_nothing() {
+    let mut game = farm_base(54);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Ripe);
+    let worker = tender_standing_at(&mut game, tile, FarmJob::Harvest, FARM_HARVEST_TICKS - 1);
+    // A different recipe leaves every tile fallow: the job posted for no
+    // longer matches the tile.
+    set_growth(&mut game, tile, CropGrowth::Fallow);
+
+    // The crew step alone: a full `tick()` would let the scheduler re-post
+    // the body to the dimple the tile now wants and hide the landing check.
+    game.run_farm_crew();
+
+    assert_eq!(power_cells_at(&mut game, (-3, 2)), 0);
+    assert_ne!(
+        game.world.get::<Task>(worker).map(|t| t.kind),
+        Some(TaskKind::Tend(FarmJob::Harvest))
+    );
+}
+
+#[test]
+fn clearing_the_plot_mid_harvest_drops_the_labour_and_spawns_nothing() {
+    let mut game = farm_base(55);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Ripe);
+    let worker = tender_standing_at(&mut game, tile, FarmJob::Harvest, FARM_HARVEST_TICKS - 1);
+    game.toggle_plot_box((-3, 2), (-3, 2));
+
+    game.run_farm_crew();
+
+    assert_eq!(power_cells_at(&mut game, (-3, 2)), 0);
+    assert!(game.world.get::<Task>(worker).is_none());
+}
+
+#[test]
+fn a_farm_alone_keeps_its_tender_moving_between_tiles() {
+    let mut game = farm_base(56);
+    sown_plot(&mut game, (-3, 2), (-2, 2));
+    spawn_tamed(&mut game, 10, 3);
+
+    pass(&mut game, 2 * (FARM_DIMPLE_TICKS as usize + WALK));
+
+    let tiles = tiles_of(&mut game);
+    assert_eq!(tiles.len(), 2);
+    assert!(tiles.iter().all(|&t| elapsed_of(&game, t).is_some()));
+}
+
+#[test]
+fn an_unreachable_plot_tile_is_dropped_silently() {
+    let mut game = farm_base(57);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    // Seal the tile in: every orthogonal neighbour is a structure.
+    for (x, y) in [(-4, 2), (-2, 2), (-3, 1), (-3, 3)] {
+        spawn_machine_at(&mut game, "mining_node", x, y);
+    }
+    spawn_tamed(&mut game, 10, 3);
+    let before = game.message_log(500).len();
+
+    pass(&mut game, FARM_DIMPLE_TICKS as usize + WALK);
+
+    assert!(tending(&mut game).is_empty());
+    assert_eq!(elapsed_of(&game, tile), None);
+    // The sealing structures say their own idle lines; the plot says nothing.
+    let said = game.message_log(500).iter().skip(before).any(|l| {
+        let t = l.text.to_lowercase();
+        t.contains("plot") || t.contains("cut off") || t.contains("tend")
+    });
+    assert!(!said, "a sealed plot tile must be dropped without a word");
 }

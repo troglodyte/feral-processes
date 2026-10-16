@@ -280,7 +280,7 @@ impl Game {
             // are one-off work with a terminal state, not a post the base
             // holds indefinitely, so the crew moving is exactly what the
             // player should be watching.
-            TaskKind::Excavate | TaskKind::Construct => false,
+            TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_) => false,
         }
     }
 
@@ -1265,7 +1265,7 @@ impl Game {
             // what `Game::marked_cells` reports. A builder's is unused: a
             // site's progress lives on `BuildSite::progress`, and
             // `BuildOrderRow::percent` is the derivation of it.
-            TaskKind::Excavate | TaskKind::Construct => false,
+            TaskKind::Excavate | TaskKind::Construct | TaskKind::Tend(_) => false,
         }
     }
 

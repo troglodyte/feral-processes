@@ -324,6 +324,10 @@ impl Game {
         // `Game::spawn_structure` — the one place a structure's component
         // list is written — is `&mut Game` work no bevy system can express.
         self.run_build_crew();
+        // The third crew, beside the other two and for their reason: a
+        // harvest ends in `floor::spawn_floor_pile` and a log line, and a
+        // tile's landing has to be checked against the plot as it is now.
+        self.run_farm_crew();
         // Beside the two crews and for the same reason as `run_dig_crew`'s
         // second: the recovery line has to name the program through
         // `creature_label` and the heal through `restore_hp`, both of which

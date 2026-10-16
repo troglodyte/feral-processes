@@ -11,8 +11,9 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{CropGrowth, FarmPlot, FarmTile, Position};
+use crate::components::{CropGrowth, FarmJob, FarmPlot, FarmTile, Position, Task, TaskKind};
 use crate::crops::{CropDb, CropId};
+use crate::game::base::{floor, hauling};
 use crate::save;
 use crate::views::{FarmTileState, FarmTileView};
 
@@ -173,6 +174,153 @@ impl Game {
         }
         for plot in touched {
             self.despawn_plot_if_empty(plot);
+        }
+    }
+
+    /// Whether any plot has a crop chosen — "a base with instructions" for
+    /// `assign_base_labour`'s quiet-base guard, `any_dig_marked`'s carve-out.
+    pub(crate) fn any_plot_sown(&mut self) -> bool {
+        let mut plots = self.world.query::<&FarmPlot>();
+        plots.iter(&self.world).any(|p| p.recipe.is_some())
+    }
+
+    /// Tiles of sown plots that want a body: every `Ripe` one as a harvest
+    /// (it is the one that pays out), then every `Fallow` one as a dimple,
+    /// each block in `(x, y)` order. Structural, `dig_wants`' rule, and
+    /// filtered by `has_station` against the ground alone for its reason.
+    pub(crate) fn farm_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+        let structures = self.structure_tiles();
+        let mut query = self.world.query::<(Entity, &Position, &FarmTile)>();
+        let mut tiles: Vec<(i32, i32, Entity, CropGrowth)> = query
+            .iter(&self.world)
+            .filter(|(_, _, t)| self.plot_recipe(t.plot).is_some())
+            .map(|(e, p, t)| (p.x, p.y, e, t.growth))
+            .collect();
+        let grid = self.world.resource::<BaseGrid>();
+        tiles.retain(|&(x, y, ..)| hauling::has_station(grid, Position { x, y }, 1, &structures));
+        tiles.sort_unstable_by_key(|&(x, y, ..)| (x, y));
+        let block = |want: CropGrowth, job: FarmJob| {
+            tiles
+                .iter()
+                .filter(move |t| t.3 == want)
+                .map(move |&(_, _, e, _)| (e, TaskKind::Tend(job)))
+                .collect::<Vec<_>>()
+        };
+        let mut wants = block(CropGrowth::Ripe, FarmJob::Harvest);
+        wants.extend(block(CropGrowth::Fallow, FarmJob::Dimple));
+        wants
+    }
+
+    /// The crew's half of farm labour, `run_dig_crew`'s skeleton: each tender
+    /// walks to its tile, works the job's meter and lands it. Sorted by tile
+    /// so two tenders' landings never reorder between runs.
+    ///
+    /// **The job is checked against the tile again at landing**, and a
+    /// mismatch drops the labour and spawns nothing: the tile may have been
+    /// re-sown, cleared or pruned since the body was posted, and a harvest of
+    /// a crop that is no longer there would mint an item from nothing. A body
+    /// that loses its route drops the job rather than standing in the dark.
+    /// A landed job drops its `Task` too — the tile has changed state, so the
+    /// scheduler decides what comes next.
+    pub(crate) fn run_farm_crew(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let mut tenders: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &Task, &Position)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, task, _)| matches!(task.kind, TaskKind::Tend(_)))
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect()
+        };
+        tenders.sort_unstable();
+        let blocked = self.blocked_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        for (.., worker) in tenders {
+            let Some((TaskKind::Tend(job), tile)) =
+                self.world.get::<Task>(worker).map(|t| (t.kind, t.target))
+            else {
+                continue;
+            };
+            let Some(target) = self.world.get::<Position>(tile).copied() else {
+                self.world.entity_mut(worker).remove::<Task>();
+                continue;
+            };
+            if !self.tile_still_wants(tile, job) {
+                self.world.entity_mut(worker).remove::<Task>();
+                continue;
+            }
+            let from = self
+                .world
+                .get::<Position>(worker)
+                .copied()
+                .unwrap_or(Position { x: 0, y: 0 });
+            if !hauling::at_station(from, target, 1) {
+                let step = {
+                    let grid = self.world.resource::<BaseGrid>();
+                    hauling::step_to_post(grid, from, target, 1, &blocked, pocket_radius)
+                };
+                match step {
+                    Ok(Some(next)) => self.take_base_step(worker, next),
+                    Ok(None) => {}
+                    Err(_) => {
+                        self.world.entity_mut(worker).remove::<Task>();
+                    }
+                }
+                continue;
+            }
+            let Some(mut task) = self.world.get_mut::<Task>(worker) else {
+                continue;
+            };
+            task.progress += 1;
+            if task.progress < task.required {
+                continue;
+            }
+            self.world.entity_mut(worker).remove::<Task>();
+            self.land_farm_job(tile, target, job);
+        }
+    }
+
+    /// Whether `tile` is a tile of a sown plot in the state `job` was posted
+    /// for.
+    fn tile_still_wants(&self, tile: Entity, job: FarmJob) -> bool {
+        let Some(t) = self.world.get::<FarmTile>(tile) else {
+            return false;
+        };
+        self.plot_recipe(t.plot).is_some()
+            && matches!(
+                (job, t.growth),
+                (FarmJob::Dimple, CropGrowth::Fallow) | (FarmJob::Harvest, CropGrowth::Ripe)
+            )
+    }
+
+    fn land_farm_job(&mut self, tile: Entity, at: Position, job: FarmJob) {
+        match job {
+            FarmJob::Dimple => {
+                if let Some(mut t) = self.world.get_mut::<FarmTile>(tile) {
+                    t.growth = CropGrowth::Growing { elapsed: 0 };
+                }
+            }
+            FarmJob::Harvest => {
+                let Some(crop) = self
+                    .world
+                    .get::<FarmTile>(tile)
+                    .and_then(|t| self.plot_recipe(t.plot))
+                    .and_then(|id| self.world.resource::<CropDb>().get(&id).cloned())
+                else {
+                    return;
+                };
+                floor::spawn_floor_pile(&mut self.world, at, crop.produces.clone(), 1);
+                if let Some(mut t) = self.world.get_mut::<FarmTile>(tile) {
+                    t.growth = CropGrowth::Fallow;
+                }
+                let name = self.item_name(&crop.produces).to_string();
+                self.log_base(format!(
+                    "Your crew brings in a {name} at ({}, {}).",
+                    at.x, at.y
+                ));
+            }
         }
     }
 

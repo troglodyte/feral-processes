@@ -1236,14 +1236,33 @@ pub enum TaskKind {
     /// that free the body anyway (displacement, sale) set the load on the
     /// floor (`floor::drop_load`) for a hauler to bring home.
     Construct,
+    /// Posted to a `FarmTile`: dimple a fallow one or bring in a ripe one's
+    /// harvest — see `Game::run_farm_crew`.
+    ///
+    /// **The third kind whose `target` is not a `Structure`**, with every
+    /// consequence `Excavate` documents. The job rides in the variant so the
+    /// crew step can tell the work a body was posted for from the tile's
+    /// state now, which is how a recipe change mid-labour drops it.
+    Tend(FarmJob),
+}
+
+/// What a body posted to a farm tile is there to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FarmJob {
+    /// Sow a fallow tile.
+    Dimple,
+    /// Bring in a ripe tile's crop.
+    Harvest,
 }
 
 impl TaskKind {
-    pub const ALL: [TaskKind; 4] = [
+    pub const ALL: [TaskKind; 6] = [
         TaskKind::GatherResource,
         TaskKind::Guard,
         TaskKind::Excavate,
         TaskKind::Construct,
+        TaskKind::Tend(FarmJob::Dimple),
+        TaskKind::Tend(FarmJob::Harvest),
     ];
 
     /// How a memory or a conversation names this activity as a topic.
@@ -1253,6 +1272,8 @@ impl TaskKind {
             TaskKind::Guard => "standing guard",
             TaskKind::Excavate => "cutting rock",
             TaskKind::Construct => "raising a structure",
+            TaskKind::Tend(FarmJob::Dimple) => "dimpling phase space",
+            TaskKind::Tend(FarmJob::Harvest) => "bringing in a harvest",
         }
     }
 }

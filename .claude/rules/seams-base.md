@@ -256,7 +256,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`Carrying` is the only thing hauling stores**, and the carry cap is what
   lets it be one `(item, qty)` pair.
 - **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` drops its load on
-  its own tile through `floor::drop_load`, whatever the depots hold** — a
+  its own tile through `Game::drop_load`, whatever the depots hold** — a
   load is never destroyed to free a body.
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`.
@@ -438,7 +438,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `systems::feeds` over the pull's reach, Teardown Rigs are never members, and a body that is not staff (the player's own
   `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**
 - **A held program is `ProgramRole::Siphoned` and grid supply is counted off the `Siphoned` marker, so removing the marker is the whole release; every despawn path for a siphon must release first.**
-- **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `floor::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.
+- **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `Game::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
 
@@ -447,3 +447,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
 
 - **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**
+
+- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is its one writer and `Game::set_down` its one door.**

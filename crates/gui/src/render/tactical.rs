@@ -623,15 +623,21 @@ pub(super) fn draw_tactical_map(
     // camera walks away from the attacker while its streak is still in flight
     // and its hit flash still lit. The dwell lives in `Fx` because it is
     // state across frames, which a renderer has none of.
-    let center = fx
+    let target = fx
         .battle_center(acting_body(view).map(|body| (body.entity, body.cell, body.footprint)))
-        .unwrap_or((view.board.side / 2, view.board.side / 2));
+        .unwrap_or_else(|| {
+            let middle = (view.board.side / 2) as f32;
+            (middle, middle)
+        });
+    // The whole cell the tiles are laid out around; the target's fraction
+    // — a body part-way through a glide — rides in the offset instead.
+    let center = (target.0.round() as i32, target.1.round() as i32);
     // **No lag clamp, unlike the surface map.** `CAMERA_MAX_LAG` buys that
     // map a trailing edge its one extra ring of tiles can cover; this loop
     // walks the whole board and skips what falls outside the pane, so there
     // is no blank edge to expose — and at one tile the move between two
     // bodies standing apart is a teleport rather than a pan.
-    let (off_x, off_y) = fx.camera_offset(center, painter.delta(), None);
+    let (off_x, off_y) = fx.camera_offset_toward(target, center, painter.delta(), None);
     // Every draw below is gated on this. The camera is held on the body that
     // acted *last*, so the acting body, the arrow over its head and a cursor
     // opened on its cell can each be an arbitrary distance off centre while
@@ -802,7 +808,11 @@ pub(super) fn draw_tactical_map(
         painter.map(&glyph, tx, ty, glyph_px, ink);
     }
 
-    for body in &view.bodies {
+    // Drawn where each body's glide has it this frame rather than on its
+    // cell — `Fx::slid_cell` — so a walk moves rather than hops. Read once
+    // here for the turn arrow below, which has to ride the same glide.
+    let slid_px = |fx: &mut Fx, body: &TacticalBody| {
+        let (sx, sy) = fx.slid_cell(body.entity, body.cell);
         let (px, py) = tile_origin_px(
             body.cell,
             center,
@@ -811,6 +821,13 @@ pub(super) fn draw_tactical_map(
             tile_px,
             pane,
         );
+        (
+            px + (sx - body.cell.0 as f32) * tile_px,
+            py + (sy - body.cell.1 as f32) * tile_px,
+        )
+    };
+    for body in &view.bodies {
+        let (px, py) = slid_px(fx, body);
         if !on_pane(px, py) {
             continue;
         }
@@ -887,14 +904,7 @@ pub(super) fn draw_tactical_map(
     // the camera on the body that acted *last*, which is exactly what makes
     // the acting body's own tile reachable from anywhere on the board.
     if let Some(body) = acting_body(view) {
-        let (px, py) = tile_origin_px(
-            body.cell,
-            center,
-            (half_w, half_h),
-            (off_x, off_y),
-            tile_px,
-            pane,
-        );
+        let (px, py) = slid_px(fx, body);
         if on_pane(px, py) {
             let cell_px = tile_px * body.footprint.max(1) as f32;
             painter.poly(

@@ -6559,6 +6559,7 @@ mod tests {
                 pursuing: false,
                 carrying: None,
                 carrying_program: None,
+                tidying: None,
                 rarity: Default::default(),
                 nemesis_grudges: 0,
                 nemesis_muster_ticks: 0,

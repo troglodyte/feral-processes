@@ -11,7 +11,7 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{Carrying, FloorItem, Position};
+use crate::components::{Carrying, FloorItem, Position, Tidying};
 use crate::game::base::hauling::Occupancy;
 use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
@@ -69,7 +69,7 @@ pub(crate) struct FreeFloor {
 impl FreeFloor {
     /// Laid floor, walkable, and not spoken for by a structure, a build site
     /// or another floor item.
-    fn free(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
+    pub(crate) fn free(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
         grid.is_floor(cell.0, cell.1)
             && grid.walkable(cell.0, cell.1)
             && !self.walls.walls(cell)
@@ -206,18 +206,20 @@ impl Game {
     }
 
     /// Puts `who`'s load on the floor around its tile, one unit per tile, and
-    /// ends the hold. A no-op if `who` carries nothing or has no tile.
+    /// ends the hold: a hauler's `Carrying` and a tidier's `Tidying` alike. A
+    /// no-op if `who` carries nothing or has no tile.
     pub(crate) fn drop_load(&mut self, who: Entity) {
         let Some(pos) = self.world.get::<Position>(who).copied() else {
             return;
         };
-        let Some(load) = self.world.entity_mut(who).take::<Carrying>() else {
-            return;
-        };
-        let units = (0..load.qty)
-            .map(|_| FloorThing::Item(load.item.clone()))
-            .collect();
-        self.set_down(pos, units);
+        let mut things = Vec::new();
+        if let Some(load) = self.world.entity_mut(who).take::<Carrying>() {
+            things.extend((0..load.qty).map(|_| FloorThing::Item(load.item.clone())));
+        }
+        if let Some(Tidying(thing)) = self.world.entity_mut(who).take::<Tidying>() {
+            things.push(thing);
+        }
+        self.set_down(pos, things);
     }
 
     /// Sets down the load of every body `haul_step_system` marked

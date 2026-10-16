@@ -971,6 +971,10 @@ impl Game {
             self.drift_idle_staff(&walkers, &amenities, &bays);
         }
         self.assign_base_labour(wanted, &lines, &staff, &amenities);
+        // After the pass rather than at the end of it: `assign_base_labour`
+        // has early returns, and a body posted by any other route still
+        // must not keep a tidied item through its job.
+        self.set_down_posted_tidiers();
     }
 
     /// The posting half of `schedule_base_labour` alone, for a change the
@@ -994,6 +998,10 @@ impl Game {
         let wanted = self.base_wants(&lines, &staff);
         let amenities = self.amenities();
         self.assign_base_labour(wanted, &lines, &staff, &amenities);
+        // After the pass rather than at the end of it: `assign_base_labour`
+        // has early returns, and a body posted by any other route still
+        // must not keep a tidied item through its job.
+        self.set_down_posted_tidiers();
     }
 
     /// Every want the base holds this pass, in priority order — **the
@@ -2420,6 +2428,7 @@ impl Game {
         // `Game::base_bodies` rather than off `staff`, because an idle body
         // that is not in this pass's list (a party member) still holds a
         // cell.
+        let mut board = self.tidy_board();
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -2436,6 +2445,19 @@ impl Game {
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
+            }
+            let sharing = self
+                .world
+                .get::<Position>(worker)
+                .is_some_and(|p| crowded.contains(&(p.x, p.y)));
+            // A sharing body keeps its item through the wander beat; any
+            // other body that may no longer tidy sets it down before the
+            // errands below walk it somewhere else with its hands full.
+            if !sharing
+                && self.world.get::<components::Tidying>(worker).is_some()
+                && !self.may_tidy(worker, amenities)
+            {
+                self.drop_load(worker);
             }
             // **The Bay first, and only once the body has a cell in this
             // space to walk from.** A program beaten on the surface — or
@@ -2454,10 +2476,6 @@ impl Game {
                 .world
                 .get::<Position>(worker)
                 .is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
-            let sharing = self
-                .world
-                .get::<Position>(worker)
-                .is_some_and(|p| crowded.contains(&(p.x, p.y)));
             // **Above the Bay arm**, `components::UnderStudy`'s own doc's
             // reason: the two are disjoint in practice — a benched program
             // cannot be pinned — so the order only states a claim a test can
@@ -2517,6 +2535,18 @@ impl Game {
                 if self.step_respite(worker, amenities).is_err() {
                     self.strand_respite(worker);
                 }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // **Below every errand and above the wander**: tidying is what a
+            // body with nothing else to do does. The wander is what a sharing
+            // body gets, for the reason the rest of the arms are gated.
+            if !sharing
+                && self.may_tidy(worker, amenities)
+                && board.as_mut().is_some_and(|b| self.tidy_step(worker, b))
+            {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     held.insert((p.x, p.y));
                 }

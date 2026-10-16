@@ -711,6 +711,16 @@ pub struct Hopper {
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
 
+/// A loose floor item an idle program is carrying to a stockpile cell.
+///
+/// The cleanup carry state, kept separate from `Carrying`, which stays one
+/// `(item, qty)`: a tidied thing may be a gear copy or a downed program, and
+/// a hauler's trip has a capacity this errand does not. `Game::drop_load`
+/// ends both holds, so every path that stops a carrier holding sets this
+/// down too.
+#[derive(Component, Clone, Debug)]
+pub struct Tidying(pub crate::items::FloorThing);
+
 /// How many breedings deep a program's lineage runs. Absent reads as 0:
 /// wild, tamed, bought and fused programs are all generation 0, and only a
 /// hatched child carries one.

@@ -758,6 +758,11 @@ pub struct CreatureSave {
     /// are written to avoid.
     #[serde(default)]
     pub carrying_program: Option<crate::items::DownedProgram>,
+    /// The loose floor item this body is carrying to a stockpile — see
+    /// `components::Tidying`. Saved for `carrying_program`'s reason: quitting
+    /// mid-errand must not destroy the thing.
+    #[serde(default)]
+    pub tidying: Option<crate::items::FloorThing>,
     /// The rare-spawn tier this creature rolled — see `components::Rarity`.
     ///
     /// Persisted as the *tag* only. The multiplier it names was already
@@ -2519,6 +2524,7 @@ mod tests {
             pursuing: false,
             carrying: None,
             carrying_program: None,
+            tidying: None,
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,

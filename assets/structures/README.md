@@ -105,6 +105,33 @@ is skipped with a warning logged in-game rather than crashing startup.
     // what keeps it working.
     work: Some((produces: "core_fragment", ticks_per_unit: 5, level: Some(1))),
 
+    // Optional; defaults to absent. A *configurable machine*: one placed
+    // structure that can run any recipe on its list, chosen per instance in
+    // the game. An unconfigured machine stands but runs nothing. A fixed
+    // `work` block, when present, wins over this.
+    //
+    //   role     `Extract` (produces from nothing, like `work`) or
+    //            `Assemble` (consumes the item's own `craftable.cost`).
+    //   recipes  A list of entries, each:
+    //     produces        the item id made (required).
+    //     ticks_per_unit  how long one unit takes (required, above zero).
+    //     level           optional reliability level, as `work`'s `level`.
+    //     flat_payout     optional, as `work`'s `flat_payout`.
+    //     research        optional research id that unlocks picking it.
+    //     tierless        optional, default false; true keeps upgrade tiers
+    //                     from scaling this recipe's yield.
+    //
+    // A bad entry is skipped with a logged warning and the rest still load:
+    // an unknown item, an `Assemble` item that is not craftable, a zero
+    // `ticks_per_unit`, or an item listed twice on one machine.
+    machine: Some((role: Extract, recipes: [
+        (produces: "core_fragment", ticks_per_unit: 10, level: Some(1)),
+    ])),
+
+    // Optional; defaults to absent. A research id naming the research a
+    // placed extractor of this kind extracts.
+    extracts_research: None,
+
     // Optional; defaults to 20. How many units this structure's *output
     // buffer* holds before it clogs and stops producing. Every deployed
     // structure has one, whether or not it produces anything — the player

@@ -1737,7 +1737,7 @@ impl Game {
         worker_speed: i32,
     ) -> Option<u32> {
         Some(crate::systems::work_ticks_at_speed(
-            crate::structures::cycle_ticks(def)?,
+            crate::structures::cycle_ticks(crate::structures::Placed { def, recipe: None })?,
             worker_speed,
             crate::classes::work_tick_scale(self.player_class()),
             site,

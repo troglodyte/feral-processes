@@ -1765,7 +1765,7 @@ pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 
 /// in the player's inventory.
 ///
 /// `kind` is a real structure id rather than a placeholder because the
-/// payout consults that structure's `WorkDef` for `flat_payout` — a node
+/// payout consults that structure's `RecipeDef` for `flat_payout` — a node
 /// whose kind isn't in the `StructureDb` would silently take the scaling
 /// branch.
 ///

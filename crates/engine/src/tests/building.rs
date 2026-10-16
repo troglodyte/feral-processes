@@ -1117,7 +1117,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
     assert_eq!(
         loaded.world.get::<ResourceNode>(restored).unwrap().level,
         Some(3),
-        "and its extraction reliability with it — WorkDef::level only carries the \
+        "and its extraction reliability with it — RecipeDef::level only carries the \
          tier-1 baseline"
     );
 }

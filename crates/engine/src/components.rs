@@ -862,7 +862,7 @@ pub struct StructureTier(pub u32);
 #[derive(Component)]
 pub struct ResourceNode {
     pub resource: ItemId,
-    /// Mirrors `WorkDef::level`. `None` means a completed gather cycle
+    /// Mirrors `RecipeDef::level`. `None` means a completed gather cycle
     /// always yields, same as before this field existed. `Some(level)` gates
     /// each completion behind a level-based percentage chance instead (see
     /// `systems::task_progress_system`) — a harder, chancier variant that a
@@ -870,6 +870,11 @@ pub struct ResourceNode {
     /// worked node does by default.
     pub level: Option<u32>,
 }
+
+/// Which recipe a configurable machine (`StructureDef::machine`) is set to,
+/// by produced item. `None` is unconfigured: it stands but runs nothing.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct MachineRecipe(pub Option<ItemId>);
 
 /// A structure's local buffers — the whole of a production chain's
 /// directionality.

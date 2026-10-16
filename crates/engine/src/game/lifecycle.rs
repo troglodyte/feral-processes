@@ -1249,7 +1249,7 @@ impl Game {
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);
                 entity.insert(StructureTier(tier));
-                // WorkDef::level only carries the tier-1 baseline, so a
+                // RecipeDef::level only carries the tier-1 baseline, so a
                 // restored node's reliability has to be re-derived from its
                 // tier or a Mk3 would come back extracting like a Mk1.
                 if let Some(mut node) = entity.get_mut::<ResourceNode>()
@@ -3869,6 +3869,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
     structures.compute_levels(&items);
+    warnings.extend(structures.validate_machines(&items));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty

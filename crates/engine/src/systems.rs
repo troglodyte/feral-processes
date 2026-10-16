@@ -519,7 +519,7 @@ pub(crate) struct CycleModifiers {
 }
 
 /// Whether the structure `node_entity` belongs to declares
-/// `WorkDef::flat_payout`. Read per cycle off the `StructureDb` rather than
+/// `RecipeDef::flat_payout`. Read per cycle off the `StructureDb` rather than
 /// mirrored onto `ResourceNode` at build time: the component is rebuilt from
 /// the def on load anyway (`Game::load`), and the one field that *is*
 /// mirrored, `level`, already needed a re-derive there to stop a Mk3 coming

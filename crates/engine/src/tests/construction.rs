@@ -1924,15 +1924,24 @@ fn rarity_lifts_a_build_by_exactly_one_rung_per_rung() {
 fn a_structure_with_no_cycle_has_no_shipped_ticks() {
     let game = base(1152);
     assert_eq!(
-        crate::structures::cycle_ticks(&def_of(&game, "mining_node")),
+        crate::structures::cycle_ticks(crate::structures::Placed {
+            def: &def_of(&game, "mining_node"),
+            recipe: None,
+        }),
         Some(10)
     );
     assert_eq!(
-        crate::structures::cycle_ticks(&def_of(&game, "assembly_bay")),
+        crate::structures::cycle_ticks(crate::structures::Placed {
+            def: &def_of(&game, "assembly_bay"),
+            recipe: None,
+        }),
         Some(20)
     );
     assert_eq!(
-        crate::structures::cycle_ticks(&def_of(&game, "depot")),
+        crate::structures::cycle_ticks(crate::structures::Placed {
+            def: &def_of(&game, "depot"),
+            recipe: None,
+        }),
         None
     );
 }

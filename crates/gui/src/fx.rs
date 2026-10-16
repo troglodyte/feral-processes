@@ -61,6 +61,20 @@ pub const BOLT_SECONDS: f64 =
 const CAMERA_DWELL_HANDOVER_FRACTION: f64 = 0.62;
 pub const CAMERA_DWELL_SECONDS: f64 =
     feral_processes_app_core::TACTICAL_HANDOVER_SECONDS as f64 * CAMERA_DWELL_HANDOVER_FRACTION;
+/// How long a battle-map body takes to glide one cell — a walk's own step,
+/// so a walk reads as one continuous movement rather than a run of hops.
+/// Derived from `TACTICAL_STEPS_PER_SECOND` for `BOLT_SECONDS`' reason. The
+/// longest a glide takes, not the only figure: see `Fx::slid_cell`.
+pub(crate) const SLIDE_SECONDS: f64 =
+    1.0 / feral_processes_app_core::TACTICAL_STEPS_PER_SECOND as f64;
+/// How much shorter than a whole glide the gap since a body's last step has
+/// to be before the next glide is paced to it instead. A wild walk is paced
+/// against frames, so where the refresh rate does not divide a walk step its
+/// gaps alternate a frame either side of `SLIDE_SECONDS` — and a glide
+/// paced to the short one lands a frame early and stands still for a frame.
+/// A held key's repeat is well under this; a frame of jitter never is.
+const FAST_STEP_FRACTION: f64 = 0.75;
+
 /// A hold that ends inside the flash it is there to show is the bug this
 /// whole mechanism exists to fix, so it is a build failure. That the *pan*
 /// also lands in time is measured instead — see
@@ -435,8 +449,8 @@ fn ghost_step(ghost: f32, current: f32, dt: f32) -> f32 {
 /// and footprint — the anchor itself at `footprint` 1, so an ordinary body
 /// is untouched.
 ///
-/// Integer division rather than a fractional centre: `battle_center` still
-/// hands back a whole cell, so a footprint whose side is odd lands exactly
+/// Integer division rather than a fractional centre: this answers a whole
+/// cell, so a footprint whose side is odd lands exactly
 /// on its own middle cell, and the shipped 2x2 formation rounds to the
 /// block's own far corner rather than the near one `anchor` alone would
 /// read as. That is closer to the middle by half a cell either way — there
@@ -832,9 +846,44 @@ struct Bolt {
 /// never left it.
 struct CameraHold {
     key: u64,
-    cell: (i32, i32),
+    cell: (f32, f32),
     release: f64,
     seen: f64,
+}
+
+/// A battle-map body's glide from where it was drawn toward the cell it
+/// now stands on — see `Fx::slid_cell`.
+struct Slide {
+    from: (f32, f32),
+    to: (i32, i32),
+    start: f64,
+    seconds: f64,
+}
+
+impl Slide {
+    /// Started a whole glide ago, so a body's first step after standing
+    /// still — or after first being seen — takes the full glide rather than
+    /// reading the wait as a fast walk's pace.
+    fn at_rest(cell: (i32, i32), now: f64) -> Self {
+        Slide {
+            from: (cell.0 as f32, cell.1 as f32),
+            to: cell,
+            start: now - SLIDE_SECONDS,
+            seconds: SLIDE_SECONDS,
+        }
+    }
+
+    fn position(&self, now: f64) -> (f32, f32) {
+        let t = if self.seconds > 0.0 {
+            ((now - self.start) / self.seconds).clamp(0.0, 1.0) as f32
+        } else {
+            1.0
+        };
+        (
+            self.from.0 + (self.to.0 as f32 - self.from.0) * t,
+            self.from.1 + (self.to.1 as f32 - self.from.1) * t,
+        )
+    }
 }
 
 struct FloatingNumber {
@@ -906,6 +955,7 @@ pub struct Fx {
     bars: HashMap<ImpactTarget, BarTracking>,
     camera: Option<(f32, f32)>,
     camera_hold: Option<CameraHold>,
+    slides: HashMap<u64, Slide>,
     log_flash_until: f64,
     last_log_line: Option<LogLine>,
     round_seen: Option<u32>,
@@ -960,6 +1010,7 @@ impl Fx {
             bars: HashMap::new(),
             camera: None,
             camera_hold: None,
+            slides: HashMap::new(),
             log_flash_until: 0.0,
             last_log_line: None,
             round_seen: None,
@@ -1624,13 +1675,27 @@ impl Fx {
         dt: f32,
         max_lag: Option<f32>,
     ) -> (f32, f32) {
-        let target = (player.0 as f32, player.1 as f32);
+        self.camera_offset_toward((player.0 as f32, player.1 as f32), player, dt, max_lag)
+    }
+
+    /// `camera_offset` toward a target between cells — a battle-map body
+    /// part-way through a glide. The offset is measured from `anchor`, the
+    /// whole cell the caller lays its tiles out around, so the target's own
+    /// fraction is in it.
+    pub fn camera_offset_toward(
+        &mut self,
+        target: (f32, f32),
+        anchor: (i32, i32),
+        dt: f32,
+        max_lag: Option<f32>,
+    ) -> (f32, f32) {
+        let anchor_f = (anchor.0 as f32, anchor.1 as f32);
         // Effects-off means an instant camera, as it does an instant HP bar.
         // The position is still tracked so re-enabling doesn't glide in from
         // wherever the camera was last left.
         if !self.enabled {
             self.camera = Some(target);
-            return (0.0, 0.0);
+            return (target.0 - anchor_f.0, target.1 - anchor_f.1);
         }
         // A first frame with no prior reading seeds at the player, so loading
         // a world doesn't pan in from the origin.
@@ -1641,7 +1706,7 @@ impl Fx {
         );
         self.camera = Some(cam);
         let (sx, sy) = self.shake_offset();
-        (cam.0 - target.0 + sx, cam.1 - target.1 + sy)
+        (cam.0 - anchor_f.0 + sx, cam.1 - anchor_f.1 + sy)
     }
 
     /// The board's thrown offset this frame, in tiles: a wobble hashed off
@@ -1684,9 +1749,7 @@ impl Fx {
     pub fn battle_center(
         &mut self,
         acting: Option<(Entity, (i32, i32), u8)>,
-    ) -> Option<(i32, i32)> {
-        let acting =
-            acting.map(|(entity, cell, footprint)| (entity, footprint_center(cell, footprint)));
+    ) -> Option<(f32, f32)> {
         // A gap wider than the dwell means no battle map was drawn last
         // frame, so this is a fight *opening* rather than one already on
         // screen: both the hold and the camera's easing belong to a board
@@ -1699,7 +1762,17 @@ impl Fx {
         {
             self.camera_hold = None;
             self.camera = None;
+            // The glides belong to the board that is gone too.
+            self.slides.clear();
         }
+        // Followed through the body's glide, not its cell: aimed at the
+        // cell, the camera surged after every hop of a walk and all but
+        // stopped before the next.
+        let acting = acting.map(|(entity, cell, footprint)| {
+            let (x, y) = self.slid_cell(entity, cell);
+            let (cx, cy) = footprint_center(cell, footprint);
+            (entity, (x + (cx - cell.0) as f32, y + (cy - cell.1) as f32))
+        });
         // Nobody acting is a board still on screen — a finished fight's,
         // under its results popup — so the hold is refreshed rather than
         // left to lapse: a lapsed hold reads as a board that went away, and
@@ -1737,6 +1810,55 @@ impl Fx {
                 Some(cell)
             }
         }
+    }
+
+    /// Where a battle-map body is drawn this frame, in cells: its own cell
+    /// at rest, and part-way along a glide after a one-cell step — for
+    /// `SLIDE_SECONDS`, or for the time since its last step when that was
+    /// sooner. The engine moves a body a whole cell at a time, so
+    /// drawn straight off its cell a walk is a run of hops.
+    ///
+    /// A move of more than one cell — a blink, a body placed fresh — is a
+    /// cut rather than a dash across the board. A step taken mid-glide
+    /// starts from where the body is drawn, so a walk never jumps back.
+    pub fn slid_cell(&mut self, entity: Entity, cell: (i32, i32)) -> (f32, f32) {
+        let now = self.now;
+        if !self.enabled {
+            self.slides
+                .insert(entity.to_bits(), Slide::at_rest(cell, now));
+            return (cell.0 as f32, cell.1 as f32);
+        }
+        let slide = self
+            .slides
+            .entry(entity.to_bits())
+            .or_insert_with(|| Slide::at_rest(cell, now));
+        if slide.to != cell {
+            let one_step = (slide.to.0 - cell.0).abs().max((slide.to.1 - cell.1).abs()) == 1;
+            *slide = if one_step {
+                // From where the body is drawn, so a step mid-glide never
+                // jumps, and paced to the body's own last step when that
+                // came faster than a walk's — a held key repeats faster — so
+                // the glide lands before the next step instead of piling up
+                // behind it. A pace that just quickened is one glide late to
+                // be learnt, and the next glide covers the shortfall.
+                Slide {
+                    from: slide.position(now),
+                    to: cell,
+                    start: now,
+                    seconds: {
+                        let gap = (now - slide.start).max(0.0);
+                        if gap < SLIDE_SECONDS * FAST_STEP_FRACTION {
+                            gap
+                        } else {
+                            SLIDE_SECONDS
+                        }
+                    },
+                }
+            } else {
+                Slide::at_rest(cell, now)
+            };
+        }
+        slide.position(now)
     }
 
     /// Drops every bar tracker, so the next battle seeds its ghosts fresh
@@ -2854,9 +2976,193 @@ mod tests {
             .expect("a body is acting");
         assert_eq!(
             center,
-            (5, 5),
+            (5.0, 5.0),
             "a 2x2 footprint anchored at (4,4) must not centre on the bare anchor"
         );
+    }
+
+    /// A body that has not moved is drawn on its own cell.
+    #[test]
+    fn a_body_at_rest_is_drawn_on_its_cell() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 1.0);
+        assert_eq!(fx.slid_cell(entity, (3, 4)), (3.0, 4.0));
+    }
+
+    /// A one-cell step glides across the step's own duration rather than
+    /// landing in one frame: halfway through it is halfway there, and at
+    /// the end it is on the new cell.
+    #[test]
+    fn a_one_cell_step_glides_over_one_step() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 1.0);
+        fx.slid_cell(entity, (3, 4));
+        battle_at(&mut fx, 1.0 + 1.0 / 60.0);
+        let first = fx.slid_cell(entity, (4, 4));
+        assert_eq!(first, (3.0, 4.0), "the slide starts where the body stood");
+        battle_at(&mut fx, 1.0 + 1.0 / 60.0 + SLIDE_SECONDS / 2.0);
+        let (x, y) = fx.slid_cell(entity, (4, 4));
+        assert!((x - 3.5).abs() < 1e-3 && y == 4.0, "halfway: {x},{y}");
+        battle_at(&mut fx, 1.0 + 1.0 / 60.0 + SLIDE_SECONDS);
+        assert_eq!(fx.slid_cell(entity, (4, 4)), (4.0, 4.0));
+    }
+
+    /// A held key steps the player every `REPEAT_INTERVAL` once it has
+    /// been held `REPEAT_DELAY` — faster than a wild walk — and each glide
+    /// must still land before the next step, or the body is drawn behind its
+    /// cell and a blow struck after the run lands ahead of it. Timed off the
+    /// real key repeat, press then delay then interval.
+    #[test]
+    fn a_held_key_walk_lands_each_glide_before_the_next_step() {
+        use crate::keys::{REPEAT_DELAY, REPEAT_INTERVAL};
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 0.5);
+        fx.slid_cell(entity, (0, 0));
+        let steps: Vec<f64> = (0..8)
+            .map(|n| match n {
+                0 => 1.0,
+                n => 1.0 + REPEAT_DELAY + REPEAT_INTERVAL * f64::from(n - 1),
+            })
+            .collect();
+        for (i, pair) in steps.windows(2).enumerate() {
+            let x = i as i32 + 1;
+            battle_at(&mut fx, pair[0]);
+            fx.slid_cell(entity, (x, 0));
+            battle_at(&mut fx, pair[1] - 1e-6);
+            let (drawn, _) = fx.slid_cell(entity, (x, 0));
+            // Step 2 is the one glide paced to the repeat *delay* before the
+            // interval is learnt, so it is still short of its cell when step
+            // 3 comes — by under half a cell. Every step after it lands.
+            let behind = x as f32 - drawn;
+            let bound = if x == 2 { 0.5 } else { 1e-3 };
+            assert!(
+                behind < bound,
+                "step {x}: drawn at {drawn}, behind its cell"
+            );
+        }
+    }
+
+    /// A wild walk is paced against frames, so at a refresh rate that does
+    /// not divide a walk step its gaps alternate a frame short and a frame
+    /// long. A glide shortened to the short gap lands a frame early and the
+    /// body stands still for a frame every other step — so it must move on
+    /// every frame of the walk, at every common rate.
+    #[test]
+    fn a_frame_quantised_walk_never_stalls_a_frame() {
+        let step = 1.0 / f64::from(feral_processes_app_core::TACTICAL_STEPS_PER_SECOND);
+        for hz in [60.0, 75.0, 144.0, 165.0] {
+            let mut fx = Fx::new();
+            let entity = Entity::from_raw_u32(1).unwrap();
+            let dt = 1.0 / hz;
+            battle_at(&mut fx, 1.0);
+            fx.slid_cell(entity, (0, 0));
+            let (mut now, mut carry, mut cell) = (1.0, 0.0, 0);
+            let mut last = 0.0;
+            for frame in 0..(hz as usize * 2) {
+                now += dt;
+                carry += dt;
+                if carry >= step {
+                    carry -= step;
+                    cell += 1;
+                }
+                battle_at(&mut fx, now);
+                let (x, _) = fx.slid_cell(entity, (cell, 0));
+                if cell > 1 {
+                    assert!(
+                        x > last,
+                        "{hz} Hz, frame {frame}: the body stood still at {x}"
+                    );
+                }
+                last = x;
+            }
+        }
+    }
+
+    /// Steps faster than any glide never let the body trail: the one glide
+    /// paced before the speed was learnt leaves it under two cells behind,
+    /// and from then on it is never more than the one cell it is gliding.
+    #[test]
+    fn fast_steps_never_leave_a_body_trailing() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 1.0);
+        fx.slid_cell(entity, (0, 0));
+        for x in 1..=20 {
+            battle_at(&mut fx, 1.0 + 0.01 * f64::from(x));
+            let (drawn, _) = fx.slid_cell(entity, (x, 0));
+            let bound = if x <= 2 { 2.0 } else { 1.0 };
+            assert!(
+                x as f32 - drawn <= bound + 1e-4,
+                "step {x}: drawn at {drawn}"
+            );
+        }
+    }
+
+    /// A jump of more than one cell — a blink, a body placed fresh — is a
+    /// cut, not a dash across the board.
+    #[test]
+    fn a_jump_of_more_than_one_cell_snaps() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 1.0);
+        fx.slid_cell(entity, (3, 4));
+        battle_at(&mut fx, 1.1);
+        assert_eq!(fx.slid_cell(entity, (6, 4)), (6.0, 4.0));
+    }
+
+    /// Effects off means an instant body, as it means an instant camera.
+    #[test]
+    fn effects_off_draws_a_step_on_its_new_cell_at_once() {
+        let mut fx = Fx::new();
+        fx.enabled = false;
+        let entity = Entity::from_raw_u32(1).unwrap();
+        battle_at(&mut fx, 1.0);
+        fx.slid_cell(entity, (3, 4));
+        battle_at(&mut fx, 1.1);
+        assert_eq!(fx.slid_cell(entity, (4, 4)), (4.0, 4.0));
+    }
+
+    /// **The stutter this exists to fix.** A body walking one cell a step
+    /// used to jump, and the camera eased after every jump — a surge at the
+    /// start of each step and a near-stop at its end. Following the slide,
+    /// the camera's per-frame travel through the middle of a walk is
+    /// steady: no frame moves it much more or less than the walk's own
+    /// speed.
+    #[test]
+    fn the_battle_camera_pans_steadily_through_a_walk() {
+        let mut fx = Fx::new();
+        let entity = Entity::from_raw_u32(1).unwrap();
+        let dt = 1.0 / 60.0;
+        let step = 1.0 / f64::from(feral_processes_app_core::TACTICAL_STEPS_PER_SECOND);
+        let mut now = 1.0;
+        let mut last = None;
+        let mut moves = Vec::new();
+        while now < 1.0 + step * 10.0 {
+            battle_at(&mut fx, now);
+            let walked = ((now - 1.0) / step).floor() as i32;
+            let target = fx
+                .battle_center(Some((entity, (walked, 0), 1)))
+                .expect("a body is acting");
+            let anchor = (target.0.round() as i32, target.1.round() as i32);
+            let (ox, _) = fx.camera_offset_toward(target, anchor, dt as f32, None);
+            let cam = anchor.0 as f32 + ox;
+            if let Some(prev) = last {
+                moves.push(cam - prev);
+            }
+            last = Some(cam);
+            now += dt;
+        }
+        let per_frame = dt as f32 / step as f32;
+        // The second half, after the camera has caught the walk's pace.
+        for (i, m) in moves[moves.len() / 2..].iter().enumerate() {
+            assert!(
+                (m - per_frame).abs() < per_frame * 0.25,
+                "frame {i}: the camera moved {m} where the walk moves {per_frame}"
+            );
+        }
     }
 
     /// A body with no `Squad` reads as footprint 1, and the camera must
@@ -2869,7 +3175,7 @@ mod tests {
         let center = fx
             .battle_center(Some((entity, (4, 4), 1)))
             .expect("a body is acting");
-        assert_eq!(center, (4, 4));
+        assert_eq!(center, (4.0, 4.0));
     }
 
     /// **Sample-and-hold is the rattle**, and this is the half a smooth curve

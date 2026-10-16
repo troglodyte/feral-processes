@@ -1549,20 +1549,18 @@ impl Game {
             .map(|(e, p, k)| ((p.x, p.y), (*e, k)))
             .collect();
 
-        let db = self.world.resource::<StructureDb>();
         let items = self.world.resource::<ItemDb>();
         let mut edges: HashMap<Entity, Vec<(i32, i32)>> = HashMap::new();
-        for (entity, pos, kind) in &placed {
-            let Some(def) = db.get(kind) else {
+        for (entity, pos, _) in &placed {
+            let Some(def) = self.placed(*entity) else {
                 continue;
             };
             for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
-                let Some((neighbour, neighbour_kind)) = by_tile.get(&(pos.x + dx, pos.y + dy))
-                else {
+                let Some((neighbour, _)) = by_tile.get(&(pos.x + dx, pos.y + dy)) else {
                     continue;
                 };
-                let feeds = db
-                    .get(neighbour_kind)
+                let feeds = self
+                    .placed(*neighbour)
                     .is_some_and(|made| crate::systems::feeds_ingredient(made, def, items));
                 // A Depot is joined to a producer it would pull from
                 // (`depot_takes_from`, the intake's own rule) and to a

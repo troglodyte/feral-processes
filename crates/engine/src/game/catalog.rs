@@ -123,8 +123,8 @@ impl Game {
     /// Every conversion a structure runs, each expanded back to the raw
     /// inputs it bottoms out in.
     ///
-    /// The roots are `systems::produced_item`'s answer, which is already the
-    /// whole of "could this structure put something in an output buffer" —
+    /// The roots are every recipe a structure can run (`StructureDef::productions`),
+    /// which is already the whole of "could this structure put something in an output buffer" —
     /// so this cannot list a machine the base does not actually run, or miss
     /// one it does. Each root's own step comes from `systems::assembly_recipe`
     /// for the same reason: a machine's recipe *is* the assembled item's
@@ -152,9 +152,26 @@ impl Game {
         let items = self.world.resource::<ItemDb>();
         let mut chains: Vec<RecipeChain> = structures
             .all()
-            .filter_map(|def| {
-                let output = crate::systems::produced_item(def)?;
-                let inputs = crate::systems::assembly_recipe(def, items).unwrap_or(&[]);
+            .flat_map(|def| def.productions().map(move |production| (def, production)))
+            // Temporary, until the fixed-recipe kinds are deleted (factory
+            // overhaul, Task 14): a machine recipe a fixed kind already
+            // lists would show the same product twice.
+            .filter(|(def, production)| {
+                def.machine.is_none()
+                    || !structures.all().any(|other| {
+                        other.machine.is_none()
+                            && other
+                                .productions()
+                                .any(|p| p.recipe.produces == production.recipe.produces)
+                    })
+            })
+            .map(|(def, production)| {
+                let placed = crate::structures::Placed {
+                    def,
+                    recipe: Some(&production.recipe.produces),
+                };
+                let output = &production.recipe.produces;
+                let inputs = crate::systems::assembly_recipe(placed, items).unwrap_or(&[]);
                 let mut steps = Vec::new();
                 // Seeded with the root, whose own step is appended below: a
                 // recipe that reaches back to what it makes would otherwise
@@ -169,13 +186,13 @@ impl Game {
                     output: self.item_name(output).to_string(),
                     // A tap and only a tap declines to quote a yield; every
                     // other root is an assembler running a one-unit batch.
-                    output_qty: def.work.is_none().then_some(1),
+                    output_qty: (!production.extracts).then_some(1),
                 });
-                Some(RecipeChain {
+                RecipeChain {
                     product: self.item_name(output).to_string(),
                     description: self.item_description(output).map(str::to_string),
                     steps,
-                })
+                }
             })
             .collect();
         chains.sort_by(|a, b| (a.steps.len(), &a.product).cmp(&(b.steps.len(), &b.product)));
@@ -240,10 +257,18 @@ impl Game {
         if items.get(item.as_str())?.craftable.is_some() {
             return None;
         }
-        self.world
-            .resource::<StructureDb>()
+        let taps = |def: &&crate::structures::StructureDef| {
+            def.productions()
+                .any(|p| p.extracts && &p.recipe.produces == item)
+        };
+        let structures = self.world.resource::<StructureDb>();
+        // A fixed tap before a configurable extractor, so the name a player
+        // knows is the one quoted while both ship.
+        structures
             .all()
-            .find(|def| def.work.as_ref().is_some_and(|w| &w.produces == item))
+            .filter(|def| def.machine.is_none())
+            .find(taps)
+            .or_else(|| structures.all().find(taps))
             .map(|def| def.name.clone())
     }
 

@@ -17,10 +17,10 @@
 use bevy_ecs::prelude::{Entity, With};
 
 use crate::Game;
-use crate::components::{Position, Stock, Structure};
+use crate::components::{MachineRecipe, Position, Stock, Structure};
 use crate::items::{ItemCategory, ItemId};
 use crate::items_db::ItemDb;
-use crate::structures::StructureDb;
+use crate::structures::{Placed, StructureDb};
 use crate::views::StockRow;
 
 /// Every deployed structure's output buffer, paired with the structure it
@@ -43,10 +43,8 @@ pub(crate) fn output_buffers(game: &Game) -> impl Iterator<Item = (&Structure, &
 /// afford. A machine standing in the base is the base saying it makes that
 /// item, so the tag holds its place at 0.
 ///
-/// **Both halves, because an assembler declares no `work` block at all** —
-/// `AssembleDef::item` is where a crafting machine says what it makes, and
-/// a rule reading `work.produces` alone leaves every one of them off the
-/// strip until its first unit lands.
+/// **Per instance, because a configurable machine makes what it is set to**
+/// and a machine with nothing set makes nothing, so it holds no place.
 ///
 /// Deliberately narrower than "any structure": a Depot makes nothing, and
 /// seeding off what a building *could hold* would put a row on the row for
@@ -57,13 +55,11 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
     let structures = game.world.resource::<StructureDb>();
     game.world
         .iter_entities()
-        .filter_map(|e| structures.get(&e.get::<Structure>()?.kind))
-        .flat_map(|def| {
-            def.work
-                .iter()
-                .map(|w| &w.produces)
-                .chain(def.assembles.iter().map(|a| &a.item))
+        .filter_map(|e| {
+            let def = structures.get(&e.get::<Structure>()?.kind)?;
+            Placed::of(def, e.get::<MachineRecipe>()).production()
         })
+        .map(|production| &production.recipe.produces)
 }
 
 /// Takes up to `qty` of `item` out of the base's own stores, and reports how

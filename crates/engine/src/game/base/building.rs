@@ -1682,7 +1682,6 @@ impl Game {
     /// the baseline, and a posted program is faster or slower than that by
     /// its own `base_speed`.
     pub(crate) fn work_ticks_for(&mut self, structure: Entity, worker_speed: i32) -> u32 {
-        let kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
         let quality = self
             .world
             .get::<crate::components::BuildQuality>(structure)
@@ -1691,27 +1690,19 @@ impl Game {
             room: self.workshop_scale(structure),
             ..SiteScales::built(quality)
         };
-        let def = self.world.resource::<StructureDb>().get(&kind).cloned();
-        match def {
-            None => crate::systems::work_ticks_at_speed(
-                5,
-                worker_speed,
-                crate::classes::work_tick_scale(self.player_class()),
-                site,
-            ),
-            Some(def) => self
-                .cycle_ticks_for(&def, site, worker_speed)
-                // A def that runs no cycle still answers here: the five-tick
-                // fallback is what a hand-spawned test node has always got.
-                .unwrap_or_else(|| {
-                    crate::systems::work_ticks_at_speed(
-                        5,
-                        worker_speed,
-                        crate::classes::work_tick_scale(self.player_class()),
-                        site,
-                    )
-                }),
-        }
+        // An unknown def, or one that runs no cycle (an unset machine), still
+        // answers: the five-tick fallback is what a hand-spawned test node
+        // has always got.
+        self.placed(structure)
+            .and_then(|placed| self.cycle_ticks_for(placed, site, worker_speed))
+            .unwrap_or_else(|| {
+                crate::systems::work_ticks_at_speed(
+                    5,
+                    worker_speed,
+                    crate::classes::work_tick_scale(self.player_class()),
+                    site,
+                )
+            })
     }
 
     /// The work-tick scale of the room `structure` stands in: only the
@@ -1728,8 +1719,9 @@ impl Game {
             .map_or(1.0, |r| crate::rooms::room_work_scale(r.band))
     }
 
-    /// One cycle of `def` for a worker of `worker_speed`, at `site`.
-    /// `None` for a structure that runs no cycle at all.
+    /// One cycle of `placed` for a worker of `worker_speed`, at `site`.
+    /// `None` for a structure that runs no cycle at all, which includes a
+    /// machine with nothing set.
     ///
     /// The single derivation the live rate and the build picker's preview
     /// both call. A percentage re-derived in a view would quote a change
@@ -1737,12 +1729,12 @@ impl Game {
     /// floors at one.
     pub(crate) fn cycle_ticks_for(
         &self,
-        def: &StructureDef,
+        placed: crate::structures::Placed<'_>,
         site: SiteScales,
         worker_speed: i32,
     ) -> Option<u32> {
         Some(crate::systems::work_ticks_at_speed(
-            crate::structures::cycle_ticks(crate::structures::Placed { def, recipe: None })?,
+            crate::structures::cycle_ticks(placed)?,
             worker_speed,
             crate::classes::work_tick_scale(self.player_class()),
             site,
@@ -1776,10 +1768,10 @@ impl Game {
         if self.world.get::<ResourceNode>(structure).is_some() {
             return true;
         }
-        self.world
-            .get::<Structure>(structure)
-            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
-            .is_some_and(|d| d.runs_a_job())
+        // A machine with nothing set runs no job, so nothing can be posted
+        // to it.
+        self.placed(structure)
+            .is_some_and(|p| p.def.runs_a_job() && !p.is_unconfigured())
     }
 
     /// Works `structure` yourself instead of posting a program to it — the
@@ -1990,7 +1982,7 @@ impl Game {
 /// "neither" would be a distinction the player cannot act on, and would put
 /// a program on a build picker with no answer to give.
 pub(crate) fn build_quality(def: &StructureDef, potential: Potential, rarity: Rarity) -> f32 {
-    let roll = if def.work.is_some() {
+    let roll = if def.extracts() {
         potential.extraction_roll
     } else {
         potential.assembly_roll

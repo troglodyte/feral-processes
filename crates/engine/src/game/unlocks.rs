@@ -587,11 +587,21 @@ impl Game {
         def.unlocks_recipes
             .iter()
             .map(|r| (r.cost.as_slice(), &r.result))
-            .chain(def.unlocks_structures.iter().filter_map(|id| {
-                let structure = structures.get(id)?;
-                let cost = crate::systems::assembly_recipe(structure, items)?;
-                Some((cost, &structure.assembles.as_ref()?.item))
-            }))
+            .chain(
+                def.unlocks_structures
+                    .iter()
+                    .filter_map(|id| structures.get(id))
+                    .flat_map(|structure| {
+                        structure.productions().filter_map(move |production| {
+                            let placed = crate::structures::Placed {
+                                def: structure,
+                                recipe: Some(&production.recipe.produces),
+                            };
+                            let cost = crate::systems::assembly_recipe(placed, items)?;
+                            Some((cost, &production.recipe.produces))
+                        })
+                    }),
+            )
             .map(|(cost, result)| self.conversion_line(cost, result))
             .collect()
     }

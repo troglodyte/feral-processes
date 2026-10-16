@@ -18,6 +18,7 @@ use crate::game::base::floor::{drop_load, take_from_pile};
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
+use crate::structures::Placed;
 use crate::systems::{intake_recipe, produced_item};
 use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;
@@ -830,6 +831,7 @@ pub struct HaulDeparture<'w, 's> {
     standing: Query<'w, 's, &'static StandingJob>,
     orders: Res<'w, resources::WorkOrders>,
     filters: Query<'w, 's, &'static crate::components::DepotFilter>,
+    recipes: Query<'w, 's, &'static crate::components::MachineRecipe>,
 }
 
 /// The structure side of `haul_step_system`, named so the helpers that read
@@ -1087,6 +1089,7 @@ pub(crate) fn haul_step_system(
         standing,
         orders,
         filters,
+        recipes,
     } = departure;
     // The crew's half of the Depot filter rule. A refusal reads exactly as
     // a full shelf everywhere below, which is what lets the whole feature
@@ -1159,7 +1162,8 @@ pub(crate) fn haul_step_system(
         .iter()
         .filter_map(|(e, p, _, s)| {
             let def = db.get(&s.kind)?;
-            let recipe = intake_recipe(def, &items)?;
+            let placed = Placed::of(def, recipes.get(e).ok());
+            let recipe = intake_recipe(placed, &items)?;
             // **A burning supplier is always a consumer.** There is no order
             // that names its fuel and no program to post to it, so the two
             // reasons an assembler counts cannot apply — and it is off the
@@ -1168,7 +1172,7 @@ pub(crate) fn haul_step_system(
             // depot for somebody to walk back. A supply-only structure pulls
             // nothing from a neighbour, so it is never one.
             let wanted = def.power_upkeep.is_some()
-                || produced_item(def).is_some_and(|item| needed.contains(item))
+                || produced_item(placed).is_some_and(|item| needed.contains(item))
                 || standing.get(e).is_ok_and(|job| job.work);
             wanted.then_some((*p, recipe))
         })
@@ -1237,7 +1241,8 @@ pub(crate) fn haul_step_system(
                 .get(machine)
                 .ok()
                 .and_then(|(_, _, _, s)| db.get(&s.kind));
-            let recipe = def.and_then(|def| intake_recipe(def, &items));
+            let recipe = def
+                .and_then(|def| intake_recipe(Placed::of(def, recipes.get(machine).ok()), &items));
             // The burner itself is in `every_structure`, harmlessly: a
             // fetched cell lands in its *input*, never its output.
             // A defence's supply is shelf stock only: `every_structure`
@@ -1536,10 +1541,14 @@ pub(crate) fn haul_step_system(
                         Ok(MachineStatus::Clogged | MachineStatus::Stranded)
                     );
                     let attached = structures.get(machine).ok().is_some_and(|(_, p, _, s)| {
-                        db.get(&s.kind).and_then(produced_item).is_some_and(|item| {
-                            consumer_beside(*p, item, &consumers)
-                                || depot_beside_accepting(*p, item, &stores, accepts)
-                        })
+                        db.get(&s.kind)
+                            .and_then(|def| {
+                                produced_item(Placed::of(def, recipes.get(machine).ok()))
+                            })
+                            .is_some_and(|item| {
+                                consumer_beside(*p, item, &consumers)
+                                    || depot_beside_accepting(*p, item, &stores, accepts)
+                            })
                     });
                     if !clogged && attached {
                         continue;

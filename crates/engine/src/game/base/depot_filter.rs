@@ -22,6 +22,7 @@
 //! would let a closed shelf destroy materials while the player was out in
 //! the field, which is not what anyone means by sorting their storage.
 
+use crate::structures::Placed;
 use crate::*;
 
 /// The rule itself, over a Depot's filter rather than the Depot: the crew's
@@ -31,10 +32,11 @@ pub(crate) fn filter_accepts(filter: Option<&DepotFilter>, item: &ItemId) -> boo
     filter.is_none_or(|f| !f.denied.contains(item))
 }
 
-/// What a producer of kind `def` puts into its own output buffer, or `None`
-/// when it makes nothing or makes a banked product, which reaches no buffer.
-pub(crate) fn buffered_item<'a>(def: &'a StructureDef, items: &ItemDb) -> Option<&'a ItemId> {
-    let item = crate::systems::produced_item(def)?;
+/// What a placed producer puts into its own output buffer, or `None` when it
+/// makes nothing (an unset machine) or makes a banked product, which reaches
+/// no buffer.
+pub(crate) fn buffered_item<'a>(placed: Placed<'a>, items: &ItemDb) -> Option<&'a ItemId> {
+    let item = crate::systems::produced_item(placed)?;
     let banked = items.get(item.as_str()).is_some_and(|d| d.banked);
     (!banked).then_some(item)
 }
@@ -44,11 +46,11 @@ pub(crate) fn buffered_item<'a>(def: &'a StructureDef, items: &ItemDb) -> Option
 /// (`depot_intake_system`) and the drawn join (`Game::depot_takes_from`) both
 /// ask it, so the picture cannot show a line the pull would refuse.
 pub(crate) fn item_depot_takes<'a>(
-    def: &'a StructureDef,
+    placed: Placed<'a>,
     items: &ItemDb,
     filter: Option<&DepotFilter>,
 ) -> Option<&'a ItemId> {
-    buffered_item(def, items).filter(|item| filter_accepts(filter, item))
+    buffered_item(placed, items).filter(|item| filter_accepts(filter, item))
 }
 
 impl Game {
@@ -174,21 +176,9 @@ impl Game {
         let Some(&Position { x, y }) = self.world.get::<Position>(machine) else {
             return;
         };
-        let Some(item) = self
-            .world
-            .get::<crate::components::MachineRecipe>(machine)
-            .and_then(|r| r.0.clone())
-        else {
+        let Some(item) = self.buffered_output(machine) else {
             return;
         };
-        let banked = self
-            .world
-            .resource::<ItemDb>()
-            .get(item.as_str())
-            .is_none_or(|def| def.banked);
-        if banked {
-            return;
-        }
         let depots: Vec<Entity> = crate::game::base::collect::ORTHOGONAL
             .iter()
             .filter_map(|(dx, dy)| self.structure_at_tile((x + dx, y + dy)))
@@ -207,10 +197,10 @@ impl Game {
     pub(crate) fn depot_takes_from(&self, depot: Entity, producer: Entity) -> bool {
         self.is_depot(depot)
             && self
-                .structure_def(producer)
-                .and_then(|def| {
+                .placed(producer)
+                .and_then(|placed| {
                     item_depot_takes(
-                        def,
+                        placed,
                         self.world.resource::<ItemDb>(),
                         self.world.get::<DepotFilter>(depot),
                     )
@@ -229,27 +219,18 @@ impl Game {
         let items = self.world.resource::<ItemDb>();
         self.is_depot(depot)
             && self
-                .structure_def(consumer)
-                .and_then(|def| crate::systems::assembly_recipe(def, items))
+                .placed(consumer)
+                .and_then(|placed| crate::systems::assembly_recipe(placed, items))
                 .is_some_and(|recipe| {
                     let filter = self.world.get::<DepotFilter>(depot);
                     recipe.iter().any(|(item, _)| filter_accepts(filter, item))
                 })
     }
 
-    fn structure_def(&self, structure: Entity) -> Option<&StructureDef> {
-        let kind = &self.world.get::<Structure>(structure)?.kind;
-        self.world.resource::<StructureDb>().get(kind)
-    }
-
     /// What `structure` puts into its own output buffer, or `None` when it
     /// makes nothing or makes a banked product.
     fn buffered_output(&self, structure: Entity) -> Option<ItemId> {
-        buffered_item(
-            self.structure_def(structure)?,
-            self.world.resource::<ItemDb>(),
-        )
-        .cloned()
+        buffered_item(self.placed(structure)?, self.world.resource::<ItemDb>()).cloned()
     }
 
     fn structure_at_tile(&self, tile: (i32, i32)) -> Option<Entity> {

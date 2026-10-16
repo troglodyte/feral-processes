@@ -1628,6 +1628,12 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
             level: work.level,
         });
     }
+    // A configurable machine stands with nothing set, as `spawn_structure`
+    // leaves it; short of the component `idle_machine_system` reads it as an
+    // ordinary idle machine.
+    if def.machine.is_some() {
+        entity.insert(crate::components::MachineRecipe::default());
+    }
     // `Game::spawn_structure`'s own list, and short of it a rig is a machine
     // that refuses every deposit and strips nothing — silently, since
     // `run_teardown_rigs` filters on the component's presence.

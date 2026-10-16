@@ -347,8 +347,9 @@ fn every_assembling_structure_describes_its_conversion_in_that_order() {
         let Some(assembles) = def.assembles.as_ref() else {
             continue;
         };
-        let cost = crate::systems::assembly_recipe(&def, items)
-            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
+        let cost =
+            crate::systems::assembly_recipe(crate::structures::Placed::of(&def, None), items)
+                .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
         let product = game.item_name(&assembles.item);
         let at = |needle: &str| {
             def.description.find(needle).unwrap_or_else(|| {
@@ -1714,7 +1715,7 @@ fn an_assembler_runs_the_named_items_own_craftable_recipe() {
     .expect("an assembles block must parse");
 
     assert_eq!(
-        crate::systems::assembly_recipe(&def, items),
+        crate::systems::assembly_recipe(crate::structures::Placed::of(&def, None), items),
         Some(authored.cost.as_slice()),
         "the machine's recipe is the item's own, not a second copy of it"
     );
@@ -1729,7 +1730,10 @@ fn a_structure_that_assembles_nothing_resolves_no_recipe() {
     let db = game.world.resource::<crate::structures::StructureDb>();
     let mining_node = db.get("mining_node").expect("mining_node ships");
 
-    assert!(crate::systems::assembly_recipe(mining_node, items).is_none());
+    assert!(
+        crate::systems::assembly_recipe(crate::structures::Placed::of(mining_node, None), items)
+            .is_none()
+    );
 }
 
 /// Without this, a typo'd `assembles` ships a machine that can never run and
@@ -1902,7 +1906,10 @@ fn the_home_alone_lights_the_machine_that_makes_grid_fuel() {
         .filter(|def| def.runs_a_job())
         .filter_map(|def| {
             Some((
-                crate::game::base::power::grid_rung(def, &chain)?,
+                crate::game::base::power::grid_rung(
+                    crate::structures::Placed::of(def, None),
+                    &chain,
+                )?,
                 def.id.as_str(),
             ))
         })

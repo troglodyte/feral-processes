@@ -248,6 +248,22 @@ impl Game {
         (QUALITY_BASE as u32 + bench + perk + care).min(u8::MAX as u32) as u8
     }
 
+    /// The kind (and its recipe) that exists to make `item`: an assembling
+    /// bench before an extractor, and a fixed-recipe kind before a
+    /// configurable machine. `StructureDb::all` is sorted, so a mod shipping
+    /// two makers for one item resolves the same way every session.
+    fn maker_of(
+        &self,
+        item: &ItemId,
+    ) -> Option<(&StructureDef, crate::structures::Production<'_>)> {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .flat_map(|d| d.productions().map(move |p| (d, p)))
+            .filter(|(_, p)| &p.recipe.produces == item)
+            .min_by_key(|(d, p)| (d.machine.is_some(), p.extracts))
+    }
+
     /// How long compiling one unit of `item` by hand takes, in ticks.
     ///
     /// **The one door onto the number**, so the screen that quotes it and
@@ -261,23 +277,9 @@ impl Game {
     /// mod shipping two machines for one item resolves the same way every
     /// session.
     pub fn hand_craft_ticks(&self, item: &ItemId) -> u32 {
-        let db = self.world.resource::<StructureDb>();
-        let cycle = db
-            .all()
-            .find_map(|d| {
-                d.assembles
-                    .as_ref()
-                    .filter(|a| &a.item == item)
-                    .map(|a| a.ticks_per_unit)
-            })
-            .or_else(|| {
-                db.all().find_map(|d| {
-                    d.work
-                        .as_ref()
-                        .filter(|w| &w.produces == item)
-                        .map(|w| w.ticks_per_unit)
-                })
-            })
+        let cycle = self
+            .maker_of(item)
+            .map(|(_, production)| production.recipe.ticks_per_unit)
             .unwrap_or(crate::tuning::HAND_CRAFT_DEFAULT_CYCLE);
         crate::tuning::HAND_CRAFT_TICK_MULT * cycle
     }
@@ -472,15 +474,7 @@ impl Game {
     /// the record answer B2: `ticks_spent` against that machine's own cycle
     /// is exactly what the convenience costs.
     fn note_hand_craft(&mut self, item: &ItemId, careful: bool, ticks_spent: u32) {
-        let bench = self
-            .world
-            .resource::<StructureDb>()
-            .all()
-            .find(|d| {
-                d.assembles.as_ref().is_some_and(|a| &a.item == item)
-                    || d.work.as_ref().is_some_and(|w| &w.produces == item)
-            })
-            .map(|d| d.id.clone());
+        let bench = self.maker_of(item).map(|(def, _)| def.id.clone());
         let item_id = item.0.clone();
         self.report_base(
             crate::base_ledger::Event::HandCraft {

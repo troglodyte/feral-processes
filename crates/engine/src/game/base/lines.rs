@@ -12,7 +12,9 @@ use std::collections::HashMap;
 use bevy_ecs::entity::Entity;
 use bevy_ecs::world::World;
 
+use crate::components::MachineRecipe;
 use crate::game::base::collect::{ORTHOGONAL, feeders_by_tile};
+use crate::structures::Placed;
 use crate::*;
 
 /// A line's identity: its lowest `(x, y)` member's tile.
@@ -150,7 +152,13 @@ pub(crate) fn lines_in(world: &mut World) -> Vec<Line> {
 
     let db = world.resource::<StructureDb>();
     let items = world.resource::<ItemDb>();
-    let defs: Vec<_> = placed.iter().map(|(_, _, k)| db.get(k)).collect();
+    let defs: Vec<_> = placed
+        .iter()
+        .map(|(e, _, k)| {
+            db.get(k)
+                .map(|def| Placed::of(def, world.get::<MachineRecipe>(*e)))
+        })
+        .collect();
     let nodes: Vec<(Entity, (i32, i32))> = placed.iter().map(|(e, tile, _)| (*e, *tile)).collect();
 
     group(&nodes, |a, b| {
@@ -335,17 +343,12 @@ impl Game {
         line: &Line,
         status_of: impl Fn(Entity) -> Option<MachineStatus>,
     ) -> Option<(Entity, ItemId)> {
-        let db = self.world.resource::<StructureDb>();
         let items = self.world.resource::<ItemDb>();
-        let defs: Vec<_> = line
-            .members
-            .iter()
-            .map(|&m| self.world.get::<Structure>(m).and_then(|s| db.get(&s.kind)))
-            .collect();
+        let defs: Vec<Option<Placed>> = line.members.iter().map(|&m| self.placed(m)).collect();
         let made: Vec<&ItemId> = defs
             .iter()
             .flatten()
-            .filter_map(|d| crate::systems::produced_item(d))
+            .filter_map(|&p| crate::systems::produced_item(p))
             .collect();
         line.members
             .iter()

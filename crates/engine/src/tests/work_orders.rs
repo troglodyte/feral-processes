@@ -194,9 +194,9 @@ fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
         .item_defs()
         .into_iter()
         .find(|d| {
-            game.structure_defs()
-                .iter()
-                .all(|s| systems::produced_item(s) != Some(&d.id))
+            game.structure_defs().iter().all(|s| {
+                systems::produced_item(crate::structures::Placed::of(s, None)) != Some(&d.id)
+            })
         })
         .expect("some shipped item is not made by any structure")
         .id;

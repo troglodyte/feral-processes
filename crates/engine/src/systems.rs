@@ -4,10 +4,10 @@ use rand::RngExt;
 
 use crate::alerts::{self, AlertBoard, AlertKind};
 use crate::components::{
-    Carrying, Creature, Derived, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus,
-    Memories, Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerFuel,
-    PowerReserve, Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed,
-    Task, TaskKind, WanderAi, field_buff_power_of, max_power_of,
+    Carrying, Creature, Derived, Experience, FieldBuff, FieldBuffKind, Inventory, MachineRecipe,
+    MachineStatus, Memories, Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position,
+    Potential, PowerFuel, PowerReserve, Pursuing, ResourceNode, Stats, Stock, Stranded, Structure,
+    StructureTier, Tamed, Task, TaskKind, WanderAi, field_buff_power_of, max_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
@@ -518,18 +518,24 @@ pub(crate) struct CycleModifiers {
     pub extraction: f64,
 }
 
-/// Whether the structure `node_entity` belongs to declares
-/// `RecipeDef::flat_payout`. Read per cycle off the `StructureDb` rather than
-/// mirrored onto `ResourceNode` at build time: the component is rebuilt from
-/// the def on load anyway (`Game::load`), and the one field that *is*
-/// mirrored, `level`, already needed a re-derive there to stop a Mk3 coming
-/// back extracting like a Mk1. A node whose kind isn't in the db — a
-/// hand-spawned test fixture — takes the ordinary scaling curve.
-fn node_is_flat_payout(node_entity: Option<&Structure>, structure_db: &StructureDb) -> bool {
+/// How a placed extractor's cycle pays: whether its recipe opts out of the
+/// zone/tier curve (`RecipeDef::flat_payout`) and whether it opts out of the
+/// upgrade tier alone (`RecipeDef::tierless`). Read per cycle off the
+/// instance's recipe rather than mirrored onto `ResourceNode`, which is
+/// rebuilt from the def on load anyway (`Game::load`). A node whose kind
+/// isn't in the db — a hand-spawned test fixture — takes the ordinary
+/// scaling curve.
+fn node_cycle_shape(
+    node_entity: Option<&Structure>,
+    recipe: Option<&MachineRecipe>,
+    structure_db: &StructureDb,
+) -> (bool, bool) {
     node_entity
         .and_then(|s| structure_db.get(&s.kind))
-        .and_then(|d| d.work.as_ref())
-        .is_some_and(|w| w.flat_payout)
+        .and_then(|d| crate::structures::Placed::of(d, recipe).production())
+        .map_or((false, false), |p| {
+            (p.recipe.flat_payout, p.recipe.tierless)
+        })
 }
 
 /// One completed gather cycle against `node`: rolls the node's reliability
@@ -762,11 +768,14 @@ fn extract_record(
 /// Both are the same thing to a caller: nothing to run. The shipped-assets
 /// test is what stops the second case reaching a player.
 pub(crate) fn assembly_recipe<'a>(
-    def: &crate::structures::StructureDef,
+    placed: crate::structures::Placed<'_>,
     items: &'a ItemDb,
 ) -> Option<&'a [(ItemId, u32)]> {
-    let assembles = def.assembles.as_ref()?;
-    let recipe = items.get(assembles.item.as_str())?.craftable.as_ref()?;
+    let production = placed.production().filter(|p| !p.extracts)?;
+    let recipe = items
+        .get(production.recipe.produces.as_str())?
+        .craftable
+        .as_ref()?;
     Some(recipe.cost.as_slice())
 }
 
@@ -790,14 +799,16 @@ pub(crate) fn assembly_recipe<'a>(
 /// A structure could in principle declare both; none does, and the assembler
 /// arm winning is arbitrary rather than load-bearing.
 pub(crate) fn intake_recipe(
-    def: &crate::structures::StructureDef,
+    placed: crate::structures::Placed<'_>,
     items: &ItemDb,
 ) -> Option<Vec<(ItemId, u32)>> {
-    if let Some(recipe) = assembly_recipe(def, items) {
+    if let Some(recipe) = assembly_recipe(placed, items) {
         return Some(recipe.to_vec());
     }
-    def.spends_supply()
-        .map(|item| vec![(item.clone(), def.supply_batch())])
+    placed
+        .def
+        .spends_supply()
+        .map(|item| vec![(item.clone(), placed.def.supply_batch())])
 }
 
 /// What a structure puts into its *own* output buffer, or `None` for one
@@ -808,11 +819,8 @@ pub(crate) fn intake_recipe(
 /// One narrowing: a structure producing a banked item reaches no `output` at
 /// all (see `deliver_payout`), so it can feed nobody. A bank is not a buffer,
 /// and nothing can pull from it.
-pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&ItemId> {
-    if let Some(work) = &def.work {
-        return Some(&work.produces);
-    }
-    def.assembles.as_ref().map(|a| &a.item)
+pub(crate) fn produced_item(placed: crate::structures::Placed<'_>) -> Option<&ItemId> {
+    placed.production().map(|p| &p.recipe.produces)
 }
 
 /// The program posted to work `machine`: the holder of a `GatherResource` task
@@ -831,8 +839,8 @@ pub(crate) fn worker_of<'a>(
 /// definition of an ingredient edge: the map's drawn links and a production
 /// line's membership both call it, so they cannot disagree.
 pub(crate) fn feeds_ingredient(
-    a: &crate::structures::StructureDef,
-    b: &crate::structures::StructureDef,
+    a: crate::structures::Placed<'_>,
+    b: crate::structures::Placed<'_>,
     items: &ItemDb,
 ) -> bool {
     let (Some(made), Some(recipe)) = (produced_item(a), assembly_recipe(b, items)) else {
@@ -843,16 +851,16 @@ pub(crate) fn feeds_ingredient(
 
 /// True when `a`'s product is the fuel `b` burns to stay running.
 pub(crate) fn feeds_fuel(
-    a: &crate::structures::StructureDef,
-    b: &crate::structures::StructureDef,
+    a: crate::structures::Placed<'_>,
+    b: crate::structures::Placed<'_>,
 ) -> bool {
-    matches!((produced_item(a), b.spends_supply()), (Some(made), Some(fuel)) if made == fuel)
+    matches!((produced_item(a), b.def.spends_supply()), (Some(made), Some(fuel)) if made == fuel)
 }
 
 /// Either feed edge: `a` makes something `b` takes in.
 pub(crate) fn feeds(
-    a: &crate::structures::StructureDef,
-    b: &crate::structures::StructureDef,
+    a: crate::structures::Placed<'_>,
+    b: crate::structures::Placed<'_>,
     items: &ItemDb,
 ) -> bool {
     feeds_ingredient(a, b, items) || feeds_fuel(a, b)
@@ -1371,6 +1379,7 @@ type WorkedNode = (
     &'static mut Stock,
     &'static mut MachineStatus,
     &'static Position,
+    Option<&'static MachineRecipe>,
 );
 
 /// The worker-side components `task_progress_system` reads per cronjob
@@ -1539,7 +1548,7 @@ pub fn task_progress_system(
         if grid.is_dark(task.target) {
             continue;
         }
-        let Ok((node, tier, structure, mut stock, mut status, node_pos)) =
+        let Ok((node, tier, structure, mut stock, mut status, node_pos, machine_recipe)) =
             nodes.get_mut(task.target)
         else {
             continue;
@@ -1641,15 +1650,16 @@ pub fn task_progress_system(
         // parameter is for: who you post to a node changes how often it
         // fizzles, and a seated program's points move it. A species missing
         // from the db is a hand-spawned test fixture and takes the baseline, the same way
-        // `node_is_flat_payout` treats a structure kind the db has never
+        // `node_cycle_shape` treats a structure kind the db has never
         // heard of.
         let worker_def = species_db.get(&creature.species);
         let worker_int = crate::species::analysis_of(attributes, worker_def, &attribute_defs);
+        let (flat_payout, tierless) = node_cycle_shape(structure, machine_recipe, &structure_db);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
-            tier,
+            tier.filter(|_| !tierless),
             *zone,
-            node_is_flat_payout(structure, &structure_db),
+            flat_payout,
             CycleModifiers {
                 keen_scavenger_level,
                 analysis_over_base: worker_int - attribute_defs.analysis_base(),
@@ -1910,7 +1920,7 @@ pub fn player_gather_system(
         // away. Either half alone leaves a player working a node they are
         // nowhere near — which pays into a buffer a transfer cannot
         // reach.
-        let Ok((node, tier, structure, mut stock, mut status, node_pos)) =
+        let Ok((node, tier, structure, mut stock, mut status, node_pos, machine_recipe)) =
             nodes.get_mut(task.target)
         else {
             continue;
@@ -1952,11 +1962,12 @@ pub fn player_gather_system(
         // dull one is genuinely worse than rolling your sleeves up. Give the
         // player the top of the range instead and posting collapses back
         // into a pure time-saver, which is the thing this phase is undoing.
+        let (flat_payout, tierless) = node_cycle_shape(structure, machine_recipe, &structure_db);
         let Some((resource, payout)) = resolve_gather_cycle(
             &node,
-            tier,
+            tier.filter(|_| !tierless),
             *zone,
-            node_is_flat_payout(structure, &structure_db),
+            flat_payout,
             CycleModifiers {
                 keen_scavenger_level,
                 analysis_over_base: 0,
@@ -2047,7 +2058,8 @@ pub fn player_gather_system(
 /// for the tick, two of them describing what a machine is and the third
 /// whether it has the grid capacity to be it.
 #[derive(SystemParam)]
-pub struct AssemblerLookups<'w> {
+pub struct AssemblerLookups<'w, 's> {
+    recipes: Query<'w, 's, &'static MachineRecipe>,
     structures: Res<'w, StructureDb>,
     items: Res<'w, ItemDb>,
     power: Res<'w, PowerGrid>,
@@ -2056,6 +2068,16 @@ pub struct AssemblerLookups<'w> {
     /// Bundled for the same reason as the rest: `assembler_system` is
     /// already at clippy's argument-count threshold.
     board: ResMut<'w, AlertBoard>,
+}
+
+/// What `depot_intake_system` reads beyond its queries, bundled to stay under
+/// clippy's argument-count threshold for `AssemblerLookups`' reason.
+#[derive(SystemParam)]
+pub struct DepotIntakeLookups<'w, 's> {
+    recipes: Query<'w, 's, &'static MachineRecipe>,
+    structures: Res<'w, StructureDb>,
+    items: Res<'w, ItemDb>,
+    power: Res<'w, PowerGrid>,
 }
 
 /// A Depot fills itself from the producers beside it: each tick, every Depot
@@ -2075,10 +2097,14 @@ pub fn depot_intake_system(
     mut stocks: Query<&mut Stock>,
     tasks: Query<(Entity, &Task)>,
     filters: Query<&crate::components::DepotFilter>,
-    structure_db: Res<StructureDb>,
-    items: Res<ItemDb>,
-    grid: Res<PowerGrid>,
+    db: DepotIntakeLookups,
 ) {
+    let DepotIntakeLookups {
+        recipes,
+        structures: structure_db,
+        items,
+        power: grid,
+    } = db;
     let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
     let mut depots: Vec<(i32, i32, Entity)> = structures
         .iter()
@@ -2103,7 +2129,8 @@ pub fn depot_intake_system(
                 .ok()
                 .and_then(|(_, s, _)| structure_db.get(&s.kind))
                 .and_then(|def| {
-                    crate::game::base::depot_filter::item_depot_takes(def, &items, filter)
+                    let placed = crate::structures::Placed::of(def, recipes.get(producer).ok());
+                    crate::game::base::depot_filter::item_depot_takes(placed, &items, filter)
                 })
             else {
                 continue;
@@ -2167,6 +2194,7 @@ pub fn assembler_system(
     mut instruments: crate::base_ledger::Instruments,
 ) {
     let AssemblerLookups {
+        recipes,
         structures: structure_db,
         items: item_db,
         power: grid,
@@ -2178,17 +2206,21 @@ pub fn assembler_system(
     let zone_now = zone.0;
     let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
 
-    let mut machines: Vec<(Entity, (i32, i32), &crate::structures::StructureDef)> = structures
+    let mut machines: Vec<(Entity, (i32, i32), crate::structures::Placed)> = structures
         .iter()
         .filter_map(|(e, s, p)| {
             let def = structure_db.get(&s.kind)?;
-            def.assembles.as_ref()?;
-            Some((e, (p.x, p.y), def))
+            let placed = crate::structures::Placed::of(def, recipes.get(e).ok());
+            // An unset machine has no production, so it falls out here and
+            // never pulls from a neighbour.
+            placed.production().filter(|p| !p.extracts)?;
+            Some((e, (p.x, p.y), placed))
         })
         .collect();
     machines.sort_by_key(|(_, tile, _)| *tile);
 
-    for (machine, (x, y), def) in machines {
+    for (machine, (x, y), placed) in machines {
+        let def = placed.def;
         // The second of the three guards, and it stops the machine before it
         // pulls from its neighbours as well as before it works: a dark
         // assembler must not drain a feeder's output into an input buffer it
@@ -2197,7 +2229,7 @@ pub fn assembler_system(
         if grid.is_dark(machine) {
             continue;
         }
-        let Some(recipe) = assembly_recipe(def, &item_db) else {
+        let Some(recipe) = assembly_recipe(placed, &item_db) else {
             continue;
         };
         // The telemetry buffer is a parameter beside the two the closure
@@ -2337,7 +2369,7 @@ pub fn assembler_system(
         let Ok((_, mut task)) = tasks.get_mut(worker) else {
             continue;
         };
-        // The rate comes from the task, not from `def.assembles`: it was
+        // The rate comes from the task, not from the recipe: it was
         // baked at assignment out of the machine's `ticks_per_unit` and the
         // posted program's `base_speed` (`Game::work_ticks_for`). Safe
         // because `upgrade_structure` never touches `ticks_per_unit`, so
@@ -2365,11 +2397,8 @@ pub fn assembler_system(
                 }
             }
         }
-        let product = def
-            .assembles
-            .as_ref()
-            .expect("filtered on `assembles` above")
-            .item
+        let product = produced_item(placed)
+            .expect("filtered on a production above")
             .clone();
         *stock.output.entry(product.clone()).or_default() += 1;
         // Emitted here rather than beside the drain above so consumption and

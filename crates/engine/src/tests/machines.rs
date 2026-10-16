@@ -423,3 +423,301 @@ fn the_first_recipe_filters_only_unfiltered_depots_beside_it() {
         .unwrap();
     assert_eq!(game.world.get::<DepotFilter>(a).unwrap().denied, a_denied);
 }
+
+// ---------------------------------------------------------------------
+// Task 4: every production reader goes per instance
+// ---------------------------------------------------------------------
+
+fn put_output(game: &mut Game, machine: Entity, item_id: &str, qty: u32) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    *stock.output.entry(item(item_id)).or_default() += qty;
+}
+
+fn put_input(game: &mut Game, machine: Entity, item_id: &str, qty: u32) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    *stock.input.entry(item(item_id)).or_default() += qty;
+}
+
+/// The entities a body is currently posted to.
+fn posts(game: &mut Game) -> Vec<Entity> {
+    game.world
+        .query::<&Task>()
+        .iter(&game.world)
+        .filter(|t| matches!(t.kind, TaskKind::GatherResource))
+        .map(|t| t.target)
+        .collect()
+}
+
+fn hire(game: &mut Game, n: usize) {
+    for _ in 0..n {
+        spawn_tamed(game, 10, 3);
+    }
+}
+
+/// A powered, homed base with room around the origin for a line.
+fn powered_base(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    stand_ample_grid_supply(&mut game);
+    game
+}
+
+/// The cycle a worker of the standard speed bakes onto its `Task` when posted
+/// to a freshly built `kind` set to `recipe` (a fixed-recipe kind ignores it).
+fn baked_required(kind: &str, recipe: Option<&str>) -> u32 {
+    let mut game = powered_base(21010);
+    let machine = match recipe {
+        Some(recipe) => spawn_machine_with_recipe_at(&mut game, kind, recipe, 2, 0),
+        None => spawn_machine_at(&mut game, kind, 2, 0),
+    };
+    let worker = spawn_tamed(&mut game, 10, 3);
+    stand_player_at_post(&mut game, machine);
+    game.assign_cronjob(worker, machine).unwrap();
+    game.world.get::<Task>(worker).unwrap().required
+}
+
+#[test]
+fn a_configured_line_runs_like_the_structures_it_replaces() {
+    let mut game = powered_base(21011);
+    let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    let (digger, builder) = (spawn_tamed(&mut game, 10, 3), spawn_tamed(&mut game, 10, 3));
+    stand_player_at_post(&mut game, extractor);
+    game.assign_cronjob(digger, extractor).unwrap();
+    stand_player_at_post(&mut game, factory);
+    game.assign_cronjob(builder, factory).unwrap();
+    park_at_post(&mut game, digger, extractor);
+    park_at_post(&mut game, builder, factory);
+
+    let required = game.world.get::<Task>(builder).unwrap().required;
+    // 12 is what the Refinery's worker bakes at the same speed (recorded for
+    // Task 14, which deletes the Refinery and pins this to the number).
+    assert_eq!(required, baked_required("refinery", None));
+    assert_eq!(required, 12);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert!(
+        node_output(&game, factory, "bytecode_block") > 0,
+        "the line should have produced bytecode"
+    );
+}
+
+#[test]
+fn an_unconfigured_machine_is_never_staffed() {
+    let mut game = powered_base(21012);
+    let factory = spawn_machine_at(&mut game, "factory", 3, 0);
+    hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(item("bytecode_block"), 5))
+        .expect("an order for an item a machine could be set to make is accepted");
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert!(!posts(&mut game).contains(&factory));
+    assert!(!game.accepts_a_program(factory));
+    assert!(game.set_standing_job(factory, true, false).is_err());
+    assert_eq!(
+        game.world.get::<MachineStatus>(factory),
+        Some(&MachineStatus::Unconfigured)
+    );
+}
+
+#[test]
+fn an_unconfigured_machine_draws_no_power() {
+    let mut game = Game::new(21013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    let idle = spawn_machine_at(&mut game, "assembler", 4, 0);
+    let ledger = {
+        let db = game.world.resource::<StructureDb>();
+        let items = game.world.resource::<ItemDb>();
+        crate::game::base::power::ledger(&game.world, db, items)
+    };
+    let drawn = |e: Entity| {
+        ledger
+            .entries
+            .iter()
+            .find(|entry| entry.entity == e)
+            .map_or(0, |entry| entry.draw)
+    };
+    assert_eq!(drawn(idle), 0, "an unset Assembler is not in the draw");
+    assert_eq!(ledger.draw, 1 + 2, "only the Extractor and Factory draw");
+    assert!(
+        ledger.draw <= ledger.supply,
+        "the Home covers exactly the configured machines"
+    );
+    assert!(ledger.dark.is_empty(), "so nothing goes dark");
+}
+
+#[test]
+fn an_unconfigured_machine_pulls_nothing_from_its_neighbours() {
+    let mut game = powered_base(21014);
+    let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_at(&mut game, "factory", 3, 0);
+    put_output(&mut game, extractor, "core_fragment", 10);
+    // A body forced onto it, so the only thing stopping a pull is that the
+    // machine makes nothing.
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert((
+        Position { x: 4, y: 0 },
+        Task {
+            kind: TaskKind::GatherResource,
+            target: factory,
+            progress: 0,
+            required: 12,
+        },
+    ));
+    for _ in 0..100 {
+        game.tick();
+    }
+    assert_eq!(node_output(&game, extractor, "core_fragment"), 10);
+    assert_eq!(units(&game, factory, "input"), 0);
+}
+
+#[test]
+fn an_order_is_served_only_by_machines_set_to_its_item() {
+    let mut game = powered_base(21015);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let right = spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    let wrong = spawn_machine_with_recipe_at(&mut game, "factory", "charge_coil", 9, 0);
+    put_input(&mut game, right, "core_fragment", 50);
+    put_input(&mut game, wrong, "core_fragment", 50);
+    hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(item("bytecode_block"), 30))
+        .unwrap();
+    game.tick();
+    let posted = posts(&mut game);
+    assert!(posted.contains(&right));
+    assert!(!posted.contains(&wrong));
+}
+
+#[test]
+fn an_order_for_an_item_no_machine_is_set_to_make_waits_stalled() {
+    let mut game = powered_base(21016);
+    let factory = spawn_machine_at(&mut game, "factory", 3, 0);
+    hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::batch(item("bytecode_block"), 5))
+        .expect("accepted, to wait for a setting");
+    let report = game.work_order_report();
+    assert_eq!(report.len(), 1);
+    assert_eq!(report[0].state, crate::views::OrderState::Stalled);
+    assert_eq!(
+        report[0].blocked_by.as_deref(),
+        Some("No way to make this — set a Factory to Bytecode Block.")
+    );
+
+    set_recipe(&mut game, factory, "bytecode_block");
+    put_input(&mut game, factory, "core_fragment", 50);
+    for _ in 0..200 {
+        game.tick();
+        if game.work_order_report()[0].state != crate::views::OrderState::Stalled {
+            return;
+        }
+    }
+    panic!("setting the machine should wake the order");
+}
+
+#[test]
+fn a_standing_order_stalls_when_its_machine_is_switched_and_resumes_when_set_back() {
+    use crate::game::base::work_orders::{OrderStanding, standing_of};
+    let mut game = powered_base(21017);
+    let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 3, 0);
+    put_output(&mut game, extractor, "core_fragment", 20);
+    game.queue_work_order(WorkOrder::level(item("bytecode_block"), 5))
+        .unwrap();
+    let order = game.work_orders()[0].clone();
+    assert!(matches!(
+        standing_of(&game, &order),
+        OrderStanding::Wants(_)
+    ));
+
+    game.set_machine_recipe(factory, &item("charge_coil"))
+        .unwrap();
+    assert_eq!(game.work_orders().len(), 1, "the order stays queued");
+    assert!(matches!(standing_of(&game, &order), OrderStanding::Stalled));
+
+    game.set_machine_recipe(factory, &item("bytecode_block"))
+        .unwrap();
+    put_output(&mut game, extractor, "core_fragment", 20);
+    assert!(matches!(
+        standing_of(&game, &order),
+        OrderStanding::Wants(_)
+    ));
+}
+
+#[test]
+fn power_cell_pays_tier_one_on_an_upgraded_extractor() {
+    let mut game = base_with("depot");
+    let extractor = place_machine(&mut game, "extractor", "power_cell", 0, 1).unwrap();
+    game.world.entity_mut(extractor).insert(StructureTier(4));
+    let zone = *game.world.resource::<ZoneLevel>();
+
+    let paid = |game: &mut Game, item_id: &str| {
+        let before = node_output(game, extractor, item_id);
+        game.work_structure(extractor).unwrap();
+        let mut ticks = 0;
+        while node_output(game, extractor, item_id) == before && ticks < 80 {
+            game.wait();
+            ticks += 1;
+        }
+        node_output(game, extractor, item_id) - before
+    };
+    assert_eq!(
+        paid(&mut game, "power_cell"),
+        crate::systems::node_payout(1, zone)
+    );
+
+    game.set_machine_recipe(extractor, &item("core_fragment"))
+        .unwrap();
+    // Reliability off, so the measurement is the payout and not the roll.
+    game.world.get_mut::<ResourceNode>(extractor).unwrap().level = None;
+    assert_eq!(
+        paid(&mut game, "core_fragment"),
+        crate::systems::node_payout(4, zone)
+    );
+}
+
+#[test]
+fn a_depot_placed_beside_a_configured_machine_filters_for_its_output() {
+    let mut game = bare_game();
+    spawn_machine_with_recipe_at(&mut game, "factory", "bytecode_block", 40, 40);
+    let depot = depot_at(&mut game, 41, 40);
+    let filter = game
+        .world
+        .get::<crate::components::DepotFilter>(depot)
+        .expect("a filter is written beside a configured machine");
+    assert!(!filter.denied.contains(&item("bytecode_block")));
+    assert!(filter.denied.contains(&item("core_fragment")));
+}
+
+#[test]
+fn a_posted_worker_on_an_upgraded_power_cell_extractor_pays_tier_one() {
+    let mut game = base_with("depot");
+    let extractor = place_machine(&mut game, "extractor", "power_cell", 0, 1).unwrap();
+    game.world.entity_mut(extractor).insert(StructureTier(4));
+    let zone = *game.world.resource::<ZoneLevel>();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    stand_player_at_post(&mut game, extractor);
+    game.assign_cronjob(worker, extractor).unwrap();
+    park_at_post(&mut game, worker, extractor);
+    // Counted across every buffer: the crew carries a cycle's output to the
+    // Depot beside the machine.
+    let made = |game: &mut Game| -> u32 {
+        game.world
+            .query::<&Stock>()
+            .iter(&game.world)
+            .map(|s| s.output.get(&item("power_cell")).copied().unwrap_or(0))
+            .sum()
+    };
+    let mut ticks = 0;
+    while made(&mut game) == 0 && ticks < 80 {
+        game.tick();
+        ticks += 1;
+    }
+    assert_eq!(made(&mut game), crate::systems::node_payout(1, zone));
+}

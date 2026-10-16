@@ -4,6 +4,7 @@
 use super::support::*;
 use crate::components::StaffRank;
 use crate::game::base::lines::LineKey;
+use crate::structures::Placed;
 use crate::systems::{feeds, feeds_fuel, feeds_ingredient};
 use crate::*;
 
@@ -23,9 +24,21 @@ fn a_mining_node_feeds_a_lathe_its_ingredient() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
     let (mining, lathe) = (def(&g, "mining_node"), def(&g, "lathe"));
-    assert!(feeds_ingredient(&mining, &lathe, items));
-    assert!(feeds(&mining, &lathe, items));
-    assert!(!feeds_ingredient(&lathe, &mining, items));
+    assert!(feeds_ingredient(
+        Placed::of(&mining, None),
+        Placed::of(&lathe, None),
+        items
+    ));
+    assert!(feeds(
+        Placed::of(&mining, None),
+        Placed::of(&lathe, None),
+        items
+    ));
+    assert!(!feeds_ingredient(
+        Placed::of(&lathe, None),
+        Placed::of(&mining, None),
+        items
+    ));
 }
 
 #[test]
@@ -33,9 +46,20 @@ fn a_power_conduit_feeds_a_recharger_its_fuel() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
     let (conduit, recharger) = (def(&g, "power_conduit"), def(&g, "recharger_node"));
-    assert!(feeds_fuel(&conduit, &recharger));
-    assert!(!feeds_ingredient(&conduit, &recharger, items));
-    assert!(feeds(&conduit, &recharger, items));
+    assert!(feeds_fuel(
+        Placed::of(&conduit, None),
+        Placed::of(&recharger, None)
+    ));
+    assert!(!feeds_ingredient(
+        Placed::of(&conduit, None),
+        Placed::of(&recharger, None),
+        items
+    ));
+    assert!(feeds(
+        Placed::of(&conduit, None),
+        Placed::of(&recharger, None),
+        items
+    ));
 }
 
 #[test]
@@ -43,7 +67,11 @@ fn a_machine_does_not_feed_its_own_kind() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
     let mining = def(&g, "mining_node");
-    assert!(!feeds(&mining, &mining, items));
+    assert!(!feeds(
+        Placed::of(&mining, None),
+        Placed::of(&mining, None),
+        items
+    ));
 }
 
 #[test]
@@ -53,7 +81,7 @@ fn a_teardown_rig_feeds_nothing() {
     let rig = def(&g, "teardown_rig");
     for other in g.structure_defs() {
         assert!(
-            !feeds(&rig, &other, items),
+            !feeds(Placed::of(&rig, None), Placed::of(&other, None), items),
             "rig must not feed {}",
             other.id
         );

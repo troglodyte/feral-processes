@@ -84,8 +84,18 @@ pub struct Placed<'a> {
 }
 
 impl<'a> Placed<'a> {
+    /// A def with the `MachineRecipe` component its entity carries, if any.
+    pub fn of(def: &'a StructureDef, recipe: Option<&'a crate::components::MachineRecipe>) -> Self {
+        Placed {
+            def,
+            recipe: recipe.and_then(|r| r.0.as_ref()),
+        }
+    }
+
     /// A fixed `work` block wins and extracts; otherwise the machine recipe
-    /// this instance is set to, if the def still lists it.
+    /// this instance is set to, if the def still lists it. A third,
+    /// temporary arm reads the old `assembles` block; it goes with that
+    /// field in Task 14.
     pub fn production(self) -> Option<Production<'a>> {
         if let Some(work) = &self.def.work {
             return Some(Production {
@@ -93,7 +103,14 @@ impl<'a> Placed<'a> {
                 extracts: true,
             });
         }
-        let machine = self.def.machine.as_ref()?;
+        let Some(machine) = self.def.machine.as_ref() else {
+            // Temporary: the old one-recipe benches, until the field is
+            // deleted with its structures (factory overhaul, Task 14).
+            return self.def.assembles.as_ref().map(|a| Production {
+                recipe: &a.recipe,
+                extracts: false,
+            });
+        };
         let recipe = machine_recipe_in(machine, self.recipe?)?;
         Some(Production {
             recipe,
@@ -141,6 +158,7 @@ pub enum StructureCategory {
 /// A structure's automated-crafting capability — see
 /// `StructureDef::assembles` and `systems::assembler_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "AssembleFile")]
 pub struct AssembleDef {
     /// What this machine builds. Deliberately an *item id* and not a recipe:
     /// the machine runs that item's own `ItemDef::craftable.cost`, so there
@@ -151,6 +169,35 @@ pub struct AssembleDef {
     /// batch of ingredients staged, room in its output, and a program
     /// assigned.
     pub ticks_per_unit: u32,
+    /// The same recipe as a `RecipeDef`, so `Placed::production` answers for
+    /// an old bench like a machine. Temporary: goes with `assembles` in
+    /// Task 14 of the factory overhaul.
+    #[serde(skip)]
+    pub recipe: RecipeDef,
+}
+
+#[derive(Deserialize)]
+struct AssembleFile {
+    item: ItemId,
+    ticks_per_unit: u32,
+}
+
+impl From<AssembleFile> for AssembleDef {
+    fn from(file: AssembleFile) -> Self {
+        let recipe = RecipeDef {
+            produces: file.item.clone(),
+            ticks_per_unit: file.ticks_per_unit,
+            level: None,
+            flat_payout: false,
+            research: None,
+            tierless: false,
+        };
+        AssembleDef {
+            item: file.item,
+            ticks_per_unit: file.ticks_per_unit,
+            recipe,
+        }
+    }
 }
 
 /// A structure's automated-teardown capability — see
@@ -984,7 +1031,12 @@ impl StructureDef {
             .iter()
             .flat_map(|m| m.recipes.iter())
             .map(move |recipe| Production { recipe, extracts });
-        fixed.chain(listed)
+        // Temporary, with `assembles` (removed in Task 14).
+        let assembled = self.assembles.iter().map(|a| Production {
+            recipe: &a.recipe,
+            extracts: false,
+        });
+        fixed.chain(listed).chain(assembled)
     }
 
     /// The listed machine recipe producing `item`, if any.

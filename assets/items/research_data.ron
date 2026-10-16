@@ -1,6 +1,7 @@
 (
     id: "research_data",
     name: "Research Data",
+    glyph: Some('.'),
     description: "What a Research Station compiles, and what a research project runs on. It goes straight into the project the base is working rather than into your cargo.",
     value: Some(1),
     role: Some(ResearchCurrency),

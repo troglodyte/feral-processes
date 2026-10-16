@@ -36,24 +36,39 @@ pub struct BrushRow {
     pub shade: Option<feral_processes_engine::floors::FloorShade>,
 }
 
+/// What a key meant to the box cursor `Excavate` and `Stockpile` share.
+pub(crate) enum BoxKey {
+    /// The second `space`: the box between `anchor` and `corner` is the
+    /// caller's to commit.
+    Commit {
+        anchor: (i32, i32),
+        corner: (i32, i32),
+    },
+    /// Handled here — a move, an anchor drop, or leaving the mode.
+    Done,
+    /// Not the cursor's key; the mode's own handler decides.
+    Unhandled(GameKey),
+}
+
 impl App {
-    /// Moves the cursor, drops and lifts the anchor, and commits the box.
+    /// Moves the cursor, drops and lifts the anchor, and leaves the mode —
+    /// everything the two box modes do identically.
     ///
-    /// `space` is the one verb: the first drops an anchor, the second
-    /// commits the box the cursor has been previewing. Whether that box
-    /// marks or clears is the **engine's** decision, from the anchor cell —
-    /// see `Game::toggle_mark_box` — so this never has to hold a mode of its
+    /// `space` is the one verb: the first drops an anchor, the second hands
+    /// back the box the cursor has been previewing. Whether that box marks
+    /// or clears is the **engine's** decision, from the anchor cell — see
+    /// `Game::toggle_mark_box` — so this never has to hold a mode of its
     /// own for erasing.
     ///
     /// `esc` takes the anchor back before it takes the mode, so one press is
     /// never two undos.
-    pub(crate) fn handle_excavate_key(&mut self, key: GameKey) {
+    pub(crate) fn box_cursor_key(&mut self, key: GameKey) -> BoxKey {
         if key == GameKey::Esc {
             if self.excavate_anchor.take().is_none() {
                 self.excavate_cursor = None;
                 self.mode = Mode::Playing;
             }
-            return;
+            return BoxKey::Done;
         }
         let Some(party) = self.game.as_ref().and_then(|g| g.base_pos()) else {
             // The party left base space out from under the mode — nothing
@@ -62,11 +77,11 @@ impl App {
             self.excavate_cursor = None;
             self.excavate_anchor = None;
             self.mode = Mode::Playing;
-            return;
+            return BoxKey::Done;
         };
         let Some((cx, cy)) = self.excavate_cursor else {
             self.mode = Mode::Playing;
-            return;
+            return BoxKey::Done;
         };
         let (dx, dy) = match key {
             GameKey::Up | GameKey::Char('k') => (0, -1),
@@ -74,25 +89,38 @@ impl App {
             GameKey::Left | GameKey::Char('h') => (-1, 0),
             GameKey::Right | GameKey::Char('l') => (1, 0),
             GameKey::Char(' ') | GameKey::Enter => {
-                match self.excavate_anchor.take() {
-                    Some(anchor) => {
-                        if let Some(game) = &mut self.game {
-                            if self.excavate_plot {
-                                game.toggle_plot_box(anchor, (cx, cy));
-                            } else {
-                                game.toggle_mark_box(
-                                    anchor,
-                                    (cx, cy),
-                                    self.excavate_brush.as_ref(),
-                                );
-                            }
-                        }
+                return match self.excavate_anchor.take() {
+                    Some(anchor) => BoxKey::Commit {
+                        anchor,
+                        corner: (cx, cy),
+                    },
+                    None => {
+                        self.excavate_anchor = Some((cx, cy));
+                        BoxKey::Done
                     }
-                    None => self.excavate_anchor = Some((cx, cy)),
-                }
-                return;
+                };
             }
-            GameKey::Char('P') => {
+            other => return BoxKey::Unhandled(other),
+        };
+        self.excavate_cursor = Some((
+            (cx + dx).clamp(party.0 - CURSOR_RANGE, party.0 + CURSOR_RANGE),
+            (cy + dy).clamp(party.1 - CURSOR_RANGE, party.1 + CURSOR_RANGE),
+        ));
+        BoxKey::Done
+    }
+
+    pub(crate) fn handle_excavate_key(&mut self, key: GameKey) {
+        match self.box_cursor_key(key) {
+            BoxKey::Commit { anchor, corner } => {
+                if let Some(game) = &mut self.game {
+                    if self.excavate_plot {
+                        game.toggle_plot_box(anchor, corner);
+                    } else {
+                        game.toggle_mark_box(anchor, corner, self.excavate_brush.as_ref());
+                    }
+                }
+            }
+            BoxKey::Unhandled(GameKey::Char('P')) => {
                 // Inert with no crop loaded, `[F]`'s rule: a plot with
                 // nothing to grow is a tool that does nothing.
                 if self
@@ -102,23 +130,17 @@ impl App {
                 {
                     self.excavate_plot = !self.excavate_plot;
                 }
-                return;
             }
-            GameKey::Char('F') => {
+            BoxKey::Unhandled(GameKey::Char('F')) => {
                 // Inert over an empty `FloorDb`: plain is the only brush
                 // there is, and a picker of one row is a screen that does
                 // nothing.
                 if self.excavate_brush_rows().len() > 1 {
                     self.mode = Mode::ExcavateBrush;
                 }
-                return;
             }
-            _ => return,
-        };
-        self.excavate_cursor = Some((
-            (cx + dx).clamp(party.0 - CURSOR_RANGE, party.0 + CURSOR_RANGE),
-            (cy + dy).clamp(party.1 - CURSOR_RANGE, party.1 + CURSOR_RANGE),
-        ));
+            BoxKey::Done | BoxKey::Unhandled(_) => {}
+        }
     }
 
     /// The picker's rows: plain, every loaded finish in id order, strip.

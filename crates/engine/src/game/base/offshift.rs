@@ -597,10 +597,23 @@ impl Game {
             // shape would walk it straight back off again.
             return Ok(());
         }
+        self.walk_idle_toward(worker, here, site)
+    }
+
+    /// One rigid step from `here` toward `site`: the walk tail `step_respite`,
+    /// `step_off_shift` and the tidy errand share. `Err` is the one place a
+    /// route is judged; `Ok` covers a step taken and a wait alike.
+    ///
+    /// No shipped amenity is wider than 1, so `side` is the default — held by
+    /// `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
+    pub(crate) fn walk_idle_toward(
+        &mut self,
+        worker: Entity,
+        here: Position,
+        site: Position,
+    ) -> Result<(), NoPost> {
         let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        // `in_reach`'s own note: no shipped amenity is wider than 1, held by
-        // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
         let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
@@ -614,10 +627,9 @@ impl Game {
             // exactly as a hauler does.
             return Ok(());
         };
-        // An off-shift body is still a body: the party's cell is the one
-        // rejection `step_to_post` cannot make for itself, since `Locale` is
-        // where the party stands in base space and the player's `Position` is
-        // pinned to the anchor out on the surface.
+        // The party's cell is the one rejection `step_to_post` cannot make
+        // for itself: `Locale` is where the party stands in base space, and
+        // the player's `Position` is pinned to the anchor out on the surface.
         if let Locale::Base { x, y } = *self.world.resource::<Locale>()
             && (x, y) == (tile.x, tile.y)
         {

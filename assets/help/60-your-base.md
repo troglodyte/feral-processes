@@ -31,6 +31,10 @@ Everything past that first pocket is solid, and you cut it out yourself.
   and then floored in one go, and the mark outlives the cut. [F] opens the brush list: plain
   tile, each floor finish with its colour, or strip. A finish costs 3 extra Blank Substrate per
   cell on top of the tile.
+- Anything set down in the base lies on the floor, one to a tile, and spreads to the nearest free
+  tiles when a place is taken. z zones floor as a stockpile: plain items lying there count as the
+  base's own stock, so the crew will build from them and haul them where they are wanted. Loose
+  things elsewhere do not count until someone carries them home.
 
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a

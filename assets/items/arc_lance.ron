@@ -2,6 +2,7 @@
     id: "arc_lance",
     fx: Some("laser_pulse"),
     name: "Arc Lance",
+    glyph: Some('\''),
     description: "Standard weapon. A straight, dependable damage upgrade.",
     value: Some(12),
     equipment: Some((Weapon, (atk: 3, damage: (min: 5, max: 10), accuracy: 2))),

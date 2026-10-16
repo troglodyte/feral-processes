@@ -1,6 +1,11 @@
 //! What the base is holding, and the one walk that decides which buffers
 //! count as holding it.
 //!
+//! The buffers are the structures' output buffers plus **stockpiled floor
+//! items** (`stockpiled`): a plain item lying on a stockpile cell is the
+//! base's, a loose one is not. Gear copies and downed programs keep their
+//! identity and are never stock.
+//!
 //! Three questions read the same set of buffers — how much of one item the
 //! whole base has (`work_orders::base_holding`), how much of it a hauler
 //! could fetch from a Depot (`work_orders::depot_holding`), and what the
@@ -17,7 +22,9 @@
 use bevy_ecs::prelude::{Entity, With};
 
 use crate::Game;
-use crate::components::{Position, Stock, Structure};
+use crate::base_grid::BaseGrid;
+use crate::components::{FloorItem, Position, Stock, Structure};
+use crate::items::FloorThing;
 use crate::items::{ItemCategory, ItemId};
 use crate::items_db::ItemDb;
 use crate::structures::StructureDb;
@@ -31,6 +38,34 @@ pub(crate) fn output_buffers(game: &Game) -> impl Iterator<Item = (&Structure, &
     game.world
         .iter_entities()
         .filter_map(|e| Some((e.get::<Structure>()?, e.get::<Stock>()?)))
+}
+
+/// Every plain item lying on a stockpile cell, in `(x, y)` order.
+///
+/// **The one read of what the floor contributes to the base's stock.**
+/// `base_holding` counts it, `spend_from_base` takes from it, `base_stock`
+/// folds it in and the builders' `nearest_source` fetches from it, so none
+/// keeps a count of its own. A gear copy or a downed program on a stockpile
+/// is not an `Item` and never appears here.
+pub(crate) fn stockpiled(game: &Game) -> Vec<(Position, Entity, ItemId)> {
+    let grid = game.world.resource::<BaseGrid>();
+    if grid.stockpile_cells().next().is_none() {
+        return Vec::new();
+    }
+    let mut rows: Vec<_> = game
+        .world
+        .iter_entities()
+        .filter_map(|e| {
+            let FloorThing::Item(item) = &e.get::<FloorItem>()?.0 else {
+                return None;
+            };
+            let pos = *e.get::<Position>()?;
+            grid.is_stockpile(pos.x, pos.y)
+                .then(|| (pos, e.id(), item.clone()))
+        })
+        .collect();
+    rows.sort_by_key(|(p, e, _)| (p.x, p.y, *e));
+    rows
 }
 
 /// Every item a deployed structure is set up to make — its `work.produces`
@@ -113,6 +148,19 @@ pub(crate) fn spend_from_base(
             continue;
         };
         taken += crate::game::base::hauling::take_from(&mut stock, item, qty - taken);
+    }
+    // After the shelves, so a floor pile is drawn down only once the
+    // buffers are empty — the order `nearest_source` also prefers.
+    if taken < qty {
+        for (_, e, held) in stockpiled(game) {
+            if taken == qty {
+                break;
+            }
+            if held == *item && crate::game::base::floor::take_floor_unit(&mut game.world, e, item)
+            {
+                taken += 1;
+            }
+        }
     }
     // Reported here rather than at the three callers: this is where the
     // units actually leave the shelves, and a partial take is exactly the
@@ -261,6 +309,7 @@ impl Game {
         for item in producible(self) {
             totals.entry(item).or_default();
         }
+        let stockpiled_rows = stockpiled(self);
         for (_, stock) in output_buffers(self) {
             for (item, qty) in &stock.output {
                 if *qty == 0 {
@@ -268,6 +317,9 @@ impl Game {
                 }
                 *totals.entry(item).or_default() += qty;
             }
+        }
+        for (_, _, item) in &stockpiled_rows {
+            *totals.entry(item).or_default() += 1;
         }
         // Folded in by the flag and never by name: `deliver_payout` sends a
         // banked item straight past its node's own `output`, so this is the

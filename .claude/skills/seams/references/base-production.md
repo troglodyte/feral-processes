@@ -415,7 +415,7 @@
   status. Giving the status two writers makes them ping-pong every tick.
 
 - **A carrier `Stranded` past `STRANDED_SET_DOWN_TICKS` drops its load on
-  its own tile (`floor::drop_load`), whatever the depots hold.** A carrier
+  its own tile (`Game::drop_load`), whatever the depots hold.** A carrier
   is never freed while it holds a load (freeing destroys the goods), so a
   stranding that waiting will not fix held a body on shift for good — a
   downed-tools hauler read on shift for a whole bench run. No store is
@@ -529,14 +529,15 @@
   name in `enter_next_zone`, not `BuybackLedger`.
 
 - **A carrier's load is never destroyed: every path that ends a hold other
-  than delivery calls `floor::drop_load`.** Before floor items each of those
+  than delivery calls `Game::drop_load`.** Before floor items each of those
   paths (post demolished, post destroyed, siphon lock-in, study, reinforcement
   call-up, off-shift free of a `Downed` body, displacement by another
   posting, joining the party, a temporary structure burning out, sale,
   extraction, permadeath, fusion) removed `Carrying` or despawned the body
   and the cargo vanished, and sortie dispatch left it frozen on a body the
   labour pool no longer sees; the stranded timeout is the one that runs inside
-  `haul_step_system`, so it reaches the core through `commands.queue`. The
+  `haul_step_system`, which only inserts a `SetDownLoad` marker that
+  `Game::set_down_stranded_loads` sweeps after `schedule.run`. The
   off-shift free fires for `Downed` only, because `is_on_shift` keeps every
   other carrier on shift. The re-match drop in `assign_base_labour` is a
   no-op kept for safety: the matching pool excludes carriers, so a carrier is
@@ -545,9 +546,9 @@
   test notices, the cargo is just gone. The only removals that are not drops
   are delivery (`hauling.rs`, at arrival) and the builder and besieger loads
   (`construction.rs`, `combat_rewards.rs`), which are not hauled cargo.
-  Piles merge one per tile and come home through `Errand::Pickup`, which
-  lifts only what an accepting depot the walk can reach will take, trying
-  every pile nearest first.
+  A load spreads one unit per tile, nearest free tile first, never merging,
+  and comes home through `Errand::Pickup`, which lifts only what an accepting
+  depot the walk can reach will take, trying every pile nearest first.
 - **A Depot pulls only what it accepts, only from a worked producer, and the
   auto-filter fires once, at spawn.** `depot_intake_system` (chained after
   `assembler_system`, so a direct consumer picks first) asks
@@ -570,3 +571,20 @@
   is the one predicate `spawn_structure` and the save loader both call.
   Coils are spent per defence event, not per point (a turret authors
   `raid_defense: 1`, `damage: 8`), and the garrison is never gated.
+
+- **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**
+  A merge or quantity field compiles and silently reintroduces stacking, and
+  every reader of a tile then sees one thing where there may be two. A second
+  search for free cells drifts from the walking-distance BFS
+  (`nearest_free_cells`) and lands items behind walls the crew cannot cross.
+  The fallback when no floor is free is a store, never the void: pack for
+  items and gear, the downed store for programs, then the nearest rack with
+  room, then the downed store past its cap — that last rung is why a
+  set-down can never destroy a program. A tidier's load is `Tidying`, not
+  `Carrying`: `Carrying` is the hauling pair `(item, qty)` and a gear copy or
+  a program does not fit it. Stockpile cells live on `BaseGrid` as a set, not
+  in a new `Resource`, because a new `Resource` shifts query iteration order
+  and every seeded test with it. Only `FloorThing::Item` on a stockpile cell
+  is stock, and only through `stock::stockpiled`. A structure or site raised
+  over a floor item relocates it through `displace_floor_items_from`, and
+  committing, wielding or posting a tidier sets its item down first.

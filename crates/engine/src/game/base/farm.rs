@@ -13,7 +13,8 @@ use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{CropGrowth, FarmJob, FarmPlot, FarmTile, Position, Task, TaskKind};
 use crate::crops::{CropDb, CropId};
-use crate::game::base::{floor, hauling};
+use crate::game::base::hauling;
+use crate::items::FloorThing;
 use crate::save;
 use crate::views::{FarmTileState, FarmTileView};
 
@@ -304,7 +305,9 @@ impl Game {
                 else {
                     return;
                 };
-                floor::spawn_floor_pile(&mut self.world, at, crop.produces.clone(), 1);
+                // One item, set down from the tile: it lands there when the
+                // tile is free and on the nearest free floor when not.
+                self.set_down(at, vec![FloorThing::Item(crop.produces.clone())]);
                 if let Some(mut t) = self.world.get_mut::<FarmTile>(tile) {
                     t.growth = CropGrowth::Fallow;
                 }
@@ -321,7 +324,7 @@ impl Game {
     }
 
     /// Every plot cell for the base map, in `pos` order. Empty outside base
-    /// space for `floor_piles`' reason: a tile's `Position` is a base cell.
+    /// space for `floor_items`' reason: a tile's `Position` is a base cell.
     pub fn farm_tiles(&self) -> Vec<FarmTileView> {
         if self.base_pos().is_none() {
             return Vec::new();

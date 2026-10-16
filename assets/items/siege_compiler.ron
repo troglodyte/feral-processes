@@ -2,6 +2,7 @@
     id: "siege_compiler",
     fx: Some("laser_pulse"),
     name: "Siege Compiler",
+    glyph: Some('\''),
     description: "Premium weapon. Heavy enough to shield you while it swings.",
     value: Some(90),
     equipment: Some((Weapon, (atk: 3, mitigation: 6, damage: (min: 5, max: 10), accuracy: 1))),

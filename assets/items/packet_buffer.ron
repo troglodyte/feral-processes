@@ -1,6 +1,7 @@
 (
     id: "packet_buffer",
     name: "Packet Buffer",
+    glyph: Some('"'),
     description: "Scavenged armor. Absorbs the first shock of an incoming packet.",
     value: Some(7),
     equipment: Some((Armor, (mitigation: 6))),

@@ -3565,3 +3565,41 @@ pub(crate) fn stock_patches(game: &mut Game, n: u32) {
         stock,
     ));
 }
+
+/// Lays floor over the inclusive box `a..=b`.
+pub(crate) fn lay_floor_box(game: &mut Game, a: (i32, i32), b: (i32, i32)) {
+    let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+    for x in a.0..=b.0 {
+        for y in a.1..=b.1 {
+            grid.lay_floor(x, y);
+        }
+    }
+}
+
+/// A load of `qty` plain `item` units lies on the floor, one of them on `at`.
+#[track_caller]
+pub(crate) fn assert_load_on_floor(game: &mut Game, at: Position, item: &str, qty: u32) {
+    let thing = crate::items::FloorThing::Item(ItemId::from(item));
+    let cells: Vec<_> = floor_things(game)
+        .into_iter()
+        .filter(|(_, t)| *t == thing)
+        .map(|(c, _)| c)
+        .collect();
+    assert_eq!(cells.len(), qty as usize, "units of {item} on the floor");
+    assert!(
+        cells.contains(&(at.x, at.y)),
+        "none on its own tile {at:?}: {cells:?}"
+    );
+}
+
+/// Every floor item as `(cell, thing)`, sorted by cell.
+pub(crate) fn floor_things(game: &mut Game) -> Vec<((i32, i32), crate::items::FloorThing)> {
+    let mut rows: Vec<_> = game
+        .world
+        .query::<(&Position, &crate::components::FloorItem)>()
+        .iter(&game.world)
+        .map(|(p, f)| ((p.x, p.y), f.0.clone()))
+        .collect();
+    rows.sort_by_key(|(c, _)| *c);
+    rows
+}

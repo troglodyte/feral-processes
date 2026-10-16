@@ -1,6 +1,7 @@
 (
     id: "sync_governor",
     name: "Sync Governor",
+    glyph: Some(':'),
     description: "Standard module. A small lift to everything rather than a lot of one thing.",
     value: Some(16),
     equipment: Some((Module, (atk: 1, mitigation: 3, decompiler: 1))),

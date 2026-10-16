@@ -1,6 +1,7 @@
 (
     id: "paged_arena",
     name: "Paged Arena",
+    glyph: Some('*'),
     description: "Prised out of something that outgrew its own memory limits. +12% max HP, and one upgrade slot.",
     value: Some(45),
     droppable: Some([("wintermute", 0.25), ("overseer", 0.2), ("construct", 0.05), ("sentinel", 0.04)]),

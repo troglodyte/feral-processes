@@ -1,6 +1,7 @@
 (
     id: "capacitor_array",
     name: "Capacitor Array",
+    glyph: Some('~'),
     description: "Restores a full reserve, and keeps a supplier lit for eight windows.",
     value: Some(20),
     consume: Some((power: 100.0)),

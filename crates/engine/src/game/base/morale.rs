@@ -22,14 +22,13 @@
 //! stored rather than derived.
 
 use crate::Game;
-use crate::base_grid::BaseGrid;
 use crate::components::TaskKind;
 use crate::components::{
     Carrying, CarryingProgram, Disgruntled, Downed, Grievance, OffShift, Position,
 };
-use crate::game::base::hauling::{NoPost, Step, step_to_post};
+use crate::game::base::hauling::NoPost;
 use crate::game::base::offshift::{Amenities, in_reach};
-use crate::resources::{GameClock, Locale};
+use crate::resources::GameClock;
 use crate::tuning::{
     MORALE_DOWNS_TOOLS_AT, MORALE_LASHES_OUT_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT,
     RESPITE_RETRY_TICKS,
@@ -317,36 +316,7 @@ impl Game {
         if in_reach(here, site, radius) {
             return Ok(());
         }
-        let blocked = self.blocked_tiles().rigid();
-        let pocket_radius = self.world.resource::<BaseGrid>().radius();
-        // No shipped amenity declares a footprint past 1, so `side` here is
-        // the default — `in_reach` above threads the same value, held by
-        // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`.
-        let Some(Step { to: tile, .. }) = step_to_post(
-            self.world.resource::<BaseGrid>(),
-            here,
-            site,
-            1,
-            &blocked,
-            pocket_radius,
-        )?
-        else {
-            // The field admits nowhere better than where it stands. It waits,
-            // exactly as a hauler and an off-shift body do.
-            return Ok(());
-        };
-        // The party's cell is the one rejection `step_to_post` cannot make
-        // for itself: `Locale` is where the party stands in base space, and
-        // the player's `Position` is pinned to the anchor out on the surface.
-        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
-            && (x, y) == (tile.x, tile.y)
-        {
-            return Ok(());
-        }
-        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
-            *pos = tile;
-        }
-        Ok(())
+        self.walk_idle_toward(worker, here, site)
     }
 
     /// Gives the errand up: the amenity exists and this body cannot walk to

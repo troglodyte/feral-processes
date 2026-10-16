@@ -362,6 +362,11 @@ impl Game {
         // the base has finished its own beat.
         self.run_outposts();
         self.schedule.run(&mut self.world);
+        // After the schedule, where `haul_step_system` has just marked who is
+        // stranded: a set-down needs the whole `Game`, so it cannot be a
+        // system, and doing it in the same tick keeps a held load from
+        // outliving its limit by a beat.
+        self.set_down_stranded_loads();
         self.drain_program_levels();
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an
@@ -732,7 +737,7 @@ impl Game {
                     .collect()
             };
             for worker in workers {
-                crate::game::base::floor::drop_load(&mut self.world, worker);
+                self.drop_load(worker);
                 self.world.entity_mut(worker).remove::<Task>();
             }
             // Every despawn door lets go of what the structure held first,

@@ -2,6 +2,7 @@
     id: "shiv_routine",
     fx: Some("slash"),
     name: "Shiv Routine",
+    glyph: Some('\''),
     description: "Scavenged weapon. Barely a blade, but it beats bare hands.",
     value: Some(4),
     equipment: Some((Weapon, (atk: 1, damage: (min: 3, max: 5), accuracy: 3))),

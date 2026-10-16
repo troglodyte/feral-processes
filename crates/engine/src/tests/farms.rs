@@ -270,7 +270,7 @@ fn a_build_request_on_a_plot_tile_removes_only_that_tile() {
     );
     assert_eq!(
         game.world
-            .query::<&crate::components::FloorPile>()
+            .query::<&crate::components::FloorItem>()
             .iter(&game.world)
             .count(),
         0
@@ -397,7 +397,8 @@ fn a_save_written_before_farms_loads_with_none() {
 // Labour: dimple and harvest
 // ---------------------------------------------------------------------
 
-use crate::components::{FarmJob, FloorPile};
+use crate::components::{FarmJob, FloorItem};
+use crate::items::FloorThing;
 use crate::tuning::{FARM_DIMPLE_TICKS, FARM_HARVEST_TICKS};
 
 /// Slack for the walk from wherever an idle body was drifting out to a tile,
@@ -411,17 +412,18 @@ fn pass(game: &mut Game, ticks: usize) {
 }
 
 fn power_cells_at(game: &mut Game, pos: (i32, i32)) -> u32 {
-    let mut query = game.world.query::<(&Position, &FloorPile)>();
+    power_cell_cells(game).iter().filter(|&&p| p == pos).count() as u32
+}
+
+/// Every cell a power cell lies on, one item per tile.
+fn power_cell_cells(game: &mut Game) -> Vec<(i32, i32)> {
+    let cell = FloorThing::Item(ItemId::from("power_cell"));
+    let mut query = game.world.query::<(&Position, &FloorItem)>();
     query
         .iter(&game.world)
-        .filter(|(p, _)| (p.x, p.y) == pos)
-        .map(|(_, pile)| {
-            pile.items
-                .get(&ItemId::from("power_cell"))
-                .copied()
-                .unwrap_or(0)
-        })
-        .sum()
+        .filter(|(_, item)| item.0 == cell)
+        .map(|(p, _)| (p.x, p.y))
+        .collect()
 }
 
 fn tending(game: &mut Game) -> Vec<(Entity, FarmJob)> {
@@ -456,28 +458,61 @@ fn a_tender_dimples_then_harvests_a_power_cell_onto_the_tile() {
     );
 }
 
+/// A core fragment on `pos`, the item every occupied-tile test lays.
+fn lay_fragment(game: &mut Game, pos: (i32, i32)) -> Entity {
+    crate::game::base::floor::spawn_floor_item(
+        &mut game.world,
+        Position { x: pos.0, y: pos.1 },
+        FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT)),
+    )
+}
+
 #[test]
-fn a_harvest_stacks_into_a_pile_already_on_the_tile() {
+fn a_floor_item_on_a_fallow_tile_never_blocks_the_dimple_or_the_growth() {
     let mut game = farm_base(51);
     let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
-    crate::game::base::floor::spawn_floor_pile(
-        &mut game.world,
-        Position { x: -3, y: 2 },
-        ItemId::from("power_cell"),
-        3,
-    );
-    // Fallow, not ripe: the pile on the cell must not stop the dimple, and
-    // the harvest that follows stacks onto it.
+    lay_fragment(&mut game, (-3, 2));
     spawn_tamed(&mut game, 10, 3);
     pass(&mut game, FARM_DIMPLE_TICKS as usize + WALK);
-    assert!(
-        elapsed_of(&game, tile).is_some(),
-        "a pile never blocked the dimple"
+    let dimpled = elapsed_of(&game, tile).expect("an item never blocks the dimple");
+    pass(&mut game, 1);
+    assert_eq!(
+        elapsed_of(&game, tile),
+        Some(dimpled + 1),
+        "an item never blocks the growth"
     );
+}
 
-    let grow = power_cell_grow_ticks(&game) as usize;
-    pass(&mut game, grow + FARM_HARVEST_TICKS as usize + WALK);
-    assert_eq!(power_cells_at(&mut game, (-3, 2)), 4);
+#[test]
+fn an_occupied_ripe_tiles_harvest_lands_on_the_nearest_free_floor() {
+    let mut game = farm_base(54);
+    let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+    set_growth(&mut game, tile, CropGrowth::Ripe);
+    let fragment = lay_fragment(&mut game, (-3, 2));
+    spawn_tamed(&mut game, 10, 3);
+    pass(&mut game, FARM_HARVEST_TICKS as usize + WALK);
+    assert_ne!(
+        game.world.get::<FarmTile>(tile).unwrap().growth,
+        CropGrowth::Ripe,
+        "the tile was harvested"
+    );
+    assert_eq!(
+        game.world.get::<FloorItem>(fragment).map(|f| &f.0),
+        Some(&FloorThing::Item(ItemId::from(ids::CORE_FRAGMENT))),
+        "the item already on the tile is untouched"
+    );
+    assert_eq!(
+        game.world.get::<Position>(fragment).map(|p| (p.x, p.y)),
+        Some((-3, 2))
+    );
+    let cells = power_cell_cells(&mut game);
+    assert_eq!(cells.len(), 1, "{cells:?}");
+    let (x, y) = cells[0];
+    assert_eq!(
+        (x + 3).abs().max((y - 2).abs()),
+        1,
+        "the harvest lands beside the tile, not on it: {cells:?}"
+    );
 }
 
 #[test]

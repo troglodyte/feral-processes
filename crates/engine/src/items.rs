@@ -422,6 +422,17 @@ pub struct DownedProgram {
     pub carried: Option<crate::abilities::AbilityId>,
 }
 
+/// One thing lying on a base tile's floor. Three kinds because the pack holds
+/// three kinds of thing in three stores (`Inventory`, `GearCopies`,
+/// `DownedPrograms`), and a drop that could not keep a copy's affixes or a
+/// program's level would launder them into plain stock.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum FloorThing {
+    Item(ItemId),
+    Gear(GearCopy),
+    Program(DownedProgram),
+}
+
 impl DownedProgram {
     /// "How good is this program", the one fold of its three graded axes —
     /// every extraction yield formula calls this rather than re-reading

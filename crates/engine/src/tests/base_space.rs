@@ -138,7 +138,7 @@ fn working_a_machine_by_hand_is_a_base_action() {
         "working a machine by hand",
         |game| {
             let at = *game.world.get::<Position>(game.player_entity()).unwrap();
-            spawn_mining_node(game, at.x + 1, at.y)
+            spawn_extractor(game, at.x + 1, at.y)
         },
         |game, node| game.work_structure(node),
     );
@@ -903,7 +903,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     // The pocket's north edge, with a machine beside it: a job to break off,
     // and solid rock one step further north to break it off against.
     let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
-    let node = spawn_mining_node(&mut game, edge.0 + 1, edge.1);
+    let node = spawn_extractor(&mut game, edge.0 + 1, edge.1);
     game.enter_base().unwrap();
     // Tools out: a disarmed bump is refused before it can swing, which is a
     // different code path from the one this test is about.

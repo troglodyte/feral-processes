@@ -1108,7 +1108,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let restored = find_structure_by_kind(&mut loaded, "extractor").unwrap();
     assert_eq!(
         loaded.world.get::<StructureTier>(restored).unwrap().0,
         3,
@@ -1764,6 +1764,9 @@ fn only_structures_that_run_a_job_get_a_machine_status() {
     let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = deploy_upgradeable_node(&mut game);
     let home = find_home(&mut game).unwrap();
+    // A machine is set to its recipe between ticks; the status is corrected
+    // on the next one.
+    game.tick();
 
     assert_eq!(
         game.world.get::<MachineStatus>(node).copied(),
@@ -1793,7 +1796,7 @@ fn partially_filled_buffers_survive_a_save_and_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let restored = find_structure_by_kind(&mut loaded, "extractor").unwrap();
     let stock = loaded.world.get::<Stock>(restored).unwrap();
     assert_eq!(
         stock.input.get(&ItemId::from(ids::CORE_FRAGMENT)).copied(),

@@ -299,7 +299,7 @@ fn the_view_is_none_for_something_that_is_not_a_depot() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: p.x + 1, y: p.y },
             Stock::new(20),

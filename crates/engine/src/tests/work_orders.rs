@@ -66,7 +66,7 @@ fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let node = spawn_mining_node(&mut game, 3, 0);
+    let node = spawn_extractor(&mut game, 3, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
     stand_player_at_post(&mut game, node);
     game.assign_cronjob(worker, node).unwrap();
@@ -98,9 +98,9 @@ fn lay_disk_line(game: &mut Game) -> (Entity, Entity, Entity) {
     // The line draws 5 against the Home's 4, and a dark machine is never a
     // want: unpowered, the Press would never be staffed at all.
     stand_ample_grid_supply(game);
-    let mine = spawn_machine_at(game, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(game, "lathe", 3, 0);
-    let press = spawn_machine_at(game, "disk_press", 4, 0);
+    let mine = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
+    let lathe = spawn_machine_with_recipe_at(game, "factory", "blank_substrate", 3, 0);
+    let press = spawn_machine_with_recipe_at(game, "assembler", "routine_disk", 4, 0);
     (mine, lathe, press)
 }
 
@@ -110,8 +110,8 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     stand_in_base(&mut game);
     place_home(&mut game);
     // Everything upstream of the press is standing; the press itself is not.
-    spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
 
     let err = game
         .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
@@ -129,10 +129,10 @@ fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
     // Deployed, but nowhere near the Lathe, so nothing can ever feed it.
-    spawn_machine_at(&mut game, "disk_press", 9, 9);
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 9, 9);
 
     let err = game
         .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
@@ -153,7 +153,7 @@ fn an_ingredient_nothing_makes_names_the_machine_to_build() {
     let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    spawn_machine_at(&mut game, "disk_press", 4, 0);
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
 
     let err = game
         .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
@@ -170,17 +170,17 @@ fn an_ingredient_made_out_of_reach_names_both_machines_and_the_depot() {
     let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
-    spawn_machine_at(&mut game, "disk_press", 9, 9);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 9, 9);
 
     let err = game
         .queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
-        .expect_err("the Lathe is nowhere near the press");
+        .expect_err("the Factory is nowhere near the Assembler");
 
     assert_eq!(
         err,
-        "The Disk Press can't reach your Lathe's Blank Substrate — build a Lathe \
+        "The Assembler can't reach your Factory's Blank Substrate — build a Factory \
          beside it, or a Depot to carry it over."
     );
 }
@@ -382,7 +382,7 @@ fn put_input(game: &mut Game, machine: Entity, item: &str, qty: u32) {
 fn a_clogged_machine_cannot_progress() {
     let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
 
     assert!(
         can_progress(&game, mine),
@@ -400,8 +400,8 @@ fn a_clogged_machine_cannot_progress() {
 fn an_assembler_with_nothing_beside_it_holding_its_ingredient_cannot_progress() {
     let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
     let _ = mine;
 
     assert!(
@@ -420,8 +420,8 @@ fn an_assembler_with_nothing_beside_it_holding_its_ingredient_cannot_progress() 
 fn an_assembler_whose_feeder_holds_the_ingredient_can_progress() {
     let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
 
     assert!(
@@ -434,7 +434,7 @@ fn an_assembler_whose_feeder_holds_the_ingredient_can_progress() {
 fn an_assembler_with_a_stocked_input_can_progress_with_no_feeder_at_all() {
     let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
     put_input(&mut game, lathe, ids::CORE_FRAGMENT, 8);
 
     assert!(can_progress(&game, lathe));
@@ -535,9 +535,9 @@ fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
     let mut game = Game::new(25, DifficultyMode::Forgiving, &dir).unwrap();
     place_home(&mut game);
     let bench = spawn_machine_at(&mut game, "widget_bench", 0, 0);
-    let mine = spawn_machine_at(&mut game, "mining_node", 0, 1);
-    let press = spawn_machine_at(&mut game, "disk_press", 1, 0);
-    let lathe = spawn_machine_at(&mut game, "lathe", 1, 1);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 0, 1);
+    let press = spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 1, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 1, 1);
     // Every stage stocked, so every machine has work and the whole line is
     // in the answer — with empty buffers only the feeder would be, and
     // "kept once at its deepest" would be vacuously true.
@@ -573,7 +573,7 @@ fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
 fn base_holding_counts_depots_and_machine_outputs_but_not_your_pockets() {
     let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     let depot = spawn_machine_at(&mut game, "depot", 4, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 7);
     put_output(&mut game, depot, ids::CORE_FRAGMENT, 5);
@@ -727,8 +727,8 @@ fn a_second_machine_making_the_ordered_item_is_staffed_too() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
+    let first = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let second = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 2);
     let staff = hire(&mut game, 2);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
@@ -753,8 +753,8 @@ fn the_report_names_every_machine_making_the_ordered_item() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
+    let first = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    let second = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 2);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
 
@@ -778,7 +778,7 @@ fn a_second_unfed_bench_does_not_refuse_a_line_that_is_whole() {
     let (_mine, _lathe, press) = lay_disk_line(&mut game);
     // Lower in `(x, y)` order than the fed Press, so an arbitrary
     // first-producer pick lands on the one with nothing beside it.
-    let orphan = spawn_machine_at(&mut game, "disk_press", 0, 4);
+    let orphan = spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 0, 4);
     assert_eq!(
         crate::game::base::work_orders::producers_of(&game, &ItemId::from("routine_disk")),
         vec![orphan, press],
@@ -1907,7 +1907,7 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     spawn_machine_at(&mut game, "depot", 3, 0);
     // Somewhere else for the scheduler to want a body, so the pass that
     // frees one is actually reached: with every want already filled it
@@ -1915,7 +1915,7 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     // order, since `wants` sorts by tile at equal depth and is truncated to
     // the one staff member — the order has to land on the machine beside
     // the depot.
-    let spare = spawn_machine_at(&mut game, "mining_node", 3, 3);
+    let spare = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 3, 3);
     game.set_standing_job(spare, true, false).unwrap();
     hire(&mut game, 1);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
@@ -2047,8 +2047,8 @@ fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
 /// counts through `depot_holding`.
 fn lay_depot_route(game: &mut Game) -> (Entity, Entity, Entity) {
     place_home(&mut *game);
-    let mine = spawn_machine_at(game, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(game, "lathe", 0, 0);
+    let mine = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
+    let lathe = spawn_machine_with_recipe_at(game, "factory", "blank_substrate", 0, 0);
     let depot = spawn_machine_at(game, "depot", -2, 0);
     (mine, lathe, depot)
 }
@@ -2140,8 +2140,8 @@ fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 0, 0);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 0, 0);
 
     let err = game
         .queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 3))
@@ -2245,8 +2245,8 @@ fn the_scheduler_still_posts_staff_while_the_player_is_far_from_the_base() {
 /// A second, independent line: Log Scraper (2,2) → Transcriber (3,2),
 /// which makes Logic Wafers and shares no machine with `lay_disk_line`.
 fn lay_wafer_line(game: &mut Game) -> (Entity, Entity) {
-    let scraper = spawn_machine_at(game, "log_scraper", 2, 2);
-    let transcriber = spawn_machine_at(game, "transcriber", 3, 2);
+    let scraper = spawn_machine_with_recipe_at(game, "extractor", "raw_trace", 2, 2);
+    let transcriber = spawn_machine_with_recipe_at(game, "factory", "logic_wafer", 3, 2);
     (scraper, transcriber)
 }
 
@@ -2319,9 +2319,9 @@ fn a_machine_two_orders_want_is_posted_once() {
     // stays a line of one and the dedupe is what this exercises.
     let depot = spawn_machine_at(&mut game, "depot", 6, 6);
     put_output(&mut game, depot, ids::CORE_FRAGMENT, 40);
-    spawn_machine_at(&mut game, "mining_node", 6, 1);
-    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
-    let annealer = spawn_machine_at(&mut game, "annealing_node", 2, 3);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 6, 1);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
+    let annealer = spawn_machine_with_recipe_at(&mut game, "factory", "annealed_core", 2, 3);
     let staff = hire(&mut game, 2);
     game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 30))
         .unwrap();
@@ -2935,7 +2935,7 @@ fn a_stall_that_resolves_and_recurs_is_announced_again() {
         "precondition: the first break was announced"
     );
 
-    let rebuilt = spawn_machine_at(&mut game, "disk_press", 4, 0);
+    let rebuilt = spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
     game.tick();
     assert_ne!(
         state_of(&game, 0),
@@ -3035,7 +3035,7 @@ fn a_base_short_of_bodies_reports_the_difference() {
     // Touching Mining Nodes feed nothing, so each is its own line and its
     // own want; a feed-connected chain would be one want however long.
     for x in 2..5 {
-        spawn_machine_at(&mut game, "mining_node", x, 0);
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", x, 0);
     }
     hire(&mut game, 2);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 30))
@@ -3093,7 +3093,7 @@ fn a_base_with_nobody_in_it_reports_its_wants_against_zero() {
 fn a_base_with_one_body(game: &mut Game) -> (Entity, Entity) {
     stand_in_base(game);
     place_home(&mut *game);
-    let mine = spawn_machine_at(game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = hire(game, 1)[0];
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -3110,8 +3110,8 @@ fn a_downed_program_is_never_posted() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    spawn_machine_at(&mut game, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
     let staff = hire(&mut game, 2);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();

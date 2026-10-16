@@ -113,7 +113,7 @@ fn a_disgruntled_program_with_an_amenity_leaves_the_posting_pool() {
     let mut game = base_with_a_built_node(70, 0.5, 0.5);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
     place_now(&mut game, "defrag_bay", 4, 0).expect("a Defrag Bay is buildable from the start");
-    let node = first_structure(&mut game, "mining_node");
+    let node = first_structure(&mut game, "extractor");
     game.set_standing_job(node, true, false)
         .expect("a Mining Node takes a standing work job");
     let worker = game.base_staff()[0];

@@ -947,13 +947,15 @@ pub(super) fn base_with_a_built_node(game_seed: u32, assembly: f32, extraction: 
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
     stand_in_base(&mut game);
     spawn_tamed(&mut game, 500, 3);
-    file_build_with_rolls(&mut game, "mining_node", 1, 0, assembly, extraction);
+    file_build_with_rolls(&mut game, "extractor", 1, 0, assembly, extraction);
     for _ in 0..400 {
-        if first_structure_opt(&mut game, "mining_node").is_some() {
+        if first_structure_opt(&mut game, "extractor").is_some() {
             break;
         }
         game.tick();
     }
+    let node = first_structure(&mut game, "extractor");
+    set_recipe_researched(&mut game, node, ids::CORE_FRAGMENT).unwrap();
     game
 }
 
@@ -1162,6 +1164,7 @@ pub(super) fn spawn_machine_with_recipe_at(
     x: i32,
     y: i32,
 ) -> Entity {
+    game.lay_starting_pocket();
     let def = game
         .structure_defs()
         .into_iter()
@@ -1188,7 +1191,14 @@ pub(super) fn set_recipe_researched(
     if let Some(gate) = gate {
         unlock_research_chain(game, &gate);
     }
-    game.set_machine_recipe(machine, &ItemId::from(recipe))
+    let item = ItemId::from(recipe);
+    // Setting is a base action; a fixture out on the surface crosses in and
+    // back so the call is not what the test is about.
+    if game.base_pos().is_some() {
+        game.set_machine_recipe(machine, &item)
+    } else {
+        from_inside_the_base(game, |g| g.set_machine_recipe(machine, &item))
+    }
 }
 
 /// A walled 4x4 room (interior x and y in 2..=5) with a door, `finished`
@@ -1808,9 +1818,9 @@ pub(super) fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
     let mut def = game
         .world
         .resource::<StructureDb>()
-        .get("armory")
+        .get("assembler")
         .cloned()
-        .expect("armory ships");
+        .expect("assembler ships");
     def.id = id.to_string();
     def.name = id.to_string();
     def.footprint = footprint;
@@ -1839,7 +1849,7 @@ pub(super) fn count_item(game: &Game, id: &str) -> u32 {
 }
 
 pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
-    run_one_full_gather_cycle_at_tier(game, "mining_node", resource, None)
+    run_one_full_gather_cycle_at_tier(game, "extractor", resource, None)
 }
 
 /// Runs exactly one completed gather cycle against a hand-built node of
@@ -1881,6 +1891,7 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
         Structure {
             kind: kind.to_string(),
         },
+        crate::components::MachineRecipe(Some(ItemId::from(resource))),
         Position { x: 3, y: 4 },
         ResourceNode {
             resource: ItemId::from(resource),
@@ -2612,13 +2623,14 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
 /// anything measuring a payout curve needs `work_node_parts()` as well, and
 /// a node short of those reads as a rate that moved rather than as a fixture
 /// missing a component.
-pub(super) fn spawn_mining_node(game: &mut Game, x: i32, y: i32) -> Entity {
+pub(super) fn spawn_extractor(game: &mut Game, x: i32, y: i32) -> Entity {
     game.lay_starting_pocket();
     game.world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
+            crate::components::MachineRecipe(Some(ItemId::from(ids::CORE_FRAGMENT))),
             Position { x, y },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
@@ -2855,10 +2867,13 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 1)).unwrap();
+    from_inside_the_base(game, |g| {
+        place_machine(g, "extractor", ids::CORE_FRAGMENT, 1, 1)
+    })
+    .unwrap();
     (
         find_structure_by_kind(game, "home").unwrap(),
-        find_structure_by_kind(game, "mining_node").unwrap(),
+        find_structure_by_kind(game, "extractor").unwrap(),
     )
 }
 
@@ -2877,8 +2892,11 @@ pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 0)).unwrap();
-    find_structure_by_kind(game, "mining_node").unwrap()
+    from_inside_the_base(game, |g| {
+        place_machine(g, "extractor", ids::CORE_FRAGMENT, 1, 0)
+    })
+    .unwrap();
+    find_structure_by_kind(game, "extractor").unwrap()
 }
 
 /// The `ProgramManifest` half of `entity`'s manifest. Most tests that reach

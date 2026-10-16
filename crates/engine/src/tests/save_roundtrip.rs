@@ -1314,7 +1314,7 @@ fn a_save_written_without_the_build_rolls_loads_them_neutral() {
 #[test]
 fn a_machines_build_quality_survives_a_save() {
     let mut game = crate::tests::support::base_with_a_built_node(4212, 1.0, 0.82);
-    let node = crate::tests::support::first_structure(&mut game, "mining_node");
+    let node = crate::tests::support::first_structure(&mut game, "extractor");
     let before = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
     assert!(
         before > 10,
@@ -1329,7 +1329,7 @@ fn a_machines_build_quality_survives_a_save() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let reloaded = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    let reloaded = crate::tests::support::first_structure(&mut loaded, "extractor");
     assert_eq!(
         loaded.work_ticks_for(reloaded, crate::tuning::DEFAULT_BASE_SPEED),
         before,
@@ -1368,7 +1368,7 @@ fn a_save_written_without_build_quality_loads_it_neutral() {
     let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
     let _ = std::fs::remove_file(&path);
 
-    let node = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    let node = crate::tests::support::first_structure(&mut loaded, "extractor");
     assert_eq!(
         loaded.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
         10,

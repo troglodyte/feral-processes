@@ -42,6 +42,19 @@ fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
         .expect("the structure was just deployed")
 }
 
+/// `deploy` for a configurable machine: stands it and sets it to `recipe`.
+fn deploy_machine(game: &mut Game, kind: &str, recipe: &str, dx: i32, dy: i32) -> Entity {
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    place_machine(game, kind, recipe, dx, dy).unwrap();
+    let (x, y) = (px + dx, py + dy);
+    let mut query = game.world.query::<(Entity, &Position, &Structure)>();
+    query
+        .iter(&game.world)
+        .find(|(_, p, _)| p.x == x && p.y == y)
+        .map(|(e, ..)| e)
+        .expect("the structure was just deployed")
+}
+
 /// A worker with enough Integrity to outlast the ambient GC Entropy Sweeps
 /// a base takes while these fixtures run.
 ///
@@ -93,7 +106,7 @@ fn tick_until(game: &mut Game, limit: u32, done: impl Fn(&Game) -> bool) {
 #[test]
 fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     let mut game = base(1);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     // A consumer beside it, so this is the *clogged* errand rather than the
     // one a machine with nothing downstream starts every cycle — see
     // `a_machine_with_nothing_downstream_delivers_as_it_produces`. Standing
@@ -101,7 +114,7 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // fixture put it — and it takes the order below to make it a consumer at
     // all, which is
     // `a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building`.
-    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
     // Somewhere to take a load: with no depot there is no errand, which is
     // `with_no_depot_a_clogged_machine_just_stays_clogged` below.
     deploy(&mut game, "depot", 4, 0);
@@ -156,7 +169,7 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
 #[test]
 fn a_worker_off_its_tile_produces_nothing_and_says_so() {
     let mut game = base(2);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     // Well outside the four tiles the node can be worked from, and outside
@@ -184,7 +197,7 @@ fn a_worker_off_its_tile_produces_nothing_and_says_so() {
 #[test]
 fn unstaffed_wins_over_running() {
     let mut game = base(3);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     // Off its post but with a clear route to it, so this is a worker that is
@@ -215,7 +228,7 @@ fn unstaffed_wins_over_running() {
 #[test]
 fn a_worker_delivers_to_the_nearer_of_two_depots() {
     let mut game = base(4);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let far = deploy(&mut game, "depot", 4, 1);
     let near = deploy(&mut game, "depot", 2, 1);
     let worker = hauler(&mut game);
@@ -252,7 +265,7 @@ fn a_delivered_load_records_the_errand_and_how_far_it_went() {
     game.world
         .resource_mut::<crate::resources::BattleTelemetry>()
         .on = true;
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let depot = deploy(&mut game, "depot", 3, 1);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -284,7 +297,7 @@ fn a_delivered_load_records_the_errand_and_how_far_it_went() {
         hauls
             .iter()
             .any(|(errand, kind, qty, distance)| errand == "deposit"
-                && kind == "mining_node"
+                && kind == "extractor"
                 && *qty > 0
                 && *distance == 3),
         "the delivery has to record its errand, its post's kind and the \
@@ -308,7 +321,7 @@ fn a_depot_is_not_offered_as_a_cronjob() {
 #[test]
 fn a_carried_load_ends_up_in_the_depot_and_in_your_cargo() {
     let mut game = base(6);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -346,7 +359,7 @@ fn a_carried_load_ends_up_in_the_depot_and_in_your_cargo() {
 #[test]
 fn a_posted_program_walks_to_its_machine_before_producing() {
     let mut game = base(7);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
     let worker = hauler(&mut game);
     // The distance is the *player's*: a posted program sets off from
@@ -388,7 +401,7 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
 #[test]
 fn clearing_a_full_buffer_takes_several_trips() {
     let mut game = base(11);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -426,7 +439,7 @@ fn clearing_a_full_buffer_takes_several_trips() {
 #[test]
 fn with_no_depot_a_clogged_machine_just_stays_clogged() {
     let mut game = base(13);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
@@ -459,7 +472,7 @@ fn with_no_depot_a_clogged_machine_just_stays_clogged() {
 #[test]
 fn a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine() {
     let mut game = base(8);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -495,7 +508,7 @@ fn a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine() {
 #[test]
 fn demolishing_a_machine_takes_its_workers_load_with_it() {
     let mut game = base(9);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -519,7 +532,7 @@ fn demolishing_a_machine_takes_its_workers_load_with_it() {
 #[test]
 fn a_sweep_that_destroys_a_machine_takes_its_workers_load_too() {
     let mut game = base(14);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -544,7 +557,7 @@ fn a_sweep_that_destroys_a_machine_takes_its_workers_load_too() {
 #[test]
 fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
     let mut game = base(12);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let near = deploy(&mut game, "depot", 3, 0);
     let far = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
@@ -571,7 +584,7 @@ fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
 #[test]
 fn a_carried_load_survives_a_save_and_load() {
     let mut game = base(10);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -630,7 +643,7 @@ fn structure_tiles(game: &mut Game) -> Vec<(i32, i32)> {
 #[test]
 fn a_hauler_carries_a_load_through_a_door() {
     let mut game = base(21);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     let depot = deploy(&mut game, "depot", 4, 0);
     // Across every floored cell of the column, since the pocket is wider
     // than it is tall and its reach says nothing about this column's height.
@@ -672,11 +685,11 @@ fn a_hauler_carries_a_load_through_a_door() {
 #[test]
 fn a_hauler_never_walks_over_a_structure() {
     let mut game = base(20);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     deploy(&mut game, "depot", 4, 0);
-    let blocker = deploy(&mut game, "mining_node", 3, 0);
-    deploy(&mut game, "mining_node", 3, -1);
-    deploy(&mut game, "mining_node", 3, 1);
+    let blocker = deploy_machine(&mut game, "extractor", "core_fragment", 3, 0);
+    deploy_machine(&mut game, "extractor", "core_fragment", 3, -1);
+    deploy_machine(&mut game, "extractor", "core_fragment", 3, 1);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
@@ -712,9 +725,9 @@ fn a_hauler_never_walks_over_a_structure() {
 #[test]
 fn posting_to_a_boxed_in_machine_is_refused() {
     let mut game = base(21);
-    let node = deploy(&mut game, "mining_node", 2, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 2, 0);
     for (dx, dy) in [(1, 0), (3, 0), (2, 1), (2, -1)] {
-        deploy(&mut game, "mining_node", dx, dy);
+        deploy_machine(&mut game, "extractor", "core_fragment", dx, dy);
     }
     let worker = hauler(&mut game);
 
@@ -737,7 +750,7 @@ fn posting_to_a_boxed_in_machine_is_refused() {
 fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
     let mut game = base(22);
     lay_long_floor(&mut game);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     deploy(&mut game, "depot", 12, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -772,7 +785,7 @@ fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
 #[test]
 fn a_worker_built_over_can_still_step_off_its_own_tile() {
     let mut game = base(23);
-    let node = deploy(&mut game, "mining_node", 2, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 2, 0);
     let depot = deploy(&mut game, "depot", -2, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -788,7 +801,7 @@ fn a_worker_built_over_can_still_step_off_its_own_tile() {
 
     // Deployed from beside the worker onto the very tile it is standing on.
     stand_player_at(&mut game, parked.x, parked.y + 1);
-    deploy(&mut game, "mining_node", 0, -1);
+    deploy_machine(&mut game, "extractor", "core_fragment", 0, -1);
 
     tick_until(&mut game, 60, |g| {
         node_output(g, depot, ids::CORE_FRAGMENT) > 0
@@ -807,12 +820,12 @@ fn a_worker_built_over_can_still_step_off_its_own_tile() {
 #[test]
 fn a_worker_parks_on_the_free_side_of_its_machine() {
     let mut game = base(24);
-    let node = deploy(&mut game, "mining_node", 2, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 2, 0);
     // The two sides facing the player, so the nearest neighbour by distance
     // is the occupied one and only the far side is legal.
-    deploy(&mut game, "mining_node", 1, 0);
-    deploy(&mut game, "mining_node", 2, 1);
-    deploy(&mut game, "mining_node", 2, -1);
+    deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
+    deploy_machine(&mut game, "extractor", "core_fragment", 2, 1);
+    deploy_machine(&mut game, "extractor", "core_fragment", 2, -1);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
 
@@ -840,7 +853,7 @@ fn a_worker_parks_on_the_free_side_of_its_machine() {
 fn an_extractor_with_no_program_reports_idle() {
     let mut game = base(25);
     let node = deploy(&mut game, "research_node", 1, 0);
-    let mine = deploy(&mut game, "mining_node", 0, 2);
+    let mine = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
 
     game.tick();
 
@@ -861,7 +874,7 @@ fn an_extractor_with_no_program_reports_idle() {
 #[test]
 fn a_worked_extractor_does_not_read_idle() {
     let mut game = base(26);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
@@ -886,7 +899,7 @@ fn a_worked_extractor_does_not_read_idle() {
 #[test]
 fn a_machine_with_nothing_downstream_delivers_as_it_produces() {
     let mut game = base(30);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -919,13 +932,19 @@ fn a_machine_with_nothing_downstream_delivers_as_it_produces() {
 #[test]
 fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
     let mut game = base(31);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     // A Lathe assembles Blank Substrate out of Core Fragments, so it is a
     // consumer of exactly what the node beside it makes. Spawned rather than
     // deployed because it is gated behind research this fixture has no
     // business unlocking.
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    spawn_machine_with_recipe_at(
+        &mut game,
+        "factory",
+        "blank_substrate",
+        node_pos.x + 1,
+        node_pos.y,
+    );
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -962,9 +981,15 @@ fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
 #[test]
 fn a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building() {
     let mut game = base(33);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    spawn_machine_with_recipe_at(
+        &mut game,
+        "factory",
+        "blank_substrate",
+        node_pos.x + 1,
+        node_pos.y,
+    );
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -997,10 +1022,22 @@ fn a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building() {
 #[test]
 fn an_order_two_links_downstream_still_keeps_the_feeder_hoarding() {
     let mut game = base(34);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
-    spawn_machine_at(&mut game, "disk_press", node_pos.x + 2, node_pos.y);
+    spawn_machine_with_recipe_at(
+        &mut game,
+        "factory",
+        "blank_substrate",
+        node_pos.x + 1,
+        node_pos.y,
+    );
+    spawn_machine_with_recipe_at(
+        &mut game,
+        "assembler",
+        "routine_disk",
+        node_pos.x + 2,
+        node_pos.y,
+    );
     // Off to the side rather than further along the row: a fourth tile out
     // is past `MAX_BUILD_DISTANCE_FROM_HOME` once the Press has taken the
     // third.
@@ -1031,9 +1068,15 @@ fn an_order_two_links_downstream_still_keeps_the_feeder_hoarding() {
 #[test]
 fn a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it() {
     let mut game = base(35);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    let lathe = spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    let lathe = spawn_machine_with_recipe_at(
+        &mut game,
+        "factory",
+        "blank_substrate",
+        node_pos.x + 1,
+        node_pos.y,
+    );
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -1066,7 +1109,7 @@ fn a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it() {
 #[test]
 fn a_worker_short_an_ingredient_fetches_it_from_the_depot() {
     let mut game = base(32);
-    let press = spawn_machine_at(&mut game, "disk_press", 1, 0);
+    let press = spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 1, 0);
     let depot = deploy(&mut game, "depot", 3, 0);
     fill_output(&mut game, depot, "blank_substrate", 10);
     let worker = hauler(&mut game);
@@ -1173,7 +1216,7 @@ fn a_burner_with_no_cell_within_reach_is_fetched_one_off_the_shelf() {
 #[test]
 fn feeding_a_burner_outranks_a_queued_work_order() {
     let mut game = base(9102);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let (recharger, _) = recharger_and_a_distant_depot(&mut game, 4);
     order_core_fragments(&mut game);
     let worker = hauler(&mut game);
@@ -1192,7 +1235,7 @@ fn feeding_a_burner_outranks_a_queued_work_order() {
 #[test]
 fn a_burner_with_a_stocked_buffer_beside_it_is_no_want_at_all() {
     let mut game = base(9103);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let recharger = deploy(&mut game, "recharger_node", 1, 0);
     // Touching the node, which is the hand-stocked arrangement the feature
     // shipped with: the supplier reaches this shelf itself.
@@ -1220,7 +1263,7 @@ fn a_burner_with_a_stocked_buffer_beside_it_is_no_want_at_all() {
 #[test]
 fn a_burner_is_no_want_when_no_shelf_holds_its_fuel() {
     let mut game = base(9104);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     // A Depot, but an empty one: the want is gated on the base actually
     // holding the fuel, or a body walks to a shelf that cannot pay it.
     recharger_and_a_distant_depot(&mut game, 0);
@@ -1244,8 +1287,8 @@ fn a_short_burner_with_nothing_in_store_puts_a_body_on_what_makes_its_fuel() {
     // Mining Node while every Recharger runs dry is how a run used to end
     // with a working Conduit standing idle beside it.
     let mut game = base_with_conduits(9110);
-    let node = deploy(&mut game, "mining_node", 0, 1);
-    let conduit = deploy(&mut game, "power_conduit", -2, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
+    let conduit = deploy_machine(&mut game, "extractor", "power_cell", -2, 0);
     recharger_and_a_distant_depot(&mut game, 0);
     order_core_fragments(&mut game);
     let worker = hauler(&mut game);
@@ -1269,7 +1312,7 @@ fn a_base_with_no_cell_anywhere_relights_its_own_recharger() {
     // unloads it onto the Depot, and the fetch half of `fuel_wants` takes
     // it from there.
     let mut game = base_with_conduits(9111);
-    deploy(&mut game, "power_conduit", -2, 0);
+    deploy_machine(&mut game, "extractor", "power_cell", -2, 0);
     let (recharger, _) = recharger_and_a_distant_depot(&mut game, 0);
     hauler(&mut game);
     hauler(&mut game);
@@ -1292,7 +1335,7 @@ fn a_base_with_no_cell_anywhere_relights_its_own_recharger() {
 /// because a full Conduit cannot progress.
 fn cells_stranded_in_a_distant_conduit(game: &mut Game) -> (Entity, Entity) {
     let recharger = deploy(game, "recharger_node", 1, 0);
-    let conduit = deploy(game, "power_conduit", -3, 0);
+    let conduit = deploy_machine(game, "extractor", "power_cell", -3, 0);
     fill_output(game, conduit, ids::POWER_CELL, 20);
     let depot = deploy(game, "depot", 4, 0);
     fill_output(game, depot, ids::CORE_FRAGMENT, 50);
@@ -1306,7 +1349,7 @@ fn cells_stranded_in_a_distant_conduit(game: &mut Game) -> (Entity, Entity) {
 #[test]
 fn a_burner_fetches_its_fuel_off_a_machine_when_no_shelf_holds_any() {
     let mut game = base_with_conduits(9113);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let (recharger, _) = cells_stranded_in_a_distant_conduit(&mut game);
     order_core_fragments(&mut game);
     let worker = hauler(&mut game);
@@ -1351,7 +1394,7 @@ fn a_dark_fuel_maker_is_not_handed_a_body() {
     // Conduits against the Home's 4: the fifth in tile order is dark.
     let mut game = base_with_conduits(9112);
     let conduits: Vec<Entity> = (0..5)
-        .map(|i| deploy(&mut game, "power_conduit", -2, i - 2))
+        .map(|i| deploy_machine(&mut game, "extractor", "power_cell", -2, i - 2))
         .collect();
     let (recharger, _) = recharger_and_a_distant_depot(&mut game, 0);
     // A fresh Recharger comes with a full window of charge, which would put
@@ -1385,17 +1428,21 @@ fn a_dark_fuel_maker_is_not_handed_a_body() {
 fn a_lines_body_goes_to_its_lit_fuel_maker_not_its_dark_end_machine() {
     // The `chains` deadlock. A Conduit -> Winding Node -> Assembly Bay line
     // on the Home's 4, with a second Conduit off to one side: the two
-    // Conduits (rung 0) and the Winding Node take all 4, so the Bay (draw 3)
+    // Conduits (rung 0) and the Winding Node take all 4, so the Bay (draw 2)
     // is dark. The Bay still has a batch of coils
     // beside it, so an order for Patch Routines names it — and `collapse`
     // aims the line's one body at the furthest-downstream want, the dark
     // Bay, where it makes nothing while the Conduit that could end the
     // blackout stands idle for the rest of the run.
     let mut game = base_with_conduits(9116);
-    let bay = deploy(&mut game, "assembly_bay", -2, -1);
-    let winding = deploy(&mut game, "winding_node", -2, 0);
-    let conduit = deploy(&mut game, "power_conduit", -2, 1);
-    deploy(&mut game, "power_conduit", 2, 2);
+    // The line runs the other way up the column from the Bay's old place: a
+    // Printer draws 2 where the Assembly Bay drew 3, so it would fit in the
+    // supply the Factory leaves unless the cut reaches the Factory's tile
+    // first.
+    let bay = deploy_machine(&mut game, "printer", "patch_routine", -2, 1);
+    let winding = deploy_machine(&mut game, "factory", "charge_coil", -2, 0);
+    let conduit = deploy_machine(&mut game, "extractor", "power_cell", -2, -1);
+    deploy_machine(&mut game, "extractor", "power_cell", 2, 2);
     fill_output(&mut game, winding, "charge_coil", 3);
     game.queue_work_order(WorkOrder::batch(ItemId::from("patch_routine"), 500))
         .unwrap();
@@ -1424,7 +1471,7 @@ fn a_lines_body_goes_to_its_lit_fuel_maker_not_its_dark_end_machine() {
 #[test]
 fn a_fed_burner_gives_the_body_back() {
     let mut game = base(9105);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let (recharger, _) = recharger_and_a_distant_depot(&mut game, 4);
     order_core_fragments(&mut game);
     let worker = hauler(&mut game);
@@ -1491,7 +1538,7 @@ fn a_fed_burner_gives_the_body_back_on_a_base_with_no_orders_at_all() {
 #[test]
 fn a_worker_walks_past_a_depot_that_refuses_its_load() {
     let mut game = base(4);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let far = deploy(&mut game, "depot", 4, 1);
     let near = deploy(&mut game, "depot", 2, 1);
     game.set_depot_filter(near, &[ItemId::from(ids::CORE_FRAGMENT)], false);
@@ -1522,7 +1569,7 @@ fn a_worker_walks_past_a_depot_that_refuses_its_load() {
 #[test]
 fn a_depot_that_refuses_the_load_is_no_reason_to_set_off() {
     let mut game = base(13);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let shelf = deploy(&mut game, "depot", 4, 0);
     game.set_depot_filter(shelf, &[ItemId::from(ids::CORE_FRAGMENT)], false);
     let worker = hauler(&mut game);
@@ -1557,7 +1604,7 @@ fn a_depot_that_refuses_the_load_is_no_reason_to_set_off() {
 #[test]
 fn a_load_refused_mid_walk_goes_back_and_re_clogs_the_machine() {
     let mut game = base(8);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let shelf = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -1614,7 +1661,7 @@ fn a_researched_depot_rung_takes_a_haul_like_the_first_one() {
         .resource_mut::<crate::resources::Research>()
         .0
         .insert("paging".to_string());
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot_mk2", 4, 0);
     assert_eq!(
         game.world.get::<Stock>(depot).unwrap().capacity,
@@ -1767,7 +1814,7 @@ fn a_haulers_walk_field_crosses_footprint_floor_but_never_the_anchor() {
 #[test]
 fn a_worker_skips_a_nearer_depot_it_cannot_reach() {
     let mut game = base(4);
-    let node = deploy(&mut game, "mining_node", 0, 1);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 1);
     let boxed = deploy(&mut game, "depot", 2, -1);
     for (dx, dy) in [(1, -1), (3, -1), (2, -2), (2, 0)] {
         deploy(&mut game, "wall", dx, dy);
@@ -1814,7 +1861,7 @@ fn plugged_corridor(seed: u32, plug: bool) -> (Game, Entity, Entity) {
             }
         }
     }
-    let node = deploy(&mut game, "mining_node", 2, -3);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 2, -3);
     for (dx, dy) in [
         (1, -4),
         (2, -4),
@@ -1914,7 +1961,7 @@ fn lay_long_floor(game: &mut Game) {
 /// that the carrier is still walking when the last one goes up.
 fn close_the_depot_in(game: &mut Game) {
     for (dx, dy) in [(11, 0), (13, 0), (12, 1), (12, -1)] {
-        deploy(game, "mining_node", dx, dy);
+        deploy_machine(game, "extractor", "core_fragment", dx, dy);
     }
 }
 
@@ -1939,7 +1986,7 @@ fn lose_the_route_mid_carry(game: &mut Game, worker: Entity, close: impl FnOnce(
 #[test]
 fn a_walled_in_depot_is_never_lifted_toward() {
     let mut game = base(43);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     let depot = walled_depot(&mut game, 3);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -1971,7 +2018,7 @@ fn a_walled_in_depot_is_never_lifted_toward() {
 fn a_machine_cut_off_from_its_depot_reads_stranded_once_and_recovers() {
     use crate::alerts::AlertKind;
     let mut game = base(43);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     let depot = walled_depot(&mut game, 3);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2025,8 +2072,8 @@ fn a_cut_off_machine_with_a_consumer_beside_it_stays_stranded() {
     use crate::alerts::AlertKind;
     let mut game = base(44);
     lay_long_floor(&mut game);
-    let node = deploy(&mut game, "mining_node", 1, 0);
-    let lathe = spawn_machine_at(&mut game, "lathe", 2, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
     walled_depot(&mut game, 4);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2070,7 +2117,7 @@ fn a_carrier_stranded_by_structures_drops_its_load_on_the_floor() {
         .resource_mut::<crate::resources::BattleTelemetry>()
         .on = true;
     lay_long_floor(&mut game);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     let near = deploy(&mut game, "depot", 12, 0);
     let far = deploy(&mut game, "depot", -14, 0);
     let worker = hauler(&mut game);
@@ -2144,7 +2191,7 @@ fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
             }
         }
     }
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     let depot = deploy(&mut game, "depot", 3, 0);
     for x in -4..=-2 {
         for y in -4..=-2 {
@@ -2205,7 +2252,7 @@ fn a_stranded_carrier_drops_its_load_whatever_the_depots_hold() {
 fn a_downed_tools_hauler_stranded_with_a_load_does_not_stay_on_shift() {
     let mut game = base(22);
     lay_long_floor(&mut game);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     deploy(&mut game, "depot", 12, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2404,7 +2451,7 @@ fn pile_total(game: &mut Game) -> u32 {
 /// fetched while its output is still empty.
 fn pickup_fixture(seed: u32) -> (Game, Entity, Entity, Entity) {
     let mut game = base(seed);
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2502,7 +2549,7 @@ fn two_haulers_sent_to_one_pile_conserve_the_total() {
 #[test]
 fn a_pile_is_left_alone_when_the_only_accepting_depot_is_walled_in() {
     let mut game = base(36);
-    let node = deploy(&mut game, "mining_node", 0, 2);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
     walled_depot(&mut game, 3);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2555,7 +2602,7 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
     ] {
         deploy(&mut game, "wall", 1 + dx, 2 + dy);
     }
-    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
@@ -2615,7 +2662,7 @@ fn the_player_steps_onto_a_door() {
 /// cannot move anything and the only question left is whether the carrier
 /// lifts the node's output. Returns `(node, near, far)`.
 fn node_with_near_and_far_depot(game: &mut Game) -> (Entity, Entity, Entity) {
-    let node = deploy(game, "mining_node", 1, 0);
+    let node = deploy_machine(game, "extractor", "core_fragment", 1, 0);
     let near = deploy(game, "depot", 2, 0);
     let far = deploy(game, "depot", 6, 0);
     fill_to_capacity(game, near, ids::POWER_CELL);

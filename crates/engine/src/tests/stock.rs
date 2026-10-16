@@ -23,7 +23,8 @@ fn row(game: &Game, tag: &str) -> Option<u32> {
 fn the_strip_sums_machine_and_depot_buffers_into_one_pile_per_item() {
     let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    stand_in_base(&mut game);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     let depot = spawn_machine_at(&mut game, "depot", 4, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 7);
     put_output(&mut game, depot, ids::CORE_FRAGMENT, 5);
@@ -135,7 +136,8 @@ fn a_banked_pool_is_a_pile_the_strip_lists() {
 fn a_machine_holds_its_pile_on_the_strip_while_its_buffer_is_empty() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    stand_in_base(&mut game);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
 
     assert_eq!(
         row(&game, "CF"),
@@ -155,7 +157,8 @@ fn a_machine_holds_its_pile_on_the_strip_while_its_buffer_is_empty() {
 fn an_assembler_holds_the_pile_it_builds() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
-    spawn_machine_at(&mut game, "lathe", 2, 0);
+    stand_in_base(&mut game);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 2, 0);
 
     assert_eq!(
         row(&game, "BS"),

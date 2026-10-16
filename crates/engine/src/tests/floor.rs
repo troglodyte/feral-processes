@@ -168,7 +168,7 @@ fn assert_dropped(game: &mut Game, worker: Entity, x: i32, y: i32) {
 fn posted_carrier(game: &mut Game) -> (Entity, Entity) {
     stand_in_base(game);
     place_home(game);
-    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let node = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = loaded_staff(game, 6, 6);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
@@ -229,7 +229,7 @@ fn pinning_for_study_drops_the_load() {
 fn ordered_carrier(game: &mut Game) -> Entity {
     stand_in_base(game);
     place_home(game);
-    spawn_machine_at(game, "mining_node", 2, 0);
+    spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = spawn_tamed(game, 100, 3);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -369,7 +369,7 @@ fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
             spawn_structure_at(&mut game, "defrag_bay", 4, 4);
         }
     }
-    let lathe = spawn_structure_at(&mut game, "lathe", 3, 3);
+    let lathe = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 3);
     game.work_ticks_for(lathe, crate::tuning::DEFAULT_BASE_SPEED)
 }
 

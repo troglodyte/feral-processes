@@ -20,6 +20,12 @@ fn build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
     structure_at(game, at.0 + dx, at.1 + dy)
 }
 
+/// A machine of `kind` set to `recipe`, built `dx`,`dy` from the player.
+fn build_machine(game: &mut Game, kind: &str, recipe: &str, dx: i32, dy: i32) -> Entity {
+    place_machine(game, kind, recipe, dx, dy)
+        .unwrap_or_else(|e| panic!("{kind} at ({dx},{dy}): {e}"))
+}
+
 fn structure_at(game: &mut Game, x: i32, y: i32) -> Entity {
     let mut q = game.world.query::<(Entity, &Position, &Structure)>();
     q.iter(&game.world)
@@ -47,7 +53,7 @@ fn allow_only(game: &Game, depot: Entity, allowed: &[ItemId]) -> bool {
 #[test]
 fn a_depot_built_beside_a_node_allows_only_its_output() {
     let mut game = base_game(9001);
-    build(&mut game, "mining_node", 2, 0);
+    build_machine(&mut game, "extractor", "core_fragment", 2, 0);
     let depot = build(&mut game, "depot", 1, 0);
 
     assert!(allow_only(&game, depot, &[frag()]));
@@ -57,13 +63,23 @@ fn a_depot_built_beside_a_node_allows_only_its_output() {
 fn a_node_built_beside_an_unfiltered_depot_leaves_it_unfiltered() {
     let mut game = base_game(9002);
     let depot = build(&mut game, "depot", 1, 0);
-    build(&mut game, "mining_node", 2, 0);
+    // Standing unset: it makes nothing yet, so there is nothing to filter for.
+    build(&mut game, "extractor", 2, 0);
 
     assert!(
         game.world.get::<DepotFilter>(depot).is_none(),
-        "only placing a Depot filters it"
+        "only placing a Depot, or setting a machine, filters it"
     );
     assert!(takes(&game, depot, &ItemId::from(ids::POWER_CELL)));
+}
+
+#[test]
+fn setting_a_machine_beside_an_unfiltered_depot_filters_it_to_the_output() {
+    let mut game = base_game(9007);
+    let depot = build(&mut game, "depot", 1, 0);
+    build_machine(&mut game, "extractor", "core_fragment", 2, 0);
+
+    assert!(allow_only(&game, depot, &[frag()]));
 }
 
 #[test]
@@ -72,7 +88,7 @@ fn a_node_built_beside_a_filtered_depot_leaves_the_players_filter() {
     let depot = build(&mut game, "depot", 1, 0);
     let cell = ItemId::from(ids::POWER_CELL);
     game.set_depot_filter(depot, &[frag(), cell.clone()], false);
-    build(&mut game, "mining_node", 2, 0);
+    build_machine(&mut game, "extractor", "core_fragment", 2, 0);
 
     assert!(!takes(&game, depot, &frag()), "the node does not lift it");
     assert!(!takes(&game, depot, &cell));
@@ -81,8 +97,8 @@ fn a_node_built_beside_a_filtered_depot_leaves_the_players_filter() {
 #[test]
 fn a_depot_between_two_producers_allows_both_outputs() {
     let mut game = base_game(9004);
-    build(&mut game, "mining_node", 1, 0);
-    build(&mut game, "refinery", 3, 0);
+    build_machine(&mut game, "extractor", "core_fragment", 1, 0);
+    build_machine(&mut game, "factory", "bytecode_block", 3, 0);
     let depot = build(&mut game, "depot", 2, 0);
 
     assert!(allow_only(
@@ -107,7 +123,7 @@ fn a_banked_producer_writes_no_filter() {
 #[test]
 fn the_filter_is_set_once_and_a_later_edit_stands() {
     let mut game = base_game(9006);
-    build(&mut game, "mining_node", 2, 0);
+    build_machine(&mut game, "extractor", "core_fragment", 2, 0);
     let depot = build(&mut game, "depot", 1, 0);
     game.set_depot_filter(depot, &[frag()], false);
     // A later tick must not re-derive it. (A Depot has no upgrade path.)
@@ -124,9 +140,15 @@ fn machine(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
     spawn_machine_at(game, kind, x, y)
 }
 
+/// `machine`, set to `recipe`.
+fn machine_with_recipe(game: &mut Game, kind: &str, recipe: &str, x: i32, y: i32) -> Entity {
+    stand_ample_grid_supply(game);
+    spawn_machine_with_recipe_at(game, kind, recipe, x, y)
+}
+
 /// A node holding `qty` fragments, worked or not.
 fn node(game: &mut Game, x: i32, y: i32, qty: u32, worked: bool) -> Entity {
-    let node = machine(game, "mining_node", x, y);
+    let node = machine_with_recipe(game, "extractor", "core_fragment", x, y);
     game.world
         .get_mut::<Stock>(node)
         .unwrap()
@@ -196,7 +218,7 @@ fn a_dark_nodes_output_stays_put() {
     // No grid supply stood, so the worked node draws power it cannot get.
     let depot = spawn_machine_at(&mut game, "depot", 41, 40);
     game.set_depot_filter(depot, &[frag()], true);
-    let node = spawn_machine_at(&mut game, "mining_node", 40, 40);
+    let node = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 40, 40);
     game.world
         .get_mut::<Stock>(node)
         .unwrap()
@@ -268,10 +290,14 @@ fn an_item_the_filter_refuses_is_not_pulled() {
 #[test]
 fn fragments_reach_a_lathe_through_a_depot_with_no_carrier() {
     let mut game = Game::new(9014, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    node(&mut game, 40, 40, 100, true);
+    // An Extractor holds 20 (a Mining Node held more), so it is seeded within
+    // that.
+    node(&mut game, 40, 40, 10, true);
     let depot = depot_for_fragments(&mut game, 41, 40);
-    game.set_depot_filter(depot, &[ItemId::from("blank_substrate")], true);
-    let lathe = machine(&mut game, "lathe", 42, 40);
+    let lathe = machine_with_recipe(&mut game, "factory", "blank_substrate", 42, 40);
+    // Setting the Factory's recipe filtered the unfiltered Depot beside it to
+    // blank substrate alone, so the fragments are let back in by hand.
+    game.set_depot_filter(depot, &[frag(), ItemId::from("blank_substrate")], true);
     post(&mut game, lathe);
 
     for _ in 0..10 {
@@ -323,7 +349,7 @@ fn a_depot_is_drawn_joined_to_a_consumer_whose_ingredient_it_accepts() {
     let node = node(&mut game, 40, 40, 0, false);
     let depot = depot_for_fragments(&mut game, 41, 40);
     game.set_depot_filter(depot, &[ItemId::from("blank_substrate")], false);
-    let lathe = machine(&mut game, "lathe", 42, 40);
+    let lathe = machine_with_recipe(&mut game, "factory", "blank_substrate", 42, 40);
 
     assert_eq!(edges_of(&mut game, depot), vec![(-1, 0), (1, 0)]);
     assert_eq!(edges_of(&mut game, node), vec![(1, 0)]);
@@ -335,7 +361,7 @@ fn a_depot_that_refuses_everything_is_not_joined_to_a_consumer() {
     let mut game = Game::new(9033, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let depot = depot_for_fragments(&mut game, 41, 40);
     game.set_all_depot_filters(depot, false);
-    let lathe = machine(&mut game, "lathe", 42, 40);
+    let lathe = machine_with_recipe(&mut game, "factory", "blank_substrate", 42, 40);
 
     assert!(edges_of(&mut game, depot).is_empty());
     assert!(edges_of(&mut game, lathe).is_empty());

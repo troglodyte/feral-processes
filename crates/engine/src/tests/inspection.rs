@@ -1357,6 +1357,9 @@ fn a_structure_report_row_carries_its_stock_and_status() {
         stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 6);
     }
 
+    // A machine is set to its recipe between ticks; the status is corrected
+    // on the next one.
+    game.tick();
     let report = game.structure_report();
     let row = report
         .iter()

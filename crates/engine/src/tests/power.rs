@@ -20,9 +20,9 @@ use bevy_ecs::prelude::*;
 
 use super::support::{
     ScratchAssets, assets_dir_with_extra_structure, copy_shipped_assets, find_structure_by_kind,
-    give, node_output, park_at_post, place_now, scratch_assets_dir, spawn_machine_at,
-    spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at, stand_player_at_post,
-    test_assets_dir,
+    give, node_output, park_at_post, place_machine, place_now, scratch_assets_dir,
+    spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at,
+    stand_player_at_post, test_assets_dir,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -1178,7 +1178,8 @@ fn a_machine_lit_only_by_a_burning_supplier_goes_dark_with_it() {
     // moment it stops. Deployed *before* the supplier, so the turns they
     // each spend do not come off the charge this test is timing.
     for i in 0..5 {
-        place_now(&mut game, "mining_node", -1, i).expect("floor west of the origin");
+        place_machine(&mut game, "extractor", "core_fragment", -1, i)
+            .expect("floor west of the origin");
     }
     recharger_beside_a_depot(&mut game, 0);
     let db = game.world.resource::<StructureDb>();

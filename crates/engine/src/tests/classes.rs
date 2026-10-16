@@ -372,7 +372,7 @@ fn an_invoker_carries_more_routine_slots_at_every_level_including_the_cap() {
 fn a_fabricator_bakes_a_shorter_work_cycle_than_anyone_else() {
     let required_under = |class| {
         let mut game = game_as(9103, class);
-        let node = spawn_mining_node(&mut game, 2, 2);
+        let node = spawn_extractor(&mut game, 2, 2);
         let worker = spawn_tamed(&mut game, 10, 3);
         stand_player_at_post(&mut game, node);
         game.assign_cronjob(worker, node)

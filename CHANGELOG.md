@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.1
+
+**A blade's swing now starts at the centre of your own program and sweeps on through the one you hit.** Weapons with the slash effect have no travelling shot, so the cut was the whole animation, and it began at a corner of the target's square. Beside you, that corner sat at the edge of your own icon, so a swing looked as if it came from nowhere. The cut still sweeps away from you as before.
+
 ## 0.19.0
 
 **Saves from earlier versions no longer load.** The base's production buildings were replaced, so an older base would load without them. Start a new game.

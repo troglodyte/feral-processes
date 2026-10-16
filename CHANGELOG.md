@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.18.34
+
+**The numpad's corner keys (7, 9, 1, 3) now walk you diagonally on the map and inside your base, not only in battle-map fights.** Before, they did nothing outside a battle-map fight. Underground they still do nothing, because there you move by facing and turning.
+
+**On a battle map you are drawn with your own picture: the icon you drew, or your character's sprite, instead of a plain `@`.** The battle map only looked up program sprites before, so the player always fell back to the letter.
+
+**Inside your base, rock can only be cut straight ahead.** A diagonal dig could open a pocket touching your base only at a corner, where a GC Entropy Sweep could never reach anything built in it. Bumping rock diagonally now costs no turn and says so.
+
+**With NumLock on, the numpad's direction keys no longer also type a digit.** On the map, numpad 1 to 4 used to step you and switch the info tab in the same press.
+
 ## 0.18.33
 
 **Programs fighting you on a battle map now fight as a pack, with one of three tactics a fight-start line announces.** Some packs still rush you, as before. Some keep together, so a fast program waits for slower packmates instead of arriving alone. Some spread out behind cover and wait, breaking cover once they see you, one of them is hit, one is lost, or they have waited six rounds. How often each tactic comes up depends on the leading program's temperament, so cautious packs lie in wait more and brutes rush more.

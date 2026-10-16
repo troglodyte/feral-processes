@@ -20,7 +20,7 @@ of them; that is not this change.
 
 ## Goals
 
-- Mark plots with the existing box tool, inside the `[D]` Excavation plan.
+- Mark plots with the existing box tool, inside the `[m]` Excavation plan.
 - Set a plot's recipe by walking up to it and pressing `[c]`.
 - Staff dimple, then (when ripe) harvest, each tile with no player order —
   harvest is generated automatically.
@@ -119,7 +119,7 @@ real save→load test (a RON round-trip cannot catch a skipped field). Bump
 
 ## Calls I made (for the user to check)
 
-- Plot marking lives inside `[D]`, not a new map key (user chose this).
+- Plot marking lives inside `[m]`, not a new map key (user chose this).
 - Farm labour is lowest priority, below digging.
 - ~4 stages, one icon drawn at growing sizes.
 - Grow time is data, set slow; exact value tunable.

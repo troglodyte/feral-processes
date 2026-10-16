@@ -235,7 +235,7 @@ fn the_compile_list_comes_back_in_category_order() {
 #[test]
 fn a_researched_recipe_sorts_into_its_category_rather_than_trailing() {
     let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "fabricator", 3, 0);
+    touch_a_workbench(&mut game);
     unlock_research_chain(&mut game, "overclock");
     let core = ItemId::from("overclock_core");
 
@@ -368,14 +368,14 @@ fn best_structure_tier_reads_the_best_deployed_one() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         None,
         "a bench nobody built is not a bench at tier 1"
     );
 
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    spawn_structure_at(&mut game, "workbench", 4, 4);
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         Some(1),
         "a structure carrying no StructureTier is standing at tier 1"
     );
@@ -383,19 +383,19 @@ fn best_structure_tier_reads_the_best_deployed_one() {
     for (x, tier) in [(5, 3), (6, 2)] {
         game.world.spawn((
             Structure {
-                kind: "fabricator".to_string(),
+                kind: "workbench".to_string(),
             },
             Position { x, y: 4 },
             StructureTier(tier),
         ));
     }
     assert_eq!(
-        game.best_structure_tier("fabricator"),
+        game.best_structure_tier("workbench"),
         Some(3),
         "the player compiles at their best bench, not their newest or their worst"
     );
     assert_eq!(
-        game.best_structure_tier("armory"),
+        game.best_structure_tier("assembler"),
         None,
         "and a different kind is a different bench"
     );
@@ -434,7 +434,8 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
         "being careful about it raises the floor on its own"
     );
 
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
     let benched = recipe_for(&mut game, "arc_lance");
     let tier_one = game.player_craft_order(&benched, false);
     assert_eq!(
@@ -443,7 +444,7 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
         "a bench at its first tier is worth no more than no bench at all"
     );
 
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(3));
     let tier_three = game.player_craft_order(&benched, false);
     assert_eq!(
@@ -460,8 +461,9 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
 fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
     use crate::tuning::QUALITY_MAX;
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(9_000));
 
     let recipe = recipe_for(&mut game, "arc_lance");
@@ -648,7 +650,8 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
     };
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let lance = ItemId::from("arc_lance");
-    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    touch_a_workbench(&mut game);
+    unlock_research_chain(&mut game, "weapon_bench");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 5)]);
 
     game.craft(&lance, 5, false).unwrap();
@@ -660,7 +663,7 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
         bare.iter().map(|c| c.quality).collect::<Vec<_>>()
     );
 
-    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(5));
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 5)]);
     fill_power(&mut game);
@@ -780,37 +783,30 @@ fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
 
 /// The cycle a hand-compile is priced off is the machine's own, so the
 /// number moves with the content rather than with a literal in the test.
-fn assembler_cycle(game: &Game, kind: &str) -> u32 {
+fn recipe_cycle(game: &Game, kind: &str, item: &str) -> u32 {
     game.world
         .resource::<StructureDb>()
         .get(kind)
         .unwrap()
-        .assembles
+        .machine
         .as_ref()
         .unwrap()
-        .ticks_per_unit
-}
-
-fn work_cycle(game: &Game, kind: &str) -> u32 {
-    game.world
-        .resource::<StructureDb>()
-        .get(kind)
-        .unwrap()
-        .work
-        .as_ref()
+        .recipes
+        .iter()
+        .find(|r| r.produces.as_str() == item)
         .unwrap()
         .ticks_per_unit
 }
 
 /// The machine exists to do this, so hand-compiling is priced off the
-/// machine's own cycle — the Lathe's, for a Blank Substrate.
+/// machine's own cycle — the Factory's, for a Blank Substrate.
 #[test]
 fn a_hand_compile_is_priced_off_the_assembler_that_makes_it() {
     let game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert_eq!(
         game.hand_craft_ticks(&ItemId::from(ids::BLANK_SUBSTRATE)),
-        crate::tuning::HAND_CRAFT_TICK_MULT * assembler_cycle(&game, "lathe"),
+        crate::tuning::HAND_CRAFT_TICK_MULT * recipe_cycle(&game, "factory", ids::BLANK_SUBSTRATE),
     );
 }
 
@@ -822,7 +818,7 @@ fn a_hand_compile_falls_back_to_the_extractor_that_produces_it() {
 
     assert_eq!(
         game.hand_craft_ticks(&ItemId::from(ids::POWER_CELL)),
-        crate::tuning::HAND_CRAFT_TICK_MULT * work_cycle(&game, "power_conduit"),
+        crate::tuning::HAND_CRAFT_TICK_MULT * recipe_cycle(&game, "extractor", ids::POWER_CELL),
     );
 }
 

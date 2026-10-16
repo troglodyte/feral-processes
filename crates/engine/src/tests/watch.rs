@@ -108,7 +108,7 @@ fn a_worker_standing_at_its_post_can_still_be_watched() {
         .world
         .spawn((
             Structure {
-                kind: "refinery".to_string(),
+                kind: "factory".to_string(),
             },
             Position { x: ox, y: oy },
         ))
@@ -174,7 +174,7 @@ fn a_program_the_sim_never_walks_cannot_be_watched() {
         .world
         .spawn((
             Structure {
-                kind: "refinery".to_string(),
+                kind: "factory".to_string(),
             },
             Position { x: 0, y: 0 },
         ))

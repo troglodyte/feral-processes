@@ -23,11 +23,10 @@ use bevy_ecs::prelude::{Entity, With};
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{FloorItem, Position, Stock, Structure};
-use crate::items::FloorThing;
-use crate::items::{ItemCategory, ItemId};
+use crate::components::{FloorItem, MachineRecipe, Position, Stock, Structure};
+use crate::items::{FloorThing, ItemCategory, ItemId};
 use crate::items_db::ItemDb;
-use crate::structures::StructureDb;
+use crate::structures::{Placed, StructureDb};
 use crate::views::StockRow;
 
 /// Every deployed structure's output buffer, paired with the structure it
@@ -69,7 +68,7 @@ pub(crate) fn stockpiled(game: &Game) -> Vec<(Position, Entity, ItemId)> {
 }
 
 /// Every item a deployed structure is set up to make — its `work.produces`
-/// or its `assembles.item`.
+/// or the recipe its machine is set to.
 ///
 /// **What "unlocked" means to the strip.** A pile whose tag only exists
 /// while the buffer behind it is non-empty makes the row reshuffle every
@@ -78,10 +77,8 @@ pub(crate) fn stockpiled(game: &Game) -> Vec<(Position, Entity, ItemId)> {
 /// afford. A machine standing in the base is the base saying it makes that
 /// item, so the tag holds its place at 0.
 ///
-/// **Both halves, because an assembler declares no `work` block at all** —
-/// `AssembleDef::item` is where a crafting machine says what it makes, and
-/// a rule reading `work.produces` alone leaves every one of them off the
-/// strip until its first unit lands.
+/// **Per instance, because a configurable machine makes what it is set to**
+/// and a machine with nothing set makes nothing, so it holds no place.
 ///
 /// Deliberately narrower than "any structure": a Depot makes nothing, and
 /// seeding off what a building *could hold* would put a row on the row for
@@ -92,13 +89,11 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
     let structures = game.world.resource::<StructureDb>();
     game.world
         .iter_entities()
-        .filter_map(|e| structures.get(&e.get::<Structure>()?.kind))
-        .flat_map(|def| {
-            def.work
-                .iter()
-                .map(|w| &w.produces)
-                .chain(def.assembles.iter().map(|a| &a.item))
+        .filter_map(|e| {
+            let def = structures.get(&e.get::<Structure>()?.kind)?;
+            Placed::of(def, e.get::<MachineRecipe>()).production()
         })
+        .map(|production| &production.recipe.produces)
 }
 
 /// Takes up to `qty` of `item` out of the base's own stores, and reports how
@@ -236,7 +231,7 @@ pub(crate) fn spend_bill_from_base(
 /// cost is drawn from every output buffer in the base, because that is what
 /// the stock block counts and a block that promised more than the base
 /// would spend is a block lying about the base. A *refund* goes to Depots
-/// alone: a unit pushed into a Mining Node's output buffer is
+/// alone: a unit pushed into an Extractor's output buffer is
 /// indistinguishable from a unit that node produced, and would be hauled
 /// away and counted as a cycle's yield. The dig crew's tile and finish draw
 /// already carries this same asymmetry.

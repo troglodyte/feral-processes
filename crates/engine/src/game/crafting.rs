@@ -85,8 +85,9 @@ impl Game {
                 let bench_ready = c
                     .requires_structure
                     .as_ref()
-                    .is_none_or(|s| self.has_structure(s));
-                bench_ready.then(|| CraftRecipe {
+                    .is_none_or(|s| self.touched_bench(s).is_some());
+                let researched = c.research.as_ref().is_none_or(|r| self.is_researched(r));
+                (bench_ready && researched).then(|| CraftRecipe {
                     result: def.id.clone(),
                     cost: charged(&c.cost),
                     requires_structure: c.requires_structure.clone(),
@@ -101,7 +102,7 @@ impl Game {
                 let bench_ready = recipe
                     .requires_structure
                     .as_ref()
-                    .is_none_or(|s| self.has_structure(s));
+                    .is_none_or(|s| self.touched_bench(s).is_some());
                 if bench_ready {
                     recipes.push(CraftRecipe {
                         result: recipe.result.clone(),
@@ -119,6 +120,29 @@ impl Game {
         // different `craft_recipes` call than the one the screen draws.
         recipes.sort_by_key(|r| self.category_sort_key(&r.result));
         recipes
+    }
+
+    /// The standing structure of `kind` the party is touching: orthogonally
+    /// adjacent to the base cell it stands in, highest tier first, ties to the
+    /// lowest tile so every call names the same one. `None` outside base
+    /// space, where nothing is touched. A structure with no `StructureTier`
+    /// reads as tier 1, `best_structure_tier`'s rule.
+    pub(crate) fn touched_bench(&self, kind: &str) -> Option<(Entity, u32)> {
+        let (bx, by) = self.base_pos()?;
+        let here = Position { x: bx, y: by };
+        let side = self.structure_footprint(&kind.to_string());
+        self.world
+            .iter_entities()
+            .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
+            .filter_map(|e| {
+                let at = e.get::<Position>()?;
+                crate::game::base::hauling::at_station(here, *at, side).then(|| {
+                    let tier = e.get::<StructureTier>().map(|t| t.0).unwrap_or(1);
+                    (e.id(), tier, (at.x, at.y))
+                })
+            })
+            .min_by_key(|(_, tier, at)| (std::cmp::Reverse(*tier), *at))
+            .map(|(entity, tier, _)| (entity, tier))
     }
 
     /// Whether a structure of `kind` exists anywhere right now. Every
@@ -221,8 +245,8 @@ impl Game {
             bench_tier: recipe
                 .requires_structure
                 .as_ref()
-                .and_then(|kind| self.best_structure_tier(kind))
-                .unwrap_or(1),
+                .and_then(|kind| self.touched_bench(kind))
+                .map_or(1, |(_, tier)| tier),
             perk_level: self.player_perk_level(Perk::TightenTolerances),
             careful,
         }
@@ -248,12 +272,27 @@ impl Game {
         (QUALITY_BASE as u32 + bench + perk + care).min(u8::MAX as u32) as u8
     }
 
+    /// The kind (and its recipe) that exists to make `item`: an assembling
+    /// recipe before an extraction. `StructureDb::all` is sorted, so a mod shipping
+    /// two makers for one item resolves the same way every session.
+    fn maker_of(
+        &self,
+        item: &ItemId,
+    ) -> Option<(&StructureDef, crate::structures::Production<'_>)> {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .flat_map(|d| d.productions().map(move |p| (d, p)))
+            .filter(|(_, p)| &p.recipe.produces == item)
+            .min_by_key(|(_, p)| p.extracts)
+    }
+
     /// How long compiling one unit of `item` by hand takes, in ticks.
     ///
     /// **The one door onto the number**, so the screen that quotes it and
     /// the loop that spends it cannot disagree: `HAND_CRAFT_TICK_MULT`
-    /// times the cycle of the machine that exists to do the job — the
-    /// `assembles` block naming this item, else the `work` block producing
+    /// times the cycle of the machine that exists to do the job — an
+    /// assembling recipe naming this item, else the extraction producing
     /// it, else `HAND_CRAFT_DEFAULT_CYCLE`. A screen recomputing the
     /// product from the constant is the second copy this exists to prevent.
     ///
@@ -261,23 +300,9 @@ impl Game {
     /// mod shipping two machines for one item resolves the same way every
     /// session.
     pub fn hand_craft_ticks(&self, item: &ItemId) -> u32 {
-        let db = self.world.resource::<StructureDb>();
-        let cycle = db
-            .all()
-            .find_map(|d| {
-                d.assembles
-                    .as_ref()
-                    .filter(|a| &a.item == item)
-                    .map(|a| a.ticks_per_unit)
-            })
-            .or_else(|| {
-                db.all().find_map(|d| {
-                    d.work
-                        .as_ref()
-                        .filter(|w| &w.produces == item)
-                        .map(|w| w.ticks_per_unit)
-                })
-            })
+        let cycle = self
+            .maker_of(item)
+            .map(|(_, production)| production.recipe.ticks_per_unit)
             .unwrap_or(crate::tuning::HAND_CRAFT_DEFAULT_CYCLE);
         crate::tuning::HAND_CRAFT_TICK_MULT * cycle
     }
@@ -472,15 +497,7 @@ impl Game {
     /// the record answer B2: `ticks_spent` against that machine's own cycle
     /// is exactly what the convenience costs.
     fn note_hand_craft(&mut self, item: &ItemId, careful: bool, ticks_spent: u32) {
-        let bench = self
-            .world
-            .resource::<StructureDb>()
-            .all()
-            .find(|d| {
-                d.assembles.as_ref().is_some_and(|a| &a.item == item)
-                    || d.work.as_ref().is_some_and(|w| &w.produces == item)
-            })
-            .map(|d| d.id.clone());
+        let bench = self.maker_of(item).map(|(def, _)| def.id.clone());
         let item_id = item.0.clone();
         self.report_base(
             crate::base_ledger::Event::HandCraft {

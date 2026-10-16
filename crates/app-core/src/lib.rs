@@ -25,6 +25,7 @@ pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::level_up::LevelUpOrigin;
+pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::splice_rig::SpliceRigScreen;
@@ -125,11 +126,11 @@ use feral_processes_engine::{
     ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
     DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageSource, OutpostReport, PerkPreview, PerkReport, ProgramSaleOption,
-    RigToolView, RouteDestination, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
-    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
-    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
-    WorkTable, condense,
+    MESSAGE_LOG_CAP, MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport,
+    ProgramSaleOption, RigToolView, RouteDestination, RouteDestinationId, RouteRefusal,
+    RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome,
+    TransferBasket, TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder,
+    WorkOrderReport, WorkTable, condense,
 };
 
 /// Chunks from the centre to the edge of the world map's grid. The grid and
@@ -1581,6 +1582,11 @@ pub enum Mode {
     /// space. A screen of its own rather than a page of `Mode::Tools`,
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
+    /// What the Extractor, Factory, Assembler or Printer beside the party
+    /// makes — `[R]` in base space. See `App::machine_recipe`.
+    MachineRecipe,
+    /// Asks before a recipe change empties a set machine.
+    MachineRecipeConfirm,
     /// Build an implant into the player or cut one out — `[I]` in base
     /// space beside a Splice Rig. See `App::splice_rig`.
     SpliceRig,
@@ -2432,6 +2438,9 @@ impl Mode {
             // one further step from a fight than the picker is.
             | Mode::DepotFilter
             | Mode::RigTool
+            // Opened from the map beside a machine, `RigTool`'s reason.
+            | Mode::MachineRecipe
+            | Mode::MachineRecipeConfirm
             // Opened from the map beside a rig, `RigTool`'s reason.
             | Mode::SpliceRig
             | Mode::Craft
@@ -3294,7 +3303,7 @@ pub struct App {
     ///
     /// **`None` is "no Depot beside you"; `Some(0)` is "a Depot with nothing
     /// left".** Keeping those distinguishable is what stops the screen
-    /// drawing a room line reading 0 beside a Mining Node, which would claim
+    /// drawing a room line reading 0 beside an Extractor, which would claim
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,
@@ -3322,6 +3331,9 @@ pub struct App {
     /// Session state, `depot_filter`'s reason — the screen acts on a
     /// machine, so it is re-read after every edit rather than restored.
     pub rig_tool: Option<RigToolScreen>,
+    /// The machine `Mode::MachineRecipe` is setting, and what it last read
+    /// of it. Session state, `rig_tool`'s reason.
+    pub machine_recipe: Option<MachineRecipeScreen>,
     /// What `Mode::SpliceRig` last read of the player's implants, and the
     /// install it is asking to confirm. Session state, `rig_tool`'s reason.
     pub splice_rig: Option<SpliceRigScreen>,

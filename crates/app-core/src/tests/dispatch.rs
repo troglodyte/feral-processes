@@ -24,6 +24,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
 
     let mut data = save::load_from_file(&path).unwrap();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "relay".to_string(),
         position: (1, 0),
         durability: None,
@@ -43,6 +44,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         incubating: Vec::new(),
     });
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "depot".to_string(),
         position: (0, 1),
         durability: None,

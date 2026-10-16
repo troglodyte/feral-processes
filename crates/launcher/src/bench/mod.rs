@@ -60,14 +60,38 @@ mod tests {
         );
     }
 
+    /// The `chains` save with its Depots' Power Cells cut to 20 each. Both
+    /// Depots start full (50 slots, 150 cells), so the Printer's output has
+    /// nowhere to go and the line stops at its capacity of 15; a drain past
+    /// it could never show. The template keeps its documented stock; only
+    /// this test frees the room.
+    fn with_room_in_the_depots() -> std::path::PathBuf {
+        use feral_processes_engine::save;
+        let mut data = save::load_from_file(&chains_save()).unwrap();
+        for depot in data.structures.iter_mut().filter(|s| s.kind == "depot") {
+            for (item, qty) in &mut depot.stock_output {
+                if item.0 == "power_cell" {
+                    *qty = 20;
+                }
+            }
+        }
+        let path = std::env::temp_dir().join(format!(
+            "feral_bench_chains_coils_{}.bin",
+            std::process::id()
+        ));
+        save::save_to_file(&path, &data).unwrap();
+        path
+    }
+
     #[test]
     fn an_order_posts_workers_who_drain_the_bay_past_its_capacity() {
         // Seed 1 passes the bay's capacity only around tick 2000: the line
         // starves of power cells soon after the first batch (see the
         // with-orders section of the chains measurement doc).
         let ticks = 2000;
+        let save = with_room_in_the_depots();
         let report = bench::run(
-            &chains_save(),
+            &save,
             &assets_dir(),
             RunOptions {
                 ticks,
@@ -77,13 +101,20 @@ mod tests {
             },
         )
         .unwrap();
+        let _ = std::fs::remove_file(&save);
         let bay = report
             .economy
             .machines
             .iter()
-            .find(|m| m.kind == "assembly_bay")
+            .find(|m| m.kind == "printer" && m.recipe.as_deref() == Some("patch_routine"))
             .unwrap();
-        let capacity = 10; // assets/structures/assembly_bay.ron
+        let capacity = u64::from(
+            ron::from_str::<feral_processes_engine::structures::StructureDef>(
+                &std::fs::read_to_string(assets_dir().join("structures/printer.ron")).unwrap(),
+            )
+            .unwrap()
+            .capacity,
+        );
         assert!(bay.units > capacity, "no drain: {bay:?}");
         assert!(report.economy.labour.mean_wanted > 0.0);
         for m in &report.economy.machines {

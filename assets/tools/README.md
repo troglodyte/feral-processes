@@ -121,7 +121,7 @@ already uses everywhere else (`tuning::TOOL_TIER_SCALE_STEP`), so raising a
 `Gear` tool's tier by one step is a flat multiplier on the game's *entire*
 gear-drop rate, not a change scoped to this one tool. The extraction bench's
 own tier stacks on top of the tool's by the same curve, and it is the larger
-of the two: a bench at its shipped ceiling (`assets/structures/compiler.ron`'s
+of the two: a bench at its shipped ceiling (`assets/structures/workbench.ron`'s
 `max_tier: 5`) already multiplies every candidate by 3x before the tool's
 own tier is even considered. Tune either with a play session behind it, not
 a guess.

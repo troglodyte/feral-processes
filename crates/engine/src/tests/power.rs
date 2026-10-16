@@ -20,9 +20,9 @@ use bevy_ecs::prelude::*;
 
 use super::support::{
     ScratchAssets, assets_dir_with_extra_structure, copy_shipped_assets, find_structure_by_kind,
-    give, node_output, park_at_post, place_now, scratch_assets_dir, spawn_machine_at,
-    spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at, stand_player_at_post,
-    test_assets_dir,
+    give, node_output, park_at_post, place_machine, place_now, scratch_assets_dir,
+    spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at,
+    stand_player_at_post, test_assets_dir,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -31,7 +31,7 @@ use crate::items_db::ItemDb;
 use crate::structures::StructureDb;
 use crate::{DifficultyMode, Game};
 
-/// A structure that never runs a job: no `work`, no `assembles`. `power_draw`
+/// A structure that never runs a job: no `work`, no `machine`. `power_draw`
 /// is deliberately settable and non-zero on some fixtures even though no
 /// shipped structure would ever author one there — that is what makes
 /// `draw_sums_only_over_structures_that_run_a_job` a real test of the
@@ -313,7 +313,7 @@ fn an_assembler_of_grid_fuel_counts_as_much_as_an_extractor_of_it() {
     color: White,
     build_cost: [],
     work: None,
-    assembles: Some((item: "test_cell", ticks_per_unit: 1)),
+    machine: Some((role: Assemble, recipes: [(produces: "test_cell", ticks_per_unit: 1)])),
     power_draw: 1,
 )"#
         .to_string(),
@@ -322,6 +322,11 @@ fn an_assembler_of_grid_fuel_counts_as_much_as_an_extractor_of_it() {
     spawn(&mut world, "test_home", 0, 0);
     let eater = spawn(&mut world, "test_eater", 0, 1);
     let bench = spawn(&mut world, "test_bench", 9, 9);
+    world
+        .entity_mut(bench)
+        .insert(crate::components::MachineRecipe(Some(ItemId::from(
+            "test_cell",
+        ))));
 
     let result = ledger(&world, &db, &items);
 
@@ -472,18 +477,18 @@ const GREEDY_NODE: &str = r#"(
 )"#;
 
 /// The same, for the *other* guard: `assembler_system` visits only structures
-/// declaring `assembles`, so the extractor above is invisible to it and one
+/// declaring a `machine`, so the extractor above is invisible to it and one
 /// fixture cannot cover both. `blank_substrate` is the shipped item whose
 /// `craftable.cost` becomes the recipe (see `systems::assembly_recipe`).
-const GREEDY_LATHE: &str = r#"(
-    id: "test_greedy_lathe",
-    name: "Greedy Lathe",
+const GREEDY_BENCH: &str = r#"(
+    id: "test_greedy_bench",
+    name: "Greedy Bench",
     glyph: 'l',
     color: Brown,
     build_cost: [],
     work: None,
     capacity: 100,
-    assembles: Some((item: "blank_substrate", ticks_per_unit: 40)),
+    machine: Some((role: Assemble, recipes: [(produces: "blank_substrate", ticks_per_unit: 40)])),
     power_draw: 1000000,
 )"#;
 
@@ -531,7 +536,7 @@ fn grid_assets(tag: &str) -> ScratchAssets {
     for (name, body) in [
         ("test_greedy_node.ron", GREEDY_NODE),
         ("test_greedy_quick_node.ron", GREEDY_QUICK_NODE),
-        ("test_greedy_lathe.ron", GREEDY_LATHE),
+        ("test_greedy_bench.ron", GREEDY_BENCH),
         ("test_grid_source.ron", GRID_SOURCE),
     ] {
         std::fs::write(dir.join("structures").join(name), body).unwrap();
@@ -613,23 +618,28 @@ fn a_dark_assembler_makes_no_progress() {
     let mut game = game_on_a_short_grid("power_dark_assembler", 4002);
     // Posting and hand-working are base actions; the party stands in the base.
     stand_in_base(&mut game);
-    let lathe = spawn_machine_at(&mut game, "test_greedy_lathe", 3, 4);
+    let bench = spawn_machine_at(&mut game, "test_greedy_bench", 3, 4);
+    game.world
+        .entity_mut(bench)
+        .insert(crate::components::MachineRecipe(Some(ItemId::from(
+            ids::BLANK_SUBSTRATE,
+        ))));
     // Fed and roomy before the worker is posted, because those are
     // `assembler_system`'s other two stalls: a test about the power guard
     // must not be able to pass because the machine was starved or clogged.
     game.world
-        .get_mut::<Stock>(lathe)
+        .get_mut::<Stock>(bench)
         .unwrap()
         .input
         .insert(ItemId::from(ids::CORE_FRAGMENT), 40);
-    let worker = post_a_worker_at(&mut game, lathe);
+    let worker = post_a_worker_at(&mut game, bench);
 
     for _ in 0..3 {
         game.tick();
     }
 
     assert_eq!(
-        status_of(&game, lathe),
+        status_of(&game, bench),
         Some(MachineStatus::Unpowered),
         "a dark assembler reports Unpowered, not Starved or Running"
     );
@@ -639,7 +649,7 @@ fn a_dark_assembler_makes_no_progress() {
         "a fed, roomy, staffed assembler that is dark must make no progress"
     );
     assert!(
-        game.world.get::<Stock>(lathe).unwrap().output.is_empty(),
+        game.world.get::<Stock>(bench).unwrap().output.is_empty(),
         "and it must assemble nothing"
     );
 }
@@ -1178,7 +1188,8 @@ fn a_machine_lit_only_by_a_burning_supplier_goes_dark_with_it() {
     // moment it stops. Deployed *before* the supplier, so the turns they
     // each spend do not come off the charge this test is timing.
     for i in 0..5 {
-        place_now(&mut game, "mining_node", -1, i).expect("floor west of the origin");
+        place_machine(&mut game, "extractor", "core_fragment", -1, i)
+            .expect("floor west of the origin");
     }
     recharger_beside_a_depot(&mut game, 0);
     let db = game.world.resource::<StructureDb>();

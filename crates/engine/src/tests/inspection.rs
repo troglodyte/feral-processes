@@ -213,7 +213,7 @@ fn spawn_marker_structure(game: &mut Game, start: Position, dx: i32, dy: i32) ->
     game.world
         .spawn((
             Structure {
-                kind: "refinery".to_string(),
+                kind: "factory".to_string(),
             },
             Position {
                 x: start.x + dx,
@@ -1123,11 +1123,11 @@ fn structure_report_lists_every_assignee_not_just_one() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
-        .find(|s| s.kind == "mining_node")
+        .find(|s| s.kind == "extractor")
         .expect("the node was just deployed")
         .entity;
 
@@ -1189,7 +1189,7 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
 
     let report = game.structure_report();
     let home = report.iter().find(|s| s.is_home).unwrap();
@@ -1197,7 +1197,7 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
     assert_eq!(home.durability, None, "Home is not raidable");
     assert!(!home.workable, "Home has no work recipe");
 
-    let node = report.iter().find(|s| s.kind == "mining_node").unwrap();
+    let node = report.iter().find(|s| s.kind == "extractor").unwrap();
     assert_eq!(node.tier, Some(1), "a fresh node sits at tier 1");
     let (hp, max_hp) = node.durability.expect("a node is raidable");
     assert!(hp > 0 && hp == max_hp, "an unraided node is at full health");
@@ -1229,12 +1229,12 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
 
     let node_at = |game: &mut Game| {
         game.structure_report()
             .into_iter()
-            .find(|s| s.kind == "mining_node")
+            .find(|s| s.kind == "extractor")
             .expect("the node was just deployed")
     };
 
@@ -1272,9 +1272,9 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 60);
     place_home(&mut game);
-    place_now(&mut game, "mining_node", 2, 0).unwrap();
-    place_now(&mut game, "armory", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 3, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 2, 0).unwrap();
+    place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 3, 0).unwrap();
 
     let kinds: Vec<String> = game
         .structure_report()
@@ -1285,14 +1285,14 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
     let mining: Vec<usize> = kinds
         .iter()
         .enumerate()
-        .filter(|(_, k)| k.as_str() == "mining_node")
+        .filter(|(_, k)| k.as_str() == "extractor")
         .map(|(i, _)| i)
         .collect();
     assert_eq!(mining.len(), 2);
     assert_eq!(
         mining[1],
         mining[0] + 1,
-        "both nodes should be adjacent rows, not split by the armory"
+        "both nodes should be adjacent rows, not split by the shell_assembler"
     );
 }
 
@@ -1357,6 +1357,9 @@ fn a_structure_report_row_carries_its_stock_and_status() {
         stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 6);
     }
 
+    // A machine is set to its recipe between ticks; the status is corrected
+    // on the next one.
+    game.tick();
     let report = game.structure_report();
     let row = report
         .iter()
@@ -1396,11 +1399,11 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
     // A `Structure` only answers this ray inside base space.
     let base = stand_in_base_and_get_origin(&mut game);
 
-    let refinery = game
+    let block_factory = game
         .world
         .spawn((
             Structure {
-                kind: "refinery".to_string(),
+                kind: "factory".to_string(),
             },
             Position {
                 x: base.x + 3,
@@ -1411,7 +1414,7 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
 
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Structure(refinery))
+        Some(InspectTarget::Structure(block_factory))
     );
 }
 
@@ -1462,7 +1465,7 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
         game.world
             .spawn((
                 Structure {
-                    kind: "refinery".to_string(),
+                    kind: "factory".to_string(),
                 },
                 Position {
                     x: base.x + dx,
@@ -1525,7 +1528,7 @@ fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) 
         .id();
     game.world.spawn((
         Structure {
-            kind: "refinery".to_string(),
+            kind: "factory".to_string(),
         },
         Position {
             x: start.x + 5,
@@ -1607,7 +1610,7 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    place_now(&mut game, "mining_node", -4, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", -4, 0).unwrap();
 
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = {
@@ -1615,7 +1618,7 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
         let mut query = game.world.query::<(Entity, &Position, &Structure)>();
         query
             .iter(&game.world)
-            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "mining_node")
+            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "extractor")
             .map(|(e, ..)| e)
             .expect("the node was just deployed")
     };
@@ -1653,7 +1656,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
 
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = {
@@ -1661,7 +1664,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
         let mut query = game.world.query::<(Entity, &Position, &Structure)>();
         query
             .iter(&game.world)
-            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "mining_node")
+            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "extractor")
             .map(|(e, ..)| e)
             .expect("the node was just deployed")
     };
@@ -1692,11 +1695,11 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
 fn a_structure_manifest_is_the_same_row_the_roster_shows() {
     let mut game = Game::new(1403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let refinery = game
+    let block_factory = game
         .world
         .spawn((
             Structure {
-                kind: "refinery".to_string(),
+                kind: "factory".to_string(),
             },
             Position {
                 x: start.x + 2,
@@ -1708,10 +1711,10 @@ fn a_structure_manifest_is_the_same_row_the_roster_shows() {
     let from_roster = game
         .structure_report()
         .into_iter()
-        .find(|r| r.entity == refinery)
+        .find(|r| r.entity == block_factory)
         .expect("the roster lists it");
     let from_manifest = game
-        .structure_manifest(refinery)
+        .structure_manifest(block_factory)
         .expect("and so does the inspector");
 
     assert_eq!(from_manifest.kind, from_roster.kind);
@@ -1747,11 +1750,11 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
-        .find(|s| s.kind == "mining_node")
+        .find(|s| s.kind == "extractor")
         .expect("the node was just deployed")
         .entity;
 
@@ -1800,12 +1803,12 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 24);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 3, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 3, 0).unwrap();
     let nodes: Vec<Entity> = game
         .structure_report()
         .into_iter()
-        .filter(|s| s.kind == "mining_node")
+        .filter(|s| s.kind == "extractor")
         .map(|s| s.entity)
         .collect();
     let (worked, guarded) = (nodes[0], nodes[1]);
@@ -1850,11 +1853,11 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
-        .find(|s| s.kind == "mining_node")
+        .find(|s| s.kind == "extractor")
         .expect("the node was just deployed")
         .entity;
     let worker = spawn_tamed_on_map(&mut game, 6, 6);
@@ -1893,12 +1896,12 @@ fn a_machines_bar_is_its_own_cycle_and_a_guarded_one_has_none() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 24);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 3, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 3, 0).unwrap();
     let nodes: Vec<Entity> = game
         .structure_report()
         .into_iter()
-        .filter(|s| s.kind == "mining_node")
+        .filter(|s| s.kind == "extractor")
         .map(|s| s.entity)
         .collect();
     let (worked, guarded) = (nodes[0], nodes[1]);
@@ -1960,11 +1963,11 @@ fn an_unstaffed_machine_has_no_bar() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
-        .find(|s| s.kind == "mining_node")
+        .find(|s| s.kind == "extractor")
         .expect("the node was just deployed")
         .entity;
 
@@ -1993,7 +1996,7 @@ fn a_build_sites_bar_is_the_percent_its_own_row_reports() {
     let program = spawn_tamed_on_map(&mut game, 6, 6);
     // A second body: committing the last program the player owns is refused.
     spawn_tamed_on_map(&mut game, 6, 7);
-    game.place_structure("mining_node", 1, 0, Some(program))
+    game.place_structure("extractor", 1, 0, Some(program))
         .expect("a filed request is the fixture");
 
     let view = game
@@ -2021,11 +2024,11 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 48);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
-        .find(|s| s.kind == "mining_node")
+        .find(|s| s.kind == "extractor")
         .expect("the node was just deployed")
         .entity;
 
@@ -2120,8 +2123,8 @@ fn adjacent_structure_finds_only_the_neighbouring_tile() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 3, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 3, 0).unwrap();
 
     let east = game
         .adjacent_structure(1, 0)
@@ -2675,13 +2678,13 @@ fn view_entities_carries_a_wild_creatures_resolved_sprite_name() {
 fn view_entities_carries_a_structures_resolved_sprite_name() {
     let mut game = Game::new(9041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let origin = stand_in_base_and_get_origin(&mut game);
-    let refinery = game
+    let block_factory = game
         .world
         .resource::<StructureDb>()
-        .get("refinery")
+        .get("factory")
         .cloned()
-        .expect("refinery ships with the game");
-    let entity = game.spawn_structure(&refinery, origin.x, origin.y, None);
+        .expect("block_factory ships with the game");
+    let entity = game.spawn_structure(&block_factory, origin.x, origin.y, None);
 
     let view = game
         .view_entities(5, 5)
@@ -2691,7 +2694,7 @@ fn view_entities_carries_a_structures_resolved_sprite_name() {
 
     assert_eq!(
         view.sprite,
-        Some("refinery".to_string()),
+        Some("factory".to_string()),
         "no shipped structure authors a sprite override, so its resolved \
          name is its id"
     );
@@ -2773,10 +2776,10 @@ fn a_depot_reports_how_full_it_is_and_a_machine_does_not() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 24);
     place_now(&mut game, "depot", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 2, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 2, 0).unwrap();
     let report = game.structure_report();
     let of = |kind: &str| report.iter().find(|s| s.kind == kind).unwrap().entity;
-    let (depot, node) = (of("depot"), of("mining_node"));
+    let (depot, node) = (of("depot"), of("extractor"));
     game.world
         .get_mut::<Stock>(depot)
         .unwrap()

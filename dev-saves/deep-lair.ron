@@ -5904,8 +5904,9 @@
             standing_guard: false,
         ),
         (
-            kind: "compiler",
+            kind: "printer",
             position: (0, -4),
+            recipe: Some("ice_breaker"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [
@@ -5918,8 +5919,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (2, -4),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -5950,8 +5952,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (1, -4),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -5960,8 +5963,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-1, -4),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -5970,8 +5974,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-2, -3),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -5982,8 +5987,9 @@
             standing_guard: false,
         ),
         (
-            kind: "power_conduit",
+            kind: "extractor",
             position: (-3, -2),
+            recipe: Some("power_cell"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -5994,8 +6000,9 @@
             standing_guard: false,
         ),
         (
-            kind: "lathe",
+            kind: "factory",
             position: (-2, -4),
+            recipe: Some("blank_substrate"),
             durability: Some(30),
             tier: None,
             stock_input: [
@@ -6006,8 +6013,9 @@
             standing_guard: false,
         ),
         (
-            kind: "disk_press",
+            kind: "assembler",
             position: (-3, -3),
+            recipe: Some("routine_disk"),
             durability: Some(30),
             tier: None,
             stock_input: [
@@ -6020,7 +6028,7 @@
             standing_guard: false,
         ),
         (
-            kind: "armory",
+            kind: "workbench",
             position: (-2, 4),
             durability: Some(29),
             tier: None,

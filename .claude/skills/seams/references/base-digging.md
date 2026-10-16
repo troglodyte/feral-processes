@@ -164,10 +164,10 @@
   claim `0` and shipped a base that cut 112 cells and floored none, so a cut
   was made to claim the tile that would hold it; the user later chose
   cut-now, floor-later instead, because holding every cut left a base with
-  no Lathe yet unable to dig at all. What keeps the 112-cell base from
+  no Factory yet unable to dig at all. What keeps the 112-cell base from
   coming back is the other half of that old fix, which stays: the plan
   *asks* for every tile it will spend. **Two budgets, one per item**
-  (tiles moved off the Lathe because a 12-tick press per cell made
+  (tiles moved off the Factory because a 12-tick press per cell made
   growing the base too slow): a tile job claims `FLOOR_TILE_COST` Core
   Fragments from **base stores only** — the user chose no pack fallback,
   because fragments are the player's currency and a fallback would quietly
@@ -185,8 +185,8 @@
   filed again next tick. The flag is provenance (`for_research`'s rule),
   `#[serde(default)]` and not skipped, or a reload orphans the line and the
   plan files a second. The deadlock rule still holds in the direction that matters — a
-  dropped tile job frees the body, which is what sends it to the Mining
-  Node and the Lathe that make the fragments and substrate (dig wants sit last in
+  dropped tile job frees the body, which is what sends it to the Extractor
+  and the Factory that make the fragments and substrate (dig wants sit last in
   `base_wants`, so a cut never outranks production). `Game::drop_dry_dig_wants`
   is the one writer of `DigSite::announced_dry`, both the set and the
   clear, and it owns both wordings (`DigDryReason::Tile`, `Finish`); neither

@@ -309,7 +309,27 @@ fn cell(t: &str, w: usize) -> String {
     s
 }
 
+/// A `cell` that marks a cut with an ellipsis, for text that can outgrow
+/// its column.
+fn cell_ellipsis(t: &str, w: usize) -> String {
+    if t.chars().count() < w {
+        return cell(t, w);
+    }
+    let mut s: String = t.chars().take(w.saturating_sub(2)).collect();
+    s.push('\u{2026}');
+    s.push(' ');
+    s
+}
+
 // ---------------------------------------------------------------- BASE
+
+/// The characters a BASE row may span: what the info column's body holds at
+/// its narrowest clamp (`layout::INFO_W_MIN_CH`, less the pane's insets),
+/// measured by `the_widest_base_row_fits_the_narrowest_column`. The name and
+/// program columns are sized against it.
+const BASE_ROW_CHARS: usize = 42;
+/// A BASE row's fixed characters: the idle mark and the OUT header.
+const BASE_ROW_FIXED_CHARS: usize = 1 + 3;
 
 /// Structures, production, defence, the build queue and the labour shortfall.
 ///
@@ -325,20 +345,56 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         return out;
     }
 
+    let rows: Vec<(&StructureReport, String)> = d
+        .structures
+        .iter()
+        .filter(|s| s.workable)
+        .map(|s| {
+            let program = s
+                .assignees
+                .first()
+                .map(|a| a.label.clone())
+                .unwrap_or_else(|| "\u{2014} none \u{2014}".to_string());
+            (s, program)
+        })
+        .collect();
+    // Each column is as wide as the widest cell drawn in it, plus a gap: a
+    // machine label ("Assembler (Recompile Kernel)") outgrows any fixed cell,
+    // and a cut name would run into the program beside it.
+    // Both are capped so the row provably fits the narrowest column
+    // (`BASE_ROW_CHARS`): a program name is at most `MAX_CUSTOM_NAME_LEN`
+    // characters, and the machine label gives way to an ellipsis for the
+    // room that is left.
+    let program_w = rows
+        .iter()
+        .map(|(_, p)| p.chars().count())
+        .chain(["PROGRAM".len()])
+        .max()
+        .unwrap_or(0)
+        .min(feral_processes_engine::MAX_CUSTOM_NAME_LEN.max("PROGRAM".len()))
+        + 1;
+    let name_w = rows
+        .iter()
+        .map(|(s, _)| s.label.chars().count())
+        .chain(["NAME".len()])
+        .max()
+        .unwrap_or(0)
+        .min(BASE_ROW_CHARS - BASE_ROW_FIXED_CHARS - program_w - 1)
+        + 1;
     out.push(text(vec![(
-        format!("{}{}{}", cell("  NAME", 20), cell("PROGRAM", 13), "OUT"),
+        format!(
+            " {}{}{}",
+            cell("NAME", name_w),
+            cell("PROGRAM", program_w),
+            "OUT"
+        ),
         palette::LABEL,
         false,
     )]));
-    for s in d.structures.iter().filter(|s| s.workable) {
+    for (s, program) in &rows {
         let idle = s.assignees.is_empty();
-        let program = s
-            .assignees
-            .first()
-            .map(|a| a.label.clone())
-            .unwrap_or_else(|| "\u{2014} none \u{2014}".to_string());
         let out_qty: u32 = s.output.iter().map(|(_, q)| q).sum();
-        let mark = if idle { "! " } else { "  " };
+        let mark = if idle { "!" } else { " " };
         let colour = if idle {
             palette::ATTENTION
         } else {
@@ -347,8 +403,8 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         out.push(text(vec![(
             format!(
                 "{mark}{}{}{}",
-                cell(&s.label, 18),
-                cell(&program, 13),
+                cell_ellipsis(&s.label, name_w),
+                cell(program, program_w),
                 out_qty
             ),
             colour,
@@ -728,8 +784,9 @@ mod tests {
 
     fn structure(label: &str, idle: bool) -> StructureReport {
         StructureReport {
+            recipe: Some("core_fragment".into()),
             entity: entity(),
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
             label: label.to_string(),
             pos: (0, 0),
             distance: 3,
@@ -993,6 +1050,146 @@ mod tests {
                 "{} drops {cut} rows off a base under load at 1280x720",
                 tab.label()
             );
+        }
+    }
+
+    /// **The BASE name column takes its width from the widest label drawn**:
+    /// a machine row reads "Assembler (Recompile Kernel)", longer than any
+    /// fixed cell, and a cut name runs into the program column beside it
+    /// ("Extractor (Core Fr0x000000"). The label is the longest the shipped
+    /// machines build, and the program is a real handle.
+    #[test]
+    fn a_base_row_draws_the_longest_machine_label_whole_beside_its_program() {
+        use feral_processes_engine::components::ProgramId;
+        use feral_processes_engine::{Game, handles, structures::MachineRole};
+
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            41,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets");
+        let longest = game
+            .structure_defs()
+            .iter()
+            .filter_map(|def| def.machine.as_ref().map(|m| (def, m)))
+            .flat_map(|(def, m)| {
+                let _: MachineRole = m.role;
+                m.recipes
+                    .iter()
+                    .map(|r| format!("{} ({})", def.name, game.item_name(&r.produces)))
+            })
+            .max_by_key(|l| l.chars().count())
+            .expect("the shipped machines list recipes");
+
+        let mut row = structure(&longest, false);
+        let handle = handles::of(ProgramId(1));
+        row.assignees[0].label = handle.clone();
+        let mut other = structure("Extractor (Core Fragment)", false);
+        other.assignees[0].label = handle.clone();
+        let structures = [row, other];
+        let d = busy(&[], &structures, &[], &[], &[], &[]);
+
+        let m = ui_metrics(720.0);
+        let room = column_body(&m).w - m.inset * 2.0;
+        with_painter(|p| {
+            for r in rows(InfoTab::Base, &d) {
+                let Row::Text { left, right } = &r else {
+                    continue;
+                };
+                let joined: String = left
+                    .iter()
+                    .chain(right.iter())
+                    .map(|(t, _, _)| t.as_str())
+                    .collect();
+                if !joined.contains(&handle) {
+                    continue;
+                }
+                // Both rows are measured for fit; the cut is checked on the
+                // one that starts the same way as the longest label.
+                let is_longest = joined.contains(&longest[..9]);
+                assert!(
+                    !is_longest || joined.contains(&format!("{longest} ")),
+                    "the name was cut into the program column: {joined:?}"
+                );
+                let drawn = p.measure_ui_advance(&joined, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the row overflows the column by {:.0}px: {joined:?}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// **A BASE row provably fits the narrowest column**: the longest custom
+    /// name (`MAX_CUSTOM_NAME_LEN` of the widest letter) beside the longest
+    /// machine label and a two-digit OUT, measured against the column at its
+    /// minimum clamp. A modded label of any length is cut by the cap, not by
+    /// the pane edge.
+    #[test]
+    fn the_widest_base_row_fits_the_narrowest_column() {
+        use feral_processes_engine::Game;
+
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            41,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets");
+        let shipped = game
+            .structure_defs()
+            .iter()
+            .filter_map(|def| def.machine.as_ref().map(|m| (def, m)))
+            .flat_map(|(def, m)| {
+                m.recipes
+                    .iter()
+                    .map(|r| format!("{} ({})", def.name, game.item_name(&r.produces)))
+                    .collect::<Vec<_>>()
+            })
+            .max_by_key(|l| l.chars().count())
+            .expect("the shipped machines list recipes");
+        // A mod's label is unbounded; the cap must hold for it too.
+        let modded = format!("{shipped} of Unreasonable Length");
+
+        let m = ui_metrics(720.0);
+        for label in [shipped, modded] {
+            let mut row = structure(&label, false);
+            row.assignees[0].label = "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
+            row.output = vec![("core_fragment".to_string(), 20)];
+            let structures = [row];
+            let d = busy(&[], &structures, &[], &[], &[], &[]);
+            with_painter(|p| {
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let r =
+                    crate::render::hud::layout::regions(char_w * 44.0, 720.0, char_w, &m, false);
+                let room = crate::render::hud::column::regions(r.info_column, &m)
+                    .body
+                    .w
+                    - m.inset * 2.0;
+                for r in rows(InfoTab::Base, &d) {
+                    let Row::Text { left, right } = &r else {
+                        continue;
+                    };
+                    let joined: String = left
+                        .iter()
+                        .chain(right.iter())
+                        .map(|(t, _, _)| t.as_str())
+                        .collect();
+                    // Only the table's own rows: the header and the data row.
+                    if !joined.contains("NAME") && !joined.contains("MMMM") {
+                        continue;
+                    }
+                    let drawn = p.measure_ui_advance(&joined, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "overflows the narrowest column by {:.0}px: {joined:?}",
+                        drawn - room
+                    );
+                }
+            });
         }
     }
 

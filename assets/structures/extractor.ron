@@ -1,0 +1,18 @@
+(
+    id: "extractor",
+    name: "Extractor",
+    description: "Pulls a raw resource out of nothing. Set what it pulls beside it with R.",
+    glyph: 'X',
+    color: Brown,
+    build_cost: [("core_fragment", 12)],
+    capacity: 20,
+    machine: Some((role: Extract, recipes: [
+        (produces: "core_fragment", ticks_per_unit: 10, level: Some(1)),
+        (produces: "raw_trace", ticks_per_unit: 10, level: Some(1), research: Some("routine_fabrication")),
+        (produces: "cache_grain", ticks_per_unit: 14, level: Some(1), research: Some("cache_coherence")),
+        (produces: "power_cell", ticks_per_unit: 6, research: Some("power_grid"), tierless: true),
+    ])),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 10), ("cache_grain", 1)])),
+    power_draw: 1,
+    room_tags: ["workshop"],
+)

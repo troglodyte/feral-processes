@@ -92,24 +92,24 @@ pub(crate) fn fuel_chain(items: &ItemDb) -> HashMap<ItemId, u32> {
 /// first key of `ledger`'s cut, lowest first, and `None` for a machine whose
 /// output is nowhere in `fuel_chain`.
 ///
-/// **A rung, not a flag.** A Power Conduit makes cells out of nothing and
-/// sits at `0`; a Mining Node makes what a cell is made of and sits at `1`,
+/// **A rung, not a flag.** An Extractor set to Power Cell makes cells out
+/// of nothing and sits at `0`; one set to what a cell is made of sits at `1`,
 /// and nothing on the grid assembles that into a cell without somebody's
 /// hands. Treated as one tier, four nodes west of every Conduit take the
 /// whole of the Home's bootstrap and the one machine that could relight the
 /// grid is dark — and `Game::fuel_wants` never posts a body to a dark one.
 ///
-/// **Both output fields, not just `work`.** Nothing shipped assembles a grid
-/// fuel today, so a reader that asked `work.produces` alone would pass every
-/// shipped census and quietly drop a mod's fuel bench out of the chain.
-pub(crate) fn grid_rung(def: &StructureDef, chain: &HashMap<ItemId, u32>) -> Option<u32> {
-    let produces = def.work.as_ref().map(|w| &w.produces);
-    let assembles = def.assembles.as_ref().map(|a| &a.item);
-    produces
-        .into_iter()
-        .chain(assembles)
-        .filter_map(|id| chain.get(id).copied())
-        .min()
+/// **Whatever the instance produces, not just `work`.** Nothing shipped
+/// assembles a grid fuel today, so a reader that asked `work.produces` alone
+/// would pass every shipped census and quietly drop a mod's fuel bench out of
+/// the chain. A machine with nothing set produces nothing, so it has no rung.
+pub(crate) fn grid_rung(
+    placed: crate::structures::Placed<'_>,
+    chain: &HashMap<ItemId, u32>,
+) -> Option<u32> {
+    placed
+        .production()
+        .and_then(|p| chain.get(&p.recipe.produces).copied())
 }
 
 /// Sums `power_supply` over every deployed structure and `power_draw` over
@@ -120,7 +120,7 @@ pub(crate) fn grid_rung(def: &StructureDef, chain: &HashMap<ItemId, u32>) -> Opt
 ///
 /// **The cut favours the machines that can restart the grid**, closest to
 /// the fuel first, and only then falls back to position. A base whose supply has collapsed to the Home's
-/// free 4 recovers by mining Core Fragments and running the Power Conduit
+/// free 4 recovers by mining Core Fragments and running the Extractor
 /// that turns them into Power Cells; cut in tile order alone, that supply
 /// goes to whichever machines happen to sit at the lowest `(x, y)` — so a
 /// Compiler drawing 3 in the corner of the base could darken a working
@@ -186,7 +186,14 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
             0
         };
         supply += supplied;
-        let drawn = if def.runs_a_job() { def.power_draw } else { 0 };
+        let placed = crate::structures::Placed::of(
+            def,
+            entity_ref.get::<crate::components::MachineRecipe>(),
+        );
+        // A machine with nothing set runs no job, so it draws nothing and
+        // takes no part in the cut: the grid is not asked to light it.
+        let runs = def.runs_a_job() && !placed.is_unconfigured();
+        let drawn = if runs { def.power_draw } else { 0 };
         if def.power_supply > 0 || drawn > 0 {
             entries.push(PowerEntry {
                 entity: entity_ref.id(),
@@ -194,7 +201,7 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
                 draw: drawn,
             });
         }
-        if def.runs_a_job() {
+        if runs {
             let pos = entity_ref
                 .get::<Position>()
                 .copied()
@@ -202,7 +209,7 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
             machines.push((
                 entity_ref.id(),
                 // `MAX` for no rung: behind every machine that has one.
-                grid_rung(def, &chain).unwrap_or(u32::MAX),
+                grid_rung(placed, &chain).unwrap_or(u32::MAX),
                 (pos.x, pos.y),
                 def.power_draw,
             ));

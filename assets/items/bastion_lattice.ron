@@ -5,6 +5,6 @@
     description: "Premium armor. The best flat protection in the Basin.",
     value: Some(80),
     equipment: Some((Armor, (mitigation: 12))),
-    craftable: Some((cost: [("portal_fragment", 12), ("bytecode_block", 4), ("charge_coil", 2)], requires_structure: Some("armory"))),
+    craftable: Some((cost: [("portal_fragment", 12), ("bytecode_block", 4), ("charge_coil", 2)], requires_structure: Some("workbench"), research: Some("armor_bench"))),
     droppable: Some([("sentinel", 0.08), ("rootkit", 0.06)]),
 )

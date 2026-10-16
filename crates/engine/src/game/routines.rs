@@ -635,6 +635,7 @@ impl Game {
             .resource::<StructureDb>()
             .all()
             .filter(|def| def.extracts_routines)
+            .filter(|def| self.extraction_researched(def))
             .any(|def| self.has_structure(&def.id))
     }
 

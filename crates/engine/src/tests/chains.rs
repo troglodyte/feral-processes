@@ -5,7 +5,7 @@ use crate::*;
 
 /// A modded assembler that builds Power Cells. Its recipe is *not* written
 /// here — the machine runs `power_cell.ron`'s own `craftable.cost`, which is
-/// the whole point of the `assembles` field.
+/// the whole point of a machine listing an item rather than a recipe.
 const TEST_ASSEMBLER: &str = r#"(
     id: "test_assembler",
     name: "Test Assembler",
@@ -15,7 +15,7 @@ const TEST_ASSEMBLER: &str = r#"(
     build_cost: [],
     work: None,
     capacity: 20,
-    assembles: Some((item: "power_cell", ticks_per_unit: 3)),
+    machine: Some((role: Assemble, recipes: [(produces: "power_cell", ticks_per_unit: 3)])),
 )"#;
 
 /// A modded assembler on a *two*-ingredient recipe. No shipped machine runs
@@ -37,7 +37,7 @@ const TWO_INPUT_ASSEMBLER: &str = r#"(
     build_cost: [],
     work: None,
     capacity: 20,
-    assembles: Some((item: "entropy_damper", ticks_per_unit: 3)),
+    machine: Some((role: Assemble, recipes: [(produces: "entropy_damper", ticks_per_unit: 3)])),
 )"#;
 
 /// A game whose asset set includes `test_assembler`. The caller drops the
@@ -82,8 +82,9 @@ fn feeder_at(game: &mut Game, x: i32, y: i32, output: u32) -> Entity {
     game.world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
+            crate::components::MachineRecipe(Some(ItemId::from(ids::CORE_FRAGMENT))),
             Position { x, y },
             stock,
         ))
@@ -101,6 +102,7 @@ fn assembler_at(game: &mut Game, x: i32, y: i32, staffed: bool) -> Entity {
             Position { x, y },
             Stock::new(20),
             MachineStatus::default(),
+            crate::components::MachineRecipe(Some(ItemId::from(ids::POWER_CELL))),
         ))
         .id();
     if staffed {
@@ -747,17 +749,17 @@ fn a_program_can_be_posted_to_an_assembler() {
 /// tiles will do:
 ///
 /// ```text
-///   + W Y      + power_conduit  W winding_node  Y assembly_bay
+///   + W Y      + cell_extractor  W coil_factory  Y patch_printer
 /// ```
 #[test]
 fn the_shipped_three_stage_chain_produces_its_terminal_item() {
     let mut game = Game::new(1100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let bay = staffed(&mut game, "assembly_bay", 42, 40);
-    let winding = staffed(&mut game, "winding_node", 41, 40);
+    let bay = staffed(&mut game, "printer", Some("patch_routine"), 42, 40);
+    let winding = staffed(&mut game, "factory", Some("charge_coil"), 41, 40);
     // The extractor is pre-stocked rather than worked, so this test measures
     // the chain rather than the production roll.
-    let conduit = stocked(&mut game, "power_conduit", 40, 40, ids::POWER_CELL, 400);
+    let conduit = stocked(&mut game, "extractor", 40, 40, ids::POWER_CELL, 400);
 
     for _ in 0..300 {
         game.tick();
@@ -794,8 +796,14 @@ fn the_shipped_three_stage_chain_produces_its_terminal_item() {
 #[test]
 fn a_machine_short_one_of_its_two_ingredients_stays_starved() {
     let mut game = game_with_two_input_assembler("chain_starve", 1101);
-    let machine = staffed(&mut game, "two_input_assembler", 42, 40);
-    stocked(&mut game, "transcriber", 41, 40, "logic_wafer", 50);
+    let machine = staffed(
+        &mut game,
+        "two_input_assembler",
+        Some("entropy_damper"),
+        42,
+        40,
+    );
+    stocked(&mut game, "factory", 41, 40, "logic_wafer", 50);
 
     for _ in 0..100 {
         game.tick();
@@ -810,62 +818,34 @@ fn a_machine_short_one_of_its_two_ingredients_stays_starved() {
     assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
 }
 
-/// A bench is bought with the product of the line that runs it. Without this
-/// the two-machine line a starting roster can afford has no payoff of its own,
-/// and the spec's "the intermediate needs standalone value" goes unmet — the
-/// Market's flat sell rate cannot express it.
-///
-/// It has to be the bench's *own* feeder, not merely some factory-made item:
-/// the Assembly Bay used to cost Bytecode Blocks while running on Charge
-/// Coils, which meant standing one up needed two unrelated lines — the exact
-/// tangle flattening the chains was meant to remove.
-#[test]
-fn each_bench_is_built_out_of_what_its_own_feeder_makes() {
-    let game = Game::new(1102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let structures = game.world.resource::<crate::structures::StructureDb>();
-
-    for (bench, feeder_product) in [
-        ("assembly_bay", ids::CHARGE_COIL),
-        ("disk_press", "blank_substrate"),
-        ("refactor_bench", "annealed_core"),
-    ] {
-        let cost = &structures.get(bench).expect("it ships").build_cost;
-        assert!(
-            cost.iter()
-                .any(|(i, n)| i.as_str() == feeder_product && *n > 0),
-            "{bench} runs on {feeder_product} but is not built out of it: {cost:?}"
-        );
-    }
-}
-
 /// The armour chain end to end. Same spine as the Patch Routine chain above
 /// but ending in equipment, which is what makes the base the way gear happens
 /// rather than a source of consumables beside it.
 ///
 /// ```text
-///   $ B %      $ mining_node  B refinery  % armory
+///   $ B %      $ extractor  B block_factory  % shell_assembler
 /// ```
 #[test]
 fn the_armoury_chain_produces_a_hardened_shell() {
     let mut game = Game::new(1103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let armory = staffed(&mut game, "armory", 42, 40);
-    let refinery = staffed(&mut game, "refinery", 41, 40);
+    let shell_assembler = staffed(&mut game, "assembler", Some("hardened_shell"), 42, 40);
+    let block_factory = staffed(&mut game, "factory", Some("bytecode_block"), 41, 40);
     // Pre-stocked rather than worked, so this measures the chain and not
     // `mining_success_chance`'s roll.
-    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 400);
+    stocked(&mut game, "extractor", 40, 40, ids::CORE_FRAGMENT, 400);
 
     for _ in 0..400 {
         game.tick();
     }
 
     assert!(
-        output_of(&game, refinery, ids::BYTECODE_BLOCK) > 0
-            || input_of(&game, armory, ids::BYTECODE_BLOCK) > 0,
-        "the refinery turned fragments into blocks"
+        output_of(&game, block_factory, ids::BYTECODE_BLOCK) > 0
+            || input_of(&game, shell_assembler, ids::BYTECODE_BLOCK) > 0,
+        "the block_factory turned fragments into blocks"
     );
     assert!(
-        output_of(&game, armory, "hardened_shell") > 0,
+        output_of(&game, shell_assembler, "hardened_shell") > 0,
         "and the armoury built wearable gear out of them"
     );
 }
@@ -876,17 +856,17 @@ fn the_armoury_chain_produces_a_hardened_shell() {
 /// of them would notice a chain that is shaped right and produces nothing.
 ///
 /// ```text
-///   $ A X      $ mining_node  A annealing_node  X refactor_bench
+///   $ A X      $ extractor  A core_factory  X kernel_assembler
 /// ```
 #[test]
 fn the_refactor_chain_produces_a_recompile_kernel() {
     let mut game = Game::new(1108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let bench = staffed(&mut game, "refactor_bench", 42, 40);
-    let annealer = staffed(&mut game, "annealing_node", 41, 40);
+    let bench = staffed(&mut game, "assembler", Some("recompile_kernel"), 42, 40);
+    let annealer = staffed(&mut game, "factory", Some("annealed_core"), 41, 40);
     // Pre-stocked rather than mined, for the reason the armoury chain above
     // is: this measures the chain, not `mining_success_chance`'s roll.
-    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 400);
+    stocked(&mut game, "extractor", 40, 40, ids::CORE_FRAGMENT, 400);
 
     for _ in 0..400 {
         game.tick();
@@ -908,28 +888,28 @@ fn the_refactor_chain_produces_a_recompile_kernel() {
 /// the Transcriber, and never touches a Mining Node.
 ///
 /// ```text
-///   T S *      T log_scraper  S transcriber  * fabricator
+///   T S *      T trace_extractor  S wafer_factory  * sniffer_assembler
 /// ```
 #[test]
-fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
+fn the_trace_sniffer_chain_runs_off_the_raw_trace_extractor() {
     let mut game = Game::new(1104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let fabricator = staffed(&mut game, "fabricator", 42, 40);
-    let transcriber = staffed(&mut game, "transcriber", 41, 40);
-    stocked(&mut game, "log_scraper", 40, 40, "raw_trace", 600);
+    let sniffer_assembler = staffed(&mut game, "assembler", Some("trace_sniffer"), 42, 40);
+    let wafer_factory = staffed(&mut game, "factory", Some("logic_wafer"), 41, 40);
+    stocked(&mut game, "extractor", 40, 40, "raw_trace", 600);
 
     for _ in 0..600 {
         game.tick();
     }
 
     assert!(
-        output_of(&game, transcriber, "logic_wafer") > 0
-            || input_of(&game, fabricator, "logic_wafer") > 0,
-        "the transcriber turned trace into wafers"
+        output_of(&game, wafer_factory, "logic_wafer") > 0
+            || input_of(&game, sniffer_assembler, "logic_wafer") > 0,
+        "the wafer_factory turned trace into wafers"
     );
     assert!(
-        output_of(&game, fabricator, "trace_sniffer") > 0,
-        "and the fabricator built a module out of them"
+        output_of(&game, sniffer_assembler, "trace_sniffer") > 0,
+        "and the sniffer_assembler built a module out of them"
     );
 }
 
@@ -943,16 +923,16 @@ fn the_fabricator_chain_produces_a_trace_sniffer_off_the_trace_tap() {
 /// the exact bug the sort exists to prevent.
 ///
 /// ```text
-///     Y        Y assembly_bay (42, 40)
-///   Y W        Y assembly_bay (41, 41)  W winding_node (42, 41)
+///     Y        Y patch_printer (42, 40)
+///   Y W        Y patch_printer (41, 41)  W coil_factory (42, 41)
 /// ```
 #[test]
 fn two_benches_competing_for_one_coil_resolve_in_position_order() {
     let mut game = Game::new(1105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let above = staffed(&mut game, "assembly_bay", 42, 40);
-    let left = staffed(&mut game, "assembly_bay", 41, 41);
-    stocked(&mut game, "winding_node", 42, 41, ids::CHARGE_COIL, 1);
+    let above = staffed(&mut game, "printer", Some("patch_routine"), 42, 40);
+    let left = staffed(&mut game, "printer", Some("patch_routine"), 41, 41);
+    stocked(&mut game, "factory", 42, 41, ids::CHARGE_COIL, 1);
 
     game.tick();
 
@@ -974,15 +954,23 @@ fn two_benches_competing_for_one_coil_resolve_in_position_order() {
 /// `assembler_system` reads `Task::required` — these tests are about which
 /// machine pulls what, and a worker that finished a batch on tick 1 would
 /// eat the very input they assert on.
-fn staffed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
-    let machine = deployed(game, kind, x, y);
-    let required = game
+fn staffed(game: &mut Game, kind: &str, recipe: Option<&str>, x: i32, y: i32) -> Entity {
+    let machine = deployed(game, kind, recipe, x, y);
+    let def = game
         .world
         .resource::<crate::structures::StructureDb>()
         .get(kind)
-        .and_then(|d| d.assembles.as_ref())
-        .map(|a| a.ticks_per_unit.max(1))
-        .unwrap_or(1);
+        .cloned();
+    let required = def
+        .and_then(|d| match (&d.machine, recipe) {
+            (Some(m), Some(r)) => m
+                .recipes
+                .iter()
+                .find(|c| c.produces.as_str() == r)
+                .map(|c| c.ticks_per_unit),
+            _ => None,
+        })
+        .map_or(1, |t| t.max(1));
     let worker = spawn_tamed(game, 10, 3);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
@@ -996,7 +984,7 @@ fn staffed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
 /// A structure of `kind` at an absolute tile with `qty` of `item` already in
 /// its output buffer, standing in for an extractor that has been running.
 fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, item: &str, qty: u32) -> Entity {
-    let e = deployed(game, kind, x, y);
+    let e = deployed(game, kind, Some(item), x, y);
     game.world
         .get_mut::<Stock>(e)
         .unwrap()
@@ -1013,8 +1001,15 @@ fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, item: &str, qty: u32) ->
 /// the base's power supply: every chain here draws power now that Task 4
 /// authored real numbers onto it, and none of these fixtures ever deploys a
 /// Home.
-fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+///
+/// A configurable machine is set to `recipe` through the real path; a
+/// structure with nothing to set (a Research Node, a modded assembler) takes
+/// `None`.
+fn deployed(game: &mut Game, kind: &str, recipe: Option<&str>, x: i32, y: i32) -> Entity {
     stand_ample_grid_supply(game);
+    if let Some(recipe) = recipe {
+        return spawn_machine_with_recipe_at(game, kind, recipe, x, y);
+    }
     let capacity = game
         .world
         .resource::<crate::structures::StructureDb>()
@@ -1039,11 +1034,11 @@ fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
 #[test]
 fn a_machine_reports_an_edge_toward_a_neighbour_that_makes_what_it_needs() {
     let mut game = Game::new(1200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let refinery = deployed(&mut game, "refinery", 41, 40);
-    let mine = deployed(&mut game, "mining_node", 40, 40);
+    let block_factory = deployed(&mut game, "factory", Some("bytecode_block"), 41, 40);
+    let mine = deployed(&mut game, "extractor", Some("core_fragment"), 40, 40);
 
     assert_eq!(
-        edges_of(&mut game, refinery),
+        edges_of(&mut game, block_factory),
         vec![(-1, 0)],
         "the Mining Node to the west makes the Core Fragments a Refinery wants"
     );
@@ -1060,10 +1055,10 @@ fn a_machine_reports_an_edge_toward_a_neighbour_that_makes_what_it_needs() {
 #[test]
 fn a_diagonal_neighbour_is_not_wired() {
     let mut game = Game::new(1201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let refinery = deployed(&mut game, "refinery", 41, 40);
-    deployed(&mut game, "mining_node", 40, 39);
+    let block_factory = deployed(&mut game, "factory", Some("bytecode_block"), 41, 40);
+    deployed(&mut game, "extractor", Some("core_fragment"), 40, 39);
 
-    assert!(edges_of(&mut game, refinery).is_empty());
+    assert!(edges_of(&mut game, block_factory).is_empty());
 }
 
 /// Touching is not the same as feeding. A Research Node beside a Refinery
@@ -1071,10 +1066,10 @@ fn a_diagonal_neighbour_is_not_wired() {
 #[test]
 fn a_neighbour_making_something_the_recipe_does_not_want_is_not_wired() {
     let mut game = Game::new(1202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let refinery = deployed(&mut game, "refinery", 41, 40);
-    deployed(&mut game, "research_node", 40, 40);
+    let block_factory = deployed(&mut game, "factory", Some("bytecode_block"), 41, 40);
+    deployed(&mut game, "research_node", None, 40, 40);
 
-    assert!(edges_of(&mut game, refinery).is_empty());
+    assert!(edges_of(&mut game, block_factory).is_empty());
 }
 
 /// The failure a player actually hits, now that a bench takes one ingredient
@@ -1085,10 +1080,10 @@ fn a_neighbour_making_something_the_recipe_does_not_want_is_not_wired() {
 #[test]
 fn a_bench_beside_the_wrong_feeder_reports_no_edge() {
     let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let bay = deployed(&mut game, "assembly_bay", 42, 40);
-    deployed(&mut game, "refinery", 41, 40);
+    let bay = deployed(&mut game, "printer", Some("patch_routine"), 42, 40);
+    deployed(&mut game, "factory", Some("bytecode_block"), 41, 40);
     // The feeder it actually wants, one tile too far south — touching nothing.
-    deployed(&mut game, "winding_node", 42, 42);
+    deployed(&mut game, "factory", Some("charge_coil"), 42, 42);
 
     assert!(
         edges_of(&mut game, bay).is_empty(),
@@ -1097,9 +1092,9 @@ fn a_bench_beside_the_wrong_feeder_reports_no_edge() {
 
     // Move it into place and the join appears.
     let mut game = Game::new(1203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let bay = deployed(&mut game, "assembly_bay", 42, 40);
-    deployed(&mut game, "refinery", 41, 40);
-    deployed(&mut game, "winding_node", 42, 41);
+    let bay = deployed(&mut game, "printer", Some("patch_routine"), 42, 40);
+    deployed(&mut game, "factory", Some("bytecode_block"), 41, 40);
+    deployed(&mut game, "factory", Some("charge_coil"), 42, 41);
 
     assert_eq!(edges_of(&mut game, bay), vec![(0, 1)]);
 }
@@ -1122,14 +1117,14 @@ fn a_home_reports_no_edges_and_no_machine_status() {
 #[test]
 fn a_joined_edge_is_an_edge_the_pull_phase_actually_uses() {
     let mut game = Game::new(1205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let refinery = staffed(&mut game, "refinery", 41, 40);
-    stocked(&mut game, "mining_node", 40, 40, ids::CORE_FRAGMENT, 100);
+    let block_factory = staffed(&mut game, "factory", Some("bytecode_block"), 41, 40);
+    stocked(&mut game, "extractor", 40, 40, ids::CORE_FRAGMENT, 100);
 
-    assert_eq!(edges_of(&mut game, refinery), vec![(-1, 0)]);
+    assert_eq!(edges_of(&mut game, block_factory), vec![(-1, 0)]);
     game.tick();
 
     assert!(
-        input_of(&game, refinery, ids::CORE_FRAGMENT) > 0,
+        input_of(&game, block_factory, ids::CORE_FRAGMENT) > 0,
         "the link points at a feeder the pull phase really drew from"
     );
 }
@@ -1155,20 +1150,23 @@ fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
     stand_in_base(&mut game);
     place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "refinery", 1, 0).expect("a Refinery is buildable from the start");
+    place_machine(&mut game, "factory", "bytecode_block", 1, 0)
+        .expect("a Factory is buildable from the start");
 
-    let refinery = find_structure_by_kind(&mut game, "refinery").unwrap();
+    let block_factory = find_structure_by_kind(&mut game, "factory").unwrap();
+    // Setting the recipe leaves the status as it was until the next tick.
+    game.tick();
     // `Idle`, not `Running`: `place_structure` ticks, and a machine nobody
     // is posted to correctly reports having no program. The point of the
     // assertion is that it reports *at all* — without a `MachineStatus` it
     // would read as `None`, which every consumer treats as "not a machine".
     assert_eq!(
-        game.world.get::<MachineStatus>(refinery).copied(),
+        game.world.get::<MachineStatus>(block_factory).copied(),
         Some(MachineStatus::Idle),
         "an assembler is a machine and has a state like an extractor does"
     );
     assert!(
-        game.world.get::<Stock>(refinery).is_some(),
+        game.world.get::<Stock>(block_factory).is_some(),
         "and it has the buffers it pulls into"
     );
 }
@@ -1185,7 +1183,7 @@ const LOOP_STRUCTURE: &str = r#"(
     build_cost: [],
     work: None,
     capacity: 20,
-    assembles: Some((item: "loop_item", ticks_per_unit: 3)),
+    machine: Some((role: Assemble, recipes: [(produces: "loop_item", ticks_per_unit: 3)])),
 )"#;
 
 const LOOP_ITEM: &str = r#"(
@@ -1199,14 +1197,14 @@ const LOOP_ITEM: &str = r#"(
 /// screen exists: what to build, and in what order, to automate a Patch
 /// Routine.
 #[test]
-fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
+fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
     let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let chains = game.recipe_chains();
 
     let chain = chains
         .iter()
         .find(|c| c.product == "Patch Routine")
-        .expect("the Assembly Bay assembles one");
+        .expect("the Printer assembles one");
 
     /// One step flattened for comparison: its inputs, its tool, its output.
     type StepShape<'a> = (Vec<(&'a str, u32)>, Option<&'a str>, &'a str);
@@ -1230,12 +1228,8 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
         shape,
         vec![
             (vec![("Core Fragment", 2)], None, "Power Cell"),
-            (vec![("Power Cell", 3)], Some("Winding Node"), "Charge Coil"),
-            (
-                vec![("Charge Coil", 3)],
-                Some("Assembly Bay"),
-                "Patch Routine"
-            ),
+            (vec![("Power Cell", 3)], Some("Workbench"), "Charge Coil"),
+            (vec![("Charge Coil", 3)], Some("Printer"), "Patch Routine"),
         ],
         "every dependency is listed before the step that consumes it"
     );
@@ -1249,14 +1243,14 @@ fn an_extractors_chain_is_a_single_step_that_consumes_nothing() {
     let chain = chains
         .iter()
         .find(|c| c.product == "Core Fragment")
-        .expect("the Mining Node produces them");
+        .expect("the Extractor produces them");
 
     assert_eq!(chain.steps.len(), 1, "a tap has no upstream");
     assert!(
         chain.steps[0].inputs.is_empty(),
         "an extractor draws from nothing, not from a recipe"
     );
-    assert_eq!(chain.steps[0].maker.as_deref(), Some("Mining Node"));
+    assert_eq!(chain.steps[0].maker.as_deref(), Some("Extractor"));
 }
 
 /// Power Cell is the shipped item that is craftable with no
@@ -1270,7 +1264,7 @@ fn a_step_the_player_compiles_by_hand_names_no_maker() {
     let coil = chains
         .iter()
         .find(|c| c.product == "Charge Coil")
-        .expect("the Winding Node assembles them");
+        .expect("a Factory assembles them");
     let power_cell = coil
         .steps
         .iter()
@@ -1350,7 +1344,7 @@ fn a_self_referential_recipe_does_not_recurse_forever() {
 /// The feeder is stocked rather than mined so the assertion is about the
 /// chain and not about `mining_success_chance`'s roll.
 #[test]
-fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
+fn a_machine_assembles_catalysts_out_of_an_adjacent_extractor() {
     let mut game = Game::new(1012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_ample_grid_supply(&mut game);
     let batch = game
@@ -1365,28 +1359,23 @@ fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
         .map(|(_, n)| *n)
         .expect("its recipe is priced in core fragments");
 
-    let compiler = game
-        .world
-        .spawn((
-            Structure {
-                kind: "compiler".to_string(),
-            },
-            Position { x: 40, y: 40 },
-            Stock::new(20),
-            MachineStatus::default(),
-        ))
-        .id();
+    let compiler = spawn_machine_with_recipe_at(&mut game, "printer", ids::ICE_BREAKER, 40, 40);
     let worker = spawn_tamed(&mut game, 10, 3);
-    // The Compiler's own `ticks_per_unit`, for the reason `staffed` carries
-    // it: `assembler_system` reads `Task::required`, and a hand-written `1`
-    // would have this machine finish a batch every tick.
+    // The Printer's own `ticks_per_unit` for the recipe, for the reason
+    // `staffed` carries it: `assembler_system` reads `Task::required`, and a
+    // hand-written `1` would have this machine finish a batch every tick.
     let required = game
         .world
         .resource::<crate::structures::StructureDb>()
-        .get("compiler")
-        .and_then(|d| d.assembles.as_ref())
-        .map(|a| a.ticks_per_unit.max(1))
-        .expect("the Compiler ships as an assembler");
+        .get("printer")
+        .and_then(|d| d.machine.as_ref())
+        .and_then(|m| {
+            m.recipes
+                .iter()
+                .find(|r| r.produces.as_str() == ids::ICE_BREAKER)
+        })
+        .map(|r| r.ticks_per_unit.max(1))
+        .expect("the Printer ships an ice_breaker recipe");
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
         target: compiler,
@@ -1422,7 +1411,7 @@ const ROUTER_STRUCTURE: &str = r#"(
     build_cost: [],
     work: None,
     capacity: 20,
-    assembles: Some((item: "plasma_router", ticks_per_unit: 3)),
+    machine: Some((role: Assemble, recipes: [(produces: "plasma_router", ticks_per_unit: 3)])),
 )"#;
 
 /// The Recipes screen's whole job is telling the player what to build, so an
@@ -1454,7 +1443,7 @@ fn an_input_no_recipe_makes_names_the_tap_that_produces_it() {
     assert_eq!(
         sourced("Routine Disk"),
         vec![
-            ("Core Fragment".into(), Some("Mining Node".into())),
+            ("Core Fragment".into(), Some("Extractor".into())),
             ("Blank Substrate".into(), None),
         ],
         "the raw input names its tap; the intermediate is made by an earlier \
@@ -1463,7 +1452,7 @@ fn an_input_no_recipe_makes_names_the_tap_that_produces_it() {
     assert_eq!(
         sourced("Trace Sniffer"),
         vec![
-            ("Raw Trace".into(), Some("Log Scraper".into())),
+            ("Raw Trace".into(), Some("Extractor".into())),
             ("Logic Wafer".into(), None),
         ],
         "and the module chain names the other tap"
@@ -1483,7 +1472,7 @@ fn an_input_with_its_own_recipe_names_no_tap_even_when_a_structure_makes_it() {
     let coil = chains
         .iter()
         .find(|c| c.product == "Charge Coil")
-        .expect("the Winding Node assembles them");
+        .expect("a Factory assembles them");
     let step = coil
         .steps
         .iter()
@@ -1546,7 +1535,7 @@ fn a_recipe_step_yields_one_unit_and_a_tap_declines_to_say() {
     let fragment = chains
         .iter()
         .find(|c| c.product == "Core Fragment")
-        .expect("the Mining Node produces them");
+        .expect("the Extractor produces them");
     assert_eq!(
         fragment.steps[0].output_qty, None,
         "a node's payout is not fixed at one"

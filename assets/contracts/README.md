@@ -92,13 +92,17 @@ place to edit.
 | `Deliver(item: "core_fragment", count: 25)` | you hand that many over at a Broker |
 | `Descend(depth: 3)` | the party stands in a Stack frame 3 or more levels down |
 | `Breach(zone: 3)` | the run reaches sector 3 or deeper |
-| `Build(structure: "refinery")` | one of those is deployed |
+| `Build(structure: "workbench")` | one of those is deployed |
+| `Configure(item: "bytecode_block")` | some standing machine is set to make that item |
 | `Hold(item: "core_fragment", count: 12)` | you have that many in your pack at once |
 | `Standing(band: Warm)` | any settlement holds you at that band or better |
 | `Perform(deed: Examined)` | you do that particular thing once |
 
 `Terminate` names a species id from `assets/species/`; `Deliver` an item id from
-`assets/items/`; `Build` a structure id from `assets/structures/`. An id
+`assets/items/`; `Build` a structure id from `assets/structures/`; `Configure`
+an item id some machine lists as a recipe (the shipped set is checked for it).
+`Configure` is met by a machine currently set to the item, and latches like
+`Build`. An id
 naming nothing is not refused at load — no other database is in hand there —
 so it costs you an unfinishable contract rather than a warning. The shipped
 set is checked by a test; a mod is not.

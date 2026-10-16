@@ -1,8 +1,8 @@
 (
     id: "stand_up_a_refinery",
-    name: "Stand Up a Refinery",
-    description: "Raw stock is worth more processed. Build a Refinery and keep it standing.",
-    objective: Build(structure: "refinery"),
+    name: "Make Bytecode Blocks",
+    description: "Raw stock is worth more processed. Set a Factory to make Bytecode Blocks.",
+    objective: Configure(item: "bytecode_block"),
     reward: [Credits(45), Item("power_cell", 5), Xp(140)],
     min_zone: 1,
 )

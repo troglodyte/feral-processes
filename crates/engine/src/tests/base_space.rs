@@ -99,7 +99,7 @@ fn deploying_a_structure_is_a_base_action() {
             place_home(game);
             give(game, &ItemId::from(ids::CORE_FRAGMENT), 20);
         },
-        |game, ()| place_now(game, "mining_node", 1, 0),
+        |game, ()| place_machine(game, "extractor", "core_fragment", 1, 0).map(drop),
     );
 }
 
@@ -138,7 +138,7 @@ fn working_a_machine_by_hand_is_a_base_action() {
         "working a machine by hand",
         |game| {
             let at = *game.world.get::<Position>(game.player_entity()).unwrap();
-            spawn_mining_node(game, at.x + 1, at.y)
+            spawn_extractor(game, at.x + 1, at.y)
         },
         |game, node| game.work_structure(node),
     );
@@ -154,9 +154,9 @@ fn filing_a_work_order_is_a_base_action() {
             // orthogonally adjacent to its feeder — anything less and the
             // order is refused by the chain rather than by the locale.
             place_home(game);
-            spawn_machine_at(game, "mining_node", 2, 0);
-            spawn_machine_at(game, "lathe", 3, 0);
-            spawn_machine_at(game, "disk_press", 4, 0);
+            spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
+            spawn_machine_with_recipe_at(game, "factory", "blank_substrate", 3, 0);
+            spawn_machine_with_recipe_at(game, "assembler", "routine_disk", 4, 0);
         },
         |game, ()| game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3)),
     );
@@ -174,7 +174,7 @@ fn collecting_from_a_machine_is_a_base_action() {
         stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 4);
         game.world.spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position {
                 x: at.x + 1,
@@ -903,7 +903,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     // The pocket's north edge, with a machine beside it: a job to break off,
     // and solid rock one step further north to break it off against.
     let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
-    let node = spawn_mining_node(&mut game, edge.0 + 1, edge.1);
+    let node = spawn_extractor(&mut game, edge.0 + 1, edge.1);
     game.enter_base().unwrap();
     // Tools out: a disarmed bump is refused before it can swing, which is a
     // different code path from the one this test is about.
@@ -1003,7 +1003,7 @@ fn every_deployment_after_the_first_home_is_a_base_action() {
     place_now(&mut game, "home", 1, 0).expect("the founding deploy is permitted from outside");
 
     let refused = game
-        .place_structure("mining_node", 1, 0, None)
+        .place_structure("extractor", 1, 0, None)
         .expect_err("a machine is a base action");
 
     assert!(
@@ -1101,10 +1101,10 @@ fn a_machine_deploys_onto_pocket_floor() {
     game.move_player(1, 0);
     assert_eq!(game.base_pos(), Some((1, 0)), "stepped off the Home tile");
 
-    place_now(&mut game, "mining_node", 1, 0)
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0)
         .expect("floor two cells east of the origin is inside the pocket");
 
-    let node = find_structure_by_kind(&mut game, "mining_node").expect("it went up");
+    let node = find_structure_by_kind(&mut game, "extractor").expect("it went up");
     let at = *game.world.get::<Position>(node).unwrap();
     assert_eq!(
         (at.x, at.y),
@@ -1131,7 +1131,7 @@ fn deploying_off_the_pocket_floor_is_refused() {
     );
 
     let refused = game
-        .place_structure("mining_node", 1, 0, None)
+        .place_structure("extractor", 1, 0, None)
         .expect_err("one step past the edge is unmined rock");
 
     assert!(
@@ -1282,7 +1282,7 @@ fn a_base_standing_does_not_wall_the_zone_surface() {
     // Machines all around the exit cell, so the surface tiles they would
     // shadow are the ones the circuit walks over.
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-        place_now(&mut game, "mining_node", dx, dy)
+        place_machine(&mut game, "extractor", "core_fragment", dx, dy)
             .unwrap_or_else(|e| panic!("({dx}, {dy}) is pocket floor: {e}"));
     }
     game.leave_base().unwrap();
@@ -1972,11 +1972,16 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
 
     let structures = game.world.resource::<StructureDb>();
     let work = structures
-        .get("mining_node")
-        .expect("the shipped assets deploy a Mining Node")
-        .work
+        .get("extractor")
+        .expect("the shipped assets deploy an Extractor")
+        .machine
         .as_ref()
-        .expect("a Mining Node is worked");
+        .and_then(|m| {
+            m.recipes
+                .iter()
+                .find(|r| r.produces.as_str() == ids::CORE_FRAGMENT)
+        })
+        .expect("an Extractor can pull Core Fragments");
     assert_eq!(
         work.produces.as_str(),
         ids::CORE_FRAGMENT,
@@ -3176,7 +3181,7 @@ fn a_dry_dig_job_frees_the_body_for_production() {
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(WALL.0, WALL.1, tick);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     game.set_standing_job(mine, true, false).unwrap();
     mark(&mut game, WALL);
 
@@ -3405,7 +3410,7 @@ fn a_floor_job_that_dries_up_mid_cycle_still_frees_its_body() {
 #[test]
 fn a_dig_job_never_takes_a_body_off_a_work_order() {
     let (mut game, staff) = base_with_a_crew(3262, 1);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
     mark(&mut game, WALL);
@@ -3423,7 +3428,7 @@ fn a_dig_job_never_takes_a_body_off_a_work_order() {
 fn a_dig_job_is_taken_when_there_is_a_spare_body() {
     let (mut game, staff) = base_with_a_crew(3263, 2);
     fragments_for(&mut game, 1);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
     mark(&mut game, WALL);
@@ -3580,7 +3585,7 @@ fn a_site_that_becomes_reachable_again_can_complain_again() {
 #[test]
 fn a_dig_job_never_takes_a_body_off_a_standing_job() {
     let (mut game, staff) = base_with_a_crew(3268, 1);
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     game.set_standing_job(mine, true, false).unwrap();
     mark(&mut game, WALL);
 
@@ -5449,8 +5454,8 @@ fn mark_finish(game: &mut Game, cell: (i32, i32)) {
 /// A Mining Node and the Lathe beside it: the shortest line that makes Blank
 /// Substrate, so `chain_break` lets an order for it stand.
 fn lay_substrate_line(game: &mut Game) {
-    spawn_machine_at(game, "mining_node", 2, 0);
-    spawn_machine_at(game, "lathe", 2, 1);
+    spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(game, "factory", "blank_substrate", 2, 1);
 }
 
 fn dig_orders(game: &Game) -> Vec<WorkOrder> {

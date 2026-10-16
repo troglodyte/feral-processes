@@ -95,7 +95,7 @@
 
 - **A build costs a tamed program exactly when the structure runs a job**,
   and both exemptions fall out of that one rule. `StructureDef::needs_program`
-  is `runs_a_job()` — `work`, `assembles` or `strips` — so a body is spent on
+  is `runs_a_job()` — `work`, a configurable `machine` or `strips` — so a body is spent on
   the thing a body will afterwards be posted to, and a Shield, a Patch Node, a
   Relay, a Data Cache, a shelf and the Zone Portal are all free for the same
   reason rather than each for its own. The Home is exempt a second time by

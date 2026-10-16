@@ -691,6 +691,11 @@ const REBUILD_PICKER_PROMPT: &str =
 const NO_CYCLE_NOTE: &str =
     "This build does not run a work cycle, so it does not care which program you spend.";
 
+/// A configurable machine has no recipe to quote a pace for, but the program
+/// you spend sets its pace whatever it is later set to make.
+const MACHINE_NOTE: &str =
+    "The program you spend sets how fast this machine works, whatever you set it to make.";
+
 /// The program picker's rows: the warning, then one entry per program the
 /// order could be paid with.
 ///
@@ -747,6 +752,17 @@ pub(super) fn build_program_rows(
     if !candidates.is_empty() && candidates.iter().all(|c| c.effect == BuildEffect::NoCycle) {
         rows.extend(
             wrap_text(NO_CYCLE_NOTE, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        );
+    }
+    if !candidates.is_empty()
+        && candidates
+            .iter()
+            .all(|c| c.effect == BuildEffect::ScalesRecipe)
+    {
+        rows.extend(
+            wrap_text(MACHINE_NOTE, DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
                 .map(text_row),
         );
@@ -1087,11 +1103,29 @@ pub(super) fn work_order_screen_rows(
     for (i, row) in rows_in.iter().enumerate() {
         let mut lines = work_order_lines(row, i, i == selected).into_iter();
         if let Some(head) = lines.next() {
-            rows.push(item_row(head, i == selected));
+            rows.push(work_order_head_row(row, head, i == selected));
         }
         rows.extend(lines.map(text_row));
     }
     rows
+}
+
+/// A work order's head row. A stalled order wears a red `!` in the icon
+/// column — its reason sits on the continuation rows beneath — so the one
+/// order that will not run without the player is findable at a glance in a
+/// long queue. `OFFLINE`, the red for "stopped and will not start again on
+/// its own".
+fn work_order_head_row(row: &WorkOrderRow, head: String, selected: bool) -> Row {
+    let stalled = row
+        .order
+        .as_ref()
+        .is_some_and(|o| o.state == OrderState::Stalled);
+    let item = item_row(head, selected);
+    if stalled {
+        with_icon(item, '!', hud::palette::OFFLINE)
+    } else {
+        item
+    }
 }
 
 /// How many bodies short the base is, or `None` when it has enough.
@@ -1731,6 +1765,7 @@ fn status_word(status: MachineStatus) -> &'static str {
         MachineStatus::Unpowered => "dark",
         MachineStatus::Dry => "out of fuel",
         MachineStatus::Uncharged => "uncharged",
+        MachineStatus::Unconfigured => "nothing set",
     }
 }
 
@@ -1886,6 +1921,7 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Unpowered => Some("dark — the grid is short"),
         MachineStatus::Dry => Some("out of fuel — no Power Cells beside it"),
         MachineStatus::Uncharged => Some("uncharged — its supply has run out"),
+        MachineStatus::Unconfigured => Some("nothing set — stand beside it and press R"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }
@@ -2077,6 +2113,7 @@ mod tests {
 
     pub(super) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         EntityView {
+            unconfigured: false,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'n',
@@ -2738,9 +2775,10 @@ mod tests {
 
     fn structure_report(status: MachineStatus) -> StructureReport {
         StructureReport {
+            recipe: Some("core_fragment".into()),
             entity: Entity::PLACEHOLDER,
-            kind: "mining_node".to_string(),
-            label: "Mining Node".to_string(),
+            kind: "extractor".to_string(),
+            label: "Extractor (Core Fragment)".to_string(),
             pos: (0, 0),
             distance: 0,
             tier: None,
@@ -2989,7 +3027,7 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: None,
-            structure: "fabricator".to_string(),
+            structure: "assembler".to_string(),
             cost: Vec::new(),
             rebuild: false,
         }
@@ -3005,7 +3043,7 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: Some(to_tier),
-            structure: "mining_node".to_string(),
+            structure: "extractor".to_string(),
             cost,
             rebuild: false,
         }
@@ -3074,7 +3112,7 @@ mod build_program_tests {
     }
 
     /// An upgrade names the tier it is buying, because that is what decides
-    /// how deep a program it costs — "Mining Node" alone would leave the
+    /// how deep a program it costs — "Extractor" alone would leave the
     /// player reading a zone requirement with nothing to attach it to.
     #[test]
     fn an_upgrade_prompt_names_the_tier_the_program_is_buying() {
@@ -3212,6 +3250,18 @@ mod build_program_tests {
                 row_text(row)
             );
         }
+    }
+
+    /// A configurable machine quotes no pace but never claims the program
+    /// does not matter.
+    #[test]
+    fn a_machine_build_says_the_program_sets_its_pace() {
+        let candidates = vec![candidate("Sparkgrub", BuildEffect::ScalesRecipe)];
+        let rows = build_program_rows(Some(&deploy("Factory")), &candidates, 0);
+        let text = rows.iter().map(row_text).collect::<Vec<_>>().join(" ");
+        assert!(text.contains("sets how fast this machine works"), "{text}");
+        assert!(!text.contains("does not run a work cycle"), "{text}");
+        assert!(!text.contains("cycle"), "{text}");
     }
 
     /// The role headings did not survive the sort, so what each program is
@@ -3566,7 +3616,7 @@ mod build_program_tests {
             "precondition: one owned program is the roster floor, not an empty roster"
         );
 
-        // The deploy menu, opened on the Mining Node's category: one line
+        // The deploy menu, opened on the Extractor's category: one line
         // for the screen, and every non-Home row dimmed.
         let (_, shapes) = crate::paint::with_painter(|p| {
             draw_build_menu(
@@ -3590,7 +3640,7 @@ mod build_program_tests {
         );
         let dimmed = crate::paint::painted_runs_in(&shapes, TEXT_DIM, false);
         assert!(
-            dimmed.iter().any(|t| t.contains("Mining Node")),
+            dimmed.iter().any(|t| t.contains("Extractor")),
             "an unaffordable structure row is greyed, not hidden: {dimmed:?}"
         );
 
@@ -3632,6 +3682,43 @@ mod work_order_tests {
     /// can actually run off, and it is measured here against the longest
     /// shipped item name and four-digit counts rather than a convenient
     /// short one.
+    /// A stalled order wears a red `!` and shows the reason it is stalled; a
+    /// queued one wears neither.
+    #[test]
+    fn a_stalled_work_order_wears_a_red_bang_and_its_reason() {
+        let order = |state, blocked_by: Option<&str>| WorkOrderRow {
+            order: Some(WorkOrderReport {
+                item: ItemId::from("bytecode_block"),
+                label: "Bytecode Block".to_string(),
+                have: 0,
+                target: 5,
+                state,
+                blocked_by: blocked_by.map(str::to_string),
+                machines: Vec::new(),
+            }),
+        };
+        let stalled = order(
+            OrderState::Stalled,
+            Some("No way to make this \u{2014} set a Factory to Bytecode Block."),
+        );
+        let queued = order(OrderState::Queued, None);
+        let rows = work_order_screen_rows(&[stalled, queued], LabourDemand::default(), 0);
+        let icons: Vec<Option<(char, Color)>> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { icon, .. } => Some(*icon),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(icons, vec![Some(('!', hud::palette::OFFLINE)), None]);
+        let text: Vec<String> = rows.iter().map(row_label_text).collect();
+        assert!(
+            text.iter()
+                .any(|t| t.contains("No way to make this") && t.contains("set a Factory")),
+            "the reason is on the screen: {text:?}"
+        );
+    }
+
     #[test]
     fn no_work_order_row_runs_past_the_popup_body() {
         let report = WorkOrderReport {

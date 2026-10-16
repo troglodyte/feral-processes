@@ -59,14 +59,14 @@ fn a_cut_corner_is_not_buildable() {
     let (w, h) = (STARTING_POCKET_HALF_WIDTH, STARTING_POCKET_HALF_HEIGHT);
 
     let err = game
-        .place_structure("armory", w, h, None)
+        .place_structure("assembler", w, h, None)
         .expect_err("the corner cell is off the floor and shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
     // Diagonally in by one, which is the first cell the chamfer leaves —
     // and the assertion that stops the cut being fixed by shrinking the
     // whole build box.
-    place_now(&mut game, "armory", w - 1, h - 1)
+    place_machine(&mut game, "assembler", "hardened_shell", w - 1, h - 1)
         .expect("the cell just inside the cut is floor and should be buildable");
 }
 
@@ -154,7 +154,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
 
     assert!(
-        place_now(&mut game, "armory", 1, 0).is_err(),
+        place_machine(&mut game, "assembler", "hardened_shell", 1, 0).is_err(),
         "nothing should be buildable before a Home exists"
     );
     assert_eq!(
@@ -167,7 +167,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
     );
 
     place_home(&mut game);
-    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
     assert_eq!(
         game.view_entities(10, 10)
             .into_iter()
@@ -207,12 +207,13 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     // The pocket's east edge, so the next placement lands one cell into rock.
     stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
     let err = game
-        .place_structure("armory", 1, 0, None)
+        .place_structure("assembler", 1, 0, None)
         .expect_err("a cell with no floor under it shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
     // Pointing back into the pocket makes it buildable again.
-    place_now(&mut game, "armory", -1, 0).expect("building back onto laid floor should succeed");
+    place_machine(&mut game, "assembler", "hardened_shell", -1, 0)
+        .expect("building back onto laid floor should succeed");
 }
 
 /// **A request the base cannot afford is filed, not refused**, and the crew
@@ -239,7 +240,7 @@ fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_
     spawn_tamed(&mut game, 10, 3);
 
     let held = count_item(&game, ids::CORE_FRAGMENT);
-    file_build(&mut game, "armory", 1, 0)
+    file_build(&mut game, "assembler", 1, 0)
         .expect("a request is filed whether or not the base can afford it yet");
 
     assert_eq!(
@@ -282,7 +283,8 @@ fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_
     // them down; what it reports short is what is left after everything the
     // base could actually reach has already been delivered.
     assert!(
-        said.text.contains("Armory") && said.text.contains(&format!("{} Core Fragment", 18 - held)),
+        said.text.contains("Assembler")
+            && said.text.contains(&format!("{} Core Fragment", 18 - held)),
         "the line should name what is being raised and what is still outstanding: {}",
         said.text
     );
@@ -304,7 +306,7 @@ fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_
 /// Every menu that lists what is standing nearby indexes this scan, so its
 /// order *is* their order. Bevy's query iteration is not stable, which left
 /// those menus reshuffling between openings — a list you cannot learn the
-/// shape of. Name first, then position, so two Mining Nodes still resolve to
+/// shape of. Name first, then position, so two Extractors still resolve to
 /// a fixed order rather than swapping rows.
 #[test]
 fn the_nearby_scan_lists_entities_by_name_then_position() {
@@ -317,9 +319,9 @@ fn the_nearby_scan_lists_entities_by_name_then_position() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "armory", 1, 0).unwrap();
-    place_now(&mut game, "mining_node", 2, 0).unwrap();
-    place_now(&mut game, "mining_node", -2, 0).unwrap();
+    place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 2, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", -2, 0).unwrap();
 
     let listed: Vec<(String, (i32, i32))> = game
         .view_entities(10, 10)
@@ -334,7 +336,11 @@ fn the_nearby_scan_lists_entities_by_name_then_position() {
         "the scan must arrive sorted, not merely be sortable"
     );
     assert!(
-        listed.iter().filter(|(l, _)| l == "Mining Node").count() == 2,
+        listed
+            .iter()
+            .filter(|(l, _)| l == "Extractor (Core Fragment)")
+            .count()
+            == 2,
         "the fixture needs two of one kind for the position tiebreak to mean anything: {listed:?}"
     );
 }
@@ -350,8 +356,8 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
     place_home(&mut game);
-    place_now(&mut game, "armory", 1, 0).unwrap();
-    let armory = game
+    place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
+    let shell_assembler = game
         .view_entities(10, 10)
         .into_iter()
         .find(|e| e.is_structure && !e.is_home)
@@ -363,7 +369,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .get::<Inventory>(player)
         .unwrap()
         .count(&ItemId::from(ids::CORE_FRAGMENT));
-    game.remove_structure(armory).unwrap();
+    game.remove_structure(shell_assembler).unwrap();
     let after = game
         .world
         .get::<Inventory>(player)
@@ -380,7 +386,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
             .filter(|e| e.is_structure)
             .count(),
         1,
-        "only the Home should remain after demolishing the armory"
+        "only the Home should remain after demolishing the shell_assembler"
     );
 }
 
@@ -391,7 +397,7 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
     unlock_research_chain(&mut game, "armor_bench");
     unlock_research_chain(&mut game, "weapon_bench");
     let player = game.player_entity();
-    // Just enough Core Fragments to afford Home + armory + fabricator
+    // Just enough Core Fragments to afford Home + shell_assembler + sniffer_assembler
     // and no more: a big surplus (as a naive "plenty of buffer" amount
     // would be) leaves cargo sitting at or above capacity once combined
     // with starting gear, which would clamp the refund this test exists
@@ -402,8 +408,8 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 31);
     place_home(&mut game);
-    place_now(&mut game, "armory", 1, 0).unwrap();
-    place_now(&mut game, "fabricator", 0, 1).unwrap();
+    place_machine(&mut game, "assembler", "hardened_shell", 1, 0).unwrap();
+    place_machine(&mut game, "assembler", "trace_sniffer", 0, 1).unwrap();
     let home = game
         .view_entities(10, 10)
         .into_iter()
@@ -438,23 +444,21 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
 }
 
 #[test]
-fn armory_and_fabricator_are_not_cronjob_workable() {
+fn the_workbench_runs_no_job() {
     let game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for id in ["armory", "fabricator"] {
-        let def = game
-            .structure_defs()
-            .into_iter()
-            .find(|d| d.id == id)
-            .unwrap_or_else(|| panic!("{id}.ron should load as a structure"));
-        assert!(
-            def.work.is_none(),
-            "{id} should unlock crafting instead of being cronjob-workable"
-        );
-    }
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "workbench")
+        .expect("workbench.ron should load as a structure");
+    assert!(
+        !def.runs_a_job(),
+        "a Workbench unlocks crafting instead of being cronjob-workable"
+    );
 }
 
 #[test]
-fn researching_and_building_an_armory_unlocks_firewall_plating() {
+fn researching_and_building_a_workbench_unlocks_firewall_plating() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "firewall");
@@ -462,7 +466,7 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         game.craft_recipes()
             .iter()
             .all(|r| r.result != ItemId::from(ids::FIREWALL_PLATING)),
-        "Firewall Plating shouldn't be craftable before an Armory is built"
+        "Firewall Plating shouldn't be craftable before a Workbench is built"
     );
 
     place_home(&mut game);
@@ -470,13 +474,13 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 18);
-    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_now(&mut game, "workbench", 1, 0).unwrap();
 
     let recipe = game
         .craft_recipes()
         .into_iter()
         .find(|r| r.result == ItemId::from(ids::FIREWALL_PLATING))
-        .expect("researching it and building an Armory should unlock the recipe");
+        .expect("researching it and building a Workbench should unlock the recipe");
     assert_eq!(
         recipe.cost,
         vec![
@@ -590,7 +594,7 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -636,7 +640,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -662,7 +666,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -715,7 +719,7 @@ fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -746,7 +750,7 @@ fn a_leveled_node_doesnt_always_yield_on_a_completed_cycle() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -967,7 +971,7 @@ fn upgrading_refuses_past_max_tier() {
     let max = game
         .world
         .resource::<StructureDb>()
-        .get("mining_node")
+        .get("extractor")
         .unwrap()
         .upgrade
         .as_ref()
@@ -1042,7 +1046,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
     let max = game
         .world
         .resource::<StructureDb>()
-        .get("mining_node")
+        .get("extractor")
         .unwrap()
         .upgrade
         .as_ref()
@@ -1079,7 +1083,7 @@ fn tier_adds_to_payout_on_top_of_the_zone_bonus() {
     game.world.resource_mut::<ZoneLevel>().0 = 3;
 
     let gained =
-        run_one_full_gather_cycle_at_tier(&mut game, "mining_node", ids::CORE_FRAGMENT, Some(3));
+        run_one_full_gather_cycle_at_tier(&mut game, "extractor", ids::CORE_FRAGMENT, Some(3));
 
     assert_eq!(
         gained, 5,
@@ -1108,7 +1112,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let restored = find_structure_by_kind(&mut loaded, "extractor").unwrap();
     assert_eq!(
         loaded.world.get::<StructureTier>(restored).unwrap().0,
         3,
@@ -1117,7 +1121,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
     assert_eq!(
         loaded.world.get::<ResourceNode>(restored).unwrap().level,
         Some(3),
-        "and its extraction reliability with it — WorkDef::level only carries the \
+        "and its extraction reliability with it — RecipeDef::level only carries the \
          tier-1 baseline"
     );
 }
@@ -1178,7 +1182,7 @@ fn a_banked_resource_never_scales_with_zone_depth() {
 ///
 /// Asserted against `resolve_gather_cycle` directly rather than through a
 /// deployed node, because no shipped structure sets the flag any more: the
-/// Compiler, which used to, now assembles its catalysts out of Core
+/// machines that replaced the Compiler assemble their catalysts out of Core
 /// Fragments pulled from a neighbour instead of printing them from nothing.
 /// The field is mod-facing now, and a test routed through a real structure
 /// would have to invent shipped content to have a subject —
@@ -1373,24 +1377,7 @@ fn a_diagonal_neighbour_is_not_close_enough_to_work() {
 /// working it both walk `BaseGrid`, and a machine standing in unmined rock
 /// is refused as walled in whatever else the test set up.
 fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
-    game.lay_starting_pocket();
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.work.is_some() && d.raidable)
-        .expect("a workable, raidable structure should exist");
-    game.world
-        .spawn((
-            Structure {
-                kind: def.id.clone(),
-            },
-            Position { x, y },
-            ResourceNode {
-                resource: def.work.as_ref().unwrap().produces.clone(),
-                level: None,
-            },
-        ))
-        .id()
+    spawn_machine_with_recipe_at(game, "extractor", "core_fragment", x, y)
 }
 
 /// Every entity currently carrying a `Task` of `kind` aimed at `structure`.
@@ -1683,13 +1670,21 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
     let mut game = Game::new(955, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
 
-    for (i, kind) in ["mining_node", "research_node"].iter().enumerate() {
+    for (i, kind) in ["extractor", "research_node"].iter().enumerate() {
         let def = game
             .structure_defs()
             .into_iter()
             .find(|d| &d.id == kind)
             .unwrap_or_else(|| panic!("{kind} ships with the game"));
-        let work = def.work.expect("both of these are worked structures");
+        let work = def
+            .work
+            .clone()
+            .or_else(|| {
+                def.machine
+                    .as_ref()
+                    .and_then(|m| m.recipes.first().cloned())
+            })
+            .expect("both of these are worked structures");
         let anchor = Position {
             x: 3 + i as i32 * 6,
             y: 4,
@@ -1701,6 +1696,7 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
                     kind: kind.to_string(),
                 },
                 anchor,
+                crate::components::MachineRecipe(Some(work.produces.clone())),
                 ResourceNode {
                     resource: work.produces.clone(),
                     level: None,
@@ -1728,7 +1724,7 @@ fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
 
 /// Every deployed structure carries a buffer, not just the ones that
 /// produce: a collect must be able to reach any of them, and a storage
-/// building declares neither `work` nor `assembles` and still needs an
+/// building declares neither `work` nor `machine` and still needs an
 /// output size.
 #[test]
 fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
@@ -1746,7 +1742,7 @@ fn deploying_a_structure_gives_it_an_empty_stock_sized_by_its_def() {
     assert_eq!(
         stock.capacity,
         crate::tuning::DEFAULT_OUTPUT_CAPACITY,
-        "mining_node.ron sets no capacity, so it takes the default"
+        "extractor.ron sets no capacity, so it takes the default"
     );
 
     let home = find_home(&mut game).unwrap();
@@ -1764,6 +1760,9 @@ fn only_structures_that_run_a_job_get_a_machine_status() {
     let mut game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = deploy_upgradeable_node(&mut game);
     let home = find_home(&mut game).unwrap();
+    // A machine is set to its recipe between ticks; the status is corrected
+    // on the next one.
+    game.tick();
 
     assert_eq!(
         game.world.get::<MachineStatus>(node).copied(),
@@ -1793,7 +1792,7 @@ fn partially_filled_buffers_survive_a_save_and_load_round_trip() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let restored = find_structure_by_kind(&mut loaded, "mining_node").unwrap();
+    let restored = find_structure_by_kind(&mut loaded, "extractor").unwrap();
     let stock = loaded.world.get::<Stock>(restored).unwrap();
     assert_eq!(
         stock.input.get(&ItemId::from(ids::CORE_FRAGMENT)).copied(),
@@ -1861,7 +1860,7 @@ fn base_log_hits(game: &Game, needle: &str) -> usize {
 fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
     let mut game = Game::new(980, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let node = worked_node_at(&mut game, "extractor", ids::CORE_FRAGMENT, 3, 4, 20);
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
     for _ in 0..40 {
@@ -1893,7 +1892,7 @@ fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
 fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
     let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 1);
+    let node = worked_node_at(&mut game, "extractor", ids::CORE_FRAGMENT, 3, 4, 1);
 
     for _ in 0..60 {
         game.tick();
@@ -1922,14 +1921,7 @@ fn collecting_from_a_clogged_node_lets_it_resume() {
     let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let p = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let node = worked_node_at(
-        &mut game,
-        "mining_node",
-        ids::CORE_FRAGMENT,
-        p.x + 1,
-        p.y,
-        1,
-    );
+    let node = worked_node_at(&mut game, "extractor", ids::CORE_FRAGMENT, p.x + 1, p.y, 1);
     let carried = count_item(&game, ids::CORE_FRAGMENT);
 
     for _ in 0..60 {
@@ -1964,7 +1956,7 @@ fn collecting_from_a_clogged_node_lets_it_resume() {
 fn a_worker_still_earns_xp_from_a_completed_cycle() {
     let mut game = Game::new(983, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
+    let node = worked_node_at(&mut game, "extractor", ids::CORE_FRAGMENT, 3, 4, 20);
     let worker = holders(&mut game, node, TaskKind::GatherResource)[0];
     let before = {
         let e = game.world.get::<Experience>(worker).unwrap();
@@ -2037,7 +2029,7 @@ fn fully_grown_base(seed: u32) -> Game {
 fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     let mut game = fully_grown_base(702);
     let r = GROWN_RADIUS;
-    place_now(&mut game, "mining_node", r, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", r, 0).unwrap();
     let node = game
         .find_blocking_structure_at(r, 0)
         .expect("the node was just deployed");
@@ -2154,8 +2146,9 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
     grant_research_data(&mut game, 1000);
 
-    let unresearched = game
-        .place_structure("cache_tap", 1, 0, None)
+    let extractor = place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
+    let grain = ItemId::from("cache_grain");
+    let unresearched = from_inside_the_base(&mut game, |g| g.set_machine_recipe(extractor, &grain))
         .expect_err("the Tap waits on Cache Coherence");
     assert!(unresearched.contains("researched"), "{unresearched}");
 
@@ -2170,7 +2163,8 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
 
     set_zone(&mut game, 2);
     unlock_research_chain(&mut game, "cache_coherence");
-    place_now(&mut game, "cache_tap", 1, 0).expect("and then stand a Tap up");
+    from_inside_the_base(&mut game, |g| g.set_machine_recipe(extractor, &grain))
+        .expect("and then set the Extractor to a Tap");
 }
 
 /// The layering property, which is the whole of "a new material does not
@@ -2187,26 +2181,19 @@ fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
     unlock_research_chain(&mut game, "cache_coherence");
     set_zone(&mut game, 3);
 
-    place_now(&mut game, "mining_node", 1, 0)
-        .expect("a Mining Node is still a thing you can build in zone 3");
-    place_now(&mut game, "cache_tap", -1, 0)
+    let fragments = place_machine(&mut game, "extractor", "core_fragment", 1, 0)
+        .expect("a core-fragment Extractor is still a thing you can build in zone 3");
+    let grain = place_machine(&mut game, "extractor", "cache_grain", -1, 0)
         .expect("and the Tap does not expire when the next zone arrives");
 
-    let defs = game.structure_defs();
-    let produced = |id: &str| {
-        defs.iter()
-            .find(|d| d.id.as_str() == id)
-            .and_then(|d| d.work.as_ref())
-            .map(|w| w.produces.clone())
-            .expect("both are producing structures")
-    };
+    let produced = |e: Entity| game.world.get::<ResourceNode>(e).unwrap().resource.clone();
     assert_eq!(
-        produced("mining_node"),
+        produced(fragments),
         ItemId::from(ids::CORE_FRAGMENT),
-        "the Mining Node's output is untouched by the tier above it"
+        "the fragment Extractor's output is untouched by the tier above it"
     );
     assert_eq!(
-        produced("cache_tap"),
+        produced(grain),
         ItemId::from("cache_grain"),
         "and the Tap is what the new material comes out of"
     );
@@ -2955,7 +2942,7 @@ fn the_home_a_shelf_and_a_portal_need_no_program() {
         !game.structure_needs_program(&"portal".into()),
         "a doorway that is spent on the way through takes no body with it"
     );
-    assert!(game.structure_needs_program(&"fabricator".into()));
+    assert!(game.structure_needs_program(&"assembler".into()));
     assert!(
         game.structure_needs_program(&"nothing_ships_this".into()),
         "an id with no def behind it still costs one — place_structure \
@@ -2974,10 +2961,10 @@ fn only_a_machine_that_runs_a_job_costs_a_program() {
     let game = Game::new(20260911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     for id in [
-        "mining_node",
+        "extractor",
         "research_node",
-        "lathe",
-        "compiler",
+        "factory",
+        "printer",
         "teardown_rig",
     ] {
         assert!(
@@ -3156,8 +3143,8 @@ fn a_posted_program_is_not_offered_to_a_build() {
 /// This calls the real `upgrade_ceiling`, not a restated copy of its
 /// formula — a hardcoded `ceiling = zone` would still pass after
 /// `upgrade_ceiling` itself changed, which is exactly the silent drift this
-/// test exists to catch. `mining_node`'s `upgrade.max_tier` is 5
-/// (`assets/structures/mining_node.ron`), matching every other shipped
+/// test exists to catch. `extractor`'s `upgrade.max_tier` is 5
+/// (`assets/structures/extractor.ron`), matching every other shipped
 /// upgradeable structure, so `upgrade_ceiling` reduces to `zone` for every
 /// zone in this loop — but it is `upgrade_ceiling` computing that, not the
 /// test asserting it.
@@ -3169,7 +3156,7 @@ fn the_upgrade_ceiling_keeps_the_program_rule_satisfiable() {
     let upgrade = game
         .world
         .resource::<StructureDb>()
-        .get("mining_node")
+        .get("extractor")
         .unwrap()
         .upgrade
         .clone()
@@ -3621,7 +3608,7 @@ fn deploying_without_a_program_is_refused_and_says_why() {
     let mut game = a_base_with_programs(20260907, 2);
 
     let err = game
-        .place_structure("mining_node", 1, 0, None)
+        .place_structure("extractor", 1, 0, None)
         .expect_err("a deploy costs a tamed program");
 
     assert!(
@@ -3643,7 +3630,7 @@ fn deploying_with_a_program_files_the_order_and_spends_it() {
     let mut game = a_base_with_programs(20260907, 1);
     let spend = tame_at_zone(&mut game, 1);
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("a program deep enough, with a body left behind");
 
     assert_eq!(
@@ -3784,7 +3771,7 @@ fn a_one_program_base_may_not_spend_its_only_body() {
     let only = tame_at_zone(&mut game, 1);
 
     let err = game
-        .place_structure("mining_node", 1, 0, Some(only))
+        .place_structure("extractor", 1, 0, Some(only))
         .expect_err("the last program may not be spent");
 
     assert!(err.contains("last program"), "{err}");
@@ -3915,7 +3902,7 @@ fn a_program_the_commit_refuses_files_no_order() {
     let held = game.owned_pets().len();
 
     let err = game
-        .place_structure("mining_node", 1, 0, Some(downed))
+        .place_structure("extractor", 1, 0, Some(downed))
         .expect_err("a downed program cannot be committed");
 
     assert!(
@@ -3941,7 +3928,7 @@ fn a_bad_cell_is_reported_before_the_program_cost() {
     stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
 
     let err = game
-        .place_structure("mining_node", 1, 0, None)
+        .place_structure("extractor", 1, 0, None)
         .expect_err("there is no floor out there");
 
     assert!(
@@ -3999,7 +3986,7 @@ fn a_program_already_committed_to_an_order_cannot_pay_for_a_second_one() {
         .expect("the upgrade order takes it");
 
     let err = game
-        .place_structure("mining_node", 2, 0, Some(spend))
+        .place_structure("extractor", 2, 0, Some(spend))
         .expect_err("the same program may not pay twice");
 
     assert!(
@@ -4021,13 +4008,13 @@ fn the_deploy_line_names_the_program_it_committed() {
     let spend = tame_at_zone(&mut game, 1);
     let who = game.creature_label(spend);
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
 
     assert!(
         game.message_history(50)
             .iter()
-            .any(|e| e.text.contains(&who) && e.text.contains("Mining Node")),
+            .any(|e| e.text.contains(&who) && e.text.contains("Extractor")),
         "the log names both the structure and the program: {:?}",
         game.message_history(50)
             .iter()
@@ -4049,7 +4036,7 @@ fn calling_off_an_order_gives_the_program_back() {
     game.rename_companion(spend, Some("Bellwether".to_string()))
         .expect("named");
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
 
@@ -4074,7 +4061,7 @@ fn the_cancel_line_names_the_program_it_gave_back() {
     let mut game = a_base_with_programs(20260907, 1);
     let spend = tame_at_zone(&mut game, 1);
     let who = game.creature_label(spend);
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
 
     let site = filed_at(&mut game, 1, 0).expect("a site");
@@ -4100,7 +4087,7 @@ fn the_cancel_line_names_the_program_it_gave_back() {
 fn a_site_wiped_with_its_cell_gives_the_program_back_too() {
     let mut game = a_base_with_programs(20260907, 1);
     let spend = tame_at_zone(&mut game, 1);
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
 
@@ -4154,7 +4141,7 @@ fn a_finished_structure_never_gives_the_program_back() {
     spawn_tamed(&mut game, 500, 3);
     let spend = tame_at_zone(&mut game, 1);
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
 
@@ -4164,7 +4151,7 @@ fn a_finished_structure_never_gives_the_program_back() {
         }
         game.tick();
     }
-    let built = find_structure_by_kind(&mut game, "mining_node").expect("the crew raises it");
+    let built = find_structure_by_kind(&mut game, "extractor").expect("the crew raises it");
     assert_eq!(game.owned_pets().len(), 1, "spent at completion");
 
     game.remove_structure(built).expect("demolished");
@@ -4190,7 +4177,7 @@ fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
     let spend = tame_at_zone(&mut game, 1);
     game.rename_companion(spend, Some("Bellwether".to_string()))
         .expect("named");
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     let site = filed_at(&mut game, 1, 0).expect("a site");
     // The install loses the species out from under the standing order.
@@ -4231,7 +4218,7 @@ fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
 fn a_rankless_build_site_snapshot_refunds_without_panicking() {
     let mut game = a_base_with_programs(20260907, 1);
     let spend = tame_at_zone(&mut game, 1);
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     let site = filed_at(&mut game, 1, 0).expect("a site");
     game.world
@@ -4274,7 +4261,7 @@ fn a_refunded_program_can_tie_another_programs_rank() {
     let mut game = a_base_with_programs(20260907, 1);
     let baseline = game.owned_pets()[0].entity;
     let spend = tame_at_zone(&mut game, 1);
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     let site = filed_at(&mut game, 1, 0).expect("a site");
 
@@ -4378,15 +4365,16 @@ fn demolishing_a_machine_returns_both_of_its_buffers() {
     place_home(&mut game);
     let cell = ItemId::from(ids::POWER_CELL);
     let frag = ItemId::from(ids::PORTAL_FRAGMENT);
-    let lathe = spawn_machine_at(&mut game, "lathe", 1, 0);
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 1, 0);
     {
-        let mut stock = game.world.get_mut::<Stock>(lathe).unwrap();
+        let mut stock = game.world.get_mut::<Stock>(substrate_factory).unwrap();
         stock.input.insert(cell.clone(), 5);
         stock.output.insert(frag.clone(), 3);
     }
 
     let (cell_before, frag_before) = (carried(&game, &cell), carried(&game, &frag));
-    game.remove_structure(lathe).unwrap();
+    game.remove_structure(substrate_factory).unwrap();
 
     assert_eq!(
         carried(&game, &cell) - cell_before,
@@ -4620,12 +4608,12 @@ fn a_body_on_a_filed_site_is_moved_aside_when_the_crew_raises_it() {
     place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     spawn_tamed(&mut game, 500, 3);
-    file_build(&mut game, "mining_node", 3, 0).unwrap();
+    file_build(&mut game, "extractor", 3, 0).unwrap();
     let sitter = spawn_tamed(&mut game, 500, 3);
 
     let mut raised = false;
     for _ in 0..400 {
-        if find_structure_by_kind(&mut game, "mining_node").is_some() {
+        if find_structure_by_kind(&mut game, "extractor").is_some() {
             raised = true;
             break;
         }
@@ -4678,8 +4666,8 @@ fn idle_wander_never_stops_on_a_filed_build_site() {
 // The squad seam's failure was that every fixture was hand-built at
 // footprint 1, so every anchor-measuring reader stayed green across 5,964
 // passing tests. `footprint_fixture`/`base_with_footprint_fixture`
-// (`support.rs`) clone `armory` wholesale — same build cost, same
-// `assembles` (so `file_build` tames a program the same way) — and differ
+// (`support.rs`) clone `shell_assembler` wholesale — same build cost, same
+// `machine` (so `file_build` tames a program the same way) — and differ
 // from a shipped-def test only in the one field under test, which is the
 // point: a 2x2 fixture that matters is one that could otherwise have been a
 // 1x1 in disguise. Shared with `tests::hauling` and `tests::work_orders`,
@@ -4688,7 +4676,11 @@ fn idle_wander_never_stops_on_a_filed_build_site() {
 #[test]
 fn an_unannotated_structure_has_footprint_one_and_does_not_study() {
     let game = Game::new(2001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let def = game.world.resource::<StructureDb>().get("armory").unwrap();
+    let def = game
+        .world
+        .resource::<StructureDb>()
+        .get("assembler")
+        .unwrap();
     assert_eq!(def.footprint, 1, "an unannotated def claims one cell");
     assert!(!def.studies, "an unannotated def holds no pen");
 }

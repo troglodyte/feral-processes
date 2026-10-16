@@ -109,7 +109,7 @@ fn an_amiable_program_feels_a_fondness_harder_than_an_abrasive_one() {
     set(&mut game, amiable, Disposition::Amiable);
     set(&mut game, abrasive, Disposition::Abrasive);
 
-    let kind = MemorySubject::Structure("mining_node".into());
+    let kind = MemorySubject::Structure("extractor".into());
     game.remember(amiable, "settled_in", kind.clone());
     game.remember(abrasive, "settled_in", kind);
 
@@ -568,7 +568,7 @@ fn a_base_with_an_order(game: &mut Game) -> (Entity, Entity) {
     stand_in_base(game);
     place_home(game);
     give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let node = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = spawn_tamed(game, 10, 3);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();

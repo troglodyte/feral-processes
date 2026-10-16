@@ -115,7 +115,7 @@ impl Game {
                 // Depot that is full — or one whose filter refuses this
                 // item — still leaves the player something to look at and a
                 // `[F]` to press; a pack full of cargo standing beside a
-                // Mining Node, with no shelf to put anything on at all,
+                // Extractor, with no shelf to put anything on at all,
                 // would otherwise open a screen of rows that move in
                 // neither direction.
                 let may_put = puttable && !self.is_banked(item);
@@ -275,7 +275,7 @@ impl Game {
     ///
     /// The one call that keeps "no Depot here" distinguishable from "a Depot
     /// with nothing left": a screen inferring the first from a zero draws a
-    /// room line reading 0 beside a Mining Node, which claims the base is
+    /// room line reading 0 beside an Extractor, which claims the base is
     /// full when it has no shelf at all.
     pub fn transfer_room(&self) -> Option<u32> {
         if self.reachable_depots().is_empty() {

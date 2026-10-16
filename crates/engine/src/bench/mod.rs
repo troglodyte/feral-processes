@@ -76,9 +76,15 @@ fn play_with(
 
     let start = game.structure_report();
     let tile_of: HashMap<Entity, (i32, i32)> = start.iter().map(|s| (s.entity, s.pos)).collect();
-    let machines: BTreeMap<(i32, i32), (String, String)> = start
+    let machines: BTreeMap<(i32, i32), (String, Option<String>, String)> = start
         .iter()
-        .filter_map(|s| Some((s.pos, (s.kind.clone(), s.status?.as_str().to_string()))))
+        .filter_map(|s| {
+            let recipe = s.recipe.as_ref().map(|r| r.as_str().to_string());
+            Some((
+                s.pos,
+                (s.kind.clone(), recipe, s.status?.as_str().to_string()),
+            ))
+        })
         .collect();
     let t0 = game.current_tick();
 
@@ -158,7 +164,7 @@ fn play_with(
 
     let machines = machines
         .into_iter()
-        .map(|(pos, (kind, initial))| {
+        .map(|(pos, (kind, recipe, initial))| {
             let status_ticks = fold_status(
                 &initial,
                 edges.get(&pos).map_or(&[][..], Vec::as_slice),
@@ -168,6 +174,7 @@ fn play_with(
             MachineReport {
                 pos,
                 kind,
+                recipe,
                 running_share: share(running, ticks),
                 units: units.get(&pos).copied().unwrap_or(0),
                 status_ticks,

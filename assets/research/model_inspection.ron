@@ -12,12 +12,12 @@
         (
             result: "adversarial_patch",
             cost: [("portal_fragment", 12), ("cache_grain", 3)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "attention_head",
             cost: [("portal_fragment", 12), ("cache_grain", 3)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

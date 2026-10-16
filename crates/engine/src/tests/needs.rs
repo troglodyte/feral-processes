@@ -664,7 +664,7 @@ fn a_base_with_an_order_and_an_amenity(game: &mut Game) -> (Entity, Entity) {
     stand_in_base(game);
     place_home(game);
     give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let node = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     place_now(game, "defrag_bay", 0, 2).expect("a Defrag Bay is buildable from the start");
     let worker = spawn_tamed(game, 10, 3);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))

@@ -25,7 +25,7 @@ fn a_structure_lost_to_a_raid_is_base_news_without_losing_its_kind() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -92,7 +92,7 @@ fn damage_structure_destroys_it_and_clears_its_cronjob_at_zero_durability() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -125,7 +125,7 @@ fn damage_structure_just_reduces_durability_when_it_survives() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 20, max_hp: 30 },
@@ -154,8 +154,8 @@ fn home_loads_as_non_raidable_and_other_structures_default_to_raidable() {
 
     let mining = defs
         .iter()
-        .find(|d| d.id == "mining_node")
-        .expect("mining_node should load");
+        .find(|d| d.id == "extractor")
+        .expect("extractor should load");
     assert!(
         mining.raidable,
         "a structure file that omits `raidable` must default to raidable"
@@ -187,13 +187,13 @@ fn deploying_a_raidable_structure_still_gives_it_a_durability_pool() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
 
     let node = {
         let mut query = game.world.query::<(Entity, &Structure)>();
         query
             .iter(&game.world)
-            .find(|(_, s)| s.kind == "mining_node")
+            .find(|(_, s)| s.kind == "extractor")
             .map(|(e, _)| e)
             .expect("the mining node should have been deployed")
     };
@@ -271,7 +271,7 @@ fn raid_check_can_damage_an_undefended_structure() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -303,7 +303,7 @@ fn raid_damage_message_is_tagged_message_kind_raid() {
         spawn_min_raid_staff(&mut game);
         game.world.spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -340,7 +340,7 @@ fn a_base_below_the_raid_staff_minimum_takes_no_raid() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -384,7 +384,7 @@ fn four_undowned_staff_is_still_below_the_raid_floor() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -417,7 +417,7 @@ fn a_base_at_the_raid_staff_minimum_can_still_be_raided() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -467,7 +467,7 @@ fn a_staff_program_that_downed_tools_does_not_count_toward_the_raid_minimum() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -507,7 +507,7 @@ fn a_sulking_staff_program_still_counts_toward_the_raid_minimum() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -545,7 +545,7 @@ fn a_downed_staff_program_does_not_count_toward_the_raid_staff_minimum() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -605,7 +605,7 @@ fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -640,7 +640,7 @@ fn damaging_a_structure_queues_a_hit_effect_at_its_position() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -664,7 +664,7 @@ fn a_forced_sweep_hits_a_structure_without_waiting_for_the_roll() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.spawn((
         Structure {
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
         },
         Position { x: 5, y: 5 },
         Durability { hp: 30, max_hp: 30 },
@@ -692,7 +692,7 @@ fn a_forced_hit_leaves_the_structure_standing_and_throws_a_hit_effect() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -724,7 +724,7 @@ fn repeated_forced_hits_never_destroy_the_structure() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -802,7 +802,7 @@ fn a_forced_destruction_clears_the_posted_workers_task() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position {
                 x: player_pos.x + 1,
@@ -838,7 +838,7 @@ fn destroying_a_structure_queues_a_destroyed_effect() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 2, y: 3 },
             Durability { hp: 4, max_hp: 30 },
@@ -864,7 +864,7 @@ fn damaging_a_structure_with_no_position_queues_nothing() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Durability { hp: 30, max_hp: 30 },
         ))
@@ -906,7 +906,7 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -952,7 +952,7 @@ fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -1004,7 +1004,7 @@ fn take_effects_drains_the_queue() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -1027,7 +1027,7 @@ fn the_effect_queue_drops_the_oldest_effects_past_its_cap() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability {
@@ -1127,7 +1127,7 @@ fn a_guard_task_never_produces_resources_even_on_a_workable_node() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {
@@ -1203,7 +1203,7 @@ fn durability_lost_with_guard(species: &str, mitigation: i32) -> u32 {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -1264,7 +1264,7 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -1322,14 +1322,14 @@ fn a_structure_survives_seven_raids_worth_of_damage() {
     let durability = game
         .structure_defs()
         .into_iter()
-        .find(|d| d.id == "mining_node")
-        .expect("mining_node.ron should load")
+        .find(|d| d.id == "extractor")
+        .expect("extractor.ron should load")
         .durability;
     let structure = game
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability {
@@ -1360,7 +1360,7 @@ fn raid_damage_is_permanent_without_a_repairer() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -1423,7 +1423,7 @@ fn a_patch_node_adds_its_tier_to_every_structures_regen() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -1452,7 +1452,7 @@ fn failover_repairs_the_base_with_no_patch_node_standing() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -1509,7 +1509,7 @@ fn a_posted_medic_repairs_the_structure_it_guards() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -1519,7 +1519,7 @@ fn a_posted_medic_repairs_the_structure_it_guards() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 8, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -1553,7 +1553,7 @@ fn a_posted_bastion_repairs_nothing() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 10, max_hp: 30 },
@@ -1575,7 +1575,7 @@ fn patch_node_repair_scales_with_its_upgrade_tier() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 1, max_hp: 60 },
@@ -1603,7 +1603,7 @@ fn patch_node_repair_stacks_across_several_nodes() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 1, max_hp: 60 },
@@ -1770,7 +1770,7 @@ fn structure_regen_does_not_exceed_max_durability() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 29, max_hp: 30 },
@@ -1791,7 +1791,7 @@ fn structures_survive_save_and_load_with_their_durability() {
     let structure_def = game
         .structure_defs()
         .into_iter()
-        .find(|d| d.id == "mining_node")
+        .find(|d| d.id == "extractor")
         .unwrap();
     game.world.spawn((
         Structure {
@@ -1848,7 +1848,7 @@ fn a_defender_raided_to_death(mode: DifficultyMode) -> (Game, Entity) {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability {
@@ -1950,7 +1950,7 @@ fn a_base_in_the_opening_sector_takes_no_raid() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -1997,7 +1997,7 @@ fn the_second_sector_is_where_sweeps_begin() {
             .world
             .spawn((
                 Structure {
-                    kind: "mining_node".to_string(),
+                    kind: "extractor".to_string(),
                 },
                 Position { x: 5, y: 5 },
                 Durability { hp: 30, max_hp: 30 },
@@ -2355,7 +2355,7 @@ fn a_sweep_waits_for_the_clock_and_lands_inside_its_jitter() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -2402,7 +2402,7 @@ fn a_sweep_resets_the_clock_and_redraws_its_interval() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -2483,7 +2483,7 @@ fn a_tick_with_nothing_to_sweep_holds_the_clock() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -2518,7 +2518,7 @@ fn a_base_below_the_staff_floor_holds_its_clock_until_it_can_defend() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -2733,7 +2733,7 @@ fn winding_the_clock_reaches_the_warning_and_not_the_sweep() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 5, y: 5 },
             Durability { hp: 30, max_hp: 30 },
@@ -2926,7 +2926,7 @@ fn zone_2_outposts_can_be_raided_through_a_real_sweep() {
     spawn_min_raid_staff(&mut game);
     game.world.spawn((
         Structure {
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
         },
         Position { x: 5, y: 5 },
         Durability { hp: 30, max_hp: 30 },
@@ -2959,7 +2959,7 @@ fn zone_1_outposts_are_never_raided() {
     spawn_min_raid_staff(&mut game);
     game.world.spawn((
         Structure {
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
         },
         Position { x: 5, y: 5 },
         Durability { hp: 30, max_hp: 30 },

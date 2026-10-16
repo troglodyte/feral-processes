@@ -2410,12 +2410,7 @@
             level: 10,
             xp: 95,
             xp_to_next: 800,
-            cronjob: Some((
-                target_position: (-1, -2),
-                progress: 1,
-                required: 8,
-                kind: GatherResource,
-            )),
+            cronjob: None,
             party_slot: None,
             sortie_index: None,
             wielded: false,
@@ -4729,7 +4724,7 @@
             pod_charged: None,
         ),
         (
-            kind: "compiler",
+            kind: "workbench",
             position: (-1, -2),
             durability: Some(30),
             tier: Some(1),
@@ -4785,8 +4780,9 @@
             pod_charged: None,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-1, 0),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],

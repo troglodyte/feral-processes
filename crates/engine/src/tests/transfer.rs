@@ -122,7 +122,7 @@ fn a_non_storing_neighbour_offers_no_put_at_all() {
     let p = player_tile(&game);
     stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y,
         200,
@@ -147,7 +147,7 @@ fn a_non_storing_neighbour_lists_only_what_is_on_its_shelf() {
     let p = player_tile(&game);
     stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y,
         200,
@@ -232,7 +232,7 @@ fn transfer_room_tells_no_depot_apart_from_a_full_one() {
     stand_in_base(&mut game);
     let p = player_tile(&game);
 
-    let node = stocked(&mut game, "mining_node", p.x + 1, p.y, 200, &[]);
+    let node = stocked(&mut game, "extractor", p.x + 1, p.y, 200, &[]);
     assert_eq!(game.transfer_room(), None, "a Mining Node has no room");
     game.world.despawn(node);
 
@@ -481,7 +481,7 @@ fn a_take_reaches_every_orthogonal_neighbour_and_no_diagonal_one() {
     for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
         stocked(
             &mut game,
-            "mining_node",
+            "extractor",
             p.x + dx,
             p.y + dy,
             20,
@@ -490,7 +490,7 @@ fn a_take_reaches_every_orthogonal_neighbour_and_no_diagonal_one() {
     }
     let diagonal = stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y + 1,
         20,
@@ -531,7 +531,7 @@ fn a_take_leaves_a_neighbours_input_untouched() {
     let p = player_tile(&game);
     let node = stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y,
         20,
@@ -565,7 +565,7 @@ fn the_shelf_side_is_pooled_across_neighbours() {
     let p = player_tile(&game);
     stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x - 1,
         p.y,
         20,
@@ -573,7 +573,7 @@ fn the_shelf_side_is_pooled_across_neighbours() {
     );
     stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y,
         20,
@@ -594,8 +594,8 @@ fn the_neighbour_scan_is_sorted_by_tile() {
     let mut game = Game::new(1756, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let p = player_tile(&game);
-    let east = stocked(&mut game, "mining_node", p.x + 1, p.y, 20, &[]);
-    let west = stocked(&mut game, "mining_node", p.x - 1, p.y, 20, &[]);
+    let east = stocked(&mut game, "extractor", p.x + 1, p.y, 20, &[]);
+    let west = stocked(&mut game, "extractor", p.x - 1, p.y, 20, &[]);
     assert_eq!(game.adjacent_stock(), vec![west, east]);
 
     let east = stocked(&mut game, "depot", p.x, p.y + 1, 200, &[]);
@@ -616,7 +616,7 @@ fn asking_for_part_of_a_buffer_leaves_the_rest_in_it() {
     let p = player_tile(&game);
     let node = stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 1,
         p.y,
         20,
@@ -911,7 +911,7 @@ fn a_terminal_does_not_reach_a_distant_machine_buffer() {
     bare(&mut game, "storage_terminal", p.x + 1, p.y);
     stocked(
         &mut game,
-        "mining_node",
+        "extractor",
         p.x + 10,
         p.y,
         20,

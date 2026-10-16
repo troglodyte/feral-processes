@@ -1,15 +1,13 @@
 (
     id: "weapon_bench",
     name: "Weapon Fabrication",
-    description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
+    description: "Opens the weapon and module recipes at the Workbench, and lets an Assembler turn Logic Wafers into Trace Sniffers.",
     cost: 24,
     materials: [("logic_wafer", 6), ("bytecode_block", 8)],
-    // The Fabricator eats Logic Wafers, which are transcribed from Raw
-    // Trace — the Transcriber and the Log Scraper, both behind Routine
-    // Fabrication. Without it the bench is a dead end the player has no way
-    // to see coming.
+    // The Trace Sniffer eats Logic Wafers, which a Factory makes from Raw
+    // Trace — both behind Routine Fabrication. Without it the recipe is a
+    // dead end the player has no way to see coming.
     requires: ["routine_fabrication"],
     requires_subject: true,
     discoverable: true,
-    unlocks_structures: ["fabricator"],
 )

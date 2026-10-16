@@ -3,7 +3,7 @@
 - **A supplier that declares `StructureDef::power_upkeep` supplies nothing
   while it is dry, and the Home never declares it.** The Home's free 4 is
   the bootstrap — a base holding no Power Cells could otherwise never run
-  the Power Conduit that makes the first one, which is a dead run rather
+  the Extractor that makes the first one, which is a dead run rather
   than difficulty. Three traps under it. A burner **runs no job**, so
   neither writer of a structure's component list gave it a `MachineStatus`
   before this: both now gate on `def.runs_a_job() || def.power_upkeep.is_some()`
@@ -24,9 +24,9 @@
   the bootstrap only if it *reaches* the bootstrapper. `ledger`'s first sort
   key is `power::grid_rung` over `power::fuel_chain` (every `grid_fuel` at
   0, what it is made of below, via `work_orders::ingredient_depths`) —
-  shipped, the Power Conduit at 0 and the Mining Node at 1. **A rung, not a
-  flag**: as one tier, four Mining Nodes west of every Conduit take the whole
-  4 and the fuel maker is dark, and a Mining Node's fragments become a cell
+  shipped, the power-cell Extractor at 0 and the core-fragment Extractor at 1. **A rung, not a
+  flag**: as one tier, four Extractors west of every power-cell Extractor take the whole
+  4 and the fuel maker is dark, and an Extractor's fragments become a cell
   only through the player's hands. The labour half lives in `fuel_wants`:
   fuel in store is *fetched*, fuel nowhere is *made* — `wants` asked
   of a one-window `WorkOrder::batch` for it — filed after every fetch and
@@ -36,16 +36,16 @@
   on the first tick after a load — exactly when a base arrives dark.
   **"In store" is any structure's output, not the shelves alone**, and
   `haul_step_system` widens a burner's collect list to match: shelves-only
-  deadlocked a real base, a Conduit out of reach sitting on a full buffer
+  deadlocked a real base, an Extractor out of reach sitting on a full buffer
   beside full Depots, where the make half names nothing because a full
-  Conduit cannot progress. **Charge Coil is not fuel**; the Winding Node *burns* three Power Cells
+  Extractor cannot progress. **Charge Coil is not fuel**; a coil-making Factory *burns* three Power Cells
   per coil, and protecting it would deepen a blackout. And a probe that
   samples `PowerFuel::ticks_left` every 100 ticks aliases against
   `POWER_UPKEEP_TICKS` and reads a healthy burner as frozen. **`base_wants`
   drops every dark `GatherResource` want before `collapse`, not only the fuel
   ones**: `can_progress` asks about stock, not the grid, so an order named a
-  dark Assembly Bay with coils beside it, `collapse` sent the line's one body
-  to it as the furthest downstream, and the lit Conduit in the same line —
+  dark Assembler with coils beside it, `collapse` sent the line's one body
+  to it as the furthest downstream, and the lit Extractor in the same line —
   the one machine that could end the blackout — never got a body
   (`a_lines_body_goes_to_its_lit_fuel_maker_not_its_dark_end_machine`). A
   fixture whose line out-draws the Home now needs `stand_ample_grid_supply`.
@@ -111,7 +111,7 @@
   `post_reach` to** and takes the next in Chebyshev rank, so a boxed Depot
   only strands a worker when it is the *only* candidate — a player save had
   its one free face held by an idle body hemmed in by the very worker
-  waiting on it, stranding two Mining Nodes beside a second, open Depot.
+  waiting on it, stranding two Extractors beside a second, open Depot.
   The lone-candidate case still strands, deliberately, so keep a free tile
   on a base's only Depot.
 
@@ -125,8 +125,8 @@
   order for a banked item is refused on the grounds that no shelf holds it.
   **A row exists if the base holds any of it *or* is set up to make it** —
   `stock::producible` seeds a 0 for every deployed structure's
-  `work.produces` **and** its `assembles.item`, because an assembler
-  declares no `work` block at all. Deliberately not "any structure" (a Depot
+  `Placed::production()` product, because a configurable
+  machine declares no `work` block at all and an unset one makes nothing. Deliberately not "any structure" (a Depot
   makes nothing and would seed a row for every item in the game) and not the
   researched recipe list (a bench recipe compiles into the *player's* pack,
   so its row could never move off zero). A banked pool the player has none
@@ -242,7 +242,7 @@
   precisely because the commit takes first. `basket_room` is `Option<u32>`
   and **`None` is "no Depot beside you" while `Some(0)` is "a Depot with
   nothing left"**: the room line is omitted entirely on `None`, since a line
-  reading 0 beside a Mining Node claims the base is full when it has no shelf
+  reading 0 beside an Extractor claims the base is full when it has no shelf
   at all. `Game::transfer_room` is the one call that answers both, and
   nothing infers the `None` from a zero. Three silent traps besides: the pack
   side must filter `ItemDef::banked` (a bank is not cargo, though a banked
@@ -256,7 +256,7 @@
   and a banked item — both of which may still be *taken*, so one field doing
   both jobs drew a `you` column reading 0 while the pack held twelve. **Only
   `can_put` creates a row from the pack side**, or a pack full of cargo
-  beside a Mining Node opens a screen of rows that move in neither direction.
+  beside an Extractor opens a screen of rows that move in neither direction.
 
 - **The trade currency gets no row on either side, and it is its own filter
   rather than `ItemDef::banked`.** Credits are carried in the same
@@ -335,14 +335,37 @@
   make the save encoding differ run to run.
 
 - **A machine's recipe is the assembled item's own `craftable.cost`**, via
-  `systems::assembly_recipe`. There is deliberately no recipe on
-  `AssembleDef`, so a bench recipe and a machine recipe cannot drift and
-  every craftable a mod adds is automatable for free.
+  `systems::assembly_recipe`, now asked of the placed instance's `Placed`
+  (it is `None` for an Extract-role or unset machine). There is deliberately
+  no second recipe format on `MachineDef`, so a bench recipe and a machine
+  recipe cannot drift and every craftable a mod adds is automatable for free.
 
-- **Every shipped `assembles` recipe is one ingredient, and that is a property
-  of the *items*.** A second ingredient on any of the four intermediates
-  silently turns its bench back into a corner puzzle. The engine's multi-input
-  support is untouched and mods may ship two-ingredient assemblers.
+- **Every `Assemble`-role recipe is one ingredient, and that is a property of
+  the *items*.** A second ingredient on any of the four intermediates
+  silently turns its bench back into a corner puzzle
+  (`every_assemble_role_recipe_is_a_single_ingredient`). The engine's
+  multi-input support is untouched and mods may ship two-ingredient recipes.
+
+- **`structures::Placed` is the one door to what a placed structure makes**,
+  and an unset machine produces, draws, serves and staffs nothing because
+  every reader asks it. Production is a property of the *instance*
+  (`Placed::of(def, Option<&MachineRecipe>)`, then `production()`), so a
+  reader that branches on `def.work` or `def.machine` itself, or on the
+  def's recipe list, treats an unset machine as running its first recipe in
+  one place and as a bystander in another; the unset one then draws power,
+  reserves a hauler or shows green in whichever reader forgot.
+  `StructureDef::productions()` is the def-level list for catalogs, never for
+  what a placed machine does. A saved recipe the def no longer lists loads
+  as unset with a warning.
+
+- **A machine's recipe is the player's: `Game::set_machine_recipe` is the
+  only writer of `MachineRecipe`**, and no order, auto-setup or load ever
+  sets one (a rebuilt wreck restores its own, `Game::restore_machine_recipe`). It refuses everything before it changes anything, then empties
+  the machine (output to Depots, the rest through `Game::set_down`),
+  unposts the worker, swaps the Extract-role `ResourceNode`, and
+  never touches a Depot (the filter is the Depot's placement, not the
+  machine's configuration). A writer that skips it loses the clearing, the
+  unposting or the node swap, and takes the player's choice away.
 
 - **A work order stores what was asked for, never how it will be done.** An
   item, a quantity and a `standing` flag — labels on the request, no plan.
@@ -448,7 +471,7 @@
 
 - **"Nobody is posted here" is one pass over every machine**,
   `idle_machine_system`. It was the assembler's branch, which visits only
-  structures declaring `assembles` — so an unstaffed extractor drew green.
+  assembling machines — so an unstaffed extractor drew green.
   `task_progress_system` announces `Running` while a cycle is still ramping.
 
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
@@ -458,9 +481,10 @@
   is pulling. The cost falls on extractors alone.
 
 - **An attached building is one the base has a reason to run**, and the recipe
-  alone was never enough: an unstaffed assembler pulls nothing, so a Lathe
-  nothing has been ordered from reserved a Mining Node's whole buffer for a
-  machine that would never take a unit. `work_orders::queue_needs` is that
+  alone was never enough: an unstaffed assembler pulls nothing, so an
+  Assemble-role machine set to a recipe nothing has been ordered from
+  reserved an Extractor's whole buffer for a machine that would never take a
+  unit. `work_orders::queue_needs` is that
   reason — the **closure** of the **whole queue** under `ItemDef::craftable`,
   over items rather than machines so a bevy system can ask it — or a standing
   work job. **Do not "fix" this by bounding the hoard instead**: a producer
@@ -560,14 +584,17 @@
   `place_now` skips construction; it fires only when the *Depot* is the
   structure built (a producer built beside a standing Depot leaves it alone,
   so an input shelf is never narrowed), only ever widens a filter, and skips a
-  banked output, which never reaches `Stock.output`. A Depot never joins a
-  production line.
+  banked output, which never reaches `Stock.output`. Setting a
+  machine's recipe never touches a Depot: a standing open Depot is
+  indistinguishable from a never-filtered one, so a machine-side filter would
+  rewrite a shelf the player left open. A Depot
+  never joins a production line.
 - **`StructureDef::supply` and `power_upkeep` share one hauling path through
   `spends_supply()`, but only a burner `draws_from_neighbours()`.** A
   supply-only structure gets no "beside" credit, is never an attached
   consumer (the `hauling.rs` consumers predicate is `power_upkeep`), and is
   sourced from `stores` only: `every_structure` would let a shield raid a
-  production buffer such as a Winding Node's output. `has_machine_status()`
+  production buffer such as a Factory's output. `has_machine_status()`
   is the one predicate `spawn_structure` and the save loader both call.
   Coils are spent per defence event, not per point (a turret authors
   `raid_defense: 1`, `damage: 8`), and the garrison is never gated.

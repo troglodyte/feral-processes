@@ -357,7 +357,7 @@ fn a_ringed_cronjob_worker_still_stops_at_the_work_cap() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
             ResourceNode {

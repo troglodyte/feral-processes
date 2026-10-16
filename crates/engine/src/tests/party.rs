@@ -130,7 +130,7 @@ fn set_companion_clears_any_active_cronjob_task() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 3, y: 4 },
         ))
@@ -482,7 +482,7 @@ fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
         .world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
             Position { x: 500, y: 501 },
         ))

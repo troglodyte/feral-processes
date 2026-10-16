@@ -34,7 +34,7 @@ fn is_beside_is_chebyshev_one() {
 
 /// A post, a sulker and a body it avoids standing beside the post.
 fn a_rival_beside_a_post(game: &mut Game) -> (Entity, Entity, Entity) {
-    let post = spawn_structure_at(game, "mining_node", 5, 5);
+    let post = spawn_structure_at(game, "extractor", 5, 5);
     let sulker = spawn_tamed(game, 10, 3);
     let rival = spawn_tamed(game, 10, 3);
     game.world.get_mut::<Position>(sulker).unwrap().x = -4;

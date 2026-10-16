@@ -505,12 +505,7 @@
             level: 10,
             xp: 95,
             xp_to_next: 800,
-            cronjob: Some((
-                target_position: (-1, -2),
-                progress: 1,
-                required: 8,
-                kind: GatherResource,
-            )),
+            cronjob: None,
             party_slot: None,
             wielded: false,
             zone: 1,
@@ -1732,7 +1727,7 @@
     ],
     structures: [
         (
-            kind: "compiler",
+            kind: "workbench",
             position: (-1, -2),
             durability: Some(30),
             tier: Some(1),
@@ -1892,8 +1887,9 @@
             standing_guard: false,
         ),
         (
-            kind: "refinery",
+            kind: "factory",
             position: (3, 0),
+            recipe: Some("bytecode_block"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -1902,8 +1898,9 @@
             standing_guard: false,
         ),
         (
-            kind: "assembly_bay",
+            kind: "printer",
             position: (4, 0),
+            recipe: Some("patch_routine"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -1912,8 +1909,9 @@
             standing_guard: false,
         ),
         (
-            kind: "winding_node",
+            kind: "factory",
             position: (4, 1),
+            recipe: Some("charge_coil"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -1922,8 +1920,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (2, 0),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -1932,8 +1931,9 @@
             standing_guard: false,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-1, 0),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -1962,8 +1962,9 @@
             standing_guard: false,
         ),
         (
-            kind: "power_conduit",
+            kind: "extractor",
             position: (4, 2),
+            recipe: Some("power_cell"),
             durability: Some(30),
             tier: None,
             stock_input: [],

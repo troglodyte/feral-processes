@@ -1,7 +1,7 @@
 (
     id: "monofilament",
     name: "Monofilament Edge",
-    description: "The hardest-hitting weapon at its tier, and it can hit from two cells away. Made at a Fabricator.",
+    description: "The hardest-hitting weapon at its tier, and it can hit from two cells away. Made at a Workbench.",
     cost: 110,
     materials: [("trace_sniffer", 5), ("logic_wafer", 12)],
     min_zone: 3,
@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "monofilament_whip",
         cost: [("portal_fragment", 12), ("cache_grain", 3)],
-        requires_structure: Some("fabricator"),
+        requires_structure: Some("workbench"),
     )],
 )

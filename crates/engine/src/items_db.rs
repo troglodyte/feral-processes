@@ -99,6 +99,11 @@ pub struct CraftableDef {
     pub cost: Vec<(ItemId, u32)>,
     #[serde(default)]
     pub requires_structure: Option<StructureId>,
+    /// The research node that must be done before the item is offered at its
+    /// bench. A bench recipe keeps the gate of the structure it came from, so
+    /// merging the benches into the Workbench loses no progression.
+    #[serde(default)]
+    pub research: Option<crate::research::ResearchId>,
 }
 
 /// What a placeable trap catches — see `components::Trap` and
@@ -1265,7 +1270,7 @@ mod tests {
                 id: "gear",
                 name: "Gear",
                 equipment: Some((Weapon, (atk: 2, mitigation: 1))),
-                craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("fabricator"))),
+                craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("workbench"))),
                 droppable: Some([("scrapper", 0.15), ("worm", 0.05)]),
             )"#,
         )]);
@@ -1277,7 +1282,7 @@ mod tests {
                 .unwrap()
                 .requires_structure
                 .as_deref(),
-            Some("fabricator")
+            Some("workbench")
         );
         assert_eq!(
             def.droppable.as_deref(),

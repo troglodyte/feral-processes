@@ -7,7 +7,7 @@ use feral_processes_engine::tuning::TALENT_START_LEVEL;
 
 /// A program to develop and three Privilege Rings to spend on it.
 fn app_ready_to_develop(seed: u32) -> App {
-    app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[("privilege_ring", 3)])
+    app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[("privilege_ring", 3)])
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn opening_a_ring_from_the_screen_spends_the_rings_and_holds_the_page() {
 
 #[test]
 fn a_refused_ring_lands_in_the_status_line_and_the_page_holds() {
-    let mut app = app_owning_a_program_and_a_compiler_with_cargo(82, &[], &[]);
+    let mut app = app_owning_a_program_and_an_extractor_with_cargo(82, &[], &[]);
     open_via_menu(&mut app, 'p', "Develop a program");
     app.handle_key(GameKey::Char('1'));
 

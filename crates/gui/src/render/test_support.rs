@@ -5,7 +5,7 @@
 //! `Game`'s ECS `World` is private to the engine crate, so — same as every
 //! analogous fixture in app-core's own `tests/support.rs`
 //! (`crates/app-core/src/tests/support.rs`, see `tame_program_at_zone` and
-//! `app_owning_a_program_and_a_compiler_deep`) — the only door onto a tamed
+//! `app_owning_a_program_and_an_extractor_deep`) — the only door onto a tamed
 //! `Creature` or a hand-placed structure from outside that crate is a save
 //! round trip: write the game out, edit the `SaveData` by hand, load it back
 //! in. app-core's own versions of these fixtures are `pub(crate)` to that
@@ -325,7 +325,7 @@ pub(super) fn game_with_tweaked_programs(
     Game::load(&path, &test_assets_dir()).unwrap()
 }
 
-/// An `App` with a founded base and a Compiler standing two cells east of
+/// An `App` with a founded base and an Extractor standing two cells east of
 /// it, the party in base space beside it — a real, scan-reachable structure
 /// for `App::upgradeable_structures` to find. Exists so a test can drive
 /// `Mode::BuildProgram` off a genuine `PendingBuild::Upgrade`, and so
@@ -333,13 +333,13 @@ pub(super) fn game_with_tweaked_programs(
 /// `EntityView` rather than one its own `.find` could never have matched.
 ///
 /// Home is founded through `Game::place_structure` — the same real call
-/// `App::handle_build_direction_key` makes for it. The Compiler is written
+/// `App::handle_build_direction_key` makes for it. The Extractor is written
 /// straight into the save instead, the way app-core's
-/// `app_owning_a_program_and_a_compiler_deep` places one:
+/// `app_owning_a_program_and_an_extractor_deep` places one:
 /// `Game::place_structure` would spend a program this fixture has no need to
 /// own, and the engine exposes no cheaper way to stand a structure up from
 /// outside its own crate.
-pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
+pub(super) fn app_in_base_with_an_extractor(seed: u32) -> App {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, Ordering::Relaxed);
     let assets_dir = test_assets_dir();
@@ -364,13 +364,14 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         while game.take_notification().is_some() {}
     }
 
-    let path = scratch_path("upgrade_compiler", seed);
+    let path = scratch_path("upgrade_extractor", seed);
     let _cleanup = RemoveOnDrop(&path);
     app.game.as_mut().expect("just set").save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     data.locale = Locale::Base { x: 0, y: 0 };
     data.structures.push(save::StructureSave {
-        kind: "compiler".to_string(),
+        recipe: Some("core_fragment".into()),
+        kind: "extractor".to_string(),
         // Base space, two cells east of the Home the fixture just founded —
         // within `MENU_SCAN_RADIUS` of the party this edit also parks there.
         position: (2, 0),
@@ -416,7 +417,7 @@ pub(super) enum StandingIn {
 
 /// A game whose base is holding something: a Depot with `STOCKED_ITEM` on
 /// its output shelf and an idle Research Node, written into the save for
-/// `app_in_base_with_a_compiler`'s reason — nothing public stands one up
+/// `app_in_base_with_an_extractor`'s reason — nothing public stands one up
 /// and fills it.
 ///
 /// `HELD_PROGRAMS` downed programs ride the same edit, because the corner
@@ -464,6 +465,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         })
         .collect();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "depot".to_string(),
         position: (3, 0),
         durability: None,
@@ -485,6 +487,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
     // And a Research Node with no project, so the same corner has a research
     // line to hide in the two places it is not drawn.
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "research_node".to_string(),
         position: (5, 0),
         durability: None,

@@ -21,7 +21,7 @@ Routines reach you five ways.
 - Routine Disks. Etch a blank disk with something you already know from the Routines page under p, then install
   the disk into a slot on yourself or on any program you own. Uninstalling returns nothing — the
   disk is spent at the install.
-- Extraction. Breaking a program down at a Compiler teaches you one of its routines and destroys
+- Extraction. Breaking a program down at a Workbench teaches you one of its routines and destroys
   the program.
 
 In a fight, s calls one. It is paid for out of the invoker's own Power reserve, so a companion

@@ -1,0 +1,18 @@
+(
+    id: "factory",
+    name: "Factory",
+    description: "Turns raw materials into basic parts. Set what it makes beside it with R.",
+    glyph: 'B',
+    color: Orange,
+    build_cost: [("core_fragment", 16)],
+    capacity: 20,
+    machine: Some((role: Assemble, recipes: [
+        (produces: "blank_substrate", ticks_per_unit: 12, research: Some("routine_fabrication")),
+        (produces: "bytecode_block", ticks_per_unit: 12),
+        (produces: "annealed_core", ticks_per_unit: 12, research: Some("program_refactoring")),
+        (produces: "logic_wafer", ticks_per_unit: 12, research: Some("routine_fabrication")),
+        (produces: "charge_coil", ticks_per_unit: 12),
+    ])),
+    power_draw: 2,
+    room_tags: ["workshop"],
+)

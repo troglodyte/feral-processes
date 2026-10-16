@@ -928,6 +928,7 @@ impl Game {
                     goal,
                     program: b.program,
                     awaiting_program: b.awaiting_program,
+                    recipe: b.recipe,
                 },
                 Position {
                     x: b.position.0,
@@ -1131,8 +1132,9 @@ impl Game {
     fn restore_structures(
         &mut self,
         structures: Vec<save::StructureSave>,
-    ) -> HashMap<(i32, i32), Entity> {
+    ) -> (HashMap<(i32, i32), Entity>, Vec<String>) {
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
+        let mut warnings = Vec::new();
         for s in structures {
             let Some(def) = self.world.resource::<StructureDb>().get(&s.kind).cloned() else {
                 continue;
@@ -1229,10 +1231,35 @@ impl Game {
             // deposit pool gone, a node carries nothing per-instance that a
             // `.ron` file doesn't already say. What the node *produced* is
             // in `Stock` above, which is where the state now lives.
-            if let Some(work) = &def.work {
+            //
+            // A machine's recipe is the one per-instance fact, and the def
+            // decides whether it still stands: a mod that dropped it leaves
+            // the machine unconfigured rather than running something the
+            // def no longer lists.
+            let recipe = if def.machine.is_some() {
+                let kept = s
+                    .recipe
+                    .clone()
+                    .filter(|item| def.machine_recipe(item).is_some());
+                if let (Some(saved), None) = (&s.recipe, &kept) {
+                    warnings.push(format!(
+                        "a {} at {},{} was set to {saved}, which it no longer makes — it loads with nothing set",
+                        def.id, s.position.0, s.position.1
+                    ));
+                }
+                entity.insert(crate::components::MachineRecipe(kept.clone()));
+                kept
+            } else {
+                None
+            };
+            let placed = crate::structures::Placed {
+                def: &def,
+                recipe: recipe.as_ref(),
+            };
+            if let Some(production) = placed.production().filter(|p| p.extracts) {
                 entity.insert(ResourceNode {
-                    resource: work.produces.clone(),
-                    level: work.level,
+                    resource: production.recipe.produces.clone(),
+                    level: production.recipe.level,
                 });
             }
             // Inserted unconditionally: a Home reloaded at 1.0 carries a
@@ -1251,7 +1278,7 @@ impl Game {
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);
                 entity.insert(StructureTier(tier));
-                // WorkDef::level only carries the tier-1 baseline, so a
+                // RecipeDef::level only carries the tier-1 baseline, so a
                 // restored node's reliability has to be re-derived from its
                 // tier or a Mk3 would come back extracting like a Mk1.
                 if let Some(mut node) = entity.get_mut::<ResourceNode>()
@@ -1261,7 +1288,7 @@ impl Game {
                 }
             }
         }
-        structure_positions
+        (structure_positions, warnings)
     }
 
     fn attach_cronjobs(
@@ -1275,6 +1302,13 @@ impl Game {
         // the assignment is silently dropped rather than crashing.
         for (worker, cronjob) in pending {
             if let Some(&target) = structure_positions.get(&cronjob.target_position) {
+                // A machine that loaded unset (its saved recipe is no longer
+                // listed) runs no job, so a program posted to it would idle.
+                if matches!(cronjob.kind, save::CronjobKind::GatherResource)
+                    && !self.accepts_a_program(target)
+                {
+                    continue;
+                }
                 self.world.entity_mut(worker).insert(Task {
                     kind: match cronjob.kind {
                         save::CronjobKind::GatherResource => TaskKind::GatherResource,
@@ -1827,6 +1861,7 @@ impl Game {
                     kind: r.kind,
                     x: r.x,
                     y: r.y,
+                    recipe: r.recipe,
                 })
                 .collect(),
         ));
@@ -1931,7 +1966,10 @@ impl Game {
             ordered_routes.into_iter().map(|(_, r)| r).collect(),
         ));
 
-        let structure_positions = game.restore_structures(data.structures);
+        let (structure_positions, structure_warnings) = game.restore_structures(data.structures);
+        for warning in structure_warnings {
+            game.log(warning);
+        }
         game.restore_floor_items(
             std::mem::take(&mut data.floor_items),
             std::mem::take(&mut data.floor_piles),
@@ -2940,6 +2978,7 @@ impl Game {
             Option<&crate::components::Racked>,
             Option<&crate::components::DropPod>,
             Option<&crate::components::Incubator>,
+            Option<&crate::components::MachineRecipe>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
@@ -2958,6 +2997,7 @@ impl Game {
             racked,
             pod,
             incubator,
+            recipe,
         ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -2967,6 +3007,7 @@ impl Game {
             structures.push(save::StructureSave {
                 kind: structure.kind.clone(),
                 position: (pos.x, pos.y),
+                recipe: recipe.and_then(|r| r.0.clone()),
                 durability: durability.map(|d| d.hp),
                 tier: tier.map(|t| t.0),
                 stock_input: encode(stock.map(|s| &s.input)),
@@ -3050,6 +3091,7 @@ impl Game {
                 goal: site.goal,
                 program: site.program.clone(),
                 awaiting_program: site.awaiting_program,
+                recipe: site.recipe.clone(),
             });
         }
         build_sites
@@ -3368,6 +3410,7 @@ impl Game {
                     kind: r.kind.clone(),
                     x: r.x,
                     y: r.y,
+                    recipe: r.recipe.clone(),
                 })
                 .collect(),
             caravans,
@@ -3893,6 +3936,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
+    warnings.extend(structures.validate_machines(&items));
     structures.compute_levels(&items);
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
@@ -3923,6 +3967,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         &affixes,
     )?;
     warnings.extend(research_warnings);
+    warnings.extend(structures.unknown_research_references(&items, &research));
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.

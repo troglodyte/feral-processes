@@ -84,7 +84,7 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
 fn save_format_version_is_unchanged_by_routes() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        37,
+        38,
         "routes add no bump of their own; a changed version is a deliberate \
          bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
@@ -861,12 +861,12 @@ fn the_tick_draws_no_rng_when_nothing_preys() {
 // 2026-09-05-settlements-phase-6-routes.md`'s branch.
 
 /// A structure that holds cargo in its own output buffer but is **not** a
-/// Depot (`stores: false` on `mining_node`, the only field `return_to_depots`
+/// Depot (`stores: false` on `extractor`, the only field `return_to_depots`
 /// reads) — `spend_from_base` draws from every `Structure + Stock` entity
 /// regardless, so a dispatch can spend from here while nothing exists that
 /// could ever receive a deposit back.
 fn deploy_non_storing_buffer(game: &mut Game, x: i32, y: i32, item: &ItemId, qty: u32) {
-    let node = deploy_structure(game, "mining_node", x, y);
+    let node = deploy_structure(game, "extractor", x, y);
     game.world.entity_mut(node).insert(Stock {
         output: [(item.clone(), qty)].into_iter().collect(),
         capacity: 9_999,

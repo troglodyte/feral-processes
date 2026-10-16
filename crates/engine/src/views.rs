@@ -810,7 +810,7 @@ pub struct ProgramSaleOption {
     /// says what it was in the middle of.
     pub activity: String,
     /// What this sale would also cancel, worded for display: e.g. "leaves
-    /// your battle party", "stops working the Mining Node". Empty when the
+    /// your battle party", "stops working the Extractor". Empty when the
     /// program is idle. The same facts as `activity`, worded as consequences
     /// — the confirmation screen warns, the row informs.
     pub detaches: Vec<String>,
@@ -839,6 +839,9 @@ pub enum BuildEffect {
     Cycle { shipped: u32, built: u32 },
     /// This structure runs no cycle, so build quality cannot reach it.
     NoCycle,
+    /// A configurable machine: it has no recipe yet, so there is no pace to
+    /// quote, but build quality scales whichever recipe it is set to.
+    ScalesRecipe,
 }
 
 /// One row of the build picker: a program, the aptitude this particular
@@ -1072,6 +1075,8 @@ pub struct DepotFill {
 
 #[derive(Clone)]
 pub struct EntityView {
+    /// A configurable machine standing with nothing set to make.
+    pub unconfigured: bool,
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,
@@ -1769,6 +1774,9 @@ pub struct LineReport {
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {
+    /// What a configurable machine is set to make; `None` when unset and for
+    /// every structure that is not a configurable machine.
+    pub recipe: Option<ItemId>,
     pub entity: Entity,
     /// The def id, so a frontend can group identical structures without
     /// comparing display names.
@@ -2479,7 +2487,7 @@ pub struct RecipeInput {
     /// How many one batch consumes.
     pub qty: u32,
     /// The extractor that taps this, for an ingredient no recipe makes —
-    /// Core Fragment naming the Mining Node. `None` when an earlier step of
+    /// Core Fragment naming the Extractor. `None` when an earlier step of
     /// the same chain already produces it, and for a drop nothing produces at
     /// all. See `Game::recipe_chains`.
     pub source: Option<String>,
@@ -3544,7 +3552,7 @@ impl BuildBlock {
 }
 
 impl BuildOrderRow {
-    /// What a screen calls this request — `Lathe`, or `Lathe → Mk3`.
+    /// What a screen calls this request — `Factory`, or `Factory → Mk3`.
     ///
     /// Composed here rather than baked into `structure`, so the name and the
     /// tier cannot be split back apart by a caller that wants only one.
@@ -4165,6 +4173,62 @@ pub struct RigToolRow {
     pub tier: u32,
     pub ticks: u64,
     pub carriers_held: u32,
+}
+
+/// What the recipe menu draws for one configurable machine.
+///
+/// `tile` is base space and the header, `RigToolView`'s reason: a base may
+/// stand several machines and the player has to be told which one they are
+/// setting. `held` is the units a change would empty (input plus output), so
+/// the screen can warn before the player makes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineRecipeView {
+    pub tile: (i32, i32),
+    pub name: String,
+    pub current: Option<ItemId>,
+    pub held: u32,
+    pub rows: Vec<MachineRecipeRow>,
+}
+
+/// One researched recipe on the menu. `inputs` is empty for an extraction.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MachineRecipeRow {
+    pub item: ItemId,
+    pub name: String,
+    pub inputs: Vec<(String, u32)>,
+    pub pace: RecipePace,
+    pub current: bool,
+}
+
+/// How long a recipe takes, as a word. Banded on `ticks_per_unit` by the
+/// `tuning::RECIPE_PACE_*` constants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecipePace {
+    Quick,
+    Steady,
+    Slow,
+    VerySlow,
+}
+
+impl RecipePace {
+    pub fn of(ticks_per_unit: u32) -> Self {
+        use crate::tuning::{RECIPE_PACE_QUICK_MAX, RECIPE_PACE_SLOW_MAX, RECIPE_PACE_STEADY_MAX};
+        match ticks_per_unit {
+            t if t <= RECIPE_PACE_QUICK_MAX => Self::Quick,
+            t if t <= RECIPE_PACE_STEADY_MAX => Self::Steady,
+            t if t <= RECIPE_PACE_SLOW_MAX => Self::Slow,
+            _ => Self::VerySlow,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Steady => "steady",
+            Self::Slow => "slow",
+            Self::VerySlow => "very slow",
+        }
+    }
 }
 
 /// The finish painted over one cell of laid floor — `Game::view_finishes_at`,

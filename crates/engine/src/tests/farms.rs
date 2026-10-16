@@ -547,7 +547,7 @@ fn an_unsown_plot_gets_no_tender() {
 #[test]
 fn farm_wants_go_unserved_when_production_and_digging_take_every_body() {
     let mut game = farm_base(53);
-    spawn_machine_at(&mut game, "mining_node", -4, 0);
+    spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, -4, 0);
     game.queue_work_order(crate::WorkOrder::batch(ItemId::from("core_fragment"), 50))
         .unwrap();
     let wall = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
@@ -679,7 +679,7 @@ fn an_unreachable_plot_tile_is_dropped_silently() {
     let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
     // Seal the tile in: every orthogonal neighbour is a structure.
     for (x, y) in [(-4, 2), (-2, 2), (-3, 1), (-3, 3)] {
-        spawn_machine_at(&mut game, "mining_node", x, y);
+        spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, x, y);
     }
     spawn_tamed(&mut game, 10, 3);
     let before = game.message_log(500).len();

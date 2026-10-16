@@ -320,62 +320,6 @@ fn every_shipped_item_and_structure_has_description_text() {
     }
 }
 
-/// **A machine's description says what it turns into what, in that order.**
-/// The build menu is where a base is planned, and a chain is only plannable
-/// if each link reads in the direction it runs — a line that names the
-/// product first ("Routine Disks out of Blank Substrate") is the same fact
-/// read backwards, and a reader assembling four machines into a chain has to
-/// re-order every one of them in their head. Two of the eleven shipped
-/// benches were also simply wrong about the direction before this census
-/// existed.
-///
-/// Ordering rather than an exact sentence, because the rest of the line is
-/// the modder's — the Lathe adds where to put it, the Fabricator its bench
-/// role. What is fixed is that the ingredients are named, the product is
-/// named, and the ingredients come first.
-///
-/// The names come from the recipe rather than the file, so retuning a
-/// machine's product in `assets/items/` fails here instead of leaving the
-/// build menu quoting the old one. `assets/structures/README.md` says the
-/// same thing in prose; this is the half that cannot be ignored.
-#[test]
-fn every_assembling_structure_describes_its_conversion_in_that_order() {
-    let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<crate::items_db::ItemDb>();
-    let mut checked = 0;
-    for def in game.structure_defs() {
-        let Some(assembles) = def.assembles.as_ref() else {
-            continue;
-        };
-        let cost = crate::systems::assembly_recipe(&def, items)
-            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
-        let product = game.item_name(&assembles.item);
-        let at = |needle: &str| {
-            def.description.find(needle).unwrap_or_else(|| {
-                panic!(
-                    "{} does not name {needle:?} in its description: {:?}",
-                    def.id, def.description
-                )
-            })
-        };
-        let product_at = at(product);
-        for (item, _) in cost {
-            let ingredient = game.item_name(item);
-            assert!(
-                at(ingredient) < product_at,
-                "{} reads backwards: {ingredient:?} must come before {product:?} in {:?}",
-                def.id,
-                def.description
-            );
-        }
-        checked += 1;
-    }
-    assert!(
-        checked >= 11,
-        "the shipped benches should all have been checked, not {checked}"
-    );
-}
-
 /// Crafting must never mint Credits. Base salvage is deliberately sellable
 /// (see `Game::sell_item`), and a Mining Node with a program on it produces
 /// that salvage forever — so an item worth more than the sum of its
@@ -454,10 +398,10 @@ fn every_shipped_upgrade_item_says_what_it_does() {
 
 /// A production line is a straight line: raw producer → refiner → bench, each
 /// machine pulling from exactly one upstream. That is a property of the
-/// *recipes*, not of the machines — an assembler runs its product's own
-/// `craftable.cost`, so a second ingredient added to any of those four items
-/// silently turns its bench back into a corner puzzle needing two lines stood
-/// up before anything comes out. That shape is what the flatten removed.
+/// *recipes*, not of the machines — an assembling machine runs its product's
+/// own `craftable.cost`, so a second ingredient added to any of those items
+/// silently turns its machine back into a corner puzzle needing two lines
+/// stood up before anything comes out. That shape is what the flatten removed.
 ///
 /// The engine still supports multi-input assemblers and mods may ship them —
 /// `chains::a_machine_short_one_of_its_two_ingredients_stays_starved` walks
@@ -468,27 +412,32 @@ fn every_shipped_assembler_recipe_is_a_single_ingredient() {
     let items = game.item_defs();
     let mut checked = 0;
     for def in game.structure_defs() {
-        let Some(assembles) = &def.assembles else {
+        let Some(machine) = &def.machine else {
             continue;
         };
-        let recipe = items
-            .iter()
-            .find(|i| i.id == assembles.item)
-            .and_then(|i| i.craftable.as_ref())
-            .unwrap_or_else(|| panic!("{} assembles {} with no recipe", def.id, assembles.item));
-        assert_eq!(
-            recipe.cost.len(),
-            1,
-            "{} assembles {} out of {} ingredients — a bench on two feeders needs two lines",
-            def.id,
-            assembles.item.as_str(),
-            recipe.cost.len()
-        );
-        checked += 1;
+        if machine.role != crate::structures::MachineRole::Assemble {
+            continue;
+        }
+        for recipe in &machine.recipes {
+            let cost = items
+                .iter()
+                .find(|i| i.id == recipe.produces)
+                .and_then(|i| i.craftable.as_ref())
+                .unwrap_or_else(|| panic!("{} lists {} with no recipe", def.id, recipe.produces));
+            assert_eq!(
+                cost.cost.len(),
+                1,
+                "{} makes {} out of {} ingredients — a machine on two feeders needs two lines",
+                def.id,
+                recipe.produces.as_str(),
+                cost.cost.len()
+            );
+            checked += 1;
+        }
     }
     assert_eq!(
         checked, 12,
-        "expected the twelve shipped assemblers — the Decoy Bench is the twelfth; one that lost its recipe would drop out of this scan unnoticed"
+        "expected the twelve shipped assembling recipes (five factory, five assembler, two printer); one that lost its recipe would drop out of this scan unnoticed"
     );
 }
 
@@ -532,8 +481,8 @@ fn the_broker_is_the_one_structure_the_first_of_which_is_free() {
 
 /// The other half of that press, and the one the recipe ceiling above can't
 /// see: a `work.produces` structure makes its item out of nothing on a
-/// timer, so the item's *value* is a Credit-per-tick rate. The Compiler
-/// (`flat_payout`, 8 ticks) would out-earn a Mining Node nearly fourfold if
+/// timer, so the item's *value* is a Credit-per-tick rate. A flat-payout
+/// printer (8 ticks) would out-earn an Extractor nearly fourfold if
 /// ICE Breakers were priced at their 3-Fragment recipe. Anything a base can
 /// print sits at the floor price; worth comes from what you can't print.
 #[test]
@@ -541,23 +490,38 @@ fn every_base_produced_item_sits_at_the_floor_price() {
     let game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut checked = 0;
     for def in game.structure_defs() {
-        let Some(work) = &def.work else {
-            continue;
-        };
-        assert_eq!(
-            game.item_value(&work.produces),
-            tuning::DEFAULT_ITEM_VALUE,
-            "{} prints {} every {} ticks, so pricing it above the floor makes the structure a Credit press",
-            def.id,
-            work.produces.as_str(),
-            work.ticks_per_unit
-        );
-        checked += 1;
+        for production in def.productions().filter(|p| p.extracts) {
+            let recipe = production.recipe;
+            assert_eq!(
+                game.item_value(&recipe.produces),
+                tuning::DEFAULT_ITEM_VALUE,
+                "{} prints {} every {} ticks, so pricing it above the floor makes the structure a Credit press",
+                def.id,
+                recipe.produces.as_str(),
+                recipe.ticks_per_unit
+            );
+            checked += 1;
+        }
     }
     assert_eq!(
         checked, 5,
-        "expected the five producing structures; the press ceiling has to cover every one"
+        "expected the Research Node's data and the Extractor's four recipes; the press ceiling has to cover every one"
     );
+}
+
+/// Every item an assembling machine lists a recipe for. Derived from the
+/// machines, never a list in a test, so a mod that adds a refiner extends
+/// the censuses below for free.
+fn assembled_items(
+    structures: &[crate::structures::StructureDef],
+) -> std::collections::HashSet<&str> {
+    structures
+        .iter()
+        .filter_map(|def| def.machine.as_ref())
+        .filter(|m| m.role == crate::structures::MachineRole::Assemble)
+        .flat_map(|m| m.recipes.iter())
+        .map(|recipe| recipe.produces.as_str())
+        .collect()
 }
 
 /// Standard and premium armour and modules are made *out of* the factory, so
@@ -566,7 +530,7 @@ fn every_base_produced_item_sits_at_the_floor_price() {
 /// any one of them reverted to raw Core Fragments would opt that item back out
 /// in silence, and nothing else in the suite would notice.
 ///
-/// "Factory-made" is derived from what structures actually `assembles`, never
+/// "Factory-made" is derived from what the assembling machines actually list, never
 /// a list here, so a mod that adds a refiner extends this for free. Weapons
 /// are deliberately outside it: they stay on the fragment economy, and moving
 /// them is a decision to make, not a gap to fill.
@@ -574,11 +538,7 @@ fn every_base_produced_item_sits_at_the_floor_price() {
 fn standard_and_premium_gear_is_made_from_intermediates() {
     let game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structures = game.structure_defs();
-    let factory_made: std::collections::HashSet<&str> = structures
-        .iter()
-        .filter_map(|def| def.assembles.as_ref())
-        .map(|assembles| assembles.item.as_str())
-        .collect();
+    let factory_made = assembled_items(&structures);
 
     let mut checked = 0;
     for def in game.item_defs() {
@@ -624,11 +584,7 @@ fn standard_and_premium_gear_is_made_from_intermediates() {
 fn scavenged_gear_stays_benchless_and_fragment_only() {
     let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structures = game.structure_defs();
-    let factory_made: std::collections::HashSet<&str> = structures
-        .iter()
-        .filter_map(|def| def.assembles.as_ref())
-        .map(|assembles| assembles.item.as_str())
-        .collect();
+    let factory_made = assembled_items(&structures);
 
     let mut checked = 0;
     for def in game.item_defs() {
@@ -1697,7 +1653,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
 #[test]
 fn an_assembler_runs_the_named_items_own_craftable_recipe() {
     let game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let authored = items
         .get(ids::POWER_CELL)
         .and_then(|d| d.craftable.as_ref())
@@ -1708,53 +1664,76 @@ fn an_assembler_runs_the_named_items_own_craftable_recipe() {
             id: "test_assembler", name: "Test Assembler", glyph: 'A', color: Cyan,
             build_cost: [],
             work: None,
-            assembles: Some((item: "power_cell", ticks_per_unit: 8)),
+            machine: Some((role: Assemble, recipes: [(produces: "power_cell", ticks_per_unit: 8)])),
         )"#,
     )
-    .expect("an assembles block must parse");
+    .expect("a machine block must parse");
+    let cell = ItemId(ids::POWER_CELL.to_string());
 
     assert_eq!(
-        crate::systems::assembly_recipe(&def, items),
+        crate::systems::assembly_recipe(
+            crate::structures::Placed {
+                def: &def,
+                recipe: Some(&cell)
+            },
+            items
+        ),
         Some(authored.cost.as_slice()),
         "the machine's recipe is the item's own, not a second copy of it"
     );
 }
 
-/// A structure with no `assembles` has no recipe to run — the resolver must
-/// say so rather than falling back to something.
+/// A structure that is not an assembling machine has no recipe to run — the
+/// resolver must say so rather than falling back to something.
 #[test]
 fn a_structure_that_assembles_nothing_resolves_no_recipe() {
     let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let db = game.world.resource::<crate::structures::StructureDb>();
-    let mining_node = db.get("mining_node").expect("mining_node ships");
+    let extractor = db.get("extractor").expect("extractor ships");
+    let core = ItemId(ids::CORE_FRAGMENT.to_string());
 
-    assert!(crate::systems::assembly_recipe(mining_node, items).is_none());
+    assert!(
+        crate::systems::assembly_recipe(
+            crate::structures::Placed {
+                def: extractor,
+                recipe: Some(&core)
+            },
+            items
+        )
+        .is_none()
+    );
 }
 
-/// Without this, a typo'd `assembles` ships a machine that can never run and
+/// Without this, a typo'd recipe ships a machine that can never run and
 /// says nothing at all. The same trap a mod falls into.
 #[test]
-fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
+fn every_shipped_assembling_recipe_names_an_item_that_declares_a_recipe() {
     let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let mut checked = 0;
     for def in game
         .world
         .resource::<crate::structures::StructureDb>()
         .all()
     {
-        if let Some(assembles) = &def.assembles {
+        let Some(machine) = &def.machine else {
+            continue;
+        };
+        if machine.role != crate::structures::MachineRole::Assemble {
+            continue;
+        }
+        for recipe in &machine.recipes {
             assert!(
                 items
-                    .get(assembles.item.as_str())
+                    .get(recipe.produces.as_str())
                     .is_some_and(|d| d.craftable.is_some()),
-                "{} assembles {:?}, which is not a craftable item",
+                "{} lists {:?}, which is not a craftable item",
                 def.id,
-                assembles.item
+                recipe.produces
             );
             assert!(
-                assembles.ticks_per_unit > 0,
+                recipe.ticks_per_unit > 0,
                 "{} would produce a unit every tick",
                 def.id
             );
@@ -1763,51 +1742,119 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
     }
     assert_eq!(
         checked, 12,
-        "the shipped chains are Refinery, Winding Node and Assembly Bay, plus the \
-         Lathe, Transcriber and Disk Press, plus the Compiler, plus the Armory and \
-         Fabricator, which assemble one gear item apiece while staying benches for \
-         the rest, plus the Annealing Node, Refactor Bench and Decoy Bench — if \
-         that changes, \
-         change this count deliberately rather than letting the check go vacuous"
+        "the shipped assembling recipes are five on the Factory, five on the \
+         Assembler and two on the Printer — if that changes, change this count \
+         deliberately rather than letting the check go vacuous"
     );
 }
 
-/// A machine runs the assembled item's own `craftable.cost` (see
-/// `systems::assembly_recipe`), so a machine whose product named a
-/// *different* bench would build something its own owner could not craft by
-/// hand — and hand-crafting is the manual fallback for a machine you own,
-/// not a way around building one.
-///
-/// Naming no bench at all is the other legal answer, and the Compiler is why:
-/// its product, the ICE Breaker, is one of the three consumable starters a
-/// run is expected to be able to compile from turn one. Automating a starter
-/// must not retroactively gate it. What stops that permission spreading is
-/// `only_the_starters_and_scavenged_gear_need_no_research_or_bench`, which
-/// pins the ungated set by name — so a *new* machine whose product went
-/// benchless to satisfy this test would fail that one instead.
+/// The hand-compile gates that moved onto the Workbench, item by item: a
+/// merged bench must not make a recipe cheaper to reach than it was.
 #[test]
-fn no_shipped_assembler_builds_another_benchs_product() {
-    let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
-    for def in game
-        .world
-        .resource::<crate::structures::StructureDb>()
-        .all()
-    {
-        let Some(assembles) = &def.assembles else {
-            continue;
-        };
-        let recipe = items
-            .get(assembles.item.as_str())
-            .and_then(|d| d.craftable.as_ref())
-            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
-        if let Some(other) = recipe.requires_structure.as_deref()
-            && other != def.id.as_str()
+fn every_bench_recipe_moved_to_the_workbench_keeps_its_gate() {
+    let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    let gates: [(&[&str], Option<&str>); 7] = [
+        (
+            &[
+                "annealed_core",
+                "recompile_kernel",
+                "bounds_check",
+                "buffer_extension",
+                "inline_cache",
+            ],
+            Some("program_refactoring"),
+        ),
+        (
+            &[
+                "bastion_lattice",
+                "hardened_shell",
+                "null_weave",
+                "nullsteel_plate",
+                "phase_carapace",
+                "static_mesh",
+            ],
+            Some("armor_bench"),
+        ),
+        (
+            &[
+                "arc_lance",
+                "black_ice_pick",
+                "entropy_damper",
+                "kernel_key",
+                "logic_probe",
+                "oracle_core",
+                "plasma_router",
+                "recursion_blade",
+                "reinitialization_protocol",
+                "scatter_lance",
+                "shim_blade",
+                "siege_compiler",
+                "singularity_matrix",
+                "sync_governor",
+                "trace_sniffer",
+            ],
+            Some("weapon_bench"),
+        ),
+        (
+            &["blank_substrate", "routine_disk", "logic_wafer"],
+            Some("routine_fabrication"),
+        ),
+        (&["honeypot"], Some("deception")),
+        (&["patch_routine", "bytecode_block", "charge_coil"], None),
+        (&[], None),
+    ];
+    let mut checked = 0;
+    for (ids, gate) in gates {
+        for id in ids {
+            let c = items
+                .get(id)
+                .and_then(|d| d.craftable.as_ref())
+                .unwrap_or_else(|| panic!("{id} should be craftable"));
+            assert_eq!(c.requires_structure.as_deref(), Some("workbench"), "{id}");
+            assert_eq!(c.research.as_deref(), gate, "{id}");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 33);
+}
+
+#[test]
+fn no_shipped_recipe_names_a_removed_bench() {
+    let game = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let removed = [
+        "compiler",
+        "armory",
+        "fabricator",
+        "refactor_bench",
+        "mining_node",
+        "log_scraper",
+        "cache_tap",
+        "power_conduit",
+        "lathe",
+        "refinery",
+        "annealing_node",
+        "transcriber",
+        "winding_node",
+        "disk_press",
+        "decoy_bench",
+        "assembly_bay",
+    ];
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    for def in items.all() {
+        if let Some(bench) = def
+            .craftable
+            .as_ref()
+            .and_then(|c| c.requires_structure.as_deref())
         {
-            panic!(
-                "{} builds {:?}, whose recipe points at {other}'s bench",
-                def.id, assembles.item
-            );
+            assert!(!removed.contains(&bench), "{} names {bench}", def.id);
+        }
+    }
+    for node in game.world.resource::<crate::research::ResearchDb>().all() {
+        for r in &node.unlocks_recipes {
+            if let Some(bench) = r.requires_structure.as_deref() {
+                assert!(!removed.contains(&bench), "{} names {bench}", node.id);
+            }
         }
     }
 }
@@ -1826,7 +1873,7 @@ fn no_shipped_assembler_builds_another_benchs_product() {
 /// free forever.
 ///
 /// Filters on `runs_a_job()` itself rather than re-deriving `work.is_some()
-/// || assembles.is_some()`, which is exactly the drift `runs_a_job`'s own
+/// || machine.is_some()`, which is exactly the drift `runs_a_job`'s own
 /// doc comment warns about.
 #[test]
 fn every_shipped_machine_declares_a_power_draw() {
@@ -1846,18 +1893,16 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 19,
-        "the plan's table named 15 machines, the Cache Tap is the \
-         sixteenth, the Teardown Rig the seventeenth, the Decoy Bench the \
-         eighteenth and the Holding Cell the nineteenth; if that count \
-         changed, change this deliberately rather than letting the check go \
-         vacuous"
+        checked, 7,
+        "the four configurable machines, the Research Node, the Teardown Rig and the \
+         Holding Cell; if that count changed, change this deliberately rather \
+         than letting the check go vacuous"
     );
 }
 
 /// Home alone has to open a base: a fresh base with nothing else standing
-/// must be able to run its opening extractors — a Mining Node, a Log
-/// Scraper and a Research Node — before a single Recharger is built.
+/// must be able to run its opening extractors — one Extractor on Core
+/// Fragments, one on Raw Trace, and a Research Node — before a single Recharger is built.
 /// Stated as a concrete sum because "covers the opening" is not something a
 /// test can check any other way.
 #[test]
@@ -1865,14 +1910,13 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
     let game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
     let home = db.get("home").expect("home ships");
-    let mining_node = db.get("mining_node").expect("mining_node ships");
-    let log_scraper = db.get("log_scraper").expect("log_scraper ships");
+    let extractor = db.get("extractor").expect("extractor ships");
     let research_node = db.get("research_node").expect("research_node ships");
 
-    let opening_draw = mining_node.power_draw + log_scraper.power_draw + research_node.power_draw;
+    let opening_draw = 2 * extractor.power_draw + research_node.power_draw;
     assert!(
         home.power_supply >= opening_draw,
-        "Home supplies {}, but a Mining Node, a Log Scraper and a Research \
+        "Home supplies {}, but two Extractors and a Research \
          Node together draw {opening_draw} — a fresh base would open dark",
         home.power_supply
     );
@@ -1881,8 +1925,8 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
 /// The bootstrap has to reach the bootstrapper. `ledger` cuts the machines
 /// that can restart the grid last, nearest the fuel last of all, so a base
 /// collapsed to the Home's free supply recovers only if that supply covers
-/// the rung that makes fuel out of nothing — a Power Conduit standing dark
-/// behind a Compiler that ate the Home's 4 is how a run used to die with its
+/// the rung that makes fuel out of nothing — an Extractor on Power Cells standing dark
+/// behind a Printer that ate the Home's 4 is how a run used to die with its
 /// own way out standing idle.
 ///
 /// The rungs are named rather than merely counted: they are *derived* from
@@ -1893,33 +1937,43 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
 fn the_home_alone_lights_the_machine_that_makes_grid_fuel() {
     let game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let chain = crate::game::base::power::fuel_chain(items);
 
-    let mut rungs: Vec<(u32, &str)> = db
+    let mut rungs: Vec<(u32, String)> = db
         .all()
         .filter(|def| def.runs_a_job())
-        .filter_map(|def| {
-            Some((
-                crate::game::base::power::grid_rung(def, &chain)?,
-                def.id.as_str(),
-            ))
+        .flat_map(|def| {
+            def.productions()
+                .map(move |p| (def, p.recipe.produces.clone()))
+        })
+        .filter_map(|(def, item)| {
+            let rung = crate::game::base::power::grid_rung(
+                crate::structures::Placed {
+                    def,
+                    recipe: Some(&item),
+                },
+                &chain,
+            )?;
+            Some((rung, format!("{}/{}", def.id, item.as_str())))
         })
         .collect();
     rungs.sort_unstable();
     assert_eq!(
         rungs,
-        [(0, "power_conduit"), (1, "mining_node")],
+        [
+            (0, "extractor/power_cell".to_string()),
+            (1, "extractor/core_fragment".to_string())
+        ],
         "the machines that outrank the rest of the base for power, and in \
-         what order; the Winding Node's Charge Coil is a Power Cell *sink* \
-         and must not be here"
+         what order; the Charge Coil is a Power Cell *sink* and must not be here"
     );
 
     let home = db.get("home").expect("home ships");
     let makers_draw: u32 = rungs
         .iter()
         .filter(|(rung, _)| *rung == 0)
-        .map(|(_, id)| db.get(id).unwrap().power_draw)
+        .map(|(_, id)| db.get(id.split('/').next().unwrap()).unwrap().power_draw)
         .sum();
     assert!(
         home.power_supply >= makers_draw,
@@ -1971,7 +2025,7 @@ fn no_shipped_structure_both_draws_and_supplies() {
 fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
     let game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let mut checked = 0;
     for def in db.all() {
         let Some(fuel) = &def.power_upkeep else {
@@ -2090,8 +2144,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 10,
-        "expected the ten upgradeable structures — the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
+        checked, 6,
+        "expected the six upgradeable structures — the Workbench, the Extractor, the Research Node, the Patch Node, the Teardown Rig and the Quarantine Rack; one that lost its path would drop out of this scan unnoticed"
     );
 }
 
@@ -2155,7 +2209,7 @@ fn every_zone_portal_line_is_makeable_by_the_sector_that_demands_it() {
     let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let research = game.world.resource::<crate::research::ResearchDb>();
     let structures = game.world.resource::<StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let node_zone = research_reachable_zone(research);
 
     // The gated structures first, each at the shallowest node that unlocks
@@ -2187,10 +2241,15 @@ fn every_zone_portal_line_is_makeable_by_the_sector_that_demands_it() {
             best = Some(best.map_or(zone, |b: u32| b.min(zone)));
         };
         for def in structures.all() {
-            let makes = def.assembles.as_ref().is_some_and(|a| &a.item == id)
-                || def.work.as_ref().is_some_and(|w| &w.produces == id);
-            if makes {
-                consider(structure_zone[def.id.as_str()]);
+            // The machine is buildable from the start, so what gates a
+            // listed recipe is the research it names.
+            for production in def.productions().filter(|p| &p.recipe.produces == id) {
+                let gate = production
+                    .recipe
+                    .research
+                    .as_ref()
+                    .map_or(1, |r| node_zone[r.as_str()]);
+                consider(structure_zone[def.id.as_str()].max(gate));
             }
         }
         if let Some(craftable) = items.get(id.as_str()).and_then(|d| d.craftable.as_ref()) {
@@ -2198,7 +2257,8 @@ fn every_zone_portal_line_is_makeable_by_the_sector_that_demands_it() {
                 .requires_structure
                 .as_ref()
                 .map_or(1, |k| structure_zone[k.as_str()]);
-            consider(bench);
+            let gate = craftable.research.as_deref().map_or(1, |r| node_zone[r]);
+            consider(bench.max(gate));
         }
         for def in research.all() {
             for recipe in &def.unlocks_recipes {
@@ -3098,7 +3158,7 @@ fn every_shipped_need_has_a_shipped_amenity() {
 /// is a real statement about content rather than a re-derivation: a shelf, a
 /// rack, the doorway out of the sector, anything that defends, repairs,
 /// services a need or trades costs nobody, and every producer costs one. A
-/// Shield that grew an `assembles:` line would fail both arms at once.
+/// Shield that grew a `machine:` line would fail both arms at once.
 ///
 /// Deliberately a census over *shipped assets* and not a rule in
 /// `StructureDef` — a mod is free to build a bench that defends.
@@ -3130,7 +3190,7 @@ fn the_shipped_program_cost_follows_the_job() {
                 def.id
             );
         }
-        if def.work.is_some() || def.assembles.is_some() || def.strips.is_some() {
+        if def.work.is_some() || def.machine.is_some() || def.strips.is_some() {
             costed += 1;
             assert!(
                 def.needs_program(),
@@ -4346,7 +4406,7 @@ fn every_shipped_sprite_override_resolves_to_a_real_file() {
 #[test]
 fn every_shipped_tools_yields_resolve_to_real_items() {
     let game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let tools = game.world.resource::<ToolDb>();
 
     let mut checked = 0;
@@ -4543,7 +4603,7 @@ fn every_researched_tool_unlock_resolves_to_a_shipped_tool() {
 #[test]
 fn every_shipped_tool_forge_cost_resolves_to_a_real_item() {
     let game = Game::new(4108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let tools = game.world.resource::<ToolDb>();
 
     let mut checked = 0;
@@ -4683,7 +4743,7 @@ fn an_image_tool_ships_an_empty_yield_pool() {
 fn every_species_rich_in_resolves_to_a_real_item() {
     let game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species = game.world.resource::<SpeciesDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
 
     let mut checked = 0;
     for def in species.all() {
@@ -4885,7 +4945,7 @@ fn every_amenity_and_repair_bay_declares_a_footprint_of_one() {
 /// Compiler keeps its own flag — moving it would silently downgrade
 /// manual extraction for a run in progress (spec 10.3).
 #[test]
-fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
+fn the_teardown_rig_is_also_an_extraction_bench_and_the_workbench_is() {
     let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structures = game.world.resource::<StructureDb>();
 
@@ -4898,13 +4958,11 @@ fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
         "the rig should be a manual bench too"
     );
 
-    let compiler = structures
-        .get("compiler")
-        .expect("compiler should be a shipped structure");
-    assert!(
-        compiler.extracts_programs,
-        "the Compiler keeps its bench flag — moving it downgrades a run in progress"
-    );
+    let workbench = structures
+        .get("workbench")
+        .expect("workbench should be a shipped structure");
+    assert!(workbench.extracts_programs && workbench.extracts_routines);
+    assert_eq!(workbench.extracts_research.as_deref(), Some("automation"));
 }
 
 /// **`runs_a_job` is doubly load-bearing.** `spawn_structure` only inserts
@@ -4953,11 +5011,12 @@ fn the_teardown_node_unlocks_the_rig() {
 /// so a bill leaning on it would be an unstated prerequisite, which is
 /// exactly the failure this exists to catch.
 ///
-/// A `work.produces` structure makes its item out of nothing on a timer and
-/// so seeds the set; an `assembles` structure does not, because a machine
-/// runs its product's own `craftable.cost` and is therefore already covered
-/// by the craft fixpoint. Treating it as a source is how the Fabricator
-/// reads as a Trace Sniffer supply with no Logic Wafer in sight.
+/// An extraction recipe (a `work` block or an Extractor's) makes its item out
+/// of nothing on a timer and so seeds the set, once the node's prerequisites
+/// hold the research it names; an assembling recipe does not, because a
+/// machine runs its product's own `craftable.cost` and is therefore already
+/// covered by the craft fixpoint. Treating it as a source is how an
+/// assembler reads as a Trace Sniffer supply with no Logic Wafer in sight.
 #[test]
 fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -5009,10 +5068,15 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
             })
             .collect();
 
+        // Open at this node: no research gate, or one this node's own
+        // prerequisites hold.
+        let open = |research_gate: Option<&str>| research_gate.is_none_or(|r| prereqs.contains(r));
         let mut makeable: std::collections::HashSet<ItemId> = structures
             .iter()
             .filter(|s| available.contains(s.id.as_str()))
-            .filter_map(|s| s.work.as_ref().map(|w| w.produces.clone()))
+            .flat_map(|s| s.productions())
+            .filter(|p| p.extracts && open(p.recipe.research.as_deref()))
+            .map(|p| p.recipe.produces.clone())
             .collect();
         loop {
             let grown: Vec<ItemId> = items
@@ -5020,9 +5084,10 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
                 .filter(|item| !makeable.contains(&item.id))
                 .filter_map(|item| item.craftable.as_ref().map(|c| (&item.id, c)))
                 .filter(|(_, c)| {
-                    c.requires_structure
-                        .as_ref()
-                        .is_none_or(|s| available.contains(s.as_str()))
+                    open(c.research.as_deref())
+                        && c.requires_structure
+                            .as_ref()
+                            .is_none_or(|s| available.contains(s.as_str()))
                         && c.cost.iter().all(|(i, _)| makeable.contains(i))
                 })
                 .map(|(id, _)| id.clone())
@@ -5513,14 +5578,14 @@ fn every_discoverable_research_node_is_reachable_from_the_visible_tree() {
     );
 }
 
-/// The honeypot's whole chain in one place: research → bench → recipe →
-/// `trap:`. Three files author four links between them and nothing in the
-/// compiler holds any of them.
+/// The honeypot's whole chain in one place: research → Workbench → recipe →
+/// `trap:`, and research → Assembler recipe. Three files author the links
+/// between them and nothing in the compiler holds any of them.
 ///
 /// The last assertion is the load-bearing one and the one nothing else
-/// checks: without `assembles` naming the item, the bench is buildable and
-/// the recipe is unassemblable, which reads at the keyboard as the work
-/// order screen simply not listing it.
+/// checks: without the Assembler listing the item, the recipe is
+/// unassemblable, which reads at the keyboard as the work order screen
+/// simply not listing it.
 #[test]
 fn the_honeypot_is_gated_by_deception_and_nothing_else() {
     let game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -5541,31 +5606,30 @@ fn the_honeypot_is_gated_by_deception_and_nothing_else() {
             .as_ref()
             .and_then(|c| c.requires_structure.as_ref())
             .map(|s| s.as_str()),
-        Some("decoy_bench"),
+        Some("workbench"),
         "a honeypot is compiled at the bench, never by hand"
     );
-
-    let unlockers: Vec<String> = game
-        .research_defs()
-        .into_iter()
-        .filter(|d| d.unlocks_structures.iter().any(|s| s == "decoy_bench"))
-        .map(|d| d.id.to_string())
-        .collect();
     assert_eq!(
-        unlockers,
-        vec!["deception".to_string()],
-        "exactly one node opens the bench"
+        honeypot
+            .craftable
+            .as_ref()
+            .and_then(|c| c.research.as_deref()),
+        Some("deception"),
+        "and it keeps the gate of the Decoy Bench it replaced"
     );
 
-    let bench = game
+    let assembler = game
         .structure_defs()
         .into_iter()
-        .find(|d| d.id == "decoy_bench")
-        .expect("the bench ships");
+        .find(|d| d.id == "assembler")
+        .expect("the Assembler ships");
+    let listed = assembler
+        .machine_recipe(&ItemId("honeypot".to_string()))
+        .expect("the Assembler must list the honeypot or it is unassemblable");
     assert_eq!(
-        bench.assembles.as_ref().map(|a| a.item.as_str()),
-        Some("honeypot"),
-        "the bench must name the item or the recipe is unassemblable"
+        listed.research.as_deref(),
+        Some("deception"),
+        "the Assembler's honeypot recipe opens with the same node"
     );
 }
 
@@ -5955,7 +6019,7 @@ fn the_decompiler_research_chain_is_loaded_reachable_and_strictly_increasing() {
 fn six_implants_ship_and_every_implant_links_to_its_item_both_ways() {
     let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let implants = game.world.resource::<crate::implants::ImplantDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let ids = implants.ids();
     assert_eq!(ids.len(), 6, "the first set: {ids:?}");
     for id in &ids {
@@ -6227,6 +6291,206 @@ fn shipped_species_name_the_personalities_the_spec_assigns() {
             assert_eq!(named, Some(profile), "{id}");
         }
     }
+}
+
+/// `(machine, produces, ticks_per_unit, research, level, tierless)` — the
+/// Global Constraints recipe table, restated so a retune of a `.ron` file
+/// has to be deliberate.
+type MachineRow = (
+    &'static str,
+    &'static str,
+    u32,
+    Option<&'static str>,
+    Option<u32>,
+    bool,
+);
+
+const MACHINE_TABLE: &[MachineRow] = &[
+    ("extractor", "core_fragment", 10, None, Some(1), false),
+    (
+        "extractor",
+        "raw_trace",
+        10,
+        Some("routine_fabrication"),
+        Some(1),
+        false,
+    ),
+    (
+        "extractor",
+        "cache_grain",
+        14,
+        Some("cache_coherence"),
+        Some(1),
+        false,
+    ),
+    ("extractor", "power_cell", 6, Some("power_grid"), None, true),
+    (
+        "factory",
+        "blank_substrate",
+        12,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("factory", "bytecode_block", 12, None, None, false),
+    (
+        "factory",
+        "annealed_core",
+        12,
+        Some("program_refactoring"),
+        None,
+        false,
+    ),
+    (
+        "factory",
+        "logic_wafer",
+        12,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("factory", "charge_coil", 12, None, None, false),
+    (
+        "assembler",
+        "routine_disk",
+        20,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("assembler", "honeypot", 20, Some("deception"), None, false),
+    (
+        "assembler",
+        "recompile_kernel",
+        20,
+        Some("program_refactoring"),
+        None,
+        false,
+    ),
+    (
+        "assembler",
+        "hardened_shell",
+        30,
+        Some("armor_bench"),
+        None,
+        false,
+    ),
+    (
+        "assembler",
+        "trace_sniffer",
+        30,
+        Some("weapon_bench"),
+        None,
+        false,
+    ),
+    ("printer", "ice_breaker", 8, Some("automation"), None, false),
+    ("printer", "patch_routine", 20, None, None, false),
+];
+
+fn shipped_game() -> Game {
+    Game::new(21002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+#[test]
+fn the_four_machines_carry_the_recipe_table() {
+    let game = shipped_game();
+    let db = game.world.resource::<StructureDb>();
+    for kind in ["extractor", "factory", "assembler", "printer"] {
+        let machine = db.get(kind).unwrap().machine.as_ref().unwrap();
+        let expected = MACHINE_TABLE.iter().filter(|r| r.0 == kind).count();
+        assert_eq!(
+            machine.recipes.len(),
+            expected,
+            "{kind} lists exactly its table rows"
+        );
+    }
+    for &(kind, produces, ticks, research, level, tierless) in MACHINE_TABLE {
+        let recipe = db
+            .get(kind)
+            .unwrap()
+            .machine_recipe(&ItemId::from(produces))
+            .unwrap_or_else(|| panic!("{kind} does not list {produces}"));
+        assert_eq!(recipe.ticks_per_unit, ticks, "{kind} {produces}");
+        assert_eq!(recipe.research.as_deref(), research, "{kind} {produces}");
+        assert_eq!(recipe.level, level, "{kind} {produces}");
+        assert_eq!(recipe.tierless, tierless, "{kind} {produces}");
+    }
+}
+
+#[test]
+fn every_machine_recipe_research_names_a_shipped_node() {
+    let game = shipped_game();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in game.world.resource::<StructureDb>().all() {
+        for production in def.productions().filter(|_| def.machine.is_some()) {
+            if let Some(id) = &production.recipe.research {
+                checked += 1;
+                assert!(
+                    research.get(id).is_some(),
+                    "{} gates {} behind unknown research {id}",
+                    def.id,
+                    production.recipe.produces
+                );
+            }
+        }
+    }
+    assert!(checked > 0, "the census must find gated recipes");
+}
+
+#[test]
+fn the_machines_cost_and_draw_what_the_spec_says() {
+    let game = shipped_game();
+    let db = game.world.resource::<StructureDb>();
+    // (kind, build cost, power draw, capacity)
+    for (kind, cost, draw, capacity) in [
+        ("extractor", 12, 1, 20),
+        ("factory", 16, 2, 20),
+        ("assembler", 18, 3, 15),
+        ("printer", 16, 2, 15),
+    ] {
+        let def = db.get(kind).unwrap();
+        assert_eq!(
+            def.build_cost,
+            vec![(ItemId::from("core_fragment"), cost)],
+            "{kind}"
+        );
+        assert_eq!(def.power_draw, draw, "{kind}");
+        assert_eq!(def.capacity, capacity, "{kind}");
+        assert_eq!(def.room_tags, vec!["workshop".to_string()], "{kind}");
+    }
+    let up = db.get("extractor").unwrap().upgrade.as_ref().unwrap();
+    assert_eq!(up.max_tier, 5);
+    assert_eq!(
+        up.cost,
+        vec![
+            (ItemId::from("core_fragment"), 10),
+            (ItemId::from("cache_grain"), 1)
+        ]
+    );
+    for kind in ["factory", "assembler", "printer"] {
+        assert!(db.get(kind).unwrap().upgrade.is_none(), "{kind}");
+    }
+}
+
+#[test]
+fn every_configure_objective_names_an_item_some_machine_can_make() {
+    let assets = test_assets_dir();
+    let (contracts, _) = crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
+    let (structures, _) =
+        crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let mut seen = 0;
+    for def in contracts.iter() {
+        if let crate::contracts::Objective::Configure { item } = &def.objective {
+            seen += 1;
+            assert!(
+                structures.all().any(|s| s.machine_recipe(item).is_some()),
+                "{} asks for a machine set to make {item}, which no machine lists",
+                def.id
+            );
+        }
+    }
+    assert!(seen > 0, "the census must find a shipped Configure job");
 }
 
 #[test]

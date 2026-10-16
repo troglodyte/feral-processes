@@ -305,7 +305,7 @@ fn chain_rows(chain: &RecipeChain) -> Vec<String> {
 /// One chain's step lines, arrow columns aligned.
 ///
 /// Columns are padded per chain rather than across the whole screen. A single
-/// global width would push a Mining Node's one-word line out past the longest
+/// global width would push an Extractor's one-word line out past the longest
 /// row in the game, and the thing worth reading at a glance is one chain's
 /// arrows lining up, not every chain's.
 ///
@@ -373,8 +373,8 @@ fn wrap_step_line(line: String) -> Vec<String> {
 /// so beats an empty column the eye reads as a missing value.
 ///
 /// An ingredient no recipe makes leads with the structure that taps it, so a
-/// chain read top to bottom is the build order: `Mining Node (Core Fragment
-/// x4) -> Lathe` is the whole answer to "what do I put down to get one".
+/// chain read top to bottom is the build order: `Extractor (Core Fragment
+/// x4) -> Factory` is the whole answer to "what do I put down to get one".
 /// Which ingredients earn that prefix is `RecipeInput::source`'s call, not
 /// this function's.
 fn inputs_text(step: &RecipeStep) -> String {

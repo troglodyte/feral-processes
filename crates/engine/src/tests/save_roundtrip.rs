@@ -927,7 +927,7 @@ fn a_build_sites_program_survives_a_save_and_load() {
     game.world.spawn((
         BuildSite {
             program: Some(snapshot.clone()),
-            ..BuildSite::new("fabricator".to_string(), vec![])
+            ..BuildSite::new("assembler".to_string(), vec![])
         },
         Position { x: 1, y: 1 },
     ));
@@ -1007,7 +1007,7 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
     let program_id = game.world.get::<ProgramId>(spend).unwrap().0;
     assert_ne!(program_id, 0, "the fixture minted a real id");
 
-    game.place_structure("mining_node", 1, 0, Some(spend))
+    game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
     game.save(&path).expect("save");
 
@@ -1209,7 +1209,7 @@ fn a_study_station_takes_precedence_over_a_stale_cronjob_on_restore() {
     let station = game
         .find_blocking_structure_at(1, -3)
         .expect("the Station was just deployed");
-    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
 
     let program = spawn_tamed(&mut game, 10, 3);
     game.rename_companion(program, Some("Analyst".to_string()))
@@ -1316,7 +1316,7 @@ fn a_save_written_without_the_build_rolls_loads_them_neutral() {
 #[test]
 fn a_machines_build_quality_survives_a_save() {
     let mut game = crate::tests::support::base_with_a_built_node(4212, 1.0, 0.82);
-    let node = crate::tests::support::first_structure(&mut game, "mining_node");
+    let node = crate::tests::support::first_structure(&mut game, "extractor");
     let before = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
     assert!(
         before > 10,
@@ -1331,7 +1331,7 @@ fn a_machines_build_quality_survives_a_save() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let reloaded = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    let reloaded = crate::tests::support::first_structure(&mut loaded, "extractor");
     assert_eq!(
         loaded.work_ticks_for(reloaded, crate::tuning::DEFAULT_BASE_SPEED),
         before,
@@ -1370,7 +1370,7 @@ fn a_save_written_without_build_quality_loads_it_neutral() {
     let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
     let _ = std::fs::remove_file(&path);
 
-    let node = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    let node = crate::tests::support::first_structure(&mut loaded, "extractor");
     assert_eq!(
         loaded.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
         10,
@@ -1488,7 +1488,7 @@ fn a_build_sites_tamed_program_without_a_base_is_refused_on_load() {
     game.world.spawn((
         BuildSite {
             program: Some(snapshot),
-            ..BuildSite::new("fabricator".to_string(), vec![])
+            ..BuildSite::new("assembler".to_string(), vec![])
         },
         Position { x: 1, y: 1 },
     ));

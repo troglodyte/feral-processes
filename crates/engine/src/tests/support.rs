@@ -950,13 +950,15 @@ pub(super) fn base_with_a_built_node(game_seed: u32, assembly: f32, extraction: 
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
     stand_in_base(&mut game);
     spawn_tamed(&mut game, 500, 3);
-    file_build_with_rolls(&mut game, "mining_node", 1, 0, assembly, extraction);
+    file_build_with_rolls(&mut game, "extractor", 1, 0, assembly, extraction);
     for _ in 0..400 {
-        if first_structure_opt(&mut game, "mining_node").is_some() {
+        if first_structure_opt(&mut game, "extractor").is_some() {
             break;
         }
         game.tick();
     }
+    let node = first_structure(&mut game, "extractor");
+    set_recipe_researched(&mut game, node, ids::CORE_FRAGMENT).unwrap();
     game
 }
 
@@ -1116,6 +1118,90 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) ->
             Position { x, y },
         ))
         .id()
+}
+
+/// A Workbench standing at `(x, y)` with Automation done: the pair that makes
+/// `Game::can_extract_routines` true, by ownership rather than touch.
+pub(super) fn stand_an_extraction_bench(game: &mut Game, x: i32, y: i32) -> Entity {
+    unlock_research_chain(game, "automation");
+    spawn_structure_at(game, "workbench", x, y)
+}
+
+/// Stands the party in base space with a Workbench orthogonally beside it:
+/// the touch a bench recipe is offered under. Returns the bench.
+pub(super) fn touch_a_workbench(game: &mut Game) -> Entity {
+    stand_in_base_at(game, 0, 0);
+    spawn_structure_at(game, "workbench", 1, 0)
+}
+
+/// Stands a machine of `kind` beside the party through the real build path,
+/// then sets it to `recipe` the way the player does — researching the
+/// recipe's gate first so the refusal is not the thing under test.
+pub(super) fn place_machine(
+    game: &mut Game,
+    kind: &str,
+    recipe: &str,
+    dx: i32,
+    dy: i32,
+) -> Result<Entity, String> {
+    place_now(game, kind, dx, dy)?;
+    let (bx, by) = game.base_pos().expect("a test places machines in the base");
+    let machine = game
+        .world
+        .query::<(Entity, &Structure, &Position)>()
+        .iter(&game.world)
+        .find(|(_, s, p)| s.kind == kind && (p.x, p.y) == (bx + dx, by + dy))
+        .map(|(e, _, _)| e)
+        .unwrap_or_else(|| panic!("the {kind} should stand at the tile"));
+    set_recipe_researched(game, machine, recipe)?;
+    Ok(machine)
+}
+
+/// `place_machine` without the build: a machine of `kind` at an absolute
+/// tile, set to `recipe`. Named apart from `spawn_machine_at`, which stands a
+/// machine with nothing set for the older single-recipe fixtures.
+pub(super) fn spawn_machine_with_recipe_at(
+    game: &mut Game,
+    kind: &str,
+    recipe: &str,
+    x: i32,
+    y: i32,
+) -> Entity {
+    game.lay_starting_pocket();
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == kind)
+        .unwrap_or_else(|| panic!("{kind} should be a shipped structure"));
+    let machine = game.spawn_structure(&def, x, y, None);
+    set_recipe_researched(game, machine, recipe).unwrap();
+    machine
+}
+
+pub(super) fn set_recipe_researched(
+    game: &mut Game,
+    machine: Entity,
+    recipe: &str,
+) -> Result<(), String> {
+    let kind = game.world.get::<Structure>(machine).unwrap().kind.clone();
+    let gate = game
+        .world
+        .resource::<StructureDb>()
+        .get(&kind)
+        .and_then(|d| d.machine.as_ref())
+        .and_then(|m| m.recipes.iter().find(|r| r.produces.as_str() == recipe))
+        .and_then(|r| r.research.clone());
+    if let Some(gate) = gate {
+        unlock_research_chain(game, &gate);
+    }
+    let item = ItemId::from(recipe);
+    // Setting is a base action; a fixture out on the surface crosses in and
+    // back so the call is not what the test is about.
+    if game.base_pos().is_some() {
+        game.set_machine_recipe(machine, &item)
+    } else {
+        from_inside_the_base(game, |g| g.set_machine_recipe(machine, &item))
+    }
 }
 
 /// A walled 4x4 room (interior x and y in 2..=5) with a door, `finished`
@@ -1381,30 +1467,59 @@ pub(super) fn base_with_a_research_node(game: &mut Game) -> Entity {
             .collect();
     // Sorted so the tiles these land on do not depend on set iteration order.
     needed.sort();
-    let mut kinds: Vec<String> = Vec::new();
+    // One machine per (kind, product): a configurable machine makes one thing,
+    // so a bill of three items on the Extractor needs three Extractors.
+    let mut machines: Vec<(String, Option<ItemId>)> = Vec::new();
     for item in needed {
         let Some(def) = crate::game::base::work_orders::makeable_by(game, &item) else {
             continue;
         };
-        if !kinds.contains(&def.id) {
-            kinds.push(def.id);
+        let recipe = def.machine.is_some().then(|| item.clone());
+        let stand = (def.id, recipe);
+        if !machines.contains(&stand) {
+            machines.push(stand);
         }
     }
     // The shelf `feeders_for` falls back to when no producer is a neighbour.
-    kinds.push("depot".to_string());
+    machines.push(("depot".to_string(), None));
     // **Laid floor, or none of this is reachable.** The starting pocket is four
     // cells across, which does not hold a Research Node plus a producer per
     // shipped bill; a machine off the floor is one `can_walk_to_post` refuses,
     // so the scheduler posts nobody and the base reads as having no work — the
     // failure looks like a scheduler bug and is a fixture that stood its
     // machines in the rock.
-    for (lane, kind) in kinds.into_iter().enumerate() {
-        let (x, y) = (2 + lane as i32 * 2, 4);
+    for (lane, (kind, recipe)) in machines.into_iter().enumerate() {
+        // Four to a row so the farthest machine stays within a walk of the
+        // pocket; two tiles apart so none is another's neighbour.
+        let (x, y) = (2 + (lane as i32 % 4) * 2, 4 + (lane as i32 / 4) * 3);
         for step in 0..=y {
             game.floor_cell(x, step);
             game.floor_cell(x - 1, step);
         }
-        spawn_machine_at(game, &kind, x, y);
+        if let Some(item) = recipe {
+            // `spawn_structure` is the real component list; the recipe is set
+            // directly because a fixture must not research its way to one.
+            let def = game
+                .structure_defs()
+                .into_iter()
+                .find(|d| d.id == kind)
+                .expect("a shipped machine");
+            let machine = game.spawn_structure(&def, x, y, None);
+            let node = def
+                .machine_recipe(&item)
+                .filter(|_| def.extracts())
+                .map(|r| ResourceNode {
+                    resource: item.clone(),
+                    level: r.level,
+                });
+            let mut entity = game.world.entity_mut(machine);
+            entity.insert(crate::components::MachineRecipe(Some(item)));
+            if let Some(node) = node {
+                entity.insert(node);
+            }
+        } else {
+            spawn_machine_at(game, &kind, x, y);
+        }
     }
     node
 }
@@ -1573,6 +1688,12 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
             level: work.level,
         });
     }
+    // A configurable machine stands with nothing set, as `spawn_structure`
+    // leaves it; short of the component `idle_machine_system` reads it as an
+    // ordinary idle machine.
+    if def.machine.is_some() {
+        entity.insert(crate::components::MachineRecipe::default());
+    }
     // `Game::spawn_structure`'s own list, and short of it a rig is a machine
     // that refuses every deposit and strips nothing — silently, since
     // `run_teardown_rigs` filters on the component's presence.
@@ -1716,7 +1837,7 @@ pub(super) fn place_home(game: &mut Game) {
 }
 
 /// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
-/// `armory` so it needs a program and a real bill exactly like a shipped
+/// `shell_assembler` so it needs a program and a real bill exactly like a shipped
 /// structure does — `spawn_structure_at` bare-spawns a `Structure` with none
 /// of that and is for what a standing structure *enables*, not for the
 /// placement or reach machinery a footprint test is about.
@@ -1729,9 +1850,9 @@ pub(super) fn footprint_fixture(game: &mut Game, id: &str, footprint: u8) {
     let mut def = game
         .world
         .resource::<StructureDb>()
-        .get("armory")
+        .get("assembler")
         .cloned()
-        .expect("armory ships");
+        .expect("assembler ships");
     def.id = id.to_string();
     def.name = id.to_string();
     def.footprint = footprint;
@@ -1760,7 +1881,7 @@ pub(super) fn count_item(game: &Game, id: &str) -> u32 {
 }
 
 pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 {
-    run_one_full_gather_cycle_at_tier(game, "mining_node", resource, None)
+    run_one_full_gather_cycle_at_tier(game, "extractor", resource, None)
 }
 
 /// Runs exactly one completed gather cycle against a hand-built node of
@@ -1768,7 +1889,7 @@ pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 
 /// in the player's inventory.
 ///
 /// `kind` is a real structure id rather than a placeholder because the
-/// payout consults that structure's `WorkDef` for `flat_payout` — a node
+/// payout consults that structure's `RecipeDef` for `flat_payout` — a node
 /// whose kind isn't in the `StructureDb` would silently take the scaling
 /// branch.
 ///
@@ -1802,6 +1923,7 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
         Structure {
             kind: kind.to_string(),
         },
+        crate::components::MachineRecipe(Some(ItemId::from(resource))),
         Position { x: 3, y: 4 },
         ResourceNode {
             resource: ItemId::from(resource),
@@ -2533,13 +2655,14 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
 /// anything measuring a payout curve needs `work_node_parts()` as well, and
 /// a node short of those reads as a rate that moved rather than as a fixture
 /// missing a component.
-pub(super) fn spawn_mining_node(game: &mut Game, x: i32, y: i32) -> Entity {
+pub(super) fn spawn_extractor(game: &mut Game, x: i32, y: i32) -> Entity {
     game.lay_starting_pocket();
     game.world
         .spawn((
             Structure {
-                kind: "mining_node".to_string(),
+                kind: "extractor".to_string(),
             },
+            crate::components::MachineRecipe(Some(ItemId::from(ids::CORE_FRAGMENT))),
             Position { x, y },
             ResourceNode {
                 resource: ItemId::from(ids::CORE_FRAGMENT),
@@ -2776,10 +2899,13 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 1)).unwrap();
+    from_inside_the_base(game, |g| {
+        place_machine(g, "extractor", ids::CORE_FRAGMENT, 1, 1)
+    })
+    .unwrap();
     (
         find_structure_by_kind(game, "home").unwrap(),
-        find_structure_by_kind(game, "mining_node").unwrap(),
+        find_structure_by_kind(game, "extractor").unwrap(),
     )
 }
 
@@ -2798,8 +2924,11 @@ pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 0)).unwrap();
-    find_structure_by_kind(game, "mining_node").unwrap()
+    from_inside_the_base(game, |g| {
+        place_machine(g, "extractor", ids::CORE_FRAGMENT, 1, 0)
+    })
+    .unwrap();
+    find_structure_by_kind(game, "extractor").unwrap()
 }
 
 /// The `ProgramManifest` half of `entity`'s manifest. Most tests that reach

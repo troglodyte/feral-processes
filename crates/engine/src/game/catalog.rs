@@ -133,8 +133,8 @@ impl Game {
     /// Every conversion a structure runs, each expanded back to the raw
     /// inputs it bottoms out in.
     ///
-    /// The roots are `systems::produced_item`'s answer, which is already the
-    /// whole of "could this structure put something in an output buffer" —
+    /// The roots are every recipe a structure can run (`StructureDef::productions`),
+    /// which is already the whole of "could this structure put something in an output buffer" —
     /// so this cannot list a machine the base does not actually run, or miss
     /// one it does. Each root's own step comes from `systems::assembly_recipe`
     /// for the same reason: a machine's recipe *is* the assembled item's
@@ -142,7 +142,7 @@ impl Game {
     /// one lookup rather than two that could drift.
     ///
     /// An item can legitimately appear twice with different makers — Power
-    /// Cell is a Power Conduit's whole output and is also bench-craftable
+    /// Cell is an Extractor's whole output and is also bench-craftable
     /// from fragments, and ICE Breaker the same with the Compiler. A root
     /// step reports the structure; an expanded dependency reports the item's
     /// own `requires_structure`. Both are true, and the screen shows the one
@@ -150,8 +150,8 @@ impl Game {
     ///
     /// An *ingredient* names its tap only when no recipe makes it (see
     /// `RecipeInput::source`), which is the same rule seen from the other
-    /// end: Core Fragment names the Mining Node because nothing on screen
-    /// makes one, while Power Cell names no Power Conduit because the bench
+    /// end: Core Fragment names the Extractor because nothing on screen
+    /// makes one, while Power Cell names no Extractor because the bench
     /// step that makes these ones is already a line of this chain. Without
     /// that clause a chain would claim two sources for a single item.
     ///
@@ -162,9 +162,14 @@ impl Game {
         let items = self.world.resource::<ItemDb>();
         let mut chains: Vec<RecipeChain> = structures
             .all()
-            .filter_map(|def| {
-                let output = crate::systems::produced_item(def)?;
-                let inputs = crate::systems::assembly_recipe(def, items).unwrap_or(&[]);
+            .flat_map(|def| def.productions().map(move |production| (def, production)))
+            .map(|(def, production)| {
+                let placed = crate::structures::Placed {
+                    def,
+                    recipe: Some(&production.recipe.produces),
+                };
+                let output = &production.recipe.produces;
+                let inputs = crate::systems::assembly_recipe(placed, items).unwrap_or(&[]);
                 let mut steps = Vec::new();
                 // Seeded with the root, whose own step is appended below: a
                 // recipe that reaches back to what it makes would otherwise
@@ -179,13 +184,13 @@ impl Game {
                     output: self.item_name(output).to_string(),
                     // A tap and only a tap declines to quote a yield; every
                     // other root is an assembler running a one-unit batch.
-                    output_qty: def.work.is_none().then_some(1),
+                    output_qty: (!production.extracts).then_some(1),
                 });
-                Some(RecipeChain {
+                RecipeChain {
                     product: self.item_name(output).to_string(),
                     description: self.item_description(output).map(str::to_string),
                     steps,
-                })
+                }
             })
             .collect();
         chains.sort_by(|a, b| (a.steps.len(), &a.product).cmp(&(b.steps.len(), &b.product)));
@@ -250,11 +255,12 @@ impl Game {
         if items.get(item.as_str())?.craftable.is_some() {
             return None;
         }
-        self.world
-            .resource::<StructureDb>()
-            .all()
-            .find(|def| def.work.as_ref().is_some_and(|w| &w.produces == item))
-            .map(|def| def.name.clone())
+        let taps = |def: &&crate::structures::StructureDef| {
+            def.productions()
+                .any(|p| p.extracts && &p.recipe.produces == item)
+        };
+        let structures = self.world.resource::<StructureDb>();
+        structures.all().find(taps).map(|def| def.name.clone())
     }
 
     /// Which group this item lists under. An id with no definition behind it
@@ -798,7 +804,7 @@ impl Game {
 
     /// Whether `structure_id` may be built right now. A structure named by
     /// no research file is unlocked by default — that's what keeps Home, the
-    /// Mining Node, the Research Node, the Recharger Node and the Zone
+    /// Extractor, the Research Node, the Recharger Node and the Zone
     /// Portal available from turn one without a hardcoded whitelist, and
     /// what keeps a structure mod that ships no research file working
     /// unchanged.

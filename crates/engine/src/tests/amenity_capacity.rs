@@ -169,7 +169,8 @@ fn a_posted_worker_does_not_claim_a_place() {
     let (mut game, site, staff) = crowded_bay(76, 2);
     let (posted, critical_one) = (staff[0], staff[1]);
     let (critical, content) = threshold(&game, &coherence());
-    let node = spawn_machine_at(&mut game, "mining_node", site.x, site.y + 2);
+    let node =
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", site.x, site.y + 2);
     set_reserve(&mut game, posted, &coherence(), content);
     game.assign_guard(posted, node).unwrap();
     put(&mut game, posted, site.x + 1, site.y + 1);
@@ -206,7 +207,8 @@ fn an_incumbent_posted_back_to_work_gives_up_its_place() {
     game.tick();
     assert!(reserve(&game, who) > before, "off shift, it holds a place");
 
-    let node = spawn_machine_at(&mut game, "mining_node", site.x, site.y + 2);
+    let node =
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", site.x, site.y + 2);
     game.world
         .entity_mut(who)
         .remove::<crate::components::OffShift>();

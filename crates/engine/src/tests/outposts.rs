@@ -147,13 +147,13 @@ fn a_pre_outposts_save_loads_with_none_standing() {
 }
 
 /// Outposts are additive behind `#[serde(default)]` and cost no bump of
-/// their own; this pins the current version, 37, which ruins raised. `tests::routes::save_format_version_is_unchanged_by_routes`'s
+/// their own; this pins the current version, 38, which configurable machines raised. `tests::routes::save_format_version_is_unchanged_by_routes`'s
 /// shape.
 #[test]
 fn save_format_version_is_unchanged_by_outposts() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        37,
+        38,
         "outposts add no bump of their own; a changed version is a deliberate \
          bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

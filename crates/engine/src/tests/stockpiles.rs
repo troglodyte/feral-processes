@@ -169,7 +169,7 @@ fn an_idle_program_carries_a_loose_item_onto_a_stockpile() {
 fn a_program_handed_a_task_mid_carry_sets_its_item_down() {
     let mut g = game_with_home();
     with_pile(&mut g);
-    let node = spawn_machine_at(&mut g, "mining_node", 2, 0);
+    let node = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 2, 0);
     let worker = spawn_tamed(&mut g, 100, 3);
     g.world
         .entity_mut(worker)
@@ -344,7 +344,7 @@ fn frag() -> ItemId {
 }
 
 fn shelf_with(g: &mut Game, x: i32, y: i32, qty: u32) -> Entity {
-    let shelf = spawn_machine_at(g, "mining_node", x, y);
+    let shelf = spawn_machine_at(g, "extractor", x, y);
     g.world
         .get_mut::<Stock>(shelf)
         .unwrap()
@@ -471,7 +471,7 @@ fn a_builder_fetches_from_a_stockpile_before_the_pack() {
         .get_mut::<Inventory>(g.player_entity())
         .unwrap()
         .add(frag(), 500);
-    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    file_build(&mut g, "extractor", 1, 0).unwrap();
     let builder = spawn_tamed(&mut g, 500, 3);
     // Strictly nearer the pile than the pack: distance and tile rank ahead of
     // the store, which only breaks a tie on the very same tile.
@@ -504,7 +504,7 @@ fn on_the_pack_s_own_tile_a_stockpile_ranks_before_the_pack() {
         .get_mut::<Inventory>(g.player_entity())
         .unwrap()
         .add(frag(), 500);
-    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    file_build(&mut g, "extractor", 1, 0).unwrap();
     let builder = spawn_tamed(&mut g, 500, 3);
     spawn_floor_item(&mut g.world, at(bx, by), core());
     let pack = pack_frags(&g);
@@ -533,7 +533,7 @@ fn a_pack_still_feeds_a_build_when_no_shelf_or_stockpile_holds_it() {
         .get_mut::<Inventory>(g.player_entity())
         .unwrap()
         .add(frag(), 500);
-    file_build(&mut g, "mining_node", 1, 0).unwrap();
+    file_build(&mut g, "extractor", 1, 0).unwrap();
     spawn_tamed(&mut g, 500, 3);
     let mut ticks = 0;
     while pack_frags(&g) == 500 {

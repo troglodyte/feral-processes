@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
+use crate::components::MachineRecipe;
 use crate::game::base::assignment;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
@@ -33,6 +34,7 @@ use crate::game::base::offshift;
 use crate::game::base::repair;
 use crate::game::base::stock;
 use crate::items::ItemId;
+use crate::structures::Placed;
 use crate::systems::{assembly_recipe, produced_item};
 use crate::tuning::MEMORY_AVOIDANCE_THRESHOLD;
 use crate::*;
@@ -162,7 +164,7 @@ impl WorkOrder {
 /// **Every** deployed structure whose def puts `item` into an output
 /// buffer, empty if nothing standing makes it.
 ///
-/// All of them, not the first: a base that builds a second Mining Node
+/// All of them, not the first: a base that builds a second Extractor
 /// because the first one's output is being eaten by the assembler beside it
 /// has doubled its own capacity, and an order that rooted its walk at one
 /// arbitrary machine would leave the one just paid for standing empty
@@ -181,8 +183,8 @@ pub(crate) fn producers_of(game: &Game, item: &ItemId) -> Vec<Entity> {
         .filter_map(|e| {
             let kind = &e.get::<Structure>()?.kind;
             let pos = e.get::<Position>()?;
-            let def = db.get(kind)?;
-            (produced_item(def) == Some(item)).then_some((pos.x, pos.y, e.id()))
+            let placed = Placed::of(db.get(kind)?, e.get::<MachineRecipe>());
+            (produced_item(placed) == Some(item)).then_some((pos.x, pos.y, e.id()))
         })
         .collect();
     found.sort();
@@ -193,9 +195,67 @@ pub(crate) fn producers_of(game: &Game, item: &ItemId) -> Vec<Entity> {
 /// `item` at all, deployed or not. Separates "you have not built it yet"
 /// from "nothing in this game makes that", which are different errands.
 pub(crate) fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
-    game.structure_defs()
-        .into_iter()
-        .find(|def| produced_item(def) == Some(item))
+    let makes = |def: &StructureDef| def.productions().any(|p| &p.recipe.produces == item);
+    game.structure_defs().iter().find(|def| makes(def)).cloned()
+}
+
+/// A standing machine whose kind could make `item` but is set to something
+/// else (or to nothing): the order for it can wait for a setting.
+fn settable_machine(game: &Game, item: &ItemId) -> Option<StructureDef> {
+    let db = game.world.resource::<StructureDb>();
+    game.world
+        .iter_entities()
+        .filter_map(|e| db.get(&e.get::<Structure>()?.kind))
+        .find(|def| {
+            def.machine_recipe(item)
+                .is_some_and(|r| r.research.as_ref().is_none_or(|id| game.is_researched(id)))
+        })
+        .cloned()
+}
+
+/// `chain_break`, except that a break some standing machine could be set to
+/// mend is not refused: the order waits, stalled, until one is. One rule at
+/// every depth — the ordered item's own machine or an ingredient's.
+pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
+    find_break(game, item)
+        .filter(|b| !b.waits)
+        .map(|b| b.reason)
+}
+
+/// Why a line cannot move, and whether setting a standing machine is all it
+/// would take — the one fact `order_refusal` needs that the sentence alone
+/// does not carry.
+struct ChainBreak {
+    reason: String,
+    waits: bool,
+}
+
+impl ChainBreak {
+    fn refused(reason: String) -> Self {
+        Self {
+            reason,
+            waits: false,
+        }
+    }
+
+    /// `no_producer`'s sentence, waiting exactly when it names a machine to
+    /// set rather than one to build.
+    fn no_producer(game: &Game, item: &ItemId) -> Self {
+        Self {
+            reason: no_producer(game, item),
+            waits: settable_machine(game, item).is_some(),
+        }
+    }
+}
+
+/// "an Extractor", "a Factory": a def name is player-facing and a mod's may
+/// start with either sound.
+fn with_article(name: &str) -> String {
+    let vowel = name
+        .chars()
+        .next()
+        .is_some_and(|c| "aeiouAEIOU".contains(c));
+    format!("{} {name}", if vowel { "an" } else { "a" })
 }
 
 /// The sentence for an `item` no deployed machine makes: the machine to
@@ -203,8 +263,14 @@ pub(crate) fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
 /// tree's "no Research Node" block, so the three cannot word it apart.
 pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
     let name = game.item_name(item);
+    if let Some(def) = settable_machine(game, item) {
+        return format!(
+            "No way to make this — set {} to {name}.",
+            with_article(&def.name)
+        );
+    }
     match makeable_by(game, item) {
-        Some(def) => format!("No {name} — build a {} to make it.", def.name),
+        Some(def) => format!("No {name} — build {} to make it.", with_article(&def.name)),
         None => format!("Nothing the base can build makes {name}."),
     }
 }
@@ -225,20 +291,25 @@ pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
 /// and nothing can be fed from it. `research_data` is refused on those
 /// terms, with its Research Node standing.
 pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
+    find_break(game, item).map(|b| b.reason)
+}
+
+/// `chain_break`, keeping whether the break waits on a setting.
+fn find_break(game: &Game, item: &ItemId) -> Option<ChainBreak> {
     let items = game.world.resource::<ItemDb>();
     if items.get(item.as_str()).is_none() {
-        return Some("No such item.".into());
+        return Some(ChainBreak::refused("No such item.".into()));
     }
     if items.get(item.as_str()).is_some_and(|d| d.banked) {
         let name = game.item_name(item);
-        return Some(format!(
+        return Some(ChainBreak::refused(format!(
             "{name} is banked as it is gathered — the base never holds a stock of it to order \
              against."
-        ));
+        )));
     }
     let machines = producers_of(game, item);
     if machines.is_empty() {
-        return Some(no_producer(game, item));
+        return Some(ChainBreak::no_producer(game, item));
     }
     // **One whole line is enough.** A second bench standing somewhere with
     // nothing beside it is a half-built plan, not a reason to refuse an
@@ -342,14 +413,7 @@ fn feeders_for(
     pos: Position,
     ingredient: &ItemId,
 ) -> Vec<Entity> {
-    let db = game.world.resource::<StructureDb>();
-    let makes = |e: Entity| {
-        game.world
-            .get::<Structure>(e)
-            .and_then(|s| db.get(&s.kind))
-            .and_then(produced_item)
-            == Some(ingredient)
-    };
+    let makes = |e: Entity| game.placed(e).and_then(produced_item) == Some(ingredient);
     let beside: Vec<Entity> = ORTHOGONAL
         .into_iter()
         .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
@@ -371,16 +435,16 @@ fn break_at(
     by_tile: &std::collections::HashMap<(i32, i32), Entity>,
     machine: Entity,
     seen: &mut std::collections::HashSet<Entity>,
-) -> Option<String> {
+) -> Option<ChainBreak> {
     if !seen.insert(machine) {
         return None;
     }
     let db = game.world.resource::<StructureDb>();
     let items = game.world.resource::<ItemDb>();
-    let kind = &game.world.get::<Structure>(machine)?.kind;
-    let def = db.get(kind)?;
+    let placed = game.placed(machine)?;
+    let def = placed.def;
     let pos = *game.world.get::<Position>(machine)?;
-    let Some(recipe) = assembly_recipe(def, items) else {
+    let Some(recipe) = assembly_recipe(placed, items) else {
         // An extractor makes its product out of nothing on a timer, so the
         // walk terminates here rather than at a depth limit.
         return None;
@@ -392,7 +456,7 @@ fn break_at(
             // a producer that exists but was not offered means no Depot —
             // and "build one" would tell the player to buy what they own.
             let Some(&far) = producers_of(game, &ingredient).first() else {
-                return Some(no_producer(game, &ingredient));
+                return Some(ChainBreak::no_producer(game, &ingredient));
             };
             let want = game.item_name(&ingredient);
             let maker = game
@@ -400,11 +464,11 @@ fn break_at(
                 .get::<Structure>(far)
                 .and_then(|s| db.get(&s.kind))
                 .map_or_else(|| want.to_string(), |d| d.name.clone());
-            return Some(format!(
+            return Some(ChainBreak::refused(format!(
                 "The {} can't reach your {maker}'s {want} — build a {maker} beside it, or a \
                  Depot to carry it over.",
                 def.name
-            ));
+            )));
         };
         if let Some(deeper) = break_at(game, by_tile, feeder, seen) {
             return Some(deeper);
@@ -476,19 +540,15 @@ pub(crate) fn can_progress(game: &Game, machine: Entity) -> bool {
     if stock.output_room() == 0 {
         return false;
     }
-    let db = game.world.resource::<StructureDb>();
     let items = game.world.resource::<ItemDb>();
-    let Some(def) = game
-        .world
-        .get::<Structure>(machine)
-        .and_then(|s| db.get(&s.kind))
-    else {
+    let Some(placed) = game.placed(machine) else {
         return false;
     };
-    let Some(recipe) = assembly_recipe(def, items) else {
+    let Some(recipe) = assembly_recipe(placed, items) else {
         // An extractor makes its product out of nothing on a timer, so room
-        // in the output is the whole question for it.
-        return produced_item(def).is_some();
+        // in the output is the whole question for it. An unset machine makes
+        // nothing, so it never earns a body.
+        return produced_item(placed).is_some();
     };
     let Some(pos) = game.world.get::<Position>(machine).copied() else {
         return false;
@@ -627,16 +687,11 @@ fn walk_feeders(
         let entry = deepest.entry(machine).or_insert(depth);
         *entry = (*entry).max(depth);
     }
-    let db = game.world.resource::<StructureDb>();
     let items = game.world.resource::<ItemDb>();
-    let Some(def) = game
-        .world
-        .get::<Structure>(machine)
-        .and_then(|s| db.get(&s.kind))
-    else {
+    let Some(placed) = game.placed(machine) else {
         return;
     };
-    let Some(recipe) = assembly_recipe(def, items) else {
+    let Some(recipe) = assembly_recipe(placed, items) else {
         // An extractor has no upstream, so the walk terminates here. A
         // clogged one simply did not earn its place above, and something
         // else has to drain it before it wants a body again.
@@ -798,8 +853,8 @@ pub(crate) fn queue_needs(
 ///
 /// **The one walk down a recipe tree by item**, with two readers:
 /// `queue_needs` takes only the keys, and `power::fuel_chain` takes the
-/// depths, which is what ranks a Power Conduit above the Mining Node whose
-/// fragments a Power Cell is made of. Breadth-first because the depth has to
+/// depths, which is what ranks a Power Cell Extractor above the
+/// Core Fragment Extractor whose fragments a Power Cell is made of. Breadth-first because the depth has to
 /// be the *shortest* one — an item that is both a seed and an ingredient of
 /// another seed is a seed. The map doubles as the seen set, so a mod's pair
 /// of items that list each other as ingredients terminates rather than
@@ -1774,7 +1829,7 @@ impl Game {
     /// **And a short burner with nothing in store asks for its fuel to be
     /// made instead**, which is the gate's other half. Left at "nothing to
     /// fetch, so nothing to want", a base whose Recharger Nodes all ran dry
-    /// kept every body on its work orders while a Power Conduit — the one
+    /// kept every body on its work orders while an Extractor — the one
     /// machine that makes cells out of nothing — stood `Idle` beside them,
     /// and the grid never came back: no order names Power Cells, so nothing
     /// else would ever post to it. The make want is `wants` asked about the
@@ -2153,7 +2208,7 @@ impl Game {
     ///
     /// **A dry job is not a want**, `build_is_workable`'s rule crossed over:
     /// a body pinned to a job it cannot afford is a body that cannot go run
-    /// the Mining Node or the Lathe that would make what it is short of, and
+    /// the Extractor or the Factory that would make what it is short of, and
     /// a one-program base stops for the rest of the run exactly the way an
     /// unconditionally-listed `BuildSite` used to.
     ///
@@ -2173,7 +2228,7 @@ impl Game {
     /// **The plan asks for every tile and finish it will spend**, one
     /// standing order per item through `Game::sync_dig_order`: the Mining
     /// Node for the tiles' fragments — a solid cell's future tile included,
-    /// though it claims nothing from the budget yet — and the Lathe for the
+    /// though it claims nothing from the budget yet — and the Factory for the
     /// finishes' substrate. It is handed over from here because this is the
     /// one pass that has priced every site the crew can reach. A cut cell
     /// waiting on a shelf nobody is told to fill would stay bare for the
@@ -2268,7 +2323,7 @@ impl Game {
     /// **Filed at the bottom, once**, like any player order —
     /// `move_work_order` is how the player promotes it, and a resize keeps
     /// whatever position it has. Filed only where `queue_work_order` would
-    /// accept it: a base with no Lathe gets no order the chain rule would
+    /// accept it: a base with no Factory gets no order the chain rule would
     /// refuse by hand, and the dry lines already say what is short. An
     /// order already standing when the chain later breaks stays, and stalls
     /// the way a player's does.
@@ -2295,7 +2350,7 @@ impl Game {
             }
             None if need == 0 => {}
             None => {
-                if chain_break(self, &item).is_some() {
+                if order_refusal(self, &item).is_some() {
                     return;
                 }
                 let name = self.item_name(&item).to_string();
@@ -2982,7 +3037,7 @@ impl Game {
         // out of phase — this reads which machines are standing, and they
         // stand in base space.
         self.require_base()?;
-        if let Some(reason) = chain_break(self, &order.item) {
+        if let Some(reason) = order_refusal(self, &order.item) {
             return Err(reason);
         }
         let name = self.item_name(&order.item).to_string();
@@ -3034,7 +3089,7 @@ impl Game {
         let mut rows: Vec<(ItemId, String)> = self
             .item_defs()
             .into_iter()
-            .filter(|def| chain_break(self, &def.id).is_none())
+            .filter(|def| order_refusal(self, &def.id).is_none())
             .map(|def| (def.id.clone(), def.name.clone()))
             .collect();
         rows.sort_by(|a, b| a.1.cmp(&b.1));
@@ -3170,7 +3225,7 @@ impl Game {
             // `standing_wants`' gate, and it is inert for the shipped extractor:
             // a Research Node needs no input, so `can_progress` is always true
             // for it. It matters for a mod whose research-currency producer
-            // `assembles` — without it a body parks at a starved bench above the
+            // assembles its output — without it a body parks at a starved bench above the
             // whole queue, which is C1's shape with a different cause.
             .filter(|&machine| can_progress(self, machine))
             .map(|machine| (machine, TaskKind::GatherResource))
@@ -3220,7 +3275,7 @@ impl Game {
                                 .map(|def| def.name.clone())
                                 .unwrap_or_default(),
                             worker: self.posted_worker_name(machine),
-                            short_of: self.machine_shortfall(machine, db, items),
+                            short_of: self.machine_shortfall(machine, items),
                             depth,
                         })
                         .collect(),
@@ -3270,17 +3325,8 @@ impl Game {
     /// The first ingredient `machine` cannot assemble a batch from, named
     /// for the screen. `None` for an extractor, and for an assembler with
     /// everything it needs within reach.
-    fn machine_shortfall(
-        &self,
-        machine: Entity,
-        db: &StructureDb,
-        items: &ItemDb,
-    ) -> Option<String> {
-        let def = self
-            .world
-            .get::<Structure>(machine)
-            .and_then(|s| db.get(&s.kind))?;
-        let recipe = assembly_recipe(def, items)?;
+    fn machine_shortfall(&self, machine: Entity, items: &ItemDb) -> Option<String> {
+        let recipe = assembly_recipe(self.placed(machine)?, items)?;
         let stock = self.world.get::<Stock>(machine)?;
         let pos = self.world.get::<Position>(machine).copied()?;
         let by_tile = structures_by_tile(self);

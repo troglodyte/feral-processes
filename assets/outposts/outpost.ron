@@ -1,5 +1,5 @@
 // The raw/processed/complex ladder mirrors the base's own material chain —
-// Raw Trace transcribes into a Logic Wafer at the Transcriber, and Cache
+// Raw Trace transcribes into a Logic Wafer at the Factory, and Cache
 // Grain is the one ZONE_MATERIALS entry (`tests/assets.rs`) — rather than
 // inventing a second, outpost-only economy. Uniform across every biome:
 // nothing else in this game varies a raw material by biome, so a

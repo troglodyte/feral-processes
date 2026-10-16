@@ -1,7 +1,7 @@
 (
     id: "firewall",
     name: "Firewall Plating",
-    description: "Solid armor that cuts the damage you take. Made at an Armory.",
+    description: "Solid armor that cuts the damage you take. Made at a Workbench.",
     cost: 45,
     materials: [("hardened_shell", 4), ("bytecode_block", 14)],
     min_zone: 2,
@@ -11,6 +11,6 @@
     unlocks_recipes: [(
         result: "firewall_plating",
         cost: [("portal_fragment", 6), ("cache_grain", 2)],
-        requires_structure: Some("armory"),
+        requires_structure: Some("workbench"),
     )],
 )

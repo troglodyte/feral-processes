@@ -564,6 +564,7 @@ fn build_extraction_bench(game: &mut Game) {
         .map(|def| def.id.clone())
         .expect("some shipped structure extracts routines");
     spawn_structure_at(game, &bench, 30, 30);
+    unlock_research_chain(game, "automation");
     assert!(
         game.can_extract_routines(),
         "the bench went up but extraction is still refused"

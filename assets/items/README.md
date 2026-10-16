@@ -59,7 +59,7 @@ any non-finite `taming_potency`, `consume.power`, or
     //   - a work node that produces it (`work.produces`) delivers it straight
     //     to the player instead of filling its own output buffer, so it is
     //     never collected by hand and can never feed a neighbouring machine.
-    //     An `assembles` machine is NOT yet wired this way — a banked item as
+    //     An `Assemble` machine is NOT yet wired this way — a banked item as
     //     an assembler's product still fills that machine's buffer and still
     //     has to be collected;
     //   - it is not listed in the inventory and cannot be bought or sold.
@@ -87,7 +87,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // press, and a mod that breaks either one prints money:
     //
     //   1. Don't price an item above the total value of its `craftable`
-    //      ingredients. Build salvage is sellable and a Mining Node produces
+    //      ingredients. Build salvage is sellable and an Extractor produces
     //      it forever, so a profitable recipe is an infinite Credit loop.
     //   2. Don't price an item a structure `produces` (see the structures
     //      schema) above the default. Such an item is made from nothing on a
@@ -279,15 +279,19 @@ any non-finite `taming_potency`, `consume.power`, or
     //
     // `requires_structure` is optional and defaults to none. Without it the
     // recipe is always available ("starter"), like the Power Cell and ICE
-    // Breaker. Naming a structure id instead gates the recipe on one of
-    // those being deployed — it only appears in the compile menu while the
-    // bench stands, exactly like a researched recipe's own bench rule. The
-    // bench is the entire unlock: an item-declared recipe needs no research
-    // node of its own (though the bench itself may be research-gated to
-    // build, which is what paces this).
+    // Breaker, anywhere including the field. Naming a structure id instead
+    // gates the recipe on the player standing orthogonally beside one of
+    // those in base space — it only appears in the compile menu while the
+    // bench is touched, and the touched bench's tier sets the quality
+    // floor. Every shipped hand-compile bench recipe names "workbench".
+    //
+    // `research` is optional and defaults to none. A research node id that
+    // must be done before the recipe is offered; it carries the gate of the
+    // bench the recipe used to need. The node's screen lists the item among
+    // what it unlocks.
     //
     // `cost` is ALSO what an automated machine runs. A structure whose
-    // `assembles` field names this item (see assets/structures/README.md)
+    // `Assemble` machine lists this item (see assets/structures/README.md)
     // builds it from exactly this recipe — there is no second recipe format
     // anywhere in the game, so the bench and the machine can never drift
     // apart, and a multi-ingredient recipe you add here is automatable for
@@ -303,7 +307,8 @@ any non-finite `taming_potency`, `consume.power`, or
     // the base floor, the same as one naming a bench nobody has upgraded.
     craftable: Some((
         cost: [("core_fragment", 12)],
-        requires_structure: Some("fabricator"),
+        requires_structure: Some("workbench"),
+        research: Some("weapon_bench"),
     )),
 
     // Optional; can be left out entirely (defaults to no drops). Species

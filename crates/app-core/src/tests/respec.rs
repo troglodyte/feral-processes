@@ -10,7 +10,7 @@ use crate::*;
 
 /// Standing on the perk screen of an ordinary run.
 fn app_on_the_perk_screen(seed: u32) -> App {
-    let mut app = app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[]);
+    let mut app = app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[]);
     open_via_menu(&mut app, 'p', "Perks");
     assert_eq!(app.mode, Mode::Perks);
     app
@@ -19,7 +19,7 @@ fn app_on_the_perk_screen(seed: u32) -> App {
 /// Standing on one program's talent ladder.
 fn app_on_the_talent_ladder(seed: u32) -> App {
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[("privilege_ring", 3)]);
+        app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[("privilege_ring", 3)]);
     open_via_menu(&mut app, 'p', "Develop a program");
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::DevelopProgram);

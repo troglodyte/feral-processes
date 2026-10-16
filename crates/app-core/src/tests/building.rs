@@ -7,14 +7,14 @@ use feral_processes_engine::structures::StructureCategory;
 
 #[test]
 fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
-    // A Compiler, not a Home: the row is hidden unless something nearby
+    // A Extractor, not a Home: the row is hidden unless something nearby
     // actually declares an upgrade path (see `App::upgradeable_structures`).
-    let mut app = app_owning_a_program_and_a_compiler(230, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(230, &[]);
     // Upgrading is a base action, so the row is offered in one locale only.
     //
-    // The *exit* cell, two tiles off the Compiler, and deliberately: the row
+    // The *exit* cell, two tiles off the Extractor, and deliberately: the row
     // is gated on the scan radius rather than on adjacency, so it has to be
-    // offered from here as well. `stand_beside_the_compiler` is what an
+    // offered from here as well. `stand_beside_the_extractor` is what an
     // upgrade that actually lands needs.
     stand_in_base(&mut app);
 
@@ -36,27 +36,27 @@ fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
 /// learn that upgrading exists. The row explains itself instead, which is
 /// what `EntityView::ceiling` is carried for.
 ///
-/// `stand_in_base` is load-bearing here now, not decoration: the Compiler
+/// `stand_in_base` is load-bearing here now, not decoration: the Extractor
 /// is a `Structure`, and `Game::view_entities` refuses to answer for one
 /// outside base space — `upgradeable_structures` would otherwise come back
-/// empty on the surface `app_owning_a_program_and_a_compiler` leaves the
+/// empty on the surface `app_owning_a_program_and_an_extractor` leaves the
 /// party on.
 #[test]
 fn a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown() {
-    let mut app = app_owning_a_program_and_a_compiler(232, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(232, &[]);
     stand_in_base(&mut app);
 
     let listed = app.upgradeable_structures();
-    let compiler = listed
+    let extractor = listed
         .iter()
-        .find(|e| e.label.contains("Compiler"))
+        .find(|e| e.label.contains("Extractor"))
         .expect("a zone-capped structure must still be offered, not hidden");
 
-    assert_eq!(compiler.tier, Some(1));
+    assert_eq!(extractor.tier, Some(1));
     assert_eq!(
-        compiler.ceiling,
+        extractor.ceiling,
         Some(1),
-        "zone 1 caps the Compiler at Mk1 even though its def allows Mk5"
+        "zone 1 caps the Extractor at Mk1 even though its def allows Mk5"
     );
 }
 
@@ -241,7 +241,7 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
 /// kind of screen.
 #[test]
 fn working_a_structure_yourself_opens_the_same_structure_list() {
-    let mut app = app_owning_a_program_and_a_compiler(960, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(960, &[]);
     stand_in_base(&mut app);
     open_command(&mut app, "Work a structure yourself");
     assert_eq!(app.mode, Mode::WorkStructure);
@@ -336,7 +336,7 @@ fn the_demolish_key_opens_outside_the_base_and_the_direction_refuses() {
         ("in the Stack", app_inside_a_small_base(243, true)),
         (
             "on the open grid",
-            app_owning_a_program_and_a_compiler(2431, &[]),
+            app_owning_a_program_and_an_extractor(2431, &[]),
         ),
     ] {
         assert!(
@@ -377,7 +377,7 @@ fn the_demolish_key_opens_outside_the_base_and_the_direction_refuses() {
 /// and only the Enter differs.
 #[test]
 fn enter_on_a_roster_row_is_refused_outside_base_space() {
-    let mut outside = app_owning_a_program_and_a_compiler(2432, &[]);
+    let mut outside = app_owning_a_program_and_an_extractor(2432, &[]);
     open_hub_screen(&mut outside, Mode::Structures);
     assert_eq!(
         outside.mode,
@@ -398,7 +398,7 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
     );
 
     // The same row, the same key, from the one locale the engine accepts.
-    let mut inside = app_owning_a_program_and_a_compiler(2432, &[]);
+    let mut inside = app_owning_a_program_and_an_extractor(2432, &[]);
     stand_in_base(&mut inside);
     open_hub_screen(&mut inside, Mode::Structures);
     let workable = inside
@@ -408,7 +408,7 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
         .structure_report()
         .iter()
         .position(|r| r.workable)
-        .expect("the fixture's Compiler is workable");
+        .expect("the fixture's Extractor is workable");
     for _ in 0..workable {
         inside.handle_key(GameKey::Down);
     }
@@ -455,7 +455,7 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
         .rows
         .iter()
         .position(|r| r.kind == StaffAction::StandingWork)
-        .expect("a Mining Node can be kept running");
+        .expect("an Extractor can be kept running");
     app.handle_key(GameKey::Char(menu_shortcut(toggle)));
 
     assert_eq!(app.mode, Mode::StructureAssign, "still on the toggles");
@@ -465,7 +465,7 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
         app.status_line
     );
     let node = app.game.as_mut().unwrap().structure_report().remove(row);
-    assert_eq!(node.kind, "mining_node", "sanity: the right row");
+    assert_eq!(node.kind, "extractor", "sanity: the right row");
 }
 
 /// Esc is a way back into the roster, not out of it: the pick was a
@@ -524,22 +524,26 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
         "the player is standing right beside this node"
     );
 
-    // The Compiler in this fixture sits 30 tiles off, which is the same
+    // The Extractor in this fixture sits 30 tiles off, which is the same
     // question asked of a structure the player is nowhere near.
-    let mut far = app_owning_a_program_and_a_compiler(249, &[]);
+    let mut far = app_owning_a_program_and_an_extractor(249, &[]);
     stand_in_base(&mut far);
     open_hub_screen(&mut far, Mode::Structures);
-    let compiler = far
+    let extractor = far
         .game
         .as_mut()
         .unwrap()
         .structure_report()
         .iter()
-        .position(|s| s.kind == "compiler")
+        .position(|s| s.kind == "extractor")
         .expect("the fixture deploys one");
-    far.menu_selected = compiler;
+    far.menu_selected = extractor;
     far.handle_key(GameKey::Enter);
-    assert_eq!(far.mode, Mode::StructureAssign, "a Compiler takes a worker");
+    assert_eq!(
+        far.mode,
+        Mode::StructureAssign,
+        "an Extractor takes a worker"
+    );
     assert!(
         far.staffing()
             .unwrap()
@@ -680,6 +684,7 @@ fn with_a_drop_pod(mut app: App, seed: u32) -> App {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "drop_pod_terminal".to_string(),
         position: (2, 0),
         durability: None,
@@ -913,7 +918,7 @@ fn node_row(app: &mut App) -> usize {
         .unwrap()
         .structure_report()
         .iter()
-        .position(|s| s.kind == "mining_node")
+        .position(|s| s.kind == "extractor")
         .expect("the fixture deploys one")
 }
 
@@ -932,7 +937,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     use feral_processes_engine::world::Biome;
 
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(750, &[], &[("blank_substrate", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(750, &[], &[("blank_substrate", 1)]);
     let edge = (STARTING_POCKET_HALF_WIDTH, 0);
     let cut = (STARTING_POCKET_HALF_WIDTH + 1, 0);
     stand_in_base_at(&mut app, edge.0, edge.1);
@@ -976,7 +981,7 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     );
 
     let mut outside =
-        app_owning_a_program_and_a_compiler_with_cargo(751, &[], &[("blank_substrate", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(751, &[], &[("blank_substrate", 1)]);
     let tick = outside.game.as_ref().unwrap().current_tick();
     outside.handle_key(GameKey::Char('v'));
     assert_eq!(
@@ -1116,7 +1121,7 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// ahead of every other category, see `StructureDef::category`), and this
 /// fixture has already founded one — picking it again would hit the
 /// "already deployed" refusal on the old direct path rather than the
-/// picker this task adds. Row 1, `mining_node`, is the first structure that
+/// picker this task adds. Row 1, `extractor`, is the first structure that
 /// actually costs a program, and `selected_index` labels rows `1`-`9`
 /// before it starts spending letters (`DIGIT_ROWS`), so row 1 is key `'2'`,
 /// not `'b'`.
@@ -1343,22 +1348,22 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
 }
 
 /// `Mode::UpgradeDirection`'s counterpart to `deploy_second_structure` —
-/// aims at the one upgradeable structure the fixture offers, the Compiler,
+/// aims at the one upgradeable structure the fixture offers, the Extractor,
 /// through the Build page rather than by hand-setting `app.mode`, since that
 /// menu path is also what proves the verb is still reachable at all.
 ///
-/// Callers stand the party with `stand_beside_the_compiler`, so east is the
+/// Callers stand the party with `stand_beside_the_extractor`, so east is the
 /// machine.
 fn open_upgrade_picker(app: &mut App) {
     open_command(app, "Upgrade a structure");
     assert_eq!(app.mode, Mode::UpgradeDirection);
-    app.handle_key(GameKey::Right); // the Compiler, one tile east
+    app.handle_key(GameKey::Right); // the Extractor, one tile east
 }
 
 #[test]
 fn upgrading_a_structure_asks_which_program_to_spend() {
-    let mut app = app_owning_a_program_and_a_compiler(875, &[]);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_a_program_and_an_extractor(875, &[]);
+    stand_beside_the_extractor(&mut app);
     // A second program: R6's zero-program refusal is `deploy`'s test to
     // make, not this one's — this test is about the mode transition and
     // `to_tier`, and a refusal on confirm would leave the mode this test
@@ -1389,8 +1394,8 @@ fn upgrading_a_structure_asks_which_program_to_spend() {
 
 #[test]
 fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
-    let mut app = app_owning_a_program_and_a_compiler(876, &[]);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_a_program_and_an_extractor(876, &[]);
+    stand_beside_the_extractor(&mut app);
     // Zone 2, `upgrading_a_structure_asks_which_program_to_spend`'s reason:
     // a zone-1 program is not deep enough for `programs_for_build(2)`, and
     // this test needs the picker to actually be showing a row for its own
@@ -1420,8 +1425,8 @@ fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
 /// silently dropping back to the map would read as the key doing nothing.
 #[test]
 fn aiming_the_upgrade_at_empty_ground_refuses_and_files_nothing() {
-    let mut app = app_owning_a_program_and_a_compiler(877, &[]);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_a_program_and_an_extractor(877, &[]);
+    stand_beside_the_extractor(&mut app);
     tame_program_at_zone(&mut app, 2);
 
     open_command(&mut app, "Upgrade a structure");
@@ -1457,10 +1462,10 @@ fn aiming_the_upgrade_at_empty_ground_refuses_and_files_nothing() {
 /// tile.
 #[test]
 fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
-    let mut app = app_owning_a_program_and_a_compiler(878, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(878, &[]);
     // The exit cell: Home stands here, and Home declares no upgrade path —
     // see `a_structure_with_no_upgrade_path_hides_the_upgrade_row`.
-    stand_beside_the_compiler(&mut app);
+    stand_beside_the_extractor(&mut app);
     tame_program_at_zone(&mut app, 2);
 
     let home = app
@@ -1504,8 +1509,8 @@ fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
 /// branch that calls `Game::upgrade_structure` rather than
 /// `place_structure` — was exercised by nothing.
 ///
-/// Built on `app_owning_one_deep_program_and_a_compiler` rather than
-/// `app_owning_a_program_and_a_compiler`: this needs the base breached to
+/// Built on `app_owning_one_deep_program_and_an_extractor` rather than
+/// `app_owning_a_program_and_an_extractor`: this needs the base breached to
 /// zone 2 (`Game::warp_to_zone`, the same real breach
 /// `tests::achievements::breach_and_tick` drives) so `upgrade_ceiling`
 /// admits a Mk2 order instead of refusing it first — every fixture that
@@ -1529,8 +1534,8 @@ fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
 /// this test can no longer use.
 #[test]
 fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
-    let mut app = app_owning_one_deep_program_and_a_compiler(877, 2, 2);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_one_deep_program_and_an_extractor(877, 2, 2);
+    stand_beside_the_extractor(&mut app);
     tame_program_at_zone(&mut app, 2);
     tame_program_at_zone(&mut app, 2);
 
@@ -1560,13 +1565,13 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
         status.contains("already on order"),
         "the engine's refusal must reach the player, got: {status:?}"
     );
-    let compiler_tier = app
+    let extractor_tier = app
         .upgradeable_structures()
         .iter()
-        .find(|e| e.label.contains("Compiler"))
+        .find(|e| e.label.contains("Extractor"))
         .and_then(|e| e.tier);
     assert_eq!(
-        compiler_tier,
+        extractor_tier,
         Some(1),
         "a refused upgrade leaves the structure's tier untouched"
     );
@@ -1600,8 +1605,8 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
 /// mutation proof in the task-8 fix report.
 #[test]
 fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
-    let mut app = app_owning_one_deep_program_and_a_compiler(878, 2, 2);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_one_deep_program_and_an_extractor(878, 2, 2);
+    stand_beside_the_extractor(&mut app);
     // The order `app_in_base_with_programs` uses: `stand_in_base` before
     // `tame_program_at_zone`, so the added creature's save round trip finds
     // the party already in base space rather than clobbering that locale.
@@ -1628,8 +1633,8 @@ fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
 /// places, and the picker asks `build_candidates` about the answer.
 #[test]
 fn an_upgrade_picker_asks_about_the_structure_standing_there() {
-    let mut app = app_owning_one_deep_program_and_a_compiler(879, 2, 2);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_one_deep_program_and_an_extractor(879, 2, 2);
+    stand_beside_the_extractor(&mut app);
     tame_program_at_zone(&mut app, 2);
 
     open_upgrade_picker(&mut app);
@@ -1641,7 +1646,7 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 
     assert_eq!(
         app.pending_build_kind().as_deref(),
-        Some("compiler"),
+        Some("extractor"),
         "an upgrade must name the machine it is standing in front of"
     );
 }
@@ -1650,8 +1655,8 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 /// the program on the row the player actually read.
 ///
 /// The roster is staged so `owned_pets`' order and `build_candidates`' order
-/// differ: `build_candidates` sorts best-first by the roll a Compiler
-/// upgrade reads (assembly, since a Compiler assembles).
+/// differ: `build_candidates` sorts best-first by the roll an Extractor
+/// upgrade reads (extraction, since an Extractor extracts).
 ///
 /// **Which program is "first" and "second" decides `owned_pets`' order
 /// again, for a reason rather than by coincidence.** Both programs share a
@@ -1664,20 +1669,20 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 /// observed to.
 #[test]
 fn the_picker_spends_the_program_on_the_row_the_player_read() {
-    let mut app = app_owning_one_deep_program_and_a_compiler(880, 2, 2);
-    stand_beside_the_compiler(&mut app);
+    let mut app = app_owning_one_deep_program_and_an_extractor(880, 2, 2);
+    stand_beside_the_extractor(&mut app);
     tame_program_at_zone_with_build_rolls(
         &mut app,
         2,
-        feral_processes_engine::tuning::MAX_INDIVIDUAL_ROLL,
         1.0,
+        feral_processes_engine::tuning::MAX_INDIVIDUAL_ROLL,
     );
 
     let (owned_first, top) = {
         let game = app.game.as_mut().unwrap();
         let pets = game.owned_pets();
         assert_eq!(pets.len(), 2, "the fixture stages exactly two programs");
-        let kind = "compiler".to_string();
+        let kind = "extractor".to_string();
         (
             pets[0].entity,
             game.build_candidates(&kind, BuildGoal::Upgrade { to_tier: 2 })[0]
@@ -1792,7 +1797,7 @@ fn escaping_the_study_screen_pins_nobody() {
     );
 }
 
-/// Home, then the line: the Lathe and the Mining Node it is fed by fold into
+/// Home, then the line: the Lathe and the Extractor it is fed by fold into
 /// the one row the Lathe stands at.
 #[test]
 fn a_line_of_two_machines_is_one_roster_row() {
@@ -1984,4 +1989,47 @@ fn the_hold_screen_refuses_with_the_blockers_text_and_spends_nothing() {
     let game = app.game.as_mut().unwrap();
     assert_eq!(game.downed_program_rows().len(), 1);
     assert_eq!(game.pet_count(), pets);
+}
+
+/// The five configurable structures are what a fresh base builds production
+/// from; the sixteen one-recipe machines and benches they replaced are gone
+/// from the menu, not merely hidden.
+#[test]
+fn the_build_menu_offers_the_machines_and_the_workbench_and_none_of_the_removed() {
+    let mut app = test_app(102);
+    deploy_home(&mut app);
+    let ids: Vec<String> = app
+        .game
+        .as_mut()
+        .unwrap()
+        .buildable_structure_defs()
+        .into_iter()
+        .map(|d| d.id.to_string())
+        .collect();
+    for wanted in ["extractor", "factory", "assembler", "printer", "workbench"] {
+        assert!(
+            ids.iter().any(|i| i == wanted),
+            "{wanted} missing from {ids:?}"
+        );
+    }
+    for gone in [
+        "mining_node",
+        "log_scraper",
+        "cache_tap",
+        "power_conduit",
+        "lathe",
+        "refinery",
+        "annealing_node",
+        "transcriber",
+        "winding_node",
+        "disk_press",
+        "decoy_bench",
+        "assembly_bay",
+        "compiler",
+        "armory",
+        "fabricator",
+        "refactor_bench",
+    ] {
+        assert!(!ids.iter().any(|i| i == gone), "{gone} still in {ids:?}");
+    }
 }

@@ -289,11 +289,12 @@ fn install_game_clears_owed_drag() {
 }
 
 /// A local helper for injecting a structure straight into a save, the way
-/// `app_inside_a_small_base_with_programs` does for its Mining Node —
+/// `app_inside_a_small_base_with_programs` does for its Extractor —
 /// `save::StructureSave` has no `Default`, so every field needs a value,
 /// and a wall and a portal both need the same harmless ones.
 fn structure_save(kind: &str, x: i32, y: i32) -> save::StructureSave {
     save::StructureSave {
+        recipe: None,
         kind: kind.to_string(),
         position: (x, y),
         durability: None,

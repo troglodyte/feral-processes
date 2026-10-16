@@ -60,6 +60,7 @@ mod icon_editor;
 mod inventory;
 mod level_up;
 mod lighting;
+mod machine_recipe;
 mod manifest;
 mod marks;
 mod meta;
@@ -143,6 +144,7 @@ use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory_item_action,
     effect_lines,
 };
+use machine_recipe::{draw_machine_recipe, draw_machine_recipe_confirm};
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
     draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
@@ -1038,6 +1040,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RigTool => app.rig_tool.clone(),
         _ => None,
     };
+    let machine_recipe = match app.mode {
+        Mode::MachineRecipe | Mode::MachineRecipeConfirm => app.machine_recipe.clone(),
+        _ => None,
+    };
     let excavate_brush = match app.mode {
         Mode::ExcavateBrush => app.excavate_brush_rows(),
         _ => Vec::new(),
@@ -1200,6 +1206,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
         }
         Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
+        Mode::MachineRecipe => {
+            draw_machine_recipe(machine_recipe.as_ref(), selected, refusal, painter, m)
+        }
+        Mode::MachineRecipeConfirm => {
+            draw_machine_recipe_confirm(machine_recipe.as_ref(), selected, refusal, painter, m)
+        }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
         Mode::FarmRecipe => draw_farm_recipe(&farm_recipe, selected, refusal, painter, m),
         Mode::PutDown => draw_put_down(&put_down, selected, refusal, painter, m),
@@ -1642,7 +1654,7 @@ fn draw_direction_prompt(
 }
 
 /// A program's current activity as a bracketed suffix — `" (in party)"`,
-/// `" (Mining Node)"`, `" (guarding Data Cache)"`, `" (idle)"`. The wording
+/// `" (Extractor)"`, `" (guarding Data Cache)"`, `" (idle)"`. The wording
 /// itself is `Game::program_activity`'s; every dialog that lists programs
 /// appends it through here so they cannot drift apart.
 fn activity_tag(activity: &str) -> String {
@@ -1688,7 +1700,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 155] = [
+    const ALL_MODES: [Mode; 157] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1704,6 +1716,8 @@ mod tests {
         Mode::Transfer,
         Mode::DepotFilter,
         Mode::RigTool,
+        Mode::MachineRecipe,
+        Mode::MachineRecipeConfirm,
         Mode::SpliceRig,
         Mode::Battle,
         Mode::BattleTarget,
@@ -2056,7 +2070,7 @@ mod tests {
         let mut fx = Fx::new();
         app.mode = Mode::BuildProgram;
         app.pending_build = Some(feral_processes_app_core::PendingBuild::Deploy {
-            structure: "mining_node".to_string(),
+            structure: "extractor".to_string(),
             dx: 1,
             dy: 0,
         });
@@ -2070,7 +2084,7 @@ mod tests {
             "the picker drew no title: {drawn:?}"
         );
         assert!(
-            says("Mining Node"),
+            says("Extractor"),
             "the prompt names the structure the order is for: {drawn:?}"
         );
         assert!(
@@ -2094,20 +2108,20 @@ mod tests {
     /// prior review round named this gap alongside the empty-picker one
     /// above.
     ///
-    /// `app_in_base_with_a_compiler` (`render/test_support.rs`) gives this a
-    /// real, scan-reachable Compiler to upgrade: `App::upgradeable_structures`
+    /// `app_in_base_with_an_extractor` (`render/test_support.rs`) gives this a
+    /// real, scan-reachable Extractor to upgrade: `App::upgradeable_structures`
     /// finds the same `Entity` this test then hands `PendingBuild::Upgrade`,
     /// so the prompt painted here is the one a genuine upgrade order would
     /// show, not a fabricated stand-in the `.find` could never have matched.
     #[test]
     fn an_upgrade_prompt_names_the_real_structure_it_would_spend_a_program_on() {
-        let mut app = test_support::app_in_base_with_a_compiler(4002);
+        let mut app = test_support::app_in_base_with_an_extractor(4002);
         let mut fx = Fx::new();
         let structure = app
             .upgradeable_structures()
             .into_iter()
-            .find(|s| s.label == "Compiler")
-            .expect("the fixture placed a Compiler within scan range")
+            .find(|s| s.label.starts_with("Extractor"))
+            .expect("the fixture placed an Extractor within scan range")
             .entity;
         app.mode = Mode::BuildProgram;
         app.pending_build = Some(feral_processes_app_core::PendingBuild::Upgrade {
@@ -2119,7 +2133,7 @@ mod tests {
         let drawn = crate::paint::painted_text(&shapes);
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
         assert!(
-            says("Upgrading the Compiler to Mk2"),
+            says("Upgrading the Extractor (Core Fragment) to Mk2"),
             "the real structure's own name, not the generic fallback: {drawn:?}"
         );
         assert!(

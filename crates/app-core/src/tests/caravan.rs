@@ -40,6 +40,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         (ItemId::from(ids::CORE_FRAGMENT), 40),
     ];
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "market".to_string(),
         position: (2, 0),
         durability: None,

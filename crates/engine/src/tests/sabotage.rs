@@ -28,7 +28,7 @@ fn a_base_with_a_full_machine(game: &mut Game, qty: u32) -> (Vec<Entity>, Entity
     for (i, &who) in staff.iter().enumerate() {
         place_at(game, who, -40 + 3 * i as i32, -40);
     }
-    let machine = spawn_structure_at(game, "mining_node", 20, 20);
+    let machine = spawn_structure_at(game, "extractor", 20, 20);
     stock_output(game, machine, qty);
     (staff, machine)
 }
@@ -152,7 +152,7 @@ fn a_resenting_sulker_spoils_one_unit_and_the_staff_in_reach_see_it() {
         vec![format!(
             "{label} spoiled a {} at the {}.",
             game.item_name(&ItemId::from(FRAGMENT)),
-            game.structure_name(&"mining_node".to_string()),
+            game.structure_name(&"extractor".to_string()),
         )]
     );
     assert_eq!(saw(&game, staff[1]), 1, "in reach of the machine");
@@ -184,7 +184,7 @@ fn a_machine_a_rival_works_is_a_candidate_though_not_resented() {
         progress: 0,
         required: 1,
     });
-    assert!(!game.resents_structure(who, &"mining_node".to_string()));
+    assert!(!game.resents_structure(who, &"extractor".to_string()));
     assert!(spoils_within_a_while(&mut game, machine));
 }
 
@@ -196,7 +196,7 @@ fn a_resenting_sulker_beside_a_full_machine(seed: u32) -> (Game, Entity, Entity)
     let who = beside_and_resenting(&mut game, &staff, machine);
     assert!(game.sulks(who), "fixture");
     assert!(
-        game.resents_structure(who, &"mining_node".to_string()),
+        game.resents_structure(who, &"extractor".to_string()),
         "fixture"
     );
     (game, who, machine)
@@ -273,7 +273,7 @@ fn an_empty_output_is_never_asked_for_a_unit() {
 fn the_second_of_two_sulkers_sees_the_stock_the_first_left() {
     let mut game = Game::new(9006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (staff, a) = a_base_with_a_full_machine(&mut game, 1);
-    let b = spawn_structure_at(&mut game, "mining_node", 20, 22);
+    let b = spawn_structure_at(&mut game, "extractor", 20, 22);
     stock_output(&mut game, b, 5);
     let id_of = |game: &Game, e: Entity| *game.world.get::<ProgramId>(e).unwrap();
     let (first, second) = if id_of(&game, staff[0]) < id_of(&game, staff[1]) {
@@ -299,7 +299,7 @@ fn the_second_of_two_sulkers_sees_the_stock_the_first_left() {
     for (who, x, y) in [(first, 20, 19), (second, 20, 21)] {
         place_at(&mut game, who, x, y);
         sulk(&mut game, who);
-        resent(&mut game, who, "mining_node");
+        resent(&mut game, who, "extractor");
     }
 
     game.note_sabotage();

@@ -133,7 +133,7 @@ fn p_reopens_on_the_last_page_and_the_three_hubs_keep_separate_slots() {
 
 #[test]
 fn a_command_page_with_every_row_hidden_still_turns_and_escapes() {
-    let mut app = app_owning_a_program_and_a_compiler(31005, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(31005, &[]);
     assert!(
         !party_rows(&mut app)
             .iter()
@@ -190,7 +190,7 @@ fn selecting_a_row_parks_the_page_as_the_origin() {
     let mut app = app_owning_distant_programs(31007, 1);
     open_via_menu(&mut app, 'p', "Read a manifest");
     assert_eq!(app.menu_origin, Some(Mode::PartyPrograms));
-    let mut app = app_owning_a_program_and_a_compiler(31008, &[]);
+    let mut app = app_owning_a_program_and_an_extractor(31008, &[]);
     open_via_menu(&mut app, 'p', "Install a routine");
     assert_eq!(app.menu_origin, Some(Mode::PartyRoutines));
 }
@@ -265,7 +265,7 @@ fn fuse_esc_lands_on_programs_in_page() {
 
 #[test]
 fn refactor_and_develop_are_reached_from_programs() {
-    let mut app = app_owning_a_program_and_a_compiler_with_cargo(
+    let mut app = app_owning_a_program_and_an_extractor_with_cargo(
         31015,
         &[],
         &[
@@ -292,7 +292,7 @@ fn refactor_and_develop_are_reached_from_programs() {
 
 #[test]
 fn routine_install_extract_and_etch_return_to_routines_in_page() {
-    let mut app = app_owning_a_program_and_a_compiler(31016, &["sandbox"]);
+    let mut app = app_owning_a_program_and_an_extractor(31016, &["sandbox"]);
     teach_player_routines(&mut app, &["sandbox"]);
     for (label, mode) in [
         ("Install a routine", Mode::RoutineTarget),

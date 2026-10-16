@@ -14,7 +14,7 @@ use crate::views::{MORALE_BANDS, morale_band};
 /// Every prefix `BenchReport::measure` accepts, for error messages and for
 /// an objective file's load-time check.
 pub const MEASURES: &[&str] = &[
-    "economy.running_share.<kind>",
+    "economy.running_share.<kind or recipe>",
     "economy.line_output_per_1000.<line key>",
     "economy.labour_unworked",
     "economy.items.<item id>",
@@ -86,6 +86,11 @@ pub struct MachineReport {
     pub status_ticks: BTreeMap<String, u64>,
     pub units: u64,
     pub running_share: f32,
+    /// What a configurable machine was set to make; `None` for a fixed
+    /// structure and an unset machine. `#[serde(default)]` so a report
+    /// written before machines existed still loads.
+    #[serde(default)]
+    pub recipe: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -511,11 +516,13 @@ impl BenchReport {
             let shares: Vec<f64> = economy
                 .machines
                 .iter()
-                .filter(|m| m.kind == kind)
+                .filter(|m| m.kind == kind || m.recipe.as_deref() == Some(kind))
                 .map(|m| f64::from(m.running_share))
                 .collect();
             if shares.is_empty() {
-                return Err(format!("no machine of kind `{kind}` in this base"));
+                return Err(format!(
+                    "no machine of kind or recipe `{kind}` in this base"
+                ));
             }
             return Ok(shares.iter().sum::<f64>() / shares.len() as f64);
         }
@@ -589,6 +596,7 @@ mod tests {
                         status_ticks: counts(&[("running", 50), ("idle", 50)]),
                         units: 5,
                         running_share: 0.5,
+                        recipe: None,
                     },
                     MachineReport {
                         pos: (1, 0),
@@ -596,6 +604,7 @@ mod tests {
                         status_ticks: counts(&[("running", 100)]),
                         units: 9,
                         running_share: 1.0,
+                        recipe: None,
                     },
                 ],
                 lines: vec![LineBench {
@@ -622,6 +631,16 @@ mod tests {
         assert_eq!(r.measure("economy.labour_unworked"), Ok(1.5));
         assert_eq!(r.measure("economy.items.ore"), Ok(14.0));
         assert_eq!(r.measure("economy.items.wire"), Ok(0.0));
+    }
+
+    #[test]
+    fn running_share_matches_a_recipe_key() {
+        let mut r = sample();
+        r.economy.machines[0].recipe = Some("core_fragment".into());
+        r.economy.machines[1].recipe = Some("power_cell".into());
+        assert_eq!(r.measure("economy.running_share.core_fragment"), Ok(0.5));
+        assert_eq!(r.measure("economy.running_share.power_cell"), Ok(1.0));
+        assert_eq!(r.measure("economy.running_share.extractor"), Ok(0.75));
     }
 
     #[test]

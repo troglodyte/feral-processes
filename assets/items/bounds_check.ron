@@ -4,6 +4,6 @@
     glyph: Some('*'),
     description: "Guard rails around a tamed program's reads, for good. +5% Mitigation, and one upgrade slot.",
     value: Some(5),
-    craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("refactor_bench"))),
+    craftable: Some((cost: [("annealed_core", 2)], requires_structure: Some("workbench"), research: Some("program_refactoring"))),
     upgrade: Some((def_percent: 5.0)),
 )

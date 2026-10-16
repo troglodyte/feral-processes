@@ -1714,7 +1714,7 @@ impl Game {
     ///
     /// **`source` is the whole reason this is one door.** Seventeen callers
     /// pass through here, and B5 — what share of a sector's Core Fragments
-    /// a Mining Node is actually worth — is unanswerable without knowing
+    /// an Extractor is actually worth — is unanswerable without knowing
     /// which of them a unit came through.
     ///
     /// Recorded, never folded: see `telemetry::Record::Acquire`. The record

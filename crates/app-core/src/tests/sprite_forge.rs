@@ -106,7 +106,7 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
 
     assert_eq!(
         subjects.len(),
-        100,
+        89,
         "every species + every structure + player + anchor (minus one \
          shipped overlap de-duplicated away — the Home's `sprite:` names \
          \"anchor\", see `assets/structures/home.ron`) + the fifteen shipped \
@@ -176,7 +176,7 @@ fn sprite_subjects_lists_every_floor_finish_with_its_shade_tint() {
 
 /// Fix round 1: a subject's colour must be the def's own `GlyphColor`, not a
 /// placeholder — checked against two real shipped defs (`assets/species/
-/// cipher.ron`, `assets/structures/annealing_node.ron`, both `color: Cyan`)
+/// cipher.ron`, `assets/structures/printer.ron`, both `color: Cyan`)
 /// rather than trusting the loader wired the field through — and the two
 /// hardcoded subjects must land on exactly the values `render/base.rs`
 /// actually draws them in: `None` for the player (a role colour, not a
@@ -205,7 +205,7 @@ fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
         SubjectTint::Glyph(Some(GlyphColor::Cyan))
     );
     assert_eq!(
-        by_name("annealing_node").tint,
+        by_name("printer").tint,
         SubjectTint::Glyph(Some(GlyphColor::Cyan))
     );
 }

@@ -227,7 +227,7 @@ pub(crate) const FAINT: Color = rgb(0x4a5563);
 /// Nine of the eleven are entries in the handoff's sixteen. **Brown and
 /// orange are not in it**, and stand outside it the way the chrome greys do:
 /// collapsing either onto its nearest entry would make two authored hues
-/// indistinguishable, and a Mining Node that reads as a Lathe — or a con
+/// indistinguishable, and an Extractor that reads as a Factory — or a con
 /// ladder whose top two rungs read alike — is worse than a hue outside the
 /// table. Both are drawn at the table's saturation, which is what keeps them
 /// from reading as louder than the sixteen they sit among.

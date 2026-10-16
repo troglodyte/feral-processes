@@ -39,7 +39,7 @@ use crate::{Game, tuning};
 /// `stock::spend_from_base` drains and the stock block counts, so a block
 /// reading `Blank Substrate 12` is a block saying the base can build — and
 /// the player's pack is the third. A Depot has no privilege here: a
-/// Mining Node's own shelf is as fetchable as a Depot's, which is what
+/// Extractor's own shelf is as fetchable as a Depot's, which is what
 /// keeps "the base is holding it" one answer rather than two.
 #[derive(Clone, Copy)]
 enum Source {
@@ -133,7 +133,7 @@ impl Game {
     /// this one is different is that the alternative is not flicker, it is a
     /// **deadlock**: build wants outrank production, so a base with one
     /// program posts it to the request, the request is dry, the body stands
-    /// there, and the Mining Node that would make the very material the site
+    /// there, and the Extractor that would make the very material the site
     /// is waiting for is never worked again. The crew says "nothing to raise
     /// it with" once and the base is finished for the rest of the run — from
     /// a player doing the supported thing, since filing a request the base
@@ -553,11 +553,14 @@ impl Game {
         // gives it back or spends it: the figure it leaves in the machine is
         // taken off the snapshot the request has been holding since it was
         // filed.
-        let Some((kind, goal, program)) = self
-            .world
-            .get::<BuildSite>(site)
-            .map(|b| (b.structure.clone(), b.goal, b.program.clone()))
-        else {
+        let Some((kind, goal, program, recipe)) = self.world.get::<BuildSite>(site).map(|b| {
+            (
+                b.structure.clone(),
+                b.goal,
+                b.program.clone(),
+                b.recipe.clone(),
+            )
+        }) else {
             return;
         };
         let Some(def) = self.world.resource::<StructureDb>().get(&kind).cloned() else {
@@ -586,7 +589,10 @@ impl Game {
                 let footprint =
                     crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
                 self.displace_bodies_from(&footprint);
-                self.spawn_structure(&def, target.x, target.y, quality);
+                let raised = self.spawn_structure(&def, target.x, target.y, quality);
+                if let Some(item) = recipe {
+                    self.restore_machine_recipe(raised, &item);
+                }
                 self.displace_floor_items_from(&footprint);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
             }

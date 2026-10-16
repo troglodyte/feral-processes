@@ -8,6 +8,7 @@ use crate::*;
 
 fn structure(kind: &str, x: i32, y: i32) -> save::StructureSave {
     save::StructureSave {
+        recipe: None,
         kind: kind.to_string(),
         position: (x, y),
         durability: None,

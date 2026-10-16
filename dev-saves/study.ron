@@ -9942,8 +9942,9 @@
             build_quality: 1.0,
         ),
         (
-            kind: "power_conduit",
+            kind: "extractor",
             position: (0, -1),
+            recipe: Some("power_cell"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -9976,8 +9977,9 @@
             build_quality: 1.0,
         ),
         (
-            kind: "mining_node",
+            kind: "extractor",
             position: (-1, 0),
+            recipe: Some("core_fragment"),
             durability: Some(30),
             tier: Some(1),
             stock_input: [],
@@ -10010,8 +10012,9 @@
             build_quality: 1.0,
         ),
         (
-            kind: "refinery",
+            kind: "factory",
             position: (-2, 0),
+            recipe: Some("bytecode_block"),
             durability: Some(30),
             tier: None,
             stock_input: [],
@@ -10027,8 +10030,9 @@
             build_quality: 1.0,
         ),
         (
-            kind: "winding_node",
+            kind: "factory",
             position: (-1, -1),
+            recipe: Some("charge_coil"),
             durability: Some(30),
             tier: None,
             stock_input: [],

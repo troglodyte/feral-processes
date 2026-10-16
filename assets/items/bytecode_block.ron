@@ -4,5 +4,5 @@
     glyph: Some('*'),
     description: "Core Fragments compiled into something that holds its shape. The Armoury forges plate out of these.",
     value: Some(4),
-    craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("refinery"))),
+    craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("workbench"))),
 )

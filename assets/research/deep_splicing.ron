@@ -12,17 +12,17 @@
         (
             result: "black_ledger",
             cost: [("trace_sniffer", 1), ("logic_wafer", 3), ("cache_grain", 2)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "dead_mans_switch",
             cost: [("trace_sniffer", 2), ("bytecode_block", 2), ("cache_grain", 2)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "overclock_spine",
             cost: [("trace_sniffer", 3), ("logic_wafer", 2), ("cache_grain", 3)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

@@ -720,7 +720,7 @@ impl Game {
     /// Both scans need it and neither may differ from the other, since the
     /// pickers built from them are lists of the same base. The position
     /// tiebreak is not cosmetic — bevy's query iteration order is
-    /// not stable, so two Mining Nodes with nothing else to separate them
+    /// not stable, so two Extractors with nothing else to separate them
     /// would otherwise swap rows between openings of the same menu, and a
     /// list nobody can learn the shape of is worse than an unsorted one.
     fn sort_by_label(views: &mut [EntityView]) {
@@ -971,7 +971,10 @@ impl Game {
         } else if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
-            self.structure_name(&s.kind)
+            match self.placed(entity) {
+                Some(placed) => placed.label(self.world.resource::<ItemDb>()),
+                None => self.structure_name(&s.kind),
+            }
         } else if let Some(build) = self.world.get::<BuildSite>(entity) {
             // Named as the thing being raised rather than as "a build site",
             // because that is the question `x` is asking: the player wants to
@@ -1474,6 +1477,7 @@ impl Game {
                         capacity: s.capacity,
                     });
                 EntityView {
+                    unconfigured: self.placed(entity).is_some_and(|p| p.is_unconfigured()),
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,
@@ -1529,8 +1533,8 @@ impl Game {
     /// joined to for production — the sides the map leaves un-outlined so a
     /// chain draws as one continuous shape.
     ///
-    /// **Symmetric, though the feeding relation is not.** A Refinery names
-    /// the Mining Node beside it; the Mining Node names nobody, because it
+    /// **Symmetric, though the feeding relation is not.** A Factory names
+    /// the Extractor beside it; the Extractor names nobody, because it
     /// has no recipe to want anything. Both walls between a joined pair have
     /// to go or the single remaining line reads as a rendering fault rather
     /// than as a join, so every link found is recorded from both ends.
@@ -1556,20 +1560,18 @@ impl Game {
             .map(|(e, p, k)| ((p.x, p.y), (*e, k)))
             .collect();
 
-        let db = self.world.resource::<StructureDb>();
         let items = self.world.resource::<ItemDb>();
         let mut edges: HashMap<Entity, Vec<(i32, i32)>> = HashMap::new();
-        for (entity, pos, kind) in &placed {
-            let Some(def) = db.get(kind) else {
+        for (entity, pos, _) in &placed {
+            let Some(def) = self.placed(*entity) else {
                 continue;
             };
             for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
-                let Some((neighbour, neighbour_kind)) = by_tile.get(&(pos.x + dx, pos.y + dy))
-                else {
+                let Some((neighbour, _)) = by_tile.get(&(pos.x + dx, pos.y + dy)) else {
                     continue;
                 };
-                let feeds = db
-                    .get(neighbour_kind)
+                let feeds = self
+                    .placed(*neighbour)
                     .is_some_and(|made| crate::systems::feeds_ingredient(made, def, items));
                 // A Depot is joined to a producer it would pull from
                 // (`depot_takes_from`, the intake's own rule) and to a
@@ -1662,6 +1664,10 @@ impl Game {
                 };
                 let stock = self.world.get::<Stock>(entity);
                 StructureReport {
+                    recipe: self
+                        .world
+                        .get::<crate::components::MachineRecipe>(entity)
+                        .and_then(|r| r.0.clone()),
                     input: named(stock.map(|s| &s.input)),
                     output: named(stock.map(|s| &s.output)),
                     output_capacity: stock.map(|s| s.capacity).unwrap_or(0),

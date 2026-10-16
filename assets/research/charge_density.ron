@@ -1,7 +1,7 @@
 (
     id: "charge_density",
     name: "Charge Density",
-    description: "Better power cells: one restores far more Power than a basic cell, the other keeps topping it up while you walk. Made at a Winding Node.",
+    description: "Better power cells: one restores far more Power than a basic cell, the other keeps topping it up while you walk. Made at a Workbench.",
     cost: 40,
     materials: [("power_cell", 10), ("cache_grain", 8)],
     min_zone: 2,
@@ -12,12 +12,12 @@
         (
             result: "buffered_cell",
             cost: [("power_cell", 3), ("logic_wafer", 1), ("cache_grain", 3), ("bytecode_block", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "sustain_cell",
             cost: [("power_cell", 2), ("logic_wafer", 2), ("cache_grain", 2), ("bytecode_block", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

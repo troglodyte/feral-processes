@@ -717,7 +717,7 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
         // `Dry` already has the capacity and needs fuel next to them.
         //
         // Not `palette::THREAT`. Br red is reserved for hostility and inbound
-        // harm, and a clogged Mining Node is neither.
+        // harm, and a clogged Extractor is neither.
         MachineStatus::Clogged
         | MachineStatus::Stranded
         | MachineStatus::Unpowered
@@ -728,7 +728,7 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
         // it is the tile worth walking to, and it reads hotter than the
         // effects it produced.
         MachineStatus::Dry => hud::palette::OFFLINE,
-        MachineStatus::Idle => hud::palette::FAINT,
+        MachineStatus::Idle | MachineStatus::Unconfigured => hud::palette::FAINT,
     }
 }
 

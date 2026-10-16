@@ -4,6 +4,6 @@
     glyph: Some('*'),
     description: "Rebuilds a tamed program for the zone you are in. Doubles its stats, once per zone it is behind.",
     value: Some(8),
-    craftable: Some((cost: [("annealed_core", 3)], requires_structure: Some("refactor_bench"))),
+    craftable: Some((cost: [("annealed_core", 3)], requires_structure: Some("workbench"), research: Some("program_refactoring"))),
     upgrade: Some((zone_bump: true)),
 )

@@ -1,7 +1,7 @@
 (
     id: "capacitance",
     name: "Capacitance",
-    description: "Stronger power cells: one refills your whole Power reserve, the other keeps topping it up for a long time. Made at a Winding Node.",
+    description: "Stronger power cells: one refills your whole Power reserve, the other keeps topping it up for a long time. Made at a Workbench.",
     cost: 90,
     materials: [("power_cell", 24), ("bytecode_block", 12)],
     min_zone: 3,
@@ -12,12 +12,12 @@
         (
             result: "capacitor_array",
             cost: [("buffered_cell", 2), ("bytecode_block", 2), ("cache_grain", 4), ("logic_wafer", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "backfeed_cell",
             cost: [("buffered_cell", 1), ("bytecode_block", 1), ("cache_grain", 3), ("logic_wafer", 1)],
-            requires_structure: Some("winding_node"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

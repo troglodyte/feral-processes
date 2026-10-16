@@ -22,7 +22,7 @@ A routine reaching that tree at all has to be *discovered* first, unless
 nothing in the field ever carries it — see "The routine research tree"
 below for the discoverable/always-visible split. Discovery comes from
 recovering the routine off a downed program with a `Routines` extraction
-tool or the Compiler's teardown, never from research directly.
+tool or the Workbench's teardown, never from research directly.
 
 Neither path is how the ability *reaches* a party member, though — abilities
 are installed **routines** occupying level-derived slots (one per two
@@ -916,7 +916,7 @@ disk, and there are exactly two places one comes from:
 
 Six ship: `kernel_shear`, `null_cache` and `deadman` off Wintermute;
 `hard_fault`, `long_winter` and `watchdog` off the Overseer. Extraction at a
-Compiler pops an exclusive routine's *disk* back out rather than teaching
+Workbench pops an exclusive routine's *disk* back out rather than teaching
 it, which is the only way to move one — and it still costs the whole
 program.
 

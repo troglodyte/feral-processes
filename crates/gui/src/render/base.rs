@@ -1145,7 +1145,7 @@ fn draw_surface_map(
             // What is going up here is not the question a player glances at
             // this cell to answer — the caret says "work is happening", the
             // examine page says what and how far along, and a dim `M` would
-            // read as a Mining Node that had gone dark. It also keeps the
+            // read as an Extractor that had gone dark. It also keeps the
             // cell legible as *not yet a thing*: nothing else on this map is
             // a filled block, so a site is never mistaken for a machine.
             //
@@ -1545,6 +1545,11 @@ fn draw_surface_map(
             if let Some(color) = machine_status.map(machine_color) {
                 outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
             }
+            // A machine with nothing set to make: a `?` in the top-right
+            // quarter, after the outline so a wall never draws over it.
+            if structure.is_some_and(|ev| ev.unconfigured) {
+                draw_unconfigured_mark(painter, px, py, tile_px);
+            }
             // How far along the work on this cell is — see
             // `EntityView::job_progress`. **After the outline**, which is
             // drawn along `tile_px - 1.0` and two pixels thick: painted
@@ -1812,6 +1817,26 @@ fn draw_surface_map(
 pub(super) struct PlanCursor {
     pub cursor: (i32, i32),
     pub anchor: Option<(i32, i32)>,
+}
+
+/// A `?` in the top-right quarter of a machine's tile: it has been placed and
+/// nothing has been chosen for it to make, so it does no work and draws no
+/// power. `ATTENTION`, "the player must act".
+///
+/// Half the tile's height so it fits its quarter, placed by its measured
+/// ink because `Painter::map`'s `y` is a baseline.
+fn draw_unconfigured_mark(painter: &Painter, px: f32, py: f32, tile_px: f32) {
+    const INSET: f32 = 2.0;
+    let glyph = "?";
+    let size = ((tile_px / 2.0) as u16).max(1);
+    let dims = painter.measure_map(glyph, size);
+    painter.map(
+        glyph,
+        px + tile_px - dims.width - INSET,
+        py + INSET + dims.height,
+        size,
+        hud::palette::ATTENTION,
+    );
 }
 
 /// The brush's own header, in the map pane's top-left corner — the same
@@ -2103,6 +2128,7 @@ mod tests {
     /// A staff program as the map sees one, mending or not.
     fn patient_view(recovering: bool) -> EntityView {
         EntityView {
+            unconfigured: false,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'd',
@@ -2536,6 +2562,75 @@ mod tests {
             "the @ is nearer its authored hue than the player role — it is \
              still being drawn through `glyph_color`"
         );
+    }
+
+    /// The base map drawn with one `factory` beside the party, set to
+    /// `recipe` or left unset, and how many `?` glyphs came out in
+    /// `ATTENTION`. Staged through the save round trip, the way a renderer
+    /// test reaches game state without a `world` accessor.
+    fn attention_question_marks(recipe: Option<&str>) -> usize {
+        use feral_processes_engine::items::ItemId;
+        use feral_processes_engine::resources::Locale;
+        use feral_processes_engine::save;
+        let mut app = playing_app();
+        let path = std::env::temp_dir().join(format!(
+            "fp_gui_unconfigured_{}_{}.sav",
+            std::process::id(),
+            recipe.unwrap_or("unset")
+        ));
+        app.game.as_mut().unwrap().save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.locale = Locale::Base { x: 0, y: 0 };
+        data.structures.push(save::StructureSave {
+            recipe: recipe.map(ItemId::from),
+            kind: "factory".to_string(),
+            position: (1, 0),
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
+            denied_items: Vec::new(),
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            build_quality: 1.0,
+            racked: Vec::new(),
+            hopper: Vec::new(),
+            hopper_progress: 0,
+            standing_tool: None,
+            pod_charged: None,
+            incubating: Vec::new(),
+        });
+        save::save_to_file(&path, &data).unwrap();
+        app.game = Some(Game::load(&path, &test_assets()).unwrap());
+        let _ = std::fs::remove_file(&path);
+
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
+        });
+        let want = hud::palette::ATTENTION;
+        crate::paint::painted_map_glyphs(&shapes)
+            .iter()
+            .filter(|(g, c)| {
+                g == "?"
+                    && (c.r - want.r).abs() + (c.g - want.g).abs() + (c.b - want.b).abs() < 0.05
+            })
+            .count()
+    }
+
+    /// A machine with nothing set to make wears a `?`, and one that has a
+    /// recipe does not. Drawn through the whole map so the call site's gate
+    /// on `EntityView::unconfigured` is what is tested, not the helper alone.
+    #[test]
+    fn an_unset_machine_wears_a_question_mark() {
+        assert_eq!(attention_question_marks(None), 1);
+    }
+
+    #[test]
+    fn a_set_machine_wears_none() {
+        assert_eq!(attention_question_marks(Some("bytecode_block")), 0);
     }
 
     /// The palette's two reservations, asserted where they are easiest to
@@ -4135,7 +4230,7 @@ mod tests {
             data.build_sites
                 .push(feral_processes_engine::save::BuildSiteSave {
                     position: (px + 1, py),
-                    structure: "mining_node".to_string(),
+                    structure: "extractor".to_string(),
                     cost: vec![(
                         feral_processes_engine::items::ItemId::from("core_fragment"),
                         5,
@@ -4144,6 +4239,7 @@ mod tests {
                     progress: 0,
                     goal: feral_processes_engine::components::BuildGoal::New,
                     program: None,
+                    recipe: None,
                     awaiting_program,
                 });
             feral_processes_engine::save::save_to_file(&path, &data).unwrap();
@@ -6252,7 +6348,7 @@ mod tests {
     /// `Game::place_structure` would file a build *request* for anything but
     /// Home rather than raising it (`Game::spawn_structure`'s doc), so the
     /// Station is written straight into the save the way
-    /// `test_support::app_in_base_with_a_compiler` stands its Compiler up:
+    /// `test_support::app_in_base_with_an_extractor` stands its Compiler up:
     /// `place_structure` would spend a tamed program this fixture has no need
     /// to own, and the engine exposes no cheaper way to stand a structure up
     /// from outside its own crate.
@@ -6269,6 +6365,7 @@ mod tests {
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         data.structures
             .push(feral_processes_engine::save::StructureSave {
+                recipe: None,
                 kind: "research_node".to_string(),
                 position: anchor,
                 durability: None,
@@ -6686,6 +6783,7 @@ mod tests {
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         data.structures
             .push(feral_processes_engine::save::StructureSave {
+                recipe: None,
                 kind: "drop_pod_terminal".to_string(),
                 position: anchor,
                 durability: None,

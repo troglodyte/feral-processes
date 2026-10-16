@@ -574,7 +574,7 @@ pub struct CreatureSave {
     /// How many percentage upgrades have been spent on this program — see
     /// `components::Refactors`. Persisted for exactly the reason `fusions`
     /// above is: `MAX_COMPANION_REFACTORS` is the only bound on a buff
-    /// chain that runs off a Mining Node forever, and a count that reset to
+    /// chain that runs off an Extractor forever, and a count that reset to
     /// 0 on load would refill the budget on every reload.
     ///
     /// `#[serde(default)]` does nothing for the bincode save — that
@@ -1315,6 +1315,10 @@ pub struct BuildSiteSave {
     /// `components::BuildSite::awaiting_program`. Written in v37.
     #[serde(default)]
     pub awaiting_program: bool,
+    /// The recipe a rebuilt machine is set to once raised — see
+    /// `components::BuildSite::recipe`.
+    #[serde(default)]
+    pub recipe: Option<crate::items::ItemId>,
 }
 
 /// A wreck waiting to be filed as a rebuild — see `resources::Ruins`.
@@ -1325,6 +1329,9 @@ pub struct RuinSave {
     /// **Base-space** coordinates, `BuildSiteSave::position`'s rule.
     pub x: i32,
     pub y: i32,
+    /// What a wrecked machine was set to — see `resources::Ruin::recipe`.
+    #[serde(default)]
+    pub recipe: Option<crate::items::ItemId>,
 }
 
 /// A caravan mid-journey — see `components::Caravan`.
@@ -1445,6 +1452,11 @@ pub struct FloorPileSave {
 pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
+    /// What a configurable machine is set to make — see
+    /// `components::MachineRecipe`. `None` on every other structure and on
+    /// a machine nobody has configured.
+    #[serde(default)]
+    pub recipe: Option<ItemId>,
     /// Current raid durability — see `components::Durability`.
     pub durability: Option<u32>,
     /// Current upgrade tier — see `components::StructureTier`. `None` for a
@@ -2156,7 +2168,11 @@ pub struct SaveData {
 /// 36 → 37: siege rebuilds. `SaveData::ruins` and
 /// `BuildSiteSave::awaiting_program` are written; a v36 file would load with
 /// no wrecks to rebuild and every awaiting site as an ordinary one.
-pub const SAVE_FORMAT_VERSION: u32 = 37;
+///
+/// 37 → 38: configurable machines. `StructureSave::recipe`, `RuinSave::recipe`
+/// and `BuildSiteSave::recipe` are written and 16 structure kinds are gone; a
+/// v37 base would load with its production structures missing.
+pub const SAVE_FORMAT_VERSION: u32 = 38;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {

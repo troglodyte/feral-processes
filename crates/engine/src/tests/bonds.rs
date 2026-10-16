@@ -266,7 +266,7 @@ fn an_extraction_is_let_go() {
         .get_mut::<crate::components::Routines>(leaving)
         .unwrap()
         .0 = vec![prize];
-    spawn_structure_at(&mut game, "compiler", 30, 30);
+    stand_an_extraction_bench(&mut game, 30, 30);
     let id = id_of(&game, leaving);
     let cast = cast_around(&mut game, leaving);
 
@@ -365,7 +365,7 @@ fn a_finished_build_lets_its_spent_program_go() {
     let id = id_of(&game, leaving);
     let cast = cast_around(&mut game, leaving);
 
-    game.place_structure("mining_node", 1, 0, Some(leaving))
+    game.place_structure("extractor", 1, 0, Some(leaving))
         .unwrap();
     assert!(
         departures(&game, cast.friend, id).is_empty(),
@@ -396,7 +396,7 @@ fn a_finished_build_stamps_the_live_short_label_on_the_grief() {
     let cast = cast_around(&mut game, leaving);
     let live = game.creature_short_label(leaving);
 
-    game.place_structure("mining_node", 1, 0, Some(leaving))
+    game.place_structure("extractor", 1, 0, Some(leaving))
         .unwrap();
     let (px, py) = game.base_pos().unwrap();
     let site = game.build_site_at(px + 1, py).unwrap();
@@ -420,7 +420,7 @@ fn a_committed_then_refunded_program_grieves_nobody() {
     let id = id_of(&game, leaving);
     let cast = cast_around(&mut game, leaving);
 
-    game.place_structure("mining_node", 1, 0, Some(leaving))
+    game.place_structure("extractor", 1, 0, Some(leaving))
         .unwrap();
     let (px, py) = game.base_pos().unwrap();
     let site = game.build_site_at(px + 1, py).unwrap();

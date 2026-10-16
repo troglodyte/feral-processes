@@ -913,9 +913,15 @@ impl Game {
             return Vec::new();
         };
         let tier = crate::game::catalog::program_tier_required(goal);
-        let extracts = def.work.is_some();
+        let extracts = def.extracts();
+        // A kind-level preview: a machine has no recipe until it is placed
+        // and set, so it quotes no pace (`ScalesRecipe`).
+        let unset = crate::structures::Placed {
+            def: &def,
+            recipe: None,
+        };
         let shipped = self.cycle_ticks_for(
-            &def,
+            unset,
             SiteScales::built(1.0),
             crate::tuning::DEFAULT_BASE_SPEED,
         );
@@ -938,12 +944,13 @@ impl Game {
                 let effect = match (
                     shipped,
                     self.cycle_ticks_for(
-                        &def,
+                        unset,
                         SiteScales::built(quality),
                         crate::tuning::DEFAULT_BASE_SPEED,
                     ),
                 ) {
                     (Some(shipped), Some(built)) => BuildEffect::Cycle { shipped, built },
+                    _ if def.machine.is_some() => BuildEffect::ScalesRecipe,
                     _ => BuildEffect::NoCycle,
                 };
                 (

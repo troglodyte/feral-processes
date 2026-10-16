@@ -261,6 +261,8 @@ impl App {
             Mode::Transfer => self.handle_basket_key(key),
             Mode::DepotFilter => self.handle_depot_filter_key(key),
             Mode::RigTool => self.handle_rig_tool_key(key),
+            Mode::MachineRecipe => self.handle_machine_recipe_key(key),
+            Mode::MachineRecipeConfirm => self.handle_machine_recipe_confirm_key(key),
             Mode::SpliceRig => self.handle_splice_rig_key(key),
             Mode::Battle => self.handle_battle_key(key),
             Mode::BattleTarget => self.handle_battle_target_key(key),

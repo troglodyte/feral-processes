@@ -525,7 +525,7 @@ fn base_job_label(class: AffinityClass) -> String {
 }
 
 /// What a post *is*, as the row's own label — the structure's name is the
-/// value beside it, so "Posted to  Mining Node" and "Guarding  Shield Wall"
+/// value beside it, so "Posted to  Extractor" and "Guarding  Shield Wall"
 /// both read as a sentence. The verb is the whole difference between the two
 /// kinds, which is the same distinction `Game::program_activity` draws for
 /// its terse one-liner.

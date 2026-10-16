@@ -29,7 +29,7 @@ impl App {
     ///
     /// Refuses rather than silently doing nothing: `[F]` is offered in the
     /// transfer picker's hint whenever that screen is open, and the picker
-    /// also opens beside a Mining Node, which has a shelf but no filter.
+    /// also opens beside an Extractor, which has a shelf but no filter.
     pub(crate) fn open_depot_filter(&mut self) {
         let Some(game) = &self.game else {
             return;

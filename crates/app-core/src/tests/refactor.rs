@@ -5,7 +5,7 @@ use crate::*;
 
 /// Two upgrades so the picker has a row to move off, and one program.
 fn app_ready_to_refactor(seed: u32) -> App {
-    app_owning_a_program_and_a_compiler_with_cargo(
+    app_owning_a_program_and_an_extractor_with_cargo(
         seed,
         &[],
         &[("bounds_check", 1), ("inline_cache", 1)],
@@ -84,7 +84,7 @@ fn spending_the_highlighted_upgrade_does_not_leave_the_highlight_on_another_one(
 #[test]
 fn spending_the_last_upgrade_leaves_the_flow_rather_than_the_page() {
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(72, &[], &[("buffer_extension", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(72, &[], &[("buffer_extension", 1)]);
     open_via_menu(&mut app, 'p', "Refactor a program");
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Char('1'));
@@ -108,7 +108,7 @@ fn spending_the_last_upgrade_leaves_the_flow_rather_than_the_page() {
 #[test]
 fn a_refused_refactor_reports_why_and_spends_nothing() {
     let mut app =
-        app_owning_a_program_and_a_compiler_with_cargo(73, &[], &[("recompile_kernel", 1)]);
+        app_owning_a_program_and_an_extractor_with_cargo(73, &[], &[("recompile_kernel", 1)]);
     open_via_menu(&mut app, 'p', "Refactor a program");
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Char('1'));

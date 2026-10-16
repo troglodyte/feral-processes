@@ -13,17 +13,17 @@
         (
             result: "ripper_fibers",
             cost: [("logic_wafer", 5), ("bytecode_block", 2), ("cache_grain", 1)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "ghost_handshake",
             cost: [("trace_sniffer", 1), ("logic_wafer", 3), ("cache_grain", 2)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
         (
             result: "dermal_lattice",
             cost: [("bytecode_block", 5), ("portal_fragment", 3), ("cache_grain", 1)],
-            requires_structure: Some("fabricator"),
+            requires_structure: Some("workbench"),
         ),
     ],
 )

@@ -273,7 +273,7 @@ fn assert_dropped(game: &mut Game, worker: Entity, x: i32, y: i32) {
 fn posted_carrier(game: &mut Game) -> (Entity, Entity) {
     stand_in_base(game);
     place_home(game);
-    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let node = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = loaded_staff(game, 6, 6);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
@@ -335,7 +335,7 @@ fn pinning_for_study_drops_the_load() {
 fn ordered_carrier(game: &mut Game) -> Entity {
     stand_in_base(game);
     place_home(game);
-    spawn_machine_at(game, "mining_node", 2, 0);
+    spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, 0);
     let worker = spawn_tamed(game, 100, 3);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
@@ -481,10 +481,10 @@ fn the_report_names_the_room_a_structure_stands_in_and_not_the_commons() {
     assert_eq!(at((0, 0)).room, None, "the home sits in the commons");
 }
 
-/// Ticks for one cycle at a lathe standing in a walled room with
+/// Ticks for one cycle at a Factory standing in a walled room with
 /// `finished` carpet cells, `with_bed` making it quarters rather than a
-/// workshop; `None` leaves the lathe in the commons.
-fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
+/// workshop; `None` leaves the Factory in the commons.
+fn factory_ticks(room: Option<(usize, bool)>) -> u32 {
     let mut game = game_with_home();
     if let Some((finished, with_bed)) = room {
         walled_room_with_finish(&mut game, finished);
@@ -492,21 +492,22 @@ fn lathe_ticks(room: Option<(usize, bool)>) -> u32 {
             spawn_structure_at(&mut game, "defrag_bay", 4, 4);
         }
     }
-    let lathe = spawn_structure_at(&mut game, "lathe", 3, 3);
-    game.work_ticks_for(lathe, crate::tuning::DEFAULT_BASE_SPEED)
+    let substrate_factory =
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 3);
+    game.work_ticks_for(substrate_factory, crate::tuning::DEFAULT_BASE_SPEED)
 }
 
 #[test]
 fn a_fine_workshop_works_faster_than_the_commons() {
-    let commons = lathe_ticks(None);
-    let fine = lathe_ticks(Some((8, false)));
+    let commons = factory_ticks(None);
+    let fine = factory_ticks(Some((8, false)));
     assert_eq!(commons, 12);
     assert_eq!(fine, 11, "12 ticks at the Fine scale, rounded");
 }
 
 #[test]
 fn a_machine_in_quarters_gets_no_workshop_scale() {
-    assert_eq!(lathe_ticks(Some((8, true))), lathe_ticks(None));
+    assert_eq!(factory_ticks(Some((8, true))), factory_ticks(None));
 }
 
 #[test]

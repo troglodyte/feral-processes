@@ -20,8 +20,8 @@ use crate::items::ItemId;
 use crate::resources::BattleTelemetry;
 use crate::telemetry::Record;
 
-/// Ticks in one bucket. A Mining Node cycle is 10 ticks and a Fabricator or
-/// Armory cycle 30, so a bucket is ~100 of the former and ~33 of the latter
+/// Ticks in one bucket. An Extractor cycle is 10 ticks and a Fabricator or
+/// Assembler cycle 30, so a bucket is ~100 of the former and ~33 of the latter
 /// — never mostly-zero, which is what makes a sparkline of them readable.
 pub const BUCKET_TICKS: u64 = 1_000;
 
@@ -42,7 +42,7 @@ pub const MAX_BUCKETS: usize = 64;
 pub struct ItemTotals {
     /// Landed from an extractor — a structure declaring `work`.
     pub mined: u32,
-    /// Landed from an assembler — a structure declaring `assembles`.
+    /// Landed from an assembler — an `Assemble` machine.
     pub compiled: u32,
     /// Landed from the player's own hands.
     pub hand: u32,
@@ -109,7 +109,7 @@ pub enum Event {
 /// Where something that reached the player's pack came from.
 ///
 /// The whole point of `Record::Acquire`: B5 asks what share of a sector's
-/// Core Fragments came from a Mining Node against kills, base rock and
+/// Core Fragments came from an Extractor against kills, base rock and
 /// caches, and a record with no source answers none of it.
 ///
 /// An enum rather than a `&str` at each call site, for
@@ -580,7 +580,7 @@ mod tests {
             tick: 0,
             zone: 1,
             machine: (0, 0),
-            kind: "mining_node".to_string(),
+            kind: "extractor".to_string(),
             tier: 1,
             worker_species: None,
             item: "core_fragment".to_string(),

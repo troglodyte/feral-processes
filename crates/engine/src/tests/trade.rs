@@ -40,7 +40,7 @@ fn program_activity_names_the_structure_a_worker_is_on() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 2, 0);
+    let node = spawn_extractor(&mut game, 2, 0);
 
     game.assign_cronjob(worker, node).unwrap();
     let label = game.program_activity(worker);
@@ -110,7 +110,7 @@ fn program_post_names_the_structure_and_which_job_it_is() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 2, 0);
+    let node = spawn_extractor(&mut game, 2, 0);
     game.assign_cronjob(worker, node).unwrap();
 
     assert_eq!(
@@ -126,7 +126,7 @@ fn a_manifest_names_the_structure_a_program_is_posted_to() {
     let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 2, 0);
+    let node = spawn_extractor(&mut game, 2, 0);
     game.assign_cronjob(worker, node).unwrap();
 
     let view = game

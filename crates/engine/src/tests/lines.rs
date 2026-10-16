@@ -2,8 +2,9 @@
 //! groups into one job.
 
 use super::support::*;
-use crate::components::StaffRank;
+use crate::components::{MachineRecipe, StaffRank};
 use crate::game::base::lines::LineKey;
+use crate::structures::Placed;
 use crate::systems::{feeds, feeds_fuel, feeds_ingredient};
 use crate::*;
 
@@ -19,31 +20,64 @@ fn game() -> Game {
 }
 
 #[test]
-fn a_mining_node_feeds_a_lathe_its_ingredient() {
+fn an_extractor_feeds_a_factory_its_ingredient() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
-    let (mining, lathe) = (def(&g, "mining_node"), def(&g, "lathe"));
-    assert!(feeds_ingredient(&mining, &lathe, items));
-    assert!(feeds(&mining, &lathe, items));
-    assert!(!feeds_ingredient(&lathe, &mining, items));
+    let (mining, factory) = (def(&g, "extractor"), def(&g, "factory"));
+    let (fragment, substrate) = (
+        MachineRecipe(Some(ItemId::from("core_fragment"))),
+        MachineRecipe(Some(ItemId::from("blank_substrate"))),
+    );
+    assert!(feeds_ingredient(
+        Placed::of(&mining, Some(&fragment)),
+        Placed::of(&factory, Some(&substrate)),
+        items
+    ));
+    assert!(feeds(
+        Placed::of(&mining, Some(&fragment)),
+        Placed::of(&factory, Some(&substrate)),
+        items
+    ));
+    assert!(!feeds_ingredient(
+        Placed::of(&factory, Some(&substrate)),
+        Placed::of(&mining, Some(&fragment)),
+        items
+    ));
 }
 
 #[test]
-fn a_power_conduit_feeds_a_recharger_its_fuel() {
+fn a_power_cell_extractor_feeds_a_recharger_its_fuel() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
-    let (conduit, recharger) = (def(&g, "power_conduit"), def(&g, "recharger_node"));
-    assert!(feeds_fuel(&conduit, &recharger));
-    assert!(!feeds_ingredient(&conduit, &recharger, items));
-    assert!(feeds(&conduit, &recharger, items));
+    let (conduit, recharger) = (def(&g, "extractor"), def(&g, "recharger_node"));
+    let cell = MachineRecipe(Some(ItemId::from("power_cell")));
+    assert!(feeds_fuel(
+        Placed::of(&conduit, Some(&cell)),
+        Placed::of(&recharger, None)
+    ));
+    assert!(!feeds_ingredient(
+        Placed::of(&conduit, Some(&cell)),
+        Placed::of(&recharger, None),
+        items
+    ));
+    assert!(feeds(
+        Placed::of(&conduit, Some(&cell)),
+        Placed::of(&recharger, None),
+        items
+    ));
 }
 
 #[test]
 fn a_machine_does_not_feed_its_own_kind() {
     let g = game();
     let items = g.world.resource::<ItemDb>();
-    let mining = def(&g, "mining_node");
-    assert!(!feeds(&mining, &mining, items));
+    let mining = def(&g, "extractor");
+    let fragment = MachineRecipe(Some(ItemId::from("core_fragment")));
+    assert!(!feeds(
+        Placed::of(&mining, Some(&fragment)),
+        Placed::of(&mining, Some(&fragment)),
+        items
+    ));
 }
 
 #[test]
@@ -53,7 +87,7 @@ fn a_teardown_rig_feeds_nothing() {
     let rig = def(&g, "teardown_rig");
     for other in g.structure_defs() {
         assert!(
-            !feeds(&rig, &other, items),
+            !feeds(Placed::of(&rig, None), Placed::of(&other, None), items),
             "rig must not feed {}",
             other.id
         );
@@ -61,10 +95,10 @@ fn a_teardown_rig_feeds_nothing() {
 }
 
 #[test]
-fn two_touching_mining_nodes_are_two_lines() {
+fn two_touching_extractors_are_two_lines() {
     let mut g = game();
-    let a = spawn_machine_at(&mut g, "mining_node", 0, 0);
-    let b = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    let a = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 0, 0);
+    let b = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 1, 0);
     let lines = g.production_lines();
     assert_eq!(lines.len(), 2);
     assert_eq!(g.line_of(a), None);
@@ -72,23 +106,23 @@ fn two_touching_mining_nodes_are_two_lines() {
 }
 
 #[test]
-fn a_lathe_beside_a_mining_node_ranks_the_lathe_first() {
+fn a_factory_beside_an_extractor_ranks_the_factory_first() {
     let mut g = game();
-    let mining = spawn_machine_at(&mut g, "mining_node", 0, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
+    let mining = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 0, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
     let lines = g.production_lines();
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0].members, vec![lathe, mining]);
+    assert_eq!(lines[0].members, vec![factory, mining]);
     assert_eq!(lines[0].rank, vec![0, 1]);
     assert_eq!(lines[0].key, LineKey((0, 0)));
-    assert_eq!(g.line_of(lathe), Some(LineKey((0, 0))));
+    assert_eq!(g.line_of(factory), Some(LineKey((0, 0))));
     assert_eq!(g.line_of(mining), Some(LineKey((0, 0))));
 }
 
 #[test]
 fn a_conduit_and_a_recharger_are_one_line() {
     let mut g = game();
-    let conduit = spawn_machine_at(&mut g, "power_conduit", 4, 4);
+    let conduit = spawn_machine_with_recipe_at(&mut g, "extractor", "power_cell", 4, 4);
     let recharger = spawn_machine_at(&mut g, "recharger_node", 4, 5);
     let lines = g.production_lines();
     assert_eq!(lines.len(), 1);
@@ -100,32 +134,32 @@ fn a_conduit_and_a_recharger_are_one_line() {
 fn a_rig_beside_a_machine_is_a_line_of_one() {
     let mut g = game();
     let rig = spawn_machine_at(&mut g, "teardown_rig", 0, 0);
-    spawn_machine_at(&mut g, "lathe", 1, 0);
+    spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
     assert_eq!(g.line_of(rig), None);
 }
 
 #[test]
 fn building_between_two_lines_merges_them_and_demolishing_splits_them() {
     let mut g = game();
-    let compiler = spawn_machine_at(&mut g, "compiler", 0, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 2, 0);
-    let far = spawn_machine_at(&mut g, "mining_node", 3, 0);
+    let compiler = spawn_machine_with_recipe_at(&mut g, "printer", "ice_breaker", 0, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 2, 0);
+    let far = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 3, 0);
     assert_eq!(g.line_of(compiler), None);
-    let key = g.line_of(lathe);
+    let key = g.line_of(factory);
     assert_eq!(key, Some(LineKey((2, 0))));
     assert_eq!(g.line_of(far), key);
 
-    let between = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    let between = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 1, 0);
     let merged = g.line_of(compiler);
     assert_eq!(merged, Some(LineKey((0, 0))));
-    for e in [lathe, far, between] {
+    for e in [factory, far, between] {
         assert_eq!(g.line_of(e), merged);
     }
     assert_eq!(g.production_lines().len(), 1);
 
     g.world.despawn(between);
     assert_eq!(g.line_of(compiler), None);
-    assert_eq!(g.line_of(lathe), Some(LineKey((2, 0))));
+    assert_eq!(g.line_of(factory), Some(LineKey((2, 0))));
 }
 
 #[test]
@@ -161,10 +195,10 @@ fn a_cycle_neither_panics_nor_reorders() {
 #[test]
 fn a_standing_job_on_one_member_reaches_the_whole_line() {
     let mut g = game();
-    let mining = spawn_machine_at(&mut g, "mining_node", 0, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
-    g.set_standing_job(lathe, true, true).unwrap();
-    assert_eq!(g.standing_job(lathe), Some((true, true)));
+    let mining = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 0, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
+    g.set_standing_job(factory, true, true).unwrap();
+    assert_eq!(g.standing_job(factory), Some((true, true)));
     assert_eq!(
         g.standing_job(mining),
         Some((true, false)),
@@ -172,14 +206,14 @@ fn a_standing_job_on_one_member_reaches_the_whole_line() {
     );
     g.set_standing_job(mining, false, false).unwrap();
     assert_eq!(g.standing_job(mining), None);
-    assert_eq!(g.standing_job(lathe), Some((false, true)));
+    assert_eq!(g.standing_job(factory), Some((false, true)));
 }
 
 #[test]
 fn a_standing_job_on_a_line_of_one_is_as_before() {
     let mut g = game();
-    let mining = spawn_machine_at(&mut g, "mining_node", 0, 0);
-    let other = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    let mining = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 0, 0);
+    let other = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 1, 0);
     g.set_standing_job(mining, true, false).unwrap();
     assert_eq!(g.standing_job(other), None);
 }
@@ -187,14 +221,14 @@ fn a_standing_job_on_a_line_of_one_is_as_before() {
 #[test]
 fn a_merged_line_with_one_flagged_member_wants_every_member() {
     let mut g = game();
-    let compiler = spawn_machine_at(&mut g, "compiler", 0, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 2, 0);
-    let far = spawn_machine_at(&mut g, "mining_node", 3, 0);
-    g.set_standing_job(lathe, true, false).unwrap();
+    let compiler = spawn_machine_with_recipe_at(&mut g, "printer", "ice_breaker", 0, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 2, 0);
+    let far = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 3, 0);
+    g.set_standing_job(factory, true, false).unwrap();
     assert_eq!(g.standing_job(far), Some((true, false)));
     assert_eq!(g.standing_job(compiler), None);
 
-    let between = spawn_machine_at(&mut g, "mining_node", 1, 0);
+    let between = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 1, 0);
     let lines = g.production_lines();
     let mut wanted: Vec<Entity> = g
         .standing_wants(&lines)
@@ -205,7 +239,7 @@ fn a_merged_line_with_one_flagged_member_wants_every_member() {
         })
         .collect();
     wanted.sort();
-    let mut all = vec![compiler, lathe, far, between];
+    let mut all = vec![compiler, factory, far, between];
     all.sort();
     assert_eq!(wanted, all);
 }
@@ -223,10 +257,10 @@ fn base_game(seed: u32) -> Game {
 
 /// Mining (2,0) -> Lathe (3,0) -> Disk Press (4,0).
 fn disk_line(g: &mut Game) -> (Entity, Entity, Entity) {
-    let mine = spawn_machine_at(g, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(g, "lathe", 3, 0);
-    let press = spawn_machine_at(g, "disk_press", 4, 0);
-    (mine, lathe, press)
+    let mine = spawn_machine_with_recipe_at(g, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(g, "factory", "blank_substrate", 3, 0);
+    let press = spawn_machine_with_recipe_at(g, "assembler", "routine_disk", 4, 0);
+    (mine, factory, press)
 }
 
 fn put_output(g: &mut Game, machine: Entity, item: &str, qty: u32) {
@@ -259,12 +293,12 @@ fn posted(g: &Game, worker: Entity) -> Option<Entity> {
 #[test]
 fn a_three_machine_line_under_a_standing_job_has_one_body_and_two_free() {
     let mut g = base_game(61);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     let staff = hire(&mut g, 3);
     g.set_standing_job(mine, true, false).unwrap();
     // Both downstream machines can progress, so three members want a body.
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
-    put_output(&mut g, lathe, ids::BLANK_SUBSTRATE, 8);
+    put_output(&mut g, factory, ids::BLANK_SUBSTRATE, 8);
     g.tick();
     let held = gatherers(&mut g);
     assert_eq!(held.len(), 1, "one body runs the line: {held:?}");
@@ -277,23 +311,23 @@ fn a_three_machine_line_under_a_standing_job_has_one_body_and_two_free() {
 #[test]
 fn the_worker_pulls_from_the_end_of_the_line() {
     let mut g = base_game(62);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     let staff = hire(&mut g, 1);
     g.set_standing_job(mine, true, false).unwrap();
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.tick();
-    assert_eq!(posted(&g, staff[0]), Some(lathe));
+    assert_eq!(posted(&g, staff[0]), Some(factory));
 }
 
 #[test]
 fn an_order_for_a_middle_product_never_posts_the_end_machine() {
     let mut g = base_game(63);
-    let (mine, lathe, press) = disk_line(&mut g);
+    let (mine, factory, press) = disk_line(&mut g);
     let staff = hire(&mut g, 3);
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     // The press could run, which is what makes this a test of the wanted
     // set rather than of what can progress.
-    put_output(&mut g, lathe, ids::BLANK_SUBSTRATE, 8);
+    put_output(&mut g, factory, ids::BLANK_SUBSTRATE, 8);
     g.queue_work_order(WorkOrder::batch(ItemId::from(ids::BLANK_SUBSTRATE), 40))
         .unwrap();
     for _ in 0..3 {
@@ -306,10 +340,10 @@ fn an_order_for_a_middle_product_never_posts_the_end_machine() {
 }
 
 /// Posts the line's one worker on the Mining Node mid-cycle, with the Lathe
-/// not yet workable, and returns `(worker, mine, lathe)`.
+/// not yet workable, and returns `(worker, mine, factory)`.
 fn mid_cycle_on_mining(g: &mut Game, staff: usize) -> (Entity, Entity, Entity) {
-    let mine = spawn_machine_at(g, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(g, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(g, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(g, "factory", "blank_substrate", 3, 0);
     let hired = hire(g, staff);
     g.set_standing_job(mine, true, false).unwrap();
     g.tick();
@@ -337,14 +371,14 @@ fn mid_cycle_on_mining(g: &mut Game, staff: usize) -> (Entity, Entity, Entity) {
         t.progress,
         t.required
     );
-    (worker, mine, lathe)
+    (worker, mine, factory)
 }
 
 #[test]
 fn a_worker_mid_cycle_is_not_moved_and_moves_when_the_cycle_completes() {
     let mut g = base_game(64);
-    let (worker, mine, lathe) = mid_cycle_on_mining(&mut g, 2);
-    // The lathe becomes workable while the mine is mid-cycle.
+    let (worker, mine, factory) = mid_cycle_on_mining(&mut g, 2);
+    // The factory becomes workable while the mine is mid-cycle.
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     while g.world.get::<Task>(worker).is_some_and(|t| t.progress != 0) {
         let t = g.world.get::<Task>(worker).unwrap();
@@ -352,23 +386,27 @@ fn a_worker_mid_cycle_is_not_moved_and_moves_when_the_cycle_completes() {
         g.tick();
     }
     g.tick();
-    assert_eq!(posted(&g, worker), Some(lathe), "moves once the cycle ends");
+    assert_eq!(
+        posted(&g, worker),
+        Some(factory),
+        "moves once the cycle ends"
+    );
 }
 
 #[test]
 fn the_same_body_is_re_posted_when_the_active_machine_moves() {
     let mut g = base_game(65);
-    let (worker, mine, lathe) = mid_cycle_on_mining(&mut g, 3);
+    let (worker, mine, factory) = mid_cycle_on_mining(&mut g, 3);
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     for _ in 0..200 {
         g.tick();
-        if posted(&g, worker) == Some(lathe) {
+        if posted(&g, worker) == Some(factory) {
             break;
         }
     }
     assert_eq!(
         gatherers(&mut g),
-        vec![(worker, lathe)],
+        vec![(worker, factory)],
         "no swap, no second body"
     );
 }
@@ -376,8 +414,8 @@ fn the_same_body_is_re_posted_when_the_active_machine_moves() {
 #[test]
 fn a_carrying_line_worker_keeps_the_lines_want() {
     let mut g = base_game(66);
-    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
-    spawn_machine_at(&mut g, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 3, 0);
     let staff = hire(&mut g, 2);
     g.set_standing_job(mine, true, false).unwrap();
     g.tick();
@@ -387,7 +425,7 @@ fn a_carrying_line_worker_keeps_the_lines_want() {
         item: ItemId::from(ids::CORE_FRAGMENT),
         qty: 1,
     });
-    // The line's want now names the lathe, not the mine the body stands on.
+    // The line's want now names the factory, not the mine the body stands on.
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.tick();
     assert_eq!(posted(&g, worker), Some(mine), "a carrier is never freed");
@@ -398,22 +436,22 @@ fn a_carrying_line_worker_keeps_the_lines_want() {
 #[test]
 fn a_line_whose_end_machine_lacks_an_ingredient_is_fetched_by_its_one_worker() {
     let mut g = base_game(67);
-    // Lathe -> Press: nothing in the line makes the lathe's core fragment.
-    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
-    let press = spawn_machine_at(&mut g, "disk_press", 2, 0);
+    // Lathe -> Press: nothing in the line makes the factory's core fragment.
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
+    let press = spawn_machine_with_recipe_at(&mut g, "assembler", "routine_disk", 2, 0);
     let depot = spawn_machine_at(&mut g, "depot", 4, 0);
     put_output(&mut g, depot, ids::CORE_FRAGMENT, 10);
     let staff = hire(&mut g, 2);
     g.set_standing_job(press, true, false).unwrap();
     g.tick();
     let (worker, target) = gatherers(&mut g)[0];
-    assert_eq!(target, lathe, "the one machine that can progress");
-    park_at_post(&mut g, worker, lathe);
+    assert_eq!(target, factory, "the one machine that can progress");
+    park_at_post(&mut g, worker, factory);
     for _ in 0..300 {
         g.tick();
         let held = g
             .world
-            .get::<Stock>(lathe)
+            .get::<Stock>(factory)
             .unwrap()
             .input
             .get(&ItemId::from(ids::CORE_FRAGMENT))
@@ -423,10 +461,10 @@ fn a_line_whose_end_machine_lacks_an_ingredient_is_fetched_by_its_one_worker() {
             break;
         }
     }
-    let held = g.world.get::<Stock>(lathe).unwrap();
+    let held = g.world.get::<Stock>(factory).unwrap();
     assert!(
         held.input.contains_key(&ItemId::from(ids::CORE_FRAGMENT)) || !held.output.is_empty(),
-        "the lathe was loaded from the depot"
+        "the factory was loaded from the depot"
     );
     assert_eq!(gatherers(&mut g).len(), 1);
     assert_eq!(
@@ -441,10 +479,10 @@ fn a_line_whose_end_machine_lacks_an_ingredient_is_fetched_by_its_one_worker() {
 #[test]
 fn a_line_already_holding_two_bodies_is_cut_back_to_one() {
     let mut g = base_game(68);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     let staff = hire(&mut g, 2);
     g.assign_cronjob(staff[0], mine).unwrap();
-    g.assign_cronjob(staff[1], lathe).unwrap();
+    g.assign_cronjob(staff[1], factory).unwrap();
     g.set_standing_job(mine, true, false).unwrap();
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.tick();
@@ -454,10 +492,10 @@ fn a_line_already_holding_two_bodies_is_cut_back_to_one() {
 #[test]
 fn hand_posted_bodies_on_a_line_with_no_want_are_left_alone() {
     let mut g = base_game(69);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     let staff = hire(&mut g, 2);
     g.assign_cronjob(staff[0], mine).unwrap();
-    g.assign_cronjob(staff[1], lathe).unwrap();
+    g.assign_cronjob(staff[1], factory).unwrap();
     for _ in 0..3 {
         g.tick();
     }
@@ -467,7 +505,7 @@ fn hand_posted_bodies_on_a_line_with_no_want_are_left_alone() {
 #[test]
 fn a_staffed_line_keeps_its_body_on_its_active_machine_through_a_save_and_load() {
     let mut g = base_game(71);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     // Told apart after the load, which does not keep entity ids, by max hp.
     let staff = [spawn_tamed(&mut g, 10, 3), spawn_tamed(&mut g, 11, 3)];
     g.set_standing_job(mine, true, false).unwrap();
@@ -475,8 +513,8 @@ fn a_staffed_line_keeps_its_body_on_its_active_machine_through_a_save_and_load()
     g.tick();
     let (worker, target) = gatherers(&mut g)[0];
     assert_eq!(
-        target, lathe,
-        "precondition: the active machine is the lathe"
+        target, factory,
+        "precondition: the active machine is the factory"
     );
     let worker_hp = g.world.get::<Stats>(worker).unwrap().max_hp;
     assert!(staff.contains(&worker));
@@ -495,7 +533,7 @@ fn a_staffed_line_keeps_its_body_on_its_active_machine_through_a_save_and_load()
     let (body, machine) = held[0];
     assert_eq!(loaded.world.get::<Stats>(body).unwrap().max_hp, worker_hp);
     let at = *loaded.world.get::<Position>(machine).unwrap();
-    assert_eq!((at.x, at.y), (3, 0), "still on the lathe");
+    assert_eq!((at.x, at.y), (3, 0), "still on the factory");
 }
 
 // ---------------------------------------------------------------------
@@ -509,10 +547,10 @@ fn set_status(g: &mut Game, machine: Entity, status: MachineStatus) {
 #[test]
 fn a_line_report_lists_sources_first_and_names_them() {
     let mut g = base_game(81);
-    let (mine, lathe, press) = disk_line(&mut g);
+    let (mine, factory, press) = disk_line(&mut g);
     let reports = g.line_reports();
     assert_eq!(reports.len(), 1, "lines of one are not reported");
-    assert_eq!(reports[0].members, vec![mine, lathe, press]);
+    assert_eq!(reports[0].members, vec![mine, factory, press]);
     assert_eq!(reports[0].names.len(), 3);
     assert_eq!(reports[0].active, None);
 }
@@ -520,16 +558,16 @@ fn a_line_report_lists_sources_first_and_names_them() {
 #[test]
 fn a_line_reports_its_held_machine_as_active_and_its_status() {
     let mut g = base_game(82);
-    let (mine, lathe, press) = disk_line(&mut g);
+    let (mine, factory, press) = disk_line(&mut g);
     hire(&mut g, 1);
     g.set_standing_job(mine, true, false).unwrap();
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.tick();
     set_status(&mut g, mine, MachineStatus::Running);
-    set_status(&mut g, lathe, MachineStatus::Clogged);
+    set_status(&mut g, factory, MachineStatus::Clogged);
     set_status(&mut g, press, MachineStatus::Idle);
     let report = g.line_reports().remove(0);
-    assert_eq!(report.active, Some(lathe));
+    assert_eq!(report.active, Some(factory));
     assert_eq!(
         report.status,
         MachineStatus::Clogged,
@@ -540,9 +578,9 @@ fn a_line_reports_its_held_machine_as_active_and_its_status() {
 #[test]
 fn with_no_active_machine_the_status_is_the_first_non_idle_from_the_end() {
     let mut g = base_game(83);
-    let (mine, lathe, press) = disk_line(&mut g);
+    let (mine, factory, press) = disk_line(&mut g);
     set_status(&mut g, press, MachineStatus::Idle);
-    set_status(&mut g, lathe, MachineStatus::Starved);
+    set_status(&mut g, factory, MachineStatus::Starved);
     set_status(&mut g, mine, MachineStatus::Running);
     assert_eq!(g.line_reports()[0].status, MachineStatus::Starved);
 }
@@ -550,9 +588,9 @@ fn with_no_active_machine_the_status_is_the_first_non_idle_from_the_end() {
 #[test]
 fn missing_names_an_ingredient_no_member_makes_and_no_depot_holds() {
     let mut g = base_game(84);
-    let lathe = spawn_machine_at(&mut g, "lathe", 1, 0);
-    spawn_machine_at(&mut g, "disk_press", 2, 0);
-    set_status(&mut g, lathe, MachineStatus::Starved);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
+    spawn_machine_with_recipe_at(&mut g, "assembler", "routine_disk", 2, 0);
+    set_status(&mut g, factory, MachineStatus::Starved);
     let report = g.line_reports().remove(0);
     assert_eq!(report.missing, Some(ItemId::from(ids::CORE_FRAGMENT)));
     let text = report.missing_text.expect("a name for the roster");
@@ -566,9 +604,9 @@ fn missing_names_an_ingredient_no_member_makes_and_no_depot_holds() {
 #[test]
 fn an_ingredient_a_member_makes_is_not_missing() {
     let mut g = base_game(85);
-    let (_mine, lathe, press) = disk_line(&mut g);
+    let (_mine, factory, press) = disk_line(&mut g);
     set_status(&mut g, press, MachineStatus::Starved);
-    set_status(&mut g, lathe, MachineStatus::Running);
+    set_status(&mut g, factory, MachineStatus::Running);
     assert_eq!(g.line_reports()[0].missing, None);
 }
 
@@ -576,7 +614,7 @@ fn an_ingredient_a_member_makes_is_not_missing() {
 fn a_structure_report_carries_its_line_key_only_for_a_line_of_two_or_more() {
     let mut g = base_game(86);
     let (mine, _lathe, _press) = disk_line(&mut g);
-    let alone = spawn_machine_at(&mut g, "mining_node", 9, 9);
+    let alone = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 9, 9);
     let rows = g.structure_report();
     let key = |e| rows.iter().find(|r| r.entity == e).unwrap().line;
     assert_eq!(key(mine), Some(LineKey((2, 0))));
@@ -590,7 +628,7 @@ fn a_structure_report_carries_its_line_key_only_for_a_line_of_two_or_more() {
 #[test]
 fn a_standing_job_on_a_conduit_beside_a_recharger_is_accepted() {
     let mut g = base_game(90);
-    let conduit = spawn_machine_at(&mut g, "power_conduit", 4, 4);
+    let conduit = spawn_machine_with_recipe_at(&mut g, "extractor", "power_cell", 4, 4);
     let recharger = spawn_machine_at(&mut g, "recharger_node", 4, 5);
     assert!(g.line_of(conduit).is_some());
     assert_eq!(g.line_of(conduit), g.line_of(recharger));
@@ -604,28 +642,28 @@ fn a_standing_job_on_a_conduit_beside_a_recharger_is_accepted() {
 #[test]
 fn a_guard_toggle_leaves_the_work_of_the_rest_of_a_merged_line_alone() {
     let mut g = base_game(93);
-    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
+    let mine = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 2, 0);
     g.set_standing_job(mine, true, false).unwrap();
-    // Built after, so the lathe joins a line whose other member is working
+    // Built after, so the factory joins a line whose other member is working
     // while it has no job of its own.
-    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
-    assert_eq!(g.line_of(mine), g.line_of(lathe));
-    g.set_standing_job(lathe, false, true).unwrap();
-    assert_eq!(g.standing_job(lathe), Some((false, true)));
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 3, 0);
+    assert_eq!(g.line_of(mine), g.line_of(factory));
+    g.set_standing_job(factory, false, true).unwrap();
+    assert_eq!(g.standing_job(factory), Some((false, true)));
     assert_eq!(g.standing_job(mine), Some((true, false)), "work untouched");
 }
 
 #[test]
 fn a_player_working_one_member_keeps_the_line_worker_off_that_member() {
     let mut g = base_game(91);
-    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 3, 0);
     let staff = hire(&mut g, 1);
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.queue_work_order(WorkOrder::batch(ItemId::from(ids::BLANK_SUBSTRATE), 40))
         .unwrap();
     g.tick();
-    assert_eq!(posted(&g, staff[0]), Some(lathe), "precondition");
+    assert_eq!(posted(&g, staff[0]), Some(factory), "precondition");
     stand_in_base_at(&mut g, 1, 0);
     g.work_structure(mine).unwrap();
     let player = g.player_entity();
@@ -653,8 +691,8 @@ fn a_player_working_one_member_keeps_the_line_worker_off_that_member() {
 #[test]
 fn a_player_on_one_member_does_not_stall_the_rest_of_the_line() {
     let mut g = base_game(95);
-    let mine = spawn_machine_at(&mut g, "mining_node", 2, 0);
-    let lathe = spawn_machine_at(&mut g, "lathe", 3, 0);
+    let mine = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 2, 0);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 3, 0);
     let staff = hire(&mut g, 2);
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
     g.queue_work_order(WorkOrder::batch(ItemId::from(ids::BLANK_SUBSTRATE), 40))
@@ -665,19 +703,19 @@ fn a_player_on_one_member_does_not_stall_the_rest_of_the_line() {
         g.tick();
     }
     assert!(
-        staff.iter().any(|&s| posted(&g, s) == Some(lathe)),
-        "the lathe is still wanted while the player works the mine"
+        staff.iter().any(|&s| posted(&g, s) == Some(factory)),
+        "the factory is still wanted while the player works the mine"
     );
 }
 
 #[test]
 fn a_staffed_line_is_not_a_run_of_idle_nodes() {
     let mut g = base_game(92);
-    let (mine, lathe, _press) = disk_line(&mut g);
+    let (mine, factory, _press) = disk_line(&mut g);
     hire(&mut g, 3);
     g.set_standing_job(mine, true, false).unwrap();
     put_output(&mut g, mine, ids::CORE_FRAGMENT, 8);
-    put_output(&mut g, lathe, ids::BLANK_SUBSTRATE, 8);
+    put_output(&mut g, factory, ids::BLANK_SUBSTRATE, 8);
     g.tick();
     assert_eq!(gatherers(&mut g).len(), 1);
     let rows: Vec<String> = g.attention().into_iter().map(|r| r.text).collect();

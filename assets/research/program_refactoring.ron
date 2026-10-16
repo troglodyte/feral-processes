@@ -1,13 +1,12 @@
 (
     id: "program_refactoring",
     name: "Program Refactoring",
-    description: "Upgrade a tamed program instead of replacing it, or take one apart for useful parts instead of scrap.",
+    description: "Upgrade a tamed program instead of replacing it, or take one apart for useful parts instead of scrap. Lets a Factory make Annealed Cores and an Assembler make Recompile Kernels, and opens the refactoring recipes at the Workbench.",
     cost: 75,
     materials: [("bytecode_block", 24), ("charge_coil", 12)],
     min_zone: 2,
     requires_subject: true,
     unlocks_fusion: true,
     requires: ["automation"],
-    unlocks_structures: ["annealing_node", "refactor_bench"],
     unlocks_tools: ["component_stripper"],
 )

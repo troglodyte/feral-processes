@@ -368,6 +368,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
     let mut data = save::load_from_file(&path).unwrap();
     data.locale = Locale::Base { x: 0, y: 0 };
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "compiler".to_string(),
         // Base space, two cells east of the Home the fixture just founded —
         // within `MENU_SCAN_RADIUS` of the party this edit also parks there.
@@ -462,6 +463,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         })
         .collect();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "depot".to_string(),
         position: (3, 0),
         durability: None,
@@ -483,6 +485,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
     // And a Research Node with no project, so the same corner has a research
     // line to hide in the two places it is not drawn.
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "research_node".to_string(),
         position: (5, 0),
         durability: None,

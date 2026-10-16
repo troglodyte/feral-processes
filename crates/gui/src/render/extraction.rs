@@ -267,6 +267,7 @@ mod tests {
         data.locale = feral_processes_engine::resources::Locale::Base { x: 0, y: 0 };
         if let Some((kind, tier, position)) = bench {
             data.structures.push(save::StructureSave {
+                recipe: None,
                 kind,
                 position,
                 durability: None,

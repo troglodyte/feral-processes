@@ -940,6 +940,9 @@ pub(crate) fn set_machine_status(
         MachineStatus::Uncharged => {
             format!("The {name} is uncharged — its supply has run out.")
         }
+        MachineStatus::Unconfigured => {
+            format!("The {name} has nothing set to make — stand beside it and press R.")
+        }
     };
     log.push_base(text.clone());
     // Only the six stall states reach the board — `Running` and `Idle` are
@@ -955,7 +958,8 @@ pub(crate) fn set_machine_status(
         | MachineStatus::Stranded
         | MachineStatus::Unpowered
         | MachineStatus::Dry
-        | MachineStatus::Uncharged => true,
+        | MachineStatus::Uncharged
+        | MachineStatus::Unconfigured => true,
         MachineStatus::Running | MachineStatus::Idle => false,
     };
     if is_blocker {
@@ -1250,15 +1254,18 @@ fn burn_grid_upkeep(world: &mut World) {
 /// one of the wasted moves the status exists to tell the player about, and an
 /// early `continue` on `worked` would leave it reporting whatever it held
 /// before the base went short.
+type IdleMachine = (
+    Entity,
+    &'static Structure,
+    &'static Position,
+    &'static mut MachineStatus,
+    Option<&'static Stock>,
+    Option<&'static crate::components::MachineRecipe>,
+);
+
 #[allow(clippy::too_many_arguments)]
 pub fn idle_machine_system(
-    mut machines: Query<(
-        Entity,
-        &Structure,
-        &Position,
-        &mut MachineStatus,
-        Option<&Stock>,
-    )>,
+    mut machines: Query<IdleMachine>,
     tasks: Query<(Entity, &Task)>,
     structure_db: Res<StructureDb>,
     grid: Res<PowerGrid>,
@@ -1267,7 +1274,7 @@ pub fn idle_machine_system(
     mut telemetry: ResMut<BattleTelemetry>,
     mut board: ResMut<AlertBoard>,
 ) {
-    for (machine, structure, pos, mut status, stock) in &mut machines {
+    for (machine, structure, pos, mut status, stock, recipe) in &mut machines {
         let def = structure_db.get(&structure.kind);
         let name = def.map(|d| d.name.as_str()).unwrap_or("machine");
         // Stated at each of the two sites rather than built by a closure:
@@ -1317,6 +1324,22 @@ pub fn idle_machine_system(
                     },
                 );
             }
+            continue;
+        }
+        if recipe.is_some_and(|r| r.0.is_none()) {
+            set_machine_status(
+                &mut status,
+                MachineStatus::Unconfigured,
+                name,
+                &mut log,
+                &mut board,
+                StallSite {
+                    telemetry: &mut telemetry,
+                    tick: clock.tick,
+                    machine: (pos.x, pos.y),
+                    kind: &structure.kind,
+                },
+            );
             continue;
         }
         if worker_of(tasks.iter(), machine).is_some() {

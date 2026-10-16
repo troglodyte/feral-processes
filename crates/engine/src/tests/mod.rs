@@ -73,6 +73,7 @@ mod kit;
 mod level_up;
 mod lines;
 mod listen;
+mod machines;
 mod manifest_roster;
 mod memories;
 mod message_log;

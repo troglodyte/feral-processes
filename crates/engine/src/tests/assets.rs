@@ -1697,7 +1697,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
 #[test]
 fn an_assembler_runs_the_named_items_own_craftable_recipe() {
     let game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let authored = items
         .get(ids::POWER_CELL)
         .and_then(|d| d.craftable.as_ref())
@@ -1725,7 +1725,7 @@ fn an_assembler_runs_the_named_items_own_craftable_recipe() {
 #[test]
 fn a_structure_that_assembles_nothing_resolves_no_recipe() {
     let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let db = game.world.resource::<crate::structures::StructureDb>();
     let mining_node = db.get("mining_node").expect("mining_node ships");
 
@@ -1737,7 +1737,7 @@ fn a_structure_that_assembles_nothing_resolves_no_recipe() {
 #[test]
 fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
     let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let mut checked = 0;
     for def in game
         .world
@@ -1788,7 +1788,7 @@ fn every_shipped_assembles_names_an_item_that_declares_a_recipe() {
 #[test]
 fn no_shipped_assembler_builds_another_benchs_product() {
     let game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     for def in game
         .world
         .resource::<crate::structures::StructureDb>()
@@ -1846,10 +1846,11 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 19,
+        checked, 23,
         "the plan's table named 15 machines, the Cache Tap is the \
          sixteenth, the Teardown Rig the seventeenth, the Decoy Bench the \
-         eighteenth and the Holding Cell the nineteenth; if that count \
+         eighteenth, the Holding Cell the nineteenth, and the Extractor, \
+         Factory, Assembler and Printer the last four; if that count \
          changed, change this deliberately rather than letting the check go \
          vacuous"
     );
@@ -1893,7 +1894,7 @@ fn home_alone_powers_a_new_bases_opening_extractors() {
 fn the_home_alone_lights_the_machine_that_makes_grid_fuel() {
     let game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let chain = crate::game::base::power::fuel_chain(items);
 
     let mut rungs: Vec<(u32, &str)> = db
@@ -1971,7 +1972,7 @@ fn no_shipped_structure_both_draws_and_supplies() {
 fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
     let game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let mut checked = 0;
     for def in db.all() {
         let Some(fuel) = &def.power_upkeep else {
@@ -2090,8 +2091,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 10,
-        "expected the ten upgradeable structures — the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
+        checked, 11,
+        "expected the eleven upgradeable structures — the Extractor, the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
     );
 }
 
@@ -2155,7 +2156,7 @@ fn every_zone_portal_line_is_makeable_by_the_sector_that_demands_it() {
     let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let research = game.world.resource::<crate::research::ResearchDb>();
     let structures = game.world.resource::<StructureDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let node_zone = research_reachable_zone(research);
 
     // The gated structures first, each at the shallowest node that unlocks
@@ -4346,7 +4347,7 @@ fn every_shipped_sprite_override_resolves_to_a_real_file() {
 #[test]
 fn every_shipped_tools_yields_resolve_to_real_items() {
     let game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let tools = game.world.resource::<ToolDb>();
 
     let mut checked = 0;
@@ -4543,7 +4544,7 @@ fn every_researched_tool_unlock_resolves_to_a_shipped_tool() {
 #[test]
 fn every_shipped_tool_forge_cost_resolves_to_a_real_item() {
     let game = Game::new(4108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let tools = game.world.resource::<ToolDb>();
 
     let mut checked = 0;
@@ -4683,7 +4684,7 @@ fn an_image_tool_ships_an_empty_yield_pool() {
 fn every_species_rich_in_resolves_to_a_real_item() {
     let game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species = game.world.resource::<SpeciesDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
 
     let mut checked = 0;
     for def in species.all() {
@@ -5955,7 +5956,7 @@ fn the_decompiler_research_chain_is_loaded_reachable_and_strictly_increasing() {
 fn six_implants_ship_and_every_implant_links_to_its_item_both_ways() {
     let game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let implants = game.world.resource::<crate::implants::ImplantDb>();
-    let items = game.world.resource::<ItemDb>();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
     let ids = implants.ids();
     assert_eq!(ids.len(), 6, "the first set: {ids:?}");
     for id in &ids {
@@ -6226,5 +6227,215 @@ fn shipped_species_name_the_personalities_the_spec_assigns() {
             let named = species.get(id).and_then(|d| d.behaviour.as_deref());
             assert_eq!(named, Some(profile), "{id}");
         }
+    }
+}
+
+/// `(machine, produces, ticks_per_unit, research, level, tierless)` — the
+/// Global Constraints recipe table, restated so a retune of a `.ron` file
+/// has to be deliberate.
+type MachineRow = (
+    &'static str,
+    &'static str,
+    u32,
+    Option<&'static str>,
+    Option<u32>,
+    bool,
+);
+
+const MACHINE_TABLE: &[MachineRow] = &[
+    ("extractor", "core_fragment", 10, None, Some(1), false),
+    (
+        "extractor",
+        "raw_trace",
+        10,
+        Some("routine_fabrication"),
+        Some(1),
+        false,
+    ),
+    (
+        "extractor",
+        "cache_grain",
+        14,
+        Some("cache_coherence"),
+        Some(1),
+        false,
+    ),
+    ("extractor", "power_cell", 6, Some("power_grid"), None, true),
+    (
+        "factory",
+        "blank_substrate",
+        12,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("factory", "bytecode_block", 12, None, None, false),
+    (
+        "factory",
+        "annealed_core",
+        12,
+        Some("program_refactoring"),
+        None,
+        false,
+    ),
+    (
+        "factory",
+        "logic_wafer",
+        12,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("factory", "charge_coil", 12, None, None, false),
+    (
+        "assembler",
+        "routine_disk",
+        20,
+        Some("routine_fabrication"),
+        None,
+        false,
+    ),
+    ("assembler", "honeypot", 20, Some("deception"), None, false),
+    (
+        "assembler",
+        "recompile_kernel",
+        20,
+        Some("program_refactoring"),
+        None,
+        false,
+    ),
+    (
+        "assembler",
+        "hardened_shell",
+        30,
+        Some("armor_bench"),
+        None,
+        false,
+    ),
+    (
+        "assembler",
+        "trace_sniffer",
+        30,
+        Some("weapon_bench"),
+        None,
+        false,
+    ),
+    ("printer", "ice_breaker", 8, Some("automation"), None, false),
+    ("printer", "patch_routine", 20, None, None, false),
+];
+
+fn shipped_game() -> Game {
+    Game::new(21002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+#[test]
+fn the_four_machines_carry_the_recipe_table() {
+    let game = shipped_game();
+    let db = game.world.resource::<StructureDb>();
+    for kind in ["extractor", "factory", "assembler", "printer"] {
+        let machine = db.get(kind).unwrap().machine.as_ref().unwrap();
+        let expected = MACHINE_TABLE.iter().filter(|r| r.0 == kind).count();
+        assert_eq!(
+            machine.recipes.len(),
+            expected,
+            "{kind} lists exactly its table rows"
+        );
+    }
+    for &(kind, produces, ticks, research, level, tierless) in MACHINE_TABLE {
+        let recipe = db
+            .get(kind)
+            .unwrap()
+            .machine_recipe(&ItemId::from(produces))
+            .unwrap_or_else(|| panic!("{kind} does not list {produces}"));
+        assert_eq!(recipe.ticks_per_unit, ticks, "{kind} {produces}");
+        assert_eq!(recipe.research.as_deref(), research, "{kind} {produces}");
+        assert_eq!(recipe.level, level, "{kind} {produces}");
+        assert_eq!(recipe.tierless, tierless, "{kind} {produces}");
+    }
+}
+
+#[test]
+fn every_machine_recipe_research_names_a_shipped_node() {
+    let game = shipped_game();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let mut checked = 0;
+    for def in game.world.resource::<StructureDb>().all() {
+        for production in def.productions().filter(|_| def.machine.is_some()) {
+            if let Some(id) = &production.recipe.research {
+                checked += 1;
+                assert!(
+                    research.get(id).is_some(),
+                    "{} gates {} behind unknown research {id}",
+                    def.id,
+                    production.recipe.produces
+                );
+            }
+        }
+    }
+    assert!(checked > 0, "the census must find gated recipes");
+}
+
+#[test]
+fn every_assemble_role_recipe_is_a_single_ingredient() {
+    let game = shipped_game();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    let mut checked = 0;
+    for def in game.world.resource::<StructureDb>().all() {
+        let Some(machine) = def.machine.as_ref() else {
+            continue;
+        };
+        if machine.role != crate::structures::MachineRole::Assemble {
+            continue;
+        }
+        for recipe in &machine.recipes {
+            checked += 1;
+            let craftable = items
+                .get(recipe.produces.as_str())
+                .and_then(|i| i.craftable.as_ref())
+                .unwrap_or_else(|| panic!("{} is not craftable", recipe.produces));
+            assert_eq!(
+                craftable.cost.len(),
+                1,
+                "{} on {} must take one ingredient",
+                recipe.produces,
+                def.id
+            );
+        }
+    }
+    assert!(checked > 0);
+}
+
+#[test]
+fn the_machines_cost_and_draw_what_the_spec_says() {
+    let game = shipped_game();
+    let db = game.world.resource::<StructureDb>();
+    // (kind, build cost, power draw, capacity)
+    for (kind, cost, draw, capacity) in [
+        ("extractor", 12, 1, 20),
+        ("factory", 16, 2, 20),
+        ("assembler", 18, 3, 15),
+        ("printer", 16, 2, 15),
+    ] {
+        let def = db.get(kind).unwrap();
+        assert_eq!(
+            def.build_cost,
+            vec![(ItemId::from("core_fragment"), cost)],
+            "{kind}"
+        );
+        assert_eq!(def.power_draw, draw, "{kind}");
+        assert_eq!(def.capacity, capacity, "{kind}");
+        assert_eq!(def.room_tags, vec!["workshop".to_string()], "{kind}");
+    }
+    let up = db.get("extractor").unwrap().upgrade.as_ref().unwrap();
+    assert_eq!(up.max_tier, 5);
+    assert_eq!(
+        up.cost,
+        vec![
+            (ItemId::from("core_fragment"), 10),
+            (ItemId::from("cache_grain"), 1)
+        ]
+    );
+    for kind in ["factory", "assembler", "printer"] {
+        assert!(db.get(kind).unwrap().upgrade.is_none(), "{kind}");
     }
 }

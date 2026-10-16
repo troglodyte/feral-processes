@@ -680,6 +680,7 @@ fn with_a_drop_pod(mut app: App, seed: u32) -> App {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "drop_pod_terminal".to_string(),
         position: (2, 0),
         durability: None,

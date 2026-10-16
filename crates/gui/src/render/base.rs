@@ -6081,6 +6081,7 @@ mod tests {
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         data.structures
             .push(feral_processes_engine::save::StructureSave {
+                recipe: None,
                 kind: "research_node".to_string(),
                 position: anchor,
                 durability: None,
@@ -6289,6 +6290,7 @@ mod tests {
         let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
         data.structures
             .push(feral_processes_engine::save::StructureSave {
+                recipe: None,
                 kind: "drop_pod_terminal".to_string(),
                 position: anchor,
                 durability: None,

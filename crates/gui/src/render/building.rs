@@ -1731,6 +1731,7 @@ fn status_word(status: MachineStatus) -> &'static str {
         MachineStatus::Unpowered => "dark",
         MachineStatus::Dry => "out of fuel",
         MachineStatus::Uncharged => "uncharged",
+        MachineStatus::Unconfigured => "nothing set",
     }
 }
 
@@ -1886,6 +1887,7 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Unpowered => Some("dark — the grid is short"),
         MachineStatus::Dry => Some("out of fuel — no Power Cells beside it"),
         MachineStatus::Uncharged => Some("uncharged — its supply has run out"),
+        MachineStatus::Unconfigured => Some("nothing set — stand beside it and press R"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }

@@ -294,6 +294,7 @@ fn install_game_clears_owed_drag() {
 /// and a wall and a portal both need the same harmless ones.
 fn structure_save(kind: &str, x: i32, y: i32) -> save::StructureSave {
     save::StructureSave {
+        recipe: None,
         kind: kind.to_string(),
         position: (x, y),
         durability: None,

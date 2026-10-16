@@ -399,6 +399,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
     data.player.downed_programs = programs;
     data.locale = Locale::Base { x: 0, y: 0 };
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "teardown_rig".to_string(),
         position: (1, 0),
         durability: None,
@@ -440,6 +441,7 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
     data.player.inventory = pack.iter().map(|(id, n)| (ItemId::from(*id), *n)).collect();
     data.locale = Locale::Base { x: 0, y: 0 };
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "splice_rig".to_string(),
         position: (1, 0),
         durability: None,
@@ -1577,6 +1579,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         breed_ready_at: 0,
     });
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "compiler".to_string(),
         // Base space, two cells east of the Home the fixture just founded.
         position: (2, 0),
@@ -1729,6 +1732,7 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
     // Footprint 2, clear of both the Home at (0, 0) and the program planted
     // at `px + 5`.
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: kind.to_string(),
         position: (2, 0),
         durability: None,
@@ -1870,6 +1874,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         breed_ready_at: 0,
     });
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "compiler".to_string(),
         // Base space, two cells east of the Home the fixture just founded.
         position: (2, 0),
@@ -2003,6 +2008,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
+            recipe: None,
             kind: "market".to_string(),
             // Base space, spread along -y so none lands on the Home at the
             // origin, the player, or each other.
@@ -2843,6 +2849,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     // The Home is already standing on base space's origin, laid down by
     // `found_the_base`; this is the machine beside it.
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "mining_node".to_string(),
         position: (1, 0),
         durability: None,
@@ -3000,6 +3007,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
     // The Home is already standing, laid down by `found_the_base`; the desk
     // goes up beside it, on the pocket floor it laid.
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "contract_broker".to_string(),
         position: (1, 0),
         durability: None,
@@ -3135,6 +3143,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
     };
     for x in 0..depots {
         data.structures.push(save::StructureSave {
+            recipe: None,
             kind: "depot".to_string(),
             // Orthogonal to the party's base cell, which is what a collect
             // and a deposit both reach by — see `collect::ORTHOGONAL`.
@@ -3209,6 +3218,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
     });
     if depot {
         data.structures.push(save::StructureSave {
+            recipe: None,
             kind: "depot".to_string(),
             position: (-1, 0),
             durability: None,
@@ -3255,6 +3265,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
     // `work_orders::chain_break` refuses a project without.
     for (index, kind) in ["research_node", "mining_node"].into_iter().enumerate() {
         data.structures.push(save::StructureSave {
+            recipe: None,
             kind: kind.to_string(),
             position: (2 + index as i32, 2),
             durability: None,
@@ -3304,6 +3315,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
     let mut data = save::load_from_file(&path).unwrap();
     data.researched.push("routine_fabrication".to_string());
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "research_node".to_string(),
         position: (2, 2),
         durability: None,
@@ -3476,6 +3488,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
         .collect();
     for x in [-1, 1] {
         data.structures.push(save::StructureSave {
+            recipe: None,
             kind: "mining_node".to_string(),
             position: (x, 0),
             durability: None,
@@ -3557,6 +3570,7 @@ fn app_at_a_bench(
     let mut data = save::load_from_file(&path).unwrap();
     data.researched.push("affix:deflecting".to_string());
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: kind.to_string(),
         position: (2, 2),
         durability: None,
@@ -3617,6 +3631,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     let lathe = save::StructureSave {
+        recipe: None,
         kind: "lathe".to_string(),
         position: (2, 0),
         durability: None,
@@ -3665,6 +3680,7 @@ pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     data.structures.push(save::StructureSave {
+        recipe: None,
         kind: "breeding_bay".to_string(),
         position: (-1, 0),
         durability: None,

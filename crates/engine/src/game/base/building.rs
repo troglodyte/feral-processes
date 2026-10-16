@@ -901,6 +901,11 @@ impl Game {
                 level: work.level,
             });
         }
+        // Stands with nothing set; choosing a recipe is what gives an
+        // Extractor its node.
+        if def.machine.is_some() {
+            entity.insert(crate::components::MachineRecipe::default());
+        }
         if def.racks.is_some() {
             entity.insert(crate::components::Racked::default());
         }

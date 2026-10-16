@@ -453,6 +453,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
     assert_eq!(
         sorted,
         vec![
+            "assembler".to_string(),
             "assembly_bay".to_string(),
             "breeding_bay".to_string(),
             "contract_broker".to_string(),
@@ -460,9 +461,12 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "defrag_bay".to_string(),
             "depot".to_string(),
             "door".to_string(),
+            "extractor".to_string(),
+            "factory".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
             "portal".to_string(),
+            "printer".to_string(),
             "quarantine_rack".to_string(),
             "recharger_node".to_string(),
             "refinery".to_string(),
@@ -1878,7 +1882,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
 fn save_format_version_is_unchanged_by_research_projects() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        37,
+        38,
         "these fields add no bump of their own; a changed version is a \
          deliberate bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

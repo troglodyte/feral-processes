@@ -1,0 +1,18 @@
+(
+    id: "assembler",
+    name: "Assembler",
+    description: "Builds finished goods from parts. Set what it makes beside it with R.",
+    glyph: 'A',
+    color: Magenta,
+    build_cost: [("core_fragment", 18)],
+    capacity: 15,
+    machine: Some((role: Assemble, recipes: [
+        (produces: "routine_disk", ticks_per_unit: 20, research: Some("routine_fabrication")),
+        (produces: "honeypot", ticks_per_unit: 20, research: Some("deception")),
+        (produces: "recompile_kernel", ticks_per_unit: 20, research: Some("program_refactoring")),
+        (produces: "hardened_shell", ticks_per_unit: 30, research: Some("armor_bench")),
+        (produces: "trace_sniffer", ticks_per_unit: 30, research: Some("weapon_bench")),
+    ])),
+    power_draw: 3,
+    room_tags: ["workshop"],
+)

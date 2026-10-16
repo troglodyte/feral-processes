@@ -1099,13 +1099,19 @@ pub enum MachineStatus {
     /// Written by `systems::idle_machine_system`, the one pass that already
     /// visits every structure, for the defences that carry a status.
     Uncharged,
+    /// A configurable machine (`StructureDef::machine`) with no recipe set,
+    /// so there is nothing for a program to do at it. Wins over `Idle` and
+    /// every worker-dependent status, but not over `Unpowered`.
+    ///
+    /// Written by `systems::idle_machine_system`, before its worker check.
+    Unconfigured,
 }
 
 impl MachineStatus {
     /// Every status, for `GlyphColor::ALL`'s reason: the renderer's colour
     /// table is exhaustive, but the census holding the palette's reserved
     /// colours off machine states is not, unless it walks this.
-    pub const ALL: [MachineStatus; 9] = [
+    pub const ALL: [MachineStatus; 10] = [
         MachineStatus::Running,
         MachineStatus::Starved,
         MachineStatus::Clogged,
@@ -1115,6 +1121,7 @@ impl MachineStatus {
         MachineStatus::Unpowered,
         MachineStatus::Dry,
         MachineStatus::Uncharged,
+        MachineStatus::Unconfigured,
     ];
 
     /// Why a machine in this state is not producing, as a screen words it.
@@ -1130,6 +1137,7 @@ impl MachineStatus {
             MachineStatus::Unpowered => "the grid is short",
             MachineStatus::Dry => "no Power Cells beside it",
             MachineStatus::Uncharged => "its supply has run out",
+            MachineStatus::Unconfigured => "nothing is set to make",
         }
     }
 
@@ -1150,6 +1158,7 @@ impl MachineStatus {
             MachineStatus::Unpowered => "unpowered",
             MachineStatus::Dry => "dry",
             MachineStatus::Uncharged => "uncharged",
+            MachineStatus::Unconfigured => "unconfigured",
         }
     }
 }
@@ -3720,17 +3729,18 @@ mod machine_status_tests {
             MachineStatus::Unpowered => 6,
             MachineStatus::Dry => 7,
             MachineStatus::Uncharged => 8,
+            MachineStatus::Unconfigured => 9,
         };
         assert_eq!(
             MachineStatus::ALL.len(),
-            9,
-            "the match above has 9 arms; ALL must list all 9"
+            10,
+            "the match above has 10 arms; ALL must list all 10"
         );
         let mut seen: Vec<usize> = MachineStatus::ALL.iter().map(|s| arms(*s)).collect();
         seen.sort_unstable();
         assert_eq!(
             seen,
-            (0..9).collect::<Vec<_>>(),
+            (0..10).collect::<Vec<_>>(),
             "ALL repeats one status and omits another"
         );
     }

@@ -728,7 +728,7 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
         // it is the tile worth walking to, and it reads hotter than the
         // effects it produced.
         MachineStatus::Dry => hud::palette::OFFLINE,
-        MachineStatus::Idle => hud::palette::FAINT,
+        MachineStatus::Idle | MachineStatus::Unconfigured => hud::palette::FAINT,
     }
 }
 

@@ -1413,6 +1413,11 @@ pub struct FloorPileSave {
 pub struct StructureSave {
     pub kind: String,
     pub position: (i32, i32),
+    /// What a configurable machine is set to make — see
+    /// `components::MachineRecipe`. `None` on every other structure and on
+    /// a machine nobody has configured.
+    #[serde(default)]
+    pub recipe: Option<ItemId>,
     /// Current raid durability — see `components::Durability`.
     pub durability: Option<u32>,
     /// Current upgrade tier — see `components::StructureTier`. `None` for a
@@ -2114,7 +2119,11 @@ pub struct SaveData {
 /// 36 → 37: siege rebuilds. `SaveData::ruins` and
 /// `BuildSiteSave::awaiting_program` are written; a v36 file would load with
 /// no wrecks to rebuild and every awaiting site as an ordinary one.
-pub const SAVE_FORMAT_VERSION: u32 = 37;
+///
+/// 37 → 38: configurable machines. `StructureSave::recipe` is written and 17
+/// structure kinds are gone; a v37 base would load with its production
+/// structures missing.
+pub const SAVE_FORMAT_VERSION: u32 = 38;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {

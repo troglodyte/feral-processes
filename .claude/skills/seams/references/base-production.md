@@ -362,10 +362,10 @@
   only writer of `MachineRecipe`**, and no order, auto-setup or load ever
   sets one. It refuses everything before it changes anything, then empties
   the machine (output to Depots, the rest through `Game::set_down`),
-  unposts the worker, swaps the Extract-role `ResourceNode`, and on the
-  *first* recipe runs `auto_filter_beside_machine`. A writer that skips it
-  loses the clearing, the unposting, the node swap or the Depot filter, and
-  takes the player's choice away.
+  unposts the worker, swaps the Extract-role `ResourceNode`, and
+  never touches a Depot (the filter is the Depot's placement, not the
+  machine's configuration). A writer that skips it loses the clearing, the
+  unposting or the node swap, and takes the player's choice away.
 
 - **A work order stores what was asked for, never how it will be done.** An
   item, a quantity and a `standing` flag — labels on the request, no plan.
@@ -584,11 +584,10 @@
   `place_now` skips construction; it fires only when the *Depot* is the
   structure built (a producer built beside a standing Depot leaves it alone,
   so an input shelf is never narrowed), only ever widens a filter, and skips a
-  banked output, which never reaches `Stock.output`. The one other trigger
-  is the machine's side: `Game::auto_filter_beside_machine`, from
-  `set_machine_recipe` on a machine's **first** recipe, filters each
-  still-unfiltered Depot beside it and leaves a Depot the player has
-  filtered alone, so changing a recipe later never rewrites a shelf. A Depot
+  banked output, which never reaches `Stock.output`. Setting a
+  machine's recipe never touches a Depot: a standing open Depot is
+  indistinguishable from a never-filtered one, so a machine-side filter would
+  rewrite a shelf the player left open. A Depot
   never joins a production line.
 - **`StructureDef::supply` and `power_upkeep` share one hauling path through
   `spends_supply()`, but only a burner `draws_from_neighbours()`.** A

@@ -402,22 +402,15 @@ fn an_extractor_keeps_its_tier_across_recipes() {
 }
 
 #[test]
-fn the_first_recipe_filters_only_unfiltered_depots_beside_it() {
+fn setting_a_recipe_never_touches_a_standing_depot() {
     let mut game = bare_game();
     let factory = a_fresh_factory(&mut game, 40, 40);
-    let a = depot_at(&mut game, 41, 40);
-    let b = depot_at(&mut game, 39, 40);
-    game.set_depot_filter(b, &[item("charge_coil")], false);
-    let b_before = game.world.get::<DepotFilter>(b).unwrap().denied.clone();
+    let open = depot_at(&mut game, 41, 40);
+    let shared = depot_at(&mut game, 39, 40);
     game.set_machine_recipe(factory, &item("bytecode_block"))
         .unwrap();
-    let a_denied = game.world.get::<DepotFilter>(a).unwrap().denied.clone();
-    assert!(!a_denied.contains(&item("bytecode_block")));
-    assert!(a_denied.contains(&item("core_fragment")));
-    assert_eq!(game.world.get::<DepotFilter>(b).unwrap().denied, b_before);
-    game.set_machine_recipe(factory, &item("charge_coil"))
-        .unwrap();
-    assert_eq!(game.world.get::<DepotFilter>(a).unwrap().denied, a_denied);
+    assert!(game.world.get::<DepotFilter>(open).is_none());
+    assert!(game.world.get::<DepotFilter>(shared).is_none());
 }
 
 // ---------------------------------------------------------------------

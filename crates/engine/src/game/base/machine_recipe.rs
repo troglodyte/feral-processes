@@ -141,7 +141,6 @@ impl Game {
         if placed.recipe == Some(item) {
             return Err(format!("It is already making {item_name}."));
         }
-        let first_recipe = placed.recipe.is_none();
 
         let (to_depots, to_floor) = self.empty_machine(machine);
         self.unpost_worker(machine);
@@ -160,9 +159,6 @@ impl Game {
             MachineRole::Assemble => {
                 self.world.entity_mut(machine).remove::<ResourceNode>();
             }
-        }
-        if first_recipe {
-            self.auto_filter_beside_machine(machine);
         }
 
         let mut line = format!("The {kind} is set to make {item_name}.");

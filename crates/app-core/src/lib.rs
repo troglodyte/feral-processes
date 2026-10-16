@@ -19,7 +19,7 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
-pub use app::excavate::BrushRow;
+pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and

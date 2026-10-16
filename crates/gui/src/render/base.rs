@@ -9,6 +9,7 @@ use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
 use feral_processes_engine::views::PinMark;
 use feral_processes_engine::views::drawn_on_surface_map;
+use feral_processes_engine::views::{FarmTileState, FarmTileView};
 use feral_processes_engine::views::{Sight, shown_at};
 
 /// A pending build site's slab and its edge.
@@ -760,6 +761,15 @@ fn draw_surface_map(
     // Base space only, and `floor_piles` already answers empty elsewhere.
     let piles: std::collections::HashSet<(i32, i32)> =
         game.floor_piles().into_iter().map(|p| p.pos).collect();
+    // Base space only, like the piles: `farm_tiles` answers empty elsewhere.
+    let farm_tiles = game.farm_tiles();
+    // A crop's glyph and a pile's mark are both a glyph on bare ground, and a
+    // cell can hold both: the crop wins, since it is what the cell is for.
+    let cropped: std::collections::HashSet<(i32, i32)> = farm_tiles
+        .iter()
+        .filter(|t| !matches!(t.state, FarmTileState::Fallow))
+        .map(|t| t.pos)
+        .collect();
     // Alt shows the rooms. `view_rooms` answers empty outside base space.
     let rooms = if reveal {
         game.view_rooms()
@@ -1002,7 +1012,7 @@ fn draw_surface_map(
             }
             // Under programs and structures, above the floor: a pile only
             // takes a glyph nothing else has claimed.
-            if ch.is_none() && piles.contains(&world) {
+            if ch.is_none() && piles.contains(&world) && !cropped.contains(&world) {
                 (ch, color) = (Some(FLOOR_PILE_MARK.0), FLOOR_PILE_MARK.1);
             }
             // Bare ground only. Where something is standing, the background
@@ -1579,6 +1589,30 @@ fn draw_surface_map(
             }
         }
     }
+    // Over the tiles and under the plan: a plot is on the ground, and a plan
+    // is drawn over it.
+    if base_pos.is_some() {
+        let occupied: std::collections::HashSet<(i32, i32)> =
+            entities.iter().map(|e| e.pos).collect();
+        draw_farm_plots(
+            painter,
+            &farm_tiles,
+            &occupied,
+            |world| {
+                tile_origin_px(
+                    world,
+                    center,
+                    (half_w, half_h),
+                    (off_x, off_y),
+                    tile_px,
+                    pane,
+                )
+            },
+            tile_px,
+            glyph_px,
+            pane,
+        );
+    }
     // Over the tiles and under the sparks: a plan is a thing drawn on the
     // ground, and a burst is a thing happening above it.
     if base_pos.is_some() {
@@ -1777,6 +1811,75 @@ fn draw_excavate_label(
         EXCAVATE_LABEL_SIZE,
         TEXT,
     );
+}
+
+/// A plot tile's outline: quiet, so a field reads as ground set aside and
+/// not as a plan or a wall.
+const PLOT_EDGE: Color = Color::new(0.20, 0.42, 0.22, 1.0);
+/// A ripe cell's outline: "ready", the same green a healthy bar uses.
+const RIPE_EDGE: Color = hud::palette::HEALTHY;
+const RIPE_EDGE_PX: f32 = 2.0;
+
+/// How large a crop's glyph draws: it grows with its stages, and a ripe one
+/// is full size. `None` for a cell with nothing in it.
+fn crop_glyph_px(full: u16, state: FarmTileState) -> Option<u16> {
+    match state {
+        FarmTileState::Fallow => None,
+        FarmTileState::Growing { stage, stages } => {
+            let (stage, stages) = (u32::from(stage), u32::from(stages));
+            Some((u32::from(full) * (stage + 1) / (stages + 1)).max(1) as u16)
+        }
+        FarmTileState::Ripe => Some(full),
+    }
+}
+
+/// Plots on the ground, drawn over the tiles and under the plan. A crop's
+/// glyph shows only where no entity already has the cell's glyph.
+fn draw_farm_plots(
+    painter: &Painter,
+    tiles: &[FarmTileView],
+    occupied: &std::collections::HashSet<(i32, i32)>,
+    at: impl Fn((i32, i32)) -> (f32, f32),
+    tile_px: f32,
+    glyph_px: u16,
+    pane: Rect,
+) {
+    for tile in tiles {
+        let (px, py) = at(tile.pos);
+        if px + tile_px < pane.x
+            || py + tile_px < pane.y
+            || px > pane.x + pane.w
+            || py > pane.y + pane.h
+        {
+            continue;
+        }
+        painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 1.0, PLOT_EDGE);
+        if tile.state == FarmTileState::Ripe {
+            painter.rect_lines(
+                px,
+                py,
+                tile_px - 1.0,
+                tile_px - 1.0,
+                RIPE_EDGE_PX,
+                RIPE_EDGE,
+            );
+        }
+        let (Some((glyph, hue)), Some(size)) = (&tile.crop, crop_glyph_px(glyph_px, tile.state))
+        else {
+            continue;
+        };
+        if occupied.contains(&tile.pos) {
+            continue;
+        }
+        let dims = painter.measure_map(glyph, size);
+        painter.map(
+            glyph,
+            px + (tile_px - dims.width) / 2.0,
+            py + (tile_px + dims.height) / 2.0,
+            size,
+            glyph_color(*hue),
+        );
+    }
 }
 
 /// The marks, the box being previewed, and the cursor — one pass over world
@@ -6129,6 +6232,100 @@ mod tests {
         }
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
+    }
+
+    /// A base with a Home and one farm plot a cell off the party's, with a
+    /// pile under the same cell when `pile`.
+    fn base_with_a_plot(seed: u32, recipe: Option<&str>, pile: bool) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0, None)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+        let at = game.base_pos().expect("in base space");
+        let path = crate::render::test_support::scratch_path("farm_plot", seed);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        let cell = (at.0 + 1, at.1);
+        data.farm_plots
+            .push(feral_processes_engine::save::FarmPlotSave {
+                recipe: recipe.map(Into::into),
+                tiles: vec![feral_processes_engine::save::FarmTileSave {
+                    position: cell,
+                    growth: feral_processes_engine::components::CropGrowth::Growing { elapsed: 0 },
+                }],
+            });
+        if pile {
+            data.floor_piles
+                .push(feral_processes_engine::save::FloorPileSave {
+                    position: cell,
+                    items: vec![(
+                        feral_processes_engine::items::ItemId::from("core_fragment"),
+                        3,
+                    )],
+                });
+        }
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        Game::load(&path, &test_assets()).unwrap()
+    }
+
+    fn painted_on_a_plot_base(mut game: Game) -> Vec<String> {
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            let centre = game.base_pos().unwrap();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                None,
+                centre,
+                false,
+            );
+        });
+        painted_text(&shapes)
+    }
+
+    #[test]
+    fn crop_glyphs_grow_with_every_stage_and_ripe_is_full_size() {
+        let full = 32;
+        let sizes: Vec<u16> = (0..4)
+            .map(|stage| {
+                crop_glyph_px(full, FarmTileState::Growing { stage, stages: 4 })
+                    .expect("a growing cell draws")
+            })
+            .collect();
+        assert!(sizes.windows(2).all(|w| w[0] < w[1]), "{sizes:?}");
+        assert!(sizes.iter().all(|&s| s < full), "{sizes:?}");
+        assert_eq!(crop_glyph_px(full, FarmTileState::Ripe), Some(full));
+        assert_eq!(crop_glyph_px(full, FarmTileState::Fallow), None);
+    }
+
+    #[test]
+    fn a_growing_plot_tile_draws_its_crop_glyph_and_an_unsown_one_does_not() {
+        let count = |recipe| {
+            painted_on_a_plot_base(base_with_a_plot(560_300, recipe, false))
+                .iter()
+                .filter(|g| g.as_str() == "+")
+                .count()
+        };
+        assert_eq!(count(Some("power_cell")), 1);
+        assert_eq!(count(None), 0);
+    }
+
+    #[test]
+    fn a_crop_hides_the_pile_mark_beneath_it() {
+        let drawn = painted_on_a_plot_base(base_with_a_plot(560_301, Some("power_cell"), true));
+        let pile = FLOOR_PILE_MARK.0.to_string();
+        assert_eq!(drawn.iter().filter(|g| **g == pile).count(), 0);
+        assert_eq!(drawn.iter().filter(|g| g.as_str() == "+").count(), 1);
     }
 
     /// The pile glyph is drawn in base space, and only because a pile is

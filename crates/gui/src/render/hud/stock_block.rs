@@ -115,6 +115,20 @@ fn research_lines(readout: &ResearchReadout, max_name_w: f32, size: u16, p: &Pai
                 .chain(wrap(&format!("needs {short_of}"), palette::ATTENTION))
                 .collect()
         }
+        // The research screen's `!`, in the corner: the project was taken
+        // on with something unbuilt or unpinned, and the reason is the
+        // row's own sentence.
+        ResearchReadout::Blocked { name, reason } => {
+            let wrap = |text: &str, ink: Color| {
+                wrap_to(text, note_w, size, p)
+                    .into_iter()
+                    .map(move |l| Line::Text(l, ink))
+            };
+            std::iter::once(header)
+                .chain(wrap(name, palette::BODY))
+                .chain(wrap(&format!("! {reason}"), palette::ATTENTION))
+                .collect()
+        }
     }
 }
 

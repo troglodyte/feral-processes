@@ -64,10 +64,12 @@ pub struct ResearchStatus {
     /// then abandoned, which is why it is on every row rather than only on
     /// the active one — see `resources::ActiveResearch`.
     pub progress: u32,
-    /// The one sentence saying why this base could never work this node, or
-    /// `None` if it can — see `Game::research_block`, which is the same call
-    /// `Game::select_research` refuses on, so the row the screen marks blocked
-    /// and the refusal the player is handed cannot disagree.
+    /// The one sentence saying why this base cannot work this node yet, or
+    /// `None` if it can — see `Game::research_block`. Not a refusal:
+    /// `Game::select_research` takes such a node on anyway, and this is what
+    /// the screen flags it with (`!`), on the running project's row too. The
+    /// corner readout's `ResearchReadout::Blocked` is the same call, so the
+    /// two surfaces cannot name different things.
     pub blocked_by: Option<String>,
     /// Whether this node sits on a path the tree recommends — see
     /// `ResearchDb::recommended_ids`. Independent of `state` for the same
@@ -85,13 +87,19 @@ pub struct ResearchStatus {
 /// What the corner over the map says about research — see
 /// `Game::research_readout`.
 ///
-/// Three states because the corner draws three different things, and a
-/// progress figure on a stalled project is a number that has stopped moving
+/// Four states because the corner draws four different things, and a
+/// progress figure on a waiting project is a number that has stopped moving
 /// with nothing saying why.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResearchReadout {
     /// A Research Node stands and no project is selected.
     Idle,
+    /// The project was taken on with something the base cannot do yet —
+    /// `reason` is `Game::research_block`'s sentence, the row's own
+    /// `ResearchStatus::blocked_by`, so the `!` here and the `!` on the
+    /// research screen name the same thing. Checked ahead of `Stalled` and
+    /// whatever the progress, since the wait starts at selection.
+    Blocked { name: String, reason: String },
     /// The project is still earning its Research Data.
     Earning {
         name: String,

@@ -768,17 +768,14 @@ impl Game {
                         }),
                     })
                     .collect();
-                // **Asked only of a node the selection could take.** A
-                // researched node and the running project are both refused
-                // before `research_block` is ever reached, so a sentence on
-                // either says why something that is not on offer is not on
-                // offer — and a fresh run drew the same amber line under all
-                // thirty-four rows, which is the screen telling the player
-                // nothing thirty-four times. A `Locked` node keeps its
-                // sentence: its wall is real and it is the one the player
-                // clears next.
+                // **Not asked of a researched node.** It is the one row
+                // nothing can be done to, and a fresh run once drew the same
+                // amber line under all thirty-four rows, which is the screen
+                // telling the player nothing thirty-four times. The running
+                // project keeps its sentence: the base took it on flagged,
+                // and the `!` on its row is what says it is waiting.
                 let blocked_by = match state {
-                    ResearchState::Unlocked | ResearchState::Active => None,
+                    ResearchState::Unlocked => None,
                     _ => self.research_block_with(def, &mut blocks),
                 };
                 ResearchStatus {
@@ -794,9 +791,9 @@ impl Game {
                         .get(&def.id)
                         .copied()
                         .unwrap_or(0),
-                    // The same call the selection refuses on, not a
-                    // re-derivation of it — that is how the screen comes to
-                    // offer a row the selection turns down.
+                    // The same call the corner readout flags on, not a
+                    // re-derivation of it — that is how two surfaces come to
+                    // name different things.
                     blocked_by,
                     materials,
                     conversions: self.research_conversions(def),
@@ -1144,17 +1141,19 @@ impl Game {
                 "The base is already working on {name} — abandon it first."
             ));
         }
-        if let Some(reason) = self.research_block(&def) {
-            return Err(reason);
-        }
+        // Deliberately no `research_block` rung: a node the base cannot work
+        // yet — no Research Node standing, a material's machine not built, no
+        // subject pinned — is taken on and flagged, never refused. The player
+        // says "this next" and goes to build the thing; the flag
+        // (`ResearchStatus::blocked_by`, `ResearchReadout::Blocked`) names
+        // it, and `settle_research` holds the project until it clears.
         // Only now, with every refusal past, does anything move.
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
         for (item, need) in &def.materials {
-            // Through the one door, so a line the queue itself would refuse
-            // is still refused here — `research_block` has already asked
-            // `chain_break` the same question, so this cannot fail, and a
-            // future divergence surfaces as a missing order rather than a
-            // silent one.
+            // Through the one door. A research line is filed whatever stands
+            // (`queue_work_order`'s own rule), so the only refusal left is an
+            // item that does not exist, which `ResearchDb::load_dir` already
+            // dropped the node for.
             let _ = self.queue_work_order(WorkOrder::batch(item.clone(), *need).with_research());
         }
         self.log_base(format!("Research project started: {}.", def.name));
@@ -1212,6 +1211,13 @@ impl Game {
         };
         let def = self.world.resource::<ResearchDb>().get(id);
         let name = def.map_or_else(|| id.clone(), |d| d.name.clone());
+        // Ahead of the stall and independent of progress: a project taken
+        // on with its machine unbuilt is waiting from the first tick, and
+        // "Earning 0/40" forever is the figure that has stopped moving with
+        // nothing saying why. The same call as the row's `blocked_by`.
+        if let Some(reason) = def.and_then(|d| self.research_block(d)) {
+            return Some(ResearchReadout::Blocked { name, reason });
+        }
         if let Some(short_of) = self.research_material_shortfall() {
             return Some(ResearchReadout::Stalled { name, short_of });
         }

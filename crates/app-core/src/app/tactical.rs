@@ -69,6 +69,15 @@ impl App {
             self.status_line = Some("Auto-attack off.".to_string());
             return;
         }
+        // A walk the player committed by a click is stopped by any key, and
+        // the key is swallowed for auto-attack's reason: it is the key that
+        // stops a body walking into something the player just saw.
+        if self.tactical_player_turn() && self.game.as_ref().is_some_and(|g| g.tactical_walking()) {
+            if let Some(game) = &mut self.game {
+                game.tactical_stop_walk();
+            }
+            return;
+        }
         if key == GameKey::Char('A') {
             self.tactical_auto = true;
             self.status_line = Some("Auto-attack on. Any key stops it.".to_string());
@@ -389,7 +398,9 @@ impl App {
     /// there is no second piece of pacing state to hold in step with the
     /// first: `Game::tactical_walking` is true exactly between a body's
     /// first step and its last, which is the same span that owes the faster
-    /// rate.
+    /// rate. The player's own turn owes a beat only while it is walking —
+    /// a click committed the walk, and this loop spends it a cell at a
+    /// time through the door a hostile's walk is spent through.
     pub fn advance_tactical(&mut self, dt: f32) {
         if !matches!(
             self.mode,
@@ -398,7 +409,9 @@ impl App {
             self.tactical_carry = 0.0;
             return;
         }
-        if self.tactical_player_turn() && !self.tactical_auto {
+        let player_turn = self.tactical_player_turn();
+        let walking = self.game.as_ref().is_some_and(|g| g.tactical_walking());
+        if player_turn && !self.tactical_auto && !walking {
             // Held at zero rather than accumulated, so the first wild body
             // to act after the player's turn waits a full beat and the
             // handover is legible.
@@ -419,13 +432,14 @@ impl App {
             // paced by the three waits the wild side's already are and a round
             // reads at one speed. The narrower door stays for the fight the
             // player is fighting, where a party body's turn is theirs and this
-            // loop must not touch it.
+            // loop touches only the walk the player committed.
             let spent = self
                 .game
                 .as_mut()
-                .map(|g| match auto {
-                    true => g.tactical_auto_beat(),
-                    false => g.tactical_ai_beat(),
+                .map(|g| match (auto, player_turn) {
+                    (true, _) => g.tactical_auto_beat(),
+                    (false, true) => g.tactical_walk_beat(),
+                    (false, false) => g.tactical_ai_beat(),
                 })
                 .unwrap_or(AiBeat::Idle);
             if spent == AiBeat::Idle {
@@ -473,6 +487,31 @@ impl App {
             StepOutcome::Departed | StepOutcome::Struck | StepOutcome::Refused => {}
         }
         self.after_tactical_action();
+    }
+
+    /// Commits the acting body to walking to `cell`, to be spent a cell a
+    /// beat by `advance_tactical` — what a click on the board means on the
+    /// player's turn.
+    ///
+    /// The engine plans the path and refuses a cell it cannot reach; the
+    /// body's own cell is silently nothing, because the engine's empty path
+    /// would otherwise read as out of reach. Nothing on the wild side's turn:
+    /// `Game::tactical_walk_to` refuses it, and saying so would blame the
+    /// player for a click the pacing loop owns.
+    pub fn tactical_walk_to(&mut self, cell: (i32, i32)) {
+        if self.mode != Mode::TacticalBattle || !self.tactical_player_turn() {
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        if game
+            .tactical_occupant(cell)
+            .is_some_and(|body| Some(body) == game.tactical_actor())
+        {
+            return;
+        }
+        if !game.tactical_walk_to(cell) {
+            self.refuse("Out of reach.");
+        }
     }
 
     /// Opens the cell cursor on the acting body's own cell.

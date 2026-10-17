@@ -9,6 +9,7 @@ use crate::{
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
 use feral_processes_engine::resources::DifficultyMode;
+use feral_processes_engine::tactical::reach;
 use feral_processes_engine::{Game, MESSAGE_LOG_CAP, MessageKind};
 
 /// An app standing in a fight opened by walking into a lone wild program.
@@ -1657,4 +1658,122 @@ fn a_swing_aimed_at_an_empty_cell_is_refused_and_spends_nothing() {
         !app.game.as_mut().unwrap().tactical_view().unwrap().acted,
         "a swing at nothing spent the action"
     );
+}
+
+/// A cell the acting body can reach at least two steps off, so the walk to
+/// it has more than one cell in it. Sorted first so the pick is stable.
+fn reachable_cell_two_away(app: &mut App) -> (i32, i32) {
+    let from = acting_cell(app);
+    let mut reachable = app
+        .game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open")
+        .reachable;
+    reachable.sort_by_key(|&(x, y)| (y, x));
+    reachable
+        .into_iter()
+        .find(|&cell| reach::distance(from, cell) >= 2)
+        .expect("the acting body can reach a cell two steps off")
+}
+
+fn acted(app: &mut App) -> bool {
+    app.game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open")
+        .acted
+}
+
+fn walking(app: &App) -> bool {
+    app.game
+        .as_ref()
+        .expect("the fixture has a game")
+        .tactical_walking()
+}
+
+#[test]
+fn walking_to_a_cell_moves_one_step_a_beat_and_spends_no_action() {
+    let mut app = fighting(9130);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let to = reachable_cell_two_away(&mut app);
+    let path_len = app.game.as_ref().unwrap().tactical_path_to(to).len();
+
+    app.tactical_walk_to(to);
+    assert!(walking(&app), "the click committed no walk");
+    assert_eq!(acting_cell(&mut app), from, "the walk was spent at once");
+
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    let after_one = acting_cell(&mut app);
+    assert_eq!(reach::distance(from, after_one), 1, "one beat is one cell");
+
+    let mut beats = 1;
+    while walking(&app) {
+        app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+        beats += 1;
+        assert!(beats <= path_len + 1, "the walk never arrived");
+    }
+    assert_eq!(acting_cell(&mut app), to);
+    assert!(!acted(&mut app), "arriving spent the action");
+    assert!(app.tactical_player_turn(), "arriving handed the turn on");
+}
+
+#[test]
+fn walking_to_an_unreachable_cell_refuses_aloud() {
+    let mut app = fighting(9131);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+
+    app.tactical_walk_to((-1, -1));
+
+    assert_eq!(app.status_line.as_deref(), Some("Out of reach."));
+    assert_eq!(acting_cell(&mut app), from);
+    assert!(!walking(&app));
+}
+
+#[test]
+fn a_click_on_the_acting_bodys_own_cell_is_silent() {
+    let mut app = fighting(9134);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+
+    app.tactical_walk_to(from);
+
+    assert_eq!(app.status_line, None);
+    assert!(!walking(&app));
+}
+
+#[test]
+fn a_key_during_the_walk_stops_it_and_is_swallowed() {
+    let mut app = fighting(9132);
+    wait_for_the_player(&mut app);
+    let to = reachable_cell_two_away(&mut app);
+    app.tactical_walk_to(to);
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    let stood = acting_cell(&mut app);
+    assert!(walking(&app), "the walk ended before the key");
+
+    app.handle_key(GameKey::Char('a'));
+
+    assert_eq!(app.mode, Mode::TacticalBattle, "the key opened the aim");
+    assert!(!walking(&app), "the key did not stop the walk");
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    assert_eq!(acting_cell(&mut app), stood, "a stopped walk kept walking");
+}
+
+#[test]
+fn the_walk_pauses_the_carry_only_while_it_is_the_players_turn() {
+    let mut app = fighting(9133);
+    open_on_a_wild_turn(&mut app);
+    let cell = reachable_cell_two_away(&mut app);
+    let from = acting_cell(&mut app);
+
+    app.tactical_walk_to(cell);
+
+    assert_eq!(app.status_line, None);
+    assert!(!walking(&app), "a click planned the wild side's walk");
+    assert_eq!(acting_cell(&mut app), from);
 }

@@ -295,11 +295,21 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
 }
 
 /// `chain_break`, keeping whether the break waits on a setting.
+/// `find_break`'s first rung on its own, for the one caller that refuses
+/// nothing else — a research order.
+fn unknown_item_refusal(game: &Game, item: &ItemId) -> Option<String> {
+    game.world
+        .resource::<ItemDb>()
+        .get(item.as_str())
+        .is_none()
+        .then(|| "No such item.".to_string())
+}
+
 fn find_break(game: &Game, item: &ItemId) -> Option<ChainBreak> {
-    let items = game.world.resource::<ItemDb>();
-    if items.get(item.as_str()).is_none() {
-        return Some(ChainBreak::refused("No such item.".into()));
+    if let Some(reason) = unknown_item_refusal(game, item) {
+        return Some(ChainBreak::refused(reason));
     }
+    let items = game.world.resource::<ItemDb>();
     if items.get(item.as_str()).is_some_and(|d| d.banked) {
         let name = game.item_name(item);
         return Some(ChainBreak::refused(format!(
@@ -3037,7 +3047,18 @@ impl Game {
         // out of phase — this reads which machines are standing, and they
         // stand in base space.
         self.require_base()?;
-        if let Some(reason) = order_refusal(self, &order.item) {
+        // A research line is filed whatever stands. The bill is filed once,
+        // at selection, and never topped up (`select_research`), so a line
+        // refused here for a machine not yet built would never be filed at
+        // all; it goes in `Stalled` instead and moves when the machine goes
+        // up, and the research screen's `!` says what it waits on. An item
+        // that does not exist is an asset error, not a base state, and is
+        // still refused.
+        if order.for_research {
+            if let Some(reason) = unknown_item_refusal(self, &order.item) {
+                return Err(reason);
+            }
+        } else if let Some(reason) = order_refusal(self, &order.item) {
             return Err(reason);
         }
         let name = self.item_name(&order.item).to_string();

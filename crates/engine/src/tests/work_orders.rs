@@ -124,6 +124,47 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     assert!(game.work_orders().is_empty());
 }
 
+/// A research project's bill is filed once, at selection, and never topped
+/// up — so a line whose machine is not built yet has to be filed anyway and
+/// wait, where a player's order for the same item is refused on the spot.
+/// It sits `Stalled` until the machine goes up and then moves.
+#[test]
+fn a_research_order_for_an_unbuilt_machine_is_filed_and_stalls_until_it_stands() {
+    let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
+    let disk = ItemId::from("routine_disk");
+
+    game.queue_work_order(WorkOrder::batch(disk.clone(), 3))
+        .expect_err("a player's order still refuses");
+    game.queue_work_order(WorkOrder::batch(disk.clone(), 3).with_research())
+        .expect("a research line is filed whatever stands");
+    let report = game.work_order_report();
+    assert_eq!(report.len(), 1);
+    assert_eq!(report[0].state, crate::views::OrderState::Stalled);
+    assert!(
+        report[0]
+            .blocked_by
+            .as_deref()
+            .is_some_and(|b| b.contains("Assembler")),
+        "the queue names the machine to build: {:?}",
+        report[0].blocked_by
+    );
+
+    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
+    let report = game.work_order_report();
+    assert_ne!(
+        report[0].state,
+        crate::views::OrderState::Stalled,
+        "building the machine is all it was waiting on"
+    );
+
+    game.queue_work_order(WorkOrder::batch(ItemId::from("no_such_item"), 1).with_research())
+        .expect_err("an item that does not exist is an asset error, not a base state");
+}
+
 #[test]
 fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

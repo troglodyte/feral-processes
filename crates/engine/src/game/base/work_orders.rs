@@ -228,8 +228,9 @@ pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
 struct ChainBreak {
     reason: String,
     waits: bool,
-    /// Nothing the player builds or sets could ever clear it — see
-    /// `permanent_break`.
+    /// Nothing the player builds, sets or finds could ever pay it — see
+    /// `permanent_break`. Only `find_break`'s two item rungs set it; a
+    /// missing producer at any depth is a build or a drop away.
     permanent: bool,
 }
 
@@ -251,14 +252,12 @@ impl ChainBreak {
     }
 
     /// `no_producer`'s sentence, waiting exactly when it names a machine to
-    /// set rather than one to build, and permanent exactly when it names
-    /// neither — "Nothing the base can build makes" it.
+    /// set rather than one to build.
     fn no_producer(game: &Game, item: &ItemId) -> Self {
-        let settable = settable_machine(game, item).is_some();
         Self {
             reason: no_producer(game, item),
-            waits: settable,
-            permanent: !settable && makeable_by(game, item).is_none(),
+            waits: settable_machine(game, item).is_some(),
+            permanent: false,
         }
     }
 }
@@ -309,14 +308,17 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     find_break(game, item).map(|b| b.reason)
 }
 
-/// The one sentence naming why a line for `item` can **never** move, or
-/// `None` if a build or a setting could clear it — the research project's
-/// own refusal, since a project is taken on flagged for anything a build
-/// clears (`select_research`) and its line filed to wait for it
-/// (`queue_work_order`). Three breaks are permanent: an item that does not
-/// exist, a banked item (it never lands in a buffer, so no holding can ever
-/// pay it, while its producer always `can_progress` and would hold a body
-/// forever), and an item nothing in the game makes.
+/// The one sentence naming why a line for `item` can **never** be paid, or
+/// `None` if something could pay it — the research project's own refusal,
+/// since a project is taken on flagged for anything the player can clear
+/// (`select_research`) and its line filed to wait for it
+/// (`queue_work_order`). Two breaks are permanent: an item that does not
+/// exist, and a banked item, which never lands in a buffer so no holding
+/// can ever pay it, while its producer always `can_progress` and would hold
+/// a body forever. An item nothing *makes* is deliberately not one: a mod's
+/// bill may name a drop, and the shelves holding it in full pays it
+/// (`research_block_memo`), so the flag — "Nothing the base can build makes
+/// it" — is the right sentence and the line's stalled order is harmless.
 pub(crate) fn permanent_break(game: &Game, item: &ItemId) -> Option<String> {
     find_break(game, item)
         .filter(|b| b.permanent)

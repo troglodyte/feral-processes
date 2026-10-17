@@ -163,6 +163,12 @@ fn a_research_order_for_an_unbuilt_machine_is_filed_and_stalls_until_it_stands()
 
     game.queue_work_order(WorkOrder::batch(ItemId::from("no_such_item"), 1).with_research())
         .expect_err("an item that does not exist is an asset error, not a base state");
+    // The guard that protects the scheduler: a banked line's producer always
+    // `can_progress` and no holding ever pays it, so filed it would hold a
+    // body forever. `select_research` refuses it first; this is the second
+    // lock, asserted on its own.
+    game.queue_work_order(WorkOrder::batch(game.research_currency(), 1).with_research())
+        .expect_err("a banked item is never filed, research or not");
 }
 
 #[test]

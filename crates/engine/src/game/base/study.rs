@@ -102,13 +102,14 @@ impl Game {
     ///
     /// 1. the project declares `requires_subject` — a project that spends no
     ///    body is not straining one, however many are pinned;
-    /// 2. `research_readout` is `Earning` or `Blocked` — that is the one
-    ///    place "stalled" is decided (`research_material_shortfall`), so a
-    ///    project waiting on a material line goes still rather than needing
-    ///    a second test for the same stall here. `Blocked` counts as worked:
-    ///    a project flagged on an unbuilt machine is still taking data, so
-    ///    its body is still being studied, and the flag is about the bill,
-    ///    not the body;
+    /// 2. `research_readout` is `Earning`, or `Blocked` with data still to
+    ///    earn — that is the one place "stalled" is decided
+    ///    (`research_material_shortfall`), so a project waiting on a
+    ///    material line goes still rather than needing a second test for
+    ///    the same stall here. A `Blocked` project short of data is still
+    ///    taking it, so its body is still being studied — the flag is about
+    ///    the bill, not the body — and one at full data is as still as a
+    ///    stalled one, whatever the corner says it waits on;
     /// 3. the body is `pinned_subject`'s own answer — the same one
     ///    `settle_research` will spend and `research_block` gates on, so the
     ///    mark cannot name a different body than the gate does.
@@ -119,24 +120,19 @@ impl Game {
     /// walk off every base that is not running a subject-gated project —
     /// `Game::attention` gates the same walk the same way.
     fn strained_subject(&self) -> Option<Entity> {
-        let id = self.world.resource::<ActiveResearch>().id.clone()?;
-        if !self
-            .world
-            .resource::<ResearchDb>()
-            .get(&id)?
-            .requires_subject
-        {
+        let research = self.world.resource::<ActiveResearch>();
+        let id = research.id.clone()?;
+        let def = self.world.resource::<ResearchDb>().get(&id)?;
+        if !def.requires_subject {
             return None;
         }
-        matches!(
-            self.research_readout(),
-            Some(
-                crate::views::ResearchReadout::Earning { .. }
-                    | crate::views::ResearchReadout::Blocked { .. }
-            )
-        )
-        .then(|| self.pinned_subject())
-        .flatten()
+        let still_earning = research.progress.get(&id).copied().unwrap_or(0) < def.cost;
+        let worked = match self.research_readout() {
+            Some(crate::views::ResearchReadout::Earning { .. }) => true,
+            Some(crate::views::ResearchReadout::Blocked { .. }) => still_earning,
+            _ => false,
+        };
+        worked.then(|| self.pinned_subject()).flatten()
     }
 
     /// Every tamed program you own that is pinned somewhere — the second

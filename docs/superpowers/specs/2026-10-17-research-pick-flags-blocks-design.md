@@ -70,16 +70,16 @@ scheduler starts working it when the machine goes up.
 
 Exception, widened at the whole-branch review: a break nothing could ever
 clear is still refused, at selection and at the queue alike
-(`work_orders::permanent_break`): an item that does not exist, a banked
-item, or an item nothing in the game makes. A flag has to name something to
-do, and a banked line's producer would hold a body forever. Reachable only
-through a mod's bill.
+(`work_orders::permanent_break`): an item that does not exist, or a banked
+item, whose producer would hold a body forever. An item nothing makes is
+still a flag, not a refusal: a mod's bill may name a drop, and holding it
+in full pays it. Reachable only through a mod's bill.
 
 Also from the review: a block is what stands between the project and
 completion, not what stands in the base. A material line the shelves hold in
 full is no block, and the Research Node is no block once the data is all
 earned, since `settle_research` needs neither. A `Blocked` project with a
-pinned subject still strains it, because data is still flowing.
+pinned subject strains it only while data is still flowing.
 
 ### 3. The row (`ResearchStatus`, `crates/engine/src/views.rs`; `research_nodes`)
 

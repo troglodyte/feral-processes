@@ -2455,6 +2455,56 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
     );
 }
 
+/// `Blocked` strains only while data still flows: a project at full data
+/// with a material line unbuilt is as still as a stalled one, whatever the
+/// corner says it waits on.
+#[test]
+fn a_flagged_project_at_full_data_lets_its_subject_settle() {
+    let mut game = Game::new(4408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let pen = game.study_pen(node).unwrap();
+    let half = 4;
+    let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
+    game.discover_research("paging");
+    game.select_research("paging").unwrap();
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .unwrap()
+        .materials
+        .clone();
+    for (item, _) in &materials {
+        for machine in crate::game::base::work_orders::producers_of(&game, item) {
+            game.world.despawn(machine);
+        }
+    }
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Strained,
+        "short of data, a flagged project is still working its subject"
+    );
+
+    fill_research_progress(&mut game, "paging");
+
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Settled,
+        "at full data nothing flows, so the body is still"
+    );
+}
+
 /// A project that declares no `requires_subject` spends no body, however many
 /// are pinned — the first of the three terms, and the one a mark derived from
 /// "is research running" alone would miss.

@@ -56,7 +56,7 @@ fn fighting_app(tactical: bool) -> App {
     panic!("no seed under 200 put a lone wild program next to the player");
 }
 
-fn fighting(_seed: u32) -> App {
+pub(super) fn fighting(_seed: u32) -> App {
     fighting_app(true)
 }
 

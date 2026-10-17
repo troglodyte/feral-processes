@@ -228,6 +228,9 @@ pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
 struct ChainBreak {
     reason: String,
     waits: bool,
+    /// Nothing the player builds or sets could ever clear it — see
+    /// `permanent_break`.
+    permanent: bool,
 }
 
 impl ChainBreak {
@@ -235,15 +238,27 @@ impl ChainBreak {
         Self {
             reason,
             waits: false,
+            permanent: false,
+        }
+    }
+
+    fn permanent(reason: String) -> Self {
+        Self {
+            reason,
+            waits: false,
+            permanent: true,
         }
     }
 
     /// `no_producer`'s sentence, waiting exactly when it names a machine to
-    /// set rather than one to build.
+    /// set rather than one to build, and permanent exactly when it names
+    /// neither — "Nothing the base can build makes" it.
     fn no_producer(game: &Game, item: &ItemId) -> Self {
+        let settable = settable_machine(game, item).is_some();
         Self {
             reason: no_producer(game, item),
-            waits: settable_machine(game, item).is_some(),
+            waits: settable,
+            permanent: !settable && makeable_by(game, item).is_none(),
         }
     }
 }
@@ -294,25 +309,30 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     find_break(game, item).map(|b| b.reason)
 }
 
-/// `chain_break`, keeping whether the break waits on a setting.
-/// `find_break`'s first rung on its own, for the one caller that refuses
-/// nothing else — a research order.
-fn unknown_item_refusal(game: &Game, item: &ItemId) -> Option<String> {
-    game.world
-        .resource::<ItemDb>()
-        .get(item.as_str())
-        .is_none()
-        .then(|| "No such item.".to_string())
+/// The one sentence naming why a line for `item` can **never** move, or
+/// `None` if a build or a setting could clear it — the research project's
+/// own refusal, since a project is taken on flagged for anything a build
+/// clears (`select_research`) and its line filed to wait for it
+/// (`queue_work_order`). Three breaks are permanent: an item that does not
+/// exist, a banked item (it never lands in a buffer, so no holding can ever
+/// pay it, while its producer always `can_progress` and would hold a body
+/// forever), and an item nothing in the game makes.
+pub(crate) fn permanent_break(game: &Game, item: &ItemId) -> Option<String> {
+    find_break(game, item)
+        .filter(|b| b.permanent)
+        .map(|b| b.reason)
 }
 
+/// `chain_break`, keeping whether the break waits on a setting and whether
+/// anything could clear it at all.
 fn find_break(game: &Game, item: &ItemId) -> Option<ChainBreak> {
-    if let Some(reason) = unknown_item_refusal(game, item) {
-        return Some(ChainBreak::refused(reason));
-    }
     let items = game.world.resource::<ItemDb>();
+    if items.get(item.as_str()).is_none() {
+        return Some(ChainBreak::permanent("No such item.".into()));
+    }
     if items.get(item.as_str()).is_some_and(|d| d.banked) {
         let name = game.item_name(item);
-        return Some(ChainBreak::refused(format!(
+        return Some(ChainBreak::permanent(format!(
             "{name} is banked as it is gathered — the base never holds a stock of it to order \
              against."
         )));
@@ -3051,11 +3071,12 @@ impl Game {
         // at selection, and never topped up (`select_research`), so a line
         // refused here for a machine not yet built would never be filed at
         // all; it goes in `Stalled` instead and moves when the machine goes
-        // up, and the research screen's `!` says what it waits on. An item
-        // that does not exist is an asset error, not a base state, and is
-        // still refused.
+        // up, and the research screen's `!` says what it waits on. Only a
+        // break nothing could clear is still refused — `select_research`
+        // refuses the same lines first, so this is the second lock on one
+        // door rather than a reachable refusal.
         if order.for_research {
-            if let Some(reason) = unknown_item_refusal(self, &order.item) {
+            if let Some(reason) = permanent_break(self, &order.item) {
                 return Err(reason);
             }
         } else if let Some(reason) = order_refusal(self, &order.item) {

@@ -943,6 +943,93 @@ fn a_flagged_project_holds_at_full_data_until_its_bill_can_be_paid() {
     );
 }
 
+/// A flag has to name something to do, and a bill naming a banked item
+/// names nothing: no holding can ever pay it, and its producer — the
+/// Research Node, for the currency — always `can_progress`, so the filed
+/// order would hold a body forever. Reachable only through a mod's bill,
+/// and refused, not flagged.
+#[test]
+fn a_bill_naming_a_banked_item_is_refused_rather_than_flagged() {
+    let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let currency = game.research_currency();
+    let def: crate::research::ResearchDef = ron::from_str(&format!(
+        r#"(id: "banked_bill", name: "Banked Bill", description: "d", cost: 1, materials: [("{}", 1)])"#,
+        currency.as_str()
+    ))
+    .unwrap();
+    game.world.resource_mut::<ResearchDb>().insert_for_test(def);
+    game.discover_research("banked_bill");
+
+    let err = game.select_research("banked_bill").unwrap_err();
+
+    assert!(err.contains("banked"), "got: {err}");
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and nothing is filed");
+}
+
+/// A block is what stands between the project and completion, not what
+/// stands in the base: a bill the shelves already hold in full is payable
+/// whatever machine has since come down, so it flags nothing.
+#[test]
+fn a_bill_already_on_the_shelves_is_no_block_whatever_stands() {
+    let mut game = Game::new(733, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials
+        .clone();
+    assert!(!materials.is_empty(), "vacuous without a bill");
+    shelve_research_bill(&mut game, "automation", 8, 8);
+    for (item, _) in &materials {
+        for machine in crate::game::base::work_orders::producers_of(&game, item) {
+            game.world.despawn(machine);
+        }
+    }
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "a held bill is paid, not waited on: {:?}",
+        game.research_readout()
+    );
+    assert_eq!(research_node(&game, "automation").blocked_by, None);
+}
+
+/// The same rule for the Research Node: once the data is all earned it
+/// stands between the project and nothing, so a project at full data with
+/// no node reads as what it actually waits on — its bill.
+#[test]
+fn a_missing_node_is_no_block_once_the_data_is_all_earned() {
+    let mut game = Game::new(734, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    for node in crate::game::base::work_orders::producers_of(&game, &game.research_currency()) {
+        game.world.despawn(node);
+    }
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+
+    fill_research_progress(&mut game, "automation");
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Stalled { .. })
+        ),
+        "full data, no node, bill unpaid: the bill is the wait: {:?}",
+        game.research_readout()
+    );
+}
+
 /// The reachability half. Without it the flag above could be permanent and
 /// every test around it would still be green.
 #[test]
@@ -2228,7 +2315,7 @@ fn the_running_project_is_read_out_with_no_node_standing() {
 // the player is refused with cannot disagree.
 // ---------------------------------------------------------------------
 
-/// The gate lives in `Game::research_block`, so the refusal is asserted
+/// The gate lives in `Game::research_block`, so the flag is asserted
 /// against a **live call** to it rather than hardcoded prose — the same
 /// drift this repo keeps recording for `chain_break`.
 #[test]
@@ -2577,19 +2664,19 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
 
 // ---------------------------------------------------------------------
 // C1 (final whole-branch review): `research_nodes` must apply the same
-// subject term `select_research` refuses on. Task 7's own tests compared
-// `select_research`'s refusal against a live `research_block` call — the
-// same door twice — which is why a subject gate could reach `select_research`
-// while `research_nodes` (the screen) still read `research_block_memo`
-// directly and never asked the subject question at all. These tests drive
-// `research_nodes` itself.
+// subject term the readout flags on. Task 7's own tests compared
+// `select_research`'s refusal (a flag since 2026-10-17) against a live
+// `research_block` call — the same door twice — which is why a subject
+// gate could reach `select_research` while `research_nodes` (the screen)
+// still read `research_block_memo` directly and never asked the subject
+// question at all. These tests drive `research_nodes` itself.
 // ---------------------------------------------------------------------
 
-/// The screen's own row must carry the same block reason the selection
-/// door refuses with, and pinning a subject must clear it there too — not
-/// only at `select_research`.
+/// The screen's own row must carry the same block reason the readout
+/// flags with, and pinning a subject must clear it there too — not only
+/// in the corner.
 #[test]
-fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does() {
+fn research_nodes_flags_a_subject_gated_node_the_same_way_the_readout_does() {
     let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);

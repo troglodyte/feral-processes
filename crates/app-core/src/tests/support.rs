@@ -3340,9 +3340,8 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
 /// the routine tree is open and its always-visible families (Symlink's
 /// among them) are listed — `routine/symlink` is the fixed point every
 /// `Mode::RoutineResearch` test picks against. Carries a Research Node so
-/// `Game::select_research` doesn't refuse a listed node for having nowhere
-/// to run — no Extractor, since a synthesised node's bill is empty
-/// (spec §2 "Cost").
+/// a listed node is not flagged for having nowhere to run — no Extractor,
+/// since a synthesised node's bill is empty (spec §2 "Cost").
 ///
 /// Built by editing a save, `app_in_base_with_a_research_node`'s reason:
 /// what these tests want is a tree already open, not the Research Node

@@ -211,10 +211,11 @@ fn state_tag(state: &ResearchState) -> String {
 /// to do, a prerequisite something this screen can do next.
 ///
 /// `blocked_by` takes the amber a prerequisite takes, and takes it **ahead of**
-/// `recommended`'s green: a node the base cannot work is not somewhere the
-/// player can go, whatever the tree recommends. It is the same meaning at a
+/// `recommended`'s green: a node the base cannot work yet can be picked, but
+/// it will wait, whatever the tree recommends. It is the same meaning at a
 /// different scale rather than a second one on the axis — a wall you clear
-/// yourself, by building the machine the sentence names.
+/// yourself, by building the machine the sentence names. The running
+/// project keeps `CYAN` whether or not it is flagged; its `!` is the flag.
 pub(super) fn row_color(node: &ResearchStatus) -> Color {
     match &node.state {
         ResearchState::Unlocked => TEXT_DIM,

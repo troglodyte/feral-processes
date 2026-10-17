@@ -102,10 +102,13 @@ impl Game {
     ///
     /// 1. the project declares `requires_subject` — a project that spends no
     ///    body is not straining one, however many are pinned;
-    /// 2. `research_readout` is `Earning` — that is the one place "stalled"
-    ///    is decided (`research_material_shortfall`), so a project waiting on
-    ///    a material line goes still rather than needing a second test for
-    ///    the same stall here;
+    /// 2. `research_readout` is `Earning` or `Blocked` — that is the one
+    ///    place "stalled" is decided (`research_material_shortfall`), so a
+    ///    project waiting on a material line goes still rather than needing
+    ///    a second test for the same stall here. `Blocked` counts as worked:
+    ///    a project flagged on an unbuilt machine is still taking data, so
+    ///    its body is still being studied, and the flag is about the bill,
+    ///    not the body;
     /// 3. the body is `pinned_subject`'s own answer — the same one
     ///    `settle_research` will spend and `research_block` gates on, so the
     ///    mark cannot name a different body than the gate does.
@@ -127,7 +130,10 @@ impl Game {
         }
         matches!(
             self.research_readout(),
-            Some(crate::views::ResearchReadout::Earning { .. })
+            Some(
+                crate::views::ResearchReadout::Earning { .. }
+                    | crate::views::ResearchReadout::Blocked { .. }
+            )
         )
         .then(|| self.pinned_subject())
         .flatten()

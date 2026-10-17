@@ -28,11 +28,21 @@
   `ResearchStatus::blocked_by` (the running project's row included) and
   `ResearchReadout::Blocked` (ahead of `Stalled`, whatever the progress), so
   the `!` on the row, on the graph box and in the corner cannot name
-  different things. For the bill to be filed once at selection and never
-  topped up, a `WorkOrder::for_research` line **skips `order_refusal`** in
-  `queue_work_order` (only "No such item." still refuses) and sits
-  `OrderStanding::Stalled` until the machine goes up. The flag needs a
-  **reachability** test of its own or it can ship permanent with every flag
+  different things. **A block is what stands between the project and
+  completion, not what stands in the base**: `research_block_memo` skips a
+  material line the shelves hold in full and the no-node rung once the data
+  is all earned, because `settle_research` needs neither machine — asked
+  otherwise, a bill made and its Extractor then knocked down read "build an
+  Extractor" until the tick it completed, and the pinned subject went still
+  (`strained_subject` reads `Earning | Blocked` as worked). For the bill to
+  be filed once at selection and never topped up, a `WorkOrder::for_research`
+  line **skips `order_refusal`** in `queue_work_order` and sits
+  `OrderStanding::Stalled` until the machine goes up. The one refusal left
+  on both doors is `work_orders::permanent_break` — unknown item, banked
+  item, nothing in the game makes it — because a flag has to name something
+  to do, and a banked line's producer always `can_progress` and would hold a
+  body forever (the Research Node makes the banked currency). The flag needs
+  a **reachability** test of its own or it can ship permanent with every flag
   test still green. Completion is `Game::settle_research`, and its two gates
   are one `&&`: the short-circuit is what stops a half-researched project
   spending its materials, and the unlock side effects are **extracted** into

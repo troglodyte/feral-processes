@@ -1435,7 +1435,7 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
 }
 
 /// Stands the party in base space with a Research Node deployed, which is the
-/// state `Game::select_research` refuses without — a project needs somewhere to
+/// state a project reads `Blocked` without — a project needs somewhere to
 /// come from, and the node is what makes the research currency.
 ///
 /// Returns the node, since a test about progress has to be able to post a body

@@ -68,9 +68,18 @@ bill is still filed once, at selection. The order sits in the queue as
 chain-break sentence under it, "Work order stalled" is logged once, and the
 scheduler starts working it when the machine goes up.
 
-Exception, builder's call on wording only: an order for an item that does
-not exist (`"No such item."`) is still refused for research too; that is an
-asset error, not a base state.
+Exception, widened at the whole-branch review: a break nothing could ever
+clear is still refused, at selection and at the queue alike
+(`work_orders::permanent_break`): an item that does not exist, a banked
+item, or an item nothing in the game makes. A flag has to name something to
+do, and a banked line's producer would hold a body forever. Reachable only
+through a mod's bill.
+
+Also from the review: a block is what stands between the project and
+completion, not what stands in the base. A material line the shelves hold in
+full is no block, and the Research Node is no block once the data is all
+earned, since `settle_research` needs neither. A `Blocked` project with a
+pinned subject still strains it, because data is still flowing.
 
 ### 3. The row (`ResearchStatus`, `crates/engine/src/views.rs`; `research_nodes`)
 

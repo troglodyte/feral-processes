@@ -7,7 +7,7 @@ use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
 use crate::tactical::ai::{AiBeat, PartyTurns};
-use crate::tactical::reach::allowance;
+use crate::tactical::reach::{self, allowance};
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
     battle_with_a_pack_of, equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile,
@@ -8404,4 +8404,108 @@ fn a_field_fights_view_carries_its_spec_biome_as_ground() {
         .insert_resource(TacticalBattle::open(spec, board));
 
     assert_eq!(game.tactical_view().unwrap().ground, Biome::Backplane);
+}
+
+/// A cell the acting body can reach that is at least two steps off, so a
+/// path to it has more than one cell in it. Sorted first so the pick is
+/// stable across runs.
+fn reachable_two_away(game: &mut Game) -> (i32, i32) {
+    let actor = game.tactical_actor().expect("somebody is acting");
+    let from = cell_of(game, actor).expect("the actor stands on the board");
+    let mut reachable = game.tactical_view().unwrap().reachable;
+    reachable.sort_by_key(|&(x, y)| (y, x));
+    reachable
+        .into_iter()
+        .find(|&cell| reach::distance(from, cell) >= 2)
+        .expect("the actor can reach a cell two steps off")
+}
+
+#[test]
+fn tactical_path_to_a_reachable_cell_ends_there_and_starts_beside_the_actor() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    let from = cell_of(&game, player).unwrap();
+    let to = reachable_two_away(&mut game);
+    let allowance = game.tactical_view().unwrap().allowance;
+
+    let path = game.tactical_path_to(to);
+    assert_eq!(path.last(), Some(&to));
+    let mut prev = from;
+    for &cell in &path {
+        assert_eq!(reach::distance(prev, cell), 1, "{prev:?} -> {cell:?}");
+        prev = cell;
+    }
+    assert!(path.len() as u32 <= allowance);
+}
+
+#[test]
+fn tactical_path_to_an_unreachable_cell_is_empty() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    assert!(game.tactical_path_to((-1, -1)).is_empty());
+}
+
+#[test]
+fn tactical_walk_to_commits_and_walk_beats_spend_it_one_cell_at_a_time() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    let to = reachable_two_away(&mut game);
+    let path = game.tactical_path_to(to);
+
+    assert!(game.tactical_walk_to(to));
+    assert!(game.tactical_walking());
+    let mut steps = 0;
+    while game.tactical_walking() {
+        assert_eq!(game.tactical_walk_beat(), AiBeat::Stepped);
+        steps += 1;
+        assert!(steps <= path.len(), "the walk did not end at its last cell");
+    }
+    assert_eq!(steps, path.len());
+    assert_eq!(cell_of(&game, player), Some(to));
+    assert!(
+        !game.tactical_view().unwrap().acted,
+        "arriving spent the action"
+    );
+    assert_eq!(game.tactical_actor(), Some(player));
+    assert_eq!(game.tactical_walk_beat(), AiBeat::Idle);
+}
+
+#[test]
+fn tactical_walk_to_refuses_for_an_unreachable_cell_and_on_the_wild_sides_turn() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    assert!(!game.tactical_walk_to((-1, -1)));
+    assert!(!game.tactical_walking());
+
+    assert!(wait_for_turn(&mut game, pack[0]));
+    assert!(!game.tactical_awaits_input());
+    let to = reachable_two_away(&mut game);
+    assert!(!game.tactical_walk_to(to));
+    assert!(!game.tactical_walking());
+}
+
+#[test]
+fn tactical_stop_walk_leaves_the_body_where_it_stands() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    let to = reachable_two_away(&mut game);
+    let path = game.tactical_path_to(to);
+
+    assert!(game.tactical_walk_to(to));
+    assert_eq!(game.tactical_walk_beat(), AiBeat::Stepped);
+    game.tactical_stop_walk();
+    assert!(!game.tactical_walking());
+    assert_eq!(cell_of(&game, player), Some(path[0]));
+    assert_eq!(game.tactical_walk_beat(), AiBeat::Idle);
+    assert_eq!(cell_of(&game, player), Some(path[0]));
 }

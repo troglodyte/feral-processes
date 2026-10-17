@@ -5,8 +5,8 @@ use super::support::{
     app_with_companions_in_the_party, install_player_routines, learn_image, test_app, walk,
 };
 use crate::{
-    App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
-    TACTICAL_TURNS_PER_SECOND, TacticalIntent,
+    App, GameKey, Mode, PointerButton, SoundEvent, TACTICAL_HANDOVER_SECONDS,
+    TACTICAL_STEPS_PER_SECOND, TACTICAL_TURNS_PER_SECOND, TacticalIntent, TargetMark,
 };
 use feral_processes_engine::resources::DifficultyMode;
 use feral_processes_engine::tactical::reach;
@@ -1762,6 +1762,229 @@ fn a_key_during_the_walk_stops_it_and_is_swallowed() {
     assert!(!walking(&app), "the key did not stop the walk");
     app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
     assert_eq!(acting_cell(&mut app), stood, "a stopped walk kept walking");
+}
+
+/// The first hostile on the board and where it stands.
+fn hostile_body(app: &mut App) -> (feral_processes_engine::Entity, (i32, i32)) {
+    let view = app
+        .game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open");
+    let body = view
+        .bodies
+        .iter()
+        .find(|b| b.is_hostile)
+        .expect("a hostile is seated");
+    (body.entity, body.cell)
+}
+
+fn marked(app: &App) -> Option<feral_processes_engine::Entity> {
+    app.tactical_target.map(|m| m.target)
+}
+
+#[test]
+fn a_click_on_a_hostile_marks_it_and_a_second_click_swings_or_refuses() {
+    let mut app = fighting(9140);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+    assert!(!acted(&mut app), "marking spent the action");
+
+    app.map_click(cell, PointerButton::Primary);
+    if reach::distance(from, cell) <= 1 {
+        assert!(
+            acted(&mut app) || !app.tactical_player_turn(),
+            "the second click did not swing"
+        );
+        assert_eq!(marked(&app), None, "a landed swing kept the mark");
+    } else {
+        assert_eq!(app.status_line.as_deref(), Some("Not from here."));
+        assert_eq!(
+            marked(&app),
+            Some(hostile),
+            "a refused swing dropped the mark"
+        );
+    }
+}
+
+#[test]
+fn a_click_elsewhere_clears_the_mark_and_walks() {
+    let mut app = fighting(9141);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+    let to = reachable_cell_two_away(&mut app);
+
+    app.map_click(to, PointerButton::Primary);
+
+    assert_eq!(marked(&app), None);
+    assert!(
+        walking(&app),
+        "the click that cleared the mark did not walk"
+    );
+}
+
+#[test]
+fn a_secondary_click_clears_the_mark() {
+    let mut app = fighting(9142);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+
+    app.map_click(cell, PointerButton::Secondary);
+
+    assert_eq!(marked(&app), None);
+    assert!(!acted(&mut app), "a secondary click spent the action");
+}
+
+#[test]
+fn esc_clears_the_mark() {
+    let mut app = fighting(9143);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(marked(&app), None);
+    assert_eq!(app.mode, Mode::TacticalBattle);
+}
+
+/// The mark is read against the live board whenever it is used or drawn,
+/// so a body that is no longer on it never reaches `tactical_attack`. The
+/// fixture's one hostile cannot leave without ending the fight, so the
+/// rule is pinned by a mark naming a body the board never held.
+#[test]
+fn the_mark_is_dropped_when_its_body_is_gone() {
+    let mut app = fighting(9144);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+    let mark = app.tactical_target.unwrap();
+    app.tactical_target = Some(TargetMark {
+        target: feral_processes_engine::Entity::PLACEHOLDER,
+        ..mark
+    });
+
+    assert_eq!(app.tactical_target_cell(), None);
+    assert_eq!(app.tactical_target, None);
+}
+
+#[test]
+fn a_mark_does_not_outlive_the_turn() {
+    let mut app = fighting(9145);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+
+    app.handle_key(GameKey::Char('E'));
+    wait_for_the_player(&mut app);
+
+    assert_eq!(app.tactical_target_cell(), None);
+    assert_eq!(app.tactical_target, None);
+}
+
+#[test]
+fn a_click_on_the_wild_sides_turn_does_nothing() {
+    let mut app = fighting(9146);
+    open_on_a_wild_turn(&mut app);
+    let from = acting_cell(&mut app);
+    let (_, cell) = hostile_body(&mut app);
+    let to = reachable_cell_two_away(&mut app);
+
+    app.map_click(cell, PointerButton::Primary);
+    app.map_click(to, PointerButton::Primary);
+
+    assert_eq!(acting_cell(&mut app), from);
+    assert_eq!(marked(&app), None);
+    assert_eq!(app.status_line, None);
+    assert!(!walking(&app));
+}
+
+#[test]
+fn hovering_a_reachable_cell_answers_the_path_and_nothing_else_does() {
+    let mut app = fighting(9147);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let to = reachable_cell_two_away(&mut app);
+
+    app.set_map_hover(Some(to));
+    let path = app.tactical_hover_path();
+    assert_eq!(path.last(), Some(&to));
+    assert!(path.len() >= 2);
+
+    app.set_map_hover(Some(from));
+    assert!(app.tactical_hover_path().is_empty());
+    app.set_map_hover(None);
+    assert!(app.tactical_hover_path().is_empty());
+    assert_eq!(app.map_hover, None);
+}
+
+#[test]
+fn in_aim_mode_the_cursor_follows_a_cell_change_and_a_click_commits() {
+    let mut app = fighting(9148);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let (_, hostile_cell) = hostile_body(&mut app);
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::TacticalAim);
+    assert_eq!(app.tactical_cursor, Some(from));
+
+    let c1 = (0, 0);
+    app.set_map_hover(Some(c1));
+    assert_eq!(
+        app.tactical_cursor,
+        Some(c1),
+        "the cursor did not follow the pointer"
+    );
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.tactical_cursor, Some((1, 0)));
+    app.set_map_hover(Some(c1));
+    assert_eq!(
+        app.tactical_cursor,
+        Some((1, 0)),
+        "a parked pointer snapped the cursor back"
+    );
+
+    let c2 = (2, 2);
+    app.set_map_hover(Some(c2));
+    assert_eq!(app.tactical_cursor, Some(c2));
+
+    app.map_click(hostile_cell, PointerButton::Primary);
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    if reach::distance(from, hostile_cell) <= 1 {
+        assert!(
+            acted(&mut app) || !app.tactical_player_turn(),
+            "the click did not swing"
+        );
+    } else {
+        assert_eq!(app.status_line.as_deref(), Some("Not from here."));
+    }
+}
+
+#[test]
+fn in_aim_mode_a_secondary_click_is_esc() {
+    let mut app = fighting(9149);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::TacticalAim);
+
+    app.map_click((0, 0), PointerButton::Secondary);
+
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    assert_eq!(app.tactical_cursor, None);
+    assert!(!acted(&mut app), "a secondary click spent the action");
 }
 
 #[test]

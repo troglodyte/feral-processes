@@ -171,6 +171,9 @@ impl App {
             // of nothing on this screen (`r_is_not_a_second_way_into_the_
             // picker`), so the shift-slip costs nothing either.
             GameKey::Char('R') => self.auto_resolve(),
+            // The one thing this screen has to back out of: the hostile a
+            // click marked for a second click to swing at.
+            GameKey::Esc => self.tactical_target = None,
             // Uppercase, `E`'s reason again — `Game::tactical_revert`'s own
             // refusal while nothing is emulating is silent here exactly as
             // `d`'s is: `d` above never checks its own bool either, and a
@@ -535,7 +538,7 @@ impl App {
     }
 
     /// Spends the chosen action on the cell the cursor is over.
-    fn commit_tactical_aim(&mut self, aim: (i32, i32)) {
+    pub(crate) fn commit_tactical_aim(&mut self, aim: (i32, i32)) {
         let Some(intent) = self.pending_tactical.take() else {
             self.mode = Mode::TacticalBattle;
             return;
@@ -580,7 +583,7 @@ impl App {
     }
 
     /// What every tactical action owes: the fight may have ended inside it.
-    fn after_tactical_action(&mut self) {
+    pub(crate) fn after_tactical_action(&mut self) {
         self.settle_tactical_end();
     }
 
@@ -598,6 +601,7 @@ impl App {
         self.pending_tactical = None;
         self.pending_tactical_emulate = None;
         self.tactical_cursor = None;
+        self.tactical_target = None;
         self.tactical_carry = 0.0;
         // Per fight: the next one opens hands-on however this one ended.
         self.tactical_auto = false;

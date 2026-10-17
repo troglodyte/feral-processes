@@ -486,6 +486,22 @@ mod tests {
         assert_eq!(text, [RESEARCH_HEADER, "Automation", "needs Cache Grain"]);
     }
 
+    /// A project taken on with something unbuilt wears the research screen's
+    /// `!` and its sentence, and no figure — the wait starts at selection.
+    #[test]
+    fn a_blocked_project_wears_the_flag_and_its_reason() {
+        let m = ui_metrics(900.0);
+        let research = ResearchReadout::Blocked {
+            name: "Automation".to_string(),
+            reason: "Build a Lathe.".to_string(),
+        };
+        let (filled, shapes) =
+            with_painter(|p| draw_stock_block(pane(), Some(&research), &[], (0, 10), p, &m));
+        assert!(filled.is_some(), "research alone is worth the corner");
+        let text = painted_text(&shapes);
+        assert_eq!(text, [RESEARCH_HEADER, "Automation", "! Build a Lathe."]);
+    }
+
     /// A reason longer than its column wraps onto further lines rather than
     /// being cut: "needs room for another…" names no problem the player can
     /// act on. Every word survives, in order, and every line is measured to

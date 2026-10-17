@@ -63,6 +63,19 @@ fn hover_off_the_playing_screen_says_nothing() {
     assert!(app.hover_lines(start.0, start.1).is_empty());
 }
 
+/// The board publishes a click layout now, so the pointer system asks for
+/// a label there too; `surface_map_game`'s gate is what keeps it empty,
+/// and a second gate in gui is not the fix if this ever fails.
+#[test]
+fn hover_lines_are_empty_on_a_battle_map() {
+    let mut app = super::tactical::fighting(2810);
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    let start = player_pos(&app);
+
+    assert!(app.hover_lines(start.0, start.1).is_empty());
+    assert!(app.hover_lines(0, 0).is_empty());
+}
+
 #[test]
 fn hover_underground_says_nothing() {
     let mut app = app_underground(2804);

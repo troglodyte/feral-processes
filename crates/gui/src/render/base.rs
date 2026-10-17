@@ -361,6 +361,17 @@ pub(super) fn draw_playing_base(
         }
         _ => Vec::new(),
     };
+    // Before the `game` borrow like the two above, and both are calls into
+    // app-core's own rules: the path is the walk the click would commit and
+    // the mark is read off the live board, so the board draws what a click
+    // would do rather than a second guess at it.
+    let tactical_overlay = tactical::Overlay {
+        cursor: tactical_cursor,
+        preview: tactical_preview,
+        placeable: tactical_placeable,
+        path: app.tactical_hover_path(),
+        target: app.tactical_target_cell(),
+    };
     let mode = app.mode;
     // A finished tactical fight's results are a popup over the board it was
     // fought on, and `TacticalBattle` went with the fight — so on that
@@ -425,17 +436,15 @@ pub(super) fn draw_playing_base(
         game.tactical_view()
     };
     // Cleared here, unconditionally, ahead of the three-way branch below:
-    // `draw_surface_map` overwrites it with `Some(..)` in the one branch
-    // that draws the ordinary grid, so a tactical board or a Stack corridor
-    // leaves it `None` rather than a click inheriting a layout from the
-    // screen the player has since left.
+    // `draw_surface_map` and `draw_tactical_map` each overwrite it with
+    // `Some(..)` in their own branch, so a Stack corridor leaves it `None`
+    // rather than a click inheriting a layout from the screen the player
+    // has since left.
     fx.set_map_click(None);
     if let Some(view) = board {
         let washes = tactical::draw_tactical_map(
             &view,
-            tactical_cursor,
-            &tactical_preview,
-            &tactical_placeable,
+            &tactical_overlay,
             fx,
             painter,
             regions.map_pane,

@@ -67,6 +67,15 @@ impl App {
         if self.tactical_auto {
             self.tactical_auto = false;
             self.status_line = Some("Auto-attack off.".to_string());
+            // The robot's own walk goes with it, or the party's walk beat
+            // would finish the route the player just reached in to stop.
+            self.stop_player_walk();
+            return;
+        }
+        // A walk the player committed by a click is stopped by any key, and
+        // the key is swallowed for auto-attack's reason: it is the key that
+        // stops a body walking into something the player just saw.
+        if self.stop_player_walk() {
             return;
         }
         if key == GameKey::Char('A') {
@@ -162,6 +171,9 @@ impl App {
             // of nothing on this screen (`r_is_not_a_second_way_into_the_
             // picker`), so the shift-slip costs nothing either.
             GameKey::Char('R') => self.auto_resolve(),
+            // The one thing this screen has to back out of: the hostile a
+            // click marked for a second click to swing at.
+            GameKey::Esc => self.tactical_target = None,
             // Uppercase, `E`'s reason again — `Game::tactical_revert`'s own
             // refusal while nothing is emulating is silent here exactly as
             // `d`'s is: `d` above never checks its own bool either, and a
@@ -389,7 +401,9 @@ impl App {
     /// there is no second piece of pacing state to hold in step with the
     /// first: `Game::tactical_walking` is true exactly between a body's
     /// first step and its last, which is the same span that owes the faster
-    /// rate.
+    /// rate. The player's own turn owes a beat only while it is walking —
+    /// a click committed the walk, and this loop spends it a cell at a
+    /// time through the door a hostile's walk is spent through.
     pub fn advance_tactical(&mut self, dt: f32) {
         if !matches!(
             self.mode,
@@ -398,7 +412,9 @@ impl App {
             self.tactical_carry = 0.0;
             return;
         }
-        if self.tactical_player_turn() && !self.tactical_auto {
+        let player_turn = self.tactical_player_turn();
+        let walking = self.game.as_ref().is_some_and(|g| g.tactical_walking());
+        if player_turn && !self.tactical_auto && !walking {
             // Held at zero rather than accumulated, so the first wild body
             // to act after the player's turn waits a full beat and the
             // handover is legible.
@@ -419,13 +435,14 @@ impl App {
             // paced by the three waits the wild side's already are and a round
             // reads at one speed. The narrower door stays for the fight the
             // player is fighting, where a party body's turn is theirs and this
-            // loop must not touch it.
+            // loop touches only the walk the player committed.
             let spent = self
                 .game
                 .as_mut()
-                .map(|g| match auto {
-                    true => g.tactical_auto_beat(),
-                    false => g.tactical_ai_beat(),
+                .map(|g| match (auto, player_turn) {
+                    (true, _) => g.tactical_auto_beat(),
+                    (false, true) => g.tactical_walk_beat(),
+                    (false, false) => g.tactical_ai_beat(),
                 })
                 .unwrap_or(AiBeat::Idle);
             if spent == AiBeat::Idle {
@@ -475,6 +492,50 @@ impl App {
         self.after_tactical_action();
     }
 
+    /// Stops a party body's live walk where it stands, answering whether
+    /// there was one to stop — the one door a key, a click and switching
+    /// auto-attack off all go through. Only on the player's turn: a wild
+    /// body's walk is the pacing loop's, and clearing it would have the AI
+    /// plan a fresh one from wherever it stood.
+    pub(crate) fn stop_player_walk(&mut self) -> bool {
+        if !self.tactical_player_turn() {
+            return false;
+        }
+        let Some(game) = &mut self.game else {
+            return false;
+        };
+        if !game.tactical_walking() {
+            return false;
+        }
+        game.tactical_stop_walk();
+        true
+    }
+
+    /// Commits the acting body to walking to `cell`, to be spent a cell a
+    /// beat by `advance_tactical` — what a click on the board means on the
+    /// player's turn.
+    ///
+    /// The engine plans the path and refuses a cell it cannot reach; the
+    /// body's own cell is silently nothing, because the engine's empty path
+    /// would otherwise read as out of reach. Nothing on the wild side's turn:
+    /// `Game::tactical_walk_to` refuses it, and saying so would blame the
+    /// player for a click the pacing loop owns.
+    pub fn tactical_walk_to(&mut self, cell: (i32, i32)) {
+        if self.mode != Mode::TacticalBattle || !self.tactical_player_turn() {
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        if game
+            .tactical_occupant(cell)
+            .is_some_and(|body| Some(body) == game.tactical_actor())
+        {
+            return;
+        }
+        if !game.tactical_walk_to(cell) {
+            self.refuse("Out of reach.");
+        }
+    }
+
     /// Opens the cell cursor on the acting body's own cell.
     ///
     /// Its own cell and not the nearest hostile: a `Radius` centred on the
@@ -496,7 +557,7 @@ impl App {
     }
 
     /// Spends the chosen action on the cell the cursor is over.
-    fn commit_tactical_aim(&mut self, aim: (i32, i32)) {
+    pub(crate) fn commit_tactical_aim(&mut self, aim: (i32, i32)) {
         let Some(intent) = self.pending_tactical.take() else {
             self.mode = Mode::TacticalBattle;
             return;
@@ -541,7 +602,7 @@ impl App {
     }
 
     /// What every tactical action owes: the fight may have ended inside it.
-    fn after_tactical_action(&mut self) {
+    pub(crate) fn after_tactical_action(&mut self) {
         self.settle_tactical_end();
     }
 
@@ -559,6 +620,7 @@ impl App {
         self.pending_tactical = None;
         self.pending_tactical_emulate = None;
         self.tactical_cursor = None;
+        self.tactical_target = None;
         self.tactical_carry = 0.0;
         // Per fight: the next one opens hands-on however this one ended.
         self.tactical_auto = false;

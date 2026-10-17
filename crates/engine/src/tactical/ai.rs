@@ -599,6 +599,35 @@ impl Game {
         self.run_tactical_beat(actor, self.decision_temperature(actor), PartyTurns::Invoke)
     }
 
+    /// Spends one cell of the walk the player committed through
+    /// `Game::tactical_walk_to`, and nothing else.
+    ///
+    /// The party side's beat: `tactical_ai_beat`'s step without its action,
+    /// because the action stays the player's to choose once the body has
+    /// arrived. `Idle` on the wild side's turn, or with no walk to spend —
+    /// a driver pacing the fight reads `tactical_walking` to know this owes
+    /// a beat at all. Through `step_along_walk`, the one door a committed
+    /// walk is spent through, so this never writes a position.
+    pub fn tactical_walk_beat(&mut self) -> AiBeat {
+        let Some(actor) = self.tactical_actor() else {
+            return AiBeat::Idle;
+        };
+        if !self.tactical_awaits_input() || !self.tactical_walking() {
+            return AiBeat::Idle;
+        }
+        let beat = self.step_along_walk(actor).unwrap_or(AiBeat::Idle);
+        // A spent walk — arrived, or dropped by a refused step — leaves
+        // nothing planned, `tactical_stop_walk`'s reason: the player's turn
+        // goes on, and a later `[A]` must plan its own walk from here.
+        // `get_resource_mut`, because a departure closed the fight.
+        if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>()
+            && !battle.walking()
+        {
+            battle.clear_walk();
+        }
+        beat
+    }
+
     /// Whether the acting body is part-way through a walk it has committed
     /// to, and so owes a step rather than a turn.
     ///

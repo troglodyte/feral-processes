@@ -1020,17 +1020,18 @@ impl Fx {
     }
 
     /// Stashes the map pane's layout for this frame — written by
-    /// `draw_surface_map` when it draws the ordinary surface/base grid,
-    /// cleared by `draw_playing_base` before its other two branches (a
-    /// tactical board, a Stack corridor) so a click there finds nothing to
-    /// invert rather than reading a stale layout from a screen the player
-    /// has since left. Read back by `lib.rs::handle_map_pointer`.
+    /// `draw_surface_map` when it draws the ordinary surface/base grid and
+    /// by `draw_tactical_map` for a battle board, cleared by
+    /// `draw_playing_base` before its third branch (a Stack corridor) so a
+    /// click there finds nothing to invert rather than reading a stale
+    /// layout from a screen the player has since left. Read back by
+    /// `lib.rs::handle_map_pointer`.
     pub(crate) fn set_map_click(&mut self, layout: Option<crate::render::MapClickLayout>) {
         self.map_click = layout;
     }
 
-    /// This frame's map pane layout, if the ordinary surface/base grid drew
-    /// one — see `set_map_click`.
+    /// This frame's map pane layout, if the surface grid or a battle board
+    /// drew one — see `set_map_click`.
     pub(crate) fn map_click(&self) -> Option<crate::render::MapClickLayout> {
         self.map_click
     }

@@ -36,6 +36,7 @@ mod mod_copy;
 pub(crate) mod outposts;
 mod party;
 mod playing;
+mod pointer;
 mod progression;
 mod refit_copy;
 pub mod rig_tool;

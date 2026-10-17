@@ -778,6 +778,21 @@ const _: () = assert!(
 /// allowance crossed between two frames — read as a teleport.
 pub const TACTICAL_STEPS_PER_SECOND: f32 = 6.0;
 
+/// The hostile a click on the board has picked, and whose turn picked it.
+///
+/// The turn is carried as the acting body and the round together, because
+/// the order wraps: a mark left from the player's last turn would otherwise
+/// read as this turn's once the cursor came back round to them. Read
+/// against the live board through `App::tactical_target_cell` whenever it
+/// is used or drawn, so a body that died or departed under a keyboard
+/// action never reaches `Game::tactical_attack`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetMark {
+    pub actor: Entity,
+    pub round: u32,
+    pub target: Entity,
+}
+
 /// What a cell cursor opened from `Mode::TacticalBattle` will commit to.
 ///
 /// A swing carries nothing because the cell names its own target; a routine
@@ -3137,6 +3152,15 @@ pub struct App {
     /// Excavation plan's base space and the zone surface. `None` outside
     /// that mode; opening it puts the cursor on the acting body's own cell.
     pub tactical_cursor: Option<(i32, i32)>,
+    /// The map or board cell under the pointer this frame, `None` off the
+    /// pane. Written by the renderer every frame and read by the aim
+    /// cursor's follow rule and the board's hover path; in whichever
+    /// coordinate space the pane is drawing, as `tactical_cursor` is.
+    pub map_hover: Option<(i32, i32)>,
+    /// The hostile a click has picked for a second click to swing at.
+    /// Per fight and per turn, never saved: `settle_tactical_end` clears it
+    /// and `tactical_target_cell` drops it once its turn has passed.
+    pub tactical_target: Option<TargetMark>,
     /// What the cursor above will commit to. `None` outside
     /// `Mode::TacticalAim`, and taken rather than read on commit so a
     /// second Enter cannot spend the same action twice.

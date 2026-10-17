@@ -44,6 +44,24 @@ fn travel_to_a_tile_queues_a_travel_and_moves_nothing_yet() {
     );
 }
 
+/// The pointer's one entry: on the surface map a primary click is
+/// `travel_to`, and the secondary button means nothing there.
+#[test]
+fn a_primary_map_click_in_playing_travels_and_a_secondary_does_not() {
+    let mut app = test_app(2706);
+    clear_the_area_around_player(&mut app);
+    let start = player_pos(&app);
+
+    app.map_click((start.0 + 3, start.1), PointerButton::Secondary);
+    assert_eq!(app.travel_goal(), None, "a secondary click travelled");
+
+    app.map_click((start.0 + 3, start.1), PointerButton::Primary);
+    assert_eq!(
+        app.travel_goal(),
+        Some(TravelGoal::Tile(start.0 + 3, start.1))
+    );
+}
+
 /// A click on a hostile's own tile resolves to a `Creature` goal rather
 /// than a `Tile` one — `views::drawn_on_surface_map`'s rule, read the same
 /// way the map itself is drawn.

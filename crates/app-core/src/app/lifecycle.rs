@@ -106,6 +106,8 @@ impl App {
             pending_field_routine: None,
             field_cursor: None,
             tactical_cursor: None,
+            map_hover: None,
+            tactical_target: None,
             pending_tactical: None,
             pending_tactical_emulate: None,
             tactical_carry: 0.0,

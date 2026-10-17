@@ -331,6 +331,66 @@ impl Game {
         StepOutcome::Moved
     }
 
+    /// The cells the acting body would walk to reach `to`, its own cell
+    /// excluded — the path a hostile would plan over the same field.
+    ///
+    /// The planning door a pointer needs: app-core sees `reachable` as cells
+    /// without costs and cannot descend the field itself, so the route a
+    /// click commits is planned here and previewed through the same call,
+    /// which is what keeps the hover wash honest about the walk it offers.
+    /// Empty with no fight, no actor, or a cell the field never reached;
+    /// seams in `.claude/rules/seams-tactical.md`.
+    pub fn tactical_path_to(&self, to: (i32, i32)) -> Vec<(i32, i32)> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let field = reach::movement_field(battle, actor, self.movement_allowance(actor));
+        reach::path_to(&battle.board, &field, from, to)
+    }
+
+    /// Commits the acting body to the walk `tactical_path_to` plans,
+    /// answering whether there was one to commit.
+    ///
+    /// **The player's walk is the same run of `tactical_step`s a hostile's
+    /// is**, spent a cell a beat through `tactical_walk_beat`, so a provoking
+    /// cell draws its reaction and a refused step drops the rest exactly as
+    /// they do for the wild side. Refused on the wild side's turn: that walk
+    /// is the AI's to plan, and a pointer must not plan it.
+    pub fn tactical_walk_to(&mut self, to: (i32, i32)) -> bool {
+        if !self.tactical_awaits_input() {
+            return false;
+        }
+        let path = self.tactical_path_to(to);
+        if path.is_empty() {
+            return false;
+        }
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .commit_walk(path);
+        true
+    }
+
+    /// Ends the acting body's walk where it stands, keeping the rest of its
+    /// turn. A no-op with no fight open.
+    ///
+    /// **`clear_walk`, not "has arrived".** `Some(vec![])` is the AI's
+    /// answer because `run_tactical_beat` reads a planned walk as "do not
+    /// plan again this turn"; a player's walk is not an AI turn, and a
+    /// `[A]` pressed after one must still close in rather than act from
+    /// where the body stopped. The same door stops the robot's own walk
+    /// when auto-attack is switched off mid-step.
+    pub fn tactical_stop_walk(&mut self) {
+        if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
+            battle.clear_walk();
+        }
+    }
+
     /// Everyone who would react to `mover` stepping from `from` to `to`.
     ///
     /// **Leaving reach is the trigger, and a step that stays adjacent is

@@ -9,21 +9,30 @@
   new variant every census has to learn.
 
 - **Research is one project at a time, and `Game::select_research` is the one
-  door — every refusal before anything is filed.** Six of them, asserted **per
-  refusal** because a single test over one of six passes against the five that
-  never write anyway. Two are not obvious. "No Research Node deployed" cannot
+  door — every refusal before anything is filed.** Five of them, asserted **per
+  refusal** because a single test over one of five passes against the four that
+  never write anyway. **What the base cannot do yet is a flag, not a refusal**
+  (2026-10-17, spec `2026-10-17-research-pick-flags-blocks-design.md`): no
+  Research Node standing, a material's machine unbuilt, no subject pinned —
+  `Game::research_block` — takes the project on and marks it, because being
+  turned away from the screen to go build the thing was the annoyance. Two
+  parts of that sentence are not obvious. "No Research Node deployed" cannot
   be `work_orders::chain_break`: that function refuses every banked item by
   construction and names the research currency in its own doc as the example,
   so it would refuse the currency whatever plant was standing — it is
   `producers_of(self, &research_currency()).is_empty()` instead. And each
   material line *is* `chain_break`, quoted **verbatim**: the same sentence the
-  work-order screen shows, and two spellings of one refusal is the drift this
+  work-order screen shows, and two spellings of one block is the drift this
   repo keeps recording, so the test asserts equality against a live
-  `chain_break` call rather than hardcoded prose. Both together are
-  `Game::research_block`, which also fills `ResearchStatus::blocked_by` —
-  `Game::orderable_items`' rule, so the row the screen marks blocked and the
-  refusal the player is handed cannot disagree. The refusal needs a
-  **reachability** test of its own or it can ship permanent with every refusal
+  `chain_break` call rather than hardcoded prose. `research_block` fills
+  `ResearchStatus::blocked_by` (the running project's row included) and
+  `ResearchReadout::Blocked` (ahead of `Stalled`, whatever the progress), so
+  the `!` on the row, on the graph box and in the corner cannot name
+  different things. For the bill to be filed once at selection and never
+  topped up, a `WorkOrder::for_research` line **skips `order_refusal`** in
+  `queue_work_order` (only "No such item." still refuses) and sits
+  `OrderStanding::Stalled` until the machine goes up. The flag needs a
+  **reachability** test of its own or it can ship permanent with every flag
   test still green. Completion is `Game::settle_research`, and its two gates
   are one `&&`: the short-circuit is what stops a half-researched project
   spending its materials, and the unlock side effects are **extracted** into

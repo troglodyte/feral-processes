@@ -19,23 +19,32 @@ impl App {
     /// In `Mode::TacticalAim` the cell cursor follows the pointer — but
     /// only when the pointer **enters a different cell**, never every
     /// frame, or a pointer parked over the board would snap the cursor back
-    /// after every arrow key. Off the board the cursor stays where it was.
+    /// after every arrow key. Off the board the cursor stays where it was:
+    /// the pane shows cells past the edge whenever the camera sits near
+    /// one, and a cursor dragged to the edge by every pointer twitch out
+    /// there would fight the arrows exactly as a parked pointer would.
     pub fn set_map_hover(&mut self, cell: Option<(i32, i32)>) {
         let entered = cell.filter(|&c| Some(c) != self.map_hover);
         self.map_hover = cell;
         if self.mode != Mode::TacticalAim {
             return;
         }
-        let Some((x, y)) = entered else { return };
-        let Some(side) = self
-            .game
+        if let Some(cell) = entered
+            && self.on_board(cell)
+        {
+            self.tactical_cursor = Some(cell);
+        }
+    }
+
+    /// Whether `cell` is one of the board's own — the pane can name cells
+    /// past the edge, and `tile_at_px` does not know where the edge is.
+    fn on_board(&mut self, cell: (i32, i32)) -> bool {
+        self.game
             .as_mut()
             .and_then(|g| g.tactical_view())
-            .map(|v| v.board.side)
-        else {
-            return;
-        };
-        self.tactical_cursor = Some((x.clamp(0, side - 1), y.clamp(0, side - 1)));
+            .is_some_and(|v| {
+                (0..v.board.side).contains(&cell.0) && (0..v.board.side).contains(&cell.1)
+            })
     }
 
     /// A click on a cell of whatever the map pane is drawing.
@@ -50,10 +59,15 @@ impl App {
             Mode::Playing if button == PointerButton::Primary => self.travel_to(cell.0, cell.1),
             Mode::TacticalBattle => self.tactical_board_click(cell, button),
             Mode::TacticalAim => match button {
-                PointerButton::Primary => {
+                // Committed at the pointer's cell, which the cursor has
+                // already followed to; a cell past the edge is nothing to
+                // aim at, so the aim stays open rather than being spent on
+                // a refusal Enter could never produce.
+                PointerButton::Primary if self.on_board(cell) => {
                     self.tactical_cursor = Some(cell);
                     self.commit_tactical_aim(cell);
                 }
+                PointerButton::Primary => {}
                 PointerButton::Secondary => self.handle_tactical_aim_key(GameKey::Esc),
                 PointerButton::Middle => {}
             },
@@ -74,15 +88,10 @@ impl App {
         if self.tactical_auto {
             self.tactical_auto = false;
             self.status_line = Some("Auto-attack off.".to_string());
+            self.stop_player_walk();
             return;
         }
-        if !self.tactical_player_turn() {
-            return;
-        }
-        if self.game.as_ref().is_some_and(|g| g.tactical_walking()) {
-            if let Some(game) = &mut self.game {
-                game.tactical_stop_walk();
-            }
+        if !self.tactical_player_turn() || self.stop_player_walk() {
             return;
         }
         if button != PointerButton::Primary {

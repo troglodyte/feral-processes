@@ -615,7 +615,17 @@ impl Game {
         if !self.tactical_awaits_input() || !self.tactical_walking() {
             return AiBeat::Idle;
         }
-        self.step_along_walk(actor).unwrap_or(AiBeat::Idle)
+        let beat = self.step_along_walk(actor).unwrap_or(AiBeat::Idle);
+        // A spent walk — arrived, or dropped by a refused step — leaves
+        // nothing planned, `tactical_stop_walk`'s reason: the player's turn
+        // goes on, and a later `[A]` must plan its own walk from here.
+        // `get_resource_mut`, because a departure closed the fight.
+        if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>()
+            && !battle.walking()
+        {
+            battle.clear_walk();
+        }
+        beat
     }
 
     /// Whether the acting body is part-way through a walk it has committed

@@ -377,11 +377,17 @@ impl Game {
     }
 
     /// Ends the acting body's walk where it stands, keeping the rest of its
-    /// turn — "has arrived", the answer `step_along_walk` gives a refusal.
-    /// A no-op with no fight open.
+    /// turn. A no-op with no fight open.
+    ///
+    /// **`clear_walk`, not "has arrived".** `Some(vec![])` is the AI's
+    /// answer because `run_tactical_beat` reads a planned walk as "do not
+    /// plan again this turn"; a player's walk is not an AI turn, and a
+    /// `[A]` pressed after one must still close in rather than act from
+    /// where the body stopped. The same door stops the robot's own walk
+    /// when auto-attack is switched off mid-step.
     pub fn tactical_stop_walk(&mut self) {
         if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
-            battle.commit_walk(Vec::new());
+            battle.clear_walk();
         }
     }
 

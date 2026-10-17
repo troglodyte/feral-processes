@@ -1987,6 +1987,122 @@ fn in_aim_mode_a_secondary_click_is_esc() {
     assert!(!acted(&mut app), "a secondary click spent the action");
 }
 
+/// Spends auto-attack's beats until a party body is part-way through a
+/// walk of the robot's own planning.
+fn advance_until_a_party_body_walks(app: &mut App) {
+    for _ in 0..256 {
+        if walking(app) && app.tactical_player_turn() {
+            return;
+        }
+        app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    }
+    panic!("no party body set off on a walk under auto-attack");
+}
+
+/// The key that stops the robot stops the body too: the walk auto-attack
+/// planned is not finished by the player's own walk beat.
+#[test]
+fn a_key_during_auto_attack_stops_the_body_where_it_stands() {
+    let mut app = fighting(9150);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('A'));
+    assert!(app.tactical_auto);
+    advance_until_a_party_body_walks(&mut app);
+    let stood = acting_cell(&mut app);
+
+    app.handle_key(GameKey::Char('x'));
+
+    assert!(!app.tactical_auto);
+    assert!(!walking(&app), "the key left the robot's walk live");
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    assert_eq!(acting_cell(&mut app), stood, "the body kept walking");
+}
+
+#[test]
+fn a_click_during_auto_attack_stops_the_body_where_it_stands() {
+    let mut app = fighting(9151);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('A'));
+    advance_until_a_party_body_walks(&mut app);
+    let stood = acting_cell(&mut app);
+
+    app.map_click(stood, PointerButton::Primary);
+
+    assert!(!app.tactical_auto);
+    assert!(!walking(&app), "the click left the robot's walk live");
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    assert_eq!(acting_cell(&mut app), stood, "the body kept walking");
+}
+
+#[test]
+fn a_click_during_the_walk_stops_it_and_is_swallowed() {
+    let mut app = fighting(9152);
+    wait_for_the_player(&mut app);
+    let (hostile, cell) = hostile_body(&mut app);
+    app.map_click(cell, PointerButton::Primary);
+    assert_eq!(marked(&app), Some(hostile));
+    let to = reachable_cell_two_away(&mut app);
+    app.tactical_walk_to(to);
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    let stood = acting_cell(&mut app);
+    assert!(walking(&app), "the walk ended before the click");
+
+    app.map_click(to, PointerButton::Primary);
+
+    assert!(!walking(&app), "the click did not stop the walk");
+    assert_eq!(marked(&app), Some(hostile), "the click was not swallowed");
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    assert_eq!(acting_cell(&mut app), stood, "a stopped walk kept walking");
+}
+
+#[test]
+fn in_aim_mode_an_off_board_hover_leaves_the_cursor_where_it_was() {
+    let mut app = fighting(9153);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let side = app
+        .game
+        .as_mut()
+        .unwrap()
+        .tactical_view()
+        .unwrap()
+        .board
+        .side;
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.tactical_cursor, Some(from));
+
+    app.set_map_hover(Some((-1, 0)));
+    assert_eq!(
+        app.tactical_cursor,
+        Some(from),
+        "a cell past the edge moved the cursor"
+    );
+    app.set_map_hover(Some((side, side)));
+    assert_eq!(
+        app.tactical_cursor,
+        Some(from),
+        "a cell past the far edge moved the cursor"
+    );
+}
+
+#[test]
+fn in_aim_mode_an_off_board_click_is_ignored() {
+    let mut app = fighting(9154);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::TacticalAim);
+
+    app.map_click((-1, -1), PointerButton::Primary);
+
+    assert_eq!(
+        app.mode,
+        Mode::TacticalAim,
+        "an off-board click spent the aim"
+    );
+    assert!(app.pending_tactical.is_some());
+    assert_eq!(app.status_line, None);
+}
+
 #[test]
 fn the_walk_pauses_the_carry_only_while_it_is_the_players_turn() {
     let mut app = fighting(9133);

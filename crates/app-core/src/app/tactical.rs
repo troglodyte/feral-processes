@@ -67,15 +67,15 @@ impl App {
         if self.tactical_auto {
             self.tactical_auto = false;
             self.status_line = Some("Auto-attack off.".to_string());
+            // The robot's own walk goes with it, or the party's walk beat
+            // would finish the route the player just reached in to stop.
+            self.stop_player_walk();
             return;
         }
         // A walk the player committed by a click is stopped by any key, and
         // the key is swallowed for auto-attack's reason: it is the key that
         // stops a body walking into something the player just saw.
-        if self.tactical_player_turn() && self.game.as_ref().is_some_and(|g| g.tactical_walking()) {
-            if let Some(game) = &mut self.game {
-                game.tactical_stop_walk();
-            }
+        if self.stop_player_walk() {
             return;
         }
         if key == GameKey::Char('A') {
@@ -490,6 +490,25 @@ impl App {
             StepOutcome::Departed | StepOutcome::Struck | StepOutcome::Refused => {}
         }
         self.after_tactical_action();
+    }
+
+    /// Stops a party body's live walk where it stands, answering whether
+    /// there was one to stop — the one door a key, a click and switching
+    /// auto-attack off all go through. Only on the player's turn: a wild
+    /// body's walk is the pacing loop's, and clearing it would have the AI
+    /// plan a fresh one from wherever it stood.
+    pub(crate) fn stop_player_walk(&mut self) -> bool {
+        if !self.tactical_player_turn() {
+            return false;
+        }
+        let Some(game) = &mut self.game else {
+            return false;
+        };
+        if !game.tactical_walking() {
+            return false;
+        }
+        game.tactical_stop_walk();
+        true
     }
 
     /// Commits the acting body to walking to `cell`, to be spent a cell a

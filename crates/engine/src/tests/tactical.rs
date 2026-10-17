@@ -8492,6 +8492,40 @@ fn tactical_walk_to_refuses_for_an_unreachable_cell_and_on_the_wild_sides_turn()
     assert!(!game.tactical_walking());
 }
 
+/// `run_tactical_beat` skips planning whenever a walk is planned, so a
+/// click-walk that left `Some(vec![])` behind would have `[A]` act from
+/// where the body stands instead of closing in. The player's walk is not
+/// an AI turn: once spent or stopped it leaves nothing planned.
+#[test]
+fn a_spent_or_stopped_walk_leaves_nothing_planned_for_the_rest_of_the_turn() {
+    let mut arrived = game();
+    tactical_fight(&mut arrived, 1, 10);
+    let player = arrived.player_entity();
+    assert!(wait_for_turn(&mut arrived, player));
+    let to = reachable_two_away(&mut arrived);
+    assert!(arrived.tactical_walk_to(to));
+    while arrived.tactical_walking() {
+        arrived.tactical_walk_beat();
+    }
+    assert!(
+        !arrived.world.resource::<TacticalBattle>().walk_planned(),
+        "arriving left a walk planned"
+    );
+
+    let mut stopped = game();
+    tactical_fight(&mut stopped, 1, 10);
+    let player = stopped.player_entity();
+    assert!(wait_for_turn(&mut stopped, player));
+    let to = reachable_two_away(&mut stopped);
+    assert!(stopped.tactical_walk_to(to));
+    stopped.tactical_walk_beat();
+    stopped.tactical_stop_walk();
+    assert!(
+        !stopped.world.resource::<TacticalBattle>().walk_planned(),
+        "stopping left a walk planned"
+    );
+}
+
 #[test]
 fn tactical_stop_walk_leaves_the_body_where_it_stands() {
     let mut game = game();

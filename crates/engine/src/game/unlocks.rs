@@ -18,6 +18,29 @@ pub struct DecompileReach {
     pub radius: u32,
 }
 
+/// One screen pass's answers per `ItemId`, for `Game::research_block_with` —
+/// the chain walk and the holding alike. The memo is the difference between
+/// a derivation and a per-frame cost: `chain_break` and `base_holding` each
+/// walk every entity in the world, the shipped tree asks once per material
+/// line of every node, and the nodes share materials heavily. It lives no
+/// longer than one call; cached on the `Game` it would be a new `Resource`
+/// (a bevy iteration-order shift) needing invalidation on every deploy,
+/// demolish and haul.
+#[derive(Default)]
+pub(crate) struct ResearchBlockMemo {
+    chain: HashMap<ItemId, Option<String>>,
+    holdings: HashMap<ItemId, u32>,
+}
+
+impl ResearchBlockMemo {
+    fn holding(&mut self, game: &Game, item: &ItemId) -> u32 {
+        *self
+            .holdings
+            .entry(item.clone())
+            .or_insert_with(|| crate::game::base::work_orders::base_holding(game, item))
+    }
+}
+
 impl Game {
     /// The one door every reader of decompile's research-extended reach goes
     /// through: the max of each field over the researched base-tree nodes.
@@ -732,14 +755,10 @@ impl Game {
     pub fn research_nodes(&self, tree: ResearchTree) -> Vec<ResearchStatus> {
         let recommended = self.world.resource::<ResearchDb>().recommended_ids();
         let active = self.world.resource::<ActiveResearch>().id.clone();
-        // One answer per material across the whole pass — see
-        // `research_block_memo`. Built out here rather than inside the closure
-        // so all thirty-odd nodes share it.
-        let mut blocks: HashMap<ItemId, Option<String>> = HashMap::new();
-        // And the same for the `have` column: `base_holding` walks every output
-        // buffer in the base, the nodes share materials heavily, and this is a
-        // per-frame derivation.
-        let mut holdings: HashMap<ItemId, u32> = HashMap::new();
+        // One answer per material across the whole pass, for the block and
+        // the `have` column alike — see `ResearchBlockMemo`. Built out here
+        // rather than inside the closure so all thirty-odd nodes share it.
+        let mut memo = ResearchBlockMemo::default();
         let mut nodes: Vec<ResearchStatus> = self
             .listed_research(tree)
             .into_iter()
@@ -763,23 +782,18 @@ impl Game {
                     .map(|(item, need)| ResearchMaterial {
                         name: self.item_name(item).to_string(),
                         need: *need,
-                        have: *holdings.entry(item.clone()).or_insert_with(|| {
-                            crate::game::base::work_orders::base_holding(self, item)
-                        }),
+                        have: memo.holding(self, item),
                     })
                     .collect();
-                // **Asked only of a node the selection could take.** A
-                // researched node and the running project are both refused
-                // before `research_block` is ever reached, so a sentence on
-                // either says why something that is not on offer is not on
-                // offer — and a fresh run drew the same amber line under all
-                // thirty-four rows, which is the screen telling the player
-                // nothing thirty-four times. A `Locked` node keeps its
-                // sentence: its wall is real and it is the one the player
-                // clears next.
+                // **Not asked of a researched node.** It is the one row
+                // nothing can be done to, and a fresh run once drew the same
+                // amber line under all thirty-four rows, which is the screen
+                // telling the player nothing thirty-four times. The running
+                // project keeps its sentence: the base took it on flagged,
+                // and the `!` on its row is what says it is waiting.
                 let blocked_by = match state {
-                    ResearchState::Unlocked | ResearchState::Active => None,
-                    _ => self.research_block_with(def, &mut blocks),
+                    ResearchState::Unlocked => None,
+                    _ => self.research_block_with(def, &mut memo),
                 };
                 ResearchStatus {
                     id: def.id.clone(),
@@ -794,9 +808,9 @@ impl Game {
                         .get(&def.id)
                         .copied()
                         .unwrap_or(0),
-                    // The same call the selection refuses on, not a
-                    // re-derivation of it — that is how the screen comes to
-                    // offer a row the selection turns down.
+                    // The same call the corner readout flags on, not a
+                    // re-derivation of it — that is how two surfaces come to
+                    // name different things.
                     blocked_by,
                     materials,
                     conversions: self.research_conversions(def),
@@ -945,12 +959,13 @@ impl Game {
         }
     }
 
-    /// Whether this base could ever work `def` at all, or the one sentence
-    /// saying why not.
+    /// Whether this base can work `def` right now, or the one sentence
+    /// saying what it waits on.
     ///
     /// The shared "can this base work this node" question, so the row the
-    /// screen marks blocked and the refusal `select_research` answers with
-    /// cannot disagree — `Game::orderable_items`' rule one rung up.
+    /// screen flags and the corner readout's `Blocked` cannot disagree —
+    /// `Game::orderable_items`' rule one rung up. Not a refusal:
+    /// `select_research` takes a flagged node on.
     ///
     /// Three things, in this order. First, for a node with `requires_subject`
     /// set, whether a body is standing in a `studies` structure's pen — the
@@ -969,7 +984,7 @@ impl Game {
     /// same sentence the work-order screen shows, and two spellings of one
     /// refusal is the drift this repo keeps recording.
     pub(crate) fn research_block(&self, def: &ResearchDef) -> Option<String> {
-        self.research_block_with(def, &mut HashMap::new())
+        self.research_block_with(def, &mut ResearchBlockMemo::default())
     }
 
     /// `research_block`, but taking the caller's own per-item memo rather
@@ -987,7 +1002,7 @@ impl Game {
     fn research_block_with(
         &self,
         def: &ResearchDef,
-        seen: &mut HashMap<ItemId, Option<String>>,
+        memo: &mut ResearchBlockMemo,
     ) -> Option<String> {
         if def.requires_subject && self.pinned_subject().is_none() {
             return Some(
@@ -995,7 +1010,7 @@ impl Game {
                     .to_string(),
             );
         }
-        self.research_block_memo(def, seen)
+        self.research_block_memo(def, memo)
     }
 
     /// `research_block_with`, reusing an answer per item across a whole
@@ -1015,21 +1030,43 @@ impl Game {
     fn research_block_memo(
         &self,
         def: &ResearchDef,
-        seen: &mut HashMap<ItemId, Option<String>>,
+        memo: &mut ResearchBlockMemo,
     ) -> Option<String> {
+        // **A block is what stands between the project and completion, not
+        // what stands in the base.** `settle_research` needs neither the
+        // Research Node nor a material's machine, only the data and a
+        // payable bill — so a node is no block once the data is all earned,
+        // and a line is no block while the shelves hold it in full. Asked
+        // otherwise, a project whose bill was made and whose Extractor was
+        // then knocked down read "build an Extractor" until the tick it
+        // completed, and its pinned subject went still for a line that was
+        // already paid.
+        let progress = self
+            .world
+            .resource::<ActiveResearch>()
+            .progress
+            .get(&def.id)
+            .copied()
+            .unwrap_or(0);
         // Answered once per pass and cached under the currency's own id: it is
         // the same question for every node, and `producers_of` walks every
         // entity in the world.
         let currency = self.research_currency();
-        if let Some(no_node) = seen
-            .entry(currency.clone())
-            .or_insert_with(|| self.no_research_node_block(&currency))
-            .clone()
+        if progress < def.cost
+            && let Some(no_node) = memo
+                .chain
+                .entry(currency.clone())
+                .or_insert_with(|| self.no_research_node_block(&currency))
+                .clone()
         {
             return Some(no_node);
         }
-        def.materials.iter().find_map(|(item, _)| {
-            seen.entry(item.clone())
+        def.materials.iter().find_map(|(item, need)| {
+            if memo.holding(self, item) >= *need {
+                return None;
+            }
+            memo.chain
+                .entry(item.clone())
                 .or_insert_with(|| crate::game::base::work_orders::chain_break(self, item))
                 .clone()
         })
@@ -1144,17 +1181,29 @@ impl Game {
                 "The base is already working on {name} — abandon it first."
             ));
         }
-        if let Some(reason) = self.research_block(&def) {
-            return Err(reason);
+        // Deliberately no `research_block` rung: a node the base cannot work
+        // yet — no Research Node standing, a material's machine not built, no
+        // subject pinned — is taken on and flagged, never refused. The player
+        // says "this next" and goes to build the thing; the flag
+        // (`ResearchStatus::blocked_by`, `ResearchReadout::Blocked`) names
+        // it, and `settle_research` holds the project until it clears. A
+        // line nothing could ever clear is the exception: a flag has to name
+        // something to do, and a banked material's producer would hold a
+        // body forever (`permanent_break`). Reachable through a mod's bill
+        // only; `ResearchDb::load_dir` never sees `ItemDb`.
+        for (item, _) in &def.materials {
+            if let Some(reason) = crate::game::base::work_orders::permanent_break(self, item) {
+                return Err(reason);
+            }
         }
         // Only now, with every refusal past, does anything move.
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
         for (item, need) in &def.materials {
-            // Through the one door, so a line the queue itself would refuse
-            // is still refused here — `research_block` has already asked
-            // `chain_break` the same question, so this cannot fail, and a
-            // future divergence surfaces as a missing order rather than a
-            // silent one.
+            // Through the one door. A research line is filed whatever stands
+            // (`queue_work_order`'s own rule), and the one refusal it keeps,
+            // `permanent_break`, was asked above before anything was written
+            // — so this cannot fail, and a future divergence surfaces as a
+            // missing order rather than a silent one.
             let _ = self.queue_work_order(WorkOrder::batch(item.clone(), *need).with_research());
         }
         self.log_base(format!("Research project started: {}.", def.name));
@@ -1212,6 +1261,13 @@ impl Game {
         };
         let def = self.world.resource::<ResearchDb>().get(id);
         let name = def.map_or_else(|| id.clone(), |d| d.name.clone());
+        // Ahead of the stall and independent of progress: a project taken
+        // on with its machine unbuilt is waiting from the first tick, and
+        // "Earning 0/40" forever is the figure that has stopped moving with
+        // nothing saying why. The same call as the row's `blocked_by`.
+        if let Some(reason) = def.and_then(|d| self.research_block(d)) {
+            return Some(ResearchReadout::Blocked { name, reason });
+        }
         if let Some(short_of) = self.research_material_shortfall() {
             return Some(ResearchReadout::Stalled { name, short_of });
         }

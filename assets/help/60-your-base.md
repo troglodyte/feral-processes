@@ -178,9 +178,10 @@ The rest of what a base does:
   nothing needs it there. While a program is pinned, each full study attempt has a 35% chance to
   uncover a hidden research node; a miss spends the attempt and the log says the study turned up
   nothing.
-- From sector 2 on, most nodes refuse selection until a program is pinned. The research screen
-  marks those rows locked and says so; any program you own satisfies it, and which one does not
-  matter. Finishing the project spends the pinned one: it leaves your roster and lands in your
+- From sector 2 on, most nodes need a program pinned before they can finish. You can still pick
+  one with nobody pinned: the research screen marks the row with `!` and says what it is waiting
+  on, and the project holds until a program is in the pen. Any program you own satisfies it, and
+  which one does not matter. Finishing the project spends the pinned one: it leaves your roster and lands in your
   downed-program store exactly as if you had beaten it in a fight, still worth a tool afterward —
   see [taking a program apart](extraction). Change your mind and abandon the project (`A`) to get
   the program back as ordinary staff instead of losing it; losing the Station itself does the same.
@@ -189,8 +190,10 @@ The rest of what a base does:
   the whole material bill and a pinned subject if the node asks for one — the bill is paid off your
   shelves, any Depot, any machine buffer, wherever in the base it is sitting. What you are carrying
   is yours and is never spent on it.
-- A node whose bill names something nothing in your base could ever make is refused outright, and the
-  refusal says which machine is missing. Early nodes want raw salvage; deeper ones want what your
+- A node whose bill names something no machine of yours makes yet is still yours to pick. Its row
+  wears `!` and names the machine to build, the base panel says the same over the map, and the
+  project waits: its order sits stalled in the work queue and starts moving the moment the machine
+  goes up. The same `!` marks a node with no Research Station standing. Early nodes want raw salvage; deeper ones want what your
   benches turn it into, and a node's bill is always something the nodes before it taught you to make.
   A research tree is therefore a reason to keep the base running, not a timer to wait out.
 - Abandoning a project with `A` takes its work orders back out and keeps the progress it has already

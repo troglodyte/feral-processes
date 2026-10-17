@@ -211,10 +211,11 @@ fn state_tag(state: &ResearchState) -> String {
 /// to do, a prerequisite something this screen can do next.
 ///
 /// `blocked_by` takes the amber a prerequisite takes, and takes it **ahead of**
-/// `recommended`'s green: a node the base cannot work is not somewhere the
-/// player can go, whatever the tree recommends. It is the same meaning at a
+/// `recommended`'s green: a node the base cannot work yet can be picked, but
+/// it will wait, whatever the tree recommends. It is the same meaning at a
 /// different scale rather than a second one on the axis — a wall you clear
-/// yourself, by building the machine the sentence names.
+/// yourself, by building the machine the sentence names. The running
+/// project keeps `CYAN` whether or not it is flagged; its `!` is the flag.
 pub(super) fn row_color(node: &ResearchStatus) -> Color {
     match &node.state {
         ResearchState::Unlocked => TEXT_DIM,
@@ -225,6 +226,16 @@ pub(super) fn row_color(node: &ResearchStatus) -> Color {
         ResearchState::Locked { min_zone, .. } if min_zone.is_some() => LOCKED_BY_ZONE,
         ResearchState::Locked { .. } => LOCKED_BY_PREREQ,
     }
+}
+
+/// The mark a row wears when the base cannot work the node yet — `"! "`
+/// ahead of the name, or nothing. One function so the list row and the
+/// graph box cannot flag differently; the sentence itself is `block_rows`.
+/// Read off `blocked_by` alone, not the state: the running project wears it
+/// too, and that is the whole point — a project taken on with its machine
+/// unbuilt is waiting, and the row is where the player looks.
+pub(super) fn flag(node: &ResearchStatus) -> &'static str {
+    if node.blocked_by.is_some() { "! " } else { "" }
 }
 
 /// A node's material bill as one line under its row — see
@@ -392,8 +403,9 @@ pub(super) fn research_menu_rows(
     for (i, node) in nodes.iter().enumerate() {
         let tag = state_tag(&node.state);
         let label = format!(
-            "[{}] {} - {}{tag}",
+            "[{}] {}{} - {}{tag}",
             menu_shortcut(i),
+            flag(node),
             node.name,
             price_tag(node, currency)
         );
@@ -559,6 +571,47 @@ mod tests {
             " (needs Automation)",
             "a bootstrap node is untouched by the gate existing"
         );
+    }
+
+    /// A node the base cannot work yet wears `!` ahead of its name — on the
+    /// running project's row as much as an available one's, since that is
+    /// the row that says the base is waiting — and a row with no sentence
+    /// wears nothing.
+    #[test]
+    fn a_blocked_row_wears_an_exclamation_mark_running_or_not() {
+        let node = |state: ResearchState, blocked_by: Option<&str>| ResearchStatus {
+            id: "automation".to_string(),
+            name: "Automation".to_string(),
+            description: "d".to_string(),
+            cost: 40,
+            state,
+            progress: 0,
+            blocked_by: blocked_by.map(str::to_string),
+            materials: Vec::new(),
+            conversions: Vec::new(),
+            unlocks: None,
+            recommended: false,
+        };
+        let label = |node: ResearchStatus| {
+            research_menu_rows(&[node], 0, "Research Data", None)
+                .into_iter()
+                .find_map(|r| match r {
+                    Row::Item { text, .. } if text.contains("Automation") => Some(text),
+                    _ => None,
+                })
+                .expect("the row is drawn")
+        };
+
+        assert!(
+            label(node(ResearchState::Active, Some("Build a Lathe.")))
+                .starts_with("[1] ! Automation")
+        );
+        assert!(
+            label(node(ResearchState::Available, Some("Build a Lathe.")))
+                .starts_with("[1] ! Automation")
+        );
+        assert!(label(node(ResearchState::Active, None)).starts_with("[1] Automation"));
+        assert!(label(node(ResearchState::Available, None)).starts_with("[1] Automation"));
     }
 
     /// The other half of the same ask, at the other end of the node: what it

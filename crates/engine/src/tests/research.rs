@@ -865,37 +865,198 @@ fn a_second_project_is_refused_while_one_is_running() {
 
 /// Nothing makes the research currency until a Research Node is standing, and
 /// `work_orders::chain_break` cannot say so — it refuses every banked item by
-/// construction. So the node is its own refusal.
+/// construction. So the node is its own block — and a block is a flag, not a
+/// refusal: the project is taken on, its bill filed, and the row and the
+/// corner both say what it waits on.
 #[test]
-fn a_base_with_no_research_node_cannot_take_a_project() {
+fn a_base_with_no_research_node_takes_a_project_on_and_flags_it() {
     let mut game = Game::new(729, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .cloned()
+        .unwrap();
 
-    let err = game.select_research("automation").unwrap_err();
+    game.select_research("automation")
+        .expect("a missing machine flags the project rather than refusing it");
 
-    assert!(
-        err.contains("Research Station"),
-        "the refusal must name the machine that is missing: {err}"
+    assert_eq!(active_research(&game), Some("automation".to_string()));
+    assert_eq!(
+        game.work_orders().len(),
+        def.materials.len(),
+        "the bill is filed at selection whatever stands"
     );
-    assert_eq!(active_research(&game), None);
-    assert!(game.work_orders().is_empty());
+    let row = research_node(&game, "automation");
+    assert_eq!(row.state, ResearchState::Active);
+    let flag = row
+        .blocked_by
+        .expect("the running project's row carries the flag");
+    assert!(
+        flag.contains("Research Station"),
+        "the flag must name the machine that is missing: {flag}"
+    );
+    assert_eq!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked {
+            name: def.name.clone(),
+            reason: flag,
+        }),
+        "the corner names the same thing as the row"
+    );
 }
 
-/// The reachability half. Without it the refusal above could be permanent and
+/// Taking a project on flagged does not loosen completion: with all its data
+/// and its bill unpayable it holds, and it lands the moment the bill can be
+/// paid — `settle_research`'s gates are untouched by the selection change.
+#[test]
+fn a_flagged_project_holds_at_full_data_until_its_bill_can_be_paid() {
+    let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    spawn_machine_at(&mut game, "research_node", 2, 2);
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .cloned()
+        .unwrap();
+    assert!(
+        !def.materials.is_empty(),
+        "the fixture is vacuous unless automation has a bill"
+    );
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+
+    game.settle_research();
+    assert!(
+        !game.is_researched("automation"),
+        "full data with nothing to pay the bill from must hold"
+    );
+    assert_eq!(active_research(&game), Some("automation".to_string()));
+
+    shelve_research_bill(&mut game, "automation", 6, 6);
+    game.settle_research();
+    assert!(
+        game.is_researched("automation"),
+        "and the bill arriving is all it was waiting on"
+    );
+}
+
+/// A flag has to name something to do, and a bill naming a banked item
+/// names nothing: no holding can ever pay it, and its producer — the
+/// Research Node, for the currency — always `can_progress`, so the filed
+/// order would hold a body forever. Reachable only through a mod's bill,
+/// and refused, not flagged.
+#[test]
+fn a_bill_naming_a_banked_item_is_refused_rather_than_flagged() {
+    let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let currency = game.research_currency();
+    let def: crate::research::ResearchDef = ron::from_str(&format!(
+        r#"(id: "banked_bill", name: "Banked Bill", description: "d", cost: 1, materials: [("{}", 1)])"#,
+        currency.as_str()
+    ))
+    .unwrap();
+    game.world.resource_mut::<ResearchDb>().insert_for_test(def);
+    game.discover_research("banked_bill");
+
+    let err = game.select_research("banked_bill").unwrap_err();
+
+    assert!(err.contains("banked"), "got: {err}");
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and nothing is filed");
+}
+
+/// A block is what stands between the project and completion, not what
+/// stands in the base: a bill the shelves already hold in full is payable
+/// whatever machine has since come down, so it flags nothing.
+#[test]
+fn a_bill_already_on_the_shelves_is_no_block_whatever_stands() {
+    let mut game = Game::new(733, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials
+        .clone();
+    assert!(!materials.is_empty(), "vacuous without a bill");
+    shelve_research_bill(&mut game, "automation", 8, 8);
+    for (item, _) in &materials {
+        for machine in crate::game::base::work_orders::producers_of(&game, item) {
+            game.world.despawn(machine);
+        }
+    }
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "a held bill is paid, not waited on: {:?}",
+        game.research_readout()
+    );
+    assert_eq!(research_node(&game, "automation").blocked_by, None);
+}
+
+/// The same rule for the Research Node: once the data is all earned it
+/// stands between the project and nothing, so a project at full data with
+/// no node reads as what it actually waits on — its bill.
+#[test]
+fn a_missing_node_is_no_block_once_the_data_is_all_earned() {
+    let mut game = Game::new(734, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    for node in crate::game::base::work_orders::producers_of(&game, &game.research_currency()) {
+        game.world.despawn(node);
+    }
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+
+    fill_research_progress(&mut game, "automation");
+
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Stalled { .. })
+        ),
+        "full data, no node, bill unpaid: the bill is the wait: {:?}",
+        game.research_readout()
+    );
+}
+
+/// The reachability half. Without it the flag above could be permanent and
 /// every test around it would still be green.
 #[test]
-fn building_the_missing_machine_makes_the_same_selection_succeed() {
+fn building_the_missing_machine_clears_the_flag() {
     let mut game = Game::new(730, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // The bill's own producers stood up, and then the Research Node removed —
     // so the Research Node is the only thing in the way.
     let node = base_with_a_research_node(&mut game);
     game.world.despawn(node);
-    assert!(game.select_research("automation").is_err());
+    game.select_research("automation").unwrap();
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+    assert!(research_node(&game, "automation").blocked_by.is_some());
 
     spawn_machine_at(&mut game, "research_node", 2, 2);
 
-    game.select_research("automation")
-        .expect("a Research Node is all that was missing");
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "a Research Node is all that was missing: {:?}",
+        game.research_readout()
+    );
+    assert_eq!(research_node(&game, "automation").blocked_by, None);
 }
 
 /// Selecting files one order per material line, marked as the project's
@@ -1532,18 +1693,27 @@ fn the_active_project_is_the_first_row() {
 /// that sentence — `Game::research_block` is one call, so the screen cannot
 /// offer a row the selection turns down for a reason it never showed.
 #[test]
-fn a_blocked_node_carries_the_sentence_that_would_refuse_it() {
+fn a_blocked_node_carries_the_sentence_it_is_flagged_with() {
     let mut game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let refusal = game.select_research("automation").unwrap_err();
-
-    let row = game
-        .research_nodes(ResearchTree::Base)
-        .into_iter()
-        .find(|n| n.id == "automation")
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .cloned()
         .unwrap();
+    let want = game.research_block(&def).expect("nothing stands");
 
-    assert_eq!(row.blocked_by.as_deref(), Some(refusal.as_str()));
+    let row = research_node(&game, "automation");
+    assert_eq!(row.state, ResearchState::Available);
+    assert_eq!(row.blocked_by.as_deref(), Some(want.as_str()));
+
+    // And the sentence rides the row into `Active`: the flag is what says
+    // the running project is waiting, so it cannot drop off at selection.
+    game.select_research("automation").unwrap();
+    let row = research_node(&game, "automation");
+    assert_eq!(row.state, ResearchState::Active);
+    assert_eq!(row.blocked_by.as_deref(), Some(want.as_str()));
 }
 
 /// A node's conversion lines are derived from what it unlocks, not authored
@@ -1780,13 +1950,14 @@ fn a_saturated_project_frees_its_research_node() {
     );
 }
 
-/// Refusal 6: a material line nothing in the base could ever make is refused
-/// with `work_orders::chain_break`'s own sentence, **verbatim**.
+/// A material line nothing in the base makes yet flags the project with
+/// `work_orders::chain_break`'s own sentence, **verbatim** — and takes it on.
 ///
 /// Its own test because no other one can reach it: `base_with_a_research_node`
 /// stands a producer for every item any shipped bill names and everything
-/// behind it, and `a_base_with_no_research_node_cannot_take_a_project` is
-/// refusal 5. So this stands the Research Node and deliberately nothing else.
+/// behind it, and `a_base_with_no_research_node_takes_a_project_on_and_flags_it`
+/// covers the node. So this stands the Research Node and deliberately nothing
+/// else.
 ///
 /// The sentence is fetched by calling `chain_break` rather than hardcoded: the
 /// same words appear on the work-order screen, and two spellings of one
@@ -1806,15 +1977,31 @@ fn a_material_with_no_producer_names_the_missing_machine() {
         .clone();
     let want = crate::game::base::work_orders::chain_break(&game, &material)
         .expect("nothing is standing that makes it, so the line is broken");
+    let bill = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials
+        .len();
 
-    let err = game.select_research("automation").unwrap_err();
+    game.select_research("automation")
+        .expect("a missing machine flags the project rather than refusing it");
 
     assert_eq!(
-        err, want,
-        "the refusal is chain_break's own sentence, not a second wording of it"
+        research_node(&game, "automation").blocked_by.as_deref(),
+        Some(want.as_str()),
+        "the flag is chain_break's own sentence, not a second wording of it"
     );
-    assert_eq!(active_research(&game), None);
-    assert!(game.work_orders().is_empty(), "and nothing is filed");
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { reason, .. }) if reason == want
+    ));
+    assert_eq!(
+        game.work_orders().len(),
+        bill,
+        "and the bill is filed, to stall until the machine goes up"
+    );
 }
 
 /// The two save keys are additive behind `#[serde(default)]`, and this is the
@@ -2099,6 +2286,8 @@ fn a_project_waiting_on_its_bill_reads_as_stalled_on_the_material() {
 
 /// A project whose node was demolished is still the project: the readout
 /// follows `ActiveResearch`, and only the idle line needs a node standing.
+/// It reads flagged, naming the Research Node — a demolished node is
+/// exactly when the player needs reminding the project is still selected.
 #[test]
 fn the_running_project_is_read_out_with_no_node_standing() {
     let mut game = Game::new(743, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2109,10 +2298,13 @@ fn the_running_project_is_read_out_with_no_node_standing() {
         game.world.despawn(node);
     }
 
-    assert!(matches!(
-        game.research_readout(),
-        Some(ResearchReadout::Earning { .. })
-    ));
+    match game.research_readout() {
+        Some(ResearchReadout::Blocked { name, reason }) => {
+            assert_eq!(name, "Automation");
+            assert!(reason.contains("Research Station"), "got: {reason}");
+        }
+        other => panic!("expected the project flagged on its missing node, got {other:?}"),
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -2123,11 +2315,11 @@ fn the_running_project_is_read_out_with_no_node_standing() {
 // the player is refused with cannot disagree.
 // ---------------------------------------------------------------------
 
-/// The gate lives in `Game::research_block`, so the refusal is asserted
+/// The gate lives in `Game::research_block`, so the flag is asserted
 /// against a **live call** to it rather than hardcoded prose — the same
 /// drift this repo keeps recording for `chain_break`.
 #[test]
-fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
+fn a_subject_gated_node_is_taken_on_and_flagged_without_a_pinned_subject() {
     let mut game = Game::new(4400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
@@ -2146,32 +2338,48 @@ fn a_subject_gated_node_is_refused_without_a_pinned_subject() {
         .expect("nobody is pinned yet, so the gate must be live");
 
     game.discover_research("paging");
-    let err = game.select_research("paging").unwrap_err();
+    game.select_research("paging")
+        .expect("an unpinned subject flags the project rather than refusing it");
 
+    assert_eq!(active_research(&game), Some("paging".to_string()));
     assert_eq!(
-        err, want,
-        "select_research's refusal must be research_block's own sentence"
+        game.research_readout(),
+        Some(ResearchReadout::Blocked {
+            name: def.name.clone(),
+            reason: want,
+        }),
+        "the corner's flag is research_block's own sentence"
     );
-    assert_eq!(active_research(&game), None);
-    assert!(game.work_orders().is_empty(), "and nothing is filed");
 }
 
 /// **A reachability test, not only a refusal test.** A refusal can ship
 /// permanent with every refusal test still green — pinning a program in the
 /// pen must make the identical selection succeed.
 #[test]
-fn pinning_a_subject_makes_a_subject_gated_selection_succeed() {
+fn pinning_a_subject_clears_a_subject_gated_projects_flag() {
     let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
+    game.discover_research("paging");
+    game.select_research("paging").unwrap();
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
 
-    game.discover_research("paging");
-    game.select_research("paging")
-        .expect("a subject standing in the pen must clear the gate");
-
     assert_eq!(active_research(&game), Some("paging".to_string()));
+    assert!(
+        matches!(
+            game.research_readout(),
+            Some(ResearchReadout::Earning { .. })
+        ),
+        "a subject standing in the pen must clear the flag: {:?}",
+        game.research_readout()
+    );
+    assert_eq!(research_node(&game, "paging").blocked_by, None);
 }
 
 /// The strain mark's three terms, asserted one at a time: a subject-gated
@@ -2244,6 +2452,56 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
         at_pen(&game),
         PinMark::Settled,
         "a project waiting on a material line is not working its subject"
+    );
+}
+
+/// `Blocked` strains only while data still flows: a project at full data
+/// with a material line unbuilt is as still as a stalled one, whatever the
+/// corner says it waits on.
+#[test]
+fn a_flagged_project_at_full_data_lets_its_subject_settle() {
+    let mut game = Game::new(4408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    let pen = game.study_pen(node).unwrap();
+    let half = 4;
+    let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
+    game.discover_research("paging");
+    game.select_research("paging").unwrap();
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .unwrap()
+        .materials
+        .clone();
+    for (item, _) in &materials {
+        for machine in crate::game::base::work_orders::producers_of(&game, item) {
+            game.world.despawn(machine);
+        }
+    }
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Strained,
+        "short of data, a flagged project is still working its subject"
+    );
+
+    fill_research_progress(&mut game, "paging");
+
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Blocked { .. })
+    ));
+    assert_eq!(
+        at_pen(&game),
+        PinMark::Settled,
+        "at full data nothing flows, so the body is still"
     );
 }
 
@@ -2380,7 +2638,7 @@ fn every_ungated_node_is_selectable_with_nobody_pinned() {
 /// makes it reachable — the census that the 24/5 split actually behaves as
 /// the refusal test above shows for one node.
 #[test]
-fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
+fn every_subject_gated_node_is_flagged_without_a_pinned_subject() {
     let gated: Vec<String> = {
         let game = Game::new(4404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         game.world
@@ -2410,13 +2668,16 @@ fn every_subject_gated_node_refuses_selection_without_a_pinned_subject() {
             .research_block(&def)
             .unwrap_or_else(|| panic!("{id} should be blocked with nobody pinned"));
 
-        let err = game
-            .select_research(&id)
-            .expect_err(&format!("{id} should be refused with nobody pinned"));
+        game.select_research(&id)
+            .unwrap_or_else(|e| panic!("{id} should be taken on with nobody pinned: {e}"));
 
         assert_eq!(
-            err, want,
-            "{id}'s refusal must be research_block's own sentence"
+            game.research_readout(),
+            Some(ResearchReadout::Blocked {
+                name: def.name.clone(),
+                reason: want,
+            }),
+            "{id}'s flag must be research_block's own sentence"
         );
     }
 }
@@ -2453,19 +2714,19 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
 
 // ---------------------------------------------------------------------
 // C1 (final whole-branch review): `research_nodes` must apply the same
-// subject term `select_research` refuses on. Task 7's own tests compared
-// `select_research`'s refusal against a live `research_block` call — the
-// same door twice — which is why a subject gate could reach `select_research`
-// while `research_nodes` (the screen) still read `research_block_memo`
-// directly and never asked the subject question at all. These tests drive
-// `research_nodes` itself.
+// subject term the readout flags on. Task 7's own tests compared
+// `select_research`'s refusal (a flag since 2026-10-17) against a live
+// `research_block` call — the same door twice — which is why a subject
+// gate could reach `select_research` while `research_nodes` (the screen)
+// still read `research_block_memo` directly and never asked the subject
+// question at all. These tests drive `research_nodes` itself.
 // ---------------------------------------------------------------------
 
-/// The screen's own row must carry the same block reason the selection
-/// door refuses with, and pinning a subject must clear it there too — not
-/// only at `select_research`.
+/// The screen's own row must carry the same block reason the readout
+/// flags with, and pinning a subject must clear it there too — not only
+/// in the corner.
 #[test]
-fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does() {
+fn research_nodes_flags_a_subject_gated_node_the_same_way_the_readout_does() {
     let mut game = Game::new(4407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
@@ -2490,7 +2751,7 @@ fn research_nodes_blocks_a_subject_gated_node_the_same_way_select_research_does(
     assert_eq!(
         row.blocked_by,
         Some(want),
-        "research_nodes's row must carry the same block reason select_research refuses with"
+        "research_nodes's row must carry the same block reason the readout flags with"
     );
 
     // Reachability: pinning a subject must clear the SCREEN's block line,
@@ -2697,7 +2958,7 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
 /// above — reachable in play via M1's battle case, a second Station
 /// resolving first, or the subject simply being walked off the pen.
 #[test]
-fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
+fn a_subject_gated_project_with_no_pinned_subject_reads_as_blocked() {
     let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
@@ -2724,14 +2985,26 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_stalled() {
     );
     assert!(!shortfall.is_empty(), "the stall must name something");
 
+    // The corner reads the subject gate as the research screen's own flag,
+    // ahead of the stall: `research_block`'s sentence says what to do
+    // where the shortfall only names what is short.
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("paging")
+        .cloned()
+        .unwrap();
+    let want = game
+        .research_block(&def)
+        .expect("nobody pinned, so the block is live");
     match game.research_readout() {
-        Some(ResearchReadout::Stalled { short_of, .. }) => {
+        Some(ResearchReadout::Blocked { reason, .. }) => {
             assert_eq!(
-                short_of, shortfall,
-                "the readout must report the same stall research_material_shortfall does"
+                reason, want,
+                "the readout must report the same block the row is flagged with"
             );
         }
-        other => panic!("expected a Stalled readout, got {other:?}"),
+        other => panic!("expected a Blocked readout, got {other:?}"),
     }
 }
 

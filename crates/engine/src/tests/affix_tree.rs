@@ -244,11 +244,8 @@ fn select_research_refuses_a_hidden_or_shut_affix_node() {
             .is_none()
     );
     research(&mut game, "t_gate");
-    assert_ne!(
-        game.select_research("affix:t_alpha").unwrap_err(),
-        "Unknown research.",
-        "open and discovered: past visibility, on to the ordinary bill checks"
-    );
+    game.select_research("affix:t_alpha")
+        .expect("open and discovered: past visibility, and the bill is a flag, not a refusal");
 }
 
 #[test]

@@ -228,6 +228,10 @@ pub(crate) fn order_refusal(game: &Game, item: &ItemId) -> Option<String> {
 struct ChainBreak {
     reason: String,
     waits: bool,
+    /// Nothing the player builds, sets or finds could ever pay it — see
+    /// `permanent_break`. Only `find_break`'s two item rungs set it; a
+    /// missing producer at any depth is a build or a drop away.
+    permanent: bool,
 }
 
 impl ChainBreak {
@@ -235,6 +239,15 @@ impl ChainBreak {
         Self {
             reason,
             waits: false,
+            permanent: false,
+        }
+    }
+
+    fn permanent(reason: String) -> Self {
+        Self {
+            reason,
+            waits: false,
+            permanent: true,
         }
     }
 
@@ -244,6 +257,7 @@ impl ChainBreak {
         Self {
             reason: no_producer(game, item),
             waits: settable_machine(game, item).is_some(),
+            permanent: false,
         }
     }
 }
@@ -294,15 +308,33 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     find_break(game, item).map(|b| b.reason)
 }
 
-/// `chain_break`, keeping whether the break waits on a setting.
+/// The one sentence naming why a line for `item` can **never** be paid, or
+/// `None` if something could pay it — the research project's own refusal,
+/// since a project is taken on flagged for anything the player can clear
+/// (`select_research`) and its line filed to wait for it
+/// (`queue_work_order`). Two breaks are permanent: an item that does not
+/// exist, and a banked item, which never lands in a buffer so no holding
+/// can ever pay it, while its producer always `can_progress` and would hold
+/// a body forever. An item nothing *makes* is deliberately not one: a mod's
+/// bill may name a drop, and the shelves holding it in full pays it
+/// (`research_block_memo`), so the flag — "Nothing the base can build makes
+/// it" — is the right sentence and the line's stalled order is harmless.
+pub(crate) fn permanent_break(game: &Game, item: &ItemId) -> Option<String> {
+    find_break(game, item)
+        .filter(|b| b.permanent)
+        .map(|b| b.reason)
+}
+
+/// `chain_break`, keeping whether the break waits on a setting and whether
+/// anything could clear it at all.
 fn find_break(game: &Game, item: &ItemId) -> Option<ChainBreak> {
     let items = game.world.resource::<ItemDb>();
     if items.get(item.as_str()).is_none() {
-        return Some(ChainBreak::refused("No such item.".into()));
+        return Some(ChainBreak::permanent("No such item.".into()));
     }
     if items.get(item.as_str()).is_some_and(|d| d.banked) {
         let name = game.item_name(item);
-        return Some(ChainBreak::refused(format!(
+        return Some(ChainBreak::permanent(format!(
             "{name} is banked as it is gathered — the base never holds a stock of it to order \
              against."
         )));
@@ -3037,7 +3069,19 @@ impl Game {
         // out of phase — this reads which machines are standing, and they
         // stand in base space.
         self.require_base()?;
-        if let Some(reason) = order_refusal(self, &order.item) {
+        // A research line is filed whatever stands. The bill is filed once,
+        // at selection, and never topped up (`select_research`), so a line
+        // refused here for a machine not yet built would never be filed at
+        // all; it goes in `Stalled` instead and moves when the machine goes
+        // up, and the research screen's `!` says what it waits on. Only a
+        // break nothing could clear is still refused — `select_research`
+        // refuses the same lines first, so this is the second lock on one
+        // door rather than a reachable refusal.
+        if order.for_research {
+            if let Some(reason) = permanent_break(self, &order.item) {
+                return Err(reason);
+            }
+        } else if let Some(reason) = order_refusal(self, &order.item) {
             return Err(reason);
         }
         let name = self.item_name(&order.item).to_string();

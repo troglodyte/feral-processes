@@ -115,6 +115,20 @@ fn research_lines(readout: &ResearchReadout, max_name_w: f32, size: u16, p: &Pai
                 .chain(wrap(&format!("needs {short_of}"), palette::ATTENTION))
                 .collect()
         }
+        // The research screen's `!`, in the corner: the project was taken
+        // on with something unbuilt or unpinned, and the reason is the
+        // row's own sentence.
+        ResearchReadout::Blocked { name, reason } => {
+            let wrap = |text: &str, ink: Color| {
+                wrap_to(text, note_w, size, p)
+                    .into_iter()
+                    .map(move |l| Line::Text(l, ink))
+            };
+            std::iter::once(header)
+                .chain(wrap(name, palette::BODY))
+                .chain(wrap(&format!("! {reason}"), palette::ATTENTION))
+                .collect()
+        }
     }
 }
 
@@ -470,6 +484,22 @@ mod tests {
         assert!(filled.is_some(), "research alone is worth the corner");
         let text = painted_text(&shapes);
         assert_eq!(text, [RESEARCH_HEADER, "Automation", "needs Cache Grain"]);
+    }
+
+    /// A project taken on with something unbuilt wears the research screen's
+    /// `!` and its sentence, and no figure — the wait starts at selection.
+    #[test]
+    fn a_blocked_project_wears_the_flag_and_its_reason() {
+        let m = ui_metrics(900.0);
+        let research = ResearchReadout::Blocked {
+            name: "Automation".to_string(),
+            reason: "Build a Lathe.".to_string(),
+        };
+        let (filled, shapes) =
+            with_painter(|p| draw_stock_block(pane(), Some(&research), &[], (0, 10), p, &m));
+        assert!(filled.is_some(), "research alone is worth the corner");
+        let text = painted_text(&shapes);
+        assert_eq!(text, [RESEARCH_HEADER, "Automation", "! Build a Lathe."]);
     }
 
     /// A reason longer than its column wraps onto further lines rather than

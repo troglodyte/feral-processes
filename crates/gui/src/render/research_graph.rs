@@ -20,7 +20,7 @@ use crate::text::Metrics;
 use feral_processes_engine::{Game, ResearchGraph, ResearchId, ResearchTree};
 
 use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
-use super::progression::{conversion_rows, material_rows, row_color, unlock_rows};
+use super::progression::{conversion_rows, flag, material_rows, row_color, unlock_rows};
 use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
 
 /// Fraction of the window width the detail panel takes.
@@ -527,7 +527,9 @@ pub(super) fn draw_research_graph(
             }
             p.rect_lines(r.x, r.y, r.w, r.h, 1.0, row_color(node));
             let mut y = r.y + m.line_height;
-            for line in box_label(&node.name, columns) {
+            // The list row's `!`, on the box: the flag is the one thing a
+            // scan of the chart has to see without opening the panel.
+            for line in box_label(&format!("{}{}", flag(node), node.name), columns) {
                 p.ui(line, r.x + m.pad, y, m.small(), row_color(node));
                 y += m.line_height;
             }
@@ -568,10 +570,10 @@ pub(super) fn draw_research_graph(
         painter,
         m,
     );
-    // Why this base could never work the node, wrapped — the list's
-    // `block_rows`, so the graph cannot offer a row `select_research` refuses
-    // without ever saying why. Above the bill, because it is the reason the
-    // bill is academic.
+    // Why this base cannot work the node yet, wrapped — the list's
+    // `block_rows`, so the graph cannot flag a box without saying what it
+    // waits on. Above the bill, because it is the reason the bill is
+    // waiting.
     for row in super::progression::block_rows(node.blocked_by.as_ref(), panel_columns) {
         cy = draw_row(&row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
     }
@@ -1133,11 +1135,11 @@ mod tests {
 
     /// The graph is a *view* of the research screen, not a second screen, so
     /// everything the list tells the player it has to tell them too: which
-    /// project is running, how far along it is, and why a row it offers would be
-    /// refused. It used to read `Game::banked` for its header — a figure
+    /// project is running, how far along it is, and what a row it flags is
+    /// waiting on. It used to read `Game::banked` for its header — a figure
     /// `Game::load` now zeroes and nothing fills — and drew neither progress nor
-    /// the block sentence, so it offered rows `select_research` turns down
-    /// without ever saying why.
+    /// the block sentence, so it offered rows the base could not work without
+    /// ever saying why.
     #[test]
     fn the_graph_says_what_the_list_says_about_a_project() {
         let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1152,7 +1154,12 @@ mod tests {
         let (_, shapes) = with_painter(|p| {
             draw_research_graph(&mut game, ResearchTree::Base, blocked, None, p, &m)
         });
-        let text = painted_text(&shapes).join(" ");
+        let painted = painted_text(&shapes);
+        assert!(
+            painted.iter().any(|t| t.starts_with("! ")),
+            "a blocked box wears the list row's `!`: {painted:?}"
+        );
+        let text = painted.join(" ");
 
         assert!(
             text.contains("No research project"),

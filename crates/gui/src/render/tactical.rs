@@ -310,6 +310,8 @@ pub(super) enum Wash {
     Danger,
     Aim,
     Hits,
+    /// The walk a click on the hovered cell would commit — move, chosen.
+    Path,
     /// Cells a party-side charge has locked.
     ChargeParty,
     /// Cells a hostile charge has locked: where the blow will land unless
@@ -331,6 +333,11 @@ impl Wash {
             Wash::Danger => palette::THREAT,
             Wash::Aim => palette::AIM,
             Wash::Hits => palette::EMPHASIS,
+            // The move wash's own blue, laid over it at the preview's
+            // stronger alpha and without an edge: the path is a subset of
+            // the reach, so "the same hue, deeper" is "move, chosen" on
+            // one channel rather than a sixth colour to learn.
+            Wash::Path => palette::PLAN,
             Wash::ChargeParty => palette::PLAYER,
             Wash::ChargeHostile => palette::OFFLINE,
         }
@@ -343,6 +350,7 @@ impl Wash {
             Wash::Danger => "danger",
             Wash::Aim => "aim",
             Wash::Hits => "hits",
+            Wash::Path => "path",
             Wash::ChargeParty => "your charge",
             Wash::ChargeHostile => "their charge",
         }
@@ -366,11 +374,11 @@ fn board_washes(
     reachable: &[(i32, i32)],
     covered: &[(i32, i32)],
     provoking: &[(i32, i32)],
-    placeable: &[(i32, i32)],
-    preview: &[(i32, i32)],
+    overlay: &Overlay,
     party_charge: &[(i32, i32)],
     hostile_charge: &[(i32, i32)],
 ) -> Vec<(Wash, Vec<(i32, i32)>)> {
+    let (placeable, preview, path) = (&overlay.placeable, &overlay.preview, &overlay.path);
     let mut washes = Vec::new();
     // Movement is drawn for **either side**, off `TacticalView::reachable`
     // alone and never off `player_turn`: a wash that appeared only for
@@ -396,6 +404,11 @@ fn board_washes(
             (Wash::Move, only(reachable, &[covered, provoking])),
             (Wash::Cover, only(covered, &[provoking])),
             (Wash::Danger, provoking.to_vec()),
+            // Over the three movement washes, because it is a route
+            // *through* them — a crossing through a danger cell has to show
+            // the danger and the route both — and only while they show: a
+            // walk is not on offer while the aim field is.
+            (Wash::Path, path.to_vec()),
         ]);
     }
     // A locked charge is standing information, not a movement option, so it
@@ -602,19 +615,37 @@ fn expand_to_footprint(anchors: &[(i32, i32)], footprint: u8) -> Vec<(i32, i32)>
         .collect()
 }
 
+/// Everything app-core lays over the board this frame that is not the
+/// fight itself: the aim cursor and the routine it previews, the walk the
+/// pointer is hovering, and the hostile a click has marked. All of it is
+/// app-core state read before the `game` borrow in `render/base.rs`; the
+/// board draws it and decides nothing about it.
+#[derive(Default)]
+pub(super) struct Overlay {
+    /// Where the aim cursor is, in `Mode::TacticalAim`.
+    pub(super) cursor: Option<(i32, i32)>,
+    /// The cells the aimed routine would hit.
+    pub(super) preview: Vec<(i32, i32)>,
+    /// The cells a `Radius` routine may be aimed at.
+    pub(super) placeable: Vec<(i32, i32)>,
+    /// The walk a click on the hovered cell would commit.
+    pub(super) path: Vec<(i32, i32)>,
+    /// The marked hostile's cell, read off the live board.
+    pub(super) target: Option<(i32, i32)>,
+}
+
 /// Draws the whole battle map.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_tactical_map(
     view: &TacticalView,
-    cursor: Option<(i32, i32)>,
-    preview: &[(i32, i32)],
-    placeable: &[(i32, i32)],
+    overlay: &Overlay,
     fx: &mut Fx,
     painter: &Painter,
     pane: Rect,
     tile_px: f32,
     glyph_px: u16,
 ) -> Vec<Wash> {
+    let cursor = overlay.cursor;
     let half_w = ((pane.w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((pane.h / tile_px) / 2.0).max(1.0) as i32;
     // The camera follows whoever is acting — the "watch" override's job,
@@ -642,6 +673,16 @@ pub(super) fn draw_tactical_map(
     // is no blank edge to expose — and at one tile the move between two
     // bodies standing apart is a teleport rather than a pan.
     let (off_x, off_y) = fx.camera_offset_toward(target, center, painter.delta(), None);
+    // Stashed for the pointer system exactly as `draw_surface_map` stashes
+    // its own: these are `tile_origin_px`'s arguments for this frame, with
+    // the offset already eased, so a click inverts the frame it saw.
+    fx.set_map_click(Some(super::base::MapClickLayout {
+        pane,
+        center,
+        half: (half_w, half_h),
+        off: (off_x, off_y),
+        tile_px,
+    }));
     // Every draw below is gated on this. The camera is held on the body that
     // acted *last*, so the acting body, the arrow over its head and a cursor
     // opened on its cell can each be an arbitrary distance off centre while
@@ -682,8 +723,7 @@ pub(super) fn draw_tactical_map(
         &reachable,
         &covered,
         &provoking,
-        placeable,
-        preview,
+        overlay,
         &charge_cells(true),
         &charge_cells(false),
     );
@@ -720,10 +760,11 @@ pub(super) fn draw_tactical_map(
         // What the legend reports is this list, so a key entry exists
         // exactly when its wash is drawn — `board_washes`' own doc.
         for &(wash, ref field) in &washes {
-            if wash == Wash::Hits {
+            if matches!(wash, Wash::Hits | Wash::Path) {
                 // No edge: a preview is a handful of cells under a cursor
                 // that already outlines its target, and a second boundary
-                // around it would compete with the cursor's own.
+                // around it would compete with the cursor's own. The path
+                // likewise: its boundary is the reach's, already traced.
                 if field.contains(&cell) {
                     let c = wash.color();
                     painter.rect(
@@ -997,6 +1038,29 @@ pub(super) fn draw_tactical_map(
         );
         if on_pane(px, py) {
             let cell_px = tile_px * anchor.1;
+            painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, palette::EMPHASIS);
+        }
+    }
+    // The marked hostile, outlined at the cursor's own weight and in its
+    // own white: a mark is where the next click's swing lands, which is
+    // what that white already means on this board. Bounds-checked for the
+    // cursor's reason.
+    if let Some(cell) = overlay.target {
+        let footprint = view
+            .bodies
+            .iter()
+            .find(|b| b.cell == cell)
+            .map_or(1.0, |b| b.footprint.max(1) as f32);
+        let (px, py) = tile_origin_px(
+            cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        if on_pane(px, py) {
+            let cell_px = tile_px * footprint;
             painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, palette::EMPHASIS);
         }
     }
@@ -2039,7 +2103,7 @@ mod tests {
         let view = game.tactical_view().expect("the fight is open");
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let painted = painted_text(&shapes);
         for body in &view.bodies {
@@ -2079,7 +2143,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_sprites(table, |p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let images = crate::paint::painted_images(&shapes);
         let painted = painted_text(&shapes);
@@ -2148,7 +2212,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_sprites(table, |p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let images = crate::paint::painted_images(&shapes);
         let painted = painted_text(&shapes);
@@ -2187,7 +2251,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_sprites(table, |p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let images = crate::paint::painted_images(&shapes);
         let painted = painted_text(&shapes);
@@ -2289,7 +2353,7 @@ mod tests {
             }
             let mut fx = Fx::new();
             let (_, shapes) = with_painter(|p| {
-                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+                draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
             });
             crate::paint::painted_map_glyphs(&shapes)
                 .into_iter()
@@ -2338,7 +2402,7 @@ mod tests {
         }];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let (_, color) = crate::paint::painted_map_glyphs(&shapes)
             .into_iter()
@@ -2373,7 +2437,7 @@ mod tests {
         }];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let (_, color) = crate::paint::painted_map_glyphs(&shapes)
             .into_iter()
@@ -2413,7 +2477,7 @@ mod tests {
         view.bodies = vec![raised];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let (_, color) = crate::paint::painted_map_glyphs(&shapes)
             .into_iter()
@@ -2459,8 +2523,10 @@ mod tests {
                 }
             }
             let mut fx = Fx::new();
-            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24))
-                .1
+            with_painter(|p| {
+                draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+            })
+            .1
         };
 
         let quiet = draw(Some(ForecastView {
@@ -2524,7 +2590,7 @@ mod tests {
             }
             let mut fx = Fx::new();
             let (_, shapes) = with_painter(|p| {
-                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+                draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
             });
             painted_rect_fill_count(&shapes, gold)
         };
@@ -2567,7 +2633,7 @@ mod tests {
         ];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let glyphs = crate::paint::painted_map_glyphs(&shapes);
         // Each prop stands in its own light, so the ink is compared with
@@ -2604,7 +2670,7 @@ mod tests {
         let mut fx = Fx::new();
         view.props.clear();
         let (_, bare) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
             !crate::paint::painted_map_glyphs(&bare)
@@ -2640,11 +2706,22 @@ mod tests {
         let mut fx = Fx::new();
         let cell = acting_body(&view).expect("somebody is acting").cell;
         let (_, with) = with_painter(|p| {
-            draw_tactical_map(&view, Some(cell), &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(
+                &view,
+                &Overlay {
+                    cursor: Some(cell),
+                    ..Default::default()
+                },
+                &mut fx,
+                p,
+                pane(),
+                32.0,
+                24,
+            )
         });
         let mut fx = Fx::new();
         let (_, without) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
             with.len() > without.len(),
@@ -2727,7 +2804,7 @@ mod tests {
             view.active = Some(rung);
             let mut fx = Fx::new();
             let (_, shapes) = with_painter(|p| {
-                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+                draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
             });
 
             let (mine, theirs) = if hostile {
@@ -2761,7 +2838,7 @@ mod tests {
         }
         let mut fx = Fx::new();
         let (_, bare) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let bare_polys = painted_poly_points(&bare, palette::HEALTHY);
         let before = bare_polys.len();
@@ -2769,7 +2846,7 @@ mod tests {
         view.bodies[0].in_cover = true;
         let mut fx = Fx::new();
         let (_, marked) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let after = painted_poly_points(&marked, palette::HEALTHY);
         assert_eq!(
@@ -2908,7 +2985,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let wash = Color::new(
             palette::PLAN.r,
@@ -2983,7 +3060,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_sprites(table, |p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
 
         let mesh = painted_images(&shapes)
@@ -3029,7 +3106,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
 
         let cover = painted_poly_points(&shapes, palette::HEALTHY);
@@ -3083,7 +3160,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let arrow_color = if squad_hostile {
             palette::THREAT
@@ -3107,9 +3184,10 @@ mod tests {
         let (_, shapes) = with_painter(|p| {
             draw_tactical_map(
                 &view,
-                Some(squad_cell),
-                &[],
-                &[],
+                &Overlay {
+                    cursor: Some(squad_cell),
+                    ..Default::default()
+                },
                 &mut fx,
                 p,
                 pane(),
@@ -3139,7 +3217,7 @@ mod tests {
         let cover_wash = Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
         let mut fx = Fx::new();
         let (_, bare) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(painted_rect_fill_count(&bare, cover_wash), 0);
 
@@ -3147,7 +3225,7 @@ mod tests {
         assert_eq!(view.covered.len(), 1, "the acting body reaches nowhere");
         let mut fx = Fx::new();
         let (_, washed) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(
             painted_rect_fill_count(&washed, cover_wash),
@@ -3185,7 +3263,7 @@ mod tests {
         let mut bare = Fx::new();
         bare.begin_frame(0.0, FrameCues::default(), true);
         let (_, quiet) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut bare, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut bare, p, pane(), 32.0, 24)
         });
 
         let mut fx = Fx::new();
@@ -3203,7 +3281,7 @@ mod tests {
             true,
         );
         let (_, lit) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
 
         assert!(
@@ -3244,7 +3322,7 @@ mod tests {
             .tactical_tile_flash(cell)
             .expect("a hit cue queued this frame is live");
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(
             painted_rect_fill_count(&shapes, flash),
@@ -3281,7 +3359,7 @@ mod tests {
             true,
         );
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
             painted_text(&shapes).iter().any(|t| t == "+5"),
@@ -3314,7 +3392,7 @@ mod tests {
             true,
         );
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let text = painted_text(&shapes);
         assert!(
@@ -3353,7 +3431,7 @@ mod tests {
                 let mut fx = Fx::new();
                 fx.begin_frame(i as f64 / 8.0, FrameCues::default(), true);
                 let (_, shapes) = with_painter(|p| {
-                    draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+                    draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
                 });
                 arrows(&painted_poly_points(&shapes, side))
                     .first()
@@ -3787,8 +3865,9 @@ mod tests {
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
             fx.begin_frame(at, FrameCues::default(), true);
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(v, &Overlay::default(), fx, p, pane(), 32.0, 24)
+            });
             shapes
         };
 
@@ -3866,8 +3945,9 @@ mod tests {
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
             fx.begin_frame(at, FrameCues::default(), true);
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(v, &Overlay::default(), fx, p, pane(), 32.0, 24)
+            });
             shapes
         };
 
@@ -3920,8 +4000,9 @@ mod tests {
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
             fx.begin_frame(at, FrameCues::default(), true);
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(v, &Overlay::default(), fx, p, pane(), 32.0, 24)
+            });
             glyph_box(&shapes, glyph).expect("the walker was drawn")
         };
         let before = frame(&mut fx, 1.0, &view);
@@ -3984,11 +4065,24 @@ mod tests {
             }
         }
         fx.begin_frame(0.0, FrameCues::default(), true);
-        with_painter(|p| draw_tactical_map(&middle, None, &[], &[], &mut fx, p, tight, 32.0, 24));
+        with_painter(|p| {
+            draw_tactical_map(&middle, &Overlay::default(), &mut fx, p, tight, 32.0, 24)
+        });
 
         fx.begin_frame(0.02, FrameCues::default(), true);
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&far_away, Some(far), &[], &[], &mut fx, p, tight, 32.0, 24)
+            draw_tactical_map(
+                &far_away,
+                &Overlay {
+                    cursor: Some(far),
+                    ..Default::default()
+                },
+                &mut fx,
+                p,
+                tight,
+                32.0,
+                24,
+            )
         });
 
         let inside = |x: f32, y: f32| {
@@ -4040,8 +4134,9 @@ mod tests {
         );
         let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
         let mut fx = Fx::new();
-        let (_, shapes) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, wide, 32.0, 24));
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, wide, 32.0, 24)
+        });
 
         let expected: usize = view
             .reachable
@@ -4071,7 +4166,7 @@ mod tests {
         view.reachable.clear();
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 0);
     }
@@ -4100,7 +4195,18 @@ mod tests {
         let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &placeable, &mut fx, p, wide, 32.0, 24)
+            draw_tactical_map(
+                &view,
+                &Overlay {
+                    placeable: placeable.clone(),
+                    ..Default::default()
+                },
+                &mut fx,
+                p,
+                wide,
+                32.0,
+                24,
+            )
         });
 
         let expected: usize = placeable
@@ -4131,7 +4237,7 @@ mod tests {
         let view = game.tactical_view().expect("the fight is open");
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(painted_line_count_in(&shapes, palette::AIM), 0);
     }
@@ -4162,7 +4268,18 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, aiming) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &placeable, &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(
+                &view,
+                &Overlay {
+                    placeable: placeable.clone(),
+                    ..Default::default()
+                },
+                &mut fx,
+                p,
+                pane(),
+                32.0,
+                24,
+            )
         });
         assert_eq!(
             painted_rect_fill_count(&aiming, wash),
@@ -4177,7 +4294,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let (_, not_aiming) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
             painted_rect_fill_count(&not_aiming, wash) > 0,
@@ -4206,12 +4323,12 @@ mod tests {
         view.player_turn = true;
         let mut fx = Fx::new();
         let (_, mine) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         view.player_turn = false;
         let mut fx = Fx::new();
         let (_, theirs) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
 
         let ours = painted_rect_fill_count(&mine, wash);
@@ -4244,7 +4361,18 @@ mod tests {
         let (view, cell) = one_cell_fields();
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[cell], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(
+                &view,
+                &Overlay {
+                    preview: vec![cell],
+                    ..Default::default()
+                },
+                &mut fx,
+                p,
+                pane(),
+                32.0,
+                24,
+            )
         });
         let at = |c: Color| Color::new(c.r, c.g, c.b, 0.22);
         assert_eq!(
@@ -4266,7 +4394,7 @@ mod tests {
         let (view, _) = one_cell_fields();
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let c = palette::THREAT;
         assert_eq!(
@@ -4283,7 +4411,19 @@ mod tests {
         let draw = |view: &TacticalView, preview: &[(i32, i32)], placeable: &[(i32, i32)]| {
             let mut fx = Fx::new();
             with_painter(|p| {
-                draw_tactical_map(view, None, preview, placeable, &mut fx, p, pane(), 32.0, 24)
+                draw_tactical_map(
+                    view,
+                    &Overlay {
+                        preview: preview.to_vec(),
+                        placeable: placeable.to_vec(),
+                        ..Default::default()
+                    },
+                    &mut fx,
+                    p,
+                    pane(),
+                    32.0,
+                    24,
+                )
             })
             .0
         };
@@ -4314,7 +4454,14 @@ mod tests {
         let covered = [sheltered, both];
         let provoking = [exposed, both];
         assert_eq!(
-            board_washes(&reachable, &covered, &provoking, &[], &[], &[], &[]),
+            board_washes(
+                &reachable,
+                &covered,
+                &provoking,
+                &Overlay::default(),
+                &[],
+                &[]
+            ),
             vec![
                 (Wash::Move, vec![open]),
                 (Wash::Cover, vec![sheltered]),
@@ -4328,7 +4475,14 @@ mod tests {
     /// the cells do.
     #[test]
     fn locked_charge_cells_get_their_own_washes() {
-        let washes = board_washes(&[], &[], &[], &[], &[], &[(1, 1)], &[(2, 2), (2, 3)]);
+        let washes = board_washes(
+            &[],
+            &[],
+            &[],
+            &Overlay::default(),
+            &[(1, 1)],
+            &[(2, 2), (2, 3)],
+        );
         assert_eq!(
             washes,
             vec![
@@ -4352,7 +4506,7 @@ mod tests {
         view.bodies = vec![body];
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let drawn = crate::paint::painted_map_glyphs(&shapes);
         assert!(
@@ -4362,7 +4516,7 @@ mod tests {
         view.bodies[0].charge = None;
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         assert!(
             !crate::paint::painted_map_glyphs(&shapes)
@@ -4409,8 +4563,9 @@ mod tests {
         view.provoking = Vec::new();
         let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
         let mut fx = Fx::new();
-        let (_, shapes) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, wide, 32.0, 24));
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, wide, 32.0, 24)
+        });
         assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 8);
     }
 
@@ -4421,7 +4576,7 @@ mod tests {
         let (view, _) = one_cell_fields();
         let mut fx = Fx::new();
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
         });
         let wash = |c: Color| Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
         assert_eq!(painted_rect_fill_count(&shapes, wash(palette::PLAN)), 0);
@@ -4510,5 +4665,105 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The board stashes the layout it drew with, exactly as the surface
+    /// map does, so a pixel on a body inverts to the cell that body was
+    /// drawn on — `tile_at_px` against `tile_origin_px` through the
+    /// published numbers rather than a recomputed camera.
+    #[test]
+    fn the_board_publishes_a_layout_that_inverts_a_bodys_pixel_to_its_cell() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let mut fx = Fx::new();
+        with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+        });
+        let layout = fx.map_click().expect("the board published its layout");
+        assert_eq!(layout.pane, pane());
+        for body in &view.bodies {
+            let (px, py) = tile_origin_px(
+                body.cell,
+                layout.center,
+                layout.half,
+                layout.off,
+                layout.tile_px,
+                layout.pane,
+            );
+            assert_eq!(
+                super::super::base::tile_at_px(px + 1.0, py + 1.0, &layout),
+                body.cell,
+                "{:?}'s pixel did not invert to its cell",
+                body.label
+            );
+        }
+    }
+
+    #[test]
+    fn a_hover_path_is_washed_and_named_in_the_legend() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let actor = acting_body(&view).expect("someone is acting");
+        let path = vec![
+            (actor.cell.0 + 1, actor.cell.1),
+            (actor.cell.0 + 2, actor.cell.1),
+        ];
+        let overlay = Overlay {
+            path: path.clone(),
+            ..Default::default()
+        };
+        let mut fx = Fx::new();
+        let (washes, shapes) =
+            with_painter(|p| draw_tactical_map(&view, &overlay, &mut fx, p, pane(), 32.0, 24));
+        assert!(
+            washes.contains(&Wash::Path),
+            "the legend does not name the path: {washes:?}"
+        );
+        let c = Wash::Path.color();
+        assert_eq!(
+            painted_rect_fill_count(&shapes, Color::new(c.r, c.g, c.b, PREVIEW_ALPHA)),
+            path.len(),
+            "the path's cells were not washed"
+        );
+    }
+
+    #[test]
+    fn a_marked_target_is_outlined() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let hostile = view
+            .bodies
+            .iter()
+            .find(|b| b.is_hostile)
+            .expect("a hostile is seated");
+        let mut fx = Fx::new();
+        let (_, plain) = with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+        });
+        let overlay = Overlay {
+            target: Some(hostile.cell),
+            ..Default::default()
+        };
+        let mut fx = Fx::new();
+        let (_, marked) =
+            with_painter(|p| draw_tactical_map(&view, &overlay, &mut fx, p, pane(), 32.0, 24));
+        let before = crate::paint::painted_rect_stroke_boxes(&plain, palette::EMPHASIS);
+        let after = crate::paint::painted_rect_stroke_boxes(&marked, palette::EMPHASIS);
+        assert_eq!(after.len(), before.len() + 1, "the mark drew no outline");
+        let layout = fx.map_click().expect("the board published its layout");
+        let (px, py) = tile_origin_px(
+            hostile.cell,
+            layout.center,
+            layout.half,
+            layout.off,
+            layout.tile_px,
+            layout.pane,
+        );
+        assert!(
+            after
+                .iter()
+                .any(|r| (r.min.x - px).abs() < 1.0 && (r.min.y - py).abs() < 1.0),
+            "no outline at the target's origin ({px}, {py}): {after:?}"
+        );
     }
 }

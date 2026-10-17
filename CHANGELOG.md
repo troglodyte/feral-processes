@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.2
+
+**You can now pick any research node the tree allows, even when your base cannot work it yet.** Before, the research screen turned you away if no Research Station stood, a material's machine was not built, or no program was pinned for study, and you had to come back after building it. Now the node becomes your project straight away. Its row, its box on the tree view and the research corner over the map wear a `!` and say what it is waiting on; the bill's work order sits in the queue until the machine goes up, and the project finishes on its own once everything it needs is there. What the tree itself gates is unchanged: a node still needs its prerequisites and its sector, and one project runs at a time.
+
 ## 0.19.1
 
 **A blade's swing now starts at the centre of your own program and sweeps on through the one you hit.** Weapons with the slash effect have no travelling shot, so the cut was the whole animation, and it began at a corner of the target's square. Beside you, that corner sat at the edge of your own icon, so a swing looked as if it came from nowhere. The cut still sweeps away from you as before.

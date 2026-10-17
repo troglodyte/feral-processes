@@ -60,6 +60,10 @@ On your turn:
 
 - Arrows or the numpad — step one cell, diagonals included. The bar counts
   down what you have left; a slow body gets fewer steps than a quick one.
+- The mouse — click a blue cell to walk there; the route lights up as you
+  hover, and the body takes it one cell at a time. Any key or click stops the
+  walk where it stands. Click a hostile to mark it, and click it again to
+  attack; a right-click, Esc or a click anywhere else clears the mark.
 - a — attack a body your weapon reaches. The cursor opens on your own cell;
   move it onto the body you mean and press Enter. Walking into a hostile is
   the same attack.
@@ -116,9 +120,10 @@ in brackets, as in PSN×3 (2), and lists every effect on a group or a party
 member.
 
 While the cursor is open, the arrows and numpad move it, Enter commits and
-Esc backs out without spending anything. Nothing checks whose side a cell is
-on — a blast centred badly lands on your own, and an attempt aimed at a
-companion is a legal one.
+Esc backs out without spending anything. The cursor also follows the mouse
+over the board: a click is Enter and a right-click is Esc. Nothing checks
+whose side a cell is on — a blast centred badly lands on your own, and an
+attempt aimed at a companion is a legal one.
 
 Walking off the edge of the board is how you leave a fight you do not want,
 and you can walk a companion out the same way — nobody is dragged back. The

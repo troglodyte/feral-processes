@@ -2262,6 +2262,24 @@ mod tests {
         );
     }
 
+    /// The Refit Bench's `+` is purple, and a body a Bay is also mending
+    /// keeps the Bay's green one.
+    #[test]
+    fn a_refitting_body_wears_the_mending_plus_and_recovery_outranks_it() {
+        use crate::render::hud::palette::{HEALTHY, MENDING};
+        use crate::render::marks::rising_mark;
+        let refitting = EntityView {
+            refitting: true,
+            ..patient_view(false)
+        };
+        assert_eq!(rising_mark(&refitting), Some(('+', MENDING)));
+        let both = EntityView {
+            refitting: true,
+            ..patient_view(true)
+        };
+        assert_eq!(rising_mark(&both), Some(('+', HEALTHY)));
+    }
+
     /// A downed program in reach of both wears the `+` alone: recovery
     /// outranks the amenity, and two glyphs on one tile would paint through
     /// each other.

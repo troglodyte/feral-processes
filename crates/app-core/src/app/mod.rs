@@ -45,6 +45,7 @@ pub(crate) mod settlement_board;
 pub(crate) mod settlement_market;
 mod siphon;
 pub mod splice_rig;
+pub(crate) mod sprite_editor;
 pub(crate) mod sprite_forge;
 pub(crate) mod stack_market;
 pub(crate) mod stat_allocation;

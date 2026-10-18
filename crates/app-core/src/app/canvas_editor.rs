@@ -186,7 +186,7 @@ impl CanvasEditor {
     /// cell the player is looking at.
     ///
     /// `IconEditor` never calls this — it opens at brush 1 and stays there.
-    /// `app::sprite_forge::SpriteEditor`'s `[g]` key is the real caller.
+    /// `app::sprite_editor::SpriteEditor`'s `[g]` key is the real caller.
     pub(crate) fn set_brush(&mut self, brush: u8) {
         if brush == 1 || brush == 2 {
             self.brush = brush;

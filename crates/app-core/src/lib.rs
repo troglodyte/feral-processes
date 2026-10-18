@@ -29,11 +29,12 @@ pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::splice_rig::SpliceRigScreen;
-pub use app::sprite_forge::{
-    DEFAULT_SPRITE_FRAME_MS, EditorButton, InstalledSprite, MAX_SPRITE_FRAMES, PointerButton,
+pub use app::sprite_editor::{
+    DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
     PointerHit, PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP,
-    SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject, SpriteWrite, SubjectTint,
+    SpriteEditorView, SubjectTint, WIZARD_BUTTONS,
 };
+pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::tactical::prop_readout;
 pub use app::telemetry::append_records;
@@ -3661,7 +3662,7 @@ pub struct App {
     /// The open `Mode::SpriteEditor` session, or `None` while it is not
     /// open — `App::sprite_editor_view`'s source and `Enter` on
     /// `Mode::SpritePicker`'s target.
-    sprite_editor: Option<crate::app::sprite_forge::SpriteEditor>,
+    sprite_editor: Option<crate::app::sprite_forge::ForgeSession>,
     /// Cues for the frontend to write, since app-core does no file I/O of
     /// its own — `take_sounds`'s seam, drained by `App::take_sprite_writes`.
     pending_sprite_writes: Vec<SpriteWrite>,

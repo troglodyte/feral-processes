@@ -208,9 +208,10 @@ struct Frontend {
     ambience: Ambience,
 }
 
-/// Frame-to-frame pointer state for `Mode::SpriteEditor` — the first mouse
-/// tracking anywhere in this crate, confined to that one screen by the
-/// guard at `handle_sprite_pointer`'s one call site.
+/// Frame-to-frame pointer state for the sprite editor — the first mouse
+/// tracking anywhere in this crate, confined to `Mode::SpriteEditor`,
+/// `Mode::SpritePicker` and `Mode::CreateCharacter` while its editor is
+/// open, by `sprite_hits` returning `None` everywhere else.
 ///
 /// `active` names which button is mid-stroke, so a fresh press (`None ->
 /// Some`) is `Down`, a held frame that still resolves is `Drag`, and a
@@ -237,8 +238,9 @@ struct SpritePointer {
 /// (`render::sprite_forge::cell_at`/`swatch_at`, tested headlessly).
 ///
 /// A no-op whenever `render::sprite_forge::sprite_hits` returns `None` — no
-/// mode check needed here beyond that, since a session is only ever open in
-/// `Mode::SpriteEditor` — and the tracker is reset in that case so a stroke
+/// mode check needed here beyond that, since `sprite_hits` answers only in
+/// `Mode::SpriteEditor`, `Mode::SpritePicker` and `Mode::CreateCharacter`
+/// while its editor is open — and the tracker is reset in that case so a stroke
 /// cannot survive into a session that opens later.
 ///
 /// **No interpolation between frames** (M6, final review): a fast drag
@@ -918,8 +920,9 @@ fn frame(
         fe.key_repeat.block_held();
         fe.last_mode = fe.app.mode;
     }
-    // Confined to `Mode::SpriteEditor` by `render::sprite_forge::sprite_hits`
-    // returning `None` everywhere else — see `handle_sprite_pointer`'s own
+    // Confined to `Mode::SpriteEditor`, `Mode::SpritePicker` and
+    // `Mode::CreateCharacter` while its editor is open, by
+    // `render::sprite_forge::sprite_hits` returning `None` everywhere else — see `handle_sprite_pointer`'s own
     // doc comment for why no separate mode check is needed here.
     {
         let ctx = contexts.ctx_mut()?;

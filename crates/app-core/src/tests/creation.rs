@@ -1393,6 +1393,88 @@ fn draw_and_keep(app: &mut App) {
     press(app, GameKey::Enter);
 }
 
+#[test]
+fn a_forge_key_in_the_wizard_editor_changes_the_drawing_and_keeps_the_screen_open() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('='));
+    let view = app.creation_sprite_view().expect("still open");
+    assert_eq!(
+        (view.frames, view.frame_ms),
+        (2, DEFAULT_SPRITE_FRAME_MS + SPRITE_FRAME_MS_STEP)
+    );
+    assert_eq!(view.buttons, WIZARD_BUTTONS.to_vec());
+    assert_eq!(view.tint, None);
+}
+
+#[test]
+fn enter_keeps_both_frames_and_the_pace() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('='));
+    app.handle_key(GameKey::Enter);
+    let icon = app.creation_choice().icon.as_ref().expect("a drawing");
+    assert_eq!(icon.frames().len(), 2);
+    assert_eq!(
+        icon.frame_ms(),
+        DEFAULT_SPRITE_FRAME_MS + SPRITE_FRAME_MS_STEP
+    );
+}
+
+#[test]
+fn s_in_the_wizard_editor_queues_no_sprite_write() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char('s'));
+    assert!(app.creation_sprite_view().is_some());
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
+fn a_click_on_keep_advances_the_wizard_like_enter() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Keep),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert!(app.creation_sprite_view().is_none());
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+    assert!(app.creation_choice().icon.is_some());
+}
+
+#[test]
+fn a_pointer_on_the_icon_step_with_the_editor_closed_changes_nothing() {
+    let mut app = on_the_icon_step("x");
+    let before = app.creation_choice().clone();
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Keep),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert_eq!(app.creation_choice(), &before);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+}
+
 /// The Icon step offers the five presets plus the drawn row, and the drawn
 /// row reads app-core's own `drawn` flag rather than something the
 /// renderer has to re-derive.
@@ -1412,12 +1494,12 @@ fn the_icon_step_offers_six_rows() {
 #[test]
 fn taking_the_drawn_row_opens_the_editor() {
     let mut app = on_the_icon_step("opens_editor");
-    assert!(app.icon_editor_view().is_none());
+    assert!(app.creation_sprite_view().is_none());
 
     open_the_editor(&mut app);
 
     assert!(
-        app.icon_editor_view().is_some(),
+        app.creation_sprite_view().is_some(),
         "taking the sixth row must open the editor"
     );
     assert_eq!(
@@ -1434,12 +1516,12 @@ fn taking_the_drawn_row_opens_the_editor() {
 fn enter_in_the_editor_keeps_the_drawing_and_advances_to_the_colour_step() {
     let mut app = on_the_icon_step("editor_keep");
     open_the_editor(&mut app);
-    assert!(app.icon_editor_view().is_some());
+    assert!(app.creation_sprite_view().is_some());
 
     draw_and_keep(&mut app);
 
     assert!(
-        app.icon_editor_view().is_none(),
+        app.creation_sprite_view().is_none(),
         "keeping the drawing must close the editor"
     );
     assert!(
@@ -1471,7 +1553,7 @@ fn opening_the_editor_by_its_number_key_selects_the_drawn_row() {
     app.menu_selected = 0;
 
     press(&mut app, ch('6')); // the sixth row
-    assert!(app.icon_editor_view().is_some(), "the editor must open");
+    assert!(app.creation_sprite_view().is_some(), "the editor must open");
     press(&mut app, GameKey::Esc);
 
     assert_eq!(
@@ -1489,13 +1571,13 @@ fn esc_in_the_editor_leaves_the_choice_as_it_was() {
     let mut app = on_the_icon_step("editor_discard");
     assert!(app.creation_choice().icon.is_none());
     open_the_editor(&mut app);
-    assert!(app.icon_editor_view().is_some());
+    assert!(app.creation_sprite_view().is_some());
 
     press(&mut app, GameKey::Char(' ')); // paint something
     press(&mut app, GameKey::Esc); // then throw it away
 
     assert!(
-        app.icon_editor_view().is_none(),
+        app.creation_sprite_view().is_none(),
         "discarding must close the editor"
     );
     assert!(
@@ -1664,7 +1746,7 @@ fn a_profile_with_no_icon_opens_the_editor_on_a_blank_canvas() {
 
     open_the_editor(&mut app);
 
-    let view = app.icon_editor_view().expect("the editor must be open");
+    let view = app.creation_sprite_view().expect("the editor must be open");
     assert!(
         view.canvas.cells.iter().all(|&p| p == 0),
         "a profile with nothing drawn must open the editor on a blank canvas"

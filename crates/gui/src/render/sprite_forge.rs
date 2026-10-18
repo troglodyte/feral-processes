@@ -66,8 +66,8 @@ struct PickerGeometry {
 }
 
 /// Everything geometric about the picker, computed once so drawing and the
-/// layout census below share one derivation — `icon_editor.rs::geometry`'s
-/// pattern for the same reason.
+/// layout census below share one derivation, so a test cannot measure a layout the
+/// draw does not make.
 fn picker_geometry(w: f32, m: &Metrics, subject_count: usize) -> PickerGeometry {
     let header_y = m.pad + m.line_height;
     let help_y = header_y + m.gap + m.line_height;
@@ -87,7 +87,7 @@ fn picker_geometry(w: f32, m: &Metrics, subject_count: usize) -> PickerGeometry 
 }
 
 /// The picker's total drawn height, footer-less (it has none) — the layout
-/// census's one number, `icon_editor.rs::content_bottom`'s counterpart.
+/// census's one number.
 #[cfg(test)]
 fn picker_content_bottom(g: &PickerGeometry, m: &Metrics) -> f32 {
     g.grid_top + g.rows_per_column as f32 * m.line_height + m.pad
@@ -210,9 +210,9 @@ const EDITOR_HEADER: &str = "Sprite Forge";
 const EDITOR_FOOTER_TEXT: &str = "Tab: switch panel   Arrows: move   Space: paint   \
     Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
 
-/// `icon_editor.rs::CANVAS_CELL_LINES`, halved: the sprite canvas is 16x16
-/// against the icon's 8x8, and this is what keeps the two screens' canvas
-/// panel the same physical size on screen — a size already known to fit at
+/// The canvas cell's height in UI lines, halved from the 8x8 editor's
+/// figure this screen replaced: the sprite canvas is 16x16 against that 8x8,
+/// and halving keeps the canvas panel the same physical size on screen — a size known to fit at
 /// the smallest supported window, since it's the icon editor's own.
 const SPRITE_CANVAS_CELL_LINES: f32 = 1.2;
 const SPRITE_SECTION_GAP_LINES: f32 = 1.0;
@@ -261,8 +261,8 @@ fn editor_geometry(
 
     let palette_label_y = canvas.y + canvas.h + gap + m.line_height;
     // Solved for rather than authored as a tuned constant — unlike
-    // `icon_editor.rs::SWATCH_LINES`, which shipped 120px past `canvas.w`
-    // for a whole task before a test caught it (Task 6's report). Deriving
+    // a tuned line count, which shipped 120px past `canvas.w`
+    // for a whole task in the 8x8 editor before a test caught it. Deriving
     // the swatch size from the width it must fit closes that class of bug
     // by construction: whatever `palette_len` is, the grid cannot disagree
     // with `canvas.w` about how wide a swatch is allowed to be.
@@ -301,8 +301,8 @@ fn editor_geometry(
         buttons,
     ));
     let footer_top = bar_bottom + gap;
-    // Measured in UI cells, `icon_editor.rs::geometry`'s pattern for a
-    // screen with no popup body to wrap against.
+    // Measured in UI cells, since this screen has no popup body to wrap
+    // against.
     let columns = ((w - m.pad * 2.0) / painter.measure_ui_advance("M", m.small()))
         .floor()
         .max(20.0) as usize;
@@ -447,8 +447,7 @@ fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorVie
     }
 }
 
-/// Total height the screen draws, footer included — `icon_editor.rs::
-/// content_bottom`'s counterpart.
+/// Total height the screen draws, footer included.
 #[cfg(test)]
 fn editor_content_bottom(g: &EditorGeometry, m: &Metrics) -> f32 {
     g.footer_y + g.footer_lines.len().saturating_sub(1) as f32 * m.line_height + m.pad
@@ -480,7 +479,7 @@ pub(super) fn draw_sprite_editor(app: &App, painter: &Painter, m: &Metrics) {
     }
 }
 
-fn draw_sprite_editor_session(
+pub(super) fn draw_sprite_editor_session(
     view: &SpriteEditorView,
     zoom: u16,
     hue: Color,
@@ -569,8 +568,7 @@ fn draw_sprite_editor_session(
 }
 
 /// A panel's border thickness and colour for whether it currently has
-/// focus — `icon_editor.rs::panel_border`'s own rule, not shared as a
-/// function across the two files since each owns its screen's chrome.
+/// focus.
 fn panel_border(focused: bool) -> (f32, Color) {
     if focused {
         (3.0, BORDER)
@@ -735,6 +733,16 @@ pub(crate) fn sprite_hits(app: &mut App, painter: &Painter) -> Option<SpriteHits
     match app.mode {
         Mode::SpriteEditor => {
             let view = app.sprite_editor_view()?;
+            Some(SpriteHits::Editor(hit_rects(
+                painter,
+                painter.screen_w(),
+                &m,
+                &view,
+                app.zoom,
+            )))
+        }
+        Mode::CreateCharacter => {
+            let view = app.creation_sprite_view()?;
             Some(SpriteHits::Editor(hit_rects(
                 painter,
                 painter.screen_w(),
@@ -1249,6 +1257,61 @@ mod tests {
             1,
             "the near-white preview pixel must come out in the subject's own hue"
         );
+    }
+
+    /// The wizard's editor is the same screen with the Forge's subject hue
+    /// taken away: the avatar is drawn untinted everywhere, so the preview
+    /// pixel is the palette entry's own colour. The Forge would tint it.
+    #[test]
+    fn the_wizard_preview_is_drawn_untinted() {
+        use super::super::creation::tests::{walk_past, wizard_app};
+        use feral_processes_app_core::CreationStep;
+        let mut app = wizard_app();
+        for step in CreationStep::ALL
+            .iter()
+            .take_while(|s| **s != CreationStep::Icon)
+        {
+            walk_past(&mut app, *step);
+        }
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        app.handle_key(GameKey::Char(' '));
+        let view = app.creation_sprite_view().expect("the editor is open");
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_sprite_editor_session(&view, app.zoom, Color::new(1.0, 1.0, 1.0, 1.0), p, &m)
+        });
+        let want = canvas::palette_color(SPRITE_PALETTE[0]);
+        assert_eq!(
+            crate::paint::painted_rect_fill_count(&shapes, want),
+            3,
+            "the swatch, the grid cell and the preview pixel, all in the entry's own colour"
+        );
+    }
+
+    #[test]
+    fn the_wizard_publishes_editor_hits_only_while_its_editor_is_open() {
+        use super::super::creation::tests::{walk_past, wizard_app};
+        use feral_processes_app_core::CreationStep;
+        let mut app = wizard_app();
+        for step in CreationStep::ALL
+            .iter()
+            .take_while(|s| **s != CreationStep::Icon)
+        {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.mode, Mode::CreateCharacter);
+        let hits = |app: &mut feral_processes_app_core::App| {
+            crate::paint::with_painter(|p| sprite_hits(app, p)).0
+        };
+        assert!(hits(&mut app).is_none());
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert!(matches!(hits(&mut app), Some(SpriteHits::Editor(_))));
     }
 
     /// The preview must show what the map will draw: a colour sprite takes a

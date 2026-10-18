@@ -24,7 +24,6 @@ mod field;
 mod floor_hands;
 pub(crate) mod group_menu;
 mod hover;
-pub(crate) mod icon_editor;
 pub(crate) mod input;
 mod inspection;
 mod inventory;

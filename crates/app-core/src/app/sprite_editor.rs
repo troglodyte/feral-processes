@@ -7,8 +7,8 @@
 //! it is the host's to answer (`Enter`, `Esc`, `s`), and the host describes
 //! itself to the renderer through `EditorChrome`.
 //!
-//! Composes a `CanvasEditor` exactly as `IconEditor` does — see that module's
-//! doc comment for why the mechanics are shared and the sink is not.
+//! Composes a `CanvasEditor` per frame — see that module's doc comment for
+//! why the mechanics are shared and the sink is not.
 
 use std::collections::VecDeque;
 

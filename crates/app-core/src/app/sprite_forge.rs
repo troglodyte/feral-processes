@@ -550,7 +550,8 @@ impl App {
     }
 
     /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
-    /// or `Mode::SpritePicker` is open, every other mode drops it silently, since nothing else in
+    /// or `Mode::SpritePicker` is open, or while the creation wizard's editor
+    /// is, every other mode drops it silently, since nothing else in
     /// the game reads a pointer at all. `phase` governs the stroke
     /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
     /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
@@ -566,6 +567,7 @@ impl App {
         match self.mode {
             Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),
             Mode::SpritePicker => self.handle_picker_pointer(hit, button, phase),
+            Mode::CreateCharacter => self.handle_creation_pointer(hit, button, phase),
             _ => {}
         }
     }

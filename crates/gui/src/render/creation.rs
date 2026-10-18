@@ -415,7 +415,7 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::render) mod tests {
     #[test]
     fn the_points_note_appears_only_with_a_bonus_and_fits_the_popup() {
         assert_eq!(points_bonus_note(0), None);
@@ -489,7 +489,7 @@ mod tests {
 
     /// A fresh app on the main menu with a scratch profile — the wizard
     /// needs no run, which is the whole reason it holds its own catalogue.
-    fn wizard_app() -> App {
+    pub(in crate::render) fn wizard_app() -> App {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let tmp = std::env::temp_dir().join(format!("fp_gui_wizard_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -595,7 +595,7 @@ mod tests {
     /// steps that hand out an allowance refuse to be left while anything
     /// on them is still affordable, so walking past them is a pass over
     /// their rows rather than one keystroke, and a table cannot say that.
-    fn walk_past(app: &mut App, step: CreationStep) {
+    pub(in crate::render) fn walk_past(app: &mut App, step: CreationStep) {
         let spend_every_row = |app: &mut App| {
             for i in 0..app.creation_rows().len() {
                 app.menu_selected = i;
@@ -636,7 +636,10 @@ mod tests {
             app.handle_key(GameKey::Down);
         }
         app.handle_key(GameKey::Enter);
-        assert!(app.icon_editor_view().is_some(), "the editor did not open");
+        assert!(
+            app.creation_sprite_view().is_some(),
+            "the editor did not open"
+        );
         app.handle_key(GameKey::Char(' '));
         app.handle_key(GameKey::Enter);
         assert!(

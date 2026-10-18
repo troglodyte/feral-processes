@@ -310,3 +310,41 @@ fn the_mark_shows_on_the_tick_that_mends_the_last_worn_copy() {
     game.tick();
     assert!(!player_refitting(&mut game), "nothing left to mend");
 }
+
+#[test]
+fn pack_copies_are_mended_most_worn_first() {
+    let (mut game, _) = stand_by_bench(6013, 5);
+    let worse = worn_copy("kinetic_edge", GEAR_DURABILITY);
+    let better = worn_copy(ids::MONOFILAMENT_WHIP, GEAR_DURABILITY - 1);
+    game.add_copies(&better, 1);
+    game.add_copies(&worse, 1);
+    for _ in 0..=REFIT_IDLE_TICKS {
+        game.tick();
+    }
+    assert_eq!(game.count_copies(&worse), 0, "the most worn went first");
+    assert_eq!(game.count_copies(&better), 1);
+}
+
+#[test]
+fn reach_is_chebyshev_so_a_diagonal_two_away_mends_and_three_does_not() {
+    for (at, mends) in [(2, true), (3, false)] {
+        let (mut game, bench) = stand_by_bench(6014, 5);
+        game.world
+            .entity_mut(bench)
+            .insert(Position { x: at, y: at });
+        let player = game.player_entity();
+        wear_on(
+            &mut game,
+            player,
+            &worn_copy(ids::MONOFILAMENT_WHIP, GEAR_DURABILITY),
+        );
+        for _ in 0..=REFIT_IDLE_TICKS {
+            game.tick();
+        }
+        assert_eq!(
+            game.refit_bench_cores() == 4,
+            mends,
+            "bench at ({at}, {at})"
+        );
+    }
+}

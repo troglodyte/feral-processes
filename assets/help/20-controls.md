@@ -50,9 +50,10 @@ Acting on the world:
   Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
   row and Ctrl halves the gap; typing digits sets an amount; [N] clears the basket; [F] sets what a
   Depot beside you will accept
+- c — beside a machine, choose what it makes; with more than one thing beside you that c can act
+  on, it asks which side, and c again there moves cargo
 - t — trade
 - F — fit a tool to the Teardown Rig beside you, or pull the one it has
-- R — choose what the machine beside you makes
 - I — open the Splice Rig beside you, to build an implant into your body or take one out
 - P — load a staff program into the Power Siphon beside you, or release the one in it
 - a — call a routine

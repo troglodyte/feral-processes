@@ -3283,6 +3283,23 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
     app
 }
 
+/// `app_beside_a_rebuild_site` with a second awaiting site north at
+/// `(0, -1)` and no Depot: two things for `[c]` to ask about and no cargo.
+pub(crate) fn app_beside_two_rebuild_sites(seed: u32) -> App {
+    let mut app = app_beside_a_rebuild_site(seed, false);
+    let path = scratch_path("two_sites", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let mut second = data.build_sites[0].clone();
+    second.position = (0, -1);
+    data.build_sites.push(second);
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
+    app
+}
+
 /// A base standing inside base space with a Research Node and the Extractor
 /// its bills draw on, so `Game::select_research` has something to accept.
 ///
@@ -3772,6 +3789,103 @@ pub(crate) fn open_the_bay_sheet(app: &mut App) -> Entity {
     app.pending_structure_manifest = Some(bay);
     app.mode = Mode::StructureManifest;
     bay
+}
+
+/// The mirror of `app_between_a_depot_and_a_machine`: the Factory moved west
+/// to `(-1, 0)` and a Depot east at `(1, 0)`, so the Depot sorts *after* the
+/// machine by `(x, y)`.
+pub(crate) fn app_beside_a_machine_west_and_a_depot_east(seed: u32) -> App {
+    let mut app = app_beside_a_machine(seed, "factory", None);
+    let path = scratch_path("machine_west_depot_east", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let factory = data
+        .structures
+        .iter_mut()
+        .find(|s| s.kind == "factory")
+        .expect("the factory from app_beside_a_machine");
+    factory.position = (-1, 0);
+    data.structures.push(save::StructureSave {
+        recipe: None,
+        kind: "depot".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
+    app
+}
+
+/// `app_beside_a_machine` with a Depot on the other side: a Factory east at
+/// `(1, 0)` and a Depot west at `(-1, 0)`, so `[c]` has two sides to ask
+/// about.
+pub(crate) fn app_between_a_depot_and_a_machine(seed: u32) -> App {
+    let mut app = app_beside_a_machine(seed, "factory", None);
+    let path = scratch_path("depot_and_machine", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.structures.push(save::StructureSave {
+        recipe: None,
+        kind: "depot".to_string(),
+        position: (-1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
+    app
+}
+
+/// `app_beside_a_machine` with the Factory east at `(1, 0)` set to
+/// `bytecode_block` and holding three of them on its output shelf, so the
+/// transfer and the recipe menu are offered on the same side.
+pub(crate) fn app_beside_a_set_machine_holding_output(seed: u32) -> App {
+    let mut app = app_beside_a_machine(seed, "factory", Some("bytecode_block"));
+    let path = scratch_path("machine_with_output", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let factory = data
+        .structures
+        .iter_mut()
+        .find(|s| s.kind == "factory")
+        .expect("the factory from app_beside_a_machine");
+    factory.stock_output = vec![(ItemId::from("bytecode_block"), 3)];
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
+    app
 }
 
 /// The party in base space beside one machine of `kind` at `(1, 0)`, set to

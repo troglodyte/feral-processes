@@ -1419,6 +1419,18 @@ impl Game {
                         .world
                         .get::<Stock>(entity)
                         .is_some_and(|s| s.output_room() == 0);
+                let structure_stores = self.world.get::<Structure>(entity).is_some_and(|s| {
+                    self.world
+                        .resource::<StructureDb>()
+                        .get(&s.kind)
+                        .is_some_and(|d| d.stores)
+                });
+                let holds_output = is_structure
+                    && !structure_stores
+                    && self
+                        .world
+                        .get::<Stock>(entity)
+                        .is_some_and(|s| s.output_used() > 0);
                 let stats = self.world.get::<Stats>(entity);
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Every glyph on the map carries its species' authored hue —
@@ -1516,6 +1528,7 @@ impl Game {
                     recovering,
                     serviced,
                     output_stranded,
+                    holds_output,
                     hp_fraction,
                     level,
                     durability,

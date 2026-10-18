@@ -35,6 +35,9 @@ Everything past that first pocket is solid, and you cut it out yourself.
   tiles when a place is taken. z zones floor as a stockpile: plain items lying there count as the
   base's own stock, so the crew will build from them and haul them where they are wanted. Loose
   things elsewhere do not count until someone carries them home.
+- A machine holding finished product shows a small dot in its top corner. Idle staff move that
+  product into a Depot with room, or onto the stockpile when every Depot is full. When neither has
+  room it stays in the machine until one does.
 
 You do not have to be there for any of it. Programs on your roster dig while you are off in a
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a

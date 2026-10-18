@@ -1585,6 +1585,17 @@ fn draw_surface_map(
                 tile_px,
                 vig,
             );
+            // Finished product sitting in a machine rather than in storage:
+            // the dot that says "the items are in here". A Depot's fill
+            // bar already says how full it is, and the view exempts it.
+            draw_held_output(
+                painter,
+                structure.is_some_and(|ev| ev.holds_output),
+                px,
+                py,
+                tile_px,
+                color,
+            );
             // "Someone is on this job", on a channel of its own rather than
             // sharing the outline with machine state. It was a yellow outline
             // until machines took that channel over, at which point a machine
@@ -2175,6 +2186,7 @@ mod tests {
             job_progress: None,
             depot_fill: None,
             output_stranded: false,
+            holds_output: false,
             hp_fraction: None,
             level: None,
             durability: None,
@@ -5491,6 +5503,94 @@ mod tests {
         assert!(none.is_empty(), "not a Depot, no bar");
     }
 
+    /// The dot is one square in the top-left quadrant, below the rarity
+    /// bar's strip and left of the tile's midpoint; a machine holding
+    /// nothing paints nothing there.
+    #[test]
+    fn a_machine_holding_output_wears_one_dot_in_its_top_left_corner() {
+        let rects = |holds| {
+            let (_, shapes) = with_painter(|p| draw_held_output(p, holds, 0.0, 0.0, CELL, WHITE));
+            shapes
+                .iter()
+                .filter_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) => Some(r.rect),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let drawn = rects(true);
+        assert_eq!(drawn.len(), 1, "exactly one dot: {drawn:?}");
+        let dot = drawn[0];
+        assert!(
+            dot.top() >= RARITY_BAR_PX,
+            "the dot overlaps the rarity bar: {dot:?}"
+        );
+        assert!(
+            dot.left() > 0.0,
+            "the dot is flush to the left edge: {dot:?}"
+        );
+        assert!(
+            dot.right() < CELL / 2.0,
+            "the dot leaves the top-left quadrant: {dot:?}"
+        );
+        assert!(
+            dot.bottom() < CELL / 2.0,
+            "the dot leaves the top-left quadrant: {dot:?}"
+        );
+        assert!(rects(false).is_empty(), "holding nothing, no dot");
+    }
+
+    /// The census for the dot: it shares no pixels with the staffed mark,
+    /// the Depot fill gauge, the progress bar, the rarity bar or the
+    /// nemesis mark at any real zoom rung, and it stays smaller than the
+    /// corner badges.
+    ///
+    /// The staffed mark bobs a fixed four pixels (`fx`'s own constant,
+    /// private there). At the 20 px rung a 2 px bar, two 2 px insets, a
+    /// 3 px bar and the mark itself leave the dot less than the bob's
+    /// reach, so the peak of a bob brushes the dot's row by about a pixel
+    /// there — the same tightness `the_nemesis_mark_sits_in_the_opposite_
+    /// corner_from_the_staffed_mark` lives with by measuring at rest. From
+    /// 40 px up the two are clear at every lift.
+    #[test]
+    fn the_held_output_dot_shares_no_pixels_with_any_other_mark_on_the_tile() {
+        let disjoint = |a: Rect, b: Rect| {
+            a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y
+        };
+        let (px, py) = (100.0, 200.0);
+        for tile_px in [20.0_f32, 40.0, 60.0, 80.0] {
+            let dot = held_output_rect(px, py, tile_px);
+            let nemesis = nemesis_mark_rect(px, py, tile_px);
+            assert!(dot.w < nemesis.w, "at {tile_px}: a dot, not a fourth badge");
+            assert!(
+                dot.y >= py + RARITY_BAR_PX,
+                "at {tile_px}: into the rarity bar"
+            );
+            let lifts: &[f32] = if tile_px > 20.0 {
+                &[0.0, 2.0, 4.0]
+            } else {
+                &[0.0]
+            };
+            for &lift in lifts {
+                let staffed = staffed_mark_rect(px, py, tile_px, lift);
+                assert!(
+                    disjoint(dot, staffed),
+                    "at {tile_px}, lift {lift}: {dot:?} vs {staffed:?}"
+                );
+            }
+            for (name, other) in [
+                ("depot fill", depot_fill_rect(px, py, tile_px)),
+                ("progress bar", progress_bar_rect(px, py, tile_px)),
+                ("nemesis", nemesis),
+            ] {
+                assert!(
+                    disjoint(dot, other),
+                    "at {tile_px}: dot {dot:?} meets {name} {other:?}"
+                );
+            }
+        }
+    }
+
     /// A structure as the map sees one, running a cycle or not.
     fn machine_view(status: Option<MachineStatus>, job_progress: Option<f32>) -> EntityView {
         EntityView {
@@ -7031,6 +7131,7 @@ mod tests {
                 carrying: None,
                 carrying_program: None,
                 tidying: None,
+                clearing: false,
                 rarity: Default::default(),
                 nemesis_grudges: 0,
                 nemesis_muster_ticks: 0,

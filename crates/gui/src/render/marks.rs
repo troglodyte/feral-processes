@@ -61,6 +61,15 @@ const PROGRESS_BAR_INSET: f32 = 2.0;
 const IDENTITY_MARK: f32 = 0.22;
 const IDENTITY_MARK_INSET: f32 = 2.0;
 
+/// The held-output dot's side, as a fraction of the tile — the "the items
+/// are in here, not in storage" mark a machine wears in its **top-left**
+/// corner while its finished-output buffer holds anything. Smaller than
+/// `IDENTITY_MARK` so it reads as a dot and not as a fourth corner badge,
+/// and 0.14 exactly because at the 20 px rung the staffed mark's resting
+/// place is 2.68 px below the dot's top: one hundredth more and the two
+/// share a row at rest (the census in `render/base.rs` pins it).
+const HELD_OUTPUT_MARK: f32 = 0.14;
+
 /// The con earmark's leg, as a fraction of the tile — the right-angled
 /// wedge folded into the **top-left** corner that answers "can I win this
 /// fight".
@@ -115,6 +124,40 @@ pub(super) fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
         size,
         size,
     )
+}
+
+/// Where the held-output dot sits — the top-left corner, dropped below
+/// `RARITY_BAR_PX` for `nemesis_mark_rect`'s reason and inset from the left
+/// edge for the same one: flush to it, the dot reads as a line
+/// `outline_open` left off. Only a structure wears it, and a structure's
+/// tile never carries a con read, so the earmark that shares this corner
+/// never lands beside it.
+pub(super) fn held_output_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let size = (tile_px - 1.0) * HELD_OUTPUT_MARK;
+    Rect::new(
+        px + IDENTITY_MARK_INSET,
+        py + RARITY_BAR_PX + IDENTITY_MARK_INSET,
+        size,
+        size,
+    )
+}
+
+/// The held-output dot, in the hue the cell already wears. Alpha 1.0, no
+/// bob and no blink: it is a fact about contents, not an event. Gated in
+/// here so a test holds both halves, `draw_depot_fill`'s shape.
+pub(super) fn draw_held_output(
+    painter: &Painter,
+    holds: bool,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    color: Color,
+) {
+    if !holds {
+        return;
+    }
+    let r = held_output_rect(px, py, tile_px);
+    painter.rect(r.x, r.y, r.w, r.h, color);
 }
 
 /// Where a town's patrol wears its mark — the **bottom-right** corner, the

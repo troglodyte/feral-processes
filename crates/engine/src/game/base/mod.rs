@@ -15,6 +15,7 @@
 
 pub(crate) mod assignment;
 pub(crate) mod building;
+pub(crate) mod clearing;
 pub(crate) mod collect;
 pub(crate) mod construction;
 pub(crate) mod defences;

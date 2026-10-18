@@ -2484,6 +2484,9 @@ impl Game {
             // needs none of the deferred `pending_cronjobs` treatment.
             if let Some((item, qty)) = c.carrying.clone() {
                 entity.insert(Carrying { item, qty });
+                if c.clearing {
+                    entity.insert(crate::components::Clearing);
+                }
             }
             if let Some(program) = c.carrying_program.clone() {
                 entity.insert(crate::components::CarryingProgram(program));
@@ -2844,6 +2847,7 @@ impl Game {
                 .world
                 .get::<crate::components::Tidying>(e)
                 .map(|t| t.0.clone()),
+            clearing: self.world.get::<crate::components::Clearing>(e).is_some(),
             rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
             nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
             nemesis_muster_ticks: self

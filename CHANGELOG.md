@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**A machine holding finished product wears a small dot in its top-left corner on the base map.** Before, product that had finished but never left the machine looked the same as a machine with nothing in it, so a full Depot and an empty stockpile read as production having stalled when the items were sitting in the machine that made them. Now the dot says "the items are in here, not in storage" for as long as the machine's finished-output buffer holds anything. Staged ingredients do not light it, and Depots never wear it: their fill bar already says how full they are.
+
+**Idle staff now carry finished product out of a machine into a Depot with room, or onto the stockpile when every Depot is full.** Before, the only thing that emptied a machine was its own posted worker, and only into a Depot: when an order finished and its worker was released, or every Depot was full, the product sat in the machine for good while the stockpile had free tiles. Now a program with nothing else to do walks it out, a Depot first and the stockpile second, ahead of tidying loose items and behind every scheduled job, so a busy base pays nothing for it. A machine feeding the machine beside it is left alone until it is full, so a production line keeps its ingredients. Nothing is picked up until there is somewhere to put it: with no Depot room and no free stockpile tile the product stays in the machine and the dot says so.
+
 ## 0.19.9
 
 **Looking at a structure with `x` now says what it runs on.** A Shield, Turret, Repair Bay, Recharger Node or Line Driver carries a line like "takes Charge Coil, holds up to 6" under its status, on the Structures roster as well as the sheet. Before, an empty Shield read "uncharged — its supply has run out" and nothing anywhere named the item the haulers were waiting on.

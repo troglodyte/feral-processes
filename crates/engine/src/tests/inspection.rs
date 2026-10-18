@@ -2123,6 +2123,68 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
     assert_eq!(stranded(&mut game, node), Some(true));
 }
 
+/// The map's "the items are in here, not in storage" dot: finished output
+/// in a machine lights it, staged input does not, and a Depot never wears it
+/// because its fill bar already says how full it is.
+#[test]
+fn a_machine_holding_finished_output_reads_as_holding_it() {
+    let mut game = Game::new(1409, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 48);
+    place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
+    place_now(&mut game, "depot", 1, 2).unwrap();
+    let find = |game: &mut Game, kind: &str| {
+        game.structure_report()
+            .into_iter()
+            .find(|s| s.kind == kind)
+            .expect("just deployed")
+            .entity
+    };
+    let node = find(&mut game, "extractor");
+    let depot = find(&mut game, "depot");
+    let holds = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .map(|v| v.holds_output)
+    };
+
+    assert_eq!(holds(&mut game, node), Some(false), "an empty buffer");
+
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 1);
+    assert_eq!(
+        holds(&mut game, node),
+        Some(false),
+        "staged input is not finished product"
+    );
+
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 1);
+    assert_eq!(
+        holds(&mut game, node),
+        Some(true),
+        "one unit of output is enough"
+    );
+
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 3);
+    assert_eq!(holds(&mut game, depot), Some(false), "a Depot is exempt");
+}
+
 /// How many of a program's bounded upgrade slots are spent, on the manifest
 /// and on the Programs page's own row — two surfaces, one count, so they cannot
 /// disagree about what is left.

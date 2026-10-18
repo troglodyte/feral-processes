@@ -2550,6 +2550,7 @@ impl Game {
         // that is not in this pass's list (a party member) still holds a
         // cell.
         let mut board = self.tidy_board();
+        let mut clearing = self.clear_board();
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -2656,6 +2657,21 @@ impl Game {
                 if self.step_respite(worker, amenities).is_err() {
                     self.strand_respite(worker);
                 }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // **Above tidy, below every errand with a claim on the body**:
+            // product sitting in a machine blocks production, and a loose
+            // floor item blocks nothing. Gated like tidy, for tidy's reasons.
+            if !sharing
+                && clearing.is_some()
+                && self.may_clear(worker, amenities)
+                && clearing
+                    .as_mut()
+                    .is_some_and(|b| self.clear_step(worker, b))
+            {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     held.insert((p.x, p.y));
                 }

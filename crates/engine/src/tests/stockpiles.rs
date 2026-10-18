@@ -581,3 +581,349 @@ fn placing_a_structure_over_a_floor_item_keeps_the_item_on_open_floor() {
     assert_eq!(things.len(), 1, "conserved: {things:?}");
     assert_ne!(things[0].0, (3, 3), "left under the site");
 }
+
+// ---- clearing: idle staff who carry finished output out of a machine ----
+
+use crate::components::{Carrying, Clearing, StandingJob};
+
+fn depot_at(g: &mut Game, x: i32, y: i32) -> Entity {
+    let def = g
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "depot")
+        .expect("a shipped Depot");
+    g.spawn_structure(&def, x, y, None)
+}
+
+fn fill_depot(g: &mut Game, depot: Entity) {
+    let mut stock = g.world.get_mut::<Stock>(depot).unwrap();
+    let cap = stock.capacity;
+    stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), cap);
+}
+
+/// An Extractor at `(x, y)` holding `qty` finished Core Fragments and no
+/// worker: a filled order's leftovers.
+fn machine_holding(g: &mut Game, x: i32, y: i32, qty: u32) -> Entity {
+    let m = spawn_machine_with_recipe_at(g, "extractor", "core_fragment", x, y);
+    g.world
+        .get_mut::<Stock>(m)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), qty);
+    m
+}
+
+fn output_of(g: &Game, e: Entity) -> u32 {
+    g.world.get::<Stock>(e).unwrap().output_used()
+}
+
+/// Three stockpile cells at (4,0), (5,0) and (6,0).
+fn with_three_cells(g: &mut Game) {
+    g.toggle_stockpile_box((4, 0), (6, 0));
+    assert_eq!(g.stockpile_cells().len(), 3);
+}
+
+/// The player's case: every Depot full, the stockpile empty, and the order's
+/// disks sitting in the machine that made them.
+#[test]
+fn an_idle_program_clears_a_machine_onto_the_stockpile_when_every_depot_is_full() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    fill_depot(&mut g, depot);
+    let machine = machine_holding(&mut g, 2, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    let mut ticks = 0;
+    while output_of(&g, machine) > 0 || on_pile(&mut g) < 3 {
+        assert!(
+            ticks < 300,
+            "never cleared: machine holds {}, floor {:?}",
+            output_of(&g, machine),
+            floor_things(&mut g)
+        );
+        g.tick();
+        ticks += 1;
+    }
+    assert_eq!(floor_things(&mut g).len(), 3, "conserved");
+    assert!(g.world.get::<Carrying>(worker).is_none());
+    assert!(g.world.get::<Clearing>(worker).is_none());
+}
+
+#[test]
+fn a_depot_with_room_is_chosen_over_the_stockpile() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    let machine = machine_holding(&mut g, 2, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    let mut ticks = 0;
+    while output_of(&g, machine) > 0 || g.world.get::<Carrying>(worker).is_some() {
+        assert!(ticks < 300, "never cleared");
+        g.tick();
+        ticks += 1;
+    }
+    assert_eq!(output_of(&g, depot), 3, "the Depot took it");
+    assert_eq!(on_pile(&mut g), 0, "nothing went to the stockpile");
+    assert!(floor_things(&mut g).is_empty());
+}
+
+/// Destination before pickup. The board exists here — the refusing Depot
+/// has room — and that is the point: a body that picked up first and asked
+/// where to go second would be left holding product nothing takes.
+#[test]
+fn nothing_is_picked_up_when_neither_a_depot_nor_the_stockpile_has_room() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    for x in 4..=6 {
+        spawn_floor_item(&mut g.world, at(x, 0), core());
+    }
+    let full = depot_at(&mut g, -4, -4);
+    fill_depot(&mut g, full);
+    let refusing = depot_at(&mut g, -4, 4);
+    g.set_depot_filter(refusing, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+    assert!(
+        g.clear_board().is_some(),
+        "a Depot with room: the board is built"
+    );
+    let machine = machine_holding(&mut g, 2, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    for _ in 0..150 {
+        g.tick();
+        assert!(
+            g.world.get::<Carrying>(worker).is_none(),
+            "picked up with nowhere to go"
+        );
+    }
+    assert_eq!(output_of(&g, machine), 3, "it stays in the machine");
+}
+
+/// A Depot touching the machine with room for its product is the intake's
+/// job, not a trip across the base.
+#[test]
+fn a_machine_beside_an_accepting_depot_with_room_is_not_cleared() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    depot_at(&mut g, 3, 0);
+    machine_holding(&mut g, 2, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    for _ in 0..150 {
+        g.tick();
+        assert!(
+            g.world.get::<Carrying>(worker).is_none(),
+            "the intake's machine was cleared by hand"
+        );
+    }
+    assert_eq!(on_pile(&mut g), 0);
+}
+
+/// A feeder in a chain hands its output to the machine beside it. Carrying
+/// it off to a Depot would starve that machine, so the feeder is left
+/// alone — until its buffer is full, when the neighbour is not keeping up
+/// and the overflow may go. The Tend's rule, shared rather than copied.
+#[test]
+fn a_feeder_beside_a_wanted_consumer_is_a_source_only_when_full() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let feeder = machine_holding(&mut g, 2, 0, 3);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "bytecode_block", 3, 0);
+    assert!(
+        g.clear_board().unwrap().has_source(feeder),
+        "a Factory nothing has been ordered from is a bystander"
+    );
+    g.world.entity_mut(factory).insert(StandingJob {
+        work: true,
+        guard: false,
+    });
+    assert!(
+        !g.clear_board().unwrap().has_source(feeder),
+        "a feed buffer beside a wanted consumer"
+    );
+    let capacity = g.world.get::<Stock>(feeder).unwrap().capacity;
+    g.world
+        .get_mut::<Stock>(feeder)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert!(
+        g.clear_board().unwrap().has_source(feeder),
+        "a full feeder's overflow may go"
+    );
+    // And in play: with the consumer staffed and a second body idle, no
+    // Core Fragment from the partial feed buffer reaches the stockpile. The
+    // Factory's own Bytecode Blocks may: they are finished product beside
+    // no consumer, which is exactly what the errand is for.
+    g.world
+        .get_mut::<Stock>(feeder)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 3);
+    spawn_tamed(&mut g, 100, 3);
+    spawn_tamed(&mut g, 100, 3);
+    for _ in 0..150 {
+        g.tick();
+        assert!(
+            !floor_things(&mut g).iter().any(|(c, thing)| {
+                *thing == core() && g.world.resource::<BaseGrid>().is_stockpile(c.0, c.1)
+            }),
+            "a feed buffer was carried off"
+        );
+    }
+}
+
+/// Product in a machine blocks production; a loose floor item blocks
+/// nothing. The body starts beside the loose item and still goes to the
+/// machine first.
+#[test]
+fn clearing_a_machine_outranks_tidying_a_loose_item() {
+    let mut g = game_with_home();
+    g.toggle_stockpile_box((4, 0), (7, 0));
+    let machine = machine_holding(&mut g, -3, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    let beside = g.world.get::<Position>(worker).copied().unwrap();
+    loose(&mut g, beside.x, beside.y + 1);
+    let mut ticks = 0;
+    while on_pile(&mut g) == 0 {
+        assert!(ticks < 300, "nothing reached the stockpile");
+        g.tick();
+        ticks += 1;
+    }
+    assert!(
+        output_of(&g, machine) < 3,
+        "the first thing on the pile came out of the machine"
+    );
+    assert!(
+        floor_things(&mut g)
+            .iter()
+            .any(|(c, _)| *c == (beside.x, beside.y + 1)),
+        "the loose item was left for later"
+    );
+}
+
+#[test]
+fn a_clearer_posted_mid_trip_sets_its_load_down_unit_for_unit() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let machine = machine_holding(&mut g, 2, 0, 0);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        at(6, 6),
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    g.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 10,
+    });
+    g.tick();
+    assert!(g.world.get::<Task>(worker).is_some(), "the task was kept");
+    assert!(g.world.get::<Carrying>(worker).is_none());
+    assert!(g.world.get::<Clearing>(worker).is_none());
+    assert_eq!(floor_things(&mut g).len(), 3, "nothing destroyed");
+}
+
+/// With a shelf that has room, a posted clearer's load goes there rather
+/// than onto the floor: product that was safely in a machine must not turn
+/// into litter because a want appeared mid-walk.
+#[test]
+fn a_clearer_posted_mid_trip_shelves_its_load_when_a_depot_has_room() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    let machine = machine_holding(&mut g, 2, 0, 0);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        at(6, 6),
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    g.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 10,
+    });
+    g.tick();
+    assert!(g.world.get::<Carrying>(worker).is_none());
+    assert!(g.world.get::<Clearing>(worker).is_none());
+    assert_eq!(output_of(&g, depot), 3, "the load went onto the shelf");
+    assert!(floor_things(&mut g).is_empty(), "nothing on the floor");
+}
+
+/// The shelving goes through the one put door: a Depot that refuses the item
+/// takes nothing, and the load ends on the floor as it would with no shelf.
+#[test]
+fn a_posted_clearers_load_never_lands_on_a_shelf_that_refuses_it() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    g.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+    let machine = machine_holding(&mut g, 2, 0, 0);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        at(6, 6),
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    g.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 10,
+    });
+    g.tick();
+    assert_eq!(output_of(&g, depot), 0, "a refusing shelf took the load");
+    assert_eq!(floor_things(&mut g).len(), 3);
+}
+
+#[test]
+fn a_base_with_no_depot_and_no_stockpile_never_clears() {
+    let mut g = game_with_home();
+    let machine = machine_holding(&mut g, 2, 0, 3);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    assert!(g.clear_board().is_none());
+    for _ in 0..150 {
+        g.tick();
+        assert!(g.world.get::<Carrying>(worker).is_none());
+    }
+    assert_eq!(output_of(&g, machine), 3);
+}
+
+#[test]
+fn a_clearers_load_survives_save_and_load_as_its_own() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    let id = *g.world.get::<ProgramId>(worker).unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_clearing_round_trip_{}.sav",
+        std::process::id()
+    ));
+    g.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let held: Vec<_> = loaded
+        .world
+        .query::<(&ProgramId, &Carrying, &Clearing)>()
+        .iter(&loaded.world)
+        .map(|(p, c, _)| (*p, c.item.clone(), c.qty))
+        .collect();
+    assert_eq!(held, vec![(id, ItemId::from(ids::CORE_FRAGMENT), 3)]);
+}

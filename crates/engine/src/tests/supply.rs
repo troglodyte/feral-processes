@@ -377,6 +377,23 @@ fn a_player_beside_a_bench_loads_it_with_cores_up_to_its_capacity() {
 }
 
 #[test]
+fn two_rows_of_one_item_cannot_overfill_a_bench() {
+    let mut game = base(9321);
+    let bench = bench_beside_player(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 30);
+
+    let core = ItemId::from(ids::ANNEALED_CORE);
+    let given = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
+
+    assert_eq!(given, vec![(core, 20)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(carried(&game, ids::ANNEALED_CORE), 10);
+}
+
+#[test]
 fn a_bench_takes_only_its_supply_item_by_hand() {
     let mut game = base(9321);
     let bench = bench_beside_player(&mut game);

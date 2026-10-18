@@ -187,8 +187,9 @@ impl Game {
     pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
         let depots = self.reachable_depots();
-        let sinks = self.supply_sinks();
+        let mut sinks = self.supply_sinks();
 
+        let mut left: Vec<u32> = Vec::with_capacity(give.len());
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in give {
             let mut outstanding = *qty;
@@ -224,14 +225,17 @@ impl Game {
                     .or_default() += moved;
                 *given.entry(item.clone()).or_default() += moved;
             }
+            left.push(outstanding);
         }
 
         // After the shelves, so a Depot beside a bench still keeps what it
         // could take first; a bench is topped up by hand only with what the
         // shelves had no room for or was never offered.
-        for (item, qty) in give {
-            let mut outstanding = qty.saturating_sub(given.get(item).copied().unwrap_or(0));
-            for (sink, supply, room) in &sinks {
+        // Room is spent as it is filled, and each row keeps its own remainder,
+        // so a basket naming one item twice can neither overfill a bench nor
+        // be short-changed by what an earlier row already gave.
+        for ((item, _), mut outstanding) in give.iter().zip(left) {
+            for (sink, supply, room) in &mut sinks {
                 if outstanding == 0 {
                     break;
                 }
@@ -247,6 +251,7 @@ impl Game {
                     continue;
                 }
                 outstanding -= moved;
+                *room -= moved;
                 *self
                     .world
                     .get_mut::<Stock>(*sink)

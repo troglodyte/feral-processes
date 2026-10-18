@@ -29,8 +29,12 @@ impl Game {
     }
 
     /// The structures orthogonally beside the party that spend a `supply`
-    /// item and are not shelves, each with the item they take and the room
-    /// left in their input, in `(x, y)` order.
+    /// item, author a `supply_capacity` and are not shelves, each with the
+    /// item they take and the room left in their input, in `(x, y)` order.
+    ///
+    /// **Only an authored capacity can be hand-loaded**: a Turret or a Shield
+    /// is stocked by its haulers alone, so a capacity-less structure is not a
+    /// put target however much supply it spends.
     ///
     /// **Beside, never `reachable`**: an Index Terminal widens what a shelf
     /// can be reached from and a machine's buffer stays walk-up. Loading is
@@ -42,7 +46,7 @@ impl Game {
             .into_iter()
             .filter_map(|e| {
                 let def = db.get(&self.world.get::<Structure>(e)?.kind)?;
-                if def.stores {
+                if def.stores || def.supply_capacity.is_none() {
                     return None;
                 }
                 let item = def.spends_supply()?.clone();

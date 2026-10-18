@@ -432,3 +432,19 @@ fn a_crew_tops_an_authored_capacity_bench_up_in_full_trips() {
         "a full trip fits no more, so the depot keeps the rest"
     );
 }
+
+#[test]
+fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
+    let mut game = base(9323);
+    let turret = deploy(&mut game, "turret", 1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CHARGE_COIL), 10);
+
+    let given = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
+
+    assert!(given.is_empty());
+    assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
+    assert_eq!(carried(&game, ids::CHARGE_COIL), 10);
+}

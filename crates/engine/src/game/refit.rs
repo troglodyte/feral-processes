@@ -73,6 +73,23 @@ impl Game {
         found.into_iter().map(|(_, e, held)| (e, held)).collect()
     }
 
+    /// The benches within `REFIT_REACH` of the player's base cell, in `(x, y)`
+    /// order: the one set both the mending and its empty-stock warning ask
+    /// about, so neither speaks for a bench the player is not standing at.
+    fn refit_benches_in_reach(&self) -> Vec<(Entity, u32)> {
+        let Some((px, py)) = self.base_pos() else {
+            return Vec::new();
+        };
+        self.refit_benches()
+            .into_iter()
+            .filter(|(e, _)| {
+                self.world
+                    .get::<Position>(*e)
+                    .is_some_and(|at| (at.x - px).abs().max((at.y - py).abs()) <= REFIT_REACH)
+            })
+            .collect()
+    }
+
     /// The first bench, in `(x, y)` order, holding enough Annealed Cores for
     /// one refit.
     pub(crate) fn stocked_refit_bench(&self) -> Option<Entity> {
@@ -167,16 +184,16 @@ impl Game {
     /// stocked bench within `REFIT_REACH`, and a copy that needs it. A pure
     /// read, so the pass and the map's mark ask the one question.
     pub(crate) fn refit_bench_serving(&self) -> Option<Entity> {
-        let (px, py) = self.base_pos()?;
-        if self.has_active_battle() || self.world.resource::<RefitStand>().ticks <= REFIT_IDLE_TICKS
+        if self.base_pos().is_none()
+            || self.has_active_battle()
+            || self.world.resource::<RefitStand>().ticks <= REFIT_IDLE_TICKS
         {
             return None;
         }
-        let bench = self.refit_benches().into_iter().find_map(|(e, held)| {
-            let at = self.world.get::<Position>(e)?;
-            let near = (at.x - px).abs().max((at.y - py).abs()) <= REFIT_REACH;
-            (near && held >= REFIT_CORES).then_some(e)
-        })?;
+        let bench = self
+            .refit_benches_in_reach()
+            .into_iter()
+            .find_map(|(e, held)| (held >= REFIT_CORES).then_some(e))?;
         (!self.worn_for_auto_refit().is_empty()).then_some(bench)
     }
 
@@ -223,13 +240,15 @@ impl Game {
     }
 
     /// Says so once per stand, on the first tick the wait is over, when work
-    /// is waiting and no bench holds a core.
+    /// is waiting and every bench within reach is out of cores.
     fn warn_refit_bench_empty(&mut self) {
         let first_ready_tick = self.world.resource::<RefitStand>().ticks == REFIT_IDLE_TICKS + 1;
-        if first_ready_tick
-            && !self.has_active_battle()
-            && self.refit_bench_standing()
-            && self.stocked_refit_bench().is_none()
+        if !first_ready_tick || self.has_active_battle() {
+            return;
+        }
+        let in_reach = self.refit_benches_in_reach();
+        if !in_reach.is_empty()
+            && in_reach.iter().all(|(_, held)| *held < REFIT_CORES)
             && !self.worn_for_auto_refit().is_empty()
         {
             self.log("The Refit Bench is out of Annealed Cores.");

@@ -247,3 +247,47 @@ fn an_empty_bench_never_shows_the_mark() {
     }
     assert!(!player_refitting(&mut game));
 }
+
+fn said_out_of_cores(game: &Game) -> usize {
+    game.message_log(200)
+        .iter()
+        .filter(|l| l.text.contains("out of Annealed Cores"))
+        .count()
+}
+
+#[test]
+fn an_empty_bench_out_of_reach_says_nothing() {
+    let (mut game, bench) = stand_by_bench(6010, 0);
+    game.world.entity_mut(bench).insert(Position { x: 5, y: 0 });
+    let player = game.player_entity();
+    wear_on(
+        &mut game,
+        player,
+        &worn_copy(ids::MONOFILAMENT_WHIP, GEAR_DURABILITY),
+    );
+    for _ in 0..8 {
+        game.tick();
+    }
+    assert_eq!(said_out_of_cores(&game), 0);
+}
+
+#[test]
+fn beside_an_empty_bench_a_stocked_one_out_of_reach_does_not_serve() {
+    let (mut game, _) = stand_by_bench(6011, 0);
+    let far = spawn_structure_at(&mut game, "refit_bench", 6, 0);
+    stock_bench(&mut game, far, 5);
+    let player = game.player_entity();
+    wear_on(
+        &mut game,
+        player,
+        &worn_copy(ids::MONOFILAMENT_WHIP, GEAR_DURABILITY),
+    );
+    for _ in 0..8 {
+        game.tick();
+    }
+    assert_eq!(
+        wear_of(&game, player, EquipmentSlot::Weapon),
+        GEAR_DURABILITY
+    );
+    assert_eq!(said_out_of_cores(&game), 1);
+}

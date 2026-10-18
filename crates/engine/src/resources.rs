@@ -1778,6 +1778,10 @@ pub struct Party(pub Vec<Entity>);
 pub struct RefitStand {
     pub cell: Option<(i32, i32)>,
     pub ticks: u32,
+    /// Whether the last tick mended a copy. The map's mark reads it, because
+    /// after the tick that mends the last worn copy there is nothing left
+    /// for `refit_bench_serving` to find.
+    pub mended: bool,
 }
 
 /// The tamed program currently equipped as the player's weapon, if any.

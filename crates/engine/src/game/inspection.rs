@@ -1349,7 +1349,8 @@ impl Game {
         // `anywhere_to_unload`'s reason: a program reaching full Integrity
         // has to stop wearing the mark without anything having to notice.
         let recovering_bodies = self.recovering_programs();
-        let refit_serving = self.refit_bench_serving().is_some();
+        let refit_serving = self.refit_bench_serving().is_some()
+            || self.world.resource::<crate::resources::RefitStand>().mended;
 
         let mut linked_edges = self.linked_edges_by_structure();
 

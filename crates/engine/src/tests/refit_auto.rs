@@ -291,3 +291,22 @@ fn beside_an_empty_bench_a_stocked_one_out_of_reach_does_not_serve() {
     );
     assert_eq!(said_out_of_cores(&game), 1);
 }
+
+#[test]
+fn the_mark_shows_on_the_tick_that_mends_the_last_worn_copy() {
+    let (mut game, _) = stand_by_bench(6012, 5);
+    let player = game.player_entity();
+    wear_on(
+        &mut game,
+        player,
+        &worn_copy(ids::MONOFILAMENT_WHIP, GEAR_DURABILITY),
+    );
+    for _ in 0..REFIT_IDLE_TICKS {
+        game.tick();
+    }
+    game.tick();
+    assert_eq!(wear_of(&game, player, EquipmentSlot::Weapon), 0);
+    assert!(player_refitting(&mut game), "the tick that mended it");
+    game.tick();
+    assert!(!player_refitting(&mut game), "nothing left to mend");
+}

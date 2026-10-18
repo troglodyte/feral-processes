@@ -202,7 +202,9 @@ impl Game {
     /// `refit_copy`, which ticks and would recurse.
     pub(crate) fn run_refit_bench(&mut self) {
         self.count_refit_stand();
-        match self.refit_bench_serving() {
+        let serving = self.refit_bench_serving();
+        self.world.resource_mut::<RefitStand>().mended = serving.is_some();
+        match serving {
             Some(bench) => self.mend_next_worn(bench),
             None => self.warn_refit_bench_empty(),
         }

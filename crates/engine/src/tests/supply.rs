@@ -386,7 +386,7 @@ fn two_rows_of_one_item_cannot_overfill_a_bench() {
         .add(ItemId::from(ids::ANNEALED_CORE), 30);
 
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let given = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
+    let (given, _) = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
 
     assert_eq!(given, vec![(core, 20)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
@@ -442,7 +442,7 @@ fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
         .unwrap()
         .add(ItemId::from(ids::CHARGE_COIL), 10);
 
-    let given = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
+    let (given, _) = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
 
     assert!(given.is_empty());
     assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
@@ -481,9 +481,25 @@ fn a_depot_beside_the_bench_does_not_take_the_cores_first() {
         .add(ItemId::from(ids::ANNEALED_CORE), 25);
 
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let given = game.give_to_adjacent(&[(core.clone(), 25)]);
+    let (given, _) = game.give_to_adjacent(&[(core.clone(), 25)]);
 
     assert_eq!(given, vec![(core, 25)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
     assert_eq!(node_output(&game, depot, ids::ANNEALED_CORE), 5);
+}
+
+#[test]
+fn loading_a_bench_says_so_and_a_depot_put_keeps_its_own_line() {
+    let mut game = base(9326);
+    bench_beside_player(&mut game);
+    deploy(&mut game, "depot", -1, 0);
+    give_cores(&mut game, 25);
+
+    let said: Vec<String> = game
+        .message_log(200)
+        .iter()
+        .map(|l| l.text.clone())
+        .collect();
+    assert!(said.contains(&"You load the Refit Bench with 20 Annealed Core.".to_string()));
+    assert!(said.contains(&"You put away 5 Annealed Core.".to_string()));
 }

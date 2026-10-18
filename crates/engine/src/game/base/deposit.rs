@@ -4,6 +4,9 @@
 
 use crate::*;
 
+/// A structure hand-loaded in one give: which, with what, and how many.
+pub(crate) type SinkLoad = (Entity, ItemId, u32);
+
 impl Game {
     /// The adjacent structures a deposit can reach, in `(x, y)` order.
     ///
@@ -188,10 +191,14 @@ impl Game {
     /// Both clamps live here: against what the pack holds, and against each
     /// Depot's `output_room()` as the fill walks them in `(x, y)` order —
     /// and each Depot's own filter, `depot_accepts`.
-    pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
+    pub(crate) fn give_to_adjacent(
+        &mut self,
+        give: &[(ItemId, u32)],
+    ) -> (Vec<(ItemId, u32)>, Vec<SinkLoad>) {
         let depots = self.reachable_depots();
         let mut sinks = self.supply_sinks();
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
+        let mut loads = Vec::new();
         for (item, qty) in give {
             // A bench first when the item is its supply: it can take nothing
             // else, while a Depot beside it would swallow every core and
@@ -199,14 +206,16 @@ impl Game {
             // spent as it is filled and each row keeps its own remainder, so
             // a basket naming one item twice can neither overfill a bench nor
             // be short-changed by what an earlier row already gave.
-            let into_sinks = self.fill_sinks(&mut sinks, item, *qty);
+            let loaded = self.fill_sinks(&mut sinks, item, *qty);
+            let into_sinks: u32 = loaded.iter().map(|(_, n)| n).sum();
+            loads.extend(loaded.into_iter().map(|(sink, n)| (sink, item.clone(), n)));
             let into_depots = self.fill_depots(&depots, item, *qty - into_sinks);
             let moved = into_sinks + into_depots;
             if moved > 0 {
                 *given.entry(item.clone()).or_default() += moved;
             }
         }
-        given.into_iter().collect()
+        (given.into_iter().collect(), loads)
     }
 
     /// Moves up to `want` of `item` from the pack into the Depots that accept
@@ -250,10 +259,16 @@ impl Game {
 
     /// Moves up to `want` of `item` from the pack into the supply sinks that
     /// spend it, spending each sink's remaining `room` as it goes, and
-    /// returns how many landed.
-    fn fill_sinks(&mut self, sinks: &mut [(Entity, ItemId, u32)], item: &ItemId, want: u32) -> u32 {
+    /// returns how many landed in each.
+    fn fill_sinks(
+        &mut self,
+        sinks: &mut [(Entity, ItemId, u32)],
+        item: &ItemId,
+        want: u32,
+    ) -> Vec<(Entity, u32)> {
         let player = self.player_entity();
         let mut outstanding = want;
+        let mut loaded = Vec::new();
         for (sink, supply, room) in sinks {
             if outstanding == 0 {
                 break;
@@ -278,7 +293,8 @@ impl Game {
                 .input
                 .entry(item.clone())
                 .or_default() += moved;
+            loaded.push((*sink, moved));
         }
-        want - outstanding
+        loaded
     }
 }

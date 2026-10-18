@@ -314,17 +314,14 @@ impl Game {
             return (Moved::new(), Moved::new());
         }
         let taken = self.take_from_adjacent(&basket.take);
-        let given = self.give_to_adjacent(&basket.give);
+        let (given, loads) = self.give_to_adjacent(&basket.give);
         let carriers = self.move_carriers(&basket.carriers);
 
         if !taken.is_empty() {
             let summary = self.moved_summary(&taken);
             self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
         }
-        if !given.is_empty() {
-            let summary = self.moved_summary(&given);
-            self.log_base(format!("You put away {summary}."));
-        }
+        self.log_loads(&given, &loads);
         if carriers > 0 {
             let what = if carriers == 1 {
                 "one downed program".to_string()
@@ -465,6 +462,42 @@ impl Game {
             }
         }
         moved
+    }
+
+    /// The put half of the log: one line per structure hand-loaded, naming
+    /// it, and one "put away" line for what went to Depots. `given` is the
+    /// whole of what left the pack, so the Depot share is what the loads do
+    /// not account for.
+    fn log_loads(
+        &mut self,
+        given: &[(ItemId, u32)],
+        loads: &[crate::game::base::deposit::SinkLoad],
+    ) {
+        let mut to_depots: Vec<(ItemId, u32)> = given.to_vec();
+        let mut by_sink: Vec<(Entity, Vec<(ItemId, u32)>)> = Vec::new();
+        for (sink, item, n) in loads {
+            if let Some((_, left)) = to_depots.iter_mut().find(|(i, _)| i == item) {
+                *left -= n;
+            }
+            match by_sink.iter_mut().find(|(e, _)| e == sink) {
+                Some((_, items)) => items.push((item.clone(), *n)),
+                None => by_sink.push((*sink, vec![(item.clone(), *n)])),
+            }
+        }
+        for (sink, items) in by_sink {
+            let name = self
+                .world
+                .get::<Structure>(sink)
+                .map(|s| self.structure_name(&s.kind))
+                .unwrap_or_default();
+            let summary = self.moved_summary(&items);
+            self.log_base(format!("You load the {name} with {summary}."));
+        }
+        to_depots.retain(|(_, n)| *n > 0);
+        if !to_depots.is_empty() {
+            let summary = self.moved_summary(&to_depots);
+            self.log_base(format!("You put away {summary}."));
+        }
     }
 
     /// "N item, M other item" — the one join both halves of a transfer log

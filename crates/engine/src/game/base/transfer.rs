@@ -69,7 +69,7 @@ impl Game {
     ///
     /// `carried` is what the pack holds, whatever may be done with it.
     /// `can_put` is 0 unless there is a Depot beside the party to put the
-    /// item into, the item is not `banked` — a bank is not cargo — and some
+    /// item into (or a structure beside it whose supply the item is), the item is not `banked` — a bank is not cargo — and some
     /// adjacent Depot has room for it that its filter has not closed, and
     /// **only a row with a `can_put` of its own is created from the pack
     /// side**, so an item that can go nowhere is listed only when it is also
@@ -103,7 +103,8 @@ impl Game {
                     .on_shelves += qty;
             }
         }
-        let puttable = self.has_put_target();
+        let depot_beside = !self.reachable_depots().is_empty();
+        let sinks = self.supply_sinks();
         let player = self.player_entity();
         if let Some(inv) = self.world.get::<Inventory>(player) {
             for (item, qty) in inv.items.iter() {
@@ -118,7 +119,8 @@ impl Game {
                 // Extractor, with no shelf to put anything on at all,
                 // would otherwise open a screen of rows that move in
                 // neither direction.
-                let may_put = puttable && !self.is_banked(item);
+                let may_put = !self.is_banked(item)
+                    && (depot_beside || sinks.iter().any(|(_, supply, _)| supply == item));
                 let can_put = if may_put {
                     (*qty).min(self.deposit_room_for(item))
                 } else {

@@ -448,3 +448,24 @@ fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
     assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
     assert_eq!(carried(&game, ids::CHARGE_COIL), 10);
 }
+
+#[test]
+fn beside_a_bench_with_no_depot_only_its_supply_is_puttable() {
+    let mut game = base(9324);
+    bench_beside_player(&mut game);
+    let inv = game.world.get_mut::<Inventory>(game.player_entity());
+    let mut inv = inv.unwrap();
+    inv.add(ItemId::from(ids::ANNEALED_CORE), 5);
+    inv.add(ItemId::from(ids::BYTECODE_BLOCK), 3);
+
+    let rows: Vec<_> = game
+        .transfer_offer()
+        .into_iter()
+        .map(|r| (r.item.0, r.can_put))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![(ids::ANNEALED_CORE.to_string(), 5)],
+        "a pack item nothing here takes gets no row at all"
+    );
+}

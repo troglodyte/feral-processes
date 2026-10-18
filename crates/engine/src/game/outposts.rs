@@ -1309,8 +1309,8 @@ mod tests {
 
     /// Writes a temp `assets/outposts/outpost.ron` naming `cost` as
     /// `repair_cost`, loads it and returns the `OutpostDb` — the shipped def
-    /// ships an empty `repair_cost` (Phase 6 fills it in), so a test of the
-    /// refusal-then-spend ladder needs one of its own with real lines in it.
+    /// is one line of Core Fragments, so a test of the refusal-then-spend
+    /// ladder over several lines needs a def of its own.
     fn outpost_db_with_repair_cost(cost: &[(&str, u32)]) -> OutpostDb {
         let dir = std::env::temp_dir().join(format!(
             "feral_outpost_repair_cost_{}_{}",

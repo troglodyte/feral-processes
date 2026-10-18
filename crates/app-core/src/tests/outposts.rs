@@ -156,14 +156,14 @@ fn r_refuses_at_full_integrity() {
 }
 
 /// `[R]` repairs a damaged outpost — design spec §8, wired in Phase 5.
-/// Stocked generously past the shipped `repair_cost` (Logic Wafers and
-/// Bytecode Blocks) so the test stays about the key reaching
-/// `Game::repair_outpost`, not about matching a content decision exactly.
+/// Stocked generously past the shipped `repair_cost` (Core Fragments) so
+/// the test stays about the key reaching `Game::repair_outpost`, not about
+/// matching a content decision exactly.
 #[test]
 fn r_repairs_a_damaged_outpost() {
     let mut app = test_app(978);
     place_damaged_outpost_east_of_player(&mut app, 10);
-    give_player_items(&mut app, &[("logic_wafer", 200), ("bytecode_block", 200)]);
+    give_player_items(&mut app, &[("core_fragment", 200)]);
     walk(&mut app, GameKey::Right);
 
     app.handle_key(GameKey::Char('R'));

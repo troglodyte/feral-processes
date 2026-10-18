@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.19.10
 
 **A machine holding finished product wears a small dot in its top-left corner on the base map.** Before, product that had finished but never left the machine looked the same as a machine with nothing in it, so a full Depot and an empty stockpile read as production having stalled when the items were sitting in the machine that made them. Now the dot says "the items are in here, not in storage" for as long as the machine's finished-output buffer holds anything. Staged ingredients do not light it, and Depots never wear it: their fill bar already says how full they are.
 

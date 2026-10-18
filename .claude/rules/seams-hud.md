@@ -39,9 +39,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **The player's `@` is a role and is read off `is_player`** — `PLAYER`, br
   cyan, which nothing else may take, and never off the `GlyphColor::Cyan`
   the player happens to spawn with.
-- **`ICON_PALETTE` is exactly fifteen entries because it is the player
-  icon's save format, and `SPRITE_PALETTE` is a separate constant for that
-  reason.**
+- **The avatar codec writes two hex digits per cell so `SPRITE_PALETTE` can
+  grow, and `decode` and `PlayerIcon::new` must keep refusing an index past
+  it rather than wrapping.**
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

@@ -132,40 +132,24 @@
   `color` through is red on `r != g`. The overdraw rule from the sprite
   seam applies with no exception here: a drawn icon is transparent
   somewhere by construction, so the test asserts the mesh **and** the
-  absent `@`. **The player edits 8x8 and the sprite is 16x16** —
-  `ICON_GRID` against `ICON_SIZE`, with `ICON_CELL_PIXELS` the one
-  expression of the ratio — so each drawn cell fills a 2x2 block of the
-  uploaded texture, which under nearest sampling is pixel-identical to a
-  native 8x8 one. The trap there is reading the two as one number:
-  changing `ICON_GRID` is a screen decision, changing `ICON_SIZE` breaks
-  the sprite format `assets/sprites/README.md` calls non-negotiable. The
-  full argument is `seam:a-one-cell-sprite-substitutes-for-a-glyph-and-the-table-it`.
-- **`ICON_PALETTE` is exactly fifteen entries because it is the player
-  icon's save format, and `SPRITE_PALETTE` is a separate constant for that
-  reason.** `PlayerIcon::encode` writes one lowercase hex digit per cell
-  (`char::from_digit(index, 16)`); a hex digit has sixteen values and index
-  `0` is already spent on transparent, so fifteen is the whole remaining
-  budget, not a stylistic count. **Nothing in the compiler holds this** —
-  `PlayerIcon::set`'s bound check (`index as usize > ICON_PALETTE.len()`)
-  accepts a sixteenth entry just as happily as a fifteenth, and `Canvas`
-  (shared with the dev sprite editor's own canvas) carries no palette or
-  range guard at all. The one thing that notices is a pinned test,
-  `the_palette_has_room_for_exactly_fifteen_colours_because_one_hex_digit_encodes_them`,
-  and a test phrased as an assertion of a specific number reads as "update
-  it" rather than "this is load-bearing" to a careless green-the-suite
-  pass. **The trap is the "fix" for what happens next, not the growth
-  itself.** A sixteenth colour compiles clean and only panics at
-  `encode`'s `.expect("palette index fits one hex digit")` the first time a
-  player paints with it and saves — loud, not silent, as the code stands.
-  Silence is one edit further: replace that `.expect` with a wrap or a mask
-  to make the panic go away, and index `16` becomes the hex digit `'0'`,
-  which `decode` reads back as transparent forever after — no compile
-  error, no failing test, the player's paint job already gone by the time
-  anyone would look. This is why the dev sprite editor's wider palette is
-  `SPRITE_PALETTE`, a second constant that never enters `PlayerIcon`'s
-  codec at all, rather than a longer `ICON_PALETTE` — merging the two back
-  into one is the DRY move this seam exists to refuse. Full argument in
-  `seam:icon-palette-is-fixed-at-fifteen-entries-by-the-save-format`.
+  absent `@`. **The avatar is a sprite and is drawn as one** — 16x16 on
+  `SPRITE_PALETTE`, edited in the same `SpriteEditor` the Forge uses and
+  animated like any sprite, so there is no second grid to keep in step with
+  the sprite size. The full argument is
+  `seam:a-one-cell-sprite-substitutes-for-a-glyph-and-the-table-it`.
+- **The avatar codec writes two hex digits per cell so `SPRITE_PALETTE` can
+  grow, and the refusal in `decode` and `PlayerIcon::new` is what holds it.**
+  63 colours plus transparent is exactly 64 values, one base64 character
+  with nothing to spare; that is the shape of the trap the old
+  palette was (one hex digit, index 0 spent on transparent). Two digits give a
+  ceiling of 255. `Canvas::set` has no range check, so `PlayerIcon::new`
+  returns `None` for a cell past the palette and `decode` is strict and
+  total. **The trap is silencing that refusal**: a wrap or mask turns an
+  out-of-range index into a valid but wrong colour (or transparent) with no
+  failing test, and the player's paint is gone. `v1` and `v2` strings fold
+  forward through `legacy_index` and re-save as `v3`;
+  `LEGACY_ICON_PALETTE` is private to those decoders. Full argument in
+  `seam:avatar-codec-is-two-hex-digits-per-cell-so-the-palette-can-grow`.
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

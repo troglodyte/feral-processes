@@ -1146,7 +1146,7 @@ impl Game {
             ),
 
             Objective::Configure { .. } => Some(
-                "Place a machine, stand beside it and press R to choose what it makes."
+                "Place a machine, stand beside it and press c to choose what it makes."
                     .to_string(),
             ),
 

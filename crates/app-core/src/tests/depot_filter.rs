@@ -186,6 +186,8 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
 fn the_key_is_refused_where_there_is_no_depot() {
     let mut app = app_beside_stocked_machines(3309, &[(ITEM, 6)]);
     app.handle_key(GameKey::Char('c'));
+    // Cargo, not the Extractor's recipe menu.
+    app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Transfer);
 
     app.handle_key(GameKey::Char('F'));

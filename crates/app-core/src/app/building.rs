@@ -763,12 +763,33 @@ impl App {
                 self.pending_plot = Some(plot);
                 self.mode = Mode::FarmRecipe;
             }
+            InteractionKind::Machine(machine) => self.open_machine_recipe_for(machine),
         }
     }
 
+    /// The "which side?" prompt. An arrow takes what is on that side, and
+    /// `c` again takes the cargo: the transfer is the one interaction that
+    /// reaches every shelf beside the party at once, and a machine's output
+    /// shelf is one of them, so a set machine holding stock offers both
+    /// on one side. The arrow prefers the thing that belongs to that side
+    /// alone; the cargo is never more than one `c` away.
     pub(crate) fn handle_interact_direction_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
+            return;
+        }
+        if key == GameKey::Char('c') {
+            let offered = self.game.as_ref().is_some_and(|g| {
+                g.adjacent_interactions()
+                    .iter()
+                    .any(|i| i.kind == InteractionKind::Transfer)
+            });
+            if offered {
+                self.run_interaction(InteractionKind::Transfer);
+            } else {
+                self.refuse("No cargo to move here.");
+                self.mode = Mode::Playing;
+            }
             return;
         }
         let Some(dir) = direction_of(key) else {
@@ -776,8 +797,10 @@ impl App {
         };
         let found = self.game.as_ref().and_then(|g| {
             let all = g.adjacent_interactions();
-            all.iter()
-                .find(|i| i.dir == dir)
+            let on_side = || all.iter().filter(|i| i.dir == dir);
+            on_side()
+                .find(|i| i.kind != InteractionKind::Transfer)
+                .or_else(|| on_side().next())
                 .map(|i| i.kind)
                 .or_else(|| {
                     // A plot is offered once, on the first side holding one of

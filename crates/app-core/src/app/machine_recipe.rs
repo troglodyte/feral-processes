@@ -1,7 +1,9 @@
 //! The recipe menu: what the Extractor, Factory, Assembler or Printer
 //! beside the party makes.
 //!
-//! Opened with `[R]` beside a machine. `rig_tool.rs`'s shape — a screen that
+//! Opened with `[c]` beside a machine, through `run_interaction`, since a
+//! machine with a recipe to set is one of the things
+//! `Game::adjacent_interactions` offers. `rig_tool.rs`'s shape — a screen that
 //! acts on one machine, re-read on every key and closing itself the moment
 //! that machine stops being one the player is standing at.
 //!
@@ -46,25 +48,19 @@ impl MachineRecipeScreen {
 }
 
 impl App {
-    /// Opens the recipe menu for the first adjacent machine, or refuses.
-    ///
-    /// **Answers whether anything happened**, `open_rig_tool`'s rule: a
-    /// refusal answers `false` so `after_world_action` does not wipe the
-    /// sentence that was just written.
-    pub(crate) fn open_machine_recipe(&mut self) -> bool {
+    /// Opens the recipe menu on one adjacent machine — the one `[c]` was
+    /// aimed at. `of` is read fresh so `Tab` knows whether it has anywhere
+    /// to go. Nothing to refuse: the interact key only offers a machine
+    /// that is there.
+    pub(crate) fn open_machine_recipe_for(&mut self, machine: Entity) {
         let Some(game) = &self.game else {
-            return false;
+            return;
         };
-        let machines = game.adjacent_machines();
-        let Some(machine) = machines.first().copied() else {
-            self.refuse("There is no machine here to set.");
-            return false;
-        };
-        if self.show_machine_recipe(machine, machines.len()) {
+        let of = game.adjacent_machines().len();
+        if self.show_machine_recipe(machine, of) {
             self.menu_selected = 0;
             self.mode = Mode::MachineRecipe;
         }
-        true
     }
 
     /// Moves to the next adjacent machine, wrapping. A no-op with one.

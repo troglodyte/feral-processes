@@ -342,6 +342,41 @@ mod adjacent {
     }
 
     #[test]
+    fn a_machine_beside_the_party_offers_its_recipe_in_its_direction() {
+        let mut game = base(2311);
+        let (px, py) = game.base_pos().unwrap();
+        let machine = spawn_machine_at(&mut game, "factory", px + 1, py);
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![Interaction {
+                dir: (1, 0),
+                kind: InteractionKind::Machine(machine)
+            }]
+        );
+    }
+
+    #[test]
+    fn the_transfer_aims_at_the_depot_not_the_machine_that_sorts_first() {
+        let mut game = base(2312);
+        let (px, py) = game.base_pos().unwrap();
+        let machine = spawn_machine_at(&mut game, "factory", px - 1, py);
+        spawn_machine_at(&mut game, "depot", px + 1, py);
+        assert_eq!(
+            game.adjacent_interactions(),
+            vec![
+                Interaction {
+                    dir: (1, 0),
+                    kind: InteractionKind::Transfer
+                },
+                Interaction {
+                    dir: (-1, 0),
+                    kind: InteractionKind::Machine(machine)
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn the_transfer_aims_at_the_terminal_not_whatever_structure_was_spawned_first() {
         let mut game = base(2307);
         let (px, py) = game.base_pos().unwrap();

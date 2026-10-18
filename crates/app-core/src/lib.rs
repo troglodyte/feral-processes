@@ -1598,7 +1598,7 @@ pub enum Mode {
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
     /// What the Extractor, Factory, Assembler or Printer beside the party
-    /// makes — `[R]` in base space. See `App::machine_recipe`.
+    /// makes — `[c]` beside it in base space. See `App::machine_recipe`.
     MachineRecipe,
     /// Asks before a recipe change empties a set machine.
     MachineRecipeConfirm,

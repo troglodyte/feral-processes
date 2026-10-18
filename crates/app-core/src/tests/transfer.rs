@@ -29,8 +29,13 @@ fn amounts(app: &App) -> Vec<i64> {
 /// Opens the picker on two mining nodes — a shelf with no Depot beside it,
 /// so every row is a take and the put budget is closed. Both sides hold the
 /// same stock and the picker pools them, so the rows read 12 and 4.
+///
+/// Two presses: a machine offers its recipe menu on the same side as its
+/// shelf, so the first `c` asks which, and `c` again is the cargo.
 fn picker(seed: u32) -> App {
     let mut app = app_beside_stocked_machines(seed, &ITEMS);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection);
     app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Transfer);
     app
@@ -92,6 +97,8 @@ fn c_opens_the_transfer_window_with_an_empty_basket() {
     let mut app = app_beside_stocked_machines(970, &[(ITEM, 6)]);
 
     app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection, "cargo or recipe?");
+    app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.basket_rows.len(), 1);
@@ -116,7 +123,9 @@ fn opening_the_transfer_window_spends_no_turn() {
     app.status_line = Some("still explaining something".to_string());
 
     app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Char('c'));
 
+    assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
     assert_eq!(
         app.status_line.as_deref(),
@@ -124,26 +133,21 @@ fn opening_the_transfer_window_spends_no_turn() {
     );
 }
 
-/// The refusal stays the engine's: with nothing on either side `c` never
-/// opens the window, so there is no empty screen to back out of and no
-/// second copy of the sentence in app-core.
+/// Two empty machines still offer their recipe menus, so `c` asks which
+/// side; `c` again asks for cargo there is none of, and is refused without
+/// an empty window to back out of.
 #[test]
-fn c_with_nothing_on_either_side_opens_no_window() {
+fn c_with_no_cargo_on_either_side_asks_about_the_machines_and_c_again_is_refused() {
     let mut app = app_beside_stocked_machines(972, &[(ITEM, 0)]);
+
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection, "a machine on each side");
 
     app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.basket_rows.is_empty());
-    assert!(
-        app.game
-            .as_ref()
-            .unwrap()
-            .message_history(usize::MAX)
-            .iter()
-            .any(|l| l.text.contains("nothing")),
-        "the engine said why"
-    );
+    assert_eq!(app.status_line.as_deref(), Some("No cargo to move here."));
 }
 
 /// **Left takes out and Right puts in**, which is the arrow moving stock in

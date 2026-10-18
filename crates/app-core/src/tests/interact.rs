@@ -77,3 +77,79 @@ fn a_side_with_nothing_is_refused_and_esc_backs_out() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
+
+#[test]
+fn c_with_a_depot_and_a_machine_asks_which_side_and_the_machine_opens_its_recipe() {
+    let mut app = app_between_a_depot_and_a_machine(2407);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection);
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::MachineRecipe, "the Factory is east");
+    assert!(app.machine_recipe.is_some());
+    app.handle_key(GameKey::Esc);
+
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.mode, Mode::Transfer, "the Depot is west");
+}
+
+#[test]
+fn on_a_shared_side_the_arrow_opens_the_machines_recipe_and_c_again_moves_cargo() {
+    let mut app = app_beside_a_set_machine_holding_output(2408);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(
+        app.mode,
+        Mode::InteractDirection,
+        "cargo and a recipe, both east"
+    );
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.mode,
+        Mode::MachineRecipe,
+        "the machine wins its own side"
+    );
+    app.handle_key(GameKey::Esc);
+
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::Transfer, "c again is the cargo");
+}
+
+#[test]
+fn c_again_with_no_cargo_beside_the_party_is_refused() {
+    let mut app = app_beside_two_rebuild_sites(2409);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection);
+
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.status_line.as_deref(), Some("No cargo to move here."));
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .message_history(usize::MAX)
+            .iter()
+            .any(|l| l.text == "No cargo to move here."),
+        "the refusal went through App::refuse, so the log has it too"
+    );
+}
+
+/// The transfer is aimed at the Depot even when a machine sorts before it,
+/// so the arrow toward a visible Depot is never refused.
+#[test]
+fn the_arrow_toward_a_depot_opens_the_transfer_when_the_machine_sorts_first() {
+    let mut app = app_beside_a_machine_west_and_a_depot_east(2410);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::InteractDirection);
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::Transfer, "the Depot is east");
+    app.handle_key(GameKey::Esc);
+
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.mode, Mode::MachineRecipe, "the Factory is west");
+}

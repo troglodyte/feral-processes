@@ -1274,7 +1274,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::InteractDirection => draw_direction_prompt(
             "Interact Direction",
-            "Interact with which neighbour? (arrows/hjkl, Esc to cancel)",
+            // Kept under the Small popup's narrowest width: a text row is
+            // neither wrapped nor clipped.
+            "Interact which way? (arrows/hjkl, c for cargo, Esc)",
             refusal,
             painter,
             m,

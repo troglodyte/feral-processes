@@ -547,8 +547,10 @@ pub struct StructureDef {
     pub supply: Option<ItemId>,
     /// How much of `supply` the input buffer holds at most, where the default
     /// of `supply_batch() * INPUT_STOCK_BATCHES` is too small for the use (a
-    /// bench kept stocked for many mends). Haulers still file a want only when
-    /// less than one batch is held, so this sets the ceiling, not the trigger.
+    /// bench kept stocked for many mends). A structure that sets it is
+    /// topped up whenever a full hauler's load fits under the ceiling
+    /// (`work_orders::supply_top_up_due`), besides the usual less-than-one-batch
+    /// trigger; hand-loading from Transfer is open only to one that sets it.
     /// `#[serde(default)]` so every existing structure file keeps parsing.
     #[serde(default)]
     pub supply_capacity: Option<u32>,

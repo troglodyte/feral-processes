@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.4
+
+**The character creator now draws your avatar with the same editor the sprite tools use: a 16x16 picture on the full sprite palette, a second picture that can alternate with the first at a speed you set, a fill tool, a colour pick, and the mouse paints too.** Before, the creator had its own smaller editor, an 8x8 grid of fifteen colours that the map scaled up, and the two had drifted apart. Now there is one editor and the creator's preview shows the picture as the map will draw it. An avatar drawn in an earlier version keeps its shape and takes the nearest colours on the new palette; its save string has room for the palette to grow without another conversion.
+
 ## 0.19.3
 
 **The mouse now works on a battle map: click a blue cell to walk there, click a hostile to mark it and again to attack, and the aim cursor follows the pointer with a click as Enter.** Before, a fight on a map was one arrow key per cell even though the surface map already answered a click with a walk, so the hand had to leave the mouse the moment a fight opened. Now hovering a reachable cell lights the route a click would take, the walk is spent one cell at a time through the same door the keys use, and any key or click stops it where it stands. A right-click or Esc clears the mark; a click during the wild side's turn does nothing, as a key does.

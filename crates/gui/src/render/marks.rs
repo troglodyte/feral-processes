@@ -27,6 +27,15 @@ const STAFFED_MARK_INSET: f32 = 2.0;
 /// names the Bay, not the body.
 const RECOVERY_MARK: char = '+';
 
+/// What a staff program wears while an amenity — a Sandbox, a Log Analyzer
+/// Bay — is refilling one of its needs. `RECOVERY_MARK`'s shape for the
+/// other thing a building does *to a body*: a glyph over the body rather
+/// than a rect on the building, floating up the way the `+` does, because
+/// both say the same kind of thing — a reserve is climbing off this
+/// structure. A caret rather than a second cross so the two refills read
+/// apart at a glance: Integrity is the `+`, and a mood is the arrow up.
+const SERVICED_MARK: char = '^';
+
 /// The progress bar's height, and how far it is held off the tile's edges.
 ///
 /// **The bottom edge belongs to the bar the way the top edge belongs to the
@@ -71,7 +80,7 @@ pub(super) const CON_MARK: f32 = 0.34;
 ///
 /// Paints nothing for `Rarity::Ordinary`, `rarity_color`'s own "no reading"
 /// case — the same channel-optional shape `draw_difficulty_mark` and
-/// `draw_recovery_mark` already follow.
+/// `draw_rising_mark` already follow.
 ///
 /// `vig` multiplies the way every other mark's does; the tactical board has
 /// no vignette of its own, so it always passes `1.0`.
@@ -218,7 +227,7 @@ pub(super) fn boss_color() -> Color {
 /// Paints the con read into the top-left corner, or nothing at all when
 /// there is no reading to paint.
 ///
-/// Extracted the way `draw_recovery_mark` is: the map's tile loop is far too
+/// Extracted the way `draw_rising_mark` is: the map's tile loop is far too
 /// big to reach with a test, and what has to be pinned here is that `None`
 /// paints *nothing* — an earmark on a companion would say the player can
 /// beat their own program.
@@ -509,23 +518,42 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
     )
 }
 
-/// The floating green `+` a program wears while a Repair Bay is mending it,
-/// or nothing at all for every other cell on the map.
+/// Which rising mark a body wears, and in what hue — or none, for every
+/// other cell on the map.
 ///
 /// **The gate lives in here rather than at the call site**, so a test can
-/// hold both halves: a body being mended draws the mark and everything else
-/// — the Bay doing the mending included — draws nothing.
-/// `EntityView::recovering` is the engine's own answer, derived from the same
-/// `Bays::serving` the heal runs through, so the mark cannot claim a
-/// recovery the heal is not performing.
+/// hold both halves: a body being mended draws the `+`, a body being
+/// refilled at an amenity draws the `^`, and everything else — the Bay or
+/// the Sandbox doing the work included — draws nothing. Both flags are the
+/// engine's own answer: `EntityView::recovering` is derived from the same
+/// `Bays::serving` the heal runs through, and `EntityView::serviced` from
+/// the same `Needs::serviced_at` the refill writes, so neither mark can
+/// claim a refill that is not being performed.
 ///
-/// **`palette::HEALTHY`, and the colour moved with the mark.** On the Bay it
-/// was `THREAT`, which stretched that role's reservation — hostility and
-/// inbound harm — over a building doing the player a favour. On the body it
-/// is Integrity climbing, which is the bar fill's own green and the one
-/// thing this map ever paints in it.
+/// **Recovery outranks the amenity**, `drift_idle_staff`'s own order for
+/// the same body: a downed program standing in reach of both is being
+/// mended first, and two marks on one tile would paint through each other.
 ///
-/// **Anchored above the patient's own glyph, not on it.** The shipped Bay's
+/// **`palette::HEALTHY` for both, and the colour moved with the mark.** On
+/// the Bay the `+` was `THREAT`, which stretched that role's reservation —
+/// hostility and inbound harm — over a building doing the player a favour.
+/// On the body it is a reserve climbing, which is the bar fill's own green
+/// and the one thing this map ever paints in it; a need refilling is the
+/// same news about a different bar, so it takes the same role.
+pub(super) fn rising_mark(ev: &EntityView) -> Option<(char, Color)> {
+    if ev.recovering {
+        Some((RECOVERY_MARK, hud::palette::HEALTHY))
+    } else if ev.serviced {
+        Some((SERVICED_MARK, hud::palette::HEALTHY))
+    } else {
+        None
+    }
+}
+
+/// The floating mark a program wears while a building is refilling one of
+/// its reserves — `rising_mark` decides which — or nothing at all.
+///
+/// **Anchored above the body's own glyph, not on it.** The shipped Bay's
 /// `radius: 0` and `hauling::step_to_post`'s structure-tiles block mean the
 /// patient stands *beside* the Bay, never on it — `a_downed_program_at_a_bay`
 /// places it one tile off — so this was never actually a mark on the Bay's
@@ -537,7 +565,7 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// planting that baseline at the same top band `nemesis_mark_rect` and
 /// `difficulty_mark_points` already keep clear of `RARITY_BAR_PX` — with no
 /// further push down for the mark's own measured height — is what leaves the
-/// patient's centred glyph, well below, untouched.
+/// body's centred glyph, well below, untouched.
 ///
 /// **It floats up and fades, and never comes back down** —
 /// `Fx::recovery_float`. It used to ride `Fx::centred_bob`, the build
@@ -545,8 +573,8 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// bouncing in place rather than Integrity coming off the Bay. Each mark
 /// now rises from rest and fades out, and the next starts at rest; the rest
 /// position is the lowest it ever draws, which is what keeps it clear of
-/// the patient's own glyph on every frame.
-pub(super) fn draw_recovery_mark(
+/// the body's own glyph on every frame.
+pub(super) fn draw_rising_mark(
     painter: &Painter,
     actor: Option<&EntityView>,
     fx: &Fx,
@@ -554,13 +582,13 @@ pub(super) fn draw_recovery_mark(
     glyph_px: u16,
     vig: f32,
 ) {
-    let Some(ev) = actor.filter(|ev| ev.recovering) else {
+    let Some((ev, (mark, role))) = actor.and_then(|ev| rising_mark(ev).map(|m| (ev, m))) else {
         return;
     };
-    let glyph = RECOVERY_MARK.to_string();
+    let glyph = mark.to_string();
     let dims = painter.measure_map(&glyph, glyph_px);
     let (lift, alpha) = fx.recovery_float(ev.entity, cell.h);
-    let color = at_level(hud::palette::HEALTHY, vig);
+    let color = at_level(role, vig);
     painter.map(
         &glyph,
         cell.x + (cell.w - dims.width) / 2.0,

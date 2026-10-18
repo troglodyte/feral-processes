@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.19.11
 
 **The Refit Bench mends your worn gear on its own, from a stock of Annealed Cores it keeps.** Stand still within two tiles of a stocked bench for more than two ticks and it mends one piece of worn gear a tick: what you and your party have equipped first, then what is in the pack. A purple `+` rises over you while it works. Before, every refit was a manual `R` at the bench that paid its cost out of your pack each time. That manual refit is still there, for gear above the worn line.
 

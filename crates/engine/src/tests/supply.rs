@@ -469,3 +469,21 @@ fn beside_a_bench_with_no_depot_only_its_supply_is_puttable() {
         "a pack item nothing here takes gets no row at all"
     );
 }
+
+#[test]
+fn a_depot_beside_the_bench_does_not_take_the_cores_first() {
+    let mut game = base(9325);
+    let bench = bench_beside_player(&mut game);
+    let depot = deploy(&mut game, "depot", -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 25);
+
+    let core = ItemId::from(ids::ANNEALED_CORE);
+    let given = game.give_to_adjacent(&[(core.clone(), 25)]);
+
+    assert_eq!(given, vec![(core, 25)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(node_output(&game, depot, ids::ANNEALED_CORE), 5);
+}

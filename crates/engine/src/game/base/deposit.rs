@@ -189,84 +189,96 @@ impl Game {
     /// Depot's `output_room()` as the fill walks them in `(x, y)` order —
     /// and each Depot's own filter, `depot_accepts`.
     pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
-        let player = self.player_entity();
         let depots = self.reachable_depots();
         let mut sinks = self.supply_sinks();
-
-        let mut left: Vec<u32> = Vec::with_capacity(give.len());
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in give {
-            let mut outstanding = *qty;
-            for depot in &depots {
-                if outstanding == 0 {
-                    break;
-                }
-                // A refusal reads exactly as a full shelf here, which is
-                // what lets one filtered Depot in a row of them cost the
-                // fill nothing but a step to the next.
-                if !self.depot_accepts(*depot, item) {
-                    continue;
-                }
-                let room = self.world.get::<Stock>(*depot).unwrap().output_room();
-                if room == 0 {
-                    continue;
-                }
-                let moved = self
-                    .world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .take(item.clone(), outstanding.min(room));
-                if moved == 0 {
-                    continue;
-                }
-                outstanding -= moved;
-                *self
-                    .world
-                    .get_mut::<Stock>(*depot)
-                    .unwrap()
-                    .output
-                    .entry(item.clone())
-                    .or_default() += moved;
-                *given.entry(item.clone()).or_default() += moved;
-            }
-            left.push(outstanding);
-        }
-
-        // After the shelves, so a Depot beside a bench still keeps what it
-        // could take first; a bench is topped up by hand only with what the
-        // shelves had no room for or was never offered.
-        // Room is spent as it is filled, and each row keeps its own remainder,
-        // so a basket naming one item twice can neither overfill a bench nor
-        // be short-changed by what an earlier row already gave.
-        for ((item, _), mut outstanding) in give.iter().zip(left) {
-            for (sink, supply, room) in &mut sinks {
-                if outstanding == 0 {
-                    break;
-                }
-                if supply != item {
-                    continue;
-                }
-                let moved = self
-                    .world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .take(item.clone(), outstanding.min(*room));
-                if moved == 0 {
-                    continue;
-                }
-                outstanding -= moved;
-                *room -= moved;
-                *self
-                    .world
-                    .get_mut::<Stock>(*sink)
-                    .unwrap()
-                    .input
-                    .entry(item.clone())
-                    .or_default() += moved;
+            // A bench first when the item is its supply: it can take nothing
+            // else, while a Depot beside it would swallow every core and
+            // leave the bench the one thing the player came to load. Room is
+            // spent as it is filled and each row keeps its own remainder, so
+            // a basket naming one item twice can neither overfill a bench nor
+            // be short-changed by what an earlier row already gave.
+            let into_sinks = self.fill_sinks(&mut sinks, item, *qty);
+            let into_depots = self.fill_depots(&depots, item, *qty - into_sinks);
+            let moved = into_sinks + into_depots;
+            if moved > 0 {
                 *given.entry(item.clone()).or_default() += moved;
             }
         }
-
         given.into_iter().collect()
+    }
+
+    /// Moves up to `want` of `item` from the pack into the Depots that accept
+    /// it, in order, and returns how many landed.
+    fn fill_depots(&mut self, depots: &[Entity], item: &ItemId, want: u32) -> u32 {
+        let player = self.player_entity();
+        let mut outstanding = want;
+        for depot in depots {
+            if outstanding == 0 {
+                break;
+            }
+            // A refusal reads exactly as a full shelf here, which is
+            // what lets one filtered Depot in a row of them cost the
+            // fill nothing but a step to the next.
+            if !self.depot_accepts(*depot, item) {
+                continue;
+            }
+            let room = self.world.get::<Stock>(*depot).unwrap().output_room();
+            if room == 0 {
+                continue;
+            }
+            let moved = self
+                .world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), outstanding.min(room));
+            if moved == 0 {
+                continue;
+            }
+            outstanding -= moved;
+            *self
+                .world
+                .get_mut::<Stock>(*depot)
+                .unwrap()
+                .output
+                .entry(item.clone())
+                .or_default() += moved;
+        }
+        want - outstanding
+    }
+
+    /// Moves up to `want` of `item` from the pack into the supply sinks that
+    /// spend it, spending each sink's remaining `room` as it goes, and
+    /// returns how many landed.
+    fn fill_sinks(&mut self, sinks: &mut [(Entity, ItemId, u32)], item: &ItemId, want: u32) -> u32 {
+        let player = self.player_entity();
+        let mut outstanding = want;
+        for (sink, supply, room) in sinks {
+            if outstanding == 0 {
+                break;
+            }
+            if supply != item {
+                continue;
+            }
+            let moved = self
+                .world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), outstanding.min(*room));
+            if moved == 0 {
+                continue;
+            }
+            outstanding -= moved;
+            *room -= moved;
+            *self
+                .world
+                .get_mut::<Stock>(*sink)
+                .unwrap()
+                .input
+                .entry(item.clone())
+                .or_default() += moved;
+        }
+        want - outstanding
     }
 }

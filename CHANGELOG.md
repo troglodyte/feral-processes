@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**A machine holding finished product wears a small dot in its top-left corner on the base map.** Before, product that had finished but never left the machine looked the same as a machine with nothing in it, so a full Depot and an empty stockpile read as production having stalled when the items were sitting in the machine that made them. Now the dot says "the items are in here, not in storage" for as long as the machine's finished-output buffer holds anything. Staged ingredients do not light it, and Depots never wear it: their fill bar already says how full they are.
+
 ## 0.19.6
 
 **A staff program resting at a Sandbox or a Log Analyzer Bay now floats a green `^` above its head, the way a program mending beside a Repair Bay floats its `+`.** Before, nothing on the base map showed that an amenity was doing its job: a program standing beside one looked the same as a program idling anywhere else. Now the mark rises and fades over the program for as long as its reserve is climbing, and stops the moment it is full or walks away, so you can see at a glance who is being looked after. A program being mended and rested at once shows only the `+`.

@@ -441,6 +441,25 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
 }
 
 #[test]
+fn the_refit_bench_is_buildable_only_once_program_refactoring_is_researched() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    stand_in_base(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 100);
+    assert!(!game.structure_unlocked("refit_bench"));
+    let refusal = place_now(&mut game, "refit_bench", 1, 0).unwrap_err();
+    assert!(refusal.contains("hasn't been researched yet."), "{refusal}");
+
+    unlock_research_chain(&mut game, "program_refactoring");
+
+    assert!(game.structure_unlocked("refit_bench"));
+    place_now(&mut game, "refit_bench", 1, 0).unwrap();
+}
+
+#[test]
 fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
     let game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ids: Vec<String> = game
@@ -467,9 +486,6 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "printer".to_string(),
             "quarantine_rack".to_string(),
             "recharger_node".to_string(),
-            // Ungated on purpose: gear wears from the first fights, so the
-            // bench that mends it is not a blueprint to earn.
-            "refit_bench".to_string(),
             // Ungated on purpose: recovering from a wipe is not a blueprint
             // you have to earn, and a Bay you cannot build in the zone where
             // the first wipe happens is a dead run rather than pressure.

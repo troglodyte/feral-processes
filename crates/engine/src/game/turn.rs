@@ -334,6 +334,9 @@ impl Game {
         // are `&mut Game` doors no bevy system can reach. See
         // `Game::run_repair_bays`.
         self.run_repair_bays();
+        // After the Bays and for their reason: a mend rewrites a worn copy
+        // through `swap_worn_copy` and names the wearer, `&mut Game` work.
+        self.run_refit_bench();
         // Beside the Bays: the free floor under a paid rest. See `run_base_trickle`.
         self.run_base_trickle();
         // Beside the Bays and for their reason: seating a child goes through

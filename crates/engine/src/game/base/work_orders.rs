@@ -546,6 +546,21 @@ pub(crate) fn batch_within_reach(held: u32, beside: u32, in_store: u32, per_batc
     held + beside + in_store >= per_batch
 }
 
+/// Whether a structure that authors its own `supply_capacity` has room for a
+/// whole hauler's load of its supply.
+///
+/// **A structure without the field never answers yes**, so a turret keeps
+/// `batch_within_reach`'s trigger exactly: a bench holding 20 would otherwise
+/// be topped up only once it fell under `SUPPLY_BATCH`, and a capacity that
+/// large is stocked in trips, not a window. `fuel_wants` and the walker's
+/// `hauling::missing_ingredient` both ask it, for `batch_within_reach`'s
+/// reason: a scheduler that staffs a bench the walker will not fetch for
+/// leaves a body standing at it.
+pub(crate) fn supply_top_up_due(def: &crate::structures::StructureDef, held: u32) -> bool {
+    def.supply_capacity
+        .is_some_and(|cap| cap.saturating_sub(held) >= crate::tuning::HAUL_CARRY_CAPACITY)
+}
+
 /// Whether staffing `machine` right now would actually move something.
 ///
 /// Output has room, **and** for an assembler, one batch of every ingredient
@@ -1932,11 +1947,20 @@ impl Game {
             } else {
                 0
             };
-            if batch_within_reach(held, beside, 0, per_window) {
+            let batch_in_reach = batch_within_reach(held, beside, 0, per_window);
+            let topping_up = supply_top_up_due(def, held);
+            if batch_in_reach && !topping_up {
                 continue;
             }
             let is_fuel = def.power_upkeep.is_some();
-            if in_store(&fuel, *burner, is_fuel) < per_window {
+            // A top-up trip is a full load or nothing; the batch trigger
+            // keeps its own, smaller, bar.
+            let wanted_in_store = if batch_in_reach {
+                crate::tuning::HAUL_CARRY_CAPACITY
+            } else {
+                per_window
+            };
+            if in_store(&fuel, *burner, is_fuel) < wanted_in_store {
                 // Only the grid's fuel puts staff on its maker at this
                 // priority; a defence's supply is made by work orders.
                 if is_fuel && !unstocked.iter().any(|(item, _)| *item == fuel) {

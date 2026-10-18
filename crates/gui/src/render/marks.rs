@@ -577,6 +577,11 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// the same body: a downed program standing in reach of both is being
 /// mended first, and two marks on one tile would paint through each other.
 ///
+/// **A Refit Bench mending the player's gear draws the same `+` in
+/// `palette::MENDING`**, after recovery (a downed body is the more urgent
+/// news) and before the amenity. `EntityView::refitting` is derived from the
+/// same `Game::refit_bench_serving` the mend runs through.
+///
 /// **`palette::HEALTHY` for both, and the colour moved with the mark.** On
 /// the Bay the `+` was `THREAT`, which stretched that role's reservation —
 /// hostility and inbound harm — over a building doing the player a favour.
@@ -586,6 +591,8 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 pub(super) fn rising_mark(ev: &EntityView) -> Option<(char, Color)> {
     if ev.recovering {
         Some((RECOVERY_MARK, hud::palette::HEALTHY))
+    } else if ev.refitting {
+        Some((RECOVERY_MARK, hud::palette::MENDING))
     } else if ev.serviced {
         Some((SERVICED_MARK, hud::palette::HEALTHY))
     } else {

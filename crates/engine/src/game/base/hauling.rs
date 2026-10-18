@@ -940,12 +940,21 @@ pub(crate) fn input_capacity(per_batch: u32) -> u32 {
 /// How much more of `item` a machine's input may hold before it is stocked
 /// to `INPUT_STOCK_BATCHES` batches. Zero for an item its recipe does not
 /// name, which is what makes a load of *product* fall through to `Deposit`
-/// even on a machine whose recipe happens to mention it.
-fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
+/// even on a machine whose recipe happens to mention it. A structure's
+/// authored `supply_capacity` replaces the batch multiple for its supply item.
+fn input_room(
+    stock: &Stock,
+    recipe: &[(ItemId, u32)],
+    item: &ItemId,
+    def: Option<&crate::structures::StructureDef>,
+) -> u32 {
     let Some((_, per_batch)) = recipe.iter().find(|(id, _)| id == item) else {
         return 0;
     };
-    input_capacity(*per_batch).saturating_sub(stock.input.get(item).copied().unwrap_or(0))
+    let cap = def
+        .filter(|d| d.spends_supply() == Some(item))
+        .map_or_else(|| input_capacity(*per_batch), |d| d.supply_input_capacity());
+    cap.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
 }
 
 /// The first thing on `machine`'s intake it cannot cover a batch of out of
@@ -960,17 +969,20 @@ fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
 /// the local chain can cover it, and the shelf is the answer being
 /// considered rather than part of the question.
 /// `work_orders::batch_within_reach` is the shared rule, so the machine the
-/// scheduler staffs off store is the machine this fetches for.
-/// `draws_from_neighbours` is `StructureDef::draws_from_neighbours`: a
-/// supply-only structure gets no credit for stock beside it.
+/// scheduler staffs off store is the machine this fetches for, and
+/// `work_orders::supply_top_up_due` is its one addition: a structure with an
+/// authored `supply_capacity` is also fetched for while a full load fits.
+/// `StructureDef::draws_from_neighbours` decides the credit for stock
+/// beside it: a supply-only structure gets none.
 fn missing_ingredient(
     machine: Entity,
     recipe: &[(ItemId, u32)],
     structures: &HaulStructures,
     by_tile: &HashMap<(i32, i32), Entity>,
-    draws_from_neighbours: bool,
+    def: Option<&crate::structures::StructureDef>,
 ) -> Option<ItemId> {
     let (_, pos, stock, _) = structures.get(machine).ok()?;
+    let draws_from_neighbours = def.is_none_or(|d| d.draws_from_neighbours());
     recipe.iter().find_map(|(item, per_batch)| {
         let held = stock.input.get(item).copied().unwrap_or(0);
         let beside: u32 = if draws_from_neighbours {
@@ -983,8 +995,13 @@ fn missing_ingredient(
         } else {
             0
         };
-        (!crate::game::base::work_orders::batch_within_reach(held, beside, 0, *per_batch))
-            .then(|| item.clone())
+        let topping_up = def.is_some_and(|d| {
+            d.spends_supply() == Some(item)
+                && crate::game::base::work_orders::supply_top_up_due(d, held)
+        });
+        (topping_up
+            || !crate::game::base::work_orders::batch_within_reach(held, beside, 0, *per_batch))
+        .then(|| item.clone())
     })
 }
 
@@ -1290,7 +1307,7 @@ pub(crate) fn haul_step_system(
                             structures
                                 .get(machine)
                                 .ok()
-                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item))
+                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item, def))
                         })
                         .unwrap_or(0);
                     if room > 0 {
@@ -1332,17 +1349,14 @@ pub(crate) fn haul_step_system(
                     }
                 }
                 None => recipe
-                    .and_then(|r| {
-                        let neighbours = def.is_none_or(|d| d.draws_from_neighbours());
-                        missing_ingredient(machine, r, &structures, &by_tile, neighbours)
-                    })
+                    .and_then(|r| missing_ingredient(machine, r, &structures, &by_tile, def))
                     .and_then(|item| {
                         let want = recipe
                             .and_then(|r| {
                                 structures
                                     .get(machine)
                                     .ok()
-                                    .map(|(_, _, stock, _)| input_room(stock, r, &item))
+                                    .map(|(_, _, stock, _)| input_room(stock, r, &item, def))
                             })
                             .unwrap_or(0)
                             .min(tuning::HAUL_CARRY_CAPACITY);

@@ -141,6 +141,17 @@ pub(crate) const AIM: Color = rgb(0xd6c542);
 /// saturation as [`glyph`]'s table so it does not read as louder than the
 /// bodies it is drawn among.
 pub(crate) const FORECAST: Color = rgb(0xb86ad0);
+/// violet — **a bench is mending the player's gear**: the `+` that rises off
+/// the player's tile while the Refit Bench works.
+///
+/// Not [`HEALTHY`], which is the Repair Bay's `+` and means a body's Integrity
+/// is climbing; gear being rewritten is different news on the same shape.
+/// Not [`FORECAST`]'s orchid either: that is the wild side's intent on the
+/// battle map, and one purple read as two meanings is how a palette stops
+/// meaning anything. Held apart from the reserved roles by
+/// `the_reserved_roles_are_separable` and from every content hue by
+/// `no_content_hue_takes_a_reserved_role_by_accident`.
+pub(crate) const MENDING: Color = rgb(0x8f6fe8);
 /// grey — the `x` where a body fell on a battle map. One hue for both sides:
 /// the dead are out of the fight, and whose they were is the log's to say.
 pub(crate) const FALLEN: Color = rgb(0x6b7580);
@@ -319,6 +330,11 @@ mod tests {
     #[test]
     fn no_content_hue_takes_a_reserved_role_by_accident() {
         for c in GlyphColor::ALL {
+            assert!(
+                dist(glyph(c), MENDING) > 0.25,
+                "{c:?} is only {:.2} from MENDING",
+                dist(glyph(c), MENDING)
+            );
             assert_ne!(
                 glyph(c),
                 ATTENTION,
@@ -433,6 +449,7 @@ mod tests {
             ("ATTENTION", ATTENTION),
             ("THREAT", THREAT),
             ("HEALTHY", HEALTHY),
+            ("MENDING", MENDING),
             ("PANE_TITLE", PANE_TITLE),
             ("BODY", BODY),
             ("LABEL", LABEL),

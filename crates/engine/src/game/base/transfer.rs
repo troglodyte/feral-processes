@@ -68,9 +68,10 @@ impl Game {
     /// from the pack, and survive a breach.
     ///
     /// `carried` is what the pack holds, whatever may be done with it.
-    /// `can_put` is 0 unless there is a Depot beside the party to put the
-    /// item into, the item is not `banked` — a bank is not cargo — and some
-    /// adjacent Depot has room for it that its filter has not closed, and
+    /// `can_put` is 0 unless there is somewhere beside the party to put the
+    /// item — a Depot, or a structure whose supply the item is — the item is
+    /// not `banked` — a bank is not cargo — and some adjacent Depot or sink
+    /// has room for it that a Depot's filter has not closed, and
     /// **only a row with a `can_put` of its own is created from the pack
     /// side**, so an item that can go nowhere is listed only when it is also
     /// sitting on a shelf. A banked item may still have `on_shelves`, since a
@@ -103,7 +104,8 @@ impl Game {
                     .on_shelves += qty;
             }
         }
-        let puttable = !self.reachable_depots().is_empty();
+        let depot_beside = !self.reachable_depots().is_empty();
+        let sinks = self.supply_sinks();
         let player = self.player_entity();
         if let Some(inv) = self.world.get::<Inventory>(player) {
             for (item, qty) in inv.items.iter() {
@@ -118,7 +120,8 @@ impl Game {
                 // Extractor, with no shelf to put anything on at all,
                 // would otherwise open a screen of rows that move in
                 // neither direction.
-                let may_put = puttable && !self.is_banked(item);
+                let may_put = !self.is_banked(item)
+                    && (depot_beside || sinks.iter().any(|(_, supply, _)| supply == item));
                 let can_put = if may_put {
                     (*qty).min(self.deposit_room_for(item))
                 } else {
@@ -278,7 +281,7 @@ impl Game {
     /// room line reading 0 beside an Extractor, which claims the base is
     /// full when it has no shelf at all.
     pub fn transfer_room(&self) -> Option<u32> {
-        if self.reachable_depots().is_empty() {
+        if !self.has_put_target() {
             return None;
         }
         Some(self.deposit_room())
@@ -312,17 +315,14 @@ impl Game {
             return (Moved::new(), Moved::new());
         }
         let taken = self.take_from_adjacent(&basket.take);
-        let given = self.give_to_adjacent(&basket.give);
+        let (given, loads) = self.give_to_adjacent(&basket.give);
         let carriers = self.move_carriers(&basket.carriers);
 
         if !taken.is_empty() {
             let summary = self.moved_summary(&taken);
             self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
         }
-        if !given.is_empty() {
-            let summary = self.moved_summary(&given);
-            self.log_base(format!("You put away {summary}."));
-        }
+        self.log_loads(&given, &loads);
         if carriers > 0 {
             let what = if carriers == 1 {
                 "one downed program".to_string()
@@ -463,6 +463,42 @@ impl Game {
             }
         }
         moved
+    }
+
+    /// The put half of the log: one line per structure hand-loaded, naming
+    /// it, and one "put away" line for what went to Depots. `given` is the
+    /// whole of what left the pack, so the Depot share is what the loads do
+    /// not account for.
+    fn log_loads(
+        &mut self,
+        given: &[(ItemId, u32)],
+        loads: &[crate::game::base::deposit::SinkLoad],
+    ) {
+        let mut to_depots: Vec<(ItemId, u32)> = given.to_vec();
+        let mut by_sink: Vec<(Entity, Vec<(ItemId, u32)>)> = Vec::new();
+        for (sink, item, n) in loads {
+            if let Some((_, left)) = to_depots.iter_mut().find(|(i, _)| i == item) {
+                *left -= n;
+            }
+            match by_sink.iter_mut().find(|(e, _)| e == sink) {
+                Some((_, items)) => items.push((item.clone(), *n)),
+                None => by_sink.push((*sink, vec![(item.clone(), *n)])),
+            }
+        }
+        for (sink, items) in by_sink {
+            let name = self
+                .world
+                .get::<Structure>(sink)
+                .map(|s| self.structure_name(&s.kind))
+                .unwrap_or_default();
+            let summary = self.moved_summary(&items);
+            self.log_base(format!("You load the {name} with {summary}."));
+        }
+        to_depots.retain(|(_, n)| *n > 0);
+        if !to_depots.is_empty() {
+            let summary = self.moved_summary(&to_depots);
+            self.log_base(format!("You put away {summary}."));
+        }
     }
 
     /// "N item, M other item" — the one join both halves of a transfer log

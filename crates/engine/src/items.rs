@@ -143,6 +143,8 @@ pub mod ids {
     pub const BYTECODE_BLOCK: &str = "bytecode_block";
     pub const BLANK_SUBSTRATE: &str = "blank_substrate";
     pub const CHARGE_COIL: &str = "charge_coil";
+    /// What a Refit Bench is stocked with and a refit spends.
+    pub const ANNEALED_CORE: &str = "annealed_core";
     pub const PATCH_ROUTINE: &str = "patch_routine";
     /// Spent by `Game::jail_program` to boot a `DownedProgram`
     /// record as a prisoner in a Holding Cell — engine content the same way `ROUTINE_DISK` is:

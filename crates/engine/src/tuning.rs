@@ -1891,17 +1891,18 @@ pub const QUALITY_DEFAULT: u8 = 100;
 /// Refit Bench restores it.
 pub const GEAR_DURABILITY: u8 = 15;
 
-/// What a Refit Bench charges for a craftable copy, as a percentage of its
-/// recipe, rounded up per ingredient. See `Game::refit_cost`.
-pub const REFIT_RECIPE_SHARE_PERCENT: u32 = 50;
+/// Annealed Cores one refit takes from the bench's stock, whatever the copy
+/// is: one material and one unit, so the bill never needs explaining.
+pub const REFIT_CORES: u32 = 1;
 
-/// Charge Coils every refit costs on top of the materials, craftable or
-/// found.
-pub const REFIT_COILS: u32 = 1;
+/// Ticks the player must have stood on one base cell before a Refit Bench
+/// starts mending: a walk past the bench spends nothing, so cores go to a
+/// player who has stopped to be served.
+pub const REFIT_IDLE_TICKS: u32 = 2;
 
-/// Core Fragments per rarity rung (plus one) for refitting a copy with no
-/// recipe, which only drops. An `Ordinary` drop costs one rung's worth.
-pub const REFIT_DROP_FRAGMENTS_PER_RANK: u32 = 5;
+/// Chebyshev distance, in base tiles, within which a standing player is
+/// served by a Refit Bench.
+pub const REFIT_REACH: i32 = 2;
 
 /// A worn copy raises a `GearWorn` alert when its remaining fights fall
 /// below this percentage of its durability.

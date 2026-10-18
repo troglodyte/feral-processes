@@ -2181,6 +2181,7 @@ mod tests {
             position_is_honest: true,
             structure_attended: false,
             recovering,
+            refitting: false,
             serviced: false,
             build: None,
             job_progress: None,
@@ -2271,6 +2272,24 @@ mod tests {
             ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
             "the `^` must float, not sit still: {ys:?}"
         );
+    }
+
+    /// The Refit Bench's `+` is purple, and a body a Bay is also mending
+    /// keeps the Bay's green one.
+    #[test]
+    fn a_refitting_body_wears_the_mending_plus_and_recovery_outranks_it() {
+        use crate::render::hud::palette::{HEALTHY, MENDING};
+        use crate::render::marks::rising_mark;
+        let refitting = EntityView {
+            refitting: true,
+            ..patient_view(false)
+        };
+        assert_eq!(rising_mark(&refitting), Some(('+', MENDING)));
+        let both = EntityView {
+            refitting: true,
+            ..patient_view(true)
+        };
+        assert_eq!(rising_mark(&both), Some(('+', HEALTHY)));
     }
 
     /// A downed program in reach of both wears the `+` alone: recovery

@@ -1349,6 +1349,8 @@ impl Game {
         // `anywhere_to_unload`'s reason: a program reaching full Integrity
         // has to stop wearing the mark without anything having to notice.
         let recovering_bodies = self.recovering_programs();
+        let refit_serving = self.refit_bench_serving().is_some()
+            || self.world.resource::<crate::resources::RefitStand>().mended;
 
         let mut linked_edges = self.linked_edges_by_structure();
 
@@ -1409,6 +1411,7 @@ impl Game {
                 // in this set and a test for it would be a claim about the
                 // marker that this file is the wrong place to make.
                 let recovering = recovering_bodies.contains(&entity);
+                let refitting = is_player && refit_serving;
                 let serviced = self
                     .world
                     .get::<crate::components::Needs>(entity)
@@ -1526,6 +1529,7 @@ impl Game {
                     position_is_honest,
                     structure_attended,
                     recovering,
+                    refitting,
                     serviced,
                     output_stranded,
                     holds_output,
@@ -1680,7 +1684,7 @@ impl Game {
                         def.spends_supply().map(|item| {
                             (
                                 self.item_name(item).to_string(),
-                                crate::game::base::hauling::input_capacity(def.supply_batch()),
+                                def.supply_input_capacity(),
                             )
                         })
                     });

@@ -274,3 +274,251 @@ fn a_shield_beside_the_coil_maker_does_not_hold_its_buffer() {
         "the coils belong on a shelf the shield can be supplied from"
     );
 }
+
+/// A shield registered under a new id with its own authored ceiling.
+fn capped_shield(game: &mut Game, id: &str, cap: Option<u32>) {
+    let mut def = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get("shield")
+        .cloned()
+        .expect("shield ships");
+    def.id = id.to_string();
+    def.supply_capacity = cap;
+    game.world
+        .resource_mut::<crate::structures::StructureDb>()
+        .insert(def);
+}
+
+#[test]
+fn an_authored_supply_capacity_is_what_the_sheet_quotes() {
+    let mut game = base(9310);
+    capped_shield(&mut game, "shield_capped", Some(20));
+    capped_shield(&mut game, "shield_plain", None);
+    let capped = deploy(&mut game, "shield_capped", 1, 0);
+    let plain = deploy(&mut game, "shield_plain", 3, 0);
+    assert_eq!(
+        game.structure_manifest(capped).unwrap().supply,
+        Some(("Charge Coil".to_string(), 20))
+    );
+    assert_eq!(
+        game.structure_manifest(plain).unwrap().supply,
+        Some((
+            "Charge Coil".to_string(),
+            SUPPLY_BATCH * crate::tuning::INPUT_STOCK_BATCHES
+        ))
+    );
+}
+
+#[test]
+fn a_crew_never_stocks_past_an_authored_capacity() {
+    let mut game = base(9311);
+    // Under the carry capacity (5), so only the ceiling can stop the trip at 4.
+    capped_shield(&mut game, "shield_capped", Some(4));
+    let shield = deploy(&mut game, "shield_capped", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, 60);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    let mut peak = 0;
+    for _ in 0..1500 {
+        game.tick();
+        peak = peak.max(hopper(&game, shield, ids::CHARGE_COIL));
+    }
+    assert_eq!(
+        peak, 4,
+        "the crew fills to the authored ceiling, no further"
+    );
+}
+
+fn give_cores(game: &mut Game, qty: u32) -> Vec<(ItemId, u32)> {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), qty);
+    let basket = TransferBasket::items(&[], &[(ItemId::from(ids::ANNEALED_CORE), qty)]);
+    game.transfer_items(&basket).1
+}
+
+fn carried(game: &Game, item: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .map_or(0, |inv| inv.count(&ItemId::from(item)))
+}
+
+fn bench_beside_player(game: &mut Game) -> Entity {
+    unlock_research_chain(game, "program_refactoring");
+    deploy(game, "refit_bench", 1, 0)
+}
+
+#[test]
+fn a_player_beside_a_bench_loads_it_with_cores_up_to_its_capacity() {
+    let mut game = base(9320);
+    let bench = bench_beside_player(&mut game);
+    assert!(
+        game.transfer_offer()
+            .iter()
+            .all(|r| r.item.0 != ids::ANNEALED_CORE),
+        "no cores carried, so no row yet"
+    );
+
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 25);
+    let row = game
+        .transfer_offer()
+        .into_iter()
+        .find(|r| r.item.0 == ids::ANNEALED_CORE)
+        .expect("the bench's row is offered");
+    assert_eq!(row.can_put, 20, "the bench's capacity is the permission");
+    assert_eq!(game.transfer_room(), Some(20));
+
+    let given = game
+        .transfer_items(&TransferBasket::items(
+            &[],
+            &[(ItemId::from(ids::ANNEALED_CORE), 25)],
+        ))
+        .1;
+    assert_eq!(given, vec![(ItemId::from(ids::ANNEALED_CORE), 20)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(
+        carried(&game, ids::ANNEALED_CORE),
+        5,
+        "the rest stays packed"
+    );
+
+    assert!(give_cores(&mut game, 1).is_empty(), "the 21st is refused");
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(carried(&game, ids::ANNEALED_CORE), 6);
+}
+
+#[test]
+fn two_rows_of_one_item_cannot_overfill_a_bench() {
+    let mut game = base(9321);
+    let bench = bench_beside_player(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 30);
+
+    let core = ItemId::from(ids::ANNEALED_CORE);
+    let (given, _) = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
+
+    assert_eq!(given, vec![(core, 20)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(carried(&game, ids::ANNEALED_CORE), 10);
+}
+
+#[test]
+fn a_bench_takes_only_its_supply_item_by_hand() {
+    let mut game = base(9321);
+    let bench = bench_beside_player(&mut game);
+    let before = carried(&game, ids::CORE_FRAGMENT);
+    let given = game
+        .transfer_items(&TransferBasket::items(
+            &[],
+            &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        ))
+        .1;
+    assert!(given.is_empty());
+    assert_eq!(carried(&game, ids::CORE_FRAGMENT), before);
+    assert_eq!(hopper(&game, bench, ids::CORE_FRAGMENT), 0);
+}
+
+#[test]
+fn a_crew_tops_an_authored_capacity_bench_up_in_full_trips() {
+    let mut game = base(9322);
+    capped_shield(&mut game, "shield_capped", Some(20));
+    let shield = deploy(&mut game, "shield_capped", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, 25);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    tick_until(&mut game, 3000, |g| {
+        hopper(g, shield, ids::CHARGE_COIL) == 20
+    });
+    for _ in 0..300 {
+        game.tick();
+    }
+    assert_eq!(hopper(&game, shield, ids::CHARGE_COIL), 20);
+    let left = game.world.get::<Stock>(depot).unwrap().output[&ItemId::from(ids::CHARGE_COIL)];
+    assert_eq!(
+        left, 5,
+        "a full trip fits no more, so the depot keeps the rest"
+    );
+}
+
+#[test]
+fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
+    let mut game = base(9323);
+    let turret = deploy(&mut game, "turret", 1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CHARGE_COIL), 10);
+
+    let (given, _) = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
+
+    assert!(given.is_empty());
+    assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
+    assert_eq!(carried(&game, ids::CHARGE_COIL), 10);
+}
+
+#[test]
+fn beside_a_bench_with_no_depot_only_its_supply_is_puttable() {
+    let mut game = base(9324);
+    bench_beside_player(&mut game);
+    let inv = game.world.get_mut::<Inventory>(game.player_entity());
+    let mut inv = inv.unwrap();
+    inv.add(ItemId::from(ids::ANNEALED_CORE), 5);
+    inv.add(ItemId::from(ids::BYTECODE_BLOCK), 3);
+
+    let rows: Vec<_> = game
+        .transfer_offer()
+        .into_iter()
+        .map(|r| (r.item.0, r.can_put))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![(ids::ANNEALED_CORE.to_string(), 5)],
+        "a pack item nothing here takes gets no row at all"
+    );
+}
+
+#[test]
+fn a_depot_beside_the_bench_does_not_take_the_cores_first() {
+    let mut game = base(9325);
+    let bench = bench_beside_player(&mut game);
+    let depot = deploy(&mut game, "depot", -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 25);
+
+    let core = ItemId::from(ids::ANNEALED_CORE);
+    let (given, _) = game.give_to_adjacent(&[(core.clone(), 25)]);
+
+    assert_eq!(given, vec![(core, 25)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(node_output(&game, depot, ids::ANNEALED_CORE), 5);
+}
+
+#[test]
+fn loading_a_bench_says_so_and_a_depot_put_keeps_its_own_line() {
+    let mut game = base(9326);
+    bench_beside_player(&mut game);
+    deploy(&mut game, "depot", -1, 0);
+    give_cores(&mut game, 25);
+
+    let said: Vec<String> = game
+        .message_log(200)
+        .iter()
+        .map(|l| l.text.clone())
+        .collect();
+    assert!(said.contains(&"You load the Refit Bench with 20 Annealed Core.".to_string()));
+    assert!(said.contains(&"You put away 5 Annealed Core.".to_string()));
+}

@@ -96,6 +96,7 @@ mod racks;
 mod raids;
 mod reactions;
 mod refactor;
+mod refit_auto;
 mod research;
 mod research_graph;
 mod respec;

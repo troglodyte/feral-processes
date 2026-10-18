@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**The Refit Bench mends your worn gear on its own, from a stock of Annealed Cores it keeps.** Stand still within two tiles of a stocked bench for more than two ticks and it mends one piece of worn gear a tick: what you and your party have equipped first, then what is in the pack. A purple `+` rises over you while it works. Before, every refit was a manual `R` at the bench that paid its cost out of your pack each time. That manual refit is still there, for gear above the worn line.
+
+**The Refit Bench now needs the Program Refactoring research, which you can start in zone 1, and it holds up to 20 Annealed Cores.** Haulers bring cores to it in full carries, or you load it by hand from the Transfer screen while standing beside it. Every refit costs one Annealed Core from that stock and nothing else, whatever the gear.
+
 ## 0.19.10
 
 **A machine holding finished product wears a small dot in its top-left corner on the base map.** Before, product that had finished but never left the machine looked the same as a machine with nothing in it, so a full Depot and an empty stockpile read as production having stalled when the items were sitting in the machine that made them. Now the dot says "the items are in here, not in storage" for as long as the machine's finished-output buffer holds anything. Staged ingredients do not light it, and Depots never wear it: their fill bar already says how full they are.

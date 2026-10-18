@@ -389,6 +389,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     // says what it is waiting on. The id must name a real item.
     supply: Some("charge_coil"),
 
+    // Optional; can be left out entirely (defaults to none, meaning the
+    // supply input holds two batches). The most of `supply` the input buffer
+    // holds, for a structure kept stocked for many uses (the Refit Bench holds
+    // 20 Annealed Cores). It is a ceiling: no delivery or hand load takes the
+    // buffer past it. A structure that sets it is also topped up in full
+    // loads, so haulers file a want while a whole carry (5) still fits and a
+    // store holds that much; without it they file one only when less than one
+    // batch is held. The player can load such a structure from the pack with
+    // `c` while standing beside it.
+    supply_capacity: Some(20),
+
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
     // sector instead of blocking movement — see `Game::enter_next_zone`.
@@ -810,12 +821,23 @@ Node.
 `refit_bench.ron` is the one structure the engine looks up by id for gear
 wear (the Mod Bench is the other). Gear loses a point of durability for every
 fight its wearer is in (see `durability` in `assets/items/README.md`), and the
-Refit Bench restores a copy to full condition. Only its presence matters: one
-standing anywhere in the base is enough, and the player need not be next to
-it. It has no `work` and nothing to author beyond the usual fields; it is
-named by no research file, so it is buildable from turn one.
+Refit Bench restores a copy to full condition.
 
-What a refit costs is not authored here. A craftable item costs half its
-recipe, rounded up per ingredient, plus a Charge Coil; an item that only drops
-costs Core Fragments scaled by the copy's rarity, plus a Charge Coil. The
-constants are `REFIT_*` in `crates/engine/src/tuning.rs`.
+It is gated: `program_refactoring` names it in `unlocks_structures`. A bench
+already standing keeps working if a mod removes the gate.
+
+It is a stocked structure, like a Turret. It authors `supply:
+Some("annealed_core")` and `supply_capacity: Some(20)`, so haulers keep up to
+20 Annealed Cores in its input from the base's shelves, and the player can
+load it by hand from the Transfer screen (`c`) when standing beside it. Every
+refit costs exactly one Annealed Core from that stock, whatever the copy and
+whatever its rarity; the constant is `REFIT_CORES` in
+`crates/engine/src/tuning.rs`. The menu refit (`R` on a worn copy) draws on
+the first bench holding a core, in `(x, y)` order, and is refused with "Load
+the Refit Bench with Annealed Cores first." when none does.
+
+The bench also mends on its own. When the player has stood still within
+`REFIT_REACH` tiles of a stocked bench for more than `REFIT_IDLE_TICKS` ticks,
+it mends one copy a tick, one core each: worn gear on the player and the
+party first, most worn first, then worn copies in the pack. Only a broken copy
+or one below the `GEAR_WORN_ALERT_PERCENT` line is mended this way.

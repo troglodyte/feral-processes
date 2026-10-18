@@ -176,6 +176,9 @@ Mine (flagged so they can be overturned):
 - **Hand loading goes through the Transfer screen**, the existing adjacent
   put/take picker, by letting `give_to_adjacent` fill a `supply`
   structure's input with its supply item up to capacity. No new key.
+- **Several benches:** both the automatic pass and manual refit take the
+  first stocked bench in `(x, y)` order. A bench standing before the gate
+  landed keeps working; only new placement is gated.
 - **Log lines.** Each automatic mend logs "The Refit Bench mended
   {copy_name}" (player) or "... {creature_label}'s {copy_name}" (party);
   `message_history` condenses repeats. The first tick a stand finds work

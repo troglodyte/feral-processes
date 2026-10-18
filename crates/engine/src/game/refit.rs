@@ -1,11 +1,17 @@
-//! The Refit Bench: pay materials, and a worn copy's condition returns to
-//! full. Player-operated and instant, the Mod Bench's pattern — the bench
+//! The Refit Bench: spend an Annealed Core from its stock, and a worn copy's
+//! condition returns to full. Player-operated and instant, the Mod Bench's pattern — the bench
 //! only has to be standing somewhere in the base.
 
-use std::collections::BTreeMap;
-
+use crate::base_ledger::ConsumeSource;
 use crate::items::{GearCopy, ItemId, ids};
+use crate::tuning::REFIT_CORES;
 use crate::*;
+
+/// Where a copy to be mended sits: on a wearer in a slot, or in the pack.
+pub(crate) enum WornAt {
+    Slot(Entity, EquipmentSlot, EquippedItem),
+    Pack(GearCopy),
+}
 
 /// The structure a refit requires. Only its presence matters, as with
 /// `affix_mods::MOD_BENCH`.
@@ -18,47 +24,99 @@ impl Game {
         self.has_structure(REFIT_BENCH)
     }
 
-    /// What refitting `copy` costs, merged per item and sorted by id.
-    ///
-    /// A craftable item costs `REFIT_RECIPE_SHARE_PERCENT` of its raw recipe,
-    /// rounded up per ingredient, plus `REFIT_COILS` Charge Coils. An item
-    /// with no recipe only drops, so its bill scales by the copy's rarity
-    /// rank instead. Empty for anything that is not worn gear.
-    ///
-    /// The raw `craftable.cost`, not `craft_recipes`: that one carries the
-    /// player's own perk discount and bench surcharge, which are about
-    /// compiling, not about mending.
+    /// What refitting `copy` costs: the same single `REFIT_CORES` Annealed
+    /// Core for any worn gear copy, craftable or found, whatever its rarity.
+    /// Empty for anything that is not gear.
     pub fn refit_cost(&self, copy: &GearCopy) -> Vec<(ItemId, u32)> {
-        let Some(def) = self.world.resource::<ItemDb>().get(copy.item.as_str()) else {
-            return Vec::new();
-        };
-        if def.equipment.is_none() {
-            return Vec::new();
+        let is_gear = self
+            .world
+            .resource::<ItemDb>()
+            .get(copy.item.as_str())
+            .is_some_and(|def| def.equipment.is_some());
+        if is_gear {
+            vec![(ItemId::from(ids::ANNEALED_CORE), REFIT_CORES)]
+        } else {
+            Vec::new()
         }
-        let mut bill: BTreeMap<ItemId, u32> = BTreeMap::new();
-        match &def.craftable {
-            Some(recipe) => {
-                for (item, qty) in &recipe.cost {
-                    let share = (qty * crate::tuning::REFIT_RECIPE_SHARE_PERCENT).div_ceil(100);
-                    *bill.entry(item.clone()).or_default() += share;
-                }
-            }
-            None => {
-                *bill.entry(ItemId::from(ids::CORE_FRAGMENT)).or_default() +=
-                    crate::tuning::REFIT_DROP_FRAGMENTS_PER_RANK * (copy.rarity.rank() + 1);
-            }
-        }
-        *bill.entry(ItemId::from(ids::CHARGE_COIL)).or_default() += crate::tuning::REFIT_COILS;
-        bill.into_iter().collect()
     }
 
-    /// Restores `copy` to full condition, paying `refit_cost` from the
-    /// base's stores and then the pack. Returns the copy's new key — it is
-    /// plain again, so it may live in a different store — and the log line.
+    /// Every Refit Bench with the cores it holds, in `(x, y)` order: bevy's
+    /// iteration order is not stable, and `stocked_refit_bench` takes the
+    /// first.
+    fn refit_benches(&self) -> Vec<(Entity, u32)> {
+        let core = ItemId::from(ids::ANNEALED_CORE);
+        let mut found: Vec<((i32, i32), Entity, u32)> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == REFIT_BENCH))
+            .filter_map(|e| {
+                let at = e.get::<Position>()?;
+                let held = e
+                    .get::<Stock>()
+                    .and_then(|s| s.input.get(&core).copied())
+                    .unwrap_or(0);
+                Some(((at.x, at.y), e.id(), held))
+            })
+            .collect();
+        found.sort_unstable_by_key(|(at, ..)| *at);
+        found.into_iter().map(|(_, e, held)| (e, held)).collect()
+    }
+
+    /// The first bench, in `(x, y)` order, holding enough Annealed Cores for
+    /// one refit.
+    pub(crate) fn stocked_refit_bench(&self) -> Option<Entity> {
+        self.refit_benches()
+            .into_iter()
+            .find(|(_, held)| *held >= REFIT_CORES)
+            .map(|(e, _)| e)
+    }
+
+    /// How many Annealed Cores the bench a refit would draw on holds, for the
+    /// refit screen to quote beside the bill. Zero when none is stocked.
+    pub fn refit_bench_cores(&self) -> u32 {
+        self.stocked_refit_bench()
+            .and_then(|bench| self.world.get::<Stock>(bench))
+            .and_then(|s| s.input.get(&ItemId::from(ids::ANNEALED_CORE)).copied())
+            .unwrap_or(0)
+    }
+
+    /// Restores a located copy to full condition and spends its core from
+    /// `bench`: the one mend, shared by the menu action and the bench's own
+    /// pass. A worn copy is swapped in its slot by `swap_worn_copy`; a carried
+    /// one goes through the pack helpers because a mended copy may be plain
+    /// again and so change store. Returns the new copy. Logs nothing and
+    /// ticks nothing — both belong to the caller.
+    pub(crate) fn mend_located(&mut self, at: WornAt, bench: Entity) -> GearCopy {
+        let paid = (0..REFIT_CORES)
+            .all(|_| crate::game::base::stock::spend_supply(self, bench, ConsumeSource::Refit));
+        debug_assert!(paid, "the caller chose a stocked bench");
+        match at {
+            WornAt::Slot(wearer, slot, old) => {
+                let mended = GearCopy {
+                    wear: 0,
+                    ..old.copy.clone()
+                };
+                self.swap_worn_copy(wearer, slot, &old, mended.clone());
+                mended
+            }
+            WornAt::Pack(copy) => {
+                let mended = GearCopy {
+                    wear: 0,
+                    ..copy.clone()
+                };
+                self.take_copies(&copy, 1);
+                self.add_copies(&mended, 1);
+                mended
+            }
+        }
+    }
+
+    /// Restores `copy` to full condition, paying one Annealed Core from a
+    /// stocked Refit Bench. Returns the copy's new key — it is plain again,
+    /// so it may live in a different store — and the log line.
     ///
-    /// Every refusal sits above the payment, and the payment itself is
-    /// all-or-nothing: each ingredient is checked with `stores_hold` before
-    /// any is spent, so a short purse spends nothing.
+    /// Every refusal sits above the payment, so a refused refit spends
+    /// nothing.
     pub fn refit_copy(&mut self, copy: &GearCopy) -> Result<(GearCopy, String), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -76,31 +134,14 @@ impl Game {
                 self.copy_name(copy)
             ));
         }
-        let cost = self.refit_cost(copy);
-        let short: Vec<String> = cost
-            .iter()
-            .filter(|(item, qty)| self.stores_hold(item) < *qty)
-            .map(|(item, qty)| {
-                format!(
-                    "{qty} {} (have {})",
-                    self.item_name(item),
-                    self.stores_hold(item)
-                )
-            })
-            .collect();
-        if !short.is_empty() {
-            return Err(format!("Need {}.", short.join(", ")));
-        }
-        for (item, qty) in &cost {
-            let paid = self.spend_from_stores(item, *qty, crate::base_ledger::ConsumeSource::Refit);
-            debug_assert!(paid, "stores_hold said the bill was covered");
-        }
-
-        let mended = GearCopy {
-            wear: 0,
-            ..copy.clone()
+        let Some(bench) = self.stocked_refit_bench() else {
+            return Err("Load the Refit Bench with Annealed Cores first.".into());
         };
-        let renewed = self.rekey_copy(copy, mended, slot, worn);
+        let at = match worn {
+            Some(item) => WornAt::Slot(self.player_entity(), slot, item),
+            None => WornAt::Pack(copy.clone()),
+        };
+        let renewed = self.mend_located(at, bench);
         let msg = format!("You refit {}.", self.copy_name(&renewed));
         self.log(msg.clone());
         self.tick();

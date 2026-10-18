@@ -3596,11 +3596,11 @@ pub(crate) fn app_at_a_mod_bench_carrying(
         (ItemId::from("core_fragment"), fragments),
         (ItemId::from("nullsteel_plate"), 1),
     ];
-    app_at_a_bench(seed, "mod_bench", inventory, modded, None)
+    app_at_a_bench(seed, "mod_bench", Vec::new(), inventory, modded, None)
 }
 
-/// A founded base with a Refit Bench standing and `plate` (worn down by
-/// `wear` fights) carried in the pack beside `stock`.
+/// A founded base with a Refit Bench holding `stock` in its input and
+/// `plate` (worn down by `wear` fights) carried in the pack.
 pub(crate) fn app_at_a_refit_bench(seed: u32, wear: u8, stock: Vec<(ItemId, u32)>) -> App {
     let worn = save::GearCopySave {
         item: ItemId::from("nullsteel_plate"),
@@ -3611,14 +3611,23 @@ pub(crate) fn app_at_a_refit_bench(seed: u32, wear: u8, stock: Vec<(ItemId, u32)
         quality: feral_processes_engine::tuning::QUALITY_DEFAULT,
         wear,
     };
-    app_at_a_bench(seed, "refit_bench", stock, vec![(worn, 1)], None)
+    app_at_a_bench(
+        seed,
+        "refit_bench",
+        stock,
+        Vec::new(),
+        vec![(worn, 1)],
+        None,
+    )
 }
 
-/// A founded base with one `kind` bench standing, the pack set to
-/// `inventory` and the modded `gear_copies` to `modded`.
+/// A founded base with one `kind` bench standing and holding `bench_stock` in
+/// its input, the pack set to `inventory` and the modded `gear_copies` to
+/// `modded`.
 fn app_at_a_bench(
     seed: u32,
     kind: &str,
+    bench_stock: Vec<(ItemId, u32)>,
     inventory: Vec<(ItemId, u32)>,
     modded: Vec<(save::GearCopySave, u32)>,
     worn_weapon: Option<(&str, u32, u8)>,
@@ -3637,7 +3646,7 @@ fn app_at_a_bench(
         position: (2, 2),
         durability: None,
         tier: None,
-        stock_input: Vec::new(),
+        stock_input: bench_stock,
         stock_output: Vec::new(),
         standing_work: false,
         standing_guard: false,
@@ -3666,8 +3675,8 @@ fn app_at_a_bench(
 }
 
 /// A founded base with a Refit Bench standing and the player wearing
-/// `item`, locked in at gear `level` and worn down by `wear` fights, with
-/// `stock` in the pack to pay for the refit.
+/// `item`, locked in at gear `level` and worn down by `wear` fights, and the
+/// bench holding `stock` to pay for the refit.
 pub(crate) fn app_at_a_refit_bench_wearing(
     seed: u32,
     item: &str,
@@ -3679,6 +3688,7 @@ pub(crate) fn app_at_a_refit_bench_wearing(
         seed,
         "refit_bench",
         stock,
+        Vec::new(),
         Vec::new(),
         Some((item, level, wear)),
     )

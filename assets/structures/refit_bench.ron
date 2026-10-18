@@ -1,9 +1,11 @@
 (
     id: "refit_bench",
     name: "Refit Bench",
-    description: "Where worn gear is restored: pay half a craftable copy's recipe plus a Charge Coil, or a rarity-scaled bill for a found one, and its condition returns to full. One standing anywhere in the base is enough.",
+    description: "Where worn gear is restored: one Annealed Core from its stock returns a copy to full condition, whatever the copy. Haulers keep up to 20 Cores on it, or load it by hand from the Transfer screen. One standing anywhere in the base is enough.",
     glyph: 'F',
     color: Cyan,
     build_cost: [("core_fragment", 12)],
     work: None,
+    supply: Some("annealed_core"),
+    supply_capacity: Some(20),
 )

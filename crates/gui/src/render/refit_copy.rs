@@ -29,7 +29,10 @@ pub(super) fn refit_rows(game: &Game, copy: &GearCopy) -> Vec<Row> {
             .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
             .collect();
         rows.push(text_row(format!("Cost: {}", bill.join(", "))));
-        rows.push(text_row("Paid from the base's stores, then your pack."));
+        rows.push(text_row(format!(
+            "Refit Bench holds {} Annealed Cores",
+            game.refit_bench_cores()
+        )));
     }
     rows.push(text_row(""));
     rows.push(text_row("Enter refits it. Esc to leave."));
@@ -79,6 +82,12 @@ mod tests {
             "{labels:?}"
         );
         assert!(labels.iter().any(|l| l.starts_with("Cost: ")), "{labels:?}");
+        assert!(
+            labels
+                .iter()
+                .any(|l| l == "Refit Bench holds 0 Annealed Cores"),
+            "{labels:?}"
+        );
         assert!(
             labels.iter().any(|l| l.contains("Needs a Refit Bench")),
             "no bench stands in a fresh game: {labels:?}"

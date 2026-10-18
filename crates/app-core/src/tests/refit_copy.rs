@@ -17,7 +17,7 @@ fn open_item_menu(app: &mut App) {
     app.mode = Mode::InventoryItemAction;
 }
 
-/// A refit bench with the plate worn and the pack stocked to pay for it.
+/// A refit bench stocked with the cores that pay for the worn plate.
 fn stocked_app(seed: u32) -> App {
     let probe = app_at_a_refit_bench(seed, WEAR, Vec::new());
     let bill = probe.game.as_ref().unwrap().refit_cost(&worn_plate());
@@ -60,14 +60,14 @@ fn open_pick_refit_then_back_out() {
 }
 
 #[test]
-fn a_short_purse_is_refused_with_the_engines_sentence_and_spends_nothing() {
+fn an_empty_bench_is_refused_with_the_engines_sentence_and_spends_nothing() {
     let mut app = app_at_a_refit_bench(9402, WEAR, Vec::new());
     open_item_menu(&mut app);
     app.handle_key(GameKey::Char('r'));
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RefitCopy);
     let line = app.status_line.clone().expect("a refusal sentence");
-    assert!(line.starts_with("Need "), "{line}");
+    assert_eq!(line, "Load the Refit Bench with Annealed Cores first.");
     assert_eq!(app.refit_copy, Some(worn_plate()), "nothing was mended");
 }
 

@@ -13,7 +13,7 @@ OutpostDef(
     name: "Outpost",       // display name
     glyph: '⌂',             // drawn on the zone map
     kit: "outpost_kit",     // the item id that founds one when used
-    repair_cost: [("core_fragment", 8)],   // paid from the pack by [R] at zero integrity
+    repair_cost: [("logic_wafer", 4)],   // paid from the pack by [R] at zero integrity
     tiers: [
         (
             yields: {

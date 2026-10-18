@@ -118,25 +118,15 @@ impl Game {
         let paid = (0..REFIT_CORES)
             .all(|_| crate::game::base::stock::spend_supply(self, bench, ConsumeSource::Refit));
         debug_assert!(paid, "the caller chose a stocked bench");
-        match at {
-            WornAt::Slot(wearer, slot, old) => {
-                let mended = GearCopy {
-                    wear: 0,
-                    ..old.copy.clone()
-                };
-                self.swap_worn_copy(wearer, slot, &old, mended.clone());
-                mended
-            }
-            WornAt::Pack(copy) => {
-                let mended = GearCopy {
-                    wear: 0,
-                    ..copy.clone()
-                };
-                self.take_copies(&copy, 1);
-                self.add_copies(&mended, 1);
-                mended
-            }
-        }
+        let (copy, worn) = match at {
+            WornAt::Slot(wearer, slot, old) => (old.copy.clone(), Some((wearer, slot, old))),
+            WornAt::Pack(copy) => (copy, None),
+        };
+        let mended = GearCopy {
+            wear: 0,
+            ..copy.clone()
+        };
+        self.rekey_copy(&copy, mended, worn)
     }
 
     /// Every copy the bench would mend now, in the order it serves them: the

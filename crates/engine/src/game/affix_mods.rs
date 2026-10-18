@@ -96,7 +96,11 @@ impl Game {
 
         let mut affixes = copy.affixes.clone();
         affixes.push(affix.clone());
-        let modded = self.rekey_copy(copy, copy.reaffixed(affixes), slot, worn);
+        let modded = self.rekey_copy(
+            copy,
+            copy.reaffixed(affixes),
+            worn.map(|w| (self.player_entity(), slot, w)),
+        );
         let msg = format!("You fit {label} to {}.", self.item_name(&modded.item));
         self.log(msg.clone());
         self.tick();
@@ -125,7 +129,11 @@ impl Game {
             .map_or_else(|| affix.as_str().to_string(), |d| d.label());
         let mut affixes = copy.affixes.clone();
         affixes.remove(position);
-        let stripped = self.rekey_copy(copy, copy.reaffixed(affixes), slot, worn);
+        let stripped = self.rekey_copy(
+            copy,
+            copy.reaffixed(affixes),
+            worn.map(|w| (self.player_entity(), slot, w)),
+        );
         let msg = format!("You strip {label} from {}.", self.item_name(&stripped.item));
         self.log(msg.clone());
         self.tick();
@@ -178,23 +186,24 @@ impl Game {
     }
 
     /// Replaces `copy` with `new`, wherever it is. Through
-    /// `take_copies`/`add_copies` when carried, because changing a property
-    /// can make a copy plain (or not) and change its store; a worn one is
-    /// swapped in its slot by `swap_worn_copy`.
+    /// `take_copies`/`add_copies` when carried (`worn` is `None`), because
+    /// changing a property can make a copy plain (or not) and change its
+    /// store; a worn one, given as its wearer, slot and current item, is
+    /// swapped in place by `swap_worn_copy`. The one rekey path: mods and
+    /// refits both go through it.
     pub(crate) fn rekey_copy(
         &mut self,
         copy: &GearCopy,
         new: GearCopy,
-        slot: EquipmentSlot,
-        worn: Option<EquippedItem>,
+        worn: Option<(Entity, EquipmentSlot, EquippedItem)>,
     ) -> GearCopy {
-        let Some(worn) = worn else {
-            self.take_copies(copy, 1);
-            self.add_copies(&new, 1);
-            return new;
-        };
-        let player = self.player_entity();
-        self.swap_worn_copy(player, slot, &worn, new.clone());
+        match worn {
+            Some((wearer, slot, old)) => self.swap_worn_copy(wearer, slot, &old, new.clone()),
+            None => {
+                self.take_copies(copy, 1);
+                self.add_copies(&new, 1);
+            }
+        }
         new
     }
 

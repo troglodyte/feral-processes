@@ -1667,7 +1667,7 @@ impl Game {
                         def.spends_supply().map(|item| {
                             (
                                 self.item_name(item).to_string(),
-                                crate::game::base::hauling::input_capacity(def.supply_batch()),
+                                def.supply_input_capacity(),
                             )
                         })
                     });

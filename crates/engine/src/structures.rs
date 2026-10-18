@@ -545,6 +545,13 @@ pub struct StructureDef {
     /// keeps parsing as one that spends nothing.
     #[serde(default)]
     pub supply: Option<ItemId>,
+    /// How much of `supply` the input buffer holds at most, where the default
+    /// of `supply_batch() * INPUT_STOCK_BATCHES` is too small for the use (a
+    /// bench kept stocked for many mends). Haulers still file a want only when
+    /// less than one batch is held, so this sets the ceiling, not the trigger.
+    /// `#[serde(default)]` so every existing structure file keeps parsing.
+    #[serde(default)]
+    pub supply_capacity: Option<u32>,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is
@@ -1040,6 +1047,15 @@ impl StructureDef {
         } else {
             crate::tuning::SUPPLY_BATCH
         }
+    }
+
+    /// How much of its `spends_supply` item this structure's input holds at
+    /// most: the authored `supply_capacity`, else `INPUT_STOCK_BATCHES`
+    /// batches. The one answer the hauler's `input_room` and the roster's
+    /// `StructureReport::supply` both read.
+    pub fn supply_input_capacity(&self) -> u32 {
+        self.supply_capacity
+            .unwrap_or_else(|| crate::game::base::hauling::input_capacity(self.supply_batch()))
     }
 
     /// Whether raising or upgrading this structure costs a tamed program.

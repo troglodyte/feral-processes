@@ -255,3 +255,60 @@ fn a_shield_beside_the_coil_maker_does_not_hold_its_buffer() {
         "the coils belong on a shelf the shield can be supplied from"
     );
 }
+
+/// A shield registered under a new id with its own authored ceiling.
+fn capped_shield(game: &mut Game, id: &str, cap: Option<u32>) {
+    let mut def = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get("shield")
+        .cloned()
+        .expect("shield ships");
+    def.id = id.to_string();
+    def.supply_capacity = cap;
+    game.world
+        .resource_mut::<crate::structures::StructureDb>()
+        .insert(def);
+}
+
+#[test]
+fn an_authored_supply_capacity_is_what_the_sheet_quotes() {
+    let mut game = base(9310);
+    capped_shield(&mut game, "shield_capped", Some(20));
+    capped_shield(&mut game, "shield_plain", None);
+    let capped = deploy(&mut game, "shield_capped", 1, 0);
+    let plain = deploy(&mut game, "shield_plain", 3, 0);
+    assert_eq!(
+        game.structure_manifest(capped).unwrap().supply,
+        Some(("Charge Coil".to_string(), 20))
+    );
+    assert_eq!(
+        game.structure_manifest(plain).unwrap().supply,
+        Some((
+            "Charge Coil".to_string(),
+            SUPPLY_BATCH * crate::tuning::INPUT_STOCK_BATCHES
+        ))
+    );
+}
+
+#[test]
+fn a_crew_never_stocks_past_an_authored_capacity() {
+    let mut game = base(9311);
+    // Under the carry capacity (5), so only the ceiling can stop the trip at 4.
+    capped_shield(&mut game, "shield_capped", Some(4));
+    let shield = deploy(&mut game, "shield_capped", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, 60);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    let mut peak = 0;
+    for _ in 0..1500 {
+        game.tick();
+        peak = peak.max(hopper(&game, shield, ids::CHARGE_COIL));
+    }
+    assert_eq!(
+        peak, 4,
+        "the crew fills to the authored ceiling, no further"
+    );
+}

@@ -389,6 +389,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // says what it is waiting on. The id must name a real item.
     supply: Some("charge_coil"),
 
+    // Optional; can be left out entirely (defaults to none, meaning the
+    // supply input holds two batches). The most of `supply` the input buffer
+    // holds, for a structure kept stocked for many uses (the Refit Bench holds
+    // 20 Annealed Cores). It is a ceiling: haulers still file a want only
+    // when less than one batch is held, and no delivery or hand load takes the
+    // buffer past it.
+    supply_capacity: Some(20),
+
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
     // sector instead of blocking movement — see `Game::enter_next_zone`.

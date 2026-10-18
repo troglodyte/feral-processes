@@ -915,12 +915,21 @@ pub(crate) fn input_capacity(per_batch: u32) -> u32 {
 /// How much more of `item` a machine's input may hold before it is stocked
 /// to `INPUT_STOCK_BATCHES` batches. Zero for an item its recipe does not
 /// name, which is what makes a load of *product* fall through to `Deposit`
-/// even on a machine whose recipe happens to mention it.
-fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
+/// even on a machine whose recipe happens to mention it. A structure's
+/// authored `supply_capacity` replaces the batch multiple for its supply item.
+fn input_room(
+    stock: &Stock,
+    recipe: &[(ItemId, u32)],
+    item: &ItemId,
+    def: Option<&crate::structures::StructureDef>,
+) -> u32 {
     let Some((_, per_batch)) = recipe.iter().find(|(id, _)| id == item) else {
         return 0;
     };
-    input_capacity(*per_batch).saturating_sub(stock.input.get(item).copied().unwrap_or(0))
+    let cap = def
+        .filter(|d| d.spends_supply() == Some(item))
+        .map_or_else(|| input_capacity(*per_batch), |d| d.supply_input_capacity());
+    cap.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
 }
 
 /// The first thing on `machine`'s intake it cannot cover a batch of out of
@@ -1275,7 +1284,7 @@ pub(crate) fn haul_step_system(
                             structures
                                 .get(machine)
                                 .ok()
-                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item))
+                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item, def))
                         })
                         .unwrap_or(0);
                     if room > 0 {
@@ -1327,7 +1336,7 @@ pub(crate) fn haul_step_system(
                                 structures
                                     .get(machine)
                                     .ok()
-                                    .map(|(_, _, stock, _)| input_room(stock, r, &item))
+                                    .map(|(_, _, stock, _)| input_room(stock, r, &item, def))
                             })
                             .unwrap_or(0)
                             .min(tuning::HAUL_CARRY_CAPACITY);

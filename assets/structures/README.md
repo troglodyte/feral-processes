@@ -384,7 +384,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // with power_upkeep (a fuel burner is fed first). A structure with a
     // supply that is a defence (a Shield or Turret) reports "Uncharged" on
     // the Production page while its input is empty; a Repair Bay simply heals
-    // at its plain rate. The id must name a real item.
+    // at its plain rate. The roster and the `x` sheet name the item either
+    // way ("takes Charge Coil, holds up to 6"), so an uncharged defence
+    // says what it is waiting on. The id must name a real item.
     supply: Some("charge_coil"),
 
     // Optional; can be left out entirely (defaults to false). If true,

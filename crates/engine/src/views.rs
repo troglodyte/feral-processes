@@ -1854,6 +1854,17 @@ pub struct StructureReport {
     /// doing. Drawn because a rig with no standing tool is the one that
     /// silently will not fetch from a rack.
     pub standing_tool: Option<String>,
+    /// What this structure is fed with to keep working — a defence's or
+    /// Repair Bay's `StructureDef::supply`, a burner's `power_upkeep` fuel
+    /// — as `(item name, how many its buffer holds at most)`. `None` on a
+    /// structure that spends nothing.
+    ///
+    /// Named even while the buffer holds some, because `input` goes quiet
+    /// the moment it empties and `MachineStatus::Uncharged` only says that
+    /// it has: a Shield reading "uncharged" told the player nothing about
+    /// what the haulers were waiting on. A name, `input`'s reason; the
+    /// ceiling is `hauling::input_capacity`, the figure the crew fills to.
+    pub supply: Option<(String, u32)>,
     /// A drop pod terminal's charge, `None` on every structure that is not
     /// one (`StructureDef::drop_pod`).
     pub pod: Option<PodState>,

@@ -1725,6 +1725,50 @@ fn a_structure_manifest_is_the_same_row_the_roster_shows() {
     assert_eq!(from_manifest.output_capacity, from_roster.output_capacity);
 }
 
+/// `x` at a Shield must say what charges it. A defence with an empty buffer
+/// reads "uncharged — its supply has run out", and nothing else on the sheet
+/// named the item the haulers were waiting on; a burner's fuel is the same
+/// gap one row over. A machine that spends nothing says nothing.
+#[test]
+fn a_structure_manifest_names_the_supply_it_spends() {
+    let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let mut place = |kind: &str, dx: i32| {
+        game.world
+            .spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position {
+                    x: start.x + dx,
+                    y: start.y,
+                },
+            ))
+            .id()
+    };
+    let shield = place("shield", 2);
+    let recharger = place("recharger_node", 4);
+    let factory = place("factory", 6);
+
+    assert_eq!(
+        game.structure_manifest(shield).unwrap().supply,
+        Some((
+            "Charge Coil".to_string(),
+            crate::game::base::hauling::input_capacity(crate::tuning::SUPPLY_BATCH)
+        ))
+    );
+    assert_eq!(
+        game.structure_manifest(recharger).unwrap().supply,
+        Some((
+            "Power Cell".to_string(),
+            crate::game::base::hauling::input_capacity(
+                crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW
+            )
+        ))
+    );
+    assert_eq!(game.structure_manifest(factory).unwrap().supply, None);
+}
+
 /// An entity that is not a structure has no row, rather than an empty one.
 #[test]
 fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {

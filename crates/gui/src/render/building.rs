@@ -1853,6 +1853,13 @@ pub(super) fn structure_detail_lines(
     if let Some(line) = stall_line(s) {
         lines.push((format!("  {line}"), YELLOW));
     }
+    // Directly under the stall, which is the line it explains: "uncharged"
+    // says the buffer is empty and this says what fills it. Drawn while it
+    // holds some too — the `in:` row below counts the stock, not the
+    // ceiling — and dim, because the crew fetches it on its own.
+    if let Some((item, capacity)) = &s.supply {
+        lines.push((format!("  takes {item}, holds up to {capacity}"), TEXT_DIM));
+    }
     if let Some(line) = buffer_line("in", &s.input, None) {
         lines.push((line, TEXT_DIM));
     }
@@ -2794,10 +2801,39 @@ mod tests {
             status: Some(status),
             assignees: Vec::new(),
             standing_tool: None,
+            supply: None,
             pod: None,
             prison: None,
             line: None,
         }
+    }
+
+    /// A defence names what charges it even while it holds some: the
+    /// "uncharged" stall says the buffer is empty, and nothing else on the
+    /// sheet says what fills it.
+    #[test]
+    fn the_detail_lines_name_what_a_structure_is_fed_with() {
+        let mut s = structure_report(MachineStatus::Uncharged);
+        s.supply = Some(("Charge Coil".to_string(), 6));
+        let lines = structure_detail_lines(&s, None, false);
+        let texts: Vec<&str> = lines.iter().map(|(l, _)| l.as_str()).collect();
+        assert!(
+            texts.contains(&"  takes Charge Coil, holds up to 6"),
+            "{texts:?}"
+        );
+        let stall = texts.iter().position(|l| l.starts_with("  uncharged"));
+        let takes = texts.iter().position(|l| l.starts_with("  takes"));
+        assert!(
+            stall < takes,
+            "the stall is explained by the line under it: {texts:?}"
+        );
+
+        s.supply = None;
+        let lines = structure_detail_lines(&s, None, false);
+        assert!(
+            lines.iter().all(|(l, _)| !l.starts_with("  takes")),
+            "{lines:?}"
+        );
     }
 
     fn line_report(active: Option<usize>, missing_text: Option<&str>) -> LineReport {

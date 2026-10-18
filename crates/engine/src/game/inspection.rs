@@ -1659,6 +1659,18 @@ impl Game {
             .map(|(entity, kind, pos)| {
                 let workable = self.accepts_a_program(entity);
                 let side = self.structure_footprint(&kind);
+                let supply = self
+                    .world
+                    .resource::<StructureDb>()
+                    .get(&kind)
+                    .and_then(|def| {
+                        def.spends_supply().map(|item| {
+                            (
+                                self.item_name(item).to_string(),
+                                crate::game::base::hauling::input_capacity(def.supply_batch()),
+                            )
+                        })
+                    });
                 let named = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                     map.map(|m| {
                         m.iter()
@@ -1706,6 +1718,7 @@ impl Game {
                                 .map(|def| def.name.clone())
                                 .unwrap_or_else(|| id.0.clone())
                         }),
+                    supply,
                     pod: self.pod_state(entity, pos),
                     prison: self.prison_state(entity),
                     line: line_of.get(&entity).copied(),

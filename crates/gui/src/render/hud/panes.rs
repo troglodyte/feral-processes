@@ -814,6 +814,7 @@ mod tests {
                 }]
             },
             standing_tool: None,
+            supply: None,
             pod: None,
             prison: None,
             line: None,

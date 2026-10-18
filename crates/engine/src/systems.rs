@@ -2279,7 +2279,7 @@ pub fn assembler_system(
             };
             let mut plan = Vec::new();
             for (item, per_batch) in recipe {
-                let cap = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
+                let cap = crate::game::base::hauling::input_capacity(*per_batch);
                 let want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
                 let takes = crate::game::base::collect::plan_adjacent_take(
                     (x, y),

@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**The Refit Bench mends your worn gear on its own, from a stock of Annealed Cores it keeps.** Stand still within two tiles of a stocked bench for more than two ticks and it mends one piece of worn gear a tick: what you and your party have equipped first, then what is in the pack. A purple `+` rises over you while it works. Before, every refit was a manual `R` at the bench that paid its cost out of your pack each time. That manual refit is still there, for gear above the worn line.
+
+**The Refit Bench now needs the Program Refactoring research, which you can start in zone 1, and it holds up to 20 Annealed Cores.** Haulers bring cores to it in full carries, or you load it by hand from the Transfer screen while standing beside it. Every refit costs one Annealed Core from that stock and nothing else, whatever the gear.
+
 ## 0.19.9
 
 **Looking at a structure with `x` now says what it runs on.** A Shield, Turret, Repair Bay, Recharger Node or Line Driver carries a line like "takes Charge Coil, holds up to 6" under its status, on the Structures roster as well as the sheet. Before, an empty Shield read "uncharged — its supply has run out" and nothing anywhere named the item the haulers were waiting on.

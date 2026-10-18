@@ -8,13 +8,14 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::achievements::Earned;
 use feral_processes_engine::attributes::AttributeId;
 use feral_processes_engine::classes::PlayerClass;
+use feral_processes_engine::icon::{Canvas, quantise};
 use feral_processes_engine::save;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
 use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS, PLAYER_BASE_STATS};
+use feral_processes_engine::{DEFAULT_SPRITE_FRAME_MS, ICON_SIZE, PlayerIcon};
 
 /// The Points step's row for `id`, by position in `App::creation_rows`.
 fn attribute_row(app: &App, id: &str) -> usize {
@@ -1537,8 +1538,7 @@ fn taking_a_preset_row_clears_a_drawn_icon() {
 /// re-seeding the profile's saved drawing over it.
 #[test]
 fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 5);
+    let icon = icon_with(&[(0, 0, 5)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()
@@ -1578,8 +1578,7 @@ fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
 /// drew something last run sees it again without having to redraw it.
 #[test]
 fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 3);
+    let icon = icon_with(&[(0, 0, 3)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()
@@ -1605,16 +1604,24 @@ fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
     ));
 }
 
-/// **A profile written before the grid halved still seeds the wizard.**
-/// `v1` carried 256 pixels; `PlayerIcon::decode` folds each 2x2 block onto
-/// the 8x8 grid, so a player who drew an icon on the old editor opens the
-/// new one on the same figure rather than on a blank canvas. Asserted
+/// A one-frame icon with the listed cells painted.
+fn icon_with(cells: &[(usize, usize, u8)]) -> PlayerIcon {
+    let mut canvas = Canvas::new(ICON_SIZE);
+    for &(x, y, index) in cells {
+        canvas.set(x, y, index);
+    }
+    PlayerIcon::new(vec![canvas], DEFAULT_SPRITE_FRAME_MS).unwrap()
+}
+
+/// **A profile written in the retired `v1` format still seeds the wizard.**
+/// `PlayerIcon::decode` keeps each pixel in place and remaps its colour, so a
+/// player who drew an icon on the old editor opens the new one on the same
+/// figure rather than on a blank canvas. Asserted
 /// through the wizard rather than on `decode` alone, because the seed is
 /// the only place a player would ever see the difference.
 #[test]
 fn entering_the_icon_step_seeds_from_a_v1_profile() {
-    // A 2x2 block of colour 4 at the old grid's origin, folding to cell
-    // (0, 0); everything else transparent.
+    // A 2x2 block of colour 4 at the origin; everything else transparent.
     let mut v1 = String::from("v1:");
     for y in 0..16 {
         for x in 0..16 {
@@ -1634,12 +1641,13 @@ fn entering_the_icon_step_seeds_from_a_v1_profile() {
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon
 
-    let mut folded = PlayerIcon::default();
-    folded.set(0, 0, 4);
+    // Old colour 4 is (0xb4, 0xb4, 0xb4); each pixel keeps its place.
+    let want = quantise((0xb4, 0xb4, 0xb4, 255));
+    let folded = icon_with(&[(0, 0, want), (1, 0, want), (0, 1, want), (1, 1, want)]);
     assert_eq!(
         app.creation_choice().icon,
         Some(folded),
-        "a v1 profile must fold onto the 8x8 grid rather than being dropped"
+        "a v1 profile must fold forward in place, colours remapped, rather than being dropped"
     );
     assert!(matches!(
         app.creation_rows().last(),
@@ -1779,8 +1787,7 @@ fn clearing_a_drawing_and_keeping_it_is_not_a_drawing() {
 /// reads.
 #[test]
 fn taking_a_preset_leaves_the_profiles_drawing_alone() {
-    let mut icon = PlayerIcon::default();
-    icon.set(3, 4, 7);
+    let icon = icon_with(&[(3, 4, 7)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()

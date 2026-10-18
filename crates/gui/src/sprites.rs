@@ -239,7 +239,7 @@ impl Sprites {
     /// This is the only texture the game builds at runtime; everything else
     /// in the table came off disk through `load`. It is asked every frame,
     /// so the first thing it does is compare the icon **by value** and do
-    /// nothing for an equal one — `PartialEq` over 64 bytes is cheaper
+    /// nothing for an equal one — `PartialEq` over a few hundred bytes is cheaper
     /// than any dirty flag would be to keep honest, and the alternative is
     /// a texture minted per frame and none ever freed. When it does change,
     /// the previous registration is taken back *before* the new one is
@@ -252,11 +252,10 @@ impl Sprites {
     /// drew, so the glyph fallback never runs. Filtered here, in the one
     /// place the key is minted, rather than at each of the two draw sites.
     ///
-    /// **The player draws 8x8 and the sprite stays 16x16**, so each drawn
-    /// cell fills an `ICON_CELL_PIXELS` square of the buffer below. Under
-    /// nearest sampling that is pixel-identical to a native 8x8 texture,
-    /// and it leaves the sprite format — which `assets/sprites/README.md`
-    /// says is not negotiable — completely alone.
+    /// **The avatar uploads as an ordinary sprite sheet**: `ICON_SIZE * n`
+    /// wide, `ICON_SIZE` tall, frame `f` at x offset `f * ICON_SIZE`, and
+    /// registered under `DRAWN_ICON_KEY` with its own pace — the shape
+    /// `load` makes of a file, so the draw sites need no second path.
     ///
     /// `ImageSampler::nearest()` is `load`'s reason exactly: bevy_egui
     /// binds the image's *own* sampler and bevy's default is linear, so
@@ -282,20 +281,22 @@ impl Sprites {
             table.remove(DRAWN_ICON_KEY);
             return;
         };
-        // Built through `PlayerIcon::pixel_rgba` — the one place a drawn
-        // cell becomes its pixel block, over `rgba`, the one place an index
-        // becomes a colour and index 0 becomes a transparent pixel rather
-        // than an opaque black one.
-        let mut bytes = Vec::with_capacity(ICON_SIZE * ICON_SIZE * 4);
+        // Through `PlayerIcon::rgba`, the one place an index becomes a
+        // colour and index 0 becomes a transparent pixel rather than an
+        // opaque black one.
+        let frames = icon.frames().len();
+        let mut bytes = Vec::with_capacity(ICON_SIZE * frames * ICON_SIZE * 4);
         for y in 0..ICON_SIZE {
-            for x in 0..ICON_SIZE {
-                let (r, g, b, a) = icon.pixel_rgba(x, y);
-                bytes.extend_from_slice(&[r, g, b, a]);
+            for frame in 0..frames {
+                for x in 0..ICON_SIZE {
+                    let (r, g, b, a) = icon.rgba(frame, x, y);
+                    bytes.extend_from_slice(&[r, g, b, a]);
+                }
             }
         }
         let mut image = Image::new(
             Extent3d {
-                width: ICON_SIZE as u32,
+                width: (ICON_SIZE * frames) as u32,
                 height: ICON_SIZE as u32,
                 depth_or_array_layers: 1,
             },
@@ -307,7 +308,7 @@ impl Sprites {
         image.sampler = ImageSampler::nearest();
         let handle = images.add(image);
         let id = textures.add_image(EguiTextureHandle::Strong(handle.clone()));
-        table.insert(DRAWN_ICON_KEY, id, 1, DEFAULT_SPRITE_FRAME_MS);
+        table.insert(DRAWN_ICON_KEY, id, frames, icon.frame_ms());
         self.drawn = Some((icon.clone(), handle));
     }
 }
@@ -667,7 +668,7 @@ pub fn register(
 mod tests {
     use super::*;
     use bevy::image::ImageFilterMode;
-    use feral_processes_engine::ICON_CELL_PIXELS;
+    use feral_processes_engine::sprite_rgba;
 
     fn plain(canvas: Canvas) -> InstalledSprite {
         InstalledSprite {
@@ -691,9 +692,31 @@ mod tests {
     /// A drawing with one lit cell — enough to be non-blank, and it pins
     /// the byte order at a coordinate that is not the origin.
     fn a_drawing() -> PlayerIcon {
-        let mut icon = PlayerIcon::default();
-        icon.set(2, 1, 6);
-        icon
+        an_icon(&[&[(2, 1, 6)]], DEFAULT_SPRITE_FRAME_MS)
+    }
+
+    /// An icon whose frames have the listed cells painted.
+    fn an_icon(frames: &[&[(usize, usize, u8)]], frame_ms: u32) -> PlayerIcon {
+        let canvases = frames
+            .iter()
+            .map(|cells| {
+                let mut canvas = Canvas::new(ICON_SIZE);
+                for &(x, y, index) in *cells {
+                    canvas.set(x, y, index);
+                }
+                canvas
+            })
+            .collect();
+        PlayerIcon::new(canvases, frame_ms).unwrap()
+    }
+
+    fn image_pixel(image: &Image, x: usize, y: usize) -> (u8, u8, u8, u8) {
+        let data = image
+            .data
+            .as_ref()
+            .expect("the image must carry its pixels");
+        let at = (y * image.width() as usize + x) * 4;
+        (data[at], data[at + 1], data[at + 2], data[at + 3])
     }
 
     fn fixtures() -> (Sprites, Assets<Image>, EguiUserTextures) {
@@ -737,90 +760,50 @@ mod tests {
         assert_eq!(d.min_filter, ImageFilterMode::Nearest);
     }
 
-    /// **Each drawn cell fills its own `ICON_CELL_PIXELS` square of the
-    /// texture.** The player edits an 8x8 grid and the sprite stays 16x16,
-    /// so the upload is where the two meet — and under nearest sampling a
-    /// correctly-expanded block is pixel-identical to a native 8x8 texture.
-    /// Asserted on the bytes: a lit cell must be four opaque pixels in a
-    /// 2x2 square at twice its coordinates, and its neighbours must be
-    /// untouched.
+    /// **Frames sit side by side in one sheet**, each at `f * ICON_SIZE`,
+    /// registered with the icon's own pace. Asserted on the bytes, with a
+    /// cell in the second frame to catch frames stacked or overwritten.
     #[test]
-    fn a_drawn_cell_is_uploaded_as_its_whole_pixel_block() {
+    fn a_two_frame_icon_uploads_a_32x16_sheet_and_registers_its_pace() {
         let (mut sprites, mut images, mut textures) = fixtures();
-        let icon = a_drawing();
+        let icon = an_icon(&[&[(1, 0, 5)], &[(2, 3, 9)]], 450);
 
         sprites.sync_drawn_icon(Some(&icon), &mut images, &mut textures);
 
         let (_, handle) = sprites.drawn.as_ref().expect("the icon must be kept");
-        let data = images
-            .get(handle)
-            .expect("the image must be in the assets")
-            .data
-            .as_ref()
-            .expect("the image must carry its pixels")
-            .clone();
-        assert_eq!(data.len(), ICON_SIZE * ICON_SIZE * 4);
-
-        let pixel = |x: usize, y: usize| {
-            let at = (y * ICON_SIZE + x) * 4;
-            (data[at], data[at + 1], data[at + 2], data[at + 3])
-        };
-        // `a_drawing` paints cell (2, 1), so pixels (4..6, 2..4).
-        let (cx, cy) = (2, 1);
-        let want = icon.rgba(cx, cy);
-        assert_eq!(want.3, 255, "the fixture's cell must be opaque");
-        for dy in 0..ICON_CELL_PIXELS {
-            for dx in 0..ICON_CELL_PIXELS {
-                let (x, y) = (cx * ICON_CELL_PIXELS + dx, cy * ICON_CELL_PIXELS + dy);
-                assert_eq!(pixel(x, y), want, "pixel ({x}, {y}) is inside the block");
-            }
-        }
-        for (x, y) in [(3, 2), (6, 2), (4, 1), (4, 4)] {
-            assert_eq!(
-                pixel(x, y),
-                (0, 0, 0, 0),
-                "pixel ({x}, {y}) is outside the block and must stay bare"
-            );
-        }
-        assert_eq!(
-            data.chunks_exact(4).filter(|p| p[3] == 255).count(),
-            ICON_CELL_PIXELS * ICON_CELL_PIXELS,
-            "one lit cell is exactly one block of opaque pixels"
-        );
+        let image = images.get(handle).expect("the image must be in the assets");
+        assert_eq!((image.width(), image.height()), (32, 16));
+        assert_eq!(image_pixel(image, 1, 0), sprite_rgba(5));
+        assert_eq!(image_pixel(image, 16 + 2, 3), sprite_rgba(9));
+        assert_eq!(image_pixel(image, 2, 3), (0, 0, 0, 0));
+        assert_eq!(image_pixel(image, 16 + 1, 0), (0, 0, 0, 0));
+        let entry = sprites.table().get(DRAWN_ICON_KEY).unwrap();
+        assert_eq!((entry.frames, entry.frame_ms), (2, 450));
     }
 
-    /// The bytes are `PlayerIcon::rgba`'s answer, transparency included.
-    ///
-    /// Index 0 is transparent rather than a colour, and `rgba` is the one
-    /// place that is decided — a second derivation here is what would let
-    /// the map draw an opaque black square where the player left the canvas
-    /// bare.
     #[test]
-    fn the_uploaded_pixels_are_the_icons_own_rgba() {
+    fn a_one_frame_icon_uploads_a_16x16_sheet() {
         let (mut sprites, mut images, mut textures) = fixtures();
-        let icon = a_drawing();
 
-        sprites.sync_drawn_icon(Some(&icon), &mut images, &mut textures);
+        sprites.sync_drawn_icon(Some(&a_drawing()), &mut images, &mut textures);
 
         let (_, handle) = sprites.drawn.as_ref().expect("the icon must be kept");
-        let data = images
-            .get(handle)
-            .expect("the image must be in the assets")
-            .data
-            .as_ref()
-            .expect("the image must carry its pixels");
-        assert_eq!(data.len(), ICON_SIZE * ICON_SIZE * 4);
-        for y in 0..ICON_SIZE {
-            for x in 0..ICON_SIZE {
-                let at = (y * ICON_SIZE + x) * 4;
-                let (r, g, b, a) = icon.pixel_rgba(x, y);
-                assert_eq!(
-                    (data[at], data[at + 1], data[at + 2], data[at + 3]),
-                    (r, g, b, a),
-                    "pixel ({x}, {y})"
-                );
-            }
-        }
+        let image = images.get(handle).expect("the image must be in the assets");
+        assert_eq!((image.width(), image.height()), (16, 16));
+        assert_eq!(image_pixel(image, 2, 1), sprite_rgba(6));
+        assert_eq!(
+            image
+                .data
+                .as_ref()
+                .unwrap()
+                .chunks_exact(4)
+                .filter(|p| p[3] == 255)
+                .count(),
+            1,
+            "one lit cell is exactly one opaque pixel"
+        );
+        let entry = sprites.table().get(DRAWN_ICON_KEY).unwrap();
+        assert_eq!((entry.frames, entry.frame_ms), (1, DEFAULT_SPRITE_FRAME_MS));
     }
 
     /// Redrawing the same icon must not mint a second texture. The map asks
@@ -849,8 +832,7 @@ mod tests {
 
         sprites.sync_drawn_icon(Some(&a_drawing()), &mut images, &mut textures);
         let old = sprites.drawn.as_ref().expect("kept").1.clone();
-        let mut second = a_drawing();
-        second.set(5, 5, 3);
+        let second = an_icon(&[&[(2, 1, 6), (5, 5, 3)]], DEFAULT_SPRITE_FRAME_MS);
         sprites.sync_drawn_icon(Some(&second), &mut images, &mut textures);
 
         assert!(

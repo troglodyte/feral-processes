@@ -137,7 +137,7 @@ pub use game::stack_view::ExamineDir;
 pub use game::travel::{TravelGoal, TravelStep};
 pub use game::unlocks::DecompileReach;
 pub use icon::{
-    FULL_COLOUR_SUFFIX, ICON_CELL_PIXELS, ICON_GRID, ICON_PALETTE, ICON_SIZE, PlayerIcon,
+    DEFAULT_SPRITE_FRAME_MS, FULL_COLOUR_SUFFIX, ICON_SIZE, MAX_SPRITE_FRAMES, PlayerIcon,
     SPRITE_ALPHA_THRESHOLD, SPRITE_PALETTE, quantise, sprite_rgba,
 };
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};

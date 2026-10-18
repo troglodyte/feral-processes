@@ -1,30 +1,20 @@
 //! The player's drawn map avatar and its save-string codec.
 //!
-//! **Two grids, and the ratio between them is the whole of this module's
-//! geometry.** The *sprite* is 16x16 (`ICON_SIZE`) because
-//! `assets/sprites/README.md` says that format is not negotiable. What the
-//! player *draws* is 8x8 (`ICON_GRID`), and each drawn cell paints an
-//! `ICON_CELL_PIXELS`-square block of that sprite — which under nearest
-//! sampling is pixel-identical to a native 8x8 texture and leaves the
-//! sprite seam untouched. `ICON_CELL_PIXELS` is that ratio, stated once so
-//! no site has to assume it.
+//! A `PlayerIcon` is one or two 16x16 `Canvas` frames and a pace, drawn on
+//! `SPRITE_PALETTE` — the same palette and the same frames-plus-pace shape
+//! as any other sprite, so the avatar is edited by the same editor and
+//! uploads as an ordinary sprite sheet. Index 0 is transparent rather than a
+//! palette entry: an avatar the player never drew is legitimately blank, and
+//! a blank icon has to encode and decode like any other.
 //!
-//! A `PlayerIcon` is therefore 64 palette indices, one per drawn cell,
-//! row-major from the top-left. Index 0 is transparent rather than a
-//! fifteenth palette entry — an icon the player never opens the editor for
-//! is legitimately blank, and a blank icon has to encode and decode like
-//! any other rather than needing a special case at the edges of the
-//! feature.
+//! The save string is `v3:<frame_ms>:<frame>[:<frame>]`. The retired `v1`
+//! and `v2` formats still decode, each old colour remapped to its nearest
+//! `SPRITE_PALETTE` entry, and re-save as `v3`.
 
-/// Opaque RGB triples, palette order. Index 0 is deliberately absent here:
-/// it means transparent and is handled by `PlayerIcon::rgba`, the one place
-/// an index becomes a colour, so the gui and any test agree about it.
-///
-/// Five steps of value, then ten hues. At this size the value ramp is the
-/// half that reads — see `assets/sprites/README.md` on shading by value
-/// rather than hue. Brown is on the list on purpose: without it a figure
-/// this size has no skin, leather or wood to draw with.
-pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
+/// The retired `v1`/`v2` formats' fifteen colours, kept only so `decode` can
+/// remap them onto `SPRITE_PALETTE` (see `legacy_index`). Index 0 was
+/// transparent; index `n` was entry `n - 1` here.
+const LEGACY_ICON_PALETTE: [(u8, u8, u8); 15] = [
     (0x1c, 0x1c, 0x1c),
     (0x4a, 0x4a, 0x4a),
     (0x7d, 0x7d, 0x7d),
@@ -42,11 +32,8 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
     (0x8a, 0x5a, 0x3c),
 ];
 
-/// A **separate** palette for the dev-only sprite editor — deliberately not
-/// an extension of `ICON_PALETTE`. `ICON_PALETTE` is fixed at 15 entries by
-/// the player icon's one-hex-digit save format; a sixteenth entry there
-/// would silently decode back as transparent on load. This palette answers
-/// to no save format, so it is free to be wider.
+/// The palette every sprite, the player's avatar included, is drawn on. Wide
+/// on purpose: it answers to no one-hex-digit save format.
 ///
 /// Entries `1..=GREY_RAMP_LEN` of a sprite canvas (palette entries
 /// `0..GREY_RAMP_LEN`) are the grey ramp; a pixel past it carries a hue.
@@ -188,41 +175,38 @@ pub fn sprite_rgba(index: u8) -> (u8, u8, u8, u8) {
     }
 }
 
-/// The *sprite's* edge, in pixels, on both axes. Not negotiable — see
-/// `assets/sprites/README.md`. Public because the gui's texture upload
-/// sizes the image with it.
+/// The sprite's edge, in pixels, on both axes. Not negotiable — see
+/// `assets/sprites/README.md`.
 pub const ICON_SIZE: usize = 16;
 
-/// The *drawn grid's* edge, in cells, on both axes. Public because
-/// app-core's editor clamps its cursor to this grid and the gui draws that
-/// many cells — a second `8` in either would be a copy of the format, not a
-/// coincidence.
-pub const ICON_GRID: usize = 8;
+/// Frames a sprite sheet may hold. The gui loader's size check and the
+/// forge's `[1]`/`[2]` keys read this one number.
+pub const MAX_SPRITE_FRAMES: usize = 2;
 
-/// How many sprite pixels one drawn cell fills, on each axis. **The one
-/// expression of the relationship between the two grids.** Every site that
-/// crosses between them — the texture upload, the `v1` fold below — reads
-/// this rather than assuming a `2`.
-pub const ICON_CELL_PIXELS: usize = ICON_SIZE / ICON_GRID;
+/// How long a frame shows when no `.anim.ron` says otherwise. Defined here
+/// because the forge needs it for a blank subject and the avatar's legacy
+/// formats decode to it; the gui loader imports it.
+pub const DEFAULT_SPRITE_FRAME_MS: u32 = 600;
 
-/// Total cell count, and the length of the encoded payload — one hex digit
-/// per cell.
-const ICON_CELLS: usize = ICON_GRID * ICON_GRID;
+/// Cells in one frame, and half the length of its encoded hex.
+const ICON_CELLS: usize = ICON_SIZE * ICON_SIZE;
 
 /// `encode`'s format tag.
-const ENCODING_PREFIX: &str = "v2:";
+const V3_PREFIX: &str = "v3";
 
-/// The retired 16x16 format's tag. `decode` still reads it, folding each
-/// `ICON_CELL_PIXELS` block down to one cell — see `decode_v1`. Anything
-/// with neither prefix is refused outright rather than guessed at.
-const V1_PREFIX: &str = "v1:";
+/// The retired 8x8 format's tag: one hex digit per cell, each cell a 2x2
+/// block of the sprite.
+const V2_PREFIX: &str = "v2";
 
-/// `v1` carried one hex digit per *sprite pixel*.
-const V1_DIGITS: usize = ICON_SIZE * ICON_SIZE;
+/// The retired 16x16 format's tag: one hex digit per pixel.
+const V1_PREFIX: &str = "v1";
+
+/// `v2`'s edge, in cells.
+const V2_GRID: usize = 8;
 
 /// A square grid of palette indices, with no opinion about which palette —
-/// that belongs to whoever draws on it. `PlayerIcon` is one `Canvas` at
-/// `ICON_GRID`; a second editor at a different edge is another.
+/// that belongs to whoever draws on it. `PlayerIcon` is one or two `Canvas`es at
+/// `ICON_SIZE`; a second editor at a different edge is another.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Canvas {
     edge: usize,
@@ -280,166 +264,171 @@ impl Canvas {
     }
 }
 
-/// The player's drawn map avatar.
+/// The player's drawn map avatar: one or two `ICON_SIZE` frames of palette
+/// indices and the pace they play at.
 ///
-/// One palette index per drawn cell, row-major from the top-left. There is
-/// no separate alpha channel — index 0 stands for transparent, `1..=15`
-/// index `ICON_PALETTE` at value `index - 1`.
+/// Fields are private so every value in existence passed `new`'s guard —
+/// `Canvas::set` has no palette-range check of its own, so this is the one
+/// place an index past `SPRITE_PALETTE` is refused, for the editor and the
+/// decoder alike.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PlayerIcon {
-    cells: Canvas,
+    frames: Vec<Canvas>,
+    frame_ms: u32,
 }
 
 impl Default for PlayerIcon {
-    /// All-transparent — stated by hand for symmetry with `clear`, which
-    /// has to say the same thing.
+    /// One blank frame at the default pace.
     fn default() -> Self {
         PlayerIcon {
-            cells: Canvas::new(ICON_GRID),
+            frames: vec![Canvas::new(ICON_SIZE)],
+            frame_ms: DEFAULT_SPRITE_FRAME_MS,
+        }
+    }
+}
+
+/// A legacy palette index as a `SPRITE_PALETTE` index: 0 stays transparent,
+/// `n` becomes the nearest sprite colour to the old colour `n - 1`.
+fn legacy_index(old: u8) -> u8 {
+    match old {
+        0 => 0,
+        n => {
+            let (r, g, b) = LEGACY_ICON_PALETTE[n as usize - 1];
+            quantise((r, g, b, 255))
         }
     }
 }
 
 impl PlayerIcon {
-    /// The cell at `(x, y)`, or 0 (transparent) if either coordinate is
-    /// off the 8x8 grid.
-    pub fn get(&self, x: usize, y: usize) -> u8 {
-        self.cells.get(x, y)
-    }
-
-    /// Paints `(x, y)` with `index`. An out-of-range coordinate or an
-    /// `index` past the palette is dropped rather than panicking — the
-    /// editor is the only caller and cannot produce either, and a loaded
-    /// save cannot reach this path at all, since `decode` refuses first.
-    /// The palette-range guard lives here, not on `Canvas`, which does not
-    /// know which palette it is drawn from.
-    pub fn set(&mut self, x: usize, y: usize, index: u8) {
-        if index as usize > ICON_PALETTE.len() {
-            return;
+    /// `None` when `frames` is empty or longer than `MAX_SPRITE_FRAMES`, a
+    /// canvas is not `ICON_SIZE` square, a cell is past `SPRITE_PALETTE`, or
+    /// `frame_ms` is 0 (a frame that never shows).
+    pub fn new(frames: Vec<Canvas>, frame_ms: u32) -> Option<PlayerIcon> {
+        if frames.is_empty() || frames.len() > MAX_SPRITE_FRAMES || frame_ms == 0 {
+            return None;
         }
-        self.cells.set(x, y, index);
-    }
-
-    /// Resets every cell to transparent.
-    pub fn clear(&mut self) {
-        self.cells.clear();
-    }
-
-    /// Whether every cell is transparent — a player who never opened the
-    /// editor, or who cleared it.
-    pub fn is_blank(&self) -> bool {
-        self.cells.is_blank()
-    }
-
-    /// The cell at `(x, y)` as RGBA. The one place index 0 becomes a
-    /// transparent pixel rather than a colour, so the gui's texture upload
-    /// and any test agree about it.
-    pub fn rgba(&self, x: usize, y: usize) -> (u8, u8, u8, u8) {
-        match self.get(x, y) {
-            0 => (0, 0, 0, 0),
-            index => {
-                let (r, g, b) = ICON_PALETTE[index as usize - 1];
-                (r, g, b, 255)
+        for canvas in &frames {
+            if canvas.edge() != ICON_SIZE {
+                return None;
+            }
+            let in_palette = (0..ICON_SIZE)
+                .all(|y| (0..ICON_SIZE).all(|x| canvas.get(x, y) as usize <= SPRITE_PALETTE.len()));
+            if !in_palette {
+                return None;
             }
         }
+        Some(PlayerIcon { frames, frame_ms })
     }
 
-    /// The *sprite pixel* at `(px, py)` as RGBA — the one place a drawn
-    /// cell becomes its `ICON_CELL_PIXELS` square block, so the gui's
-    /// upload expands the grid without restating the ratio.
-    pub fn pixel_rgba(&self, px: usize, py: usize) -> (u8, u8, u8, u8) {
-        self.rgba(px / ICON_CELL_PIXELS, py / ICON_CELL_PIXELS)
+    pub fn frames(&self) -> &[Canvas] {
+        &self.frames
     }
 
-    /// `"v2:"` followed by 64 lowercase hex digits, row-major — one per
-    /// drawn cell, `decode`'s exact inverse.
+    pub fn frame_ms(&self) -> u32 {
+        self.frame_ms
+    }
+
+    /// Whether every frame is transparent — a player who never opened the
+    /// editor, or who cleared it.
+    pub fn is_blank(&self) -> bool {
+        self.frames.iter().all(Canvas::is_blank)
+    }
+
+    /// The cell at `(x, y)` of `frame` as RGBA. Panics if `frame` is out of
+    /// range, like slice indexing.
+    pub fn rgba(&self, frame: usize, x: usize, y: usize) -> (u8, u8, u8, u8) {
+        sprite_rgba(self.frames[frame].get(x, y))
+    }
+
+    /// `v3:<frame_ms>:<frame>[:<frame>]`, each frame 512 lowercase hex
+    /// digits, row-major, two per cell. `decode`'s exact inverse.
     pub fn encode(&self) -> String {
-        let mut s = String::with_capacity(ENCODING_PREFIX.len() + ICON_CELLS);
-        s.push_str(ENCODING_PREFIX);
-        for y in 0..ICON_GRID {
-            for x in 0..ICON_GRID {
-                s.push(
-                    std::char::from_digit(self.cells.get(x, y) as u32, 16)
-                        .expect("palette index fits one hex digit"),
-                );
+        let mut s = format!("{V3_PREFIX}:{}", self.frame_ms);
+        for canvas in &self.frames {
+            s.push(':');
+            for y in 0..ICON_SIZE {
+                for x in 0..ICON_SIZE {
+                    s.push_str(&format!("{:02x}", canvas.get(x, y)));
+                }
             }
         }
         s
     }
 
-    /// The inverse of `encode`, plus the one retired format.
+    /// The inverse of `encode`, plus the two retired formats.
     ///
-    /// Strict and total within each: a wrong length or a non-hex digit
-    /// returns `None` rather than recovering partially — the caller falls
-    /// back to the glyph, which is already correct on its own. A `v1`
-    /// payload decodes to a perfectly ordinary icon and re-saves as `v2`;
-    /// there is no second kind of `PlayerIcon`.
+    /// Strict and total: anything malformed returns `None` rather than
+    /// being clamped or partly recovered — the caller falls back to the
+    /// glyph, which is already correct on its own. A `v1`/`v2` payload
+    /// decodes to an ordinary one-frame icon and re-saves as `v3`.
     pub fn decode(s: &str) -> Option<PlayerIcon> {
-        if let Some(digits) = s.strip_prefix(ENCODING_PREFIX) {
-            return Self::decode_v2(digits);
+        let (prefix, rest) = s.split_once(':')?;
+        match prefix {
+            V3_PREFIX => Self::decode_v3(rest),
+            V2_PREFIX => Self::decode_v2(rest),
+            V1_PREFIX => Self::decode_v1(rest),
+            _ => None,
         }
-        if let Some(digits) = s.strip_prefix(V1_PREFIX) {
-            return Self::decode_v1(digits);
-        }
-        None
     }
 
+    fn decode_v3(rest: &str) -> Option<PlayerIcon> {
+        let (pace, frames) = rest.split_once(':')?;
+        let frame_ms = pace.parse::<u32>().ok()?;
+        let frames = frames
+            .split(':')
+            .map(Self::decode_v3_frame)
+            .collect::<Option<Vec<_>>>()?;
+        PlayerIcon::new(frames, frame_ms)
+    }
+
+    fn decode_v3_frame(digits: &str) -> Option<Canvas> {
+        if digits.len() != ICON_CELLS * 2 {
+            return None;
+        }
+        let nibbles = digits
+            .chars()
+            .map(|c| c.to_digit(16).map(|d| d as u8))
+            .collect::<Option<Vec<_>>>()?;
+        let mut canvas = Canvas::new(ICON_SIZE);
+        for (i, pair) in nibbles.chunks_exact(2).enumerate() {
+            canvas.set(i % ICON_SIZE, i / ICON_SIZE, pair[0] * 16 + pair[1]);
+        }
+        Some(canvas)
+    }
+
+    /// A `v2` cell is a 2x2 block of the sprite.
     fn decode_v2(digits: &str) -> Option<PlayerIcon> {
+        if digits.len() != V2_GRID * V2_GRID {
+            return None;
+        }
+        let scale = ICON_SIZE / V2_GRID;
+        let mut canvas = Canvas::new(ICON_SIZE);
+        for (i, c) in digits.chars().enumerate() {
+            let index = legacy_index(c.to_digit(16)? as u8);
+            let (cx, cy) = (i % V2_GRID, i / V2_GRID);
+            for dy in 0..scale {
+                for dx in 0..scale {
+                    canvas.set(cx * scale + dx, cy * scale + dy, index);
+                }
+            }
+        }
+        PlayerIcon::new(vec![canvas], DEFAULT_SPRITE_FRAME_MS)
+    }
+
+    /// A `v1` pixel keeps its place; only its colour is remapped.
+    fn decode_v1(digits: &str) -> Option<PlayerIcon> {
         if digits.len() != ICON_CELLS {
             return None;
         }
-        let mut cells = Canvas::new(ICON_GRID);
+        let mut canvas = Canvas::new(ICON_SIZE);
         for (i, c) in digits.chars().enumerate() {
-            cells.set(i % ICON_GRID, i / ICON_GRID, c.to_digit(16)? as u8);
+            canvas.set(
+                i % ICON_SIZE,
+                i / ICON_SIZE,
+                legacy_index(c.to_digit(16)? as u8),
+            );
         }
-        Some(PlayerIcon { cells })
-    }
-
-    /// Folds a 16x16 `v1` payload onto the 8x8 grid.
-    ///
-    /// A cell takes **the most frequent non-transparent index** in its
-    /// block, ties broken in reading order; a block whose pixels are all
-    /// transparent stays transparent. That preserves the silhouette, which
-    /// is what survives the halving — sampling one corner of each block
-    /// instead would drop a one-pixel outline entirely and turn a drawn
-    /// figure into confetti.
-    fn decode_v1(digits: &str) -> Option<PlayerIcon> {
-        if digits.len() != V1_DIGITS {
-            return None;
-        }
-        let mut pixels = [0u8; V1_DIGITS];
-        for (i, c) in digits.chars().enumerate() {
-            pixels[i] = c.to_digit(16)? as u8;
-        }
-        let mut cells = Canvas::new(ICON_GRID);
-        for cy in 0..ICON_GRID {
-            for cx in 0..ICON_GRID {
-                let mut block = Vec::with_capacity(ICON_CELL_PIXELS * ICON_CELL_PIXELS);
-                for dy in 0..ICON_CELL_PIXELS {
-                    for dx in 0..ICON_CELL_PIXELS {
-                        let x = cx * ICON_CELL_PIXELS + dx;
-                        let y = cy * ICON_CELL_PIXELS + dy;
-                        block.push(pixels[y * ICON_SIZE + x]);
-                    }
-                }
-                // Walking the block in reading order and taking a value
-                // only on a *strictly* greater count is what breaks a tie
-                // toward the earlier pixel.
-                let (mut best, mut best_count) = (0u8, 0usize);
-                for &v in &block {
-                    if v == 0 {
-                        continue;
-                    }
-                    let count = block.iter().filter(|&&p| p == v).count();
-                    if count > best_count {
-                        best = v;
-                        best_count = count;
-                    }
-                }
-                cells.set(cx, cy, best);
-            }
-        }
-        Some(PlayerIcon { cells })
+        PlayerIcon::new(vec![canvas], DEFAULT_SPRITE_FRAME_MS)
     }
 }
 
@@ -511,189 +500,125 @@ mod canvas_tests {
 mod tests {
     use super::*;
 
-    /// One `v1` payload: 256 hex digits, row-major over the retired 16x16
-    /// pixel grid, built from a closure so a test can state the shape it
-    /// cares about and nothing else.
-    fn v1(pixel: impl Fn(usize, usize) -> u8) -> String {
-        let mut s = String::from(V1_PREFIX);
-        for y in 0..ICON_SIZE {
-            for x in 0..ICON_SIZE {
-                s.push(std::char::from_digit(pixel(x, y) as u32, 16).unwrap());
-            }
+    fn painted(frames: &[&[(usize, usize, u8)]], frame_ms: u32) -> PlayerIcon {
+        let canvases = frames
+            .iter()
+            .map(|cells| {
+                let mut canvas = Canvas::new(ICON_SIZE);
+                for &(x, y, index) in *cells {
+                    canvas.set(x, y, index);
+                }
+                canvas
+            })
+            .collect();
+        PlayerIcon::new(canvases, frame_ms).unwrap()
+    }
+
+    #[test]
+    fn a_two_frame_icon_round_trips_through_encode_and_decode_unchanged() {
+        let icon = painted(&[&[(0, 0, 1), (15, 15, 63)], &[(7, 7, 30)]], 450);
+        let s = icon.encode();
+        assert!(s.starts_with("v3:450:"));
+        assert_eq!(s.len(), "v3:450:".len() + 512 + 1 + 512);
+        assert_eq!(PlayerIcon::decode(&s), Some(icon));
+    }
+
+    #[test]
+    fn a_default_icon_encodes_to_one_frame_of_512_zeros_at_the_default_pace() {
+        assert_eq!(
+            PlayerIcon::default().encode(),
+            format!("v3:{DEFAULT_SPRITE_FRAME_MS}:{}", "0".repeat(512))
+        );
+    }
+
+    #[test]
+    fn decode_refuses_every_malformed_shape() {
+        let frame = "0".repeat(512);
+        for bad in [
+            format!("v4:600:{frame}"),                 // unknown future prefix
+            "v3:600:".to_string(),                     // no frame
+            format!("v3:600:{frame}:{frame}:{frame}"), // three frames
+            format!("v3:600:{}", "0".repeat(511)),
+            format!("v3:600:{}", "0".repeat(513)),
+            format!("v3:600:{}g{}", "0".repeat(255), "0".repeat(256)),
+            format!("v3:600:{}40{}", "0".repeat(254), "0".repeat(256)), // 0x40 = 64 > 63
+            format!("v3:0:{frame}"),
+            format!("v3:-5:{frame}"),
+            format!("v3:six:{frame}"),
+            format!("v3::{frame}"),
+        ] {
+            assert_eq!(PlayerIcon::decode(&bad), None, "{bad:.40}");
         }
-        s
     }
 
     #[test]
-    fn a_drawn_icon_round_trips_through_encode_and_decode_unchanged() {
-        let mut icon = PlayerIcon::default();
-        icon.set(0, 0, 1);
-        icon.set(7, 7, 15);
-        icon.set(3, 5, 6);
-        let decoded = PlayerIcon::decode(&icon.encode()).expect("a well-formed encoding decodes");
-        assert_eq!(icon, decoded);
-    }
-
-    /// The encoding's shape, stated as a literal: the tag plus one hex
-    /// digit per drawn cell, 67 characters in all.
-    #[test]
-    fn a_default_icon_encodes_to_the_prefix_plus_64_zeros() {
-        let icon = PlayerIcon::default();
-        let expected = format!("v2:{}", "0".repeat(ICON_CELLS));
-        assert_eq!(icon.encode(), expected);
-        assert_eq!(icon.encode().len(), 67);
+    fn any_positive_pace_decodes_and_the_top_palette_index_round_trips() {
+        let icon = painted(&[&[(3, 3, 63)]], u32::MAX);
+        assert_eq!(PlayerIcon::decode(&icon.encode()), Some(icon));
     }
 
     #[test]
-    fn decode_refuses_a_wrong_prefix() {
-        let payload = "0".repeat(ICON_CELLS);
-        assert_eq!(PlayerIcon::decode(&format!("v3:{payload}")), None);
-        assert_eq!(PlayerIcon::decode(&payload), None);
+    fn new_refuses_what_decode_refuses() {
+        let c = Canvas::new(ICON_SIZE);
+        assert!(PlayerIcon::new(vec![], 600).is_none());
+        assert!(PlayerIcon::new(vec![c.clone(); 3], 600).is_none());
+        assert!(PlayerIcon::new(vec![Canvas::new(8)], 600).is_none());
+        assert!(PlayerIcon::new(vec![c.clone()], 0).is_none());
+        let mut over = c.clone();
+        over.set(0, 0, 64);
+        assert!(PlayerIcon::new(vec![over], 600).is_none());
+        assert!(PlayerIcon::new(vec![c], 600).is_some());
     }
 
     #[test]
-    fn decode_refuses_one_character_short() {
-        let payload = "0".repeat(ICON_CELLS - 1);
-        assert_eq!(PlayerIcon::decode(&format!("v2:{payload}")), None);
-    }
-
-    #[test]
-    fn decode_refuses_one_character_long() {
-        let payload = "0".repeat(ICON_CELLS + 1);
-        assert_eq!(PlayerIcon::decode(&format!("v2:{payload}")), None);
-    }
-
-    #[test]
-    fn decode_refuses_a_non_hex_digit_in_the_middle() {
-        let mut payload: Vec<u8> = "0".repeat(ICON_CELLS).into_bytes();
-        payload[32] = b'g';
-        let s = format!("v2:{}", String::from_utf8(payload).unwrap());
-        assert_eq!(PlayerIcon::decode(&s), None);
-    }
-
-    /// A `v1` payload of the wrong length is refused on its own terms —
-    /// 64 digits behind a `v1:` tag is not a short `v1`, it is a `v2`
-    /// payload wearing the wrong tag, and both are equally unreadable.
-    #[test]
-    fn decode_refuses_a_v1_payload_of_the_wrong_length() {
-        assert_eq!(
-            PlayerIcon::decode(&format!("v1:{}", "0".repeat(ICON_CELLS))),
-            None
-        );
-        assert_eq!(
-            PlayerIcon::decode(&format!("v1:{}", "0".repeat(V1_DIGITS + 1))),
-            None
-        );
-        assert_eq!(
-            PlayerIcon::decode(&format!("v1:{}", "g".repeat(V1_DIGITS))),
-            None
-        );
-    }
-
-    /// **The `v1` fold's majority rule.** A block holding three of one
-    /// colour and one of another takes the majority, not the first pixel —
-    /// which is what fails against a decoder that simply samples the
-    /// top-left of each block.
-    #[test]
-    fn a_v1_block_folds_to_its_most_frequent_non_transparent_colour() {
-        // Block (0, 0) reads [5, 3 / 3, 3] — 3 is the majority, 5 is first.
-        let s = v1(|x, y| match (x, y) {
-            (0, 0) => 5,
-            (1, 0) | (0, 1) | (1, 1) => 3,
-            _ => 0,
-        });
-        let icon = PlayerIcon::decode(&s).expect("a v1 payload still decodes");
-        assert_eq!(icon.get(0, 0), 3, "the majority colour wins the block");
-    }
-
-    /// A block whose pixels are all transparent stays transparent — the
-    /// silhouette's holes are half of what reads at this size.
-    #[test]
-    fn a_wholly_transparent_v1_block_stays_transparent() {
-        let s = v1(|x, y| if x < 2 && y < 2 { 7 } else { 0 });
-        let icon = PlayerIcon::decode(&s).expect("a v1 payload still decodes");
-        assert_eq!(icon.get(0, 0), 7);
-        assert_eq!(icon.get(1, 0), 0, "an untouched block is transparent");
-        assert_eq!(icon.get(3, 3), 0);
-    }
-
-    /// A two-two split takes the earlier of the two in reading order, and
-    /// a single lit pixel among three transparent ones still carries the
-    /// block — transparency never outvotes a colour.
-    #[test]
-    fn a_v1_tie_breaks_in_reading_order_and_one_lit_pixel_carries_its_block() {
-        let s = v1(|x, y| match (x, y) {
-            // Block (0, 0): [9, 9 / 4, 4] — a tie, and 9 reads first.
-            (0, 0) | (1, 0) => 9,
-            (0, 1) | (1, 1) => 4,
-            // Block (1, 1): one lit pixel in the block's last cell.
-            (3, 3) => 2,
-            _ => 0,
-        });
-        let icon = PlayerIcon::decode(&s).expect("a v1 payload still decodes");
-        assert_eq!(icon.get(0, 0), 9, "a tie breaks toward reading order");
-        assert_eq!(icon.get(1, 1), 2, "transparency does not outvote a colour");
-    }
-
-    /// A decoded `v1` is an ordinary icon and re-saves as `v2` — there is
-    /// no second kind of `PlayerIcon` and no format that survives a save.
-    #[test]
-    fn a_decoded_v1_icon_re_encodes_as_v2() {
-        let s = v1(|x, y| if x < 2 && y < 2 { 7 } else { 0 });
-        let icon = PlayerIcon::decode(&s).expect("a v1 payload still decodes");
-        let re = icon.encode();
-        assert!(re.starts_with("v2:"));
-        assert_eq!(PlayerIcon::decode(&re), Some(icon));
-    }
-
-    /// A sixteenth colour would be unencodable — `encode` emits one hex
-    /// digit per cell, and `'0'..='f'` is 16 values total with `'0'`
-    /// already spent on transparent. Pinning the length here means that
-    /// ceiling fails a fast, named test rather than surfacing as a palette
-    /// entry the editor can paint with but no save can ever store.
-    #[test]
-    fn the_palette_has_room_for_exactly_fifteen_colours_because_one_hex_digit_encodes_them() {
-        assert_eq!(ICON_PALETTE.len(), 15);
-    }
-
-    #[test]
-    fn rgba_is_transparent_at_index_zero_and_opaque_otherwise() {
-        let mut icon = PlayerIcon::default();
-        icon.set(2, 2, 6);
-        assert_eq!(icon.rgba(0, 0), (0, 0, 0, 0));
-        let (r, g, b, a) = icon.rgba(2, 2);
-        assert_eq!((r, g, b), ICON_PALETTE[5]);
-        assert_eq!(a, 255);
-    }
-
-    /// **The two grids' ratio, asserted rather than assumed.** The drawn
-    /// grid has to divide the sprite exactly, or a cell's block would fall
-    /// off the texture's edge.
-    #[test]
-    fn the_drawn_grid_divides_the_sprite_exactly() {
-        assert_eq!(ICON_SIZE % ICON_GRID, 0);
-        assert_eq!(ICON_CELL_PIXELS, 2);
-        assert_eq!(ICON_GRID * ICON_CELL_PIXELS, ICON_SIZE);
-    }
-
-    /// One drawn cell covers an `ICON_CELL_PIXELS` square of the sprite,
-    /// and every pixel of that square is the cell's own colour.
-    #[test]
-    fn a_drawn_cell_covers_its_whole_pixel_block() {
-        let mut icon = PlayerIcon::default();
-        icon.set(3, 5, 11);
-        let want = icon.rgba(3, 5);
-        for dy in 0..ICON_CELL_PIXELS {
-            for dx in 0..ICON_CELL_PIXELS {
-                let (px, py) = (3 * ICON_CELL_PIXELS + dx, 5 * ICON_CELL_PIXELS + dy);
-                assert_eq!(icon.pixel_rgba(px, py), want, "pixel ({px}, {py})");
-            }
+    fn a_v2_cell_becomes_a_2x2_block_in_the_remapped_colour() {
+        let mut digits = "0".repeat(64).into_bytes();
+        digits[8 + 2] = b'f'; // cell (2, 1), old index 15
+        let icon =
+            PlayerIcon::decode(&format!("v2:{}", String::from_utf8(digits).unwrap())).unwrap();
+        assert_eq!(icon.frames().len(), 1);
+        assert_eq!(icon.frame_ms(), DEFAULT_SPRITE_FRAME_MS);
+        let want = legacy_index(15);
+        assert!((1..=63).contains(&want));
+        for (x, y) in [(4, 2), (5, 2), (4, 3), (5, 3)] {
+            assert_eq!(icon.frames()[0].get(x, y), want, "({x},{y})");
         }
-        assert_eq!(
-            icon.pixel_rgba(5, 10),
-            (0, 0, 0, 0),
-            "the block's neighbour"
-        );
-        assert_eq!(icon.pixel_rgba(6, 9), (0, 0, 0, 0), "the block's neighbour");
+        assert_eq!(icon.frames()[0].get(6, 2), 0);
+        assert!(icon.encode().starts_with("v3:"));
+    }
+
+    #[test]
+    fn a_v1_pixel_keeps_its_place_and_takes_the_remapped_colour() {
+        let mut digits = "0".repeat(256).into_bytes();
+        digits[16 * 9 + 13] = b'3';
+        let icon =
+            PlayerIcon::decode(&format!("v1:{}", String::from_utf8(digits).unwrap())).unwrap();
+        assert_eq!(icon.frames()[0].get(13, 9), legacy_index(3));
+        assert_eq!(icon.frames()[0].get(12, 9), 0);
+    }
+
+    #[test]
+    fn every_legacy_index_remaps_inside_the_sprite_palette() {
+        assert_eq!(legacy_index(0), 0);
+        for n in 1..=15u8 {
+            assert!(
+                (1..=SPRITE_PALETTE.len() as u8).contains(&legacy_index(n)),
+                "{n}"
+            );
+        }
+    }
+
+    #[test]
+    fn rgba_is_transparent_at_index_zero_and_the_palette_colour_otherwise() {
+        let icon = painted(&[&[(1, 1, 5)]], 600);
+        assert_eq!(icon.rgba(0, 0, 0).3, 0);
+        let (r, g, b) = SPRITE_PALETTE[4];
+        assert_eq!(icon.rgba(0, 1, 1), (r, g, b, 255));
+    }
+
+    #[test]
+    fn is_blank_needs_every_frame_blank() {
+        assert!(PlayerIcon::default().is_blank());
+        assert!(!painted(&[&[], &[(0, 0, 1)]], 600).is_blank());
     }
 }

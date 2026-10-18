@@ -27,23 +27,20 @@
 use super::canvas;
 use super::*;
 use feral_processes_app_core::{CanvasFocus, IconEditorView};
-use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
+use feral_processes_engine::{ICON_SIZE, SPRITE_PALETTE};
 
-/// A canvas cell's side, in `Metrics::line_height` units. Double what it
-/// was at 16x16: the grid halved, so a cell doubles and the canvas keeps
-/// the size both layout censuses below were verified against.
-const CANVAS_CELL_LINES: f32 = 2.4;
-/// A palette swatch's side, in the same units. Smaller than a canvas cell,
-/// because the strip is sixteen swatches (fifteen colours and the
-/// transparent one) and fifteen gaps wide and has to sit under a canvas
-/// that is `ICON_GRID` cells: the ceiling is
-/// `(ICON_GRID * CANVAS_CELL_LINES - 15 * SWATCH_GAP_LINES) / 16`, which is
-/// 0.92 at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
-/// holds it — the constant shipped at 1.4 against a comment claiming this
-/// exact rule, and nothing measured the two together.
-const SWATCH_LINES: f32 = 0.9;
+/// A canvas cell's side, in `Metrics::line_height` units. Half the old 8x8
+/// cell: the grid doubled, so the canvas keeps the size both layout censuses
+/// below were verified against.
+const CANVAS_CELL_LINES: f32 = 1.2;
+/// A palette swatch's side, in the same units. The strip is sixty-four
+/// swatches wide and has to sit under a canvas that is `ICON_SIZE` cells:
+/// the ceiling is `(ICON_SIZE * CANVAS_CELL_LINES - 63 * SWATCH_GAP_LINES) /
+/// 64`, which is 0.25 at the numbers above. `the_palette_strip_fits_under_the_canvas`
+/// is what holds it.
+const SWATCH_LINES: f32 = 0.25;
 /// Gap between two palette swatches, in `Metrics::line_height` units.
-const SWATCH_GAP_LINES: f32 = 0.3;
+const SWATCH_GAP_LINES: f32 = 0.02;
 /// Vertical gap between the screen's blocks (header, each panel's caption,
 /// the panel itself, the footer), in `Metrics::line_height` units.
 const SECTION_GAP_LINES: f32 = 1.0;
@@ -95,7 +92,7 @@ fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
 
     let canvas_label_y = header_y + gap + m.line_height;
     let cell = m.line_height * CANVAS_CELL_LINES;
-    let canvas_side = cell * ICON_GRID as f32 + m.inset * 2.0;
+    let canvas_side = cell * ICON_SIZE as f32 + m.inset * 2.0;
     let canvas = Rect::new(
         (w - canvas_side) / 2.0,
         canvas_label_y + m.gap,
@@ -106,7 +103,7 @@ fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
     let palette_label_y = canvas.y + canvas.h + gap + m.line_height;
     let swatch = m.line_height * SWATCH_LINES;
     let swatch_gap = m.line_height * SWATCH_GAP_LINES;
-    let n = canvas::swatch_count(ICON_PALETTE.len()) as f32;
+    let n = canvas::swatch_count(SPRITE_PALETTE.len()) as f32;
     let palette_w = swatch * n + swatch_gap * (n - 1.0) + m.inset * 2.0;
     let palette_h = swatch + m.inset * 2.0;
     let palette = Rect::new(
@@ -184,9 +181,9 @@ fn draw_canvas_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: 
     let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Canvas);
     painter.rect_lines(c.x, c.y, c.w, c.h, thickness, color);
 
-    let side = ICON_GRID as f32 * g.cell;
+    let side = ICON_SIZE as f32 * g.cell;
     let inner = Rect::new(c.x + m.inset, c.y + m.inset, side, side);
-    canvas::draw_canvas_grid(painter, inner, &view.canvas, &ICON_PALETTE);
+    canvas::draw_canvas_grid(painter, inner, &view.canvas, &SPRITE_PALETTE);
 }
 
 /// The palette panel's chrome — content (the swatch row and its selection
@@ -211,9 +208,9 @@ fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m:
     canvas::draw_swatch_grid(
         painter,
         inner,
-        canvas::swatch_count(ICON_PALETTE.len()),
+        canvas::swatch_count(SPRITE_PALETTE.len()),
         view.canvas.selected,
-        &ICON_PALETTE,
+        &SPRITE_PALETTE,
     );
 }
 
@@ -234,8 +231,8 @@ mod tests {
     fn blank_view() -> IconEditorView {
         IconEditorView {
             canvas: feral_processes_app_core::CanvasView {
-                cells: vec![0; ICON_GRID * ICON_GRID],
-                edge: ICON_GRID as u8,
+                cells: vec![0; ICON_SIZE * ICON_SIZE],
+                edge: ICON_SIZE as u8,
                 cursor: (0, 0),
                 selected: 1,
                 focus: CanvasFocus::Canvas,
@@ -326,7 +323,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&blank_view(), p, &m));
         assert!(
-            crate::paint::painted_rect_fill_count(&shapes, SCREEN_BG) >= ICON_GRID * ICON_GRID,
+            crate::paint::painted_rect_fill_count(&shapes, SCREEN_BG) >= ICON_SIZE * ICON_SIZE,
             "every transparent cell must be filled with the screen background"
         );
         assert_eq!(
@@ -345,7 +342,7 @@ mod tests {
         // Index 7: away from both ends of the palette and from `selected`'s
         // opening value of 1, so this cannot pass by coincidence.
         view.canvas.cells[0] = 7;
-        let want = canvas::palette_color(ICON_PALETTE[6]);
+        let want = canvas::palette_color(SPRITE_PALETTE[6]);
 
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&view, p, &m));

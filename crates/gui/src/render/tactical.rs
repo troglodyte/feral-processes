@@ -2190,9 +2190,14 @@ mod tests {
     }
 
     fn a_drawing() -> feral_processes_engine::PlayerIcon {
-        let mut icon = feral_processes_engine::PlayerIcon::default();
-        icon.set(3, 4, 7);
-        icon
+        let mut canvas =
+            feral_processes_engine::icon::Canvas::new(feral_processes_engine::ICON_SIZE);
+        canvas.set(3, 4, 7);
+        feral_processes_engine::PlayerIcon::new(
+            vec![canvas],
+            feral_processes_engine::DEFAULT_SPRITE_FRAME_MS,
+        )
+        .unwrap()
     }
 
     /// The player's own drawing stands on their body on this board as it

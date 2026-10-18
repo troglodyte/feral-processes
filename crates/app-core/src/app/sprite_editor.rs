@@ -27,14 +27,7 @@ use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_D
 /// comment ("The *sprite* is 16x16 (`ICON_SIZE`)").
 const SPRITE_EDGE: usize = feral_processes_engine::ICON_SIZE;
 
-/// Frames a sprite sheet may hold. The gui loader's size check and the
-/// forge's `[1]`/`[2]` keys read this one number.
-pub const MAX_SPRITE_FRAMES: usize = 2;
-
-/// How long a frame shows when no `.anim.ron` says otherwise. Defined here
-/// because the forge needs it for a blank subject and app-core cannot see
-/// gui; the gui loader imports it.
-pub const DEFAULT_SPRITE_FRAME_MS: u32 = 600;
+pub use feral_processes_engine::{DEFAULT_SPRITE_FRAME_MS, MAX_SPRITE_FRAMES};
 
 /// What one `[-]`/`[=]` press moves a sprite's frame time by.
 pub const SPRITE_FRAME_MS_STEP: u32 = 100;

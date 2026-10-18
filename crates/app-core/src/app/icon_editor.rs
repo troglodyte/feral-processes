@@ -21,8 +21,8 @@ use crate::app::canvas_editor::{
     CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_DEPTH as CANVAS_UNDO_DEPTH,
 };
 use crate::*;
-use feral_processes_engine::icon::Canvas;
-use feral_processes_engine::{ICON_GRID, ICON_PALETTE, PlayerIcon};
+use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
+use feral_processes_engine::{DEFAULT_SPRITE_FRAME_MS, PlayerIcon};
 
 /// How far back `u` reaches — `CanvasEditor`'s own constant, re-exported
 /// under its established name here since `tests/icon_editor.rs` names it
@@ -52,30 +52,16 @@ pub(crate) enum IconEditorOutcome {
     Discard,
 }
 
-/// Builds the `Canvas` `CanvasEditor` draws from, one cell at a time —
-/// `PlayerIcon::get` and `Canvas::set` are both public, so this needs
-/// nothing from `PlayerIcon` beyond its ordinary reading API.
+/// The first frame is what this single-canvas editor draws on.
 fn canvas_from_icon(icon: &PlayerIcon) -> Canvas {
-    let mut canvas = Canvas::new(ICON_GRID);
-    for y in 0..ICON_GRID {
-        for x in 0..ICON_GRID {
-            canvas.set(x, y, icon.get(x, y));
-        }
-    }
-    canvas
+    icon.frames()[0].clone()
 }
 
-/// `canvas_from_icon`'s inverse — `PlayerIcon::set` already refuses an
-/// out-of-palette index, so a `Canvas` this editor could never have
-/// produced still decodes safely.
+/// `canvas_from_icon`'s inverse — `PlayerIcon::new` refuses an
+/// out-of-palette index, which this editor cannot paint.
 fn icon_from_canvas(canvas: &Canvas) -> PlayerIcon {
-    let mut icon = PlayerIcon::default();
-    for y in 0..ICON_GRID {
-        for x in 0..ICON_GRID {
-            icon.set(x, y, canvas.get(x, y));
-        }
-    }
-    icon
+    PlayerIcon::new(vec![canvas.clone()], DEFAULT_SPRITE_FRAME_MS)
+        .expect("the editor paints palette indices on a 16x16 canvas")
 }
 
 pub(crate) struct IconEditor {
@@ -97,8 +83,8 @@ impl IconEditor {
         IconEditor {
             editor: CanvasEditor::open(
                 canvas,
-                ICON_PALETTE.len() as u8,
-                ICON_PALETTE.len() as u8 + 1,
+                SPRITE_PALETTE.len() as u8,
+                SPRITE_PALETTE.len() as u8 + 1,
             ),
             opened_with: icon,
         }

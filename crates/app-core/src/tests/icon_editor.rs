@@ -10,7 +10,7 @@
 use super::support::*;
 use crate::app::icon_editor::{ICON_UNDO_DEPTH, IconEditor, IconEditorOutcome};
 use crate::*;
-use feral_processes_engine::{ICON_GRID, PlayerIcon};
+use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 /// An editor open on a blank canvas — what the wizard hands it for a
 /// player who has never drawn one.
@@ -27,7 +27,7 @@ fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
         CanvasFocus::Canvas,
         "the cursor only moves while the canvas has focus"
     );
-    for _ in 0..ICON_GRID - 1 {
+    for _ in 0..ICON_SIZE - 1 {
         editor.handle_key(GameKey::Left);
         editor.handle_key(GameKey::Up);
     }
@@ -42,7 +42,7 @@ fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
 
 /// The drawn cell at `(x, y)` as the view reports it.
 fn cell(editor: &IconEditor, x: u8, y: u8) -> u8 {
-    editor.view().canvas.cells[y as usize * ICON_GRID + x as usize]
+    editor.view().canvas.cells[y as usize * ICON_SIZE + x as usize]
 }
 
 #[test]
@@ -119,8 +119,8 @@ fn the_cursor_does_not_wrap_at_any_edge() {
     editor.handle_key(GameKey::Up);
     assert_eq!(editor.view().canvas.cursor, (0, 0));
 
-    let last = (ICON_GRID - 1) as u8;
-    for _ in 0..ICON_GRID + 4 {
+    let last = (ICON_SIZE - 1) as u8;
+    for _ in 0..ICON_SIZE + 4 {
         editor.handle_key(GameKey::Right);
         editor.handle_key(GameKey::Down);
     }
@@ -139,12 +139,12 @@ fn the_palette_selection_does_not_wrap_at_either_end() {
     );
     editor.handle_key(GameKey::Left);
     assert_eq!(editor.view().canvas.selected, 0);
-    for _ in 0..40 {
+    for _ in 0..80 {
         editor.handle_key(GameKey::Right);
     }
     assert_eq!(
         editor.view().canvas.selected,
-        feral_processes_engine::ICON_PALETTE.len() as u8
+        feral_processes_engine::SPRITE_PALETTE.len() as u8
     );
 }
 
@@ -304,7 +304,7 @@ fn the_undo_history_is_bounded_at_icon_undo_depth() {
     let edits = ICON_UNDO_DEPTH + 8;
     let mut editor = blank_editor();
     for i in 0..edits {
-        move_cursor_to(&mut editor, (i % ICON_GRID) as u8, (i / ICON_GRID) as u8);
+        move_cursor_to(&mut editor, (i % ICON_SIZE) as u8, (i / ICON_SIZE) as u8);
         editor.handle_key(GameKey::Char(' '));
     }
     for _ in 0..ICON_UNDO_DEPTH + 1 {
@@ -326,7 +326,7 @@ fn enter_keeps_what_was_drawn() {
     editor.handle_key(GameKey::Char(' '));
     assert_eq!(editor.handle_key(GameKey::Enter), IconEditorOutcome::Keep);
     let icon = editor.icon();
-    assert_eq!(icon.get(6, 2), 1);
+    assert_eq!(icon.frames()[0].get(6, 2), 1);
     assert!(!icon.is_blank());
 }
 
@@ -335,8 +335,13 @@ fn enter_keeps_what_was_drawn() {
 /// to remember to throw away.
 #[test]
 fn esc_discards_and_puts_back_the_icon_it_opened_with() {
-    let mut opened_with = PlayerIcon::default();
-    opened_with.set(0, 0, 4);
+    let mut canvas = feral_processes_engine::icon::Canvas::new(ICON_SIZE);
+    canvas.set(0, 0, 4);
+    let opened_with = PlayerIcon::new(
+        vec![canvas],
+        feral_processes_engine::DEFAULT_SPRITE_FRAME_MS,
+    )
+    .unwrap();
     let mut editor = IconEditor::open(opened_with.clone());
     move_cursor_to(&mut editor, 6, 6);
     editor.handle_key(GameKey::Char(' '));

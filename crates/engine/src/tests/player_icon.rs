@@ -17,11 +17,13 @@ fn save_path(name: &str) -> std::path::PathBuf {
 }
 
 fn painted_icon() -> PlayerIcon {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 1);
-    icon.set(7, 7, 15);
-    icon.set(7, 3, 9);
-    icon
+    let mut first = crate::icon::Canvas::new(ICON_SIZE);
+    first.set(0, 0, 1);
+    first.set(15, 15, 63);
+    first.set(7, 3, 9);
+    let mut second = crate::icon::Canvas::new(ICON_SIZE);
+    second.set(8, 8, 30);
+    PlayerIcon::new(vec![first, second], 450).unwrap()
 }
 
 /// **Through a real save/load round trip, not a RON string round trip.**

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.8
+
+**Repairing an outpost costs 4 Logic Wafers and 4 Bytecode Blocks again, as it did before 0.19.7.** That release cut the bill to Core Fragments by mistake: the repair that was meant to get cheaper was a different one, and the outpost's bill was never the problem. Nothing else changed.
+
 ## 0.19.7
 
 **Repairing an outpost now costs 8 Core Fragments.** Before, the bill was 4 Logic Wafers and 4 Bytecode Blocks, half of what founding one costs and two crafted parts you had to carry out from the base just in case. Core Fragments are the salvage you always have on you, so a repair is one line from your pack and nothing to plan a trip around.

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.5
+
+**Stand beside a machine and press c to choose what it makes, the same key that moves cargo; where both are on offer, c asks which way and c again is the cargo.** Before, the recipe menu had its own key, R, beside a machine. Now a machine with a recipe to set is one of the things c can act on, like a Depot, a rebuild site or a farm plot, so one key does everything at the structures beside you. A set machine holding stock offers both its cargo and its recipe on the same side: the arrow toward it opens the recipe, and c again moves the cargo, so collecting from a stocked machine is one press longer than it was. The transfer aims at a Depot before a machine's own shelf, so the arrow toward a Depot always opens the cargo. The contract hint and the help pages say c now.
+
 ## 0.19.4
 
 **The character creator now draws your avatar with the same editor the sprite tools use: a 16x16 picture on the full sprite palette, a second picture that can alternate with the first at a speed you set, a fill tool, a colour pick, and the mouse paints too.** Before, the creator had its own smaller editor, an 8x8 grid of fifteen colours that the map scaled up, and the two had drifted apart. Now there is one editor and the creator's preview shows the picture as the map will draw it. An avatar drawn in an earlier version keeps its shape and takes the nearest colours on the new palette; its save string has room for the palette to grow without another conversion.

@@ -10,7 +10,10 @@ OutpostDef(
     name: "Outpost",
     glyph: '⌂',
     kit: "outpost_kit",
-    repair_cost: [("logic_wafer", 4), ("bytecode_block", 4)],
+    // Core Fragments alone: the Factory-chain bill this replaced (Logic
+    // Wafers and Bytecode Blocks) asked for more items than a repair is
+    // worth, and fragments are the one material the player always carries.
+    repair_cost: [("core_fragment", 8)],
     tiers: [
         // Tier 1 — raw
         (

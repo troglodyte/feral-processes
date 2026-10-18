@@ -1,8 +1,6 @@
-//! `CanvasEditor`'s own tests — the shared canvas mechanics `IconEditor`
-//! and (later) the dev-only sprite editor both compose on. `tests/
-//! icon_editor.rs` covers the same verbs through `IconEditor`'s key table
-//! and must keep passing unchanged; this file is the mechanics on their
-//! own terms, plus the three behaviours the brush and the stroke add.
+//! `CanvasEditor`'s own tests — the shared canvas mechanics `SpriteEditor`
+//! composes on, on their own terms, plus the three behaviours the brush
+//! and the stroke add.
 
 use crate::app::canvas_editor::{CanvasEditor, CanvasFocus, CanvasKey, ICON_UNDO_DEPTH};
 use crate::*;
@@ -270,8 +268,7 @@ fn undo_past_an_empty_history_is_a_no_op() {
 }
 
 /// The history is bounded, so the oldest edits fall off rather than the
-/// editor growing without limit — `tests/icon_editor.rs`'s
-/// `the_undo_history_is_bounded_at_icon_undo_depth`, generalised.
+/// editor growing without limit.
 #[test]
 fn the_history_is_capped_at_icon_undo_depth() {
     let edits = ICON_UNDO_DEPTH + 8;
@@ -327,8 +324,8 @@ fn set_canvas_replaces_the_drawing_wholesale() {
 fn a_key_the_editor_does_not_bind_is_reported_unhandled() {
     let mut editor = editor();
     assert_eq!(editor.handle_key(GameKey::Char('q')), CanvasKey::Unhandled);
-    // Enter and Esc are `IconEditor`'s own — the shared table never binds
-    // them, which is how `IconEditor` takes them back.
+    // Enter and Esc are the hosts' own — the shared table never binds
+    // them, which is how a host takes them back.
     assert_eq!(editor.handle_key(GameKey::Enter), CanvasKey::Unhandled);
     assert_eq!(editor.handle_key(GameKey::Esc), CanvasKey::Unhandled);
 }

@@ -8,13 +8,14 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::achievements::Earned;
 use feral_processes_engine::attributes::AttributeId;
 use feral_processes_engine::classes::PlayerClass;
+use feral_processes_engine::icon::{Canvas, quantise};
 use feral_processes_engine::save;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
 use feral_processes_engine::tuning::{CREATION_CREDITS, CREATION_STAT_POINTS, PLAYER_BASE_STATS};
+use feral_processes_engine::{DEFAULT_SPRITE_FRAME_MS, ICON_SIZE, PlayerIcon};
 
 /// The Points step's row for `id`, by position in `App::creation_rows`.
 fn attribute_row(app: &App, id: &str) -> usize {
@@ -1392,6 +1393,88 @@ fn draw_and_keep(app: &mut App) {
     press(app, GameKey::Enter);
 }
 
+#[test]
+fn a_forge_key_in_the_wizard_editor_changes_the_drawing_and_keeps_the_screen_open() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('='));
+    let view = app.creation_sprite_view().expect("still open");
+    assert_eq!(
+        (view.frames, view.frame_ms),
+        (2, DEFAULT_SPRITE_FRAME_MS + SPRITE_FRAME_MS_STEP)
+    );
+    assert_eq!(view.buttons, WIZARD_BUTTONS.to_vec());
+    assert_eq!(view.tint, None);
+}
+
+#[test]
+fn enter_keeps_both_frames_and_the_pace() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Char('='));
+    app.handle_key(GameKey::Enter);
+    let icon = app.creation_choice().icon.as_ref().expect("a drawing");
+    assert_eq!(icon.frames().len(), 2);
+    assert_eq!(
+        icon.frame_ms(),
+        DEFAULT_SPRITE_FRAME_MS + SPRITE_FRAME_MS_STEP
+    );
+}
+
+#[test]
+fn s_in_the_wizard_editor_queues_no_sprite_write() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_key(GameKey::Char('s'));
+    assert!(app.creation_sprite_view().is_some());
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
+fn a_click_on_keep_advances_the_wizard_like_enter() {
+    let mut app = on_the_icon_step("x");
+    open_the_editor(&mut app);
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Keep),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert!(app.creation_sprite_view().is_none());
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+    assert!(app.creation_choice().icon.is_some());
+}
+
+#[test]
+fn a_pointer_on_the_icon_step_with_the_editor_closed_changes_nothing() {
+    let mut app = on_the_icon_step("x");
+    let before = app.creation_choice().clone();
+    app.handle_pointer(
+        PointerHit::Cell(0, 0),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Button(EditorButton::Keep),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    assert_eq!(app.creation_choice(), &before);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+}
+
 /// The Icon step offers the five presets plus the drawn row, and the drawn
 /// row reads app-core's own `drawn` flag rather than something the
 /// renderer has to re-derive.
@@ -1411,12 +1494,12 @@ fn the_icon_step_offers_six_rows() {
 #[test]
 fn taking_the_drawn_row_opens_the_editor() {
     let mut app = on_the_icon_step("opens_editor");
-    assert!(app.icon_editor_view().is_none());
+    assert!(app.creation_sprite_view().is_none());
 
     open_the_editor(&mut app);
 
     assert!(
-        app.icon_editor_view().is_some(),
+        app.creation_sprite_view().is_some(),
         "taking the sixth row must open the editor"
     );
     assert_eq!(
@@ -1433,12 +1516,12 @@ fn taking_the_drawn_row_opens_the_editor() {
 fn enter_in_the_editor_keeps_the_drawing_and_advances_to_the_colour_step() {
     let mut app = on_the_icon_step("editor_keep");
     open_the_editor(&mut app);
-    assert!(app.icon_editor_view().is_some());
+    assert!(app.creation_sprite_view().is_some());
 
     draw_and_keep(&mut app);
 
     assert!(
-        app.icon_editor_view().is_none(),
+        app.creation_sprite_view().is_none(),
         "keeping the drawing must close the editor"
     );
     assert!(
@@ -1470,7 +1553,7 @@ fn opening_the_editor_by_its_number_key_selects_the_drawn_row() {
     app.menu_selected = 0;
 
     press(&mut app, ch('6')); // the sixth row
-    assert!(app.icon_editor_view().is_some(), "the editor must open");
+    assert!(app.creation_sprite_view().is_some(), "the editor must open");
     press(&mut app, GameKey::Esc);
 
     assert_eq!(
@@ -1488,13 +1571,13 @@ fn esc_in_the_editor_leaves_the_choice_as_it_was() {
     let mut app = on_the_icon_step("editor_discard");
     assert!(app.creation_choice().icon.is_none());
     open_the_editor(&mut app);
-    assert!(app.icon_editor_view().is_some());
+    assert!(app.creation_sprite_view().is_some());
 
     press(&mut app, GameKey::Char(' ')); // paint something
     press(&mut app, GameKey::Esc); // then throw it away
 
     assert!(
-        app.icon_editor_view().is_none(),
+        app.creation_sprite_view().is_none(),
         "discarding must close the editor"
     );
     assert!(
@@ -1537,8 +1620,7 @@ fn taking_a_preset_row_clears_a_drawn_icon() {
 /// re-seeding the profile's saved drawing over it.
 #[test]
 fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 5);
+    let icon = icon_with(&[(0, 0, 5)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()
@@ -1578,8 +1660,7 @@ fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
 /// drew something last run sees it again without having to redraw it.
 #[test]
 fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 3);
+    let icon = icon_with(&[(0, 0, 3)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()
@@ -1605,16 +1686,24 @@ fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
     ));
 }
 
-/// **A profile written before the grid halved still seeds the wizard.**
-/// `v1` carried 256 pixels; `PlayerIcon::decode` folds each 2x2 block onto
-/// the 8x8 grid, so a player who drew an icon on the old editor opens the
-/// new one on the same figure rather than on a blank canvas. Asserted
+/// A one-frame icon with the listed cells painted.
+fn icon_with(cells: &[(usize, usize, u8)]) -> PlayerIcon {
+    let mut canvas = Canvas::new(ICON_SIZE);
+    for &(x, y, index) in cells {
+        canvas.set(x, y, index);
+    }
+    PlayerIcon::new(vec![canvas], DEFAULT_SPRITE_FRAME_MS).unwrap()
+}
+
+/// **A profile written in the retired `v1` format still seeds the wizard.**
+/// `PlayerIcon::decode` keeps each pixel in place and remaps its colour, so a
+/// player who drew an icon on the old editor opens the new one on the same
+/// figure rather than on a blank canvas. Asserted
 /// through the wizard rather than on `decode` alone, because the seed is
 /// the only place a player would ever see the difference.
 #[test]
 fn entering_the_icon_step_seeds_from_a_v1_profile() {
-    // A 2x2 block of colour 4 at the old grid's origin, folding to cell
-    // (0, 0); everything else transparent.
+    // A 2x2 block of colour 4 at the origin; everything else transparent.
     let mut v1 = String::from("v1:");
     for y in 0..16 {
         for x in 0..16 {
@@ -1634,12 +1723,13 @@ fn entering_the_icon_step_seeds_from_a_v1_profile() {
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon
 
-    let mut folded = PlayerIcon::default();
-    folded.set(0, 0, 4);
+    // Old colour 4 is (0xb4, 0xb4, 0xb4); each pixel keeps its place.
+    let want = quantise((0xb4, 0xb4, 0xb4, 255));
+    let folded = icon_with(&[(0, 0, want), (1, 0, want), (0, 1, want), (1, 1, want)]);
     assert_eq!(
         app.creation_choice().icon,
         Some(folded),
-        "a v1 profile must fold onto the 8x8 grid rather than being dropped"
+        "a v1 profile must fold forward in place, colours remapped, rather than being dropped"
     );
     assert!(matches!(
         app.creation_rows().last(),
@@ -1656,7 +1746,7 @@ fn a_profile_with_no_icon_opens_the_editor_on_a_blank_canvas() {
 
     open_the_editor(&mut app);
 
-    let view = app.icon_editor_view().expect("the editor must be open");
+    let view = app.creation_sprite_view().expect("the editor must be open");
     assert!(
         view.canvas.cells.iter().all(|&p| p == 0),
         "a profile with nothing drawn must open the editor on a blank canvas"
@@ -1779,8 +1869,7 @@ fn clearing_a_drawing_and_keeping_it_is_not_a_drawing() {
 /// reads.
 #[test]
 fn taking_a_preset_leaves_the_profiles_drawing_alone() {
-    let mut icon = PlayerIcon::default();
-    icon.set(3, 4, 7);
+    let icon = icon_with(&[(3, 4, 7)]);
     let profile = Profile {
         player_icon: Some(icon.encode()),
         ..Default::default()

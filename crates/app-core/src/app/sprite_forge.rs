@@ -3,49 +3,27 @@
 //! of a player's build, and the editing screen itself. See
 //! `docs/superpowers/specs/2026-09-04-dev-sprite-editor-design.md`.
 //!
-//! `SpriteEditor` composes a `CanvasEditor` exactly as `IconEditor` does —
-//! see that module's doc comment for why the mechanics are shared and the
-//! sink is not. What is this sink's own: which subject it opened for, the
-//! `[g]`/`[s]` keys on top of the shared table, the write cue, and the
-//! mouse entry point. Drawing is `Mode::SpriteEditor`'s Task 7, not this
-//! module's.
+//! The Forge is a host of `sprite_editor::SpriteEditor`: what is this
+//! sink's own is which subject it opened for, the `[s]`/`Esc` keys the
+//! editor leaves unhandled, the write cue, and the mouse entry point.
+//! Drawing is `Mode::SpriteEditor`'s Task 7, not this module's.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::icon::{Canvas, GREY_RAMP_LEN, SPRITE_PALETTE};
+use feral_processes_engine::icon::{Canvas, GREY_RAMP_LEN};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
 use feral_processes_engine::tactical::props::PropDb;
 
-use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_DEPTH, Tool};
+use crate::app::sprite_editor::{
+    DEFAULT_SPRITE_FRAME_MS, EditorChrome, FORGE_BUTTONS, PointerButton, PointerHit, PointerPhase,
+    SpriteEditor, SpriteEditorView, SubjectTint,
+};
 use crate::{App, GameKey, Mode};
-
-/// The sprite canvas's edge — always 16, never a brush-dependent size (the
-/// brush is a footprint over this fixed grid, not a second canvas format;
-/// see the design doc's "The canvas is 16x16 always"). `ICON_SIZE` is the
-/// same 16, named for the *pixel* geometry the icon editor draws at; reused
-/// here rather than a second `pub const SPRITE_EDGE = 16` because the two
-/// really are one number, documented as such in `engine::icon`'s own doc
-/// comment ("The *sprite* is 16x16 (`ICON_SIZE`)").
-const SPRITE_EDGE: usize = feral_processes_engine::ICON_SIZE;
-
-/// Frames a sprite sheet may hold. The gui loader's size check and the
-/// forge's `[1]`/`[2]` keys read this one number.
-pub const MAX_SPRITE_FRAMES: usize = 2;
-
-/// How long a frame shows when no `.anim.ron` says otherwise. Defined here
-/// because the forge needs it for a blank subject and app-core cannot see
-/// gui; the gui loader imports it.
-pub const DEFAULT_SPRITE_FRAME_MS: u32 = 600;
-
-/// What one `[-]`/`[=]` press moves a sprite's frame time by.
-pub const SPRITE_FRAME_MS_STEP: u32 = 100;
-pub const SPRITE_FRAME_MS_MIN: u32 = 100;
-pub const SPRITE_FRAME_MS_MAX: u32 = 2000;
 
 /// The name `assets/sprites/anchor.png` is looked up under — the one place
 /// this string is authored beside `crates/gui/src/render/base.rs`'s
@@ -109,19 +87,6 @@ pub enum SpriteArt {
 /// bare four-tuple clippy's `type_complexity` lint flags on sight.
 pub(crate) type StaticSpriteSubject = (String, String, char, SubjectTint);
 
-/// What a subject's preview multiplies against — the `SpriteSubject::tint`
-/// a picker row and a live editor preview both read.
-///
-/// A small enum over the two sources rather than a second field: a species
-/// or structure (or the player, or the anchor) previews against a
-/// `GlyphColor`, a floor finish previews against a `FloorShade`, and a
-/// subject is always exactly one or the other.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SubjectTint {
-    Glyph(Option<GlyphColor>),
-    Shade(feral_processes_engine::floors::FloorShade),
-}
-
 /// One row of `Mode::SpritePicker`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpriteSubject {
@@ -178,198 +143,26 @@ fn saves_as_full_colour(frames: &[Canvas]) -> bool {
     })
 }
 
-/// Swatches per row of the sprite palette grid: 64 swatches (the transparent
-/// one and 63 colours) as four rows of sixteen, nine families of six colours
-/// reading across and the greys leading.
-const SPRITE_PALETTE_COLS: u8 = 16;
-
-/// One `Mode::SpriteEditor` session — `CanvasEditor`'s shared mechanics
-/// plus which subject this is. The subject is a name rather than an index
-/// into `App::sprite_subjects()`: that list is rebuilt (and re-sorted, once
-/// a save changes an `art` state) on every read, so an index into it would
-/// go stale the moment this editor's own save landed.
-pub(crate) struct SpriteEditor {
-    editor: CanvasEditor,
-    subject: String,
+/// One `Mode::SpriteEditor` session — the shared editor plus which subject
+/// this is. The subject is a name rather than an index into
+/// `App::sprite_subjects()`: that list is rebuilt (and re-sorted, once a save
+/// changes an `art` state) on every read, so an index into it would go stale
+/// the moment this session's own save landed.
+pub(crate) struct ForgeSession {
+    pub(crate) editor: SpriteEditor,
+    pub(crate) subject: String,
     /// The variant the art was opened with; `None` is new art, whose variant
     /// is decided by what is drawn on it.
-    full_colour: Option<bool>,
-    /// Every frame but the live one's latest pixels: `editor` owns the
-    /// active frame's canvas while it is being edited, so `frames[active]`
-    /// is stale until `current_frames` or a switch folds it back in.
-    frames: Vec<Canvas>,
-    active_frame: usize,
-    frame_ms: u32,
-    /// `(frames, active_frame)` as they stood before each change. The shared
-    /// editor's ring holds one bare canvas, which cannot undo a frame being
-    /// added or deleted.
-    history: VecDeque<ForgeSnapshot>,
+    pub(crate) full_colour: Option<bool>,
 }
 
-/// One forge undo entry: every frame, and which was being edited.
-type ForgeSnapshot = (Vec<Canvas>, usize);
-
-impl SpriteEditor {
-    /// Opens on `frames` — `handle_sprite_picker_key`'s own resolution of
-    /// `App::sprite_library` (enabled) then `App::sprite_disabled` (off),
-    /// falling back to a blank 16x16 canvas only when the subject has never
-    /// had art at all. Blank is a legitimate opening state here, unlike the
-    /// player's own `@`: nothing filters it away before it can be saved.
-    fn open(
-        subject: String,
-        frames: Vec<Canvas>,
-        frame_ms: u32,
-        full_colour: Option<bool>,
-    ) -> SpriteEditor {
-        let first = frames
-            .first()
-            .cloned()
-            .unwrap_or_else(|| Canvas::new(SPRITE_EDGE));
-        SpriteEditor {
-            editor: CanvasEditor::open(first, SPRITE_PALETTE.len() as u8, SPRITE_PALETTE_COLS),
-            subject,
-            full_colour,
-            frames,
-            active_frame: 0,
-            frame_ms,
-            history: VecDeque::new(),
-        }
-    }
-
-    /// Every frame with the live canvas folded into the active one.
-    fn current_frames(&self) -> Vec<Canvas> {
-        let mut frames = self.frames.clone();
-        frames[self.active_frame] = self.editor.canvas().clone();
-        frames
-    }
-
-    fn snapshot(&self) -> ForgeSnapshot {
-        (self.current_frames(), self.active_frame)
-    }
-
-    fn remember(&mut self, snapshot: ForgeSnapshot) {
-        if self.history.len() == ICON_UNDO_DEPTH {
-            self.history.pop_front();
-        }
-        self.history.push_back(snapshot);
-    }
-
-    /// Runs a shared-editor edit and keeps a forge undo entry for it if the
-    /// editor took a snapshot. Compared by the editor's running count, not
-    /// its ring depth: a full ring stays the same length while still
-    /// taking snapshots.
-    fn delegate<R>(&mut self, edit: impl FnOnce(&mut CanvasEditor) -> R) -> R {
-        let before = self.snapshot();
-        let taken = self.editor.snapshots_taken();
-        let result = edit(&mut self.editor);
-        if self.editor.snapshots_taken() != taken {
-            self.remember(before);
-        }
-        result
-    }
-
-    /// `[1]`/`[2]`. The first `[2]` on a one-frame sprite makes frame 2 as a
-    /// copy of frame 1; anything past the next unmade frame is ignored.
-    fn select_frame(&mut self, index: usize) {
-        if index == self.active_frame || index > self.frames.len() || index >= MAX_SPRITE_FRAMES {
-            return;
-        }
-        let before = self.snapshot();
-        self.frames = self.current_frames();
-        if index == self.frames.len() {
-            self.frames.push(self.frames[self.active_frame].clone());
-            self.remember(before);
-        }
-        self.active_frame = index;
-        self.editor.set_canvas(self.frames[index].clone());
-    }
-
-    /// `[D]`: drops frame 2 and goes back to frame 1.
-    fn delete_second_frame(&mut self) {
-        if self.frames.len() < 2 {
-            return;
-        }
-        let before = self.snapshot();
-        self.frames = self.current_frames();
-        self.frames.truncate(1);
-        self.active_frame = 0;
-        self.editor.set_canvas(self.frames[0].clone());
-        self.remember(before);
-    }
-
-    /// The forge's own `[u]`, restoring frames and the active frame together.
-    fn undo(&mut self) {
-        if let Some((frames, active)) = self.history.pop_back() {
-            self.frames = frames;
-            self.active_frame = active;
-            self.editor.set_canvas(self.frames[active].clone());
-        }
-    }
-
-    fn step_frame_ms(&mut self, up: bool) {
-        self.frame_ms = if up {
-            self.frame_ms.saturating_add(SPRITE_FRAME_MS_STEP)
-        } else {
-            self.frame_ms.saturating_sub(SPRITE_FRAME_MS_STEP)
-        }
-        .clamp(SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_MAX);
-    }
-
+impl ForgeSession {
     /// The variant a save writes: the one the art was loaded as, else what
     /// the frames need.
     fn full_colour(&self) -> bool {
         self.full_colour
-            .unwrap_or_else(|| saves_as_full_colour(&self.current_frames()))
+            .unwrap_or_else(|| saves_as_full_colour(&self.editor.frames()))
     }
-
-    /// What the screen draws — `CanvasEditor`'s own view, the subject name
-    /// for a header, and the palette a `CanvasView`'s bare indices need to
-    /// become colour.
-    fn view(&self) -> SpriteEditorView {
-        let frame_cells = self
-            .current_frames()
-            .iter()
-            .map(|canvas| {
-                let edge = canvas.edge();
-                (0..edge)
-                    .flat_map(|y| (0..edge).map(move |x| (x, y)))
-                    .map(|(x, y)| canvas.get(x, y))
-                    .collect()
-            })
-            .collect();
-        SpriteEditorView {
-            canvas: self.editor.view(),
-            subject: self.subject.clone(),
-            palette: &SPRITE_PALETTE,
-            full_colour: self.full_colour(),
-            palette_cols: SPRITE_PALETTE_COLS,
-            tool: self.editor.tool(),
-            frames: self.frames.len(),
-            active_frame: self.active_frame,
-            frame_ms: self.frame_ms,
-            frame_cells,
-        }
-    }
-}
-
-/// What `Mode::SpriteEditor` draws.
-pub struct SpriteEditorView {
-    pub canvas: CanvasView,
-    pub subject: String,
-    pub palette: &'static [(u8, u8, u8)],
-    /// The variant a save would write, so the preview can tint the way the
-    /// map will.
-    pub full_colour: bool,
-    /// Swatches per drawn row, the transparent swatch counted — the same
-    /// number the keyboard's Up and Down move by.
-    pub palette_cols: u8,
-    pub tool: Tool,
-    pub frames: usize,
-    pub active_frame: usize,
-    pub frame_ms: u32,
-    /// Every frame's cells, the active one live, so the preview can play the
-    /// animation without a second call.
-    pub frame_cells: Vec<Vec<u8>>,
 }
 
 /// One cue for the frontend to act on. app-core queues it and forgets —
@@ -411,95 +204,10 @@ impl SpriteOp {
     }
 }
 
-/// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
-/// cell or a swatch by the gui — never a pixel. The gui owns the canvas and
-/// swatch rects (it draws them), so it tests the pointer against those
-/// itself; app-core never receives a pixel and never learns the rects
-/// exist.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PointerHit {
-    Cell(u8, u8),
-    Swatch(u8),
-    Button(EditorButton),
-    Subject(usize),
-}
-
-/// A clickable stand-in for one of the editor's keys. **A button has no
-/// effect of its own**: `handle_pointer` presses it by calling the key
-/// handler with `key()`, so a button and its key cannot drift apart.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EditorButton {
-    Save,
-    Undo,
-    Clear,
-    Brush,
-    Tool,
-    Back,
-    Frame1,
-    Frame2,
-    DeleteFrame,
-    Slower,
-    Faster,
-}
-
-impl EditorButton {
-    pub const ALL: [EditorButton; 11] = [
-        EditorButton::Save,
-        EditorButton::Undo,
-        EditorButton::Clear,
-        EditorButton::Brush,
-        EditorButton::Tool,
-        EditorButton::Back,
-        EditorButton::Frame1,
-        EditorButton::Frame2,
-        EditorButton::DeleteFrame,
-        EditorButton::Slower,
-        EditorButton::Faster,
-    ];
-
-    pub fn key(self) -> GameKey {
-        match self {
-            EditorButton::Save => GameKey::Char('s'),
-            EditorButton::Undo => GameKey::Char('u'),
-            EditorButton::Clear => GameKey::Char('x'),
-            EditorButton::Brush => GameKey::Char('g'),
-            EditorButton::Tool => GameKey::Char('f'),
-            EditorButton::Back => GameKey::Esc,
-            EditorButton::Frame1 => GameKey::Char('1'),
-            EditorButton::Frame2 => GameKey::Char('2'),
-            EditorButton::DeleteFrame => GameKey::Char('D'),
-            EditorButton::Slower => GameKey::Char('-'),
-            EditorButton::Faster => GameKey::Char('='),
-        }
-    }
-}
-
-/// Which mouse button a `PointerHit` was reported for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PointerButton {
-    Primary,
-    /// Paints index 0 — erase, the same thing `Backspace` already means on
-    /// this editor.
-    Secondary,
-    /// Picks the cell's colour, the eyedropper — `[i]`'s pointer twin.
-    Middle,
-}
-
-/// Where in a click-or-drag gesture a `PointerHit` was reported.
-///
-/// **A whole drag is one undo entry, not one per cell.** `Down` opens a
-/// stroke (`CanvasEditor::begin_stroke`, one snapshot taken before anything
-/// is known to change), `Up` closes it (`end_stroke`), and `Drag` neither
-/// opens nor closes one — every cell the gui reports while the button is
-/// held lands inside the same stroke `Down` opened.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PointerPhase {
-    Down,
-    Drag,
-    Up,
-    /// Only the picker reads this, and only on a `PointerHit::Subject`.
-    DoubleClick,
-}
+/// The Forge's key line: the editor's own keys, then the dev tool's save and
+/// leave.
+const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
+    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
 
 impl App {
     /// Marks that a sprite dir exists for this build to read and write
@@ -766,27 +474,40 @@ impl App {
             .sprite_library
             .get(name)
             .or_else(|| self.sprite_disabled.get(name));
-        let editor = match installed {
-            Some(sprite) => SpriteEditor::open(
-                name.to_string(),
+        let (frames, frame_ms, full_colour) = match installed {
+            Some(sprite) => (
                 sprite.frames.clone(),
                 sprite.frame_ms,
                 Some(sprite.full_colour),
             ),
-            None => SpriteEditor::open(
-                name.to_string(),
-                vec![Canvas::new(SPRITE_EDGE)],
-                DEFAULT_SPRITE_FRAME_MS,
-                None,
-            ),
+            None => (Vec::new(), DEFAULT_SPRITE_FRAME_MS, None),
         };
-        self.sprite_editor = Some(editor);
+        self.sprite_editor = Some(ForgeSession {
+            editor: SpriteEditor::open(frames, frame_ms),
+            subject: name.to_string(),
+            full_colour,
+        });
         self.mode = Mode::SpriteEditor;
     }
 
     /// What `Mode::SpriteEditor` draws, or `None` while it is not open.
     pub fn sprite_editor_view(&self) -> Option<SpriteEditorView> {
-        self.sprite_editor.as_ref().map(SpriteEditor::view)
+        let session = self.sprite_editor.as_ref()?;
+        // A subject missing from its own picker list is unreachable — `Enter`
+        // only ever opens a name the list just offered — and draws unmodified
+        // rather than panicking if a future caller breaks that.
+        let tint = self
+            .sprite_static_subjects
+            .as_ref()
+            .and_then(|subjects| subjects.iter().find(|s| s.0 == session.subject))
+            .map(|s| s.3);
+        Some(session.editor.view(EditorChrome {
+            title: format!("Sprite Forge — {}", session.subject),
+            keys: FORGE_KEYS.to_string(),
+            buttons: FORGE_BUTTONS.to_vec(),
+            tint,
+            full_colour: session.full_colour(),
+        }))
     }
 
     /// Drains every `SpriteWrite` queued since the last call —
@@ -797,16 +518,14 @@ impl App {
         std::mem::take(&mut self.pending_sprite_writes)
     }
 
-    /// `Mode::SpriteEditor`'s own keys, on top of `CanvasEditor`'s shared
-    /// table (arrows, `Space`/`Backspace`, `u`, `x`, `Tab`), taken back
-    /// unhandled: `[g]` toggles the brush 1<->2, `[s]` queues a `Save`
-    /// carrying the canvas as it stands, and `Esc` leaves for
-    /// `Mode::SpritePicker` without queueing anything — a blank canvas is a
-    /// legitimate save here (see the module doc comment), so `Esc` and
-    /// `[s]` differ only in whether a cue is raised at all, never in what
-    /// the cue would have carried.
+    /// `Mode::SpriteEditor`'s host keys, on top of the shared editor's own:
+    /// `[s]` queues a `Save` carrying the canvas as it stands, and `Esc`
+    /// leaves for `Mode::SpritePicker` without queueing anything — a blank
+    /// canvas is a legitimate save here, so `Esc` and `[s]` differ only in
+    /// whether a cue is raised at all, never in what the cue would have
+    /// carried.
     pub(crate) fn handle_sprite_editor_key(&mut self, key: GameKey) {
-        let Some(sprite_editor) = &mut self.sprite_editor else {
+        let Some(session) = &mut self.sprite_editor else {
             return;
         };
         match key {
@@ -814,64 +533,39 @@ impl App {
                 self.sprite_editor = None;
                 self.mode = Mode::SpritePicker;
             }
-            GameKey::Char('g') => {
-                let next = if sprite_editor.editor.view().brush == 1 {
-                    2
-                } else {
-                    1
-                };
-                sprite_editor.editor.set_brush(next);
-            }
-            GameKey::Char('f') => sprite_editor.editor.toggle_tool(),
-            GameKey::Char('1') => sprite_editor.select_frame(0),
-            GameKey::Char('2') => sprite_editor.select_frame(1),
-            GameKey::Char('D') => sprite_editor.delete_second_frame(),
-            GameKey::Char('-') => sprite_editor.step_frame_ms(false),
-            GameKey::Char('=') => sprite_editor.step_frame_ms(true),
-            GameKey::Char('u') => sprite_editor.undo(),
-            GameKey::Char('i') => {
-                let (x, y) = sprite_editor.editor.view().cursor;
-                sprite_editor.editor.pick_colour_at(x, y);
-            }
             GameKey::Char('s') => {
                 // Pinned after the first save: re-deriving would let a later
                 // hue-free save write `x.png` beside the `x.colour.png`
                 // already on disk, and the stale colour file would win.
-                let full_colour = sprite_editor.full_colour();
-                sprite_editor.full_colour = Some(full_colour);
+                let full_colour = session.full_colour();
+                session.full_colour = Some(full_colour);
                 let write = SpriteWrite {
-                    name: sprite_editor.subject.clone(),
+                    name: session.subject.clone(),
                     op: SpriteOp::Save {
-                        frames: sprite_editor.current_frames(),
-                        frame_ms: sprite_editor.frame_ms,
+                        frames: session.editor.frames(),
+                        frame_ms: session.editor.frame_ms(),
                         full_colour,
                     },
                 };
                 self.pending_sprite_writes.push(write);
             }
             _ => {
-                let _: CanvasKey = sprite_editor.delegate(|editor| editor.handle_key(key));
+                session.editor.handle_key(key);
             }
         }
     }
 
     /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
-    /// or `Mode::SpritePicker` is open, every other mode drops it silently, since nothing else in
+    /// or `Mode::SpritePicker` is open, or while the creation wizard's editor
+    /// is, every other mode drops it silently, since nothing else in
     /// the game reads a pointer at all. `phase` governs the stroke
-    /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
-    /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
-    /// erase — on `Secondary`), a `Swatch` selects.
-    ///
-    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
-    /// and that is the palette index itself**: `draw_swatch_grid` draws the
-    /// transparent swatch (index 0) first and palette entry `n` at position
-    /// `n`. It used to be a `+ 1` conversion here, and getting that wrong
-    /// selected the swatch left of the one outlined; with no conversion
-    /// there is nothing at this seam to get wrong.
+    /// (`PointerPhase`'s own doc comment); what a `hit` does to the canvas is
+    /// `SpriteEditor::handle_pointer`'s.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
         match self.mode {
             Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),
             Mode::SpritePicker => self.handle_picker_pointer(hit, button, phase),
+            Mode::CreateCharacter => self.handle_creation_pointer(hit, button, phase),
             _ => {}
         }
     }
@@ -923,33 +617,9 @@ impl App {
             }
             return;
         }
-        let Some(sprite_editor) = &mut self.sprite_editor else {
+        let Some(session) = &mut self.sprite_editor else {
             return;
         };
-        sprite_editor.delegate(|editor| {
-            if phase == PointerPhase::Down {
-                editor.begin_stroke();
-            }
-            match hit {
-                PointerHit::Cell(x, y) if button == PointerButton::Middle => {
-                    editor.pick_colour_at(x, y);
-                }
-                // A fill is one press, not a gesture: only `Down` acts.
-                PointerHit::Cell(..)
-                    if editor.tool() == Tool::Fill && phase != PointerPhase::Down => {}
-                PointerHit::Cell(x, y) => {
-                    let index = match button {
-                        PointerButton::Primary => editor.view().selected,
-                        PointerButton::Secondary | PointerButton::Middle => 0,
-                    };
-                    editor.apply_tool(x, y, index);
-                }
-                PointerHit::Swatch(index) => editor.pick_swatch(index),
-                PointerHit::Button(_) | PointerHit::Subject(_) => {}
-            }
-            if phase == PointerPhase::Up {
-                editor.end_stroke();
-            }
-        });
+        session.editor.handle_pointer(hit, button, phase);
     }
 }

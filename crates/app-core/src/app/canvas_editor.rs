@@ -1,13 +1,11 @@
 //! Shared canvas-editing mechanics: the cursor clamp, the paint guard, the
 //! undo ring and the shared half of the key table.
 //!
-//! `IconEditor` (`crates/app-core/src/app/icon_editor.rs`) composes one of
-//! these to draw the player's 8x8 map avatar; the dev-only sprite editor
-//! composes a second, wider one on the same mechanics. **Share the canvas
-//! mechanics, not the state machine**: the sink, the outcome and the
-//! wizard's `Enter`/`Esc` interception differ between the two editors and
-//! stay on their own side — `CanvasEditor` never returns an outcome, only
-//! whether it recognised the key.
+//! `SpriteEditor` composes one of these per frame, for the Sprite Forge and
+//! the creation wizard alike. **Share the canvas mechanics, not the state
+//! machine**: the sink, the outcome and the hosts' `Enter`/`Esc`
+//! interception differ and stay on the hosts' side — `CanvasEditor` never
+//! returns an outcome, only whether it recognised the key.
 //!
 //! **Undo is whole `Canvas` snapshots, not a diff.** `ICON_UNDO_DEPTH` of
 //! them is small enough that simple wins. A snapshot is pushed only when a
@@ -19,8 +17,8 @@
 //! moves the cursor a whole *n*-cell stride and its landing coordinates are
 //! snapped to a multiple of *n*, and one paint fills the whole *n*x*n* block
 //! anchored there. At brush 1 every one of those is a no-op, which is what
-//! keeps the icon editor — permanently at brush 1 — behaving exactly as it
-//! did before the brush existed.
+//! keeps a canvas that never leaves brush 1 behaving exactly as it did
+//! before the brush existed.
 //!
 //! **A stroke is one undo entry, and its snapshot is lazy.** `begin_stroke`
 //! pushes nothing; the first `record()` inside the stroke that follows a
@@ -185,8 +183,7 @@ impl CanvasEditor {
     /// from brush 1 would otherwise anchor a brush-2 block half off the
     /// cell the player is looking at.
     ///
-    /// `IconEditor` never calls this — it opens at brush 1 and stays there.
-    /// `app::sprite_forge::SpriteEditor`'s `[g]` key is the real caller.
+    /// `app::sprite_editor::SpriteEditor`'s `[g]` key is the real caller.
     pub(crate) fn set_brush(&mut self, brush: u8) {
         if brush == 1 || brush == 2 {
             self.brush = brush;

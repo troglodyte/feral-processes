@@ -45,11 +45,9 @@ the battle map's body alike, gated by the one `render::wears_drawing`. It is the
 exception to "art is authored near-white" because it is the one tile
 that inherits none of the hues that rule protects — no species colour,
 no `biome_tint`, no damage dimming — so putting the hue back reads as a
-bug fix and is not one. **The player edits `ICON_GRID` (8) and the
-sprite stays `ICON_SIZE` (16)**, `ICON_CELL_PIXELS` the one expression
-of the ratio: each drawn cell fills a 2x2 block of the upload, and the
-save string is `"v2:"` plus 64 hex digits with `v1` folded, never
-dropped.
+bug fix and is not one. **The avatar is a sprite drawn at the sprite's size on the sprite
+palette, animated like one**, and the save string is `v3`, with `v1` and `v2`
+folded forward.
 
 **The battle portrait** (`render/battle.rs::draw_battle_portrait`) is the
 one sprite drawn as a picture pane rather than in a glyph's place; its glyph

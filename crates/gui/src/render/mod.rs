@@ -56,7 +56,6 @@ mod group_menu;
 mod help;
 mod history;
 pub(crate) mod hud;
-mod icon_editor;
 mod inventory;
 mod level_up;
 mod lighting;
@@ -177,8 +176,8 @@ use trade::{
 use transfer::draw_transfer;
 
 /// The colour `draw` clears the window to before dispatching to a screen.
-/// Named so `icon_editor.rs` can paint a transparent canvas pixel in the
-/// window's own background rather than a hardcoded black the player could
+/// Named so the sprite editor and `canvas.rs` can paint a transparent canvas
+/// pixel in the window's own background rather than a hardcoded black the player could
 /// mistake for a painted dark pixel.
 const SCREEN_BG: Color = Color::new(0.02, 0.02, 0.03, 1.0);
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
@@ -644,12 +643,12 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         Mode::Options => draw_options(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
-        // The icon editor hangs off the wizard's Icon step as `App` state
-        // rather than a `Mode` of its own (`app::icon_editor`'s reason), so
-        // it is this arm's job to notice it is open and draw over the
-        // wizard's own popup instead of drawing it.
-        Mode::CreateCharacter => match app.icon_editor_view() {
-            Some(view) => icon_editor::draw_icon_editor(&view, painter, &m),
+        // The sprite editor hangs off the wizard's Icon step as `App` state
+        // rather than a `Mode` of its own, so it is this arm's job to
+        // notice it is open and draw over the wizard's own popup instead of
+        // drawing it. The view carries no tint, so the avatar wears no hue.
+        Mode::CreateCharacter => match app.creation_sprite_view() {
+            Some(view) => sprite_forge::draw_sprite_editor_session(&view, app.zoom, painter, &m),
             None => creation::draw_create_character(app, refusal, painter, &m),
         },
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),

@@ -381,8 +381,9 @@ fn the_player_view_carries_its_look_and_nothing_else_does() {
 /// as its whole payoff.
 #[test]
 fn a_chosen_icon_reaches_the_player_view() {
-    let mut icon = PlayerIcon::default();
-    icon.set(0, 0, 5);
+    let mut canvas = crate::icon::Canvas::new(ICON_SIZE);
+    canvas.set(0, 0, 5);
+    let icon = PlayerIcon::new(vec![canvas], DEFAULT_SPRITE_FRAME_MS).unwrap();
     let choice = CharacterChoice {
         icon: Some(icon.clone()),
         ..CharacterChoice::default()

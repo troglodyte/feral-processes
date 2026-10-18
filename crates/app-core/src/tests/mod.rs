@@ -29,7 +29,6 @@ mod fusion;
 mod gear_inspect;
 mod group_menus;
 mod hover;
-mod icon_editor;
 mod info_tab;
 mod interact;
 mod inventory;

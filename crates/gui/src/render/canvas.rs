@@ -1,23 +1,20 @@
 //! `draw_canvas_grid` and `draw_swatch_grid`: the pixel grid with its
 //! brush-sized cursor, and a row of palette swatches — the mechanics
-//! `render/icon_editor.rs` used to own outright, extracted so the dev-only
-//! sprite editor (a later task) can draw the same thing against a wider
-//! grid and a different palette. `draw_canvas_grid` consumes app-core's
-//! `CanvasView` the same way `icon_editor.rs` already did; `draw_swatch_grid`
+//! of the sprite editor, which the Forge and the creation wizard share.
+//! `draw_canvas_grid` consumes app-core's
+//! `CanvasView`; `draw_swatch_grid`
 //! takes only a selected index and a palette — it was never really an
 //! operation on a canvas, just one this file used to perform alongside one.
 //!
-//! **Two functions, not one, because the icon editor draws them into two
+//! **Two functions, not one, because the sprite editor draws them into two
 //! independently-bordered panels.** Each takes its own `Rect` — the panes'
 //! own convention, "the caller takes the origin" — and the caller decides
 //! whether, and where, to call either. Neither function draws a background,
-//! a border or a label; that chrome is `icon_editor.rs`'s (and will be
-//! whatever the sprite editor's screen wants).
+//! a border or a label; that chrome is the sprite editor screen's.
 //!
 //! **The swatch size comes from `rect.h`, not from the grid's cell.** The
-//! two panels are independently sized in the icon editor (the palette
-//! strip is narrower than the canvas — see `icon_editor.rs`'s own
-//! `SWATCH_LINES` comment), so a swatch derived from the grid's own cell
+//! two panels are independently sized in the sprite editor (the palette
+//! strip is narrower than the canvas), so a swatch derived from the grid's own cell
 //! size could not reproduce that. The caller passes the exact box the
 //! swatch row must fill; `SWATCH_GAP_RATIO` is the one thing this function
 //! decides — the gap between swatches as a fraction of a swatch's own

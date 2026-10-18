@@ -1286,7 +1286,7 @@ fn draw_surface_map(
                 // sprite is authored near-white and inherits its tile's
                 // colour through egui's multiplying tint — that is what
                 // `assets/sprites/README.md` asks art for. A drawing is the
-                // exception on purpose: the player picked its fifteen
+                // exception on purpose: the player picked the
                 // colours themselves, and multiplying those by an indigo or
                 // rose swatch turns most of them black.
                 //
@@ -3406,9 +3406,14 @@ mod tests {
     /// about, since the pixels themselves live in the texture the upload
     /// built and never reach this code.
     fn a_drawing() -> feral_processes_engine::PlayerIcon {
-        let mut icon = feral_processes_engine::PlayerIcon::default();
-        icon.set(3, 4, 7);
-        icon
+        let mut canvas =
+            feral_processes_engine::icon::Canvas::new(feral_processes_engine::ICON_SIZE);
+        canvas.set(3, 4, 7);
+        feral_processes_engine::PlayerIcon::new(
+            vec![canvas],
+            feral_processes_engine::DEFAULT_SPRITE_FRAME_MS,
+        )
+        .unwrap()
     }
 
     /// **The overdraw rule, for the rung most exposed to it.** A drawn icon
@@ -3468,7 +3473,7 @@ mod tests {
 
     /// **The drawn icon is the one sprite in the game drawn untinted.**
     /// Every other sprite is authored near-white and multiplied by the hue
-    /// its tile would have worn; a drawing carries its own fifteen colours,
+    /// its tile would have worn; a drawing carries its own colours,
     /// and multiplying those by an indigo swatch turns most of them black.
     /// The tint is therefore neutral — grey at the vignette's own value, so
     /// depth shading is kept and the hue is dropped.

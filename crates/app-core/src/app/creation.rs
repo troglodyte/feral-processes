@@ -39,7 +39,7 @@
 //! **The Points step opens on an empty pool.** Every point is the
 //! player's own placement; nothing on the screen arrives decided.
 
-use crate::app::icon_editor::{IconEditor, IconEditorOutcome};
+use crate::app::sprite_editor::{EditorChrome, SpriteEditor};
 use crate::app::stat_allocation::{AllocationFor, StatAllocation, spend_adjustment, spent_cost};
 use crate::*;
 use feral_processes_engine::PlayerIcon;
@@ -379,11 +379,10 @@ impl App {
     /// for the main menu; `[R]` rolls whatever is still undecided and jumps
     /// to the Summary; everything else is the showing step's own.
     ///
-    /// **The icon editor takes every key first, whole, while it is open.**
-    /// It hangs off the wizard rather than owning a `Mode` of its own (see
-    /// `app::icon_editor`), so this is the one door it can intercept
-    /// through — Esc included, which would otherwise walk the wizard back a
-    /// step instead of reaching `IconEditor::handle_key`'s own Esc.
+    /// **The sprite editor takes every key first, whole, while it is open.**
+    /// It hangs off the wizard rather than owning a `Mode` of its own, so
+    /// this is the one door it can intercept through — Esc included, which
+    /// would otherwise walk the wizard back a step.
     ///
     /// **An all-transparent canvas is not a drawing**, and that is decided
     /// here rather than at each surface that asks. `CharacterChoice::icon`
@@ -400,15 +399,18 @@ impl App {
     /// on it.
     pub(crate) fn handle_creation_key(&mut self, key: GameKey) {
         if let Some(editor) = self.creation_icon_editor.as_mut() {
-            match editor.handle_key(key) {
-                IconEditorOutcome::Open => {}
-                IconEditorOutcome::Keep => {
-                    let drawn = editor.icon().clone();
+            match key {
+                GameKey::Enter => {
+                    let drawn = PlayerIcon::new(editor.frames(), editor.frame_ms())
+                        .expect("the editor holds one or two 16x16 frames");
                     self.creation_icon_editor = None;
                     self.creation_choice.icon = (!drawn.is_blank()).then_some(drawn);
                     self.advance_creation();
                 }
-                IconEditorOutcome::Discard => self.creation_icon_editor = None,
+                GameKey::Esc => self.creation_icon_editor = None,
+                _ => {
+                    editor.handle_key(key);
+                }
             }
             return;
         }
@@ -748,9 +750,9 @@ impl App {
         };
         if idx == CREATION_ICONS.len() {
             self.menu_selected = idx;
-            self.creation_icon_editor = Some(IconEditor::open(
-                self.creation_choice.icon.clone().unwrap_or_default(),
-            ));
+            let icon = self.creation_choice.icon.clone().unwrap_or_default();
+            self.creation_icon_editor =
+                Some(SpriteEditor::open(icon.frames().to_vec(), icon.frame_ms()));
             return;
         }
         let (glyph, sprite) = CREATION_ICONS[idx];
@@ -1052,5 +1054,49 @@ impl App {
     /// step to announce. Zero until a banked run is worth one.
     pub fn creation_bonus_stat_points(&self) -> u32 {
         score::creation_bonus(self.profile.lifetime_score).stat_points
+    }
+}
+
+/// Enter and Esc here are the wizard's, not the Forge's save and back.
+const CREATION_SPRITE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
+    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   Enter: keep   Esc: discard";
+
+impl App {
+    /// What the Icon step's editor draws, or `None` while it is not open.
+    /// The drawn avatar is untinted everywhere, so no hue is applied here.
+    pub fn creation_sprite_view(&self) -> Option<SpriteEditorView> {
+        self.creation_icon_editor.as_ref().map(|editor| {
+            editor.view(EditorChrome {
+                title: "Draw your avatar".to_string(),
+                keys: CREATION_SPRITE_KEYS.to_string(),
+                buttons: WIZARD_BUTTONS.to_vec(),
+                tint: None,
+                full_colour: false,
+            })
+        })
+    }
+
+    /// The mouse in the wizard: a button is the key it stands for, so Keep
+    /// goes through `handle_creation_key` exactly as `Enter` does; anything
+    /// else is the editor's own stroke. With the editor closed the Icon
+    /// step's list has no pointer at all, so nothing happens.
+    pub(crate) fn handle_creation_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
+        if let PointerHit::Button(pressed) = hit {
+            if self.creation_icon_editor.is_some()
+                && phase == PointerPhase::Down
+                && button == PointerButton::Primary
+            {
+                self.handle_creation_key(pressed.key());
+            }
+            return;
+        }
+        if let Some(editor) = self.creation_icon_editor.as_mut() {
+            editor.handle_pointer(hit, button, phase);
+        }
     }
 }

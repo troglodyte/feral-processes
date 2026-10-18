@@ -44,9 +44,12 @@ picked is your whole pack.
 
 Your look is a glyph and a colour, and it is only a look. They come as two screens: five shapes,
 then the swatches. Enter takes the row you are standing on and moves you along, and n walks past
-without changing anything. A sixth row on the shape screen opens an editor to draw your own map
-icon. Enter in the editor keeps the drawing and moves you on to the swatches; Esc throws it away and
-returns you to the shapes. The swatch still colours your glyph everywhere else. The preview in the corner follows the
+without changing anything. A sixth row on the shape screen opens an editor to draw your own avatar. It is drawn at the size the
+map shows you, with a wide range of colours, and you can add a second picture that alternates with
+the first and set how fast they swap. There is a fill tool, a colour pick, and the mouse paints too.
+Enter keeps the drawing and moves you on to the swatches; Esc throws it away and returns you to the
+shapes. A blank drawing counts as no avatar. The swatch still colours your glyph everywhere else.
+The preview in the corner follows the
 cursor, so you can see an option before you take it, and it is drawn the same way the map draws
 you.
 

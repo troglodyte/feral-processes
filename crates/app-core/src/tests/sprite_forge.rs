@@ -330,7 +330,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
 
     open_editor(&mut app, "anchor");
     let view = app.sprite_editor_view().expect("editor open");
-    assert_eq!(view.subject, "anchor");
+    assert_eq!(view.title, "Sprite Forge — anchor");
     assert_eq!(
         view.canvas.cells[0], 5,
         "the installed canvas loaded, not a blank one"
@@ -338,7 +338,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
 
     open_editor(&mut app, &blank_name);
     let view = app.sprite_editor_view().expect("editor open");
-    assert_eq!(view.subject, blank_name);
+    assert_eq!(view.title, format!("Sprite Forge — {blank_name}"));
     assert!(
         view.canvas.cells.iter().all(|&c| c == 0),
         "a subject with no installed art opens on a blank canvas"
@@ -1178,7 +1178,7 @@ fn observed(app: &mut App) -> (Mode, Option<EditorState>, Vec<SpriteWrite>) {
 
 #[test]
 fn every_button_does_exactly_what_its_key_does() {
-    for (n, button) in EditorButton::ALL.into_iter().enumerate() {
+    for (n, button) in FORGE_BUTTONS.into_iter().enumerate() {
         let mut by_button = app_ready_for_buttons(60 + n as u32);
         let mut by_key = app_ready_for_buttons(60 + n as u32);
         // Same starting point, or the comparison below proves nothing.
@@ -1204,7 +1204,7 @@ fn the_buttons_are_not_vacuous_each_one_changes_something() {
         press(&mut app, button);
         before != observed(&mut app)
     };
-    for button in EditorButton::ALL {
+    for button in FORGE_BUTTONS {
         assert!(changed(button), "{button:?} did nothing");
     }
 }
@@ -1255,7 +1255,7 @@ fn each_button_names_the_key_the_footer_documents() {
         (EditorButton::Slower, GameKey::Char('-')),
         (EditorButton::Faster, GameKey::Char('=')),
     ];
-    assert_eq!(table.len(), EditorButton::ALL.len());
+    assert_eq!(table.len(), FORGE_BUTTONS.len());
     for (button, key) in table {
         assert_eq!(button.key(), key, "{button:?}");
     }
@@ -1304,7 +1304,7 @@ fn a_double_click_on_the_selected_subject_opens_it_with_its_art_and_variant() {
 
     assert_eq!(app.mode, Mode::SpriteEditor);
     let view = app.sprite_editor_view().unwrap();
-    assert_eq!(view.subject, "cipher");
+    assert_eq!(view.title, "Sprite Forge — cipher");
     assert!(view.full_colour, "the installed variant travels with it");
     assert_eq!(view.canvas.cells[3 * 16 + 3], 12);
 }
@@ -1341,10 +1341,10 @@ fn a_double_click_opens_what_enter_opens() {
     assert_eq!(
         by_mouse
             .sprite_editor_view()
-            .map(|v| (v.subject, v.canvas.cells)),
+            .map(|v| (v.title, v.canvas.cells)),
         by_key
             .sprite_editor_view()
-            .map(|v| (v.subject, v.canvas.cells)),
+            .map(|v| (v.title, v.canvas.cells)),
     );
 }
 

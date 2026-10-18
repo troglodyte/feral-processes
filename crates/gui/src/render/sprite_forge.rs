@@ -66,8 +66,8 @@ struct PickerGeometry {
 }
 
 /// Everything geometric about the picker, computed once so drawing and the
-/// layout census below share one derivation — `icon_editor.rs::geometry`'s
-/// pattern for the same reason.
+/// layout census below share one derivation, so a test cannot measure a layout the
+/// draw does not make.
 fn picker_geometry(w: f32, m: &Metrics, subject_count: usize) -> PickerGeometry {
     let header_y = m.pad + m.line_height;
     let help_y = header_y + m.gap + m.line_height;
@@ -87,7 +87,7 @@ fn picker_geometry(w: f32, m: &Metrics, subject_count: usize) -> PickerGeometry 
 }
 
 /// The picker's total drawn height, footer-less (it has none) — the layout
-/// census's one number, `icon_editor.rs::content_bottom`'s counterpart.
+/// census's one number.
 #[cfg(test)]
 fn picker_content_bottom(g: &PickerGeometry, m: &Metrics) -> f32 {
     g.grid_top + g.rows_per_column as f32 * m.line_height + m.pad
@@ -206,14 +206,10 @@ fn subject_row_text(subject: &SpriteSubject, selected: bool) -> String {
 // The editor screen
 // ---------------------------------------------------------------------
 
-const EDITOR_HEADER: &str = "Sprite Forge";
-const EDITOR_FOOTER_TEXT: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
-
-/// `icon_editor.rs::CANVAS_CELL_LINES`, halved: the sprite canvas is 16x16
-/// against the icon's 8x8, and this is what keeps the two screens' canvas
-/// panel the same physical size on screen — a size already known to fit at
-/// the smallest supported window, since it's the icon editor's own.
+/// The canvas cell's height in UI lines, halved from the 8x8 editor's
+/// figure this screen replaced: the sprite canvas is 16x16 against that 8x8,
+/// and halving keeps the canvas panel the same physical size on screen — a size known to fit at
+/// the smallest supported window.
 const SPRITE_CANVAS_CELL_LINES: f32 = 1.2;
 const SPRITE_SECTION_GAP_LINES: f32 = 1.0;
 
@@ -231,18 +227,20 @@ struct EditorGeometry {
     footer_lines: Vec<String>,
 }
 
-/// `edge` and `palette_len` come from the view being drawn rather than a
-/// hardcoded 16 and `SPRITE_PALETTE.len()`, so this stays correct if either
-/// ever changes without a second place to update.
+/// The edge, palette and key line come from the view being drawn rather than
+/// a hardcoded 16 and `SPRITE_PALETTE.len()`, so this stays correct if any
+/// of them ever changes without a second place to update.
 fn editor_geometry(
     painter: &Painter,
     w: f32,
     m: &Metrics,
-    edge: usize,
-    palette_len: usize,
-    palette_cols: usize,
+    view: &SpriteEditorView,
     zoom: u16,
 ) -> EditorGeometry {
+    let edge = view.canvas.edge as usize;
+    let palette_len = view.palette.len();
+    let palette_cols = view.palette_cols as usize;
+    let buttons = &view.buttons;
     let gap = m.line_height * SPRITE_SECTION_GAP_LINES;
 
     let header_y = m.pad + m.line_height;
@@ -259,8 +257,8 @@ fn editor_geometry(
 
     let palette_label_y = canvas.y + canvas.h + gap + m.line_height;
     // Solved for rather than authored as a tuned constant — unlike
-    // `icon_editor.rs::SWATCH_LINES`, which shipped 120px past `canvas.w`
-    // for a whole task before a test caught it (Task 6's report). Deriving
+    // a tuned line count, which shipped 120px past `canvas.w`
+    // for a whole task in the 8x8 editor before a test caught it. Deriving
     // the swatch size from the width it must fit closes that class of bug
     // by construction: whatever `palette_len` is, the grid cannot disagree
     // with `canvas.w` about how wide a swatch is allowed to be.
@@ -288,22 +286,23 @@ fn editor_geometry(
     let (tile_px, _) = map_cell(zoom);
     let preview = Rect::new(canvas.x + canvas.w + gap, canvas.y, tile_px, tile_px);
 
-    let mut buttons = button_rects(painter, w, palette.y + palette.h + m.gap, m);
-    let bar_bottom = buttons.last().map_or(0.0, |(_, r)| r.y + r.h);
+    let mut button_rects = button_rects(painter, w, palette.y + palette.h + m.gap, m, buttons);
+    let bar_bottom = button_rects.last().map_or(0.0, |(_, r)| r.y + r.h);
     // Under the preview's speed readout, where the screen has room.
-    buttons.extend(frame_button_rects(
+    button_rects.extend(frame_button_rects(
         painter,
         preview.x,
         preview.y + preview.h + m.line_height * FRAME_COLUMN_LINES,
         m,
+        buttons,
     ));
     let footer_top = bar_bottom + gap;
-    // Measured in UI cells, `icon_editor.rs::geometry`'s pattern for a
-    // screen with no popup body to wrap against.
+    // Measured in UI cells, since this screen has no popup body to wrap
+    // against.
     let columns = ((w - m.pad * 2.0) / painter.measure_ui_advance("M", m.small()))
         .floor()
         .max(20.0) as usize;
-    let footer_lines = feral_processes_engine::text::wrap(EDITOR_FOOTER_TEXT, columns);
+    let footer_lines = feral_processes_engine::text::wrap(&view.keys, columns);
 
     EditorGeometry {
         header_y,
@@ -312,7 +311,7 @@ fn editor_geometry(
         cell,
         palette_label_y,
         palette,
-        buttons,
+        buttons: button_rects,
         preview_label_y,
         preview,
         footer_y: footer_top + m.line_height,
@@ -321,8 +320,8 @@ fn editor_geometry(
 }
 
 /// How many monospace cells a button's label is given. The longest label,
-/// `[g] Brush 2`, is eleven; the rest is padding on both sides.
-const BUTTON_CHARS: f32 = 13.0;
+/// `[Esc] Discard`, is thirteen; the rest is padding on both sides.
+const BUTTON_CHARS: f32 = 15.0;
 
 /// Buttons on the bottom bar; the frame and speed buttons stack in the
 /// column under the preview instead, since eleven in a row would run off a
@@ -336,9 +335,15 @@ const FRAME_COLUMN_LINES: f32 = 2.0;
 /// The bottom button bar's rects, centred on the window at `y`. Every button
 /// is the same width, so a label that changes with state (`Brush 1`/`Brush
 /// 2`, `Paint`/`Fill`) cannot shift its neighbours or the hit rects.
-fn button_rects(painter: &Painter, w: f32, y: f32, m: &Metrics) -> Vec<(EditorButton, Rect)> {
+fn button_rects(
+    painter: &Painter,
+    w: f32,
+    y: f32,
+    m: &Metrics,
+    buttons: &[EditorButton],
+) -> Vec<(EditorButton, Rect)> {
     let (button_w, button_h, gap) = button_size(painter, m);
-    let bar = &EditorButton::ALL[..BAR_BUTTONS];
+    let bar = &buttons[..BAR_BUTTONS];
     let n = bar.len() as f32;
     let left = (w - (button_w * n + gap * (n - 1.0))) / 2.0;
     bar.iter()
@@ -351,9 +356,15 @@ fn button_rects(painter: &Painter, w: f32, y: f32, m: &Metrics) -> Vec<(EditorBu
 }
 
 /// The frame and speed buttons, stacked down from `(x, y)`.
-fn frame_button_rects(painter: &Painter, x: f32, y: f32, m: &Metrics) -> Vec<(EditorButton, Rect)> {
+fn frame_button_rects(
+    painter: &Painter,
+    x: f32,
+    y: f32,
+    m: &Metrics,
+    buttons: &[EditorButton],
+) -> Vec<(EditorButton, Rect)> {
     let (button_w, button_h, gap) = button_size(painter, m);
-    EditorButton::ALL[BAR_BUTTONS..]
+    buttons[BAR_BUTTONS..]
         .iter()
         .enumerate()
         .map(|(i, &b)| {
@@ -387,6 +398,8 @@ fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
             Tool::Fill => "[f] Fill".to_string(),
         },
         EditorButton::Back => "[Esc] Back".to_string(),
+        EditorButton::Keep => "[Enter] Keep".to_string(),
+        EditorButton::Discard => "[Esc] Discard".to_string(),
         EditorButton::Frame1 => "[1] Frame 1".to_string(),
         EditorButton::Frame2 => "[2] Frame 2".to_string(),
         EditorButton::DeleteFrame => "[D] Delete 2".to_string(),
@@ -430,35 +443,17 @@ fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorVie
     }
 }
 
-/// Total height the screen draws, footer included — `icon_editor.rs::
-/// content_bottom`'s counterpart.
+/// Total height the screen draws, footer included.
 #[cfg(test)]
 fn editor_content_bottom(g: &EditorGeometry, m: &Metrics) -> f32 {
     g.footer_y + g.footer_lines.len().saturating_sub(1) as f32 * m.line_height + m.pad
 }
 
-/// `&mut App`, not `&App`: resolving the session's own hue means a second
-/// call into `App::sprite_subjects` (see below), which is `&mut self` —
-/// Task 4's caching fix-round-1. `SpriteEditor` itself stores only the
-/// subject's *name* (`crates/app-core/src/app/sprite_forge.rs`'s own
-/// comment on why: that list re-sorts on every read, so an index would go
-/// stale), so the name is all this has to look the hue back up with.
-pub(super) fn draw_sprite_editor(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_sprite_editor(app: &App, painter: &Painter, m: &Metrics) {
     let zoom = app.zoom;
     match app.sprite_editor_view() {
         Some(view) => {
-            // A subject not found in its own picker list is unreachable —
-            // `Enter` only ever opens a name `sprite_subjects()` just
-            // listed — but falling back to a neutral hue rather than
-            // panicking keeps a stray future caller from turning a lookup
-            // gap into a crash.
-            let hue = app
-                .sprite_subjects()
-                .into_iter()
-                .find(|s| s.name == view.subject)
-                .map(|s| subject_hue(&s.tint))
-                .unwrap_or(TEXT);
-            draw_sprite_editor_session(&view, zoom, hue, painter, m);
+            draw_sprite_editor_session(&view, zoom, painter, m);
         }
         // Unreachable through the picker's own `Enter` (it always opens a
         // session before switching mode) but not through a test, or a
@@ -475,31 +470,23 @@ pub(super) fn draw_sprite_editor(app: &mut App, painter: &Painter, m: &Metrics) 
     }
 }
 
-fn draw_sprite_editor_session(
+pub(super) fn draw_sprite_editor_session(
     view: &SpriteEditorView,
     zoom: u16,
-    hue: Color,
     painter: &Painter,
     m: &Metrics,
 ) {
     let edge = view.canvas.edge as usize;
-    let g = editor_geometry(
-        painter,
-        painter.screen_w(),
-        m,
-        edge,
-        view.palette.len(),
-        view.palette_cols as usize,
-        zoom,
-    );
+    let g = editor_geometry(painter, painter.screen_w(), m, view, zoom);
+    // White is the identity tint: a host with no subject hue draws the
+    // preview as authored.
+    let hue = view
+        .tint
+        .as_ref()
+        .map(subject_hue)
+        .unwrap_or(Color::new(1.0, 1.0, 1.0, 1.0));
 
-    centered_ui(
-        painter,
-        &format!("{EDITOR_HEADER} — {}", view.subject),
-        g.header_y,
-        m.title(),
-        TEXT,
-    );
+    centered_ui(painter, &view.title, g.header_y, m.title(), TEXT);
 
     centered_ui(painter, "Canvas", g.canvas_label_y, m.small(), TEXT_DIM);
     let c = g.canvas;
@@ -563,8 +550,7 @@ fn draw_sprite_editor_session(
 }
 
 /// A panel's border thickness and colour for whether it currently has
-/// focus — `icon_editor.rs::panel_border`'s own rule, not shared as a
-/// function across the two files since each owns its screen's chrome.
+/// focus.
 fn panel_border(focused: bool) -> (f32, Color) {
     if focused {
         (3.0, BORDER)
@@ -737,6 +723,16 @@ pub(crate) fn sprite_hits(app: &mut App, painter: &Painter) -> Option<SpriteHits
                 app.zoom,
             )))
         }
+        Mode::CreateCharacter => {
+            let view = app.creation_sprite_view()?;
+            Some(SpriteHits::Editor(hit_rects(
+                painter,
+                painter.screen_w(),
+                &m,
+                &view,
+                app.zoom,
+            )))
+        }
         Mode::SpritePicker => {
             let count = app.sprite_subjects().len();
             Some(SpriteHits::Picker(picker_row_rects(
@@ -798,15 +794,7 @@ pub(crate) fn hit_rects(
     zoom: u16,
 ) -> HitRects {
     let edge = view.canvas.edge as usize;
-    let g = editor_geometry(
-        painter,
-        w,
-        m,
-        edge,
-        view.palette.len(),
-        view.palette_cols as usize,
-        zoom,
-    );
+    let g = editor_geometry(painter, w, m, view, zoom);
     let side = edge as f32 * g.cell;
     let canvas = Rect::new(g.canvas.x + m.inset, g.canvas.y + m.inset, side, side);
     let palette = Rect::new(
@@ -828,7 +816,7 @@ pub(crate) fn hit_rects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_app_core::{GameKey, Mode, PointerButton, PointerPhase};
+    use feral_processes_app_core::{FORGE_BUTTONS, GameKey, Mode, PointerButton, PointerPhase};
     use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::icon::SPRITE_PALETTE;
 
@@ -876,6 +864,31 @@ mod tests {
         app.menu_selected = index;
         app.handle_key(GameKey::Enter);
         assert_eq!(app.mode, Mode::SpriteEditor, "Enter must open the editor");
+    }
+
+    /// The Forge's editor view on the first subject.
+    fn forge_view() -> SpriteEditorView {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        app.sprite_editor_view().expect("just opened")
+    }
+
+    /// A wizard walked to the Icon step with its editor open.
+    fn wizard_editor_app() -> feral_processes_app_core::App {
+        use super::super::creation::tests::{walk_past, wizard_app};
+        use feral_processes_app_core::CreationStep;
+        let mut app = wizard_app();
+        for step in CreationStep::ALL
+            .iter()
+            .take_while(|s| **s != CreationStep::Icon)
+        {
+            walk_past(&mut app, *step);
+        }
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        app
     }
 
     // -------------------------------------------------------------
@@ -1030,7 +1043,7 @@ mod tests {
     fn the_editor_screen_fits_at_1280x720() {
         let m = crate::text::ui_metrics(CENSUS_H);
         let ((bottom, lines), _shapes) = crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+            let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), 2);
             (editor_content_bottom(&g, &m), g.footer_lines.len())
         });
         assert!(
@@ -1045,7 +1058,7 @@ mod tests {
     fn the_editor_screen_fits_1280_wide() {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+            let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), 2);
             for (name, rect) in [
                 ("canvas", g.canvas),
                 ("palette", g.palette),
@@ -1074,7 +1087,7 @@ mod tests {
     fn the_palette_strip_fits_under_the_canvas() {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+            let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), 2);
             assert!(
                 g.palette.w <= g.canvas.w + 0.01,
                 "the palette is {}px wide under a {}px canvas",
@@ -1092,7 +1105,7 @@ mod tests {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
             for zoom in feral_processes_app_core::MIN_ZOOM..=feral_processes_app_core::MAX_ZOOM {
-                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, zoom);
+                let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), zoom);
                 let (tile_px, _) = crate::text::map_cell(zoom);
                 assert_eq!(
                     g.preview.w, tile_px,
@@ -1150,7 +1163,7 @@ mod tests {
         app.handle_key(GameKey::Char(' '));
 
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let want = canvas::palette_color(SPRITE_PALETTE[0]);
         assert_eq!(
             crate::paint::painted_rect_fill_count(&shapes, want),
@@ -1195,7 +1208,7 @@ mod tests {
         );
 
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         assert_eq!(
             crate::paint::painted_rect_fill_count(&shapes, raw_white),
             2,
@@ -1206,6 +1219,69 @@ mod tests {
             1,
             "the near-white preview pixel must come out in the subject's own hue"
         );
+    }
+
+    /// The wizard's editor is the same screen with the Forge's subject hue
+    /// taken away: the avatar is drawn untinted everywhere, so the preview
+    /// pixel is the palette entry's own colour. Drawn through `render::draw`
+    /// so the `Mode::CreateCharacter` arm is the thing under test.
+    #[test]
+    fn the_wizard_preview_is_drawn_untinted() {
+        let mut app = wizard_editor_app();
+        app.handle_key(GameKey::Char(' '));
+        let mut fx = crate::fx::Fx::new();
+        let (_, shapes) =
+            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
+        let want = canvas::palette_color(SPRITE_PALETTE[0]);
+        assert_eq!(
+            crate::paint::painted_rect_fill_count(&shapes, want),
+            3,
+            "the swatch, the grid cell and the preview pixel, all in the entry's own colour"
+        );
+    }
+
+    /// The dispatcher draws the editor, not the wizard's popup, once the
+    /// Icon step's editor is open — and in the wizard's own words, not the
+    /// dev tool's.
+    #[test]
+    fn the_dispatcher_draws_the_editor_over_the_wizard_once_it_is_open() {
+        let mut app = wizard_editor_app();
+        assert_eq!(app.mode, Mode::CreateCharacter);
+        let mut fx = crate::fx::Fx::new();
+        let (_, shapes) =
+            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
+        let drawn = crate::paint::painted_text(&shapes).join("\n");
+        assert!(drawn.contains("Draw your avatar"), "{drawn}");
+        assert!(drawn.contains("[Enter] Keep"), "{drawn}");
+        assert!(
+            drawn.contains("Enter: keep"),
+            "the key line names Enter: {drawn}"
+        );
+        assert!(!drawn.contains("Sprite Forge"), "{drawn}");
+        assert!(!drawn.contains("s: save"), "{drawn}");
+    }
+
+    #[test]
+    fn the_wizard_publishes_editor_hits_only_while_its_editor_is_open() {
+        use super::super::creation::tests::{walk_past, wizard_app};
+        use feral_processes_app_core::CreationStep;
+        let mut app = wizard_app();
+        for step in CreationStep::ALL
+            .iter()
+            .take_while(|s| **s != CreationStep::Icon)
+        {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.mode, Mode::CreateCharacter);
+        let hits = |app: &mut feral_processes_app_core::App| {
+            crate::paint::with_painter(|p| sprite_hits(app, p)).0
+        };
+        assert!(hits(&mut app).is_none());
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert!(matches!(hits(&mut app), Some(SpriteHits::Editor(_))));
     }
 
     /// The preview must show what the map will draw: a colour sprite takes a
@@ -1239,7 +1315,7 @@ mod tests {
         assert_ne!(grey, hue, "the fixture must have a hue to drop");
 
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         assert_eq!(crate::paint::painted_rect_fill_count(&shapes, grey), 1);
         assert_eq!(crate::paint::painted_rect_fill_count(&shapes, hue), 0);
     }
@@ -1249,10 +1325,10 @@ mod tests {
     /// rather than nothing — a blank window would be a soft lock.
     #[test]
     fn no_session_draws_a_fallback_instead_of_a_blank_window() {
-        let mut app = sprite_forge_app();
+        let app = sprite_forge_app();
         assert!(app.sprite_editor_view().is_none());
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         assert!(
             !crate::paint::painted_text(&shapes).is_empty(),
             "an unopened editor must still draw something, not a blank window"
@@ -1266,7 +1342,7 @@ mod tests {
         let mut app = sprite_forge_app();
         open_editor(&mut app, 0);
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes).join(" ");
         for key in [
             "Tab",
@@ -1295,7 +1371,7 @@ mod tests {
         open_editor(&mut app, 0);
         let subject = app.sprite_subjects()[0].clone();
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         assert!(
             drawn
@@ -1523,12 +1599,12 @@ mod tests {
         let m = crate::text::ui_metrics(CENSUS_H);
         let (g, rects) = crate::paint::with_painter(|p| {
             (
-                editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, app.zoom),
+                editor_geometry(p, CENSUS_W, &m, &view, app.zoom),
                 hit_rects(p, CENSUS_W, &m, &view, app.zoom),
             )
         })
         .0;
-        assert_eq!(g.buttons.len(), EditorButton::ALL.len());
+        assert_eq!(g.buttons.len(), FORGE_BUTTONS.len());
         for (button, r) in &g.buttons {
             let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
             assert_eq!(rects.resolve(centre), Some(PointerHit::Button(*button)));
@@ -1540,7 +1616,7 @@ mod tests {
     fn the_button_bar_fits_at_1280x720_below_the_palette() {
         let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
+            let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), 2);
             let mut right = 0.0_f32;
             for (b, r) in &g.buttons[..BAR_BUTTONS] {
                 assert!(r.x >= 0.0 && r.x + r.w <= CENSUS_W, "{b:?} off the window");
@@ -1555,24 +1631,32 @@ mod tests {
         });
     }
 
-    /// Every label fits its button, in every state the label can take.
+    /// Every label fits its button, in every state the label can take, for
+    /// each host's button list.
     #[test]
     fn every_button_label_fits_its_button() {
-        let mut app = sprite_forge_app();
-        open_editor(&mut app, 0);
         let m = crate::text::ui_metrics(CENSUS_H);
-        for keys in [vec![], vec!['f'], vec!['g'], vec!['f', 'g']] {
-            for k in keys {
-                app.handle_key(GameKey::Char(k));
-            }
-            let view = app.sprite_editor_view().expect("open");
-            crate::paint::with_painter(|p| {
-                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, 2);
-                for (b, r) in &g.buttons {
-                    let label = button_label(*b, &view);
-                    assert!(p.measure_ui(&label, m.small()).width < r.w, "{label:?}");
+        let mut forge = sprite_forge_app();
+        open_editor(&mut forge, 0);
+        let mut wizard = wizard_editor_app();
+        for app in [&mut forge, &mut wizard] {
+            for keys in [vec![], vec!['f'], vec!['g'], vec!['f', 'g']] {
+                for k in keys {
+                    app.handle_key(GameKey::Char(k));
                 }
-            });
+                let view = app
+                    .sprite_editor_view()
+                    .or_else(|| app.creation_sprite_view())
+                    .expect("open");
+                crate::paint::with_painter(|p| {
+                    let g = editor_geometry(p, CENSUS_W, &m, &view, 2);
+                    assert_eq!(g.buttons.len(), view.buttons.len());
+                    for (b, r) in &g.buttons {
+                        let label = button_label(*b, &view);
+                        assert!(p.measure_ui(&label, m.small()).width < r.w, "{label:?}");
+                    }
+                });
+            }
         }
     }
 
@@ -1582,7 +1666,7 @@ mod tests {
         let mut app = sprite_forge_app();
         open_editor(&mut app, 0);
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         for label in [
             "[s] Save",
@@ -1685,7 +1769,7 @@ mod tests {
         open_editor(&mut app, 0);
         app.handle_key(GameKey::Char('2'));
         let m = crate::text::ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         for label in ["[1] Frame 1", "[2] Frame 2", "600 ms"] {
             assert!(drawn.iter().any(|t| t.contains(label)), "{label:?}");
@@ -1701,7 +1785,7 @@ mod tests {
             if frames2 {
                 app.handle_key(GameKey::Char('2'));
             }
-            let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&mut app, p, &m));
+            let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
             crate::paint::painted_runs_in(&shapes, TEXT_OFF, false)
         };
         let one = dim_texts(false);
@@ -1754,7 +1838,7 @@ mod tests {
         };
         for zoom in 0..=4 {
             crate::paint::with_painter(|p| {
-                let g = editor_geometry(p, CENSUS_W, &m, 16, SPRITE_PALETTE.len(), 16, zoom);
+                let g = editor_geometry(p, CENSUS_W, &m, &forge_view(), zoom);
                 for (i, (b, r)) in g.buttons.iter().enumerate() {
                     assert!(
                         r.x >= 0.0 && r.x + r.w <= CENSUS_W,

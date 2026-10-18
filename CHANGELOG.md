@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.7
+
+**Repairing an outpost now costs 8 Core Fragments.** Before, the bill was 4 Logic Wafers and 4 Bytecode Blocks, half of what founding one costs and two crafted parts you had to carry out from the base just in case. Core Fragments are the salvage you always have on you, so a repair is one line from your pack and nothing to plan a trip around.
+
 ## 0.19.6
 
 **A staff program resting at a Sandbox or a Log Analyzer Bay now floats a green `^` above its head, the way a program mending beside a Repair Bay floats its `+`.** Before, nothing on the base map showed that an amenity was doing its job: a program standing beside one looked the same as a program idling anywhere else. Now the mark rises and fades over the program for as long as its reserve is climbing, and stops the moment it is full or walks away, so you can see at a glance who is being looked after. A program being mended and rested at once shows only the `+`.

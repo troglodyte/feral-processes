@@ -392,9 +392,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Optional; can be left out entirely (defaults to none, meaning the
     // supply input holds two batches). The most of `supply` the input buffer
     // holds, for a structure kept stocked for many uses (the Refit Bench holds
-    // 20 Annealed Cores). It is a ceiling: haulers still file a want only
-    // when less than one batch is held, and no delivery or hand load takes the
-    // buffer past it.
+    // 20 Annealed Cores). It is a ceiling: no delivery or hand load takes the
+    // buffer past it. A structure that sets it is also topped up in full
+    // loads, so haulers file a want while a whole carry (5) still fits and a
+    // store holds that much; without it they file one only when less than one
+    // batch is held. The player can load such a structure from the pack with
+    // `c` while standing beside it.
     supply_capacity: Some(20),
 
     // Optional; can be left out entirely (defaults to false). If true,

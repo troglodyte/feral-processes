@@ -1252,6 +1252,12 @@ pub struct EntityView {
     /// Bay — or with no Bay standing at all — is benched, not recovering, and
     /// wears nothing. Derived per call for `structure_attended`'s reason.
     pub recovering: bool,
+    /// Whether this is the player with a Refit Bench mending their gear this
+    /// tick — derived from `Game::refit_bench_serving`, the predicate the
+    /// pass itself acts on, so the mark cannot claim a mend that is not
+    /// happening. Never true for a program: the bench serves the player's
+    /// stand, and the mark rises off their tile alone.
+    pub refitting: bool,
     /// Whether this is a staff program holding a place at an amenity right
     /// now — a Sandbox, a Log Analyzer Bay — so one of its need reserves is
     /// climbing this tick. `recovering`'s shape for the other refill: a fact

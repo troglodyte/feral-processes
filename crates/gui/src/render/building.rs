@@ -2155,6 +2155,7 @@ mod tests {
             job_progress: None,
             depot_fill: None,
             recovering: false,
+            refitting: false,
             serviced: false,
             build: None,
             output_stranded: false,

@@ -1771,6 +1771,15 @@ impl BattleTimeline {
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
 
+/// Where the player has been standing in base space and for how many
+/// consecutive ticks, so the Refit Bench can tell a stop from a walk past.
+/// Not a save field: the wait is two ticks and a load restarts it harmlessly.
+#[derive(Resource, Default, Clone, Debug)]
+pub struct RefitStand {
+    pub cell: Option<(i32, i32)>,
+    pub ticks: u32,
+}
+
 /// The tamed program currently equipped as the player's weapon, if any.
 ///
 /// Deliberately not a field on `components::Equipment`: that slot holds an

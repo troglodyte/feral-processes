@@ -2170,6 +2170,7 @@ mod tests {
             position_is_honest: true,
             structure_attended: false,
             recovering,
+            refitting: false,
             serviced: false,
             build: None,
             job_progress: None,

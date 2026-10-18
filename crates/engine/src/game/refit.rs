@@ -3,14 +3,25 @@
 //! only has to be standing somewhere in the base.
 
 use crate::base_ledger::ConsumeSource;
+use crate::game::wear::is_nearly_worn;
 use crate::items::{GearCopy, ItemId, ids};
-use crate::tuning::REFIT_CORES;
+use crate::resources::RefitStand;
+use crate::tuning::{REFIT_CORES, REFIT_IDLE_TICKS, REFIT_REACH};
 use crate::*;
 
 /// Where a copy to be mended sits: on a wearer in a slot, or in the pack.
 pub(crate) enum WornAt {
     Slot(Entity, EquipmentSlot, EquippedItem),
     Pack(GearCopy),
+}
+
+impl WornAt {
+    fn wear(&self) -> u8 {
+        match self {
+            WornAt::Slot(_, _, item) => item.copy.wear,
+            WornAt::Pack(copy) => copy.wear,
+        }
+    }
 }
 
 /// The structure a refit requires. Only its presence matters, as with
@@ -108,6 +119,120 @@ impl Game {
                 self.add_copies(&mended, 1);
                 mended
             }
+        }
+    }
+
+    /// Every copy the bench would mend now, in the order it serves them: the
+    /// player's slots, then each party member's in `Party` order, most worn
+    /// first within a wearer, then pack copies the same way. Only copies at
+    /// the `GearWorn` alert line or past it: the bench fixes what the HUD
+    /// warns about, since a core a scratch can spend is a core the next
+    /// fight's real damage cannot.
+    fn worn_for_auto_refit(&self) -> Vec<WornAt> {
+        let needs_it = |copy: &GearCopy| is_nearly_worn(self.condition_of(copy));
+        let mut wearers = vec![self.player_entity()];
+        wearers.extend(self.world.resource::<Party>().0.iter().copied());
+        let mut out = Vec::new();
+        for wearer in wearers {
+            let Some(equipment) = self.world.get::<Equipment>(wearer) else {
+                continue;
+            };
+            let mut worn: Vec<WornAt> = EquipmentSlot::ALL
+                .into_iter()
+                .filter_map(|slot| Some((slot, equipment.get(slot)?)))
+                .filter(|(_, item)| needs_it(&item.copy))
+                .map(|(slot, item)| WornAt::Slot(wearer, slot, item))
+                .collect();
+            worn.sort_by_key(|at| std::cmp::Reverse(at.wear()));
+            out.extend(worn);
+        }
+        let mut carried: Vec<GearCopy> = self
+            .world
+            .get::<GearCopies>(self.player_entity())
+            .map(|rows| {
+                rows.copies
+                    .iter()
+                    .map(|(copy, _)| copy.clone())
+                    .filter(needs_it)
+                    .collect()
+            })
+            .unwrap_or_default();
+        carried.sort_by_key(|copy| std::cmp::Reverse(copy.wear));
+        out.extend(carried.into_iter().map(WornAt::Pack));
+        out
+    }
+
+    /// The bench that is mending the player this tick, if any: in base
+    /// space, no battle, stood still for more than `REFIT_IDLE_TICKS`, a
+    /// stocked bench within `REFIT_REACH`, and a copy that needs it. A pure
+    /// read, so the pass and the map's mark ask the one question.
+    pub(crate) fn refit_bench_serving(&self) -> Option<Entity> {
+        let (px, py) = self.base_pos()?;
+        if self.has_active_battle() || self.world.resource::<RefitStand>().ticks <= REFIT_IDLE_TICKS
+        {
+            return None;
+        }
+        let bench = self.refit_benches().into_iter().find_map(|(e, held)| {
+            let at = self.world.get::<Position>(e)?;
+            let near = (at.x - px).abs().max((at.y - py).abs()) <= REFIT_REACH;
+            (near && held >= REFIT_CORES).then_some(e)
+        })?;
+        (!self.worn_for_auto_refit().is_empty()).then_some(bench)
+    }
+
+    /// One tick of the bench's own service: counts the player's stand, and
+    /// once it is long enough mends one copy through `mend_located`. Never
+    /// `refit_copy`, which ticks and would recurse.
+    pub(crate) fn run_refit_bench(&mut self) {
+        self.count_refit_stand();
+        match self.refit_bench_serving() {
+            Some(bench) => self.mend_next_worn(bench),
+            None => self.warn_refit_bench_empty(),
+        }
+    }
+
+    fn count_refit_stand(&mut self) {
+        let here = self.base_pos();
+        let mut stand = self.world.resource_mut::<RefitStand>();
+        match here {
+            Some(cell) if stand.cell == Some(cell) => stand.ticks += 1,
+            Some(cell) => {
+                stand.cell = Some(cell);
+                stand.ticks = 1;
+            }
+            None => *stand = RefitStand::default(),
+        }
+    }
+
+    fn mend_next_worn(&mut self, bench: Entity) {
+        let Some(at) = self.worn_for_auto_refit().into_iter().next() else {
+            return;
+        };
+        let owner = match &at {
+            WornAt::Slot(wearer, ..) if *wearer != self.player_entity() => {
+                Some(self.creature_label(*wearer))
+            }
+            _ => None,
+        };
+        let mended = self.mend_located(at, bench);
+        let name = self.copy_name(&mended);
+        self.log(match owner {
+            Some(label) => format!("The Refit Bench mended {label}'s {name}."),
+            None => format!("The Refit Bench mended {name}."),
+        });
+    }
+
+    /// Says so once per stand, on the first tick the wait is over, when work
+    /// is waiting and no bench holds a core.
+    fn warn_refit_bench_empty(&mut self) {
+        let first_ready_tick = self.world.resource::<RefitStand>().ticks == REFIT_IDLE_TICKS + 1;
+        if first_ready_tick
+            && !self.has_active_battle()
+            && self.refit_bench_standing()
+            && self.stocked_refit_bench().is_none()
+            && !self.worn_for_auto_refit().is_empty()
+        {
+            self.log("The Refit Bench is out of Annealed Cores.");
         }
     }
 

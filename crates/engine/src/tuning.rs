@@ -1895,6 +1895,15 @@ pub const GEAR_DURABILITY: u8 = 15;
 /// is: one material and one unit, so the bill never needs explaining.
 pub const REFIT_CORES: u32 = 1;
 
+/// Ticks the player must have stood on one base cell before a Refit Bench
+/// starts mending: a walk past the bench spends nothing, so cores go to a
+/// player who has stopped to be served.
+pub const REFIT_IDLE_TICKS: u32 = 2;
+
+/// Chebyshev distance, in base tiles, within which a standing player is
+/// served by a Refit Bench.
+pub const REFIT_REACH: i32 = 2;
+
 /// A worn copy raises a `GearWorn` alert when its remaining fights fall
 /// below this percentage of its durability.
 pub const GEAR_WORN_ALERT_PERCENT: u32 = 20;

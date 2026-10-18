@@ -1409,6 +1409,10 @@ impl Game {
                 // in this set and a test for it would be a claim about the
                 // marker that this file is the wrong place to make.
                 let recovering = recovering_bodies.contains(&entity);
+                let serviced = self
+                    .world
+                    .get::<crate::components::Needs>(entity)
+                    .is_some_and(|needs| needs.serviced().next().is_some());
                 let output_stranded = is_structure
                     && !anywhere_to_unload
                     && self
@@ -1510,6 +1514,7 @@ impl Game {
                     position_is_honest,
                     structure_attended,
                     recovering,
+                    serviced,
                     output_stranded,
                     hp_fraction,
                     level,

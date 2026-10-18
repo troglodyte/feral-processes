@@ -530,6 +530,48 @@ fn standing_at_an_amenity_refills_the_reserve() {
     );
 }
 
+/// **The map's `^` is the refill, asked a second way.** `EntityView::serviced`
+/// is what the base map floats its mark from, and it has to answer for the
+/// two states the refill acts on: a body in reach of its amenity with a
+/// reserve to fill, and the same body across the base. A flag that merely
+/// said "this program is off shift" would light a body still walking there.
+///
+/// Asserted as an equivalence with the reserve's own movement, so it would
+/// fail against a mark that was simply always lit.
+#[test]
+fn the_amenity_mark_is_lit_exactly_while_a_reserve_is_being_refilled() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(&mut game, "defrag_bay", 2, 0).expect("a Defrag Bay is buildable from the start");
+    let who = spawn_tamed_on_map(&mut game, 1, 0);
+    let (critical, _) = threshold(&game, &coherence());
+
+    let beside = Position { x: 1, y: 0 };
+    let away = Position { x: -4, y: -4 };
+    for (what, at, expected) in [("in reach", beside, true), ("across the base", away, false)] {
+        *game.world.get_mut::<Position>(who).unwrap() = at;
+        set_reserve(&mut game, who, &coherence(), critical - 1.0);
+        let before = reserve(&game, who);
+
+        game.tick();
+
+        let refilled = reserve(&game, who) > before;
+        let lit = game
+            .view_entities(20, 20)
+            .into_iter()
+            .find(|v| v.entity == who)
+            .map(|v| v.serviced)
+            .expect("a tamed program on the map has a view");
+        assert_eq!(lit, expected, "the mark is wrong for a program {what}");
+        assert_eq!(
+            lit, refilled,
+            "the mark and the refill disagree for a program {what}: lit {lit}, refilled {refilled}"
+        );
+    }
+}
+
 /// One tick of a program standing beside a Defrag Bay, `finished` of its
 /// room's cells in carpet (`None`: the bay stands in the commons). Returns
 /// the reserve gained net of nothing else — the same drain applies either way.

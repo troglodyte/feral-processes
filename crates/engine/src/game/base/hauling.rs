@@ -134,7 +134,32 @@ pub(crate) fn at_station(worker: Position, structure: Position, side: u8) -> boo
 /// An assembler and its ingredients, or a burning supplier and its fuel —
 /// `systems::intake_recipe` is the one question, and it owns its answer for
 /// that function's reason.
-type Consumer = (Position, Vec<(ItemId, u32)>);
+pub(crate) type Consumer = (Position, Vec<(ItemId, u32)>);
+
+/// The recipe a standing structure pulls from its neighbours, if the base has
+/// a reason to run it — the one definition of a consumer, read by
+/// `haul_step_system` and by the idle clearing board alike, so a feeder's
+/// output cannot be a pile to one and a feed buffer to the other.
+///
+/// **A burning supplier is always a consumer.** There is no order that names
+/// its fuel and no program to post to it, so the two reasons an assembler
+/// counts cannot apply — and it is off the grid without the cell either way.
+/// Left out, a Conduit standing beside a Recharger Node would have its cells
+/// hauled off to a depot for somebody to walk back. A supply-only structure
+/// pulls nothing from a neighbour, so it is never one. An assembler counts
+/// when its product is on order or it carries a standing work job.
+pub(crate) fn wanted_consumer(
+    placed: Placed<'_>,
+    items: &ItemDb,
+    needed: &HashSet<ItemId>,
+    standing_work: bool,
+) -> Option<Vec<(ItemId, u32)>> {
+    let recipe = intake_recipe(placed, items)?;
+    let wanted = placed.def.power_upkeep.is_some()
+        || produced_item(placed).is_some_and(|item| needed.contains(item))
+        || standing_work;
+    wanted.then_some(recipe)
+}
 
 /// Whether a machine at `machine` producing `item` has an **attached
 /// building** — an orthogonal neighbour whose own recipe names that item.
@@ -151,7 +176,7 @@ type Consumer = (Position, Vec<(ItemId, u32)>);
 /// every machine standing there: `haul_step_system` builds `consumers` from
 /// the assemblers the base has a reason to run, so a Factory nothing has been
 /// ordered from is a bystander rather than a feed target.
-fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
+pub(crate) fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
     consumers
         .iter()
         .any(|(pos, recipe)| touching(*pos, machine) && recipe.iter().any(|(want, _)| want == item))
@@ -1162,18 +1187,8 @@ pub(crate) fn haul_step_system(
         .filter_map(|(e, p, _, s)| {
             let def = db.get(&s.kind)?;
             let placed = Placed::of(def, recipes.get(e).ok());
-            let recipe = intake_recipe(placed, &items)?;
-            // **A burning supplier is always a consumer.** There is no order
-            // that names its fuel and no program to post to it, so the two
-            // reasons an assembler counts cannot apply — and it is off the
-            // grid without the cell either way. Left out, a Conduit standing
-            // beside a Recharger Node would have its cells hauled off to a
-            // depot for somebody to walk back. A supply-only structure pulls
-            // nothing from a neighbour, so it is never one.
-            let wanted = def.power_upkeep.is_some()
-                || produced_item(placed).is_some_and(|item| needed.contains(item))
-                || standing.get(e).is_ok_and(|job| job.work);
-            wanted.then_some((*p, recipe))
+            let standing_work = standing.get(e).is_ok_and(|job| job.work);
+            wanted_consumer(placed, &items, &needed, standing_work).map(|recipe| (*p, recipe))
         })
         .collect();
 

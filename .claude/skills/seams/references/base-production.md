@@ -627,8 +627,21 @@
   removes it so it cannot outlive the load. Where the load goes is derived
   each beat, as a hauler's is: a stored target goes stale when a Depot fills
   mid-walk. Rank above tidy because product in a machine blocks production
-  and a loose item blocks nothing. A machine an accepting Depot *with room*
-  is touching is not a source (`depot_beside_accepting`, asked of Depots
-  with room only, unlike the Tend's use). Free stockpile cells come from one
+  and a loose item blocks nothing. A source is the Tend's own test, shared
+  piece by piece and not copied: a machine whose item a *wanted* consumer
+  beside it pulls (`hauling::wanted_consumer`, the one definition, read by
+  `haul_step_system` and the board) or an accepting Depot *with room* is
+  touching is a feed buffer, not a pile, unless it is full. The first
+  version excluded only the Depot, and the `chains` bench caught it: six
+  idle Spare programs carried the Power Cell Extractor's output off to the
+  Depots and starved the Charge Coil line. A clearer the scheduler posts
+  mid-trip shelves its load first (`shelve_posted_clearing_load`, through
+  `stock::shelve_on_depots` honouring `Game::depot_accepts` — the refund
+  door `return_to_depots` is the same loop and deliberately ignores the
+  filter, `a_refund_ignores_the_filter`) and
+  sets down only the remainder: the supply test showed a load dropped four
+  beats into a walk becoming floor litter the posted hauler then scavenged,
+  and product that was safely in a machine must not turn into loose items
+  nobody counts because a want appeared. Free stockpile cells come from one
   computation, `Game::free_stockpile_cells`, for both boards. No
   `Record::Haul`: a clearing trip has no post.

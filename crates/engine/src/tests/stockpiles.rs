@@ -584,7 +584,7 @@ fn placing_a_structure_over_a_floor_item_keeps_the_item_on_open_floor() {
 
 // ---- clearing: idle staff who carry finished output out of a machine ----
 
-use crate::components::{Carrying, Clearing};
+use crate::components::{Carrying, Clearing, StandingJob};
 
 fn depot_at(g: &mut Game, x: i32, y: i32) -> Entity {
     let def = g
@@ -716,6 +716,60 @@ fn a_machine_beside_an_accepting_depot_with_room_is_not_cleared() {
     assert_eq!(on_pile(&mut g), 0);
 }
 
+/// A feeder in a chain hands its output to the machine beside it. Carrying
+/// it off to a Depot would starve that machine, so the feeder is left
+/// alone — until its buffer is full, when the neighbour is not keeping up
+/// and the overflow may go. The Tend's rule, shared rather than copied.
+#[test]
+fn a_feeder_beside_a_wanted_consumer_is_a_source_only_when_full() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let feeder = machine_holding(&mut g, 2, 0, 3);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "bytecode_block", 3, 0);
+    assert!(
+        g.clear_board().unwrap().has_source(feeder),
+        "a Factory nothing has been ordered from is a bystander"
+    );
+    g.world.entity_mut(factory).insert(StandingJob {
+        work: true,
+        guard: false,
+    });
+    assert!(
+        !g.clear_board().unwrap().has_source(feeder),
+        "a feed buffer beside a wanted consumer"
+    );
+    let capacity = g.world.get::<Stock>(feeder).unwrap().capacity;
+    g.world
+        .get_mut::<Stock>(feeder)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+    assert!(
+        g.clear_board().unwrap().has_source(feeder),
+        "a full feeder's overflow may go"
+    );
+    // And in play: with the consumer staffed and a second body idle, no
+    // Core Fragment from the partial feed buffer reaches the stockpile. The
+    // Factory's own Bytecode Blocks may: they are finished product beside
+    // no consumer, which is exactly what the errand is for.
+    g.world
+        .get_mut::<Stock>(feeder)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 3);
+    spawn_tamed(&mut g, 100, 3);
+    spawn_tamed(&mut g, 100, 3);
+    for _ in 0..150 {
+        g.tick();
+        assert!(
+            !floor_things(&mut g).iter().any(|(c, thing)| {
+                *thing == core() && g.world.resource::<BaseGrid>().is_stockpile(c.0, c.1)
+            }),
+            "a feed buffer was carried off"
+        );
+    }
+}
+
 /// Product in a machine blocks production; a loose floor item blocks
 /// nothing. The body starts beside the loose item and still goes to the
 /// machine first.
@@ -770,6 +824,66 @@ fn a_clearer_posted_mid_trip_sets_its_load_down_unit_for_unit() {
     assert!(g.world.get::<Carrying>(worker).is_none());
     assert!(g.world.get::<Clearing>(worker).is_none());
     assert_eq!(floor_things(&mut g).len(), 3, "nothing destroyed");
+}
+
+/// With a shelf that has room, a posted clearer's load goes there rather
+/// than onto the floor: product that was safely in a machine must not turn
+/// into litter because a want appeared mid-walk.
+#[test]
+fn a_clearer_posted_mid_trip_shelves_its_load_when_a_depot_has_room() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    let machine = machine_holding(&mut g, 2, 0, 0);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        at(6, 6),
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    g.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 10,
+    });
+    g.tick();
+    assert!(g.world.get::<Carrying>(worker).is_none());
+    assert!(g.world.get::<Clearing>(worker).is_none());
+    assert_eq!(output_of(&g, depot), 3, "the load went onto the shelf");
+    assert!(floor_things(&mut g).is_empty(), "nothing on the floor");
+}
+
+/// The shelving goes through the one put door: a Depot that refuses the item
+/// takes nothing, and the load ends on the floor as it would with no shelf.
+#[test]
+fn a_posted_clearers_load_never_lands_on_a_shelf_that_refuses_it() {
+    let mut g = game_with_home();
+    with_three_cells(&mut g);
+    let depot = depot_at(&mut g, -4, -4);
+    g.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
+    let machine = machine_holding(&mut g, 2, 0, 0);
+    let worker = spawn_tamed(&mut g, 100, 3);
+    g.world.entity_mut(worker).insert((
+        at(6, 6),
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty: 3,
+        },
+        Clearing,
+    ));
+    g.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: machine,
+        progress: 0,
+        required: 10,
+    });
+    g.tick();
+    assert_eq!(output_of(&g, depot), 0, "a refusing shelf took the load");
+    assert_eq!(floor_things(&mut g).len(), 3);
 }
 
 #[test]

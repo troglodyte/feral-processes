@@ -243,6 +243,19 @@ pub(crate) fn spend_bill_from_base(
 /// full base simply returns a smaller figure and the caller decides what to
 /// do with the remainder — this never destroys a unit it could not place.
 pub(crate) fn return_to_depots(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
+    shelve_on_depots(game, item, qty, |_, _| true)
+}
+
+/// `return_to_depots` with a say over which shelves may take the units: a
+/// refund ignores a Depot's filter (`a_refund_ignores_the_filter`), where a
+/// clearer shelving the load it was carrying is a put and goes through
+/// `Game::depot_accepts` like every other put. One loop, two doors.
+pub(crate) fn shelve_on_depots(
+    game: &mut Game,
+    item: &ItemId,
+    qty: u32,
+    accepts: impl Fn(&Game, Entity) -> bool,
+) -> u32 {
     let mut depots: Vec<(i32, i32, Entity)> = {
         let standing: Vec<(Entity, Position, crate::structures::StructureId)> = {
             let mut query = game
@@ -265,6 +278,9 @@ pub(crate) fn return_to_depots(game: &mut Game, item: &ItemId, qty: u32) -> u32 
     for (.., depot) in depots {
         if landed == qty {
             break;
+        }
+        if !accepts(game, depot) {
+            continue;
         }
         let Some(mut stock) = game.world.get_mut::<Stock>(depot) else {
             continue;

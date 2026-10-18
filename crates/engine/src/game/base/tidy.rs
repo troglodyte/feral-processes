@@ -185,6 +185,7 @@ impl Game {
             .collect();
         posted.sort();
         for who in posted {
+            self.shelve_posted_clearing_load(who);
             self.drop_load(who);
         }
     }

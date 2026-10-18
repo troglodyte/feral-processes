@@ -18,13 +18,19 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{Carrying, Clearing, Position, Stock, Structure};
+use crate::components::{
+    Carrying, Clearing, MachineRecipe, Position, StandingJob, Stock, Structure,
+};
 use crate::game::base::floor::spawn_floor_item;
 use crate::game::base::hauling::{
-    at_station, crew_reach, deposit, depot_beside_accepting, nearest_depot, reaches, take_from,
+    Consumer, at_station, consumer_beside, crew_reach, deposit, depot_beside_accepting,
+    nearest_depot, reaches, take_from, wanted_consumer,
 };
+use crate::game::base::work_orders;
 use crate::items::{FloorThing, ItemId};
-use crate::structures::StructureDb;
+use crate::items_db::ItemDb;
+use crate::resources::WorkOrders;
+use crate::structures::{Placed, StructureDb};
 use crate::tuning;
 
 /// The beat's clearing work, shared by every clearer in the pass. A source
@@ -33,13 +39,22 @@ use crate::tuning;
 /// the same one — the arrival checks keep that correct, as the tidy board's
 /// do.
 pub(crate) struct ClearBoard {
-    /// Machines holding finished output nobody beside them will take, with
-    /// the items held, `(x, y)`-sorted.
+    /// Machines holding finished output nobody beside them will take — no
+    /// wanted consumer and no accepting Depot with room touching them, unless
+    /// the buffer is full — with the items held, `(x, y)`-sorted.
     sources: Vec<(Entity, Position, Vec<ItemId>)>,
     /// Depots with room, `(x, y)`-sorted.
     depots: Vec<(Entity, Position)>,
     /// Free stockpile cells, from `free_stockpile_cells`.
     cells: Vec<Position>,
+}
+
+impl ClearBoard {
+    /// Whether `machine` is one this beat's clearers may take from.
+    #[cfg(test)]
+    pub(crate) fn has_source(&self, machine: Entity) -> bool {
+        self.sources.iter().any(|&(e, ..)| e == machine)
+    }
 }
 
 fn chebyshev(a: Position, b: Position) -> i32 {
@@ -67,14 +82,26 @@ impl Game {
             .collect();
         let mut depots = Vec::new();
         let mut machines = Vec::new();
+        let mut consumers: Vec<Consumer> = Vec::new();
         {
             let db = self.world.resource::<StructureDb>();
+            let items = self.world.resource::<ItemDb>();
+            let needed = work_orders::queue_needs(&self.world.resource::<WorkOrders>().0, items);
             for (e, p, kind, held, room) in standing {
-                let stores = db.get(&kind).is_some_and(|d| d.stores);
-                if stores && room > 0 {
-                    depots.push((e, p));
-                } else if !stores && !held.is_empty() {
-                    machines.push((e, p, held));
+                let Some(def) = db.get(&kind) else { continue };
+                if def.stores {
+                    if room > 0 {
+                        depots.push((e, p));
+                    }
+                    continue;
+                }
+                let placed = Placed::of(def, self.world.get::<MachineRecipe>(e));
+                let standing_work = self.world.get::<StandingJob>(e).is_some_and(|j| j.work);
+                if let Some(recipe) = wanted_consumer(placed, items, &needed, standing_work) {
+                    consumers.push((p, recipe));
+                }
+                if !held.is_empty() {
+                    machines.push((e, p, held, room == 0));
                 }
             }
         }
@@ -82,17 +109,24 @@ impl Game {
             return None;
         }
         depots.sort_by_key(|(_, p)| (p.x, p.y));
-        // A machine whose product an accepting Depot touching it has room
-        // for is skipped: `depot_intake_system` is already pulling from it,
-        // and a body crossing the base for a unit the intake takes next
-        // beat is a wasted trip.
+        // The Tend's own rule, shared piece by piece: a machine whose product
+        // a wanted consumer beside it pulls, or an accepting Depot touching
+        // it has room for, is a feed buffer and not a pile — `assembler_system`
+        // or `depot_intake_system` is already taking from it, and a body
+        // walking it across the base starves the machine next door. A full
+        // buffer is the one exception, as it is for the Tend: the neighbour
+        // is not keeping up, and the overflow may go.
         let accepts = |depot: Entity, item: &ItemId| self.depot_accepts(depot, item);
         let mut sources: Vec<(Entity, Position, Vec<ItemId>)> = machines
             .into_iter()
-            .filter_map(|(e, p, held)| {
+            .filter_map(|(e, p, held, clogged)| {
                 let items: Vec<ItemId> = held
                     .into_iter()
-                    .filter(|item| !depot_beside_accepting(p, item, &depots, accepts))
+                    .filter(|item| {
+                        clogged
+                            || !(consumer_beside(p, item, &consumers)
+                                || depot_beside_accepting(p, item, &depots, accepts))
+                    })
                     .collect();
                 (!items.is_empty()).then_some((e, p, items))
             })
@@ -261,6 +295,30 @@ impl Game {
         }
         self.drop_load(worker);
         true
+    }
+
+    /// A clearer the scheduler has posted mid-trip puts its load onto a shelf
+    /// with room first — `machine_recipe::empty_machine`'s precedent, through
+    /// the same loop (`stock::shelve_on_depots`, here honouring the Depot's
+    /// filter because this is a put) — and only what no shelf takes is set
+    /// down. Product that was safely in a machine must not become floor
+    /// litter nobody counts because a want appeared four beats into a walk;
+    /// a trip bound for the stockpile (no shelf had room) still ends on the
+    /// floor, where tidy finds it.
+    pub(crate) fn shelve_posted_clearing_load(&mut self, who: Entity) {
+        if self.world.get::<Clearing>(who).is_none() {
+            return;
+        }
+        let Some(load) = self.world.get::<Carrying>(who).cloned() else {
+            return;
+        };
+        let landed = crate::game::base::stock::shelve_on_depots(
+            self,
+            &load.item,
+            load.qty,
+            |game, depot| game.depot_accepts(depot, &load.item),
+        );
+        self.lighten(who, &load, landed);
     }
 
     /// Takes `moved` units off the body's load, ending the trip at zero.

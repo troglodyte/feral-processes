@@ -219,17 +219,36 @@ fn a_shield_takes_the_shelf_not_the_nearer_production_output() {
     let winding = place_machine(&mut game, "factory", "charge_coil", 3, 0).unwrap();
     let depot = deploy(&mut game, "depot", 6, 0);
     fill_output(&mut game, winding, ids::CHARGE_COIL, 20);
-    fill_output(&mut game, depot, ids::CHARGE_COIL, 20);
+    // The shelf is filled to capacity so the body, idle until the shield
+    // wants it, has nowhere to clear the maker's coils to
+    // (`base/clearing.rs`): with room on the shelf it would carry them there
+    // before the posting, and the claim here is about the supply haul alone.
+    let shelf = game.world.get::<Stock>(depot).unwrap().capacity;
+    fill_output(&mut game, depot, ids::CHARGE_COIL, shelf);
     let worker = spawn_tamed(&mut game, 500, 3);
     park_at_post(&mut game, worker, shield);
 
     tick_until(&mut game, 400, |g| hopper(g, shield, ids::CHARGE_COIL) > 0);
+    // Measured at the moment of supply: the coils in the hopper came off the
+    // shelf and the maker is untouched.
+    assert_eq!(node_output(&game, winding, ids::CHARGE_COIL), 20);
     for _ in 0..40 {
         game.tick();
     }
 
     assert!(hopper(&game, shield, ids::CHARGE_COIL) > 0);
-    assert_eq!(node_output(&game, winding, ids::CHARGE_COIL), 20);
+    // Released from the shield the worker is idle, the shelf has the room
+    // the supply freed, and an idle body clears a full maker onto a shelf
+    // with room — so by now coils may have moved from the maker to the
+    // Depot, but only there. Every coil is on the maker, on the shelf or in
+    // the hopper.
+    assert_eq!(
+        node_output(&game, winding, ids::CHARGE_COIL)
+            + node_output(&game, depot, ids::CHARGE_COIL)
+            + hopper(&game, shield, ids::CHARGE_COIL),
+        20 + shelf,
+        "a coil left by a door other than the shelf or the hopper"
+    );
 }
 
 /// A defence beside a coil maker is not its attached building: nothing pulls

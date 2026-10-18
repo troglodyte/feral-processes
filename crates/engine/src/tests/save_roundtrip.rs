@@ -1339,6 +1339,39 @@ fn a_machines_build_quality_survives_a_save() {
     );
 }
 
+/// A bench's loaded cores are `Stock::input`, which the structure save must
+/// carry: a reload that dropped them would hand the player an empty bench.
+#[test]
+fn a_refit_benchs_annealed_cores_survive_a_save_and_load() {
+    use crate::items::ids;
+    let mut game = Game::new(6310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bench = crate::tests::support::spawn_structure_at(&mut game, "refit_bench", 3, 3);
+    game.world.entity_mut(bench).insert(Stock {
+        input: [(ItemId::from(ids::ANNEALED_CORE), 7)]
+            .into_iter()
+            .collect(),
+        ..Default::default()
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_refit_bench_cores_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = crate::tests::support::first_structure(&mut loaded, "refit_bench");
+    let held = loaded
+        .world
+        .get::<Stock>(reloaded)
+        .unwrap()
+        .input
+        .get(&ItemId::from(ids::ANNEALED_CORE))
+        .copied();
+    assert_eq!(held, Some(7));
+}
+
 /// The structure half of the missing-key rule: a pre-feature save loads
 /// every machine at its shipped rate, not at zero.
 #[test]

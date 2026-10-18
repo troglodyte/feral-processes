@@ -818,12 +818,23 @@ Node.
 `refit_bench.ron` is the one structure the engine looks up by id for gear
 wear (the Mod Bench is the other). Gear loses a point of durability for every
 fight its wearer is in (see `durability` in `assets/items/README.md`), and the
-Refit Bench restores a copy to full condition. Only its presence matters: one
-standing anywhere in the base is enough, and the player need not be next to
-it. It has no `work` and nothing to author beyond the usual fields; it is
-named by no research file, so it is buildable from turn one.
+Refit Bench restores a copy to full condition.
 
-What a refit costs is not authored here. A craftable item costs half its
-recipe, rounded up per ingredient, plus a Charge Coil; an item that only drops
-costs Core Fragments scaled by the copy's rarity, plus a Charge Coil. The
-constants are `REFIT_*` in `crates/engine/src/tuning.rs`.
+It is gated: `program_refactoring` names it in `unlocks_structures`. A bench
+already standing keeps working if a mod removes the gate.
+
+It is a stocked structure, like a Turret. It authors `supply:
+Some("annealed_core")` and `supply_capacity: Some(20)`, so haulers keep up to
+20 Annealed Cores in its input from the base's shelves, and the player can
+load it by hand from the Transfer screen (`c`) when standing beside it. Every
+refit costs exactly one Annealed Core from that stock, whatever the copy and
+whatever its rarity; the constant is `REFIT_CORES` in
+`crates/engine/src/tuning.rs`. The menu refit (`R` on a worn copy) draws on
+the first bench holding a core, in `(x, y)` order, and is refused with "Load
+the Refit Bench with Annealed Cores first." when none does.
+
+The bench also mends on its own. When the player has stood still within
+`REFIT_REACH` tiles of a stocked bench for more than `REFIT_IDLE_TICKS` ticks,
+it mends one copy a tick, one core each: worn gear on the player and the
+party first, most worn first, then worn copies in the pack. Only a broken copy
+or one at or below the `GEAR_WORN_ALERT_PERCENT` line is mended this way.

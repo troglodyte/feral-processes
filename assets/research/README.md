@@ -111,8 +111,10 @@ Core Fragments.
     // `DownedProgram` record in your store, exactly as if it had been
     // defeated in the field. Every shipped node with `min_zone >= 2` sets
     // this, and the three benches (`armor_bench`, `weapon_bench`,
-    // `routine_fabrication`) set it at zone 1 as well — the chain that makes
-    // gear and Routine Disks is bought with a program, not just with time.
+    // `routine_fabrication`) and `program_refactoring` (which unlocks the
+    // Refit Bench) set it at zone 1 as well — the chain that makes gear and
+    // Routine Disks, and mends it, is bought with a program, not just with
+    // time.
     // The five that get a base running from turn one (`automation`,
     // `power_grid`, `commerce`, `teardown`, `fortification`) do not, so a
     // fresh run never needs a subject before it has a base worth studying

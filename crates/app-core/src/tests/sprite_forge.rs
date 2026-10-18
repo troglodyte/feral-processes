@@ -330,7 +330,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
 
     open_editor(&mut app, "anchor");
     let view = app.sprite_editor_view().expect("editor open");
-    assert_eq!(view.title, "anchor");
+    assert_eq!(view.title, "Sprite Forge — anchor");
     assert_eq!(
         view.canvas.cells[0], 5,
         "the installed canvas loaded, not a blank one"
@@ -338,7 +338,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
 
     open_editor(&mut app, &blank_name);
     let view = app.sprite_editor_view().expect("editor open");
-    assert_eq!(view.title, blank_name);
+    assert_eq!(view.title, format!("Sprite Forge — {blank_name}"));
     assert!(
         view.canvas.cells.iter().all(|&c| c == 0),
         "a subject with no installed art opens on a blank canvas"
@@ -1304,7 +1304,7 @@ fn a_double_click_on_the_selected_subject_opens_it_with_its_art_and_variant() {
 
     assert_eq!(app.mode, Mode::SpriteEditor);
     let view = app.sprite_editor_view().unwrap();
-    assert_eq!(view.title, "cipher");
+    assert_eq!(view.title, "Sprite Forge — cipher");
     assert!(view.full_colour, "the installed variant travels with it");
     assert_eq!(view.canvas.cells[3 * 16 + 3], 12);
 }

@@ -646,15 +646,9 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         // The sprite editor hangs off the wizard's Icon step as `App` state
         // rather than a `Mode` of its own, so it is this arm's job to
         // notice it is open and draw over the wizard's own popup instead of
-        // drawing it. White is the identity tint: the avatar wears no hue.
+        // drawing it. The view carries no tint, so the avatar wears no hue.
         Mode::CreateCharacter => match app.creation_sprite_view() {
-            Some(view) => sprite_forge::draw_sprite_editor_session(
-                &view,
-                app.zoom,
-                Color::new(1.0, 1.0, 1.0, 1.0),
-                painter,
-                &m,
-            ),
+            Some(view) => sprite_forge::draw_sprite_editor_session(&view, app.zoom, painter, &m),
             None => creation::draw_create_character(app, refusal, painter, &m),
         },
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),

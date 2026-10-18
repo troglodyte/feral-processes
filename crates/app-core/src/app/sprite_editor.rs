@@ -21,10 +21,10 @@ use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_D
 /// The sprite canvas's edge — always 16, never a brush-dependent size (the
 /// brush is a footprint over this fixed grid, not a second canvas format;
 /// see the design doc's "The canvas is 16x16 always"). `ICON_SIZE` is the
-/// same 16, named for the *pixel* geometry the icon editor draws at; reused
-/// here rather than a second `pub const SPRITE_EDGE = 16` because the two
-/// really are one number, documented as such in `engine::icon`'s own doc
-/// comment ("The *sprite* is 16x16 (`ICON_SIZE`)").
+/// same 16, named for the sprite's pixel geometry; reused here rather than
+/// a second `pub const SPRITE_EDGE = 16` because the two really are one
+/// number, documented as such in `engine::icon`'s own doc comment ("The
+/// *sprite* is 16x16 (`ICON_SIZE`)").
 const SPRITE_EDGE: usize = feral_processes_engine::ICON_SIZE;
 
 pub use feral_processes_engine::{DEFAULT_SPRITE_FRAME_MS, MAX_SPRITE_FRAMES};
@@ -52,7 +52,7 @@ pub enum SubjectTint {
     Shade(feral_processes_engine::floors::FloorShade),
 }
 
-/// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
+/// Where a pointer landed on the editor, already resolved to a
 /// cell or a swatch by the gui — never a pixel. The gui owns the canvas and
 /// swatch rects (it draws them), so it tests the pointer against those
 /// itself; app-core never receives a pixel and never learns the rects
@@ -164,19 +164,24 @@ pub enum PointerPhase {
     DoubleClick,
 }
 
-/// What differs between hosts of the editor: the header, the button set, the
-/// preview's hue source and which variant a save would write.
+/// What differs between hosts of the editor: the header and key line (the
+/// player's wizard must not show the dev tool's name or its save key), the
+/// button set, the preview's hue source and which variant a save would write.
 pub struct EditorChrome {
     pub title: String,
+    pub keys: String,
     pub buttons: Vec<EditorButton>,
     pub tint: Option<SubjectTint>,
     pub full_colour: bool,
 }
 
-/// What `Mode::SpriteEditor` draws.
+/// What the editor draws, in either host.
 pub struct SpriteEditorView {
     pub canvas: CanvasView,
+    /// The whole header line, as the host wrote it.
     pub title: String,
+    /// The whole key line, as the host wrote it.
+    pub keys: String,
     pub buttons: Vec<EditorButton>,
     /// What the preview multiplies against; `None` draws it unmodified.
     pub tint: Option<SubjectTint>,
@@ -417,6 +422,7 @@ impl SpriteEditor {
         SpriteEditorView {
             canvas: self.editor.view(),
             title: chrome.title,
+            keys: chrome.keys,
             buttons: chrome.buttons,
             tint: chrome.tint,
             palette: &SPRITE_PALETTE,
@@ -460,11 +466,13 @@ mod tests {
         let editor = SpriteEditor::open(Vec::new(), DEFAULT_SPRITE_FRAME_MS);
         let view = editor.view(EditorChrome {
             title: "x".into(),
+            keys: "k".into(),
             buttons: WIZARD_BUTTONS.to_vec(),
             tint: None,
             full_colour: false,
         });
         assert_eq!(view.title, "x");
+        assert_eq!(view.keys, "k");
         assert_eq!(view.buttons, WIZARD_BUTTONS.to_vec());
         assert_eq!(view.tint, None);
     }

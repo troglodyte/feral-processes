@@ -1057,6 +1057,10 @@ impl App {
     }
 }
 
+/// Enter and Esc here are the wizard's, not the Forge's save and back.
+const CREATION_SPRITE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
+    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   Enter: keep   Esc: discard";
+
 impl App {
     /// What the Icon step's editor draws, or `None` while it is not open.
     /// The drawn avatar is untinted everywhere, so no hue is applied here.
@@ -1064,6 +1068,7 @@ impl App {
         self.creation_icon_editor.as_ref().map(|editor| {
             editor.view(EditorChrome {
                 title: "Draw your avatar".to_string(),
+                keys: CREATION_SPRITE_KEYS.to_string(),
                 buttons: WIZARD_BUTTONS.to_vec(),
                 tint: None,
                 full_colour: false,

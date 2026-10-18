@@ -204,6 +204,11 @@ impl SpriteOp {
     }
 }
 
+/// The Forge's key line: the editor's own keys, then the dev tool's save and
+/// leave.
+const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
+    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
+
 impl App {
     /// Marks that a sprite dir exists for this build to read and write
     /// PNGs through — installed by the launcher unconditionally within a
@@ -497,7 +502,8 @@ impl App {
             .and_then(|subjects| subjects.iter().find(|s| s.0 == session.subject))
             .map(|s| s.3);
         Some(session.editor.view(EditorChrome {
-            title: session.subject.clone(),
+            title: format!("Sprite Forge — {}", session.subject),
+            keys: FORGE_KEYS.to_string(),
             buttons: FORGE_BUTTONS.to_vec(),
             tint,
             full_colour: session.full_colour(),
@@ -553,16 +559,8 @@ impl App {
     /// or `Mode::SpritePicker` is open, or while the creation wizard's editor
     /// is, every other mode drops it silently, since nothing else in
     /// the game reads a pointer at all. `phase` governs the stroke
-    /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
-    /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
-    /// erase — on `Secondary`), a `Swatch` selects.
-    ///
-    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
-    /// and that is the palette index itself**: `draw_swatch_grid` draws the
-    /// transparent swatch (index 0) first and palette entry `n` at position
-    /// `n`. It used to be a `+ 1` conversion here, and getting that wrong
-    /// selected the swatch left of the one outlined; with no conversion
-    /// there is nothing at this seam to get wrong.
+    /// (`PointerPhase`'s own doc comment); what a `hit` does to the canvas is
+    /// `SpriteEditor::handle_pointer`'s.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
         match self.mode {
             Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),

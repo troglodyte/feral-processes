@@ -163,8 +163,8 @@ pub fn quantise(pixel: (u8, u8, u8, u8)) -> u8 {
     best as u8 + 1
 }
 
-/// `quantise`'s inverse for a valid index: 0 is transparent, `1..=19`
-/// indexes `SPRITE_PALETTE` at `index - 1`.
+/// `quantise`'s inverse for a valid index: 0 is transparent, and
+/// `1..=SPRITE_PALETTE.len()` indexes `SPRITE_PALETTE` at `index - 1`.
 pub fn sprite_rgba(index: u8) -> (u8, u8, u8, u8) {
     match index {
         0 => (0, 0, 0, 0),
@@ -546,6 +546,10 @@ mod tests {
             format!("v3:-5:{frame}"),
             format!("v3:six:{frame}"),
             format!("v3::{frame}"),
+            format!("v2:{}", "0".repeat(63)),
+            format!("v2:{}", "0".repeat(65)),
+            format!("v1:{}", "0".repeat(255)),
+            format!("v1:{}g{}", "0".repeat(100), "0".repeat(155)),
         ] {
             assert_eq!(PlayerIcon::decode(&bad), None, "{bad:.40}");
         }

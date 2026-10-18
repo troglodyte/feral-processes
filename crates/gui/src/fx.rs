@@ -151,10 +151,11 @@ const NUMBER_MARK_SECONDS: f64 = 0.9;
 /// tile.
 const NUMBER_MARK_RISE: f32 = 0.55;
 
-/// How long one green `+` over a body a Repair Bay is mending takes to float
-/// up and fade out, and how far it floats as a share of the tile. The next
-/// one starts back at rest, so a long recovery reads as a stream of marks
-/// rising off the patient rather than one mark bouncing on it.
+/// How long one rising mark over a body — the `+` a Repair Bay mends with,
+/// the `^` an amenity refills with — takes to float up and fade out, and how
+/// far it floats as a share of the tile. The next one starts back at rest,
+/// so a long recovery reads as a stream of marks rising off the body rather
+/// than one mark bouncing on it.
 const RECOVERY_FLOAT_SECONDS: f64 = 1.0;
 const RECOVERY_FLOAT_RISE: f32 = 0.5;
 
@@ -1589,8 +1590,9 @@ impl Fx {
         staffed_bob_offset(self.now, entity.to_bits()) - STAFFED_BOB_PX / 2.0
     }
 
-    /// How far above its rest position to draw a mending body's `+` this
-    /// frame, in pixels of a `tile_px` tile, and at what alpha. The rise is a
+    /// How far above its rest position to draw a body's rising mark — the
+    /// mending `+`, the amenity `^` — this frame, in pixels of a `tile_px`
+    /// tile, and at what alpha. The rise is a
     /// share of the tile so it reads the same at every zoom, and that share
     /// stays private here, `strain_jitter`'s rule.
     pub fn recovery_float(&self, entity: Entity, tile_px: f32) -> (f32, f32) {

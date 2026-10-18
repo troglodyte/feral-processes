@@ -1252,6 +1252,14 @@ pub struct EntityView {
     /// Bay — or with no Bay standing at all — is benched, not recovering, and
     /// wears nothing. Derived per call for `structure_attended`'s reason.
     pub recovering: bool,
+    /// Whether this is a staff program holding a place at an amenity right
+    /// now — a Sandbox, a Log Analyzer Bay — so one of its need reserves is
+    /// climbing this tick. `recovering`'s shape for the other refill: a fact
+    /// about the body, read off the same `Needs::serviced_at` the refill in
+    /// `needs_drain_system` wrote, so the mark cannot claim a refill that is
+    /// not happening. A body still walking to its amenity, or standing at
+    /// one with no place free, wears nothing.
+    pub serviced: bool,
     /// If this is a structure, whether its output buffer is full while
     /// nothing in the base can take a load — no depot built, or every depot
     /// already full.

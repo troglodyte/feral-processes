@@ -1386,13 +1386,13 @@ fn draw_surface_map(
                     Color::new(ORANGE.r * vig, ORANGE.g * vig, ORANGE.b * vig, ORANGE.a),
                 );
             }
-            // A body a Bay is mending, drawn on the same layer as the build
-            // caret and for the same reason: it is a mark that needs the
+            // A body a Bay is mending, or one an amenity is refilling, drawn
+            // on the same layer as the build caret and for the same reason: it is a mark that needs the
             // middle of the tile and a vertical offset, and the glyph path
             // above has neither to give it.
             //
             // **`actor` and not `structure`** — the mark says *this program
-            // is being repaired*, so it rides the patient. Which is also the
+            // is being refilled*, so it rides the body. Which is also the
             // glyph the tile is drawing: an actor takes the tile's glyph off
             // a structure, so on a Bay with somebody standing in it the `+`
             // and the body it belongs to are the same cell's ink. Passed the
@@ -1409,7 +1409,7 @@ fn draw_surface_map(
             // anyway; the gate is what keeps that an assertion rather than a
             // coincidence.
             if base_pos.is_some() {
-                draw_recovery_mark(
+                draw_rising_mark(
                     painter,
                     actor,
                     fx,
@@ -2170,6 +2170,7 @@ mod tests {
             position_is_honest: true,
             structure_attended: false,
             recovering,
+            serviced: false,
             build: None,
             job_progress: None,
             depot_fill: None,
@@ -2185,10 +2186,18 @@ mod tests {
         }
     }
 
-    /// Where the `+` was painted this frame, or `None` if it was not.
-    fn mark_y(shapes: &[bevy_egui::egui::epaint::ClippedShape]) -> Option<f32> {
+    /// A staff program an amenity is refilling, `patient_view`'s shape.
+    fn served_view() -> EntityView {
+        EntityView {
+            serviced: true,
+            ..patient_view(false)
+        }
+    }
+
+    /// Where `mark` was painted this frame, or `None` if it was not.
+    fn mark_y(shapes: &[bevy_egui::egui::epaint::ClippedShape], mark: &str) -> Option<f32> {
         shapes.iter().find_map(|cs| match &cs.shape {
-            bevy_egui::egui::Shape::Text(t) if t.galley.text() == "+" => Some(t.pos.y),
+            bevy_egui::egui::Shape::Text(t) if t.galley.text() == mark => Some(t.pos.y),
             _ => None,
         })
     }
@@ -2198,7 +2207,7 @@ mod tests {
         ev: &EntityView,
     ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let (_, shapes) = with_painter(|p| {
-            draw_recovery_mark(
+            draw_rising_mark(
                 p,
                 Some(ev),
                 fx,
@@ -2211,7 +2220,61 @@ mod tests {
     }
 
     fn recovery_mark_at(fx: &Fx, ev: &EntityView) -> Option<f32> {
-        mark_y(&recovery_mark_shapes(fx, ev))
+        mark_y(&recovery_mark_shapes(fx, ev), "+")
+    }
+
+    /// **The amenity mark is the recovery mark's shape with a different
+    /// glyph**: drawn on a program an amenity is refilling, drawn on
+    /// nothing else, and it moves — sampled across frame times for the
+    /// same reason the `+` test is. The `+` is also asserted absent, since
+    /// a body being refilled is not being mended and the two must read
+    /// apart.
+    #[test]
+    fn a_serviced_program_wears_a_floating_caret_and_never_the_cross() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, FrameCues::default(), false);
+        let served = served_view();
+
+        assert!(
+            mark_y(&recovery_mark_shapes(&fx, &served), "^").is_some(),
+            "a program an amenity is refilling must wear the `^`"
+        );
+        assert!(
+            mark_y(&recovery_mark_shapes(&fx, &served), "+").is_none(),
+            "and never the `+`, which is Integrity's"
+        );
+        assert!(
+            mark_y(&recovery_mark_shapes(&fx, &patient_view(false)), "^").is_none(),
+            "a program nothing is refilling draws no `^`"
+        );
+
+        let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
+            .into_iter()
+            .map(|now| {
+                fx.begin_frame(now, FrameCues::default(), false);
+                mark_y(&recovery_mark_shapes(&fx, &served), "^").expect("drawn every frame")
+            })
+            .collect();
+        assert!(
+            ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
+            "the `^` must float, not sit still: {ys:?}"
+        );
+    }
+
+    /// A downed program in reach of both wears the `+` alone: recovery
+    /// outranks the amenity, and two glyphs on one tile would paint through
+    /// each other.
+    #[test]
+    fn recovery_outranks_the_amenity_mark_on_one_body() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, FrameCues::default(), false);
+        let both = EntityView {
+            serviced: true,
+            ..patient_view(true)
+        };
+        let shapes = recovery_mark_shapes(&fx, &both);
+        assert!(mark_y(&shapes, "+").is_some(), "the `+` is drawn");
+        assert!(mark_y(&shapes, "^").is_none(), "and the `^` is not");
     }
 
     /// The whole of what this mark ships, in the three states that matter:
@@ -2219,7 +2282,7 @@ mod tests {
     /// else, and it moves.
     ///
     /// The motion is not decoration and is asserted rather than assumed —
-    /// `draw_recovery_mark` reads `Fx::centred_bob`, and a mark pinned to the
+    /// `draw_rising_mark` reads `Fx::recovery_float`, and a mark pinned to the
     /// middle of the tile would paint an identical shape every frame and pass
     /// a test that only looked for the glyph. Sampled across a spread of
     /// frame times rather than at one hand-picked half period, so retuning
@@ -2362,7 +2425,7 @@ mod tests {
 
         let (mark_dims, mark_shapes) = with_painter(|p| {
             let dims = p.measure_map("+", CELL_GLYPH_PX);
-            draw_recovery_mark(
+            draw_rising_mark(
                 p,
                 Some(&busy),
                 &fx,
@@ -2372,7 +2435,7 @@ mod tests {
             );
             dims
         });
-        let mark_top = mark_y(&mark_shapes).expect("the mark is drawn");
+        let mark_top = mark_y(&mark_shapes, "+").expect("the mark is drawn");
         let mark_bottom = mark_top + mark_dims.height;
 
         assert!(

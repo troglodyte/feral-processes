@@ -312,3 +312,106 @@ fn a_crew_never_stocks_past_an_authored_capacity() {
         "the crew fills to the authored ceiling, no further"
     );
 }
+
+fn give_cores(game: &mut Game, qty: u32) -> Vec<(ItemId, u32)> {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), qty);
+    let basket = TransferBasket::items(&[], &[(ItemId::from(ids::ANNEALED_CORE), qty)]);
+    game.transfer_items(&basket).1
+}
+
+fn carried(game: &Game, item: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .map_or(0, |inv| inv.count(&ItemId::from(item)))
+}
+
+fn bench_beside_player(game: &mut Game) -> Entity {
+    unlock_research_chain(game, "program_refactoring");
+    deploy(game, "refit_bench", 1, 0)
+}
+
+#[test]
+fn a_player_beside_a_bench_loads_it_with_cores_up_to_its_capacity() {
+    let mut game = base(9320);
+    let bench = bench_beside_player(&mut game);
+    assert!(
+        game.transfer_offer()
+            .iter()
+            .all(|r| r.item.0 != ids::ANNEALED_CORE),
+        "no cores carried, so no row yet"
+    );
+
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::ANNEALED_CORE), 25);
+    let row = game
+        .transfer_offer()
+        .into_iter()
+        .find(|r| r.item.0 == ids::ANNEALED_CORE)
+        .expect("the bench's row is offered");
+    assert_eq!(row.can_put, 20, "the bench's capacity is the permission");
+    assert_eq!(game.transfer_room(), Some(20));
+
+    let given = game
+        .transfer_items(&TransferBasket::items(
+            &[],
+            &[(ItemId::from(ids::ANNEALED_CORE), 25)],
+        ))
+        .1;
+    assert_eq!(given, vec![(ItemId::from(ids::ANNEALED_CORE), 20)]);
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(
+        carried(&game, ids::ANNEALED_CORE),
+        5,
+        "the rest stays packed"
+    );
+
+    assert!(give_cores(&mut game, 1).is_empty(), "the 21st is refused");
+    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
+    assert_eq!(carried(&game, ids::ANNEALED_CORE), 6);
+}
+
+#[test]
+fn a_bench_takes_only_its_supply_item_by_hand() {
+    let mut game = base(9321);
+    let bench = bench_beside_player(&mut game);
+    let before = carried(&game, ids::CORE_FRAGMENT);
+    let given = game
+        .transfer_items(&TransferBasket::items(
+            &[],
+            &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        ))
+        .1;
+    assert!(given.is_empty());
+    assert_eq!(carried(&game, ids::CORE_FRAGMENT), before);
+    assert_eq!(hopper(&game, bench, ids::CORE_FRAGMENT), 0);
+}
+
+#[test]
+fn a_crew_tops_an_authored_capacity_bench_up_in_full_trips() {
+    let mut game = base(9322);
+    capped_shield(&mut game, "shield_capped", Some(20));
+    let shield = deploy(&mut game, "shield_capped", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    fill_output(&mut game, depot, ids::CHARGE_COIL, 25);
+    let worker = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, worker, shield);
+
+    tick_until(&mut game, 3000, |g| {
+        hopper(g, shield, ids::CHARGE_COIL) == 20
+    });
+    for _ in 0..300 {
+        game.tick();
+    }
+    assert_eq!(hopper(&game, shield, ids::CHARGE_COIL), 20);
+    let left = game.world.get::<Stock>(depot).unwrap().output[&ItemId::from(ids::CHARGE_COIL)];
+    assert_eq!(
+        left, 5,
+        "a full trip fits no more, so the depot keeps the rest"
+    );
+}

@@ -3621,6 +3621,15 @@ pub(crate) fn app_at_a_refit_bench(seed: u32, wear: u8, stock: Vec<(ItemId, u32)
     )
 }
 
+/// A Refit Bench with the party standing orthogonally beside it and `cores`
+/// Annealed Cores in the pack, for the hand-loading picker.
+pub(crate) fn app_beside_a_refit_bench_carrying(seed: u32, cores: u32) -> App {
+    let inventory = vec![(ItemId::from("annealed_core"), cores)];
+    let mut app = app_at_a_bench(seed, "refit_bench", Vec::new(), inventory, Vec::new(), None);
+    stand_in_base_at(&mut app, 2, 1);
+    app
+}
+
 /// A founded base with one `kind` bench standing and holding `bench_stock` in
 /// its input, the pack set to `inventory` and the modded `gear_copies` to
 /// `modded`.

@@ -619,3 +619,21 @@ fn c_opens_the_transfer_for_a_downed_program_with_no_shelf_beside() {
 
     assert_eq!(app.mode, Mode::Transfer);
 }
+
+/// `c` beside a Refit Bench opens the picker with a row for the cores in the
+/// pack, and the bench's capacity is the most the basket can put.
+#[test]
+fn c_beside_a_refit_bench_lets_the_basket_put_cores_up_to_its_capacity() {
+    let mut app = app_beside_a_refit_bench_carrying(982, 25);
+
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::Transfer);
+    let row = row_of(&app, "annealed_core");
+    assert_eq!(app.basket_rows[row].item().unwrap().can_put, 20);
+    app.menu_selected = row;
+    for _ in 0..25 {
+        app.handle_key(GameKey::Right);
+    }
+
+    assert_eq!(amounts(&app)[row], -20, "the 21st core is not offered");
+}

@@ -28,6 +28,39 @@ impl Game {
         self.only_depots(self.reachable_stock())
     }
 
+    /// The structures orthogonally beside the party that spend a `supply`
+    /// item and are not shelves, each with the item they take and the room
+    /// left in their input, in `(x, y)` order.
+    ///
+    /// **Beside, never `reachable`**: an Index Terminal widens what a shelf
+    /// can be reached from and a machine's buffer stays walk-up. Loading is
+    /// the one hand-delivery to a machine, so it asks for the machine to be
+    /// the thing the party is standing at.
+    pub(crate) fn supply_sinks(&self) -> Vec<(Entity, ItemId, u32)> {
+        let db = self.world.resource::<StructureDb>();
+        self.adjacent_stock()
+            .into_iter()
+            .filter_map(|e| {
+                let def = db.get(&self.world.get::<Structure>(e)?.kind)?;
+                if def.stores {
+                    return None;
+                }
+                let item = def.spends_supply()?.clone();
+                let held = self.world.get::<Stock>(e)?.input.get(&item).copied();
+                let room = def
+                    .supply_input_capacity()
+                    .saturating_sub(held.unwrap_or(0));
+                Some((e, item, room))
+            })
+            .collect()
+    }
+
+    /// Whether anything beside the party takes a put: a Depot, or a
+    /// structure that spends a supply.
+    pub(crate) fn has_put_target(&self) -> bool {
+        !self.reachable_depots().is_empty() || !self.supply_sinks().is_empty()
+    }
+
     fn only_depots(&self, cells: Vec<Entity>) -> Vec<Entity> {
         cells
             .into_iter()
@@ -63,10 +96,19 @@ impl Game {
         if self.require_base().is_err() {
             return 0;
         }
-        self.depots_for_put()
+        let carried = self.puttable_carried();
+        let sinks: u32 = self
+            .supply_sinks()
             .into_iter()
-            .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
-            .sum()
+            .filter(|(_, item, _)| carried.contains(item))
+            .map(|(.., room)| room)
+            .sum();
+        sinks
+            + self
+                .depots_for_put()
+                .into_iter()
+                .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
+                .sum::<u32>()
     }
 
     /// The adjacent Depots the shared put budget is measured across: those
@@ -115,11 +157,19 @@ impl Game {
     /// `TransferRow::can_put` is clamped to: a Depot refusing this item is
     /// not room for it however empty it stands.
     pub(crate) fn deposit_room_for(&self, item: &ItemId) -> u32 {
-        self.reachable_depots()
+        let sinks: u32 = self
+            .supply_sinks()
             .into_iter()
-            .filter(|e| self.depot_accepts(*e, item))
-            .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
-            .sum()
+            .filter(|(_, supply, _)| supply == item)
+            .map(|(.., room)| room)
+            .sum();
+        sinks
+            + self
+                .reachable_depots()
+                .into_iter()
+                .filter(|e| self.depot_accepts(*e, item))
+                .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
+                .sum::<u32>()
     }
 
     /// Moves an exact basket out of the pack and into `reachable_depots` —
@@ -137,6 +187,7 @@ impl Game {
     pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
         let depots = self.reachable_depots();
+        let sinks = self.supply_sinks();
 
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in give {
@@ -169,6 +220,38 @@ impl Game {
                     .get_mut::<Stock>(*depot)
                     .unwrap()
                     .output
+                    .entry(item.clone())
+                    .or_default() += moved;
+                *given.entry(item.clone()).or_default() += moved;
+            }
+        }
+
+        // After the shelves, so a Depot beside a bench still keeps what it
+        // could take first; a bench is topped up by hand only with what the
+        // shelves had no room for or was never offered.
+        for (item, qty) in give {
+            let mut outstanding = qty.saturating_sub(given.get(item).copied().unwrap_or(0));
+            for (sink, supply, room) in &sinks {
+                if outstanding == 0 {
+                    break;
+                }
+                if supply != item {
+                    continue;
+                }
+                let moved = self
+                    .world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .take(item.clone(), outstanding.min(*room));
+                if moved == 0 {
+                    continue;
+                }
+                outstanding -= moved;
+                *self
+                    .world
+                    .get_mut::<Stock>(*sink)
+                    .unwrap()
+                    .input
                     .entry(item.clone())
                     .or_default() += moved;
                 *given.entry(item.clone()).or_default() += moved;

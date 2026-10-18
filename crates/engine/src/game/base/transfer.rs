@@ -103,7 +103,7 @@ impl Game {
                     .on_shelves += qty;
             }
         }
-        let puttable = !self.reachable_depots().is_empty();
+        let puttable = self.has_put_target();
         let player = self.player_entity();
         if let Some(inv) = self.world.get::<Inventory>(player) {
             for (item, qty) in inv.items.iter() {
@@ -278,7 +278,7 @@ impl Game {
     /// room line reading 0 beside an Extractor, which claims the base is
     /// full when it has no shelf at all.
     pub fn transfer_room(&self) -> Option<u32> {
-        if self.reachable_depots().is_empty() {
+        if !self.has_put_target() {
             return None;
         }
         Some(self.deposit_room())

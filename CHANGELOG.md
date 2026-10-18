@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.9
+
+**Looking at a structure with `x` now says what it runs on.** A Shield, Turret, Repair Bay, Recharger Node or Line Driver carries a line like "takes Charge Coil, holds up to 6" under its status, on the Structures roster as well as the sheet. Before, an empty Shield read "uncharged — its supply has run out" and nothing anywhere named the item the haulers were waiting on.
+
 ## 0.19.8
 
 **Repairing an outpost costs 4 Logic Wafers and 4 Bytecode Blocks again, as it did before 0.19.7.** That release cut the bill to Core Fragments by mistake: the repair that was meant to get cheaper was a different one, and the outpost's bill was never the problem. Nothing else changed.

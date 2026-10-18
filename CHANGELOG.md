@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.6
+
+**A staff program resting at a Sandbox or a Log Analyzer Bay now floats a green `^` above its head, the way a program mending beside a Repair Bay floats its `+`.** Before, nothing on the base map showed that an amenity was doing its job: a program standing beside one looked the same as a program idling anywhere else. Now the mark rises and fades over the program for as long as its reserve is climbing, and stops the moment it is full or walks away, so you can see at a glance who is being looked after. A program being mended and rested at once shows only the `+`.
+
 ## 0.19.5
 
 **Stand beside a machine and press c to choose what it makes, the same key that moves cargo; where both are on offer, c asks which way and c again is the cargo.** Before, the recipe menu had its own key, R, beside a machine. Now a machine with a recipe to set is one of the things c can act on, like a Depot, a rebuild site or a farm plot, so one key does everything at the structures beside you. A set machine holding stock offers both its cargo and its recipe on the same side: the arrow toward it opens the recipe, and c again moves the cargo, so collecting from a stocked machine is one press longer than it was. The transfer aims at a Depot before a machine's own shelf, so the arrow toward a Depot always opens the cargo. The contract hint and the help pages say c now.

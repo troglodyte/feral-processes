@@ -840,4 +840,4 @@ The bench also mends on its own. When the player has stood still within
 `REFIT_REACH` tiles of a stocked bench for more than `REFIT_IDLE_TICKS` ticks,
 it mends one copy a tick, one core each: worn gear on the player and the
 party first, most worn first, then worn copies in the pack. Only a broken copy
-or one at or below the `GEAR_WORN_ALERT_PERCENT` line is mended this way.
+or one below the `GEAR_WORN_ALERT_PERCENT` line is mended this way.

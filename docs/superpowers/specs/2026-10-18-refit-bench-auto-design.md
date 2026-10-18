@@ -62,7 +62,7 @@ holds a rewrite".
   first (highest `wear`), ties by that walk order. Pack copies follow in
   `GearCopies` row order, most worn first.
 - **What counts as worn.** A copy is eligible for automatic mending when
-  it is broken or its remaining fights are at or below the existing
+  it is broken or its remaining fights are below the existing
   `GEAR_WORN_ALERT_PERCENT` line, the same line that raises the `GearWorn`
   alert. The bench fixes what the HUD warns about and leaves a scratch
   alone. Manual refit (the existing R action) still accepts any wear > 0.

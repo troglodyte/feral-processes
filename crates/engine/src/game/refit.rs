@@ -141,8 +141,8 @@ impl Game {
 
     /// Every copy the bench would mend now, in the order it serves them: the
     /// player's slots, then each party member's in `Party` order, most worn
-    /// first within a wearer, then pack copies the same way. Only copies at
-    /// the `GearWorn` alert line or past it: the bench fixes what the HUD
+    /// first within a wearer, then pack copies the same way. Only copies
+    /// below the `GearWorn` alert line: the bench fixes what the HUD
     /// warns about, since a core a scratch can spend is a core the next
     /// fight's real damage cannot.
     fn worn_for_auto_refit(&self) -> Vec<WornAt> {

@@ -2175,6 +2175,7 @@ mod tests {
             job_progress: None,
             depot_fill: None,
             output_stranded: false,
+            holds_output: false,
             hp_fraction: None,
             level: None,
             durability: None,

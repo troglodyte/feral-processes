@@ -2151,6 +2151,7 @@ mod tests {
             serviced: false,
             build: None,
             output_stranded: false,
+            holds_output: false,
             hp_fraction: None,
             level: None,
             durability: None,

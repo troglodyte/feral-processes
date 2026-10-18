@@ -1275,6 +1275,11 @@ pub struct EntityView {
     /// Keyed on room rather than on a depot existing, because a depot that
     /// has filled up is no better than no depot.
     pub output_stranded: bool,
+    /// A structure other than a Depot whose finished-output buffer holds
+    /// anything. The map's "the items are in here, not in storage" dot.
+    /// Finished output only: staged input is never marked, and a banked
+    /// output never reaches `Stock::output`, so it never lights this.
+    pub holds_output: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.

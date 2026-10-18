@@ -763,6 +763,11 @@ pub struct CreatureSave {
     /// mid-errand must not destroy the thing.
     #[serde(default)]
     pub tidying: Option<crate::items::FloorThing>,
+    /// Whether `carrying` is the idle clearing errand's load rather than a
+    /// posted hauler's — see `components::Clearing`. Without it a reload
+    /// would leave the body holding a load no errand finishes.
+    #[serde(default)]
+    pub clearing: bool,
     /// The rare-spawn tier this creature rolled — see `components::Rarity`.
     ///
     /// Persisted as the *tag* only. The multiplier it names was already
@@ -2568,6 +2573,7 @@ mod tests {
             carrying: None,
             carrying_program: None,
             tidying: None,
+            clearing: false,
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,

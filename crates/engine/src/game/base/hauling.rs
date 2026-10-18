@@ -162,7 +162,7 @@ fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> 
 /// so a buffer with such a shelf beside it is fed rather than a pile, and
 /// the crew leaves it be. Asked of *every* Depot, full ones included: a full
 /// shelf backs the producer up rather than turning the crew onto it.
-fn depot_beside_accepting(
+pub(crate) fn depot_beside_accepting(
     machine: Position,
     item: &ItemId,
     stores: &[(Entity, Position)],
@@ -724,7 +724,7 @@ pub(crate) fn step_to_post(
 /// much landed. Never past `capacity` — an over-capacity write would make
 /// that field a suggestion, and a full depot is a decided failure mode
 /// rather than an exception to it.
-fn deposit(stock: &mut Stock, load: &Carrying) -> u32 {
+pub(crate) fn deposit(stock: &mut Stock, load: &Carrying) -> u32 {
     let moved = load.qty.min(stock.output_room());
     if moved > 0 {
         *stock.output.entry(load.item.clone()).or_default() += moved;

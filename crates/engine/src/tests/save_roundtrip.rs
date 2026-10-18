@@ -389,6 +389,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         carrying: _,
         carrying_program: _,
         tidying: _,
+        clearing: _,
         rarity: _,
         boss: _,
         equipment: _,

@@ -7131,6 +7131,7 @@ mod tests {
                 carrying: None,
                 carrying_program: None,
                 tidying: None,
+                clearing: false,
                 rarity: Default::default(),
                 nemesis_grudges: 0,
                 nemesis_muster_ticks: 0,

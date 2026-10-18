@@ -721,6 +721,19 @@ pub struct CarryingProgram(pub DownedProgram);
 #[derive(Component, Clone, Debug)]
 pub struct Tidying(pub crate::items::FloorThing);
 
+/// The hold on this body's `Carrying` belongs to the idle clearing errand
+/// (`game::base::clearing`): finished output walked out of a machine to a
+/// Depot or the stockpile with no post behind it.
+///
+/// A marker and not a second load state. `Carrying` stays the one load, so
+/// every path that sets a carrier's load down covers a clearer unchanged;
+/// this says only *whose* trip it is, so `may_tidy`'s "a body holding a
+/// hauler's load is mid-trip for somebody else" keeps meaning that, and the
+/// clearing errand knows the load is its own to finish. Where the load is
+/// going is derived each beat from `Position`, as a hauler's is.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct Clearing;
+
 /// How many breedings deep a program's lineage runs. Absent reads as 0:
 /// wild, tamed, bought and fused programs are all generation 0, and only a
 /// hatched child carries one.

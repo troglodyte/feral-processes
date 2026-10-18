@@ -209,13 +209,17 @@ impl Game {
     }
 
     /// Puts `who`'s load on the floor around its tile, one unit per tile, and
-    /// ends the hold: a hauler's `Carrying` and a tidier's `Tidying` alike. A
-    /// no-op if `who` carries nothing or has no tile.
+    /// ends the hold: a hauler's `Carrying`, a clearer's `Carrying` with its
+    /// `Clearing` marker, and a tidier's `Tidying` alike. A no-op if `who`
+    /// carries nothing or has no tile.
     pub(crate) fn drop_load(&mut self, who: Entity) {
         let Some(pos) = self.world.get::<Position>(who).copied() else {
             return;
         };
         let mut things = Vec::new();
+        self.world
+            .entity_mut(who)
+            .remove::<crate::components::Clearing>();
         if let Some(load) = self.world.entity_mut(who).take::<Carrying>() {
             things.extend((0..load.qty).map(|_| FloorThing::Item(load.item.clone())));
         }

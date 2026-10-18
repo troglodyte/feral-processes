@@ -1553,6 +1553,7 @@ mod tests {
             carrying: None,
             carrying_program: None,
             tidying: None,
+            clearing: false,
             rarity: feral_processes_engine::components::Rarity::Prismatic,
             nemesis_grudges: 0,
             nemesis_muster_ticks: 0,

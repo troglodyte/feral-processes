@@ -11,7 +11,7 @@ use bevy_ecs::prelude::*;
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    Carrying, CarryingProgram, FloorItem, Position, Task, Tidying, UnderStudy,
+    Carrying, CarryingProgram, Clearing, FloorItem, Position, Task, Tidying, UnderStudy,
 };
 use crate::game::base::floor::take_floor_item;
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
@@ -33,8 +33,10 @@ fn chebyshev(a: Position, b: Position) -> i32 {
 }
 
 impl Game {
-    /// `None` when no cell is marked.
-    pub(crate) fn tidy_board(&mut self) -> Option<TidyBoard> {
+    /// The free stockpile cells, `(x, y)`-sorted; `None` when no cell is
+    /// marked at all. One computation for the tidy board and the clearing
+    /// board, so the two errands cannot disagree about what a free cell is.
+    pub(crate) fn free_stockpile_cells(&mut self) -> Option<Vec<Position>> {
         let marked: Vec<(i32, i32)> = self
             .world
             .resource::<BaseGrid>()
@@ -44,14 +46,19 @@ impl Game {
             return None;
         }
         let floor = self.free_floor();
-        let cells = {
-            let grid = self.world.resource::<BaseGrid>();
+        let grid = self.world.resource::<BaseGrid>();
+        Some(
             marked
                 .into_iter()
                 .filter(|&c| floor.free(grid, c))
                 .map(|(x, y)| Position { x, y })
-                .collect()
-        };
+                .collect(),
+        )
+    }
+
+    /// `None` when no cell is marked.
+    pub(crate) fn tidy_board(&mut self) -> Option<TidyBoard> {
+        let cells = self.free_stockpile_cells()?;
         let mut loose: Vec<(Entity, Position)> = self
             .world
             .query::<(Entity, &Position, &FloorItem)>()
@@ -64,12 +71,12 @@ impl Game {
         Some(TidyBoard { cells, loose })
     }
 
-    /// Whether `worker` may spend this beat on the errand: on shift by the
-    /// scheduler's own test (`is_on_shift`), so a body the assignment is about
-    /// to free and set down never picks up what that pass would drop. A body
-    /// holding a hauler's load or a carried program is mid-trip for somebody
-    /// else.
-    pub(crate) fn may_tidy(&self, worker: Entity, amenities: &Amenities) -> bool {
+    /// The gates every idle errand shares: on laid floor, no `Task`, not a
+    /// study subject, not carrying a program, and on shift by the scheduler's
+    /// own test (`is_on_shift`), so a body the assignment is about to free
+    /// and set down never picks up what that pass would drop. What each
+    /// errand adds is whose load the body may already be holding.
+    fn may_run_idle_errand(&self, worker: Entity, amenities: &Amenities) -> bool {
         let w = self.world.get_entity(worker).ok();
         let Some(w) = w else { return false };
         let on_floor = w
@@ -78,9 +85,23 @@ impl Game {
         on_floor
             && w.get::<Task>().is_none()
             && w.get::<UnderStudy>().is_none()
-            && w.get::<Carrying>().is_none()
             && w.get::<CarryingProgram>().is_none()
             && self.is_on_shift(worker, amenities)
+    }
+
+    /// Whether `worker` may spend this beat tidying. A body holding a
+    /// hauler's or a clearer's load is mid-trip for somebody else.
+    pub(crate) fn may_tidy(&self, worker: Entity, amenities: &Amenities) -> bool {
+        self.may_run_idle_errand(worker, amenities) && self.world.get::<Carrying>(worker).is_none()
+    }
+
+    /// Whether `worker` may spend this beat clearing: a load it holds must be
+    /// the clearing errand's own, and a tidied item is a tidier's trip.
+    pub(crate) fn may_clear(&self, worker: Entity, amenities: &Amenities) -> bool {
+        self.may_run_idle_errand(worker, amenities)
+            && self.world.get::<Tidying>(worker).is_none()
+            && (self.world.get::<Carrying>(worker).is_none()
+                || self.world.get::<Clearing>(worker).is_some())
     }
 
     /// One beat of the errand. Returns whether the body spent it.
@@ -154,11 +175,12 @@ impl Game {
         true
     }
 
-    /// Sets down what a body holds once the scheduler has handed it a job.
+    /// Sets down what a body holds once the scheduler has handed it a job: a
+    /// tidier's item and a clearer's load alike.
     pub(crate) fn set_down_posted_tidiers(&mut self) {
         let mut posted: Vec<Entity> = self
             .world
-            .query_filtered::<Entity, (With<Tidying>, With<Task>)>()
+            .query_filtered::<Entity, (Or<(With<Tidying>, With<Clearing>)>, With<Task>)>()
             .iter(&self.world)
             .collect();
         posted.sort();

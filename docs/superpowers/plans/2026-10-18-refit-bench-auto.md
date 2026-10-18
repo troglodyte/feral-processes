@@ -140,8 +140,16 @@ cue queues initialised at `lifecycle.rs:576-582` and `1591-1597`.
   accepts its supply item into `Stock.input` up to the def's capacity;
   Depots unchanged. Check `Game::transfer_items` (`transfer.rs:299`) and
   the Transfer view list the bench's row; label left to the builder.
+- `work_orders.rs::fuel_wants`: Phase 1 found the `held < SUPPLY_BATCH`
+  trigger tops an authored-capacity bench to only 5-7. For a structure
+  with `supply_capacity` authored, also file the want while
+  `capacity - held >= HAUL_CARRY_CAPACITY` (a full trip fits) and a Depot
+  holds at least that much. Structures without the field keep the old
+  trigger exactly, so turrets are untouched.
 - Tests: engine, player beside a bench puts 20 cores in; the 21st is
-  refused and stays in the pack; a non-supply item is refused.
+  refused and stays in the pack; a non-supply item is refused. Hauling: a
+  bench at 0 with a Depot holding 25 cores ends at 20 and the Depot at 5;
+  a turret's trigger is unchanged (existing supply tests stay green).
   `app-core/src/tests/` Transfer test if a precedent fixture exists
   (`app_at_a_refit_bench*` in `support.rs:3604-3700`).
 

@@ -615,3 +615,20 @@
   is stock, and only through `stock::stockpiled`. A structure or site raised
   over a floor item relocates it through `displace_floor_items_from`, and
   committing, wielding or posting a tidier sets its item down first.
+
+- **Idle clearing (`base/clearing.rs`) ranks above tidy, picks its destination before it picks anything up, and holds `Carrying` plus a unit `Clearing` marker rather than a second load state.**
+  The trap is a body left holding product nothing takes. The board being
+  `None` with no Depot room and no free cell is only half the guard: a Depot
+  with room that *refuses* the item builds a board, so `clear_step` asks
+  `nearest_depot` through `Game::depot_accepts` (or a reachable free cell)
+  per item before `take_from`, and a test with a full Depot alone passed the
+  pick-up-first mutation. The load is `Carrying`, so every existing drop
+  path covers a clearer; `Clearing` says whose trip it is, and `drop_load`
+  removes it so it cannot outlive the load. Where the load goes is derived
+  each beat, as a hauler's is: a stored target goes stale when a Depot fills
+  mid-walk. Rank above tidy because product in a machine blocks production
+  and a loose item blocks nothing. A machine an accepting Depot *with room*
+  is touching is not a source (`depot_beside_accepting`, asked of Depots
+  with room only, unlike the Tend's use). Free stockpile cells come from one
+  computation, `Game::free_stockpile_cells`, for both boards. No
+  `Record::Haul`: a clearing trip has no post.

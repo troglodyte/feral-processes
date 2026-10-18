@@ -456,3 +456,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **Farm wants are appended after dig wants, and `run_farm_crew` drops a tender's `Task` on every landing and every tile/job mismatch** — that, not the quiet-base guard, is what keeps a farm-only base from stranding its tender (`FarmTile` is another non-`Structure` entity with a base-space `Position`).
 - **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**
+- **Idle clearing ranks above tidy on `drift_idle_staff`'s fall-through, picks its destination (a Depot with room that accepts the item, else a free stockpile cell) before anything leaves the machine, and holds `Carrying` plus the unit `Clearing` marker rather than a second load state.**

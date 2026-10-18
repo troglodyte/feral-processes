@@ -68,9 +68,10 @@ impl Game {
     /// from the pack, and survive a breach.
     ///
     /// `carried` is what the pack holds, whatever may be done with it.
-    /// `can_put` is 0 unless there is a Depot beside the party to put the
-    /// item into (or a structure beside it whose supply the item is), the item is not `banked` — a bank is not cargo — and some
-    /// adjacent Depot has room for it that its filter has not closed, and
+    /// `can_put` is 0 unless there is somewhere beside the party to put the
+    /// item — a Depot, or a structure whose supply the item is — the item is
+    /// not `banked` — a bank is not cargo — and some adjacent Depot or sink
+    /// has room for it that a Depot's filter has not closed, and
     /// **only a row with a `can_put` of its own is created from the pack
     /// side**, so an item that can go nowhere is listed only when it is also
     /// sitting on a shelf. A banked item may still have `on_shelves`, since a

@@ -179,18 +179,23 @@ impl Game {
                 .sum::<u32>()
     }
 
-    /// Moves an exact basket out of the pack and into `reachable_depots` —
-    /// the adjacent ones, or every one beside a terminal — reporting what
-    /// actually landed, keyed and ordered by `ItemId`.
+    /// Moves an exact basket out of the pack into the structures beside the
+    /// party, reporting what actually landed, keyed and ordered by `ItemId`,
+    /// and separately each load a supply sink took. An item that is an
+    /// adjacent sink's supply fills the sink before any Depot, or a shelf
+    /// beside the bench would swallow what was meant to load it; everything
+    /// else goes to `reachable_depots` — the adjacent ones, or every one
+    /// beside a terminal.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and
     /// `require_base` already, and owns the announcement and the turn. That
     /// is what lets one screen take and give inside a single action.
     ///
-    /// Both clamps live here: against what the pack holds, and against each
-    /// Depot's `output_room()` as the fill walks them in `(x, y)` order —
-    /// and each Depot's own filter, `depot_accepts`.
+    /// Every clamp lives here: against what the pack holds, against each
+    /// sink's `supply_input_capacity`, and against each Depot's
+    /// `output_room()` as the fill walks them in `(x, y)` order — and each
+    /// Depot's own filter, `depot_accepts`.
     pub(crate) fn give_to_adjacent(
         &mut self,
         give: &[(ItemId, u32)],

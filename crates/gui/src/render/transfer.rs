@@ -91,7 +91,11 @@ pub(super) fn draw_transfer(
 /// claims the base is full when it has no shelf at all. `Some(0)` still
 /// draws it — that is a Depot with nothing left, which is exactly the thing
 /// the player needs told.
-fn body_rows(entries: &[(String, i64, u32, u32)], room: Option<u32>, selected: usize) -> Vec<Row> {
+pub(super) fn body_rows(
+    entries: &[(String, i64, u32, u32)],
+    room: Option<u32>,
+    selected: usize,
+) -> Vec<Row> {
     let mut body = Vec::new();
     if let Some(room) = room {
         let given: u32 = entries.iter().fold(0u32, |acc, (_, n, _, _)| {
@@ -105,12 +109,6 @@ fn body_rows(entries: &[(String, i64, u32, u32)], room: Option<u32>, selected: u
         text_row("Left takes out, Right puts in; Shift for the end, Ctrl halves the gap"),
         text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
     ]);
-    // Offered exactly when it works. `room` is `Some` only when a Depot is
-    // beside the party, which is the same question `App::open_depot_filter`
-    // refuses on — so the hint cannot advertise a key that answers back.
-    if room.is_some() {
-        body.push(text_row("[F] set what a Depot beside you will accept"));
-    }
     body.push(text_row(""));
     let cols = Columns::of(entries);
     body.push(text_row(cols.header()));
@@ -328,6 +326,13 @@ mod tests {
         let row = cols.row(widest, u32::MAX, u32::MAX, u32::MAX as i64);
         let header = cols.header();
 
+        // The structure hub draws the same rows in a narrower rect than the
+        // popup, so the table must fit that one too.
+        crate::render::base_report::assert_rows_fit(
+            &[item_row(row.clone(), false), text_row(header.clone())],
+            "transfer page",
+        );
+
         with_painter(|p| {
             let m = ui_metrics(900.0);
             let room = body_room(&m);
@@ -509,6 +514,7 @@ mod tests {
     fn no_transfer_hint_line_overflows_its_popup() {
         let entries = vec![("core fragment".to_string(), 0, 0, 0)];
         let rows = body_rows(&entries, Some(u32::MAX), 0);
+        crate::render::base_report::assert_rows_fit(&rows, "transfer page");
 
         with_painter(|p| {
             let m = ui_metrics(900.0);

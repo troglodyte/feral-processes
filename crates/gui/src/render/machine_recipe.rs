@@ -19,14 +19,19 @@ pub(super) fn draw_machine_recipe(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let body = match screen {
+    let body = page_rows(screen, selected);
+    draw_popup("Recipe", PopupSize::Large, &body, refusal, painter, m);
+}
+
+/// The screen's rows, shared by the popup and the structure hub's page.
+pub(super) fn page_rows(screen: Option<&MachineRecipeScreen>, selected: usize) -> Vec<Row> {
+    match screen {
         Some(screen) => body_rows(screen, selected),
         // Unreachable through `App`, which closes the screen the moment the
         // machine stops answering — drawn rather than asserted, because a
         // renderer that panics takes the window with it.
         None => vec![text_row("There is no machine here.")],
-    };
-    draw_popup("Recipe", PopupSize::Large, &body, refusal, painter, m);
+    }
 }
 
 pub(super) fn draw_machine_recipe_confirm(
@@ -161,6 +166,10 @@ mod tests {
             .max_by_key(|(i, r)| row_text(*i, r).chars().count())
             .expect("the shipped assets define craftables");
         let text = row_text(index, widest);
+        crate::render::base_report::assert_rows_fit(
+            &[item_row(text.clone(), false)],
+            "recipe page",
+        );
 
         with_painter(|p| {
             let m = ui_metrics(900.0);

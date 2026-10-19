@@ -3026,6 +3026,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
     match mode {
         Mode::WorkOrderPick | Mode::WorkOrderQuantity => Some(Mode::WorkOrders),
         Mode::StructureAssign => Some(Mode::Structures),
+        Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
         _ => None,
     }
 }

@@ -354,6 +354,10 @@ fn each_popup_child_names_the_hub_screen_it_draws_over() {
         base_popup_parent(Mode::StructureAssign),
         Some(Mode::Structures)
     );
+    assert_eq!(
+        base_popup_parent(Mode::MachineRecipeConfirm),
+        Some(Mode::MachineRecipe)
+    );
     assert_eq!(base_popup_parent(Mode::WorkOrders), None);
     assert_eq!(base_popup_parent(Mode::Playing), None);
 }

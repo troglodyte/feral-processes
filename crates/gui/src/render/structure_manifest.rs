@@ -20,20 +20,26 @@ pub(super) fn draw_structure_manifest(
     painter: &Painter,
     m: &Metrics,
 ) {
-    // A raid can bring a structure down while its sheet is open, so the
-    // missing case is a message rather than an empty popup — the same
-    // contract `draw_manifest` keeps for a program that has died.
-    let Some(report) = entity.and_then(|e| game.structure_manifest(e)) else {
-        draw_popup(
+    match structure_rows(game, entity) {
+        Some(rows) => draw_popup("Structure", PopupSize::Small, &rows, refusal, painter, m),
+        // A raid can bring a structure down while its sheet is open, so the
+        // missing case is a message rather than an empty popup — the same
+        // contract `draw_manifest` keeps for a program that has died.
+        None => draw_popup(
             "Structure",
             PopupSize::Small,
             &[text_row("That structure is gone. Esc to go back.")],
             refusal,
             painter,
             m,
-        );
-        return;
-    };
+        ),
+    }
+}
+
+/// The sheet's rows, `None` when the structure is gone. Shared by the popup
+/// and the structure hub's Info page.
+pub(super) fn structure_rows(game: &mut Game, entity: Option<Entity>) -> Option<Vec<Row>> {
+    let report = entity.and_then(|e| game.structure_manifest(e))?;
 
     let siblings: Vec<StructureReport> = match report.line {
         Some(key) => game
@@ -69,6 +75,5 @@ pub(super) fn draw_structure_manifest(
     }
     rows.push(text_row(""));
     rows.push(text_row(bay_footer(&slots)));
-
-    draw_popup("Structure", PopupSize::Small, &rows, refusal, painter, m);
+    Some(rows)
 }

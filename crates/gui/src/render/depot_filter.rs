@@ -41,14 +41,19 @@ pub(super) fn draw_depot_filter(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let body = match screen {
+    let body = page_rows(screen, selected);
+    draw_popup("Depot filter", PopupSize::Large, &body, refusal, painter, m);
+}
+
+/// The screen's rows, shared by the popup and the structure hub's page.
+pub(super) fn page_rows(screen: Option<&DepotFilterScreen>, selected: usize) -> Vec<Row> {
+    match screen {
         Some(screen) => body_rows(screen, selected),
         // Unreachable through `App`, which closes the screen the moment the
         // Depot stops answering — drawn rather than asserted because a
         // renderer that panics takes the window with it.
         None => vec![text_row("There is no Depot here.")],
-    };
-    draw_popup("Depot filter", PopupSize::Large, &body, refusal, painter, m);
+    }
 }
 
 /// The header lines, the column header, and then one row per item.
@@ -65,7 +70,7 @@ fn body_rows(screen: &DepotFilterScreen, selected: usize) -> Vec<Row> {
     ))];
     body.extend([
         text_row("Up/Down pick a row; Left denies it, Right allows it"),
-        text_row("[A] allow all  [D] deny all  Esc back to the transfer screen"),
+        text_row("[A] allow all  [D] deny all  Esc leaves the page"),
         text_row("Denying takes nothing off the shelf — it only stops more arriving"),
         text_row(""),
     ]);
@@ -221,6 +226,10 @@ mod tests {
             .expect("the shipped assets define items");
         let row = cols.row(&widest.name, false, u32::MAX);
         let header = cols.header();
+        crate::render::base_report::assert_rows_fit(
+            &[item_row(row.clone(), false), text_row(header.clone())],
+            "Depot filter page",
+        );
 
         with_painter(|p| {
             let m = ui_metrics(900.0);

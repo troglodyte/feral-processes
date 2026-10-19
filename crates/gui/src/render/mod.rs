@@ -10,8 +10,9 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, MENU_SCAN_RADIUS, Mode, Staffing,
-    SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows, hub_of,
-    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    SwapChoice, SwapRow, TradeChoice, TransferEntry, base_popup_parent, equip_preview_tag,
+    equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut, qty_column,
+    stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -1180,7 +1181,53 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::OutpostPost => app.outpost_post_candidates(),
         _ => Vec::new(),
     };
+    // The frame the current mode sits in, and the one under a popup child,
+    // taken off the `App` for the reason the rows above are.
+    let hub_frame = base_report::HubFrame::of(app, app.mode);
+    let popup_parent = base_popup_parent(app.mode).and_then(|p| base_report::HubFrame::of(app, p));
+    let on_rail = app.hub_on_rail;
     let Some(game) = &mut app.game else { return };
+    // A structure's page: the same rows its popup would draw, in the hub's
+    // frame instead. The shared hubs follow, further down.
+    if let Some(frame) = hub_frame.as_ref().filter(|f| f.is_structure()) {
+        let (rows, nothing_qualifies) = match app.mode {
+            Mode::Transfer => (
+                transfer::body_rows(&transfer_entries, app.basket_room, selected),
+                None,
+            ),
+            Mode::DepotFilter => (
+                depot_filter::page_rows(depot_filter.as_ref(), selected),
+                None,
+            ),
+            Mode::MachineRecipe => (
+                machine_recipe::page_rows(machine_recipe.as_ref(), selected),
+                None,
+            ),
+            Mode::RigTool => (rig_tool::page_rows(rig_tool.as_ref(), selected), None),
+            Mode::Siphon => (building::siphon_page_rows(game, siphon, selected), None),
+            Mode::SpliceRig => (splice_rig::page_rows(splice_rig.as_ref(), selected), None),
+            Mode::FarmRecipe => (farm_recipe::body_rows(&farm_recipe, selected), None),
+            Mode::BuildProgram => {
+                building::build_program_page(game, build_commit.as_ref(), selected)
+            }
+            Mode::StructureManifest => (
+                structure_manifest::structure_rows(game, app.pending_structure_manifest)
+                    .unwrap_or_else(|| vec![text_row("That structure is gone. Esc to go back.")]),
+                None,
+            ),
+            other => (vec![text_row(format!("No page for {other:?}."))], None),
+        };
+        base_report::draw_structure_page(
+            frame,
+            app.mode,
+            &rows,
+            on_rail,
+            refusal.or(nothing_qualifies.as_deref()),
+            painter,
+            m,
+        );
+        return;
+    }
     match app.mode {
         Mode::DevConsole => {
             draw_dev_console(App::dev_console_rows(), selected, refusal, painter, m)
@@ -1209,6 +1256,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_machine_recipe(machine_recipe.as_ref(), selected, refusal, painter, m)
         }
         Mode::MachineRecipeConfirm => {
+            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
             draw_machine_recipe_confirm(machine_recipe.as_ref(), selected, refusal, painter, m)
         }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
@@ -1235,11 +1283,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::WorkOrderPick => {
-            base_report::draw_popup_parent(game, app.mode, painter, m);
+            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
             draw_work_order_pick(&orderable, selected, refusal, painter, m)
         }
         Mode::WorkOrderQuantity => {
-            base_report::draw_popup_parent(game, app.mode, painter, m);
+            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
             draw_work_order_quantity(
                 game,
                 app.pending_order.clone(),
@@ -1610,13 +1658,23 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        mode if hub_of(mode).is_some() => {
-            base_report::draw_base_report(game, mode, selected, &app_screens, refusal, painter, m)
+        _ if hub_frame.is_some() => {
+            if let Some(frame) = &hub_frame {
+                base_report::draw_base_report(
+                    game,
+                    frame,
+                    selected,
+                    &app_screens,
+                    refusal,
+                    painter,
+                    m,
+                )
+            }
         }
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
-            base_report::draw_popup_parent(game, app.mode, painter, m);
+            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
             if let Some(staffing) = &staffing {
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }

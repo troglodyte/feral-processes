@@ -22,7 +22,7 @@ pub(super) fn draw_farm_recipe(
     );
 }
 
-fn body_rows(rows: &[CropRow], selected: usize) -> Vec<Row> {
+pub(super) fn body_rows(rows: &[CropRow], selected: usize) -> Vec<Row> {
     let mut body = vec![
         text_row("Pick what this plot grows. Esc to go back."),
         text_row(""),

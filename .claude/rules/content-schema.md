@@ -9,7 +9,7 @@ paths:
   - "crates/engine/src/species*"
   - "crates/engine/src/structures*"
   - "crates/engine/src/abilities*"
-  - "crates/engine/tests/assets.rs"
+  - "crates/engine/src/tests/assets.rs"
 ---
 
 # Content directories: the non-obvious parts
@@ -31,8 +31,9 @@ that are not in any one README.
   class's tree is a file. `Accuracy` is read on demand alongside `Affinity`
   (no `Stats` field to bake into). The tier count is fixed at
   `KERNEL_RING_MAX * LEVELS_PER_RING` tiers of two choices each, or the tree is
-  skipped with a warning; six censuses in `tests/assets.rs` hold shipped trees
-  to the design, so a new node kind costs every tree an existing choice.
+  skipped with a warning; six censuses in `src/tests/assets.rs` (`mod
+  talents`) hold shipped trees to the design, so a new node kind costs every
+  tree an existing choice.
 - **Effects** (`assets/effects/*.ron`) are read by gui only, never the engine;
   items and abilities name one with `fx`, and a census in `effects.rs` holds
   every named id to a real file.
@@ -59,7 +60,7 @@ that are not in any one README.
   - **Variant order is save format** (bincode is positional;
     `PlayerSave::unlocked_perks` holds indices): append, or bump
     `SAVE_FORMAT_VERSION`.
-- **`tuning.rs` is deliberately code, not data**: content is moddable,
-  difficulty is not. Every hardcoded knob is a documented `pub const` there in
-  labelled sections; new tuning goes there, never inline, and never a
-  duplicate of a `.ron` value.
+- **`tuning.rs` is deliberately code, not data**: difficulty stays in Rust
+  even where content is a file. Every hardcoded knob is a documented
+  `pub const` there in labelled sections; new tuning goes there, never
+  inline, and never a duplicate of a `.ron` value.

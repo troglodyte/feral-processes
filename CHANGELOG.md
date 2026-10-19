@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.15
+
+**Programs resting at a Sandbox or Log Analyzer Bay move around it instead of standing frozen beside it.** A program restoring Slack or Coherence, or taking a break in a bad mood, used to hold one tile next to the building until it was done, which looked like it was stuck. It now drifts between the tiles in reach every few seconds and never leaves reach while doing it.
+
+**A Sandbox and a Log Analyzer Bay now reach programs up to two tiles away, not just beside them.** That gives a resting program room to move. Each still restores two programs at a time, but other buildings crowding it only cut that to one when nearly every tile within two tiles is taken.
+
 ## 0.19.14
 
 **Your inventory and your party are one screen, opened with `i`.** The rail runs Items, Phase keys, Downed programs and Tools, then Companions, Programs, Routines and Perks. `[` and `]` and the arrow keys walk all eight pages, and `i` reopens the page you left.

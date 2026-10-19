@@ -2,8 +2,8 @@
 //! when it cannot.
 //!
 //! A reserve that has run below its need's `critical` takes the program off
-//! shift; it walks to the nearest structure servicing that need, stands there
-//! until it is `content`, and goes back to work. **One gate decides whether a
+//! shift; it walks to the nearest structure servicing that need, mills in its
+//! reach until it is `content`, and goes back to work. **One gate decides whether a
 //! need may pull a body off a post, and failing that gate *is* acting out** —
 //! there is no third state where a program is stalled but content.
 
@@ -574,13 +574,16 @@ impl Game {
     ///
     /// Rides `hauling::step_to_post`, the walk the dig crew already takes.
     /// There is no second walk.
+    ///
+    /// `Ok(Some((site, radius)))` is arrival: the leash `drift_idle_staff`
+    /// mills the body inside, so it does not read as frozen at the building.
     pub(crate) fn step_off_shift(
         &mut self,
         worker: Entity,
         amenities: &Amenities,
-    ) -> Result<(), NoPost> {
+    ) -> Result<Option<(Position, i32)>, NoPost> {
         let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
-            return Ok(());
+            return Ok(None);
         };
         let here = self
             .world
@@ -593,11 +596,11 @@ impl Game {
             .and_then(|n| n.serviced_at(&need));
         let (site, _, radius) = amenities.route(&need, here, held).ok_or(NoPost::NoRoute)?;
         if in_reach(here, site, radius) {
-            // Arrived. It stands here until it is content — the drift's other
-            // shape would walk it straight back off again.
-            return Ok(());
+            // Arrived. It stays in reach until it is content — the drift's
+            // unleashed shape would walk it straight back off again.
+            return Ok(Some((site, radius)));
         }
-        self.walk_idle_toward(worker, here, site)
+        self.walk_idle_toward(worker, here, site).map(|()| None)
     }
 
     /// One rigid step from `here` toward `site`: the walk tail `step_respite`,

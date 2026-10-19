@@ -851,6 +851,28 @@ pub(crate) fn wander_step(from: Position, index: usize, step: u64) -> Option<Pos
     })
 }
 
+/// What `drift_idle_staff` hands `Game::wander_one` for one beat: where the
+/// pool may not step, and the clock the step is drawn from.
+struct WanderBeat {
+    home: Position,
+    tick: u64,
+    step: u64,
+    /// Every structure and build-site footprint cell.
+    occupied: std::collections::HashSet<(i32, i32)>,
+    /// Where the idle pool stands, grown with every tile written this beat.
+    held: std::collections::HashSet<(i32, i32)>,
+    /// The party's cell when it is in base space.
+    party: Option<(i32, i32)>,
+}
+
+/// Whether a body standing at its amenity is offered a step this beat.
+///
+/// Slower than the wander, `AMENITY_MILL_BEATS`' reason, and staggered by
+/// index so a crowd at one Sandbox does not shuffle in lockstep.
+fn mills_this_beat(index: usize, step: u64) -> bool {
+    (step + index as u64).is_multiple_of(crate::tuning::AMENITY_MILL_BEATS)
+}
+
 /// How many of `item` the **base** is holding — every Depot
 /// (`StructureDef::stores`), every machine output buffer, and every plain
 /// item on a stockpile cell.
@@ -2548,19 +2570,27 @@ impl Game {
         // depending on the order the pool is walked in. `hire`-style
         // co-location — two programs beaten on the same tile — resolves
         // itself the first time one of them moves.
-        let mut held: std::collections::HashSet<(i32, i32)> = staff
+        let held: std::collections::HashSet<(i32, i32)> = staff
             .iter()
             .filter(|&&w| self.world.get::<Task>(w).is_none())
             .filter_map(|&w| self.world.get::<Position>(w))
             .map(|p| (p.x, p.y))
             .collect();
+        let mut beat = WanderBeat {
+            home,
+            tick,
+            step,
+            occupied,
+            held,
+            party,
+        };
         // Which cells hold more than one body, as the beat opens.
         //
         // **What makes "one body to a cell" repair itself**, and it is why
         // the walks refusing an occupied tile was not the whole rule. A body
         // that has *arrived* never consults a walk again — a patient in reach
-        // of its Bay holds there deliberately, and so does a program standing
-        // at its amenity — so a heap that already exists, in a save written
+        // of its Bay holds there deliberately, and a program at its amenity
+        // steps only on its milling beats — so a heap that already exists, in a save written
         // before any of this or left by a structure raised on top of one,
         // would stay a heap forever with every future step correctly refused.
         // Sharing a cell therefore outranks every errand below: the body
@@ -2638,7 +2668,7 @@ impl Game {
             if !sharing && on_floor && self.world.get::<components::UnderStudy>(worker).is_some() {
                 let _ = self.step_to_study(worker);
                 if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                    beat.held.insert((p.x, p.y));
                 }
                 continue;
             }
@@ -2655,7 +2685,7 @@ impl Game {
                 // re-inserts it.
                 if self.step_to_repair(worker, bays).is_ok() || bays.is_empty() {
                     if let Some(p) = self.world.get::<Position>(worker) {
-                        held.insert((p.x, p.y));
+                        beat.held.insert((p.x, p.y));
                     }
                     continue;
                 }
@@ -2664,11 +2694,15 @@ impl Game {
             // is ever judged: it gives the post up and latches the need, so
             // the gate does not hand it straight back on the next beat.
             if !sharing && self.world.get::<components::OffShift>(worker).is_some() {
-                if self.step_off_shift(worker, amenities).is_err() {
-                    self.strand_off_shift(worker);
+                match self.step_off_shift(worker, amenities) {
+                    Ok(Some(leash)) if mills_this_beat(index, step) => {
+                        self.wander_one(worker, index, &mut beat, staff, Some(leash));
+                    }
+                    Ok(_) => {}
+                    Err(_) => self.strand_off_shift(worker),
                 }
                 if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                    beat.held.insert((p.x, p.y));
                 }
                 continue;
             }
@@ -2681,11 +2715,15 @@ impl Game {
             // it stalled, which is this errand's whole difference from that
             // one.
             if !sharing && self.on_respite(worker, amenities) {
-                if self.step_respite(worker, amenities).is_err() {
-                    self.strand_respite(worker);
+                match self.step_respite(worker, amenities) {
+                    Ok(Some(leash)) if mills_this_beat(index, step) => {
+                        self.wander_one(worker, index, &mut beat, staff, Some(leash));
+                    }
+                    Ok(_) => {}
+                    Err(_) => self.strand_respite(worker),
                 }
                 if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                    beat.held.insert((p.x, p.y));
                 }
                 continue;
             }
@@ -2700,7 +2738,7 @@ impl Game {
                     .is_some_and(|b| self.clear_step(worker, b))
             {
                 if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                    beat.held.insert((p.x, p.y));
                 }
                 continue;
             }
@@ -2713,82 +2751,108 @@ impl Game {
                 && board.as_mut().is_some_and(|b| self.tidy_step(worker, b))
             {
                 if let Some(p) = self.world.get::<Position>(worker) {
-                    held.insert((p.x, p.y));
+                    beat.held.insert((p.x, p.y));
                 }
                 continue;
             }
-            let here = self.world.get::<Position>(worker).copied();
-            let tile = match here.filter(|_| on_floor) {
-                Some(p) => match wander_step(p, index, step) {
-                    Some(tile) => tile,
-                    // The beat it spends standing still.
-                    None => continue,
-                },
-                None => entry_tile(home, index, tick),
-            };
-            if occupied.contains(&(tile.x, tile.y)) {
-                continue;
-            }
-            // **Laid floor, not `walkable`.** Open ground is walkable but is
-            // not the base's footprint — only laid floor may take a
-            // structure — so a wanderer left to roam it would be loitering
-            // ground nothing can ever be built or posted on. This is the
-            // leash, and it is why there is no radius to tune.
-            if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
-                continue;
-            }
-            // The party is the other body standing in base space, read off
-            // `Locale` and never the player's `Position`, which is pinned to
-            // the anchor tile out on the zone surface. A program that steps
-            // onto the party hides the `@`.
-            if party == Some((tile.x, tile.y)) {
-                continue;
-            }
-            if held.contains(&(tile.x, tile.y)) {
-                continue;
-            }
-            // The last rejection, and the only one that is about the body
-            // rather than about the ground: a program left stranded on a
-            // tile holds it against that tile, and will not be stood back
-            // on it while the grudge is worth anything.
-            //
-            // `opinion_of` and not `morale` — this is a question about one
-            // corner of the base, and the sum over everything would keep a
-            // program that has had a bad run off every tile at once. The
-            // comparison is signed, so a tile it feels nothing about, and a
-            // tile it feels *well* about, both pass.
-            if self.opinion_of(
-                worker,
-                &components::MemorySubject::BaseTile {
-                    x: tile.x,
-                    y: tile.y,
-                },
-            ) < MEMORY_AVOIDANCE_THRESHOLD
-            {
-                continue;
-            }
-            // A body does not stand beside one it holds a grudge against.
-            // Signed through `Bond::avoids`, so a fondness never triggers
-            // it; the adjacency is read first because the bond is a fold
-            // over a store and most candidates have no neighbour at all.
-            if staff.iter().any(|&other| {
-                other != worker
-                    && self
-                        .world
-                        .get::<Position>(other)
-                        .is_some_and(|p| (p.x - tile.x).abs().max((p.y - tile.y).abs()) <= 1)
-                    && self
-                        .world
-                        .get::<components::ProgramId>(other)
-                        .copied()
-                        .is_some_and(|id| self.bond(worker, id).avoids())
-            }) {
-                continue;
-            }
-            held.insert((tile.x, tile.y));
-            if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
-                *pos = tile;
-            }
+            self.wander_one(worker, index, &mut beat, staff, None);
+        }
+    }
+
+    /// One drift step for `worker`: a `wander_step` neighbour that passes
+    /// every rejection below, or a beat holding its ground.
+    ///
+    /// `leash` is an amenity the body has arrived at, `(site, radius)`, and a
+    /// leashed step must stay in reach of it. That is the whole difference
+    /// between an idle program's wander and one milling at a Sandbox while
+    /// it refills — both are this, so a rule added to one cannot miss the
+    /// other.
+    fn wander_one(
+        &mut self,
+        worker: Entity,
+        index: usize,
+        beat: &mut WanderBeat,
+        staff: &[Entity],
+        leash: Option<(Position, i32)>,
+    ) {
+        let here = self.world.get::<Position>(worker).copied();
+        let on_floor = here.is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
+        let tile = match here.filter(|_| on_floor) {
+            Some(p) => match wander_step(p, index, beat.step) {
+                Some(tile) => tile,
+                // The beat it spends standing still.
+                None => return,
+            },
+            // A leashed body has arrived somewhere already; the ring is for
+            // a body with no cell in this space at all.
+            None if leash.is_some() => return,
+            None => entry_tile(beat.home, index, beat.tick),
+        };
+        if leash.is_some_and(|(site, radius)| !offshift::in_reach(tile, site, radius)) {
+            return;
+        }
+        if beat.occupied.contains(&(tile.x, tile.y)) {
+            return;
+        }
+        // **Laid floor, not `walkable`.** Open ground is walkable but is
+        // not the base's footprint — only laid floor may take a
+        // structure — so a wanderer left to roam it would be loitering
+        // ground nothing can ever be built or posted on. This is the
+        // leash, and it is why there is no radius to tune.
+        if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
+            return;
+        }
+        // The party is the other body standing in base space, read off
+        // `Locale` and never the player's `Position`, which is pinned to
+        // the anchor tile out on the zone surface. A program that steps
+        // onto the party hides the `@`.
+        if beat.party == Some((tile.x, tile.y)) {
+            return;
+        }
+        if beat.held.contains(&(tile.x, tile.y)) {
+            return;
+        }
+        // The last rejection, and the only one that is about the body
+        // rather than about the ground: a program left stranded on a
+        // tile holds it against that tile, and will not be stood back
+        // on it while the grudge is worth anything.
+        //
+        // `opinion_of` and not `morale` — this is a question about one
+        // corner of the base, and the sum over everything would keep a
+        // program that has had a bad run off every tile at once. The
+        // comparison is signed, so a tile it feels nothing about, and a
+        // tile it feels *well* about, both pass.
+        if self.opinion_of(
+            worker,
+            &components::MemorySubject::BaseTile {
+                x: tile.x,
+                y: tile.y,
+            },
+        ) < MEMORY_AVOIDANCE_THRESHOLD
+        {
+            return;
+        }
+        // A body does not stand beside one it holds a grudge against.
+        // Signed through `Bond::avoids`, so a fondness never triggers
+        // it; the adjacency is read first because the bond is a fold
+        // over a store and most candidates have no neighbour at all.
+        if staff.iter().any(|&other| {
+            other != worker
+                && self
+                    .world
+                    .get::<Position>(other)
+                    .is_some_and(|p| (p.x - tile.x).abs().max((p.y - tile.y).abs()) <= 1)
+                && self
+                    .world
+                    .get::<components::ProgramId>(other)
+                    .copied()
+                    .is_some_and(|id| self.bond(worker, id).avoids())
+        }) {
+            return;
+        }
+        beat.held.insert((tile.x, tile.y));
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = tile;
         }
     }
 

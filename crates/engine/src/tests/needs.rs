@@ -498,9 +498,52 @@ fn an_off_shift_program_steps_toward_its_amenity() {
         gap(after) < gap(before),
         "it closed on the Defrag Bay at {site:?}: {before:?} -> {after:?}"
     );
+    let radius = game.amenities().servicing(&coherence())[0].2;
     assert!(
-        crate::game::base::offshift::in_reach(after, site, 0),
+        crate::game::base::offshift::in_reach(after, site, radius),
         "and it arrived: {after:?} against {site:?}"
+    );
+}
+
+/// **Arrived is not frozen.** A body refilling at its amenity shuffles among
+/// the tiles in reach rather than standing on one for the whole refill, which
+/// on the map read as a program stuck beside the building — and never steps
+/// out of reach doing it.
+#[test]
+fn an_off_shift_program_mills_within_its_amenitys_reach() {
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    let bay = find_structure_by_kind(&mut game, "defrag_bay").unwrap();
+    let site = *game.world.get::<Position>(bay).unwrap();
+    {
+        let mut pos = game.world.get_mut::<Position>(staff[0]).unwrap();
+        pos.x = site.x - 1;
+        pos.y = site.y;
+    }
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+    let radius = game.amenities().servicing(&coherence())[0].2;
+
+    let mut tiles = std::collections::HashSet::new();
+    for _ in 0..80 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        set_tick(&mut game, next);
+        drift(&mut game, &staff);
+        let p = *game.world.get::<Position>(staff[0]).unwrap();
+        assert!(
+            crate::game::base::offshift::in_reach(p, site, radius),
+            "milling never leaves reach: {p:?} against {site:?}"
+        );
+        assert!(
+            off_shift(&game, staff[0]).is_some(),
+            "and it is still refilling"
+        );
+        tiles.insert((p.x, p.y));
+    }
+
+    assert!(
+        tiles.len() >= 3,
+        "it moved around the Defrag Bay rather than holding one tile: {tiles:?}"
     );
 }
 

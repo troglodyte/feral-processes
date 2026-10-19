@@ -53,8 +53,8 @@ is how they go away. Your own swings are never held back this way — with your 
 tools out, walking into a wall still cuts it, whatever the shelves hold.
 
 Farm plots are drawn in the same plan. Press P to switch the box from rock to a plot, draw it on
-open floor, and press P again to go back. Stand beside a plot and press c to pick what it grows;
-every tile in it takes that crop. Your staff dimple each tile, wait out the crop's grow time, then
+open floor, and press P again to go back. Stand beside a plot, press c and open its Grow page to pick what
+it grows; every tile in it takes that crop. Your staff dimple each tile, wait out the crop's grow time, then
 harvest the result onto the floor, and start over, for as long as the plot stands. Drawing a box
 that starts on a plot tile unmarks it, which is how you stop.
 
@@ -146,16 +146,16 @@ The rest of what a base does:
   Enter to take exactly what you have set; [A] fills every row to its maximum, so taking the lot is
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
-- From that window, [F] opens what a Depot beside you will accept. Weapons, armor, modules and
+- A Depot's Filter page, one page down from its Inventory under c, sets what it will accept. Weapons, armor, modules and
   etched disks each get one row for the whole family, and every other item a row of its own; Left
   denies a row and Right allows it, [A] and [D] write the whole list at once, and Tab walks to the
-  next Depot when there is more than one touching you. A Depot refuses nothing until you say so.
+  next structure beside you when there is more than one. A Depot refuses nothing until you say so.
   What is denied simply never lands there — your crew carries it to the next Depot instead, and back
   to the machine it came from if none will take it, so two Depots with opposite lists sort the base
   between them. Denying something already on the shelf leaves it there; a filter says what may come
   in, never what has to leave.
-- An Index Terminal, once Memory Mapping is researched, puts every Depot in the base into that
-  same window. Stand beside it and press c: the Depots come in from wherever they stand, both to
+- An Index Terminal, once Memory Mapping is researched, puts every Depot in the base into its
+  Inventory page. Stand beside it and press c: the Depots come in from wherever they stand, both to
   take from and to put into. Machines still have to be walked to.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
   structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick Upgrade a
@@ -207,8 +207,8 @@ The rest of what a base does:
   holding the goods — if something else spends them before the project settles, that row is the only
   thing that will tell you.
 - A Power Siphon pins one staff program into the Power Grid and runs the base off it. Research Grid
-  Tapping, then build one for 24 Core Fragments and 4 Bytecode Blocks. Stand beside it and press P
-  to load a staff program or release the one inside. A siphon with someone in it supplies 4 to the
+  Tapping, then build one for 24 Core Fragments and 4 Bytecode Blocks. Stand beside it and press c
+  to open its Siphon page, where you load a staff program or release the one inside. A siphon with someone in it supplies 4 to the
   Power Grid, the same as a Recharger Node, and an empty one supplies nothing. The held program does no
   other work. It resents the hold, and the grudge builds slowly: a few strikes make it sulk, and a
   long enough hold makes it down tools. Letting go always costs it, because it comes out with at

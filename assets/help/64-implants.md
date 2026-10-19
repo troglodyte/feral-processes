@@ -5,7 +5,7 @@ as it stays in, and it asks something of you in return. Research Wetware Splicin
 Splice Rig in your [base](your-base). Implants themselves are forged at a Workbench from that
 research.
 
-Stand beside a Splice Rig and press I. The screen lists what is already built in, then the
+Stand beside a Splice Rig and press c. Its Splice page lists what is already built in, then the
 implants in your pack. Pick a row, then press I to install it or R to take one out. The screen
 shows what each one does to you, what it drinks, and its downside if it has one.
 

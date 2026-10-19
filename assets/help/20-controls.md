@@ -45,17 +45,15 @@ Your menus and stores:
 
 Acting on the world:
 
-- c — move cargo between you and the structures beside you: one window with a row per item, where
-  the columns read you, container — so Left takes off a machine's shelf toward you and
-  Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
-  row and Ctrl halves the gap; typing digits sets an amount; [N] clears the basket; [F] sets what a
-  Depot beside you will accept
-- c — beside a machine, choose what it makes; with more than one thing beside you that c can act
-  on, it asks which side, and c again there moves cargo
+- c — open the structure beside you. It has one screen with a page for everything you can do with
+  that structure: Inventory, Filter (a Depot), Recipe (a machine), Tool (a Teardown Rig), Siphon,
+  Splice, Grow (a farm plot), Rebuild (a wreck) and Info. [ and ] turn pages and Esc steps back to
+  the page list, then out. With more than one structure beside you, Tab steps to the next one
+  clockwise from north. Inventory is that one structure's own shelf, with a row per item and the
+  columns you, container — so Left takes off the shelf toward you and Right puts your own cargo
+  onto it. [A] takes the lot; Shift goes to the end of a row and Ctrl halves the gap; typing digits
+  sets an amount; [N] clears the basket
 - t — trade
-- F — fit a tool to the Teardown Rig beside you, or pull the one it has
-- I — open the Splice Rig beside you, to build an implant into your body or take one out
-- P — load a staff program into the Power Siphon beside you, or release the one in it
 - a — call a routine
 - x — examine a direction
 - d — demolish a direction

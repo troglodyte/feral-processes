@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**`c` beside a structure opens one screen for that structure, with a page for everything you can do with it.** Before, `c` beside a machine asked which side, a second `c` opened the cargo, and the Teardown Rig's tool, the Power Siphon and the Splice Rig each hid behind their own map letter (`F`, `P`, `I`). Now one `c` opens the structure: Inventory, Filter, Recipe, Tool, Siphon, Splice, Grow, Rebuild and Info, whichever it has. `[` and `]` turn pages, Esc steps back to the page list and then out, and Tab steps to the next structure beside you, clockwise from north. The title names the structure and where it is in the cycle, such as "Depot — east (2 of 3)". Opening, stepping and turning pages cost no turn.
+
+**Inventory is that one structure's own shelf, not everything beside you.** A Depot's page shows the Depot, a machine's shows the machine, and an Index Terminal's still reaches every Depot in the base. The pooled offer over every adjacent shelf is gone. A Rack's page still lets you put downed programs you carry onto it.
+
+**`F`, `P` and `I` on the map and the "which side" prompt are gone.** Structures that only have an Info page (walls, lights, Shields) never open the screen, so `c` beside only those still says there is nothing to take.
+
 ## 0.19.12
 
 **A program carrying a Power Cell to a Recharger Node keeps going after you load a save.** Before, loading a save dropped the trip but left the cell in the program's hands. A program holding something with no job is never given work and never puts the load down, so it wandered the base with the cell for the rest of the run. A base with several of these had too few hands left for its lowest-priority work: the farm, and carrying finished product out of machines.

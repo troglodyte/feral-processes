@@ -519,7 +519,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (`c`) reaches every Depot in the base — to take from and to put into —
     // rather than only the Depots beside you. Machine output shelves and
     // Quarantine Racks still have to be walked to, and each Depot's own filter
-    // still applies. `[F]` sets up only a Depot beside you.
+    // still applies. A Depot beside you has its own Filter page.
     indexes_storage: true,
 
     // Optional; can be left out entirely (defaults to no trading). If set,

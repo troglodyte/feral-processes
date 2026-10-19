@@ -469,7 +469,7 @@ fn the_preview_carries_held_phase_keys() {
     assert_eq!(after, max_hp(&app));
 }
 
-/// Opens the player's own sheet through the party hub, whose manifest row
+/// Opens the player's own sheet through the party pages, whose manifest row
 /// opens on you.
 fn open_own_manifest(app: &mut App) {
     app.mode = Mode::Playing;

@@ -524,7 +524,7 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
 /// reason `draw_status_buffs` picks `TagStyle::OwnLine`; the ceiling is held
 /// by `no_crew_row_overflows_the_column`.
 fn crew_rows(d: &PaneData) -> Vec<Row> {
-    let mut out = vec![head("CREW", 'p', "party")];
+    let mut out = vec![head("CREW", 'i', "party")];
     out.push(with_tail(
         vec![
             label("ROSTER  "),

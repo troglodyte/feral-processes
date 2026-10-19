@@ -1,6 +1,6 @@
 //! The inventory hub: `i` opens a rail of Items, Phase keys, Downed programs
-//! and Tools, and every screen that used to hang off the pack still has its
-//! door. Driven through `handle_key` throughout, so a lost door fails here.
+//! and Tools, then the party's Companions, Programs, Routines and Perks, and
+//! every screen that used to hang off the pack still has its door. Driven through `handle_key` throughout, so a lost door fails here.
 
 use feral_processes_engine::items::ids;
 
@@ -8,11 +8,15 @@ use super::support::*;
 use crate::*;
 use feral_processes_engine::items::DownedProgram;
 
-const RAIL: [Mode; 4] = [
+const RAIL: [Mode; 8] = [
     Mode::Inventory,
     Mode::PhaseKeys,
     Mode::DownedPrograms,
     Mode::Tools,
+    Mode::Companion,
+    Mode::PartyPrograms,
+    Mode::PartyRoutines,
+    Mode::Perks,
 ];
 
 fn press(app: &mut App, keys: &[GameKey]) {
@@ -56,10 +60,22 @@ fn assert_on_items_in_page(app: &App) {
 }
 
 #[test]
-fn the_inventory_hub_lists_four_pages_in_rail_order() {
+fn the_inventory_hub_lists_eight_pages_in_rail_order() {
     assert_eq!(Hub::Inventory.title(), "INVENTORY");
     let titles: Vec<_> = Hub::Inventory.table().iter().map(|p| p.title).collect();
-    assert_eq!(titles, ["Items", "Phase keys", "Downed programs", "Tools"]);
+    assert_eq!(
+        titles,
+        [
+            "Items",
+            "Phase keys",
+            "Downed programs",
+            "Tools",
+            "Companions",
+            "Programs",
+            "Routines",
+            "Perks"
+        ]
+    );
     for (page, mode) in RAIL.into_iter().enumerate() {
         assert_eq!(hub_of(mode), Some((Hub::Inventory, page, 0)));
     }
@@ -74,16 +90,16 @@ fn i_opens_on_items_with_the_cursor_on_the_rail() {
 }
 
 #[test]
-fn rail_up_and_down_wrap_across_the_four_pages() {
+fn rail_up_and_down_wrap_across_the_eight_pages() {
     let mut app = test_app(9501);
     app.handle_key(GameKey::Char('i'));
-    for expected in [RAIL[1], RAIL[2], RAIL[3], RAIL[0]] {
+    for expected in RAIL[1..].iter().chain(&RAIL[..1]) {
         app.handle_key(GameKey::Down);
-        assert_eq!(app.mode, expected);
+        assert_eq!(app.mode, *expected);
         assert!(app.hub_on_rail);
     }
     app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::Tools, "Up from the first page wraps");
+    assert_eq!(app.mode, Mode::Perks, "Up from the first page wraps");
 }
 
 #[test]
@@ -94,7 +110,7 @@ fn brackets_turn_inventory_pages_from_the_rail_and_from_a_page() {
     assert_eq!(app.mode, Mode::PhaseKeys);
     app.handle_key(GameKey::Char('['));
     app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::Tools);
+    assert_eq!(app.mode, Mode::Perks);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::Inventory);
@@ -231,28 +247,10 @@ fn leaving_the_hub_from_a_drill_down_does_not_keep_the_pick_for_the_return() {
 }
 
 #[test]
-fn the_party_hub_no_longer_lists_tools_and_the_page_is_a_bracket_away() {
-    let mut app = test_app(9508);
-    app.handle_key(GameKey::Char('p'));
-    assert!(
-        party_rows(&mut app).iter().all(|r| r.label != "Tools"),
-        "Tools moved to the inventory"
-    );
-    app.handle_key(GameKey::Esc);
-
-    press(
-        &mut app,
-        &[GameKey::Char('i'), GameKey::Char(']'), GameKey::Char(']')],
-    );
-    app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::Tools);
-}
-
-#[test]
 fn the_tools_page_is_entered_on_the_rail_and_swallows_actions_there() {
     let mut app = test_app(9509);
     app.handle_key(GameKey::Char('i'));
-    press(&mut app, &[GameKey::Up]);
+    press(&mut app, &[GameKey::Down, GameKey::Down, GameKey::Down]);
     assert_eq!(app.mode, Mode::Tools);
     assert!(app.hub_on_rail);
     let status = app.status_line.clone();
@@ -263,7 +261,16 @@ fn the_tools_page_is_entered_on_the_rail_and_swallows_actions_there() {
 #[test]
 fn tools_esc_goes_to_the_rail_then_the_map() {
     let mut app = test_app(9510);
-    press(&mut app, &[GameKey::Char('i'), GameKey::Up, GameKey::Right]);
+    press(
+        &mut app,
+        &[
+            GameKey::Char('i'),
+            GameKey::Down,
+            GameKey::Down,
+            GameKey::Down,
+            GameKey::Right,
+        ],
+    );
     assert_eq!(app.mode, Mode::Tools);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail);

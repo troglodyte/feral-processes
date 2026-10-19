@@ -2757,7 +2757,7 @@ pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
     }
 }
 
-/// The party hub's two command pages, in rail order.
+/// The party's two command pages, in rail order.
 pub(crate) const PARTY_COMMAND_PAGES: [Mode; 2] = [Mode::PartyPrograms, Mode::PartyRoutines];
 
 /// Every party command row on offer right now, Programs then Routines.
@@ -2837,7 +2837,6 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
-        Hub::Party => 'p',
         Hub::Structure => unreachable!("hub_of names the shared hubs only"),
     }));
     for _ in 0..hub.table().len() {

@@ -2217,7 +2217,7 @@ pub enum Mode {
     BaseResearch,
     BaseTrade,
     BaseCompile,
-    /// The party hub's command pages (`p`): the program errands and the
+    /// The party's command pages on the inventory rail: the program errands and the
     /// routine errands, drawn from `App::command_rows` like the base's.
     PartyPrograms,
     PartyRoutines,
@@ -2802,8 +2802,9 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
     },
 ];
 
-/// The inventory's table, in rail order. Tools lives here rather than in the
-/// party hub: it is a kit you carry.
+/// The inventory's table, in rail order: what you carry, then who you carry
+/// it with. The roster and Perks are pages in their own right; the two
+/// command pages hold the errands that act on programs and on routines.
 pub const INVENTORY_PAGES: &[HubPage] = &[
     HubPage {
         title: "Items",
@@ -2821,12 +2822,6 @@ pub const INVENTORY_PAGES: &[HubPage] = &[
         title: "Tools",
         screens: &[Mode::Tools],
     },
-];
-
-/// The party's table, in rail order. The roster and Perks are pages in their
-/// own right; the two command pages hold the errands that act on programs
-/// and on routines.
-pub const PARTY_PAGES: &[HubPage] = &[
     HubPage {
         title: "Companions",
         screens: &[Mode::Companion],
@@ -2846,12 +2841,11 @@ pub const PARTY_PAGES: &[HubPage] = &[
 ];
 
 /// A rail of pages with one cursor, shared by the base report, the
-/// inventory, the party and the structure beside you.
+/// inventory and the structure beside you.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hub {
     Base,
     Inventory,
-    Party,
     /// One structure's pages: which they are depends on the structure, so
     /// they come from `App::structure_hub` rather than a table.
     Structure,
@@ -2860,13 +2854,12 @@ pub enum Hub {
 impl Hub {
     /// The hubs with a fixed table, which `App::hub_last` remembers a screen
     /// for. `Structure` is opened fresh each time and has neither.
-    pub const ALL: [Hub; 3] = [Hub::Base, Hub::Inventory, Hub::Party];
+    pub const ALL: [Hub; 2] = [Hub::Base, Hub::Inventory];
 
     pub fn title(self) -> &'static str {
         match self {
             Hub::Base => "BASE REPORT",
             Hub::Inventory => "INVENTORY",
-            Hub::Party => "PARTY",
             Hub::Structure => "STRUCTURE",
         }
     }
@@ -2877,7 +2870,6 @@ impl Hub {
         match self {
             Hub::Base => BASE_REPORT_PAGES,
             Hub::Inventory => INVENTORY_PAGES,
-            Hub::Party => PARTY_PAGES,
             Hub::Structure => &[],
         }
     }
@@ -3106,7 +3098,7 @@ pub struct App {
     /// `i` and `p` reopen where the player left off. `None` until a hub has
     /// been opened, which lands on the base's Overview, the inventory's Items
     /// or the party's Companions.
-    hub_last: [Option<Mode>; 3],
+    hub_last: [Option<Mode>; Hub::ALL.len()],
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.
     pub structure_hub: Option<StructureHub>,

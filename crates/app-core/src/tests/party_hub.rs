@@ -1,6 +1,6 @@
-//! The party hub: `p` opens a rail of Companions, Programs, Routines and
-//! Perks, and every screen that hung off the old `p` menu still has its
-//! door. Driven through `handle_key` throughout, so a lost door fails here.
+//! The party's pages: Companions, Programs, Routines and Perks sit on the
+//! inventory rail after Tools, and every screen that hung off the old `p`
+//! menu still has its door. Driven through `handle_key` throughout, so a lost door fails here.
 
 use feral_processes_engine::save;
 
@@ -18,6 +18,19 @@ fn press(app: &mut App, keys: &[GameKey]) {
     for key in keys {
         app.handle_key(*key);
     }
+}
+
+/// `i`, then `]` along the rail to Companions, the cursor still on the rail.
+fn open_companions(app: &mut App) {
+    app.handle_key(GameKey::Char('i'));
+    for _ in 0..INVENTORY_PAGES.len() {
+        if app.mode == Mode::Companion {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(app.mode, Mode::Companion);
+    assert!(app.hub_on_rail);
 }
 
 fn assert_in_page(app: &App, mode: Mode) {
@@ -48,50 +61,25 @@ fn app_with_points(seed: u32, stat_points: u32, perk_points: u32) -> App {
 }
 
 #[test]
-fn the_party_hub_lists_four_pages_in_rail_order() {
-    assert_eq!(Hub::Party.title(), "PARTY");
-    let titles: Vec<_> = PARTY_PAGES.iter().map(|p| p.title).collect();
-    assert_eq!(titles, ["Companions", "Programs", "Routines", "Perks"]);
+fn the_party_pages_follow_tools_on_the_inventory_rail() {
     for (page, mode) in RAIL.into_iter().enumerate() {
-        assert_eq!(hub_of(mode), Some((Hub::Party, page, 0)));
+        assert_eq!(hub_of(mode), Some((Hub::Inventory, 4 + page, 0)));
     }
 }
 
 #[test]
-fn p_opens_on_companions_with_the_cursor_on_the_rail() {
+fn p_opens_nothing_on_the_map() {
     let mut app = test_app(31001);
     app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.mode, Mode::Companion);
-    assert!(app.hub_on_rail);
-}
-
-#[test]
-fn the_rail_wraps_and_brackets_turn() {
-    let mut app = test_app(31002);
-    app.handle_key(GameKey::Char('p'));
-    for mode in &RAIL[1..] {
-        app.handle_key(GameKey::Down);
-        assert_eq!(app.mode, *mode);
-    }
-    app.handle_key(GameKey::Down);
-    assert_eq!(app.mode, Mode::Companion, "Down wraps past the last page");
-    app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::Perks, "Up wraps past the first");
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::PartyRoutines);
-    app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::Perks);
-    assert!(
-        app.hub_on_rail,
-        "turning a page leaves the cursor on the rail"
-    );
+    assert_eq!(app.mode, Mode::Playing);
 }
 
 #[test]
 fn right_and_enter_go_into_the_page_and_esc_climbs_back_out() {
     for key in [GameKey::Right, GameKey::Enter] {
         let mut app = test_app(31003);
-        press(&mut app, &[GameKey::Char('p'), key]);
+        open_companions(&mut app);
+        app.handle_key(key);
         assert_in_page(&app, Mode::Companion);
         app.handle_key(GameKey::Esc);
         assert_eq!(app.mode, Mode::Companion);
@@ -102,30 +90,21 @@ fn right_and_enter_go_into_the_page_and_esc_climbs_back_out() {
 }
 
 #[test]
-fn p_reopens_on_the_last_page_and_the_three_hubs_keep_separate_slots() {
+fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     let mut app = test_app(31004);
-    press(
-        &mut app,
-        &[GameKey::Char('p'), GameKey::Down, GameKey::Down],
-    );
+    open_companions(&mut app);
+    press(&mut app, &[GameKey::Down, GameKey::Down]);
     assert_eq!(app.mode, Mode::PartyRoutines);
-    press(&mut app, &[GameKey::Esc]);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
-    press(&mut app, &[GameKey::Char('i'), GameKey::Char(']')]);
-    assert_eq!(app.mode, Mode::PhaseKeys);
-    press(&mut app, &[GameKey::Esc]);
     press(&mut app, &[GameKey::Char('b'), GameKey::Char(']')]);
     assert_eq!(app.mode, Mode::BaseBuild);
     press(&mut app, &[GameKey::Esc]);
 
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.mode, Mode::PartyRoutines, "p kept its own slot");
-    assert!(app.hub_on_rail);
-    press(&mut app, &[GameKey::Esc]);
     app.handle_key(GameKey::Char('i'));
-    assert_eq!(app.mode, Mode::PhaseKeys);
+    assert_eq!(app.mode, Mode::PartyRoutines, "i kept its own slot");
+    assert!(app.hub_on_rail);
     press(&mut app, &[GameKey::Esc]);
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseBuild);
@@ -140,7 +119,7 @@ fn a_command_page_with_every_row_hidden_still_turns_and_escapes() {
             .any(|r| r.label == "Fuse two programs"),
         "premise: one companion and no fusion research hides Fuse"
     );
-    app.handle_key(GameKey::Char('p'));
+    open_companions(&mut app);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::PartyPrograms);
     // Rows are selected by key, not by walking onto a hidden one.
@@ -200,8 +179,7 @@ fn selecting_a_row_parks_the_page_as_the_origin() {
 #[test]
 fn the_roster_is_the_first_page() {
     let mut app = app_owning_distant_programs(31010, 1);
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.mode, Mode::Companion);
+    open_companions(&mut app);
 }
 
 #[test]
@@ -216,10 +194,8 @@ fn the_menu_manifest_esc_lands_on_programs_in_page() {
 #[test]
 fn the_roster_manifest_esc_lands_on_the_same_row_in_page() {
     let mut app = app_owning_distant_programs(31012, 2);
-    press(
-        &mut app,
-        &[GameKey::Char('p'), GameKey::Right, GameKey::Char('2')],
-    );
+    open_companions(&mut app);
+    press(&mut app, &[GameKey::Right, GameKey::Char('2')]);
     assert_in_page(&app, Mode::Companion);
     assert_eq!(app.menu_selected, 1);
     app.handle_key(GameKey::Char('M'));
@@ -237,10 +213,8 @@ fn equip_memories_and_rename_return_to_the_roster_page() {
         ('N', Mode::RenamePet),
     ] {
         let mut app = app_owning_distant_programs(31013, 2);
-        press(
-            &mut app,
-            &[GameKey::Char('p'), GameKey::Right, GameKey::Char('2')],
-        );
+        open_companions(&mut app);
+        press(&mut app, &[GameKey::Right, GameKey::Char('2')]);
         app.handle_key(GameKey::Char(key));
         assert_eq!(app.mode, screen, "{key}");
         app.handle_key(GameKey::Esc);
@@ -402,7 +376,7 @@ fn perk_previews_are_fresh_after_a_rail_turn() {
 }
 
 #[test]
-fn p_reopening_on_perks_refreshes_the_previews() {
+fn i_reopening_on_perks_refreshes_the_previews() {
     let mut app = app_with_perk_points(31024, 20);
     open_via_menu(&mut app, 'p', "Perks");
     press(&mut app, &[GameKey::Esc, GameKey::Esc]);
@@ -412,7 +386,7 @@ fn p_reopening_on_perks_refreshes_the_previews() {
         .unwrap()
         .buy_perk(id)
         .expect("a point to spend");
-    app.handle_key(GameKey::Char('p'));
+    app.handle_key(GameKey::Char('i'));
     assert_eq!(app.mode, Mode::Perks);
     let game = app.game.as_mut().unwrap();
     let fresh: Vec<_> = game

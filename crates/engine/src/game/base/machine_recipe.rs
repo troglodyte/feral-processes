@@ -31,20 +31,25 @@ impl Game {
         Some(Placed { def, recipe })
     }
 
+    /// Whether this structure is a configurable machine — the per-entity
+    /// test `adjacent_machines` and the structure hub's Recipe page share.
+    pub(crate) fn is_machine(&self, structure: Entity) -> bool {
+        self.structure_def_of(structure)
+            .is_some_and(|d| d.machine.is_some())
+    }
+
     /// Every configurable machine touching the party's cell, lowest tile
     /// first — `adjacent_teardown_rigs`' reach and ordering.
     pub fn adjacent_machines(&self) -> Vec<Entity> {
         let Some((px, py)) = self.base_pos() else {
             return Vec::new();
         };
-        let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
+            .filter(|e| self.is_machine(e.id()))
             .filter_map(|e| {
-                let kind = &e.get::<Structure>()?.kind;
                 let p = e.get::<Position>()?;
-                db.get(kind)?.machine.as_ref()?;
                 Some((p.x, p.y, e.id()))
             })
             .filter(|(x, y, _)| {

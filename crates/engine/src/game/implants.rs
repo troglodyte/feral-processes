@@ -236,14 +236,22 @@ impl Game {
             return false;
         };
         self.world.iter_entities().any(|e| {
-            let (Some(s), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
+            let Some(p) = e.get::<Position>() else {
                 return false;
             };
-            s.kind == SPLICE_RIG
+            self.is_splice_rig(e.id())
                 && crate::game::base::collect::ORTHOGONAL
                     .iter()
                     .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
         })
+    }
+
+    /// Whether this structure is a Splice Rig — the per-entity test
+    /// `adjacent_splice_rig` and the structure hub's Splice page share.
+    pub(crate) fn is_splice_rig(&self, structure: Entity) -> bool {
+        self.world
+            .get::<Structure>(structure)
+            .is_some_and(|s| s.kind == SPLICE_RIG)
     }
 
     /// Everything the Splice Rig screen shows: Load against the cap, what is

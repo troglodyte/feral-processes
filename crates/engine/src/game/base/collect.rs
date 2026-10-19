@@ -161,16 +161,29 @@ impl Game {
         let Some((px, py)) = self.base_pos() else {
             return false;
         };
-        let db = self.world.resource::<StructureDb>();
         self.world.iter_entities().any(|e| {
-            let (Some(structure), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
+            let Some(p) = e.get::<Position>() else {
                 return false;
             };
             ORTHOGONAL
                 .iter()
                 .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
-                && db.get(&structure.kind).is_some_and(|d| d.indexes_storage)
+                && self.indexes_storage(e.id())
         })
+    }
+
+    /// Whether this structure is flagged `StructureDef::indexes_storage` —
+    /// the per-entity question `indexes_storage_here` and the structure hub
+    /// both ask.
+    pub(crate) fn indexes_storage(&self, structure: Entity) -> bool {
+        self.structure_def_of(structure)
+            .is_some_and(|d| d.indexes_storage)
+    }
+
+    /// The def of a standing structure, `None` for anything else.
+    pub(crate) fn structure_def_of(&self, entity: Entity) -> Option<&StructureDef> {
+        let kind = &self.world.get::<Structure>(entity)?.kind;
+        self.world.resource::<StructureDb>().get(kind)
     }
 
     /// Moves an exact basket off the structures `reachable_stock` names —

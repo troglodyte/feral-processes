@@ -220,13 +220,7 @@ impl Game {
     }
 
     pub(crate) fn is_depot(&self, entity: Entity) -> bool {
-        let Some(structure) = self.world.get::<Structure>(entity) else {
-            return false;
-        };
-        self.world
-            .resource::<StructureDb>()
-            .get(&structure.kind)
-            .is_some_and(|d| d.stores)
+        self.structure_def_of(entity).is_some_and(|d| d.stores)
     }
 
     /// The adjacent Depots the filter screen can be opened on, in the same

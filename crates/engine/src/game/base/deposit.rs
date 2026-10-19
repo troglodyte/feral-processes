@@ -69,18 +69,7 @@ impl Game {
     }
 
     fn only_depots(&self, cells: Vec<Entity>) -> Vec<Entity> {
-        cells
-            .into_iter()
-            .filter(|e| {
-                let Some(structure) = self.world.get::<Structure>(*e) else {
-                    return false;
-                };
-                self.world
-                    .resource::<StructureDb>()
-                    .get(&structure.kind)
-                    .is_some_and(|d| d.stores)
-            })
-            .collect()
+        cells.into_iter().filter(|e| self.is_depot(*e)).collect()
     }
 
     /// Room left across every adjacent Depot's `output` — the shared budget

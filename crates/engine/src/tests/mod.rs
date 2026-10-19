@@ -129,6 +129,7 @@ mod stack_movement;
 mod staff_report;
 mod stock;
 mod stockpiles;
+mod structure_hub;
 mod sulking;
 mod summons;
 mod supply;

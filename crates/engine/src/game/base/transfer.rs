@@ -161,14 +161,12 @@ impl Game {
         let Some((px, py)) = self.base_pos() else {
             return Vec::new();
         };
-        let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
+            .filter(|e| self.is_rack(e.id()))
             .filter_map(|e| {
-                let kind = &e.get::<Structure>()?.kind;
                 let p = e.get::<Position>()?;
-                db.get(kind)?.racks.as_ref()?;
                 Some((p.x, p.y, e.id()))
             })
             .filter(|(x, y, _)| {
@@ -179,6 +177,13 @@ impl Game {
             .collect();
         found.sort();
         found.into_iter().map(|(_, _, e)| e).collect()
+    }
+
+    /// Whether this structure racks downed programs — the per-entity test
+    /// `adjacent_racks` and the structure hub's Inventory page share.
+    pub(crate) fn is_rack(&self, structure: Entity) -> bool {
+        self.structure_def_of(structure)
+            .is_some_and(|d| d.racks.is_some())
     }
 
     /// Every carrier the party could move in either direction: the pack's

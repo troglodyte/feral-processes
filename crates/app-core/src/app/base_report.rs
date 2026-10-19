@@ -19,10 +19,13 @@ impl App {
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
     pub(crate) fn handle_hub_nav(&mut self, key: GameKey) -> bool {
-        let Some((hub, page, screen)) = hub_of(self.mode) else {
+        let Some((hub, page, screen)) = self.hub_at() else {
             return false;
         };
-        let table = hub.pages();
+        if hub == Hub::Structure {
+            return self.handle_structure_hub_nav(key);
+        }
+        let table = hub.table();
         let pages = table.len();
         let turn = |by: usize| table[(page + by) % pages].screens[0];
         let screens = table[page].screens;
@@ -57,6 +60,33 @@ impl App {
         true
     }
 
+    /// The structure hub's rule, apart from the shared hubs': each page is
+    /// one screen that owns its arrows (Inventory spends Left and Right on
+    /// moving stock), so the rail is reached by `Esc` and `[`/`]` turn pages
+    /// from anywhere. `Tab` steps to the next structure. `Esc` from the
+    /// rail leaves for the map.
+    fn handle_structure_hub_nav(&mut self, key: GameKey) -> bool {
+        match key {
+            GameKey::Char(']') => self.turn_structure_page(1),
+            GameKey::Char('[') => self.turn_structure_page(-1),
+            GameKey::Tab => self.step_structure(1),
+            _ if self.hub_on_rail => match key {
+                GameKey::Down => self.turn_structure_page(1),
+                GameKey::Up => self.turn_structure_page(-1),
+                GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
+                GameKey::Esc => self.close_structure_hub(),
+                _ => {}
+            },
+            GameKey::Esc if !self.page_owns_esc() => self.hub_on_rail = true,
+            _ => return false,
+        }
+        true
+    }
+
+    fn last_in(&self, hub: Hub) -> Option<Mode> {
+        hub.slot().and_then(|i| self.hub_last[i])
+    }
+
     fn in_downed_drill_down(&self) -> bool {
         self.mode == Mode::DownedPrograms && self.pending_downed_program_index.is_some()
     }
@@ -70,21 +100,21 @@ impl App {
     /// time, with the cursor on the rail. `b` opens it from the map
     /// with no `menu_origin`, so `Esc` from the rail returns there.
     pub(crate) fn open_base_report(&mut self) {
-        self.mode = self.hub_last[Hub::Base.slot()].unwrap_or(Mode::BaseOverview);
+        self.mode = self.last_in(Hub::Base).unwrap_or(Mode::BaseOverview);
         self.hub_on_rail = true;
     }
 
     /// Opens the inventory where the player left it, or on Items the first
     /// time, with the cursor on the rail — `open_base_report`'s rule.
     pub(crate) fn open_inventory_hub(&mut self) {
-        self.mode = self.hub_last[Hub::Inventory.slot()].unwrap_or(Mode::Inventory);
+        self.mode = self.last_in(Hub::Inventory).unwrap_or(Mode::Inventory);
         self.hub_on_rail = true;
     }
 
     /// Opens the party where the player left it, or on Companions the first
     /// time, with the cursor on the rail — `open_base_report`'s rule.
     pub(crate) fn open_party_hub(&mut self) {
-        self.mode = self.hub_last[Hub::Party.slot()].unwrap_or(Mode::Companion);
+        self.mode = self.last_in(Hub::Party).unwrap_or(Mode::Companion);
         self.hub_on_rail = true;
     }
 

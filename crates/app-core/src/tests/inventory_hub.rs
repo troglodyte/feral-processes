@@ -58,7 +58,7 @@ fn assert_on_items_in_page(app: &App) {
 #[test]
 fn the_inventory_hub_lists_four_pages_in_rail_order() {
     assert_eq!(Hub::Inventory.title(), "INVENTORY");
-    let titles: Vec<_> = Hub::Inventory.pages().iter().map(|p| p.title).collect();
+    let titles: Vec<_> = Hub::Inventory.table().iter().map(|p| p.title).collect();
     assert_eq!(titles, ["Items", "Phase keys", "Downed programs", "Tools"]);
     for (page, mode) in RAIL.into_iter().enumerate() {
         assert_eq!(hub_of(mode), Some((Hub::Inventory, page, 0)));

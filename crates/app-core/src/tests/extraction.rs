@@ -297,20 +297,20 @@ fn the_screen_is_the_players_own_hands_and_a_row_pays_the_pack() {
 }
 
 // ---------------------------------------------------------------------------
-// `Mode::RigTool`: the rig's own tool holder, `[F]` in base space.
+// `Mode::RigTool`: the rig's own tool holder, a page of its hub.
 // ---------------------------------------------------------------------------
 
-/// `[F]` beside a rig opens the holder; `Esc` closes it. Not `c`, which
-/// already opens the transfer picker at a rig to collect what it stripped,
-/// and not `T`, which `crates/engine/EASTER_EGGS.md` reserves.
+/// `[c]` beside a rig opens its hub on the tool holder (the rig holds no
+/// stock, so Inventory is not a page yet); `Esc` goes to the rail and `Esc`
+/// again closes the hub.
 #[test]
-fn f_beside_a_rig_opens_the_tool_holder() {
+fn c_beside_a_rig_opens_the_tool_holder() {
     let mut app = app_beside_a_rig_holding(1);
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::RigTool);
     assert!(
@@ -319,40 +319,25 @@ fn f_beside_a_rig_opens_the_tool_holder() {
     );
 
     app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::RigTool, "Esc goes to the rail first");
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.rig_tool.is_none(), "and drops it on the way out");
 }
 
-/// A key that reads as doing nothing is the failure being avoided, so the
-/// refusal is spoken rather than swallowed.
+/// The hub follows the party: out of the rig's reach it closes.
 #[test]
-fn f_with_no_rig_beside_you_refuses_out_loud() {
+fn the_tool_holder_closes_when_the_party_leaves_the_rig() {
     let mut app = app_beside_a_rig_holding(1);
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
-    // Walk out of the rig's four orthogonal tiles without leaving base
-    // space. Asserted rather than assumed: walking *into* the rig's cell
-    // does not move the player, so a step in its direction would leave the
-    // party adjacent and this test would pass for nothing.
-    walk(&mut app, GameKey::Char('j'));
-    walk(&mut app, GameKey::Char('j'));
-    assert!(
-        app.game
-            .as_ref()
-            .unwrap()
-            .adjacent_teardown_rigs()
-            .is_empty(),
-        "the fixture must actually get the party clear of the rig"
-    );
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::RigTool);
 
-    assert_eq!(app.mode, Mode::Playing, "no screen opens");
-    let said = app
-        .status_line
-        .clone()
-        .expect("the refusal is said out loud");
-    assert!(
-        said.contains("rig"),
-        "and it is this key's own refusal, not another's: {said:?}"
-    );
+    stand_in_base_at(&mut app, 9, 9);
+    app.handle_key(GameKey::Up);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.rig_tool.is_none());
+    assert!(app.structure_hub.is_none());
 }

@@ -138,6 +138,10 @@ impl App {
             self.mode = Mode::Breed;
             return;
         }
+        // The hub's Info page is left by the hub's own keys, not by any key.
+        if self.structure_hub.is_some() {
+            return;
+        }
         self.pending_structure_manifest = None;
         self.close_screen();
     }

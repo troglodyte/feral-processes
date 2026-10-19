@@ -223,22 +223,6 @@ impl Game {
         self.structure_def_of(entity).is_some_and(|d| d.stores)
     }
 
-    /// The adjacent Depots the filter screen can be opened on, in the same
-    /// `(x, y)` order the transfer picker fills them in.
-    ///
-    /// `pub` because the screen holds the entity it is editing and needs
-    /// the list to cycle through; a re-read on every open is what makes a
-    /// Depot demolished while the screen was shut simply not be there.
-    pub fn adjacent_depot_entities(&self) -> Vec<Entity> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Vec::new();
-        }
-        if self.require_base().is_err() {
-            return Vec::new();
-        }
-        self.adjacent_depots()
-    }
-
     /// One Depot's filter as the screen draws it — the header line, then a
     /// row per `filter_group` family, then a row per ungrouped item.
     ///

@@ -41,12 +41,6 @@ fn body_rows(screen: &RigToolScreen, selected: usize) -> Vec<Row> {
     let view = &screen.view;
     let (x, y) = view.tile;
     let mut body = vec![text_row(format!("{} at ({x}, {y})", view.name))];
-    if screen.of > 1 {
-        body.push(text_row(format!(
-            "One of {} beside you; Tab for the next",
-            screen.of
-        )));
-    }
     match &view.installed {
         Some(row) => body.push(text_row(format!(
             "Fitted: {} — {}, tier {}, {} ticks a program",
@@ -178,7 +172,6 @@ mod tests {
             .collect();
         RigToolScreen {
             rig: Entity::PLACEHOLDER,
-            of: 1,
             view: RigToolView {
                 tile: (0, 0),
                 name: "Teardown Rig".to_string(),

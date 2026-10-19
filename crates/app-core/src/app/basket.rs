@@ -187,13 +187,6 @@ impl App {
                 }
             }
             GameKey::Char('N') => self.basket_amounts.iter_mut().for_each(|n| *n = 0),
-            // The third screen action, and the only one that leaves: what a
-            // Depot beside you will take in at all. It is offered from here
-            // because this is the screen that already knows the player is
-            // standing next to one — and it discards the basket on the way
-            // out, since a filter is exactly what `can_put` is derived
-            // from. See `App::open_depot_filter`.
-            GameKey::Char('F') => self.open_depot_filter(),
             // The magnitude accumulates in the row's **current sign**, and a
             // row sitting at zero types a take. `saturating_*` because a
             // held digit key must reach the clamp rather than overflow.
@@ -278,12 +271,18 @@ impl App {
     /// opened from `Mode::OutpostVisit`, so it closes back onto that screen
     /// rather than dropping the player onto the raw map underneath it.
     pub(crate) fn leave_basket(&mut self) {
+        self.clear_basket();
+        self.mode = match self.transfer_source {
+            TransferSource::Base(_) => Mode::Playing,
+            TransferSource::Outpost(_) => Mode::OutpostVisit,
+        };
+    }
+
+    /// The basket's teardown without the exit: the structure hub turns a
+    /// page or steps structure and discards what was staged.
+    pub(crate) fn clear_basket(&mut self) {
         self.basket_rows.clear();
         self.basket_amounts.clear();
         self.basket_room = None;
-        self.mode = match self.transfer_source {
-            TransferSource::Base => Mode::Playing,
-            TransferSource::Outpost(_) => Mode::OutpostVisit,
-        };
     }
 }

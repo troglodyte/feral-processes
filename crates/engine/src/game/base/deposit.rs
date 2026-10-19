@@ -9,25 +9,9 @@ use crate::*;
 pub(crate) type SinkLoad = (Entity, ItemId, u32);
 
 impl Game {
-    /// The adjacent structures a deposit can reach, in `(x, y)` order.
-    ///
-    /// `adjacent_stock()` filtered to `StructureDef::stores` — an Extractor
-    /// has a `Stock` too, and mirroring collect exactly would let the player
-    /// push cargo into a machine's own output as though that machine had
-    /// produced it. Filtered rather than re-sorted, so `adjacent_stock`'s
-    /// `(x, y)` order survives untouched: a partial fill across two Depots
-    /// has to drain — here, fill — them in the same order every run.
-    ///
-    /// `pub(crate)` so `game/base/transfer.rs` can ask whether there is a
-    /// Depot at all, and so `tests/transfer.rs` can pin the order directly.
-    pub(crate) fn adjacent_depots(&self) -> Vec<Entity> {
-        self.only_depots(self.adjacent_stock())
-    }
-
     /// The Depots a transfer puts into: `reachable_stock` under
-    /// `adjacent_depots`' own filter, so beside an Index Terminal that is
-    /// every Depot in the base. The Depot filter screen keeps
-    /// `adjacent_depots` — you configure the shelf you are standing at.
+    /// the Depot filter, so beside an Index Terminal that is every Depot in
+    /// the base.
     pub(crate) fn reachable_depots(&self) -> Vec<Entity> {
         self.only_depots(self.reachable_stock())
     }

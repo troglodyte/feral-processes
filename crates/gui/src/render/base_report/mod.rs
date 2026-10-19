@@ -68,7 +68,7 @@ pub(super) fn draw_base_report(
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
     let content = frame::paint_frame(
         hub.title(),
-        hub.pages(),
+        hub.table(),
         page,
         screen,
         Some(mode),
@@ -95,7 +95,7 @@ pub(super) fn draw_popup_parent(game: &Game, child: Mode, painter: &Painter, m: 
     };
     frame::paint_frame(
         hub.title(),
-        hub.pages(),
+        hub.table(),
         page,
         screen,
         None,

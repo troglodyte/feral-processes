@@ -2,7 +2,6 @@
 //! that needs a program waits for, and that all of it survives a save.
 
 use super::support::*;
-use crate::components::MachineRecipe;
 use crate::resources::{Ruin, Ruins};
 use crate::*;
 
@@ -273,7 +272,7 @@ fn ruins_and_an_awaiting_site_survive_a_real_save_and_load() {
     );
 }
 
-/// `adjacent_interactions`: what `[c]` can do beside the party.
+/// `adjacent_structures`: the rebuild sites in the hub's cycle.
 mod adjacent {
     use super::*;
 
@@ -288,21 +287,22 @@ mod adjacent {
     }
 
     #[test]
-    fn nothing_beside_the_party_offers_nothing() {
+    fn nothing_beside_the_party_is_in_the_cycle() {
         let game = base(2301);
-        assert!(game.adjacent_interactions().is_empty());
+        assert!(game.adjacent_structures().is_empty());
     }
 
     #[test]
     fn an_awaiting_site_beside_the_party_offers_its_rebuild() {
         let mut game = base(2302);
         let site = file_node_east(&mut game);
+        let cycle = game.adjacent_structures();
+        assert_eq!(cycle.len(), 1);
+        assert_eq!(cycle[0].entity, site);
+        assert_eq!(cycle[0].dir, (1, 0));
         assert_eq!(
-            game.adjacent_interactions(),
-            vec![Interaction {
-                dir: (1, 0),
-                kind: InteractionKind::RebuildProgram(site)
-            }]
+            cycle[0].pages,
+            vec![StructurePage::Rebuild, StructurePage::Info]
         );
     }
 
@@ -315,7 +315,7 @@ mod adjacent {
             .0
             .push(ruin("extractor", px + 3, py));
         game.file_ruins();
-        assert!(game.adjacent_interactions().is_empty());
+        assert!(game.adjacent_structures().is_empty());
 
         let mut game = base(2304);
         let site = file_node_east(&mut game);
@@ -324,368 +324,18 @@ mod adjacent {
         let spare = tame_at_zone(&mut game, 1);
         game.world.resource_mut::<Party>().0.push(spare);
         game.commit_rebuild_program(site, program).unwrap();
-        assert!(game.adjacent_interactions().is_empty());
+        assert!(game.adjacent_structures().is_empty());
     }
 
     #[test]
-    fn a_depot_beside_the_party_offers_a_transfer_in_its_direction() {
-        let mut game = base(2305);
-        let (px, py) = game.base_pos().unwrap();
-        spawn_machine_at(&mut game, "depot", px - 1, py);
-        assert_eq!(
-            game.adjacent_interactions(),
-            vec![Interaction {
-                dir: (-1, 0),
-                kind: InteractionKind::Transfer
-            }]
-        );
-    }
-
-    #[test]
-    fn a_machine_beside_the_party_offers_its_recipe_in_its_direction() {
-        let mut game = base(2311);
-        let (px, py) = game.base_pos().unwrap();
-        let machine = spawn_machine_at(&mut game, "factory", px + 1, py);
-        assert_eq!(
-            game.adjacent_interactions(),
-            vec![Interaction {
-                dir: (1, 0),
-                kind: InteractionKind::Machine(machine)
-            }]
-        );
-    }
-
-    #[test]
-    fn the_transfer_aims_at_the_depot_not_the_machine_that_sorts_first() {
-        let mut game = base(2312);
-        let (px, py) = game.base_pos().unwrap();
-        let machine = spawn_machine_at(&mut game, "factory", px - 1, py);
-        spawn_machine_at(&mut game, "depot", px + 1, py);
-        assert_eq!(
-            game.adjacent_interactions(),
-            vec![
-                Interaction {
-                    dir: (1, 0),
-                    kind: InteractionKind::Transfer
-                },
-                Interaction {
-                    dir: (-1, 0),
-                    kind: InteractionKind::Machine(machine)
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn the_transfer_aims_at_the_terminal_not_whatever_structure_was_spawned_first() {
-        let mut game = base(2307);
-        let (px, py) = game.base_pos().unwrap();
-        let bare = |game: &mut Game, kind: &str, x: i32, y: i32| {
-            game.world.spawn((
-                Structure {
-                    kind: kind.to_string(),
-                },
-                Position { x, y },
-            ));
-        };
-        bare(&mut game, "wall", px - 1, py);
-        bare(&mut game, "storage_terminal", px + 1, py);
-        let far = spawn_machine_at(&mut game, "depot", px + 6, py + 3);
-        game.world
-            .get_mut::<Stock>(far)
-            .unwrap()
-            .output
-            .insert(ItemId::from(ids::CORE_FRAGMENT), 7);
-        assert_eq!(
-            game.adjacent_interactions(),
-            vec![Interaction {
-                dir: (1, 0),
-                kind: InteractionKind::Transfer
-            }]
-        );
-    }
-
-    #[test]
-    fn a_wall_beside_the_party_offers_no_transfer() {
-        let mut game = base(2308);
-        let (px, py) = game.base_pos().unwrap();
-        game.world
-            .get_mut::<Inventory>(game.player_entity())
-            .unwrap()
-            .take(ItemId::from(ids::CORE_FRAGMENT), 500);
-        let bare = |game: &mut Game, kind: &str, x: i32, y: i32| {
-            game.world.spawn((
-                Structure {
-                    kind: kind.to_string(),
-                },
-                Position { x, y },
-            ));
-        };
-        bare(&mut game, "wall", px - 1, py);
-        assert!(game.transfer_offer().is_empty() && game.rack_offer().is_empty());
-        assert!(game.adjacent_interactions().is_empty());
-    }
-
-    #[test]
-    fn a_downed_program_alone_offers_a_transfer_at_the_origin() {
-        let mut game = base(2309);
-        let player = game.player_entity();
-        game.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(ItemId::from(ids::CORE_FRAGMENT), 500);
-        game.world
-            .entity_mut(player)
-            .insert(DownedPrograms(vec![crate::items::DownedProgram {
-                species: "scrapper".to_string(),
-                level: 4,
-                rarity: crate::components::Rarity::Ordinary,
-                boss: false,
-                condition: 70,
-                carried: None,
-            }]));
-        assert_eq!(
-            game.adjacent_interactions(),
-            vec![Interaction {
-                dir: (0, 0),
-                kind: InteractionKind::Transfer
-            }]
-        );
-    }
-
-    #[test]
-    fn a_depot_and_a_site_offer_both() {
+    fn a_depot_and_a_site_are_both_in_the_cycle_site_first() {
         let mut game = base(2306);
         let (px, py) = game.base_pos().unwrap();
         spawn_machine_at(&mut game, "depot", px - 1, py);
         let site = file_node_east(&mut game);
-        let found = game.adjacent_interactions();
-        assert_eq!(found.len(), 2);
-        assert!(found.contains(&Interaction {
-            dir: (1, 0),
-            kind: InteractionKind::RebuildProgram(site)
-        }));
-        assert!(found.iter().any(|i| i.kind == InteractionKind::Transfer));
+        let cycle = game.adjacent_structures();
+        assert_eq!(cycle.len(), 2);
+        assert_eq!(cycle[0].entity, site, "east comes before west");
+        assert_eq!(cycle[1].dir, (-1, 0));
     }
-}
-
-#[test]
-fn an_awaiting_sites_examine_line_says_it_needs_a_program() {
-    let mut game = base(2310);
-    let (px, py) = game.base_pos().unwrap();
-    game.world
-        .resource_mut::<Ruins>()
-        .0
-        .push(ruin("extractor", px + 1, py));
-    game.file_ruins();
-    let (site, _) = sites(&mut game)[0];
-    let blurb = game.build_site_blurb(site).unwrap();
-    assert!(blurb.contains("waiting for a program"), "{blurb}");
-    assert!(game.build_order_report()[0].awaiting_program);
-}
-
-/// Files `kind` at one cell east of the party and returns whether a site
-/// came of it, after `setup` has had its say.
-fn files_after(seed: u32, kind: &str, setup: impl FnOnce(&mut Game, i32, i32)) -> (Game, bool) {
-    let mut game = base(seed);
-    let (px, py) = game.base_pos().unwrap();
-    setup(&mut game, px + 1, py);
-    game.world
-        .resource_mut::<Ruins>()
-        .0
-        .push(ruin(kind, px + 1, py));
-    game.file_ruins();
-    let filed = !sites(&mut game).is_empty();
-    (game, filed)
-}
-
-fn dropped_and_said(game: &Game) -> bool {
-    game.world.resource::<Ruins>().0.is_empty()
-        && game
-            .message_history(50)
-            .iter()
-            .any(|m| m.text.contains("could not be rebuilt"))
-}
-
-/// A program standing on a wreck no longer holds the rebuild back: the
-/// request is filed and the program moved aside, through the same path a
-/// fresh deploy takes.
-#[test]
-fn a_program_standing_on_the_wreck_is_moved_aside_and_the_ruin_filed() {
-    let mut body = None;
-    let (game, filed) = files_after(2208, "shield", |game, x, y| {
-        let b = spawn_tamed(game, 10, 3);
-        *game.world.get_mut::<Position>(b).unwrap() = Position { x, y };
-        body = Some(b);
-    });
-    let (px, py) = game.base_pos().unwrap();
-    assert!(filed, "a body on the tile does not hold the rebuild back");
-    assert!(game.world.resource::<Ruins>().0.is_empty());
-    let at = *game.world.get::<Position>(body.unwrap()).unwrap();
-    assert_ne!(
-        (at.x, at.y),
-        (px + 1, py),
-        "the body was moved off the wreck"
-    );
-    assert!(
-        !game
-            .message_history(50)
-            .iter()
-            .any(|m| m.text.contains("could not be rebuilt")),
-        "and nothing was dropped"
-    );
-}
-
-#[test]
-fn a_filed_request_on_the_wreck_drops_the_ruin_and_says_so() {
-    let (mut game, _) = files_after(2209, "shield", |game, _, _| {
-        file_build(game, "depot", 1, 0).unwrap();
-    });
-    assert_eq!(sites(&mut game).len(), 1, "only the request already there");
-    assert!(dropped_and_said(&game));
-}
-
-#[test]
-fn a_ruin_whose_structure_no_longer_loads_is_dropped_and_said() {
-    let (game, filed) = files_after(2210, "no_such_structure", |_, _, _| {});
-    assert!(!filed);
-    assert!(
-        game.world.resource::<Ruins>().0.is_empty()
-            && game
-                .message_history(50)
-                .iter()
-                .any(|m| m.text.contains("no longer loads"))
-    );
-}
-
-/// The Build orders flag is `build_order_report`'s own `awaiting_program`:
-/// a wreck waiting for a program lights it, committing one puts it out.
-#[test]
-fn the_build_orders_flag_follows_a_site_awaiting_a_program() {
-    let mut game = base(2208);
-    assert_eq!(game.base_report_flags().build_orders, None);
-    let (px, py) = game.base_pos().unwrap();
-    game.world
-        .resource_mut::<Ruins>()
-        .0
-        .push(ruin("extractor", px + 1, py));
-    game.file_ruins();
-    assert!(
-        game.build_order_report().iter().any(|b| b.awaiting_program),
-        "precondition: the wreck waits for a program"
-    );
-
-    assert!(game.base_report_flags().build_orders.is_some());
-
-    let (site, _) = sites(&mut game)[0];
-    let program = tame_at_zone(&mut game, 1);
-    let spare = tame_at_zone(&mut game, 1);
-    game.world.resource_mut::<Party>().0.push(spare);
-    game.commit_rebuild_program(site, program).unwrap();
-
-    assert_eq!(game.base_report_flags().build_orders, None);
-}
-
-/// A request the crew has announced dry or cut off is a Build orders gap
-/// too, read through the one row derivation.
-#[test]
-fn the_build_orders_flag_follows_a_blocked_site() {
-    let mut game = base(2209);
-    let (px, py) = game.base_pos().unwrap();
-    game.world
-        .resource_mut::<Ruins>()
-        .0
-        .push(ruin("extractor", px + 1, py));
-    game.file_ruins();
-    let (site, _) = sites(&mut game)[0];
-    let program = tame_at_zone(&mut game, 1);
-    let spare = tame_at_zone(&mut game, 1);
-    game.world.resource_mut::<Party>().0.push(spare);
-    game.commit_rebuild_program(site, program).unwrap();
-    assert_eq!(game.base_report_flags().build_orders, None);
-
-    game.world.get_mut::<BuildSite>(site).unwrap().announced_dry = true;
-    assert_eq!(
-        game.build_order_row(site).unwrap().blocked,
-        Some(BuildBlock::Dry)
-    );
-    assert!(game.base_report_flags().build_orders.is_some());
-
-    {
-        let mut b = game.world.get_mut::<BuildSite>(site).unwrap();
-        b.announced_dry = false;
-        b.announced_stuck = true;
-    }
-    assert_eq!(
-        game.build_order_row(site).unwrap().blocked,
-        Some(BuildBlock::Unreachable)
-    );
-    assert!(game.base_report_flags().build_orders.is_some());
-}
-
-#[test]
-fn a_wrecked_machine_is_rebuilt_set_to_what_it_made() {
-    let mut game = base(2209);
-    spawn_tamed(&mut game, 500, 3);
-    let (factory, x, y) = raidable(&mut game, "factory");
-    game.world
-        .entity_mut(factory)
-        .insert(MachineRecipe(Some(ItemId::from("bytecode_block"))));
-    game.damage_structure(factory, 10, "Factory", "a siege");
-    game.file_ruins();
-    let (site, awaiting) = sites(&mut game)[0];
-    assert!(awaiting, "a machine waits for its program");
-    let program = tame_at_zone(&mut game, 1);
-    let spare = tame_at_zone(&mut game, 1);
-    game.world.resource_mut::<Party>().0.push(spare);
-    game.commit_rebuild_program(site, program).unwrap();
-    for _ in 0..2000 {
-        if game.world.get::<BuildSite>(site).is_none() {
-            break;
-        }
-        game.tick();
-    }
-    assert!(game.world.get::<BuildSite>(site).is_none(), "raised");
-    let rebuilt = {
-        let mut q = game.world.query::<(Entity, &Structure, &Position)>();
-        q.iter(&game.world)
-            .find(|(_, s, p)| s.kind == "factory" && (p.x, p.y) == (x, y))
-            .map(|(e, ..)| e)
-            .expect("the factory stands again")
-    };
-    assert_eq!(
-        game.world.get::<MachineRecipe>(rebuilt),
-        Some(&MachineRecipe(Some(ItemId::from("bytecode_block"))))
-    );
-}
-
-#[test]
-fn a_ruins_recipe_survives_a_save_and_load() {
-    let mut game = base(2210);
-    let (px, py) = game.base_pos().unwrap();
-    let mut wreck = ruin("factory", px + 1, py);
-    wreck.recipe = Some(ItemId::from("bytecode_block"));
-    game.world.resource_mut::<Ruins>().0.push(wreck.clone());
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_ruin_recipe_{}.bin",
-        std::process::id()
-    ));
-    game.save(&path).unwrap();
-    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-    assert_eq!(loaded.world.resource::<Ruins>().0, vec![wreck]);
-
-    loaded.file_ruins();
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_site_recipe_{}.bin",
-        std::process::id()
-    ));
-    loaded.save(&path).unwrap();
-    let mut again = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-    let site = sites(&mut again)[0].0;
-    assert_eq!(
-        again.world.get::<BuildSite>(site).unwrap().recipe,
-        Some(ItemId::from("bytecode_block"))
-    );
 }

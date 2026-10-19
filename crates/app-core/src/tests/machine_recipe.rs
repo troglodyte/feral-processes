@@ -1,4 +1,4 @@
-//! `Mode::MachineRecipe`: the recipe menu, `[c]` beside a machine.
+//! `Mode::MachineRecipe`: the recipe menu, the Recipe page of a machine's hub.
 
 use super::support::*;
 use crate::*;
@@ -9,15 +9,24 @@ fn recipe_of(app: &App) -> Option<ItemId> {
     game.machine_recipe_view(machine).unwrap().current
 }
 
+/// `[c]` opens the machine's hub on its shelf; `]` turns to the recipe.
+fn open_recipe(app: &mut App) {
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::Transfer, "the shelf is the first page");
+    app.handle_key(GameKey::Char(']'));
+}
+
 #[test]
 fn c_beside_a_machine_opens_its_recipe_menu() {
     let mut app = app_beside_a_machine(9400, "factory", None);
 
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
 
     assert_eq!(app.mode, Mode::MachineRecipe);
     assert!(app.machine_recipe.is_some());
 
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::MachineRecipe, "Esc goes to the rail first");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.machine_recipe.is_none(), "and drops it on the way out");
@@ -36,7 +45,7 @@ fn r_beside_a_machine_no_longer_opens_it() {
 #[test]
 fn picking_a_row_on_an_unset_machine_sets_it_without_asking() {
     let mut app = app_beside_a_machine(9402, "factory", None);
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
     let first = app.machine_recipe.as_ref().unwrap().view.rows[0]
         .item
         .clone();
@@ -50,7 +59,7 @@ fn picking_a_row_on_an_unset_machine_sets_it_without_asking() {
 #[test]
 fn picking_a_row_on_a_set_machine_asks_first() {
     let mut app = app_beside_a_machine(9403, "factory", Some("bytecode_block"));
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
     let other = app
         .machine_recipe
         .as_ref()
@@ -83,7 +92,7 @@ fn picking_a_row_on_a_set_machine_asks_first() {
 #[test]
 fn declining_the_confirm_leaves_the_recipe() {
     let mut app = app_beside_a_machine(9404, "factory", Some("bytecode_block"));
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
     let other = app
         .machine_recipe
         .as_ref()
@@ -108,7 +117,7 @@ fn declining_the_confirm_leaves_the_recipe() {
 #[test]
 fn the_menu_shows_only_researched_rows() {
     let mut app = app_beside_a_machine(9405, "factory", None);
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
 
     let items: Vec<&str> = app
         .machine_recipe
@@ -130,7 +139,7 @@ fn the_menu_shows_only_researched_rows() {
 #[test]
 fn an_uppercase_letter_never_picks_a_row() {
     let mut app = app_beside_a_machine(9406, "factory", None);
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
 
     app.handle_key(GameKey::Char('A'));
 
@@ -141,7 +150,7 @@ fn an_uppercase_letter_never_picks_a_row() {
 #[test]
 fn the_screen_closes_when_the_machine_is_demolished() {
     let mut app = app_beside_a_machine(9407, "factory", None);
-    app.handle_key(GameKey::Char('c'));
+    open_recipe(&mut app);
     let machine = app.machine_recipe.as_ref().unwrap().machine;
     app.game
         .as_mut()

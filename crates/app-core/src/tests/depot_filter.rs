@@ -1,4 +1,4 @@
-//! The Depot filter screen: `[F]` out of the transfer picker, an arrow per
+//! The Depot filter screen: the Filter page of a Depot's hub, an arrow per
 //! row, and the two keys that write the whole list.
 
 use super::support::*;
@@ -10,12 +10,12 @@ fn item(id: &str) -> feral_processes_engine::items::ItemId {
     feral_processes_engine::items::ItemId::from(id)
 }
 
-/// The picker beside `depots` Depots, then `[F]` into the filter screen.
+/// The hub beside `depots` Depots, turned from Inventory to Filter.
 fn filter_screen(seed: u32, depots: i32) -> App {
     let mut app = app_beside_depots(seed, depots, 6, &[(ITEM, 4)]);
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::Transfer, "the picker opens first");
-    app.handle_key(GameKey::Char('F'));
+    assert_eq!(app.mode, Mode::Transfer, "the Inventory page opens first");
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::DepotFilter);
     app
 }
@@ -36,8 +36,7 @@ fn allowed(app: &App, id: &str) -> bool {
 }
 
 /// Left denies and Right allows, the arrow moving the row toward the column
-/// it points at — the transfer picker's own convention, since that is the
-/// screen this one is opened from.
+/// it points at — the transfer picker's own convention, the page beside it.
 #[test]
 fn left_denies_the_selected_row_and_right_allows_it_again() {
     let mut app = filter_screen(3300, 1);
@@ -95,26 +94,6 @@ fn the_lowercase_keys_do_nothing() {
     assert!(screen.view.rows.iter().all(|r| r.allowed), "d is not D");
 }
 
-/// Up to four Depots can be orthogonally adjacent, so the screen has to
-/// say which one it is editing and offer a way to the next.
-#[test]
-fn tab_walks_to_the_next_adjacent_depot() {
-    let mut app = filter_screen(3304, 2);
-    let first = app.depot_filter.as_ref().unwrap().depot;
-    assert_eq!(app.depot_filter.as_ref().unwrap().of, 2);
-
-    app.handle_key(GameKey::Tab);
-    let second = app.depot_filter.as_ref().unwrap().depot;
-    assert_ne!(first, second, "Tab moves to the other Depot");
-
-    app.handle_key(GameKey::Tab);
-    assert_eq!(
-        app.depot_filter.as_ref().unwrap().depot,
-        first,
-        "and wraps back round"
-    );
-}
-
 /// A filter is per Depot, which is the whole point of sorting: what one
 /// shelf refuses must say nothing about the other.
 #[test]
@@ -125,29 +104,20 @@ fn a_denial_lands_on_one_depot_alone() {
     assert!(!allowed(&app, ITEM));
 
     app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::DepotFilter);
     assert!(
         allowed(&app, ITEM),
         "the second shelf never heard the instruction"
     );
 }
 
-/// With one Depot beside you, Tab is a no-op rather than a way out.
+/// Going back to Inventory re-reads the offer, so the basket is a fresh,
+/// zeroed one rather than the one built against the old filter.
 #[test]
-fn tab_with_one_depot_stays_put() {
-    let mut app = filter_screen(3306, 1);
-    let only = app.depot_filter.as_ref().unwrap().depot;
-
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::DepotFilter);
-    assert_eq!(app.depot_filter.as_ref().unwrap().depot, only);
-}
-
-/// Esc goes back where it came from, on a freshly taken offer: the filter
-/// just edited is what `TransferRow::can_put` is derived from.
-#[test]
-fn esc_returns_to_the_picker_with_a_zeroed_basket() {
+fn turning_back_to_inventory_comes_up_zeroed() {
     let mut app = filter_screen(3307, 1);
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('['));
 
     assert_eq!(app.mode, Mode::Transfer);
     assert!(app.depot_filter.is_none());
@@ -169,7 +139,7 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
     let mut app = filter_screen(3308, 1);
     app.menu_selected = row_of(&app, ITEM);
     app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('['));
 
     let row = app
         .basket_rows
@@ -180,30 +150,20 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
     assert_eq!(row.can_put, 0, "and nothing may be put where it is refused");
 }
 
-/// A Extractor has a shelf but no filter, so the key that opens this
-/// screen has to say so rather than opening an empty one.
+/// An Extractor has a shelf but no filter, so its hub has no such page.
 #[test]
-fn the_key_is_refused_where_there_is_no_depot() {
+fn a_machine_has_no_filter_page() {
     let mut app = app_beside_stocked_machines(3309, &[(ITEM, 6)]);
     app.handle_key(GameKey::Char('c'));
-    // Cargo, not the Extractor's recipe menu.
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::Transfer);
-
-    app.handle_key(GameKey::Char('F'));
-    assert_eq!(app.mode, Mode::Transfer, "the picker stays open");
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|l| l.contains("Depot")),
-        "and the refusal says why: {:?}",
-        app.status_line
-    );
+    for _ in 0..4 {
+        assert_ne!(app.mode, Mode::DepotFilter);
+        app.handle_key(GameKey::Char(']'));
+    }
 }
 
 /// The case the picker's empty-offer arm exists for: a Depot built a
 /// moment ago, nothing on it and nothing in the pack, is exactly the one
-/// worth setting up — and `[F]` is only reachable from inside the picker.
+/// worth setting up.
 #[test]
 fn an_empty_depot_and_an_empty_pack_still_open_the_picker() {
     let mut app = app_beside_depots(3310, 1, 0, &[]);
@@ -215,6 +175,6 @@ fn an_empty_depot_and_an_empty_pack_still_open_the_picker() {
         "nothing to move, and that is fine"
     );
 
-    app.handle_key(GameKey::Char('F'));
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::DepotFilter);
 }

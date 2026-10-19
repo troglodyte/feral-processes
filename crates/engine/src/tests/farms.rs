@@ -702,25 +702,22 @@ fn standing_beside_a_plot_offers_it_on_c() {
     let hw = crate::tuning::STARTING_POCKET_HALF_WIDTH;
     game.toggle_plot_box((hw - 1, 0), (hw - 1, 0));
     let plot = plot_of(&game, (hw - 1, 0));
-    let offered = game.adjacent_interactions();
+    let offered = game.adjacent_structures();
     let found = offered
         .iter()
-        .find(|i| i.kind == InteractionKind::Plot(plot))
+        .find(|s| s.entity == plot)
         .expect("the plot beside the party is offered");
     assert_eq!(found.dir, (-1, 0));
+    assert_eq!(found.pages, vec![StructurePage::Grow, StructurePage::Info]);
 
     stand_in_base_at(&mut game, hw - 3, 0);
     assert!(
-        game.adjacent_interactions()
-            .iter()
-            .all(|i| i.kind != InteractionKind::Plot(plot)),
+        game.adjacent_structures().iter().all(|s| s.entity != plot),
         "one step away the plot is not offered"
     );
     stand_in_base_at(&mut game, hw - 1, 0);
     assert!(
-        game.adjacent_interactions()
-            .iter()
-            .all(|i| i.kind != InteractionKind::Plot(plot)),
+        game.adjacent_structures().iter().all(|s| s.entity != plot),
         "standing on a plot tile alone does not offer it"
     );
 }

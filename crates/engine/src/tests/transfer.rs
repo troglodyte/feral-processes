@@ -601,9 +601,9 @@ fn the_neighbour_scan_is_sorted_by_tile() {
     let east = stocked(&mut game, "depot", p.x, p.y + 1, 200, &[]);
     let west = stocked(&mut game, "depot", p.x, p.y - 1, 200, &[]);
     assert_eq!(
-        game.adjacent_depots(),
+        game.reachable_depots(),
         vec![west, east],
-        "and the Depot filter leaves that order alone"
+        "and the Depots a transfer puts into keep that order"
     );
 }
 

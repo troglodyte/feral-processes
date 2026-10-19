@@ -27,7 +27,6 @@ pub(crate) mod floor;
 pub(crate) mod floor_hands;
 pub(crate) mod hauling;
 pub(crate) mod healing;
-pub(crate) mod interact;
 pub(crate) mod lines;
 pub(crate) mod machine_recipe;
 pub(crate) mod morale;

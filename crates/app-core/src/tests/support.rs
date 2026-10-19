@@ -2838,8 +2838,9 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
         Hub::Party => 'p',
+        Hub::Structure => unreachable!("hub_of names the shared hubs only"),
     }));
-    for _ in 0..hub.pages().len() {
+    for _ in 0..hub.table().len() {
         if hub_of(app.mode).map(|(_, p, _)| p) == Some(page) {
             break;
         }

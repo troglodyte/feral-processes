@@ -734,7 +734,7 @@ fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
 fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
-        for mode in hub.pages().iter().flat_map(|p| p.screens) {
+        for mode in hub.table().iter().flat_map(|p| p.screens) {
             assert!(!seen.contains(mode), "{mode:?} is in two hubs");
             seen.push(*mode);
         }

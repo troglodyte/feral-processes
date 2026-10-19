@@ -1272,15 +1272,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::InteractDirection => draw_direction_prompt(
-            "Interact Direction",
-            // Kept under the Small popup's narrowest width: a text row is
-            // neither wrapped nor clipped.
-            "Interact which way? (arrows/hjkl, c for cargo, Esc)",
-            refusal,
-            painter,
-            m,
-        ),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
@@ -1701,7 +1692,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 157] = [
+    const ALL_MODES: [Mode; 156] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1747,7 +1738,6 @@ mod tests {
         Mode::RemoveDirection,
         Mode::TrapDirection,
         Mode::UpgradeDirection,
-        Mode::InteractDirection,
         Mode::InspectDirection,
         Mode::FrameMap,
         Mode::WorldMap,

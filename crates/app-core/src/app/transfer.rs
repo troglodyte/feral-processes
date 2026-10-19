@@ -36,6 +36,23 @@ impl App {
         self.mode = Mode::Transfer;
     }
 
+    /// Opens the picker on one structure's shelves, or on the pack's downed
+    /// programs alone. A structure that is not a rack carries no carrier
+    /// rows: the pack's downed programs have nowhere to go there.
+    pub(crate) fn open_transfer_for(&mut self, at: TransferAt) {
+        let Some(game) = &self.game else { return };
+        let rack_room = match at {
+            TransferAt::Structure(e) => game.rack_room(e),
+            TransferAt::PackOnly => 0,
+        };
+        let carriers = match at {
+            TransferAt::Structure(e) if game.rack_slots(e) == 0 => Vec::new(),
+            _ => game.rack_offer_at(at),
+        };
+        let (rows, room) = (game.transfer_offer_at(at), game.transfer_room_at(at));
+        self.open_transfer(rows, carriers, room, rack_room, TransferSource::Base(at));
+    }
+
     /// Moves the basket and closes the screen.
     ///
     /// The two halves are split out of one signed list here rather than kept
@@ -61,8 +78,8 @@ impl App {
             && let Some(game) = &mut self.game
         {
             match self.transfer_source {
-                TransferSource::Base => {
-                    game.transfer_items(&basket);
+                TransferSource::Base(at) => {
+                    game.transfer_items_at(at, &basket);
                 }
                 TransferSource::Outpost(tile) => {
                     self.status_line = game.take_from_outpost(tile, &basket).err();

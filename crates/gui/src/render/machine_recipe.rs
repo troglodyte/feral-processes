@@ -59,12 +59,6 @@ fn body_rows(screen: &MachineRecipeScreen, selected: usize) -> Vec<Row> {
     let view = &screen.view;
     let (x, y) = view.tile;
     let mut body = vec![text_row(format!("{} at ({x}, {y})", view.name))];
-    if screen.of > 1 {
-        body.push(text_row(format!(
-            "One of {} beside you; Tab for the next",
-            screen.of
-        )));
-    }
     body.push(text_row(match view.current {
         Some(_) => "Pick a row to switch; a switch empties what the machine holds",
         None => "Nothing set yet — the machine makes nothing until you pick a row",
@@ -205,7 +199,6 @@ mod tests {
     fn an_unset_machine_says_so_and_a_set_one_warns_of_the_switch() {
         let mut screen = MachineRecipeScreen {
             machine: Entity::PLACEHOLDER,
-            of: 1,
             pending: None,
             view: MachineRecipeView {
                 tile: (1, 2),

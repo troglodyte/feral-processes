@@ -63,12 +63,6 @@ fn body_rows(screen: &DepotFilterScreen, selected: usize) -> Vec<Row> {
         "Depot at ({x}, {y}) — room for {} more",
         view.room
     ))];
-    if screen.of > 1 {
-        body.push(text_row(format!(
-            "One of {} beside you; Tab for the next",
-            screen.of
-        )));
-    }
     body.extend([
         text_row("Up/Down pick a row; Left denies it, Right allows it"),
         text_row("[A] allow all  [D] deny all  Esc back to the transfer screen"),

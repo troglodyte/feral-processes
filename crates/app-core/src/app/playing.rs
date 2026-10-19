@@ -3,13 +3,6 @@
 use crate::DEV_CONSOLE_KEY;
 use crate::*;
 
-/// What `c` resolved to: one interaction to run now, or several sides to
-/// ask about with `Mode::InteractDirection`.
-enum Interact {
-    Run(InteractionKind),
-    Ask,
-}
-
 /// The shared "did the world actually move" rule behind `stepped` and
 /// `stepped_paced`: `f` performs the step and answers `(bite, drag_owed)`,
 /// and this adds the one `acted` read both need — extracted so the two
@@ -491,7 +484,7 @@ impl App {
         // the line that explains why.
         let mut refusal = None;
         // What `c` decided to do, handed out past the `self.game` borrow.
-        let mut interaction: Option<Interact> = None;
+        let mut open_hub = false;
         // What the ground took off the party, for the cue
         // `after_world_action` picks. Declared out here because the four
         // movement arms below sit inside a `self.game` borrow and have to
@@ -527,67 +520,24 @@ impl App {
                     game.use_power_source();
                     true
                 }
-                // Surface only, and not bound in the Stack block below: a
-                // base's buffers are something you walk up to, and the
-                // engine refuses it underground anyway.
-                //
-                // One key for both directions. It was two — `c` to collect
-                // and `P` to put away — and an item on a shelf *and* in the
-                // pack had a row on each screen with no way to see the
-                // other.
-                // **Not `c`**: a rig carries `Stock`, so `c` already opens
-                // the transfer picker at one to collect what it has
-                // stripped, and one key meaning two things depending on
-                // whether a buffer happens to be empty is worse than a
-                // second key.
-                //
-                // **And not `T`**, which was the first choice and is one of
-                // the hidden keys `crates/engine/EASTER_EGGS.md` lists — a
-                // documented feature cannot have a key no page may name, and
-                // `no_shipped_help_page_names_a_hidden_key` is what says so.
-                // `F` is free here and already means "set up the machine
-                // beside you" on the transfer picker, where `[F]` opens a
-                // Depot's filter.
-                GameKey::Char('F') => self.open_rig_tool(),
-                // `P` because it is unbound on the map: `D`, `L`, `N`, `F`
-                // and `Z` are taken, and `T` and `W` are hidden keys
-                // `no_shipped_help_page_names_a_hidden_key` forbids a page
-                // from naming. Uppercase, as every map action is.
-                GameKey::Char('P') => self.open_siphon(),
-                // `I` because it is unbound on the map (the inspect key lives
-                // on the lists, never here), and not one of the hidden keys.
-                // Uppercase, as every map action is.
-                GameKey::Char('I') => self.open_splice_rig(),
-                // The interact key: whatever the structures beside the party
-                // offer (`Game::adjacent_interactions`). Nothing → the
-                // engine's own transfer refusal; one → act on it; several
-                // sides → ask which. Opening a screen is not an action, so
-                // the choice is handed out past the `self.game` borrow.
+                // The interact key: the hub for the structures beside the
+                // party. Nothing beside → the engine's own transfer refusal.
+                // Opening a screen is not an action, so it is handed out
+                // past the `self.game` borrow.
                 GameKey::Char('c') => {
-                    let found = game.adjacent_interactions();
-                    // A transfer with no neighbouring shelf (the pack's
-                    // downed programs alone) sits at `(0, 0)` and cannot be
-                    // aimed at, so it only counts when it is all there is.
-                    let aimed: Vec<_> = found.iter().filter(|i| i.dir != (0, 0)).collect();
-                    match (found.first(), aimed.len()) {
-                        (None, _) => {
-                            // Straight back through the engine, which speaks
-                            // its own refusal and spends no turn. A
-                            // `status_line` copy of that sentence here would
-                            // be a second home for it, and a copy of an
-                            // engine message reads as the key doing nothing.
-                            game.refuse_transfer();
-                            true
-                        }
-                        (Some(only), 0 | 1) => {
-                            interaction =
-                                Some(Interact::Run(aimed.first().map_or(only.kind, |i| i.kind)));
-                            false
-                        }
-                        _ => {
-                            interaction = Some(Interact::Ask);
-                            false
-                        }
+                    if game.adjacent_structures().is_empty()
+                        && game.rack_offer_at(TransferAt::PackOnly).is_empty()
+                    {
+                        // Straight back through the engine, which speaks
+                        // its own refusal and spends no turn. A
+                        // `status_line` copy of that sentence here would
+                        // be a second home for it, and a copy of an
+                        // engine message reads as the key doing nothing.
+                        game.refuse_transfer();
+                        true
+                    } else {
+                        open_hub = true;
+                        false
                     }
                 }
                 // Refused through the shared tail rather than silently, for
@@ -675,10 +625,8 @@ impl App {
         if let Some(reason) = refusal {
             self.refuse(reason);
         }
-        match interaction {
-            Some(Interact::Run(kind)) => self.run_interaction(kind),
-            Some(Interact::Ask) => self.mode = Mode::InteractDirection,
-            None => {}
+        if open_hub {
+            self.open_structure_hub();
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }

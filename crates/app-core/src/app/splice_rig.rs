@@ -1,7 +1,6 @@
 //! The Splice Rig's screen: build an implant into the player, or cut one out.
 //!
-//! Opened with `[I]` beside a rig, `open_rig_tool`'s shape — an action on a
-//! machine, so the key lives on the map. One list, the installed implants
+//! A page of the structure hub (`app/structure_hub.rs`) on a Splice Rig. One list, the installed implants
 //! first and then the implant items in the pack, so a single lowercase
 //! selector picks either; the verbs are uppercase (`[I]` install, `[R]`
 //! remove) because a lowercase letter picks a row everywhere else.
@@ -33,31 +32,18 @@ impl SpliceRigScreen {
 }
 
 impl App {
-    /// Opens the screen beside a rig, or refuses.
-    ///
-    /// **Answers whether anything happened**, `open_rig_tool`'s rule: a
-    /// refusal answers `false`, because the caller clears the status line of
-    /// a key that acted and would wipe the sentence just written.
-    pub(crate) fn open_splice_rig(&mut self) -> bool {
+    /// Opens the screen, the hub's Splice page. The implants are the
+    /// player's own, so the page needs no rig handle.
+    pub(crate) fn open_splice_rig(&mut self) {
         let Some(game) = &self.game else {
-            return false;
+            return;
         };
-        if !game.adjacent_splice_rig() {
-            self.refuse("There is no Splice Rig here.");
-            return false;
-        }
         self.splice_rig = Some(SpliceRigScreen {
             view: game.implant_view(),
             confirm: None,
         });
         self.menu_selected = 0;
         self.mode = Mode::SpliceRig;
-        true
-    }
-
-    pub(crate) fn leave_splice_rig(&mut self) {
-        self.splice_rig = None;
-        self.mode = Mode::Playing;
     }
 
     fn refresh_splice_rig(&mut self) {
@@ -72,14 +58,8 @@ impl App {
 
     pub(crate) fn handle_splice_rig_key(&mut self, key: GameKey) {
         let Some(screen) = &self.splice_rig else {
-            self.mode = Mode::Playing;
             return;
         };
-        // Walked away from, or the rig demolished, while the screen was open.
-        if !self.game.as_ref().is_some_and(|g| g.adjacent_splice_rig()) {
-            self.leave_splice_rig();
-            return;
-        }
         if let Some(item) = screen.confirm.clone() {
             match key {
                 GameKey::Char('Y') => self.install_splice_item(&item),
@@ -94,7 +74,6 @@ impl App {
         }
         let rows = screen.rows();
         match key {
-            GameKey::Esc => self.leave_splice_rig(),
             GameKey::Up | GameKey::Down => self.scroll(key, rows),
             GameKey::Enter => match self.selected_splice_row() {
                 Some(SpliceRow::Installed(id)) => self.remove_splice_implant(&id),

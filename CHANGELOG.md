@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.16
+
+**Nothing changes in play; this release reorganises the engine's code.** The three largest shared files (the tuning numbers, the component types and the screen read-models) were each one file of 4,000 to 6,500 lines that nearly every change edited. Each is now a folder split by subsystem, with every name still reached the same way, so the game builds and behaves exactly as in 0.19.15.
+
 ## 0.19.15
 
 **Programs resting at a Sandbox or Log Analyzer Bay move around it instead of standing frozen beside it.** A program restoring Slack or Coherence, or taking a break in a bad mood, used to hold one tile next to the building until it was done, which looked like it was stuck. It now drifts between the tiles in reach every few seconds and never leaves reach while doing it.

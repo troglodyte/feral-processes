@@ -1783,6 +1783,14 @@ impl Game {
             .is_some_and(|p| p.def.runs_a_job() && !p.is_unconfigured())
     }
 
+    /// Whether `structure` is one `fuel_wants` posts a body to so it can
+    /// carry fuel or supply in, which `accepts_a_program` does not cover: a
+    /// supplier runs no job of its own.
+    pub(crate) fn takes_a_supply_run(&self, structure: Entity) -> bool {
+        self.placed(structure)
+            .is_some_and(|p| p.def.spends_supply().is_some())
+    }
+
     /// Works `structure` yourself instead of posting a program to it — the
     /// same `Task` a cronjob worker carries, on the player, advanced by
     /// `systems::player_gather_system` and paying out through the same

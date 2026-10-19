@@ -229,6 +229,27 @@ impl Game {
         self.set_down(pos, things);
     }
 
+    /// Sets down every staff load with no errand behind it: no `Task` to
+    /// deliver under and no `Clearing` trip. `Carrying` is a forced edge in
+    /// the matching and bars every idle errand, so such a body is never
+    /// handed anything that would end the hold. Every writer of `Carrying`
+    /// pairs it with one of the two, and this is the recovery for a path
+    /// that lost the pair, such as a reload dropping the `Task`.
+    pub(crate) fn set_down_unposted_loads(&mut self, staff: &[Entity]) {
+        let stranded: Vec<Entity> = staff
+            .iter()
+            .copied()
+            .filter(|&w| {
+                self.world.get::<Carrying>(w).is_some()
+                    && self.world.get::<crate::components::Task>(w).is_none()
+                    && self.world.get::<crate::components::Clearing>(w).is_none()
+            })
+            .collect();
+        for who in stranded {
+            self.drop_load(who);
+        }
+    }
+
     /// Lifts every floor item on `footprint` and sets it down again beside
     /// it. Called once the structure or site exists, so the search skips the
     /// footprint: an item under a building could not be picked up, and a

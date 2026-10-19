@@ -248,9 +248,12 @@ fn a_builder_with_a_stale_stranded_keeps_its_load() {
     g.world
         .entity_mut(worker)
         .insert(crate::components::Stranded { since: 0 });
-    for _ in 0..crate::tuning::STRANDED_SET_DOWN_TICKS + 5 {
-        g.tick();
-    }
+    // The clock moved by hand rather than by `tick`: a real builder holds its
+    // load under a `Construct` task, and this fixture has none, so a ticked
+    // labour pass would set it down through `set_down_unposted_loads`. The
+    // stale `Stranded` only needs the time to have passed.
+    g.world.resource_mut::<crate::resources::GameClock>().tick +=
+        crate::tuning::STRANDED_SET_DOWN_TICKS + 5;
     g.set_down_stranded_loads();
     assert!(g.world.get::<Carrying>(worker).is_some());
     assert!(floor_things(&mut g).is_empty());

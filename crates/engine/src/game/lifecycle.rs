@@ -1305,8 +1305,12 @@ impl Game {
             if let Some(&target) = structure_positions.get(&cronjob.target_position) {
                 // A machine that loaded unset (its saved recipe is no longer
                 // listed) runs no job, so a program posted to it would idle.
+                // A supplier runs no job either, but `fuel_wants` posts a
+                // body to it to carry the supply in: dropping that posting
+                // here keeps the restored `Carrying` and strands the body.
                 if matches!(cronjob.kind, save::CronjobKind::GatherResource)
                     && !self.accepts_a_program(target)
+                    && !self.takes_a_supply_run(target)
                 {
                     continue;
                 }

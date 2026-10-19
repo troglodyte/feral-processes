@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.14
+
+**Your inventory and your party are one screen, opened with `i`.** The rail runs Items, Phase keys, Downed programs and Tools, then Companions, Programs, Routines and Perks. `[` and `]` and the arrow keys walk all eight pages, and `i` reopens the page you left.
+
+**`p` on the map does nothing now.** It used to open the party; those pages are on the `i` rail. The key strip no longer lists it, and the CREW pane points at `i`.
+
 ## 0.19.13
 
 **`c` beside a structure opens one screen for that structure, with a page for everything you can do with it.** Before, `c` beside a machine asked which side, a second `c` opened the cargo, and the Teardown Rig's tool, the Power Siphon and the Splice Rig each hid behind their own map letter (`F`, `P`, `I`). Now one `c` opens the structure: Inventory, Filter, Recipe, Tool, Siphon, Splice, Grow, Rebuild and Info, whichever it has. `[` and `]` turn pages, Esc steps back to the page list and then out, and Tab steps to the next structure beside you, clockwise from north. The title names the structure and where it is in the cycle, such as "Depot — east (2 of 3)". Opening, stepping and turning pages cost no turn.

@@ -48,7 +48,7 @@ fn load_affixes(dir: &std::path::Path) -> (AffixDb, Vec<String>) {
 /// as a percentage. The ceilings are calibrated against what the shipped
 /// gear grants on each axis — see `assets/affixes/README.md`.
 ///
-/// Not `tuning.rs` constants: these bound the *content*, are checked against
+/// Not `tuning/` constants: these bound the *content*, are checked against
 /// the content, and an affix past one stops being a bonus on an item and
 /// starts being the item.
 fn axes(stats: EquipmentStats) -> [(&'static str, i32, i32); 7] {

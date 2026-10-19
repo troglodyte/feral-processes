@@ -23,7 +23,7 @@ use crate::*;
 /// cell you can leave from — base space's own origin, where the Home
 /// stands.
 ///
-/// Here rather than in `tuning.rs`: it is not a knob, it is the origin the
+/// Here rather than in `tuning/`: it is not a knob, it is the origin the
 /// whole coordinate space is defined against, and a base space whose exit
 /// was somewhere else would be a different space rather than a retuned one.
 pub(crate) const BASE_EXIT_CELL: (i32, i32) = (0, 0);

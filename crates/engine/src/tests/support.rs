@@ -3394,7 +3394,7 @@ pub(crate) fn equip_armor(game: &mut Game, wearer: Entity, item: &str) {
 /// fumble band is a fumble, and the rest is a miss. The band starts at the
 /// widest crit band any body in the game carries (Entropy can widen the
 /// player's past `CRIT_CHANCE`), and `hit_chance` is clamped to at least
-/// `HIT_CHANCE_MIN`, which `tuning.rs` asserts sits above every crit band, so
+/// `HIT_CHANCE_MIN`, which `tuning/` asserts sits above every crit band, so
 /// a first draw in it is a plain hit against *every* pairing of combatants.
 /// No test using this has to know what it is fighting.
 ///

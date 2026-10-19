@@ -45,7 +45,7 @@ impl Stats {
 }
 
 /// The full end of a reserve's range. Lives here beside `PowerReserve`
-/// rather than in `tuning.rs`, because it is the type's own documented
+/// rather than in `tuning/`, because it is the type's own documented
 /// invariant rather than a difficulty knob.
 pub const POWER_MAX: f32 = 100.0;
 

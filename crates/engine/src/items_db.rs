@@ -61,7 +61,7 @@ pub struct PrebattleBuff {
 }
 
 /// What `Game::refactor_companion` does to a tamed program. Magnitudes live
-/// here rather than in `tuning.rs` so a new upgrade item is a `.ron` file and
+/// here rather than in `tuning/` so a new upgrade item is a `.ron` file and
 /// never a code change — only the per-companion slot cap is tuning.
 ///
 /// Percentages rather than flat amounts because a companion's stats keep
@@ -111,7 +111,7 @@ pub struct CraftableDef {
 ///
 /// The ceiling is the only authored figure. How long a honeypot takes and
 /// how likely it is to catch anything are difficulty, which is
-/// `tuning.rs`'s and deliberately not a modder's.
+/// `tuning/`'s and deliberately not a modder's.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrapDef {
     /// The best rarity this trap will ever catch. A roll above it is
@@ -195,7 +195,7 @@ pub struct ItemDef {
     /// grid fuel and no supplier will burn it.
     ///
     /// **Windows rather than ticks**, because the window's length is a
-    /// difficulty knob and difficulty is not content: `tuning.rs` keeps
+    /// difficulty knob and difficulty is not content: `tuning/` keeps
     /// saying how long a supplier runs on the staple cell, and an item file
     /// only says how many of those a denser one is worth. Authored ticks
     /// would let a mod retune the base's fuel economy by editing an item.
@@ -225,7 +225,7 @@ pub struct ItemDef {
     /// free and spends nothing, so this is the field half of the mechanic.
     ///
     /// A flag rather than a price, and on the *item* rather than in
-    /// `tuning.rs`, because the cost used to live on a structure's
+    /// `tuning/`, because the cost used to live on a structure's
     /// `RestDef::cost` precisely so a mod could change it — with no
     /// structure involved in a field rest it has to stay data somewhere, and
     /// a modder prices their own charge through its `craftable.cost`.

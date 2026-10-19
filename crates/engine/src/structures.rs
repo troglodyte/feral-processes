@@ -172,7 +172,7 @@ pub enum StructureCategory {
 pub struct StripDef {
     /// How many downed programs the hopper holds before it refuses.
     ///
-    /// Authored per machine rather than in `tuning.rs`, for
+    /// Authored per machine rather than in `tuning/`, for
     /// `StructureDef::capacity`'s reason: it is how big *this* box is, and
     /// a modder's second rig should be able to differ.
     pub hopper: u32,
@@ -183,7 +183,7 @@ pub struct StripDef {
 /// One figure, authored per machine like `StripDef::hopper`: how long a
 /// warden takes over each decompile attempt is a fact about *this* cell, and
 /// a modder's second cell should be able to differ. What an attempt is
-/// worth lives in `tuning.rs` and `Game::jail_odds`, not here.
+/// worth lives in `tuning/` and `Game::jail_odds`, not here.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrisonSpec {
     /// Warden beats between one decompile roll and the next.
@@ -200,7 +200,7 @@ pub struct PrisonSpec {
 pub struct RackDef {
     /// How many downed programs this rack holds **at tier 1**.
     ///
-    /// Authored per machine rather than in `tuning.rs`, for
+    /// Authored per machine rather than in `tuning/`, for
     /// `StripDef::hopper`'s reason: it is how big *this* box is, and a
     /// modder's second rack should be able to differ.
     ///
@@ -525,7 +525,7 @@ pub struct StructureDef {
     /// `game::base::power::is_fuelled`, restores no `power_regen` trickle
     /// either — for as long as it cannot pay.
     ///
-    /// Data decides *which* suppliers burn and *what* they burn; `tuning.rs`
+    /// Data decides *which* suppliers burn and *what* they burn; `tuning/`
     /// decides how fast. The Home deliberately leaves this unset: its free
     /// supply is the bootstrap, and a base with no Power Cells could never
     /// make the first one if the thing powering the Conduit needed one
@@ -723,7 +723,7 @@ pub struct StructureDef {
     /// the base's Grid capacity from wherever it stands, with no radius to
     /// bound it and no worker slot to make deploying a second one cost
     /// anything beyond the build itself — a count is the only knob that
-    /// paces it. It lives here rather than in `tuning.rs` because it is a
+    /// paces it. It lives here rather than in `tuning/` because it is a
     /// property of the structure — a mod adds a capped structure by setting
     /// a number, not by editing the engine.
     #[serde(default)]

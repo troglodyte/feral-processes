@@ -132,7 +132,7 @@ pub enum MachineStatus {
     /// wasted moves while it is dark, so this is the reading that has to be
     /// shown. It is the only status whose fix is "supply more grid".
     ///
-    /// A sixth variant is allowed here where `views.rs::output_stranded`
+    /// A sixth variant is allowed here where `views::output_stranded`
     /// refused one, and the difference is worth keeping straight: a base-wide
     /// shortfall is *not* what this says. Under the ledger's cut order one
     /// machine runs while its neighbour two tiles over is dark, so which

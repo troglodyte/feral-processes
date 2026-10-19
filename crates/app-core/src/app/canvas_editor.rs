@@ -38,7 +38,7 @@ use std::collections::VecDeque;
 use crate::*;
 use feral_processes_engine::icon::Canvas;
 
-/// How far back `u` reaches. Here rather than in `tuning.rs`: that file is
+/// How far back `u` reaches. Here rather than in `tuning/`: that file is
 /// how hard the game is, and this prices no fight, gates no progression and
 /// is invisible outside two dev/creation screens.
 pub(crate) const ICON_UNDO_DEPTH: usize = 32;

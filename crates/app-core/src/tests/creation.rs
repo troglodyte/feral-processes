@@ -705,7 +705,7 @@ fn wizard_app_with_profile(name: &str, profile: &Profile) -> App {
 /// `perk_points` and roster against exactly what the preview claimed —
 /// against a same-choice baseline run with an empty profile, so the
 /// assertion needs no hardcoded knowledge of `PLAYER_BASE_STATS` beyond what
-/// `tuning.rs` already states elsewhere.
+/// `tuning/` already states elsewhere.
 #[test]
 fn the_preview_matches_what_is_paid() {
     let profile = profile_with_every_reward_kind();

@@ -1039,7 +1039,7 @@ impl Game {
 /// How far past `CARAVAN_SPAWN_DISTANCE_TILES` a caravan's surface search
 /// reaches, so a route that has to go round something still exists.
 ///
-/// Here rather than in `tuning.rs` for `BASE_EXIT_CELL`'s reason: it is not a
+/// Here rather than in `tuning/` for `BASE_EXIT_CELL`'s reason: it is not a
 /// knob, it is the slack a straight-line spawn distance needs to be walkable
 /// at all. `NEST_PATH_SEARCH_MARGIN` is the same idea on the other search.
 const CARAVAN_PATH_MARGIN: i32 = 12;

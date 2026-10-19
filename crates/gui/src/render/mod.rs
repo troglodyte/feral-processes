@@ -229,7 +229,7 @@ const BACK_RANK_DESATURATION: f32 = 0.55;
 ///
 /// A presentation threshold, not a difficulty knob — nothing in the sim
 /// reads it — so it lives here with the colours rather than in the engine's
-/// `tuning.rs`.
+/// `tuning/`.
 const CRITICAL_HP_DIVISOR: i32 = 3;
 
 /// Whether a program is close enough to deletion to warrant the warning

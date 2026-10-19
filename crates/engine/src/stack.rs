@@ -33,7 +33,7 @@ const FRAME_SIZE: i32 = 21;
 /// Sampling clusters them, which is what makes one frame sit differently
 /// from the next.
 ///
-/// Inline rather than in `tuning.rs` for the reason `BRAID_PERCENT` is —
+/// Inline rather than in `tuning/` for the reason `BRAID_PERCENT` is —
 /// this is the shape of generated content, not a difficulty knob.
 const ROOM_AREA_TARGET: i32 = 165;
 const ROOM_ATTEMPTS: usize = 400;
@@ -63,7 +63,7 @@ const CHAMBER_GAP_WIDTH: i32 = 3;
 /// Percent of dead ends the braid pass opens back up into the rest of the
 /// maze. A perfect maze is *all* dead ends, which is tedious to walk and
 /// reads as noise from a first-person view; loops are what make a frame feel
-/// like a place rather than a puzzle box. Not in `tuning.rs` for the same
+/// like a place rather than a puzzle box. Not in `tuning/` for the same
 /// reason `world::WorldMap::classify` keeps its noise thresholds inline —
 /// this is the shape of generated content, not a difficulty knob.
 ///
@@ -1383,7 +1383,7 @@ mod tests {
     /// between two points. It is not that there is too much frame. But
     /// encounters roll per step against a fixed `STACK_CACHES_PER_FRAME`, so
     /// a layout carving half the walkable cells of a maze would quietly
-    /// double the loot per fight without anyone editing `tuning.rs`. Every
+    /// double the loot per fight without anyone editing `tuning/`. Every
     /// layout therefore has to fill the frame to roughly the same extent.
     ///
     /// The band is wide because it spans three generators — measured, the

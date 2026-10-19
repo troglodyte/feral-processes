@@ -803,7 +803,7 @@ fn every_shipped_integrity_routine_rolls_a_band() {
 /// should fail to compile here rather than skip the check.
 ///
 /// Deliberately not a census of the *values* — how aimed a routine is, is a
-/// content decision, and `tuning.rs` is where difficulty lives.
+/// content decision, and `tuning/` is where difficulty lives.
 #[test]
 fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
     use crate::abilities::AbilityEffect as E;

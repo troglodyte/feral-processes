@@ -15,7 +15,7 @@ use crate::*;
 /// stay the only things that decide it.
 ///
 /// Staff and `resources::Party` therefore remain disjoint sets drawing on
-/// one `pet_capacity` roster, which is the tension `tuning.rs` already
+/// one `pet_capacity` roster, which is the tension `tuning/` already
 /// states: every program working the base is one absent from the party.
 /// What changed is that nothing has to *maintain* that any more.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2154,7 +2154,7 @@ impl Game {
         // Restoring it also needs the player's hand to be empty of a
         // *weapon*, not just of another program: `wield_program` unequips
         // one before it takes the resource, which is the only place that
-        // holds `views.rs`'s "wielded and weapon are mutually exclusive"
+        // holds `views/`'s "wielded and weapon are mutually exclusive"
         // invariant up — `equip` has no reciprocal guard against a live
         // wield. Skipping this check lets a weapon equipped while the order
         // stood survive the refund undisturbed, and the program comes back

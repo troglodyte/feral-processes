@@ -124,7 +124,7 @@ impl OutpostDb {
 /// Crew is deliberately absent: membership rides `components::PostedAt` and
 /// `save::CreatureSave::outpost`, `resources::Sorties`' `sortie_index`
 /// precedent one level over. Stock capacity, crew cap and max integrity come
-/// from `tuning.rs`, so none of them is stored either — everything past
+/// from `tuning/`, so none of them is stored either — everything past
 /// these six fields is derived on every read (tier, trend, current yields).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outpost {

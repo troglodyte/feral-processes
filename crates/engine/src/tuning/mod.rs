@@ -11,8 +11,7 @@
 //! - **Anything already expressed as data.** Species stats, item and craft
 //!   costs, structure economy, research costs and ability magnitudes are
 //!   `.ron` files under `assets/`. Tune those by editing the files — see
-//!   each directory's `README.md`. Pulling them into Rust would break
-//!   moddability.
+//!   each directory's `README.md`; a second copy here would drift.
 //! - **Type invariants.** `components::POWER_MAX`/`POWER_MIN` bound what
 //!   `PowerReserve` may hold; every reader assumes they hold. They live beside the
 //!   type they constrain.
@@ -60,8 +59,8 @@ mod tests {
     use super::*;
     use crate::resources::ZoneLevel;
 
-    /// The reference wearer must stay a *derivation* of the two axes above
-    /// it, not three hand-written numbers that drift the first time
+    /// The reference wearer must stay a *derivation* of the two axes in
+    /// `player.rs`, not three hand-written numbers that drift the first time
     /// `HP_PER_LEVEL` or `PLAYER_BASE_STATS` moves. Its whole value is that
     /// it sits where players actually stand.
     #[test]

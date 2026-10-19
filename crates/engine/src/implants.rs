@@ -8,7 +8,7 @@
 //! The effects are a closed vocabulary — absolute stat deltas, a short list of
 //! hooks, one optional signature and one optional downside — that a `.ron`
 //! file combines; the magnitudes are the file's and the formulas are here and
-//! in `tuning.rs`. `assets/implants/README.md` is the schema reference.
+//! in `tuning/`. `assets/implants/README.md` is the schema reference.
 //!
 //! **An empty database is valid**, and a missing directory is not an error
 //! (`StatusDb`'s rule). An id whose def is missing contributes nothing:

@@ -127,9 +127,10 @@ When a schema changes:
 - **Big files split when you're already in them**: a test file or `gui`
   renderer over ~3k lines gets broken up by scenario or panel as part of the
   change that touches it — never as a standalone project.
-- **app-core: one module per mode** in `app/<mode>.rs`. `lib.rs` holds
-  `Mode`, `App` and dispatch only; new mode logic never lands there, and
-  existing logic moves out when you are changing it.
+- **app-core: one module per mode** in `app/<mode>.rs`. The target is a
+  `lib.rs` holding only `Mode`, `App` and dispatch; it isn't there yet, so new
+  mode logic never lands in it, and existing logic moves out when you are
+  changing it.
 
 ## Rust idioms
 

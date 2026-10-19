@@ -4,7 +4,7 @@
 //! Contracts are data, like achievements and species — `assets/contracts/*.ron`,
 //! one file per contract, so adding one is a file drop. What is *not* data is
 //! how a board is derived and how many may be held at once, which live in
-//! `tuning.rs` beside every other knob.
+//! `tuning/` beside every other knob.
 
 use std::collections::BTreeMap;
 use std::path::Path;

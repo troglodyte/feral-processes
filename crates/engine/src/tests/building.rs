@@ -1539,7 +1539,7 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 /// was beaten on.
 ///
 /// A tamed program's `Position` is written once, at capture, and never
-/// again — `views.rs` says so and `render/base.rs` refuses to draw a
+/// again — `views/` says so and `render/base.rs` refuses to draw a
 /// companion because of it. So the stale tile can be anywhere the player has
 /// ever fought, and a walk measured from it strands a worker outside
 /// `haul_walk_radius` of its own machine: `haul_step_system` finds it absent
@@ -3306,7 +3306,7 @@ fn a_refunded_program_does_not_snatch_back_an_occupied_hand() {
 /// program: `wield_program` is the only place that unequips a weapon to make
 /// room, and `refund_program` must defer to it too, or the run ends up
 /// holding both a weapon and a wielded program at once — the pairing
-/// `views.rs` documents as mutually exclusive.
+/// `views/` documents as mutually exclusive.
 #[test]
 fn a_refunded_program_does_not_snatch_a_weapon_out_of_the_hand() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

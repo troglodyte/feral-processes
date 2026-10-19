@@ -708,7 +708,7 @@ pub struct LogEntry {
 /// the window; and the same warning again three hundred ticks later falls
 /// outside it, so two starvation events read as two events.
 ///
-/// Not in `tuning.rs`: that file is how hard the game is, and this is how the
+/// Not in `tuning/`: that file is how hard the game is, and this is how the
 /// screen reads.
 pub const CONDENSE_LOOKBACK: usize = 4;
 

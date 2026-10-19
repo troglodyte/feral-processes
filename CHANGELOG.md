@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.12
+
+**A program carrying a Power Cell to a Recharger Node keeps going after you load a save.** Before, loading a save dropped the trip but left the cell in the program's hands. A program holding something with no job is never given work and never puts the load down, so it wandered the base with the cell for the rest of the run. A base with several of these had too few hands left for its lowest-priority work: the farm, and carrying finished product out of machines.
+
+**Programs already stuck that way put their load down and go back to work.** Any base program holding a load with no job behind it now sets the load on the floor, where the stockpile errand or a fuel delivery picks it up. Nothing is lost. A save with stuck carriers recovers within a few ticks of loading.
+
 ## 0.19.11
 
 **The Refit Bench mends your worn gear on its own, from a stock of Annealed Cores it keeps.** Stand still within two tiles of a stocked bench for more than two ticks and it mends one piece of worn gear a tick: what you and your party have equipped first, then what is in the pack. A purple `+` rises over you while it works. Before, every refit was a manual `R` at the bench that paid its cost out of your pack each time. That manual refit is still there, for gear above the worn line.

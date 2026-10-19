@@ -1370,7 +1370,7 @@ impl Game {
     /// The perk arm is clamped at `AFFINITY_MAX`, the same ceiling a species
     /// file is clamped to at load (`Affinities::clamp_all`): perk levels are
     /// uncapped, so without this a long enough game would let the player's
-    /// own invocations exceed the bound `tuning.rs` reasons about everywhere else.
+    /// own invocations exceed the bound `tuning/` reasons about everywhere else.
     /// `.min` rather than `.clamp`, because the perk arithmetic — a `u32`
     /// level times a finite constant — cannot produce NaN or undershoot
     /// `AFFINITY_MIN`, so there is no lower bound to express.
@@ -1399,7 +1399,7 @@ impl Game {
         // Talents are the *companion's* axis, in the creature arm only: perks
         // are the player's, and the two never stack. Clamped the same way the
         // perk arm above is, and for the same reason — a mod's tree may author
-        // any magnitude it likes, and `tuning.rs` reasons about `AFFINITY_MAX`
+        // any magnitude it likes, and `tuning/` reasons about `AFFINITY_MAX`
         // everywhere else.
         (species * self.talent_affinity_mult(actor, kind)).min(AFFINITY_MAX)
     }

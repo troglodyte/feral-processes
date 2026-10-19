@@ -142,7 +142,7 @@ const KINDS: [BattleCell; 4] = [
 /// that is quietly the wrong terrain reads as the generator being bland
 /// rather than as a missing row.
 ///
-/// In `tuning.rs`'s neighbourhood rather than in `.ron` for the reason
+/// In `tuning/`'s neighbourhood rather than in `.ron` for the reason
 /// `Biome::name` already gives: mods extend species, structures, items and
 /// environments, but the biome set is a fixed enum `WorldMap::classify`
 /// sorts noise into, and ground for a variant that cannot exist is not a

@@ -518,7 +518,7 @@ pub(crate) const SWAP_NAME_COLUMN_FOR_TESTS: usize = SWAP_NAME_COLUMN;
 /// The sort key sums the three stat deltas, which values a point of DECOMP
 /// like a point of ATK. That is a display heuristic for "probably the one
 /// you want" and not a claim about what those stats are worth, which is why
-/// it is here rather than a weighting in `tuning.rs`.
+/// it is here rather than a weighting in `tuning/`.
 ///
 /// `wearer` is the player or a program they own. `status.inventory` and
 /// `status.zone` stay the player's whichever it is — cargo is shared and the
@@ -724,7 +724,7 @@ const MAX_IDLE_TICKS_PER_FRAME: u32 = 2;
 /// How fast battle narration scrolls into the log pane, in lines per second.
 ///
 /// Presentation rather than difficulty, which is why it lives here and not
-/// in the engine's `tuning.rs`.
+/// in the engine's `tuning/`.
 ///
 /// A typical round narrates four lines, so this is a round per second — a
 /// line landing every quarter second, which reads as arriving rather than
@@ -2688,7 +2688,7 @@ pub const MAX_ZOOM: u16 = 4;
 /// never presses `+` sees exactly what they saw before.
 ///
 /// Presentation state, so it lives here beside the zone map's zoom rather
-/// than in `tuning.rs` — what the renderer crops to is not difficulty. The
+/// than in `tuning/` — what the renderer crops to is not difficulty. The
 /// cell radius each level maps to is the renderer's business
 /// (`render/frame_map.rs::window_radius`).
 pub const STACK_MAP_MIN_ZOOM: u16 = 1;

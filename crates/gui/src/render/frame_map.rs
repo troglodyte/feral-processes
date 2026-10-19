@@ -28,7 +28,7 @@ const INSET_FILL: f32 = 0.94;
 /// doc comment restating them is a copy that goes stale, which this repo
 /// has already paid for three times in the manifest's layout.
 ///
-/// Presentation, so it lives here and not in `tuning.rs` — how much of the
+/// Presentation, so it lives here and not in `tuning/` — how much of the
 /// corridor the map covers is not difficulty.
 const INSET_FRACTION: f32 = 0.30;
 

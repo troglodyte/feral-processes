@@ -20,7 +20,7 @@ use crate::*;
 /// than eventually destroying the thing being watched — see
 /// `repeated_forced_hits_never_destroy_the_structure`.
 ///
-/// Deliberately not in `tuning.rs`: that file is how hard the game is, and
+/// Deliberately not in `tuning/`: that file is how hard the game is, and
 /// nothing a player can reach reads this.
 pub(crate) const DEV_HIT_DAMAGE_PERCENT: u32 = 25;
 

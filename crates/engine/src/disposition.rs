@@ -10,7 +10,7 @@
 //! `.ron`, and the moddability rule says content is a file. A disposition is
 //! not content: it ships no name, no blurb, no glyph and no mechanic, only
 //! multipliers on numbers the sim already computes. That puts it on
-//! `tuning.rs`'s side of the line that file draws — *how hard the game is, is
+//! `tuning/`'s side of the line that file draws — *how hard the game is, is
 //! not moddable* — and the magnitudes live there accordingly.
 //!
 //! The second reason is stronger than the first. Every axis below is an

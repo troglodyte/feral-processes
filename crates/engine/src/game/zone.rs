@@ -232,7 +232,7 @@ impl Game {
 
     /// Pays the loot a destroyed `nest` owes, drawn entirely from its
     /// species' existing `SpeciesDef` fields — content stays data, only the
-    /// `NEST_CACHE_*` magnitudes in `tuning.rs` are code. Mirrors
+    /// `NEST_CACHE_*` magnitudes in `tuning/` are code. Mirrors
     /// `award_loot`'s clone-then-drop-the-borrow shape (`combat_rewards.rs`)
     /// so the `SpeciesDb` resource isn't held live across a `grant_loot`
     /// call that itself needs the world.

@@ -12,7 +12,7 @@
 //! `tuning::CREATION_COST_PER_ATTRIBUTE_POINT`. That is one point today, so
 //! the two readings happen to agree - which is exactly why the distinction
 //! has to be held here rather than left to the numbers: repricing is a
-//! `tuning.rs` edit, and every reader that treats the map as a point tally
+//! `tuning/` edit, and every reader that treats the map as a point tally
 //! would silently start handing an attribute out free. The Points step's
 //! rows, ceiling rule and preview are `StatAllocation`'s, shared with
 //! `Mode::AllocateStats`.

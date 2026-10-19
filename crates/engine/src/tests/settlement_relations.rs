@@ -1227,7 +1227,7 @@ fn a_trip_interrupted_by_a_fight_stops_paying_for_itself() {
 
 /// How many deeds either end of the ladder may sit from `Neutral`.
 ///
-/// **Not a `tuning.rs` constant** — `ZONE_MATERIALS`' shape. This is a census
+/// **Not a `tuning/` constant** — `ZONE_MATERIALS`' shape. This is a census
 /// bound holding a claim about the design, not a knob the engine reads.
 ///
 /// Five is not a number anyone picked: it is the pace the way *up* already

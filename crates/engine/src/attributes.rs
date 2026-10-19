@@ -12,7 +12,7 @@
 //! **Data where `disposition.rs` is Rust, and that line is the whole
 //! reason this directory exists.** A `Disposition` ships no name, no blurb
 //! and no glyph, only multipliers on numbers the sim already computes,
-//! which puts it with `tuning.rs` on the not-moddable side. An attribute is
+//! which puts it with `tuning/` on the not-moddable side. An attribute is
 //! the inverse: a name, a legacy name and two lines of prose, and for most
 //! attributes a list of per-point effects. That is content by the same test that put species,
 //! needs, memories and the perk catalogue in `assets/`.

@@ -75,13 +75,17 @@ FERAL_DEV_NO_SIEGES=1 cargo run                      # the siege clock never run
   target/debug/incremental`. Each worktree builds its own `target/`.
 - Releases are manual per platform: `docs/releasing.md`.
 
-## Moddability
+## Content: data or code
 
-The game must stay moddable: never hardcode content in Rust that can be data.
-Species, structures, items, abilities, achievements, talent trees and help
-pages are each a file in `assets/<kind>/`, schema in that directory's
-`README.md`. Perks are half data and `tuning.rs` is deliberately code —
-`.claude/rules/content-schema.md` has both, loaded with `assets/**`.
+Moddability is not a goal. New content kinds default to Rust (enums,
+`tuning/`): string ids, loaders, schema READMEs and census tests cost more
+than they buy for a handful of entries. Make a new `assets/<kind>/` only
+when it will hold many entries tuned often, or isn't code (help markdown,
+sprites, sounds, effects). The large sets already in `assets/` (items,
+abilities, contracts, research, structures, memories, species) stay data. A
+kind holding one or two files may fold back into Rust when you are already
+changing it — not as a project of its own. `.claude/rules/content-schema.md`
+has the per-kind traps, loaded with `assets/**`.
 
 When a schema changes:
 
@@ -103,7 +107,30 @@ When a schema changes:
   Pattern: `battle::attackers_in_group`, `battle::slot_aggro_weight`,
   `battle::expected_damage`, `systems::node_payout`.
 - Composition over inheritance; no global mutable state; named constants in
-  `tuning.rs`; no optimization without evidence.
+  `tuning/`; no optimization without evidence.
+- **New discrete/turn-based logic is plain Rust** — structs owned in one
+  place plus pure functions over them, not new components reached by
+  `world.get`. ECS is for many entities ticking (staff, wanderers, tasks).
+  Existing ECS code is not migrated for its own sake.
+- **RNG never depends on query iteration order**: sort by a stable id before
+  drawing inside a loop over a query, so a new `Resource` or component can't
+  shift the stream.
+
+## Code organization
+
+- **A new engine subsystem is a directory**, `crates/engine/src/<domain>/`,
+  holding its types, rules, views and tests (`tactical/` and `settlements/`
+  are the model). Its constants go in `tuning/<domain>.rs`, never inline.
+- `tuning/`, `components/` and `views/` are split by domain and re-exported
+  from `mod.rs`, so `tuning::X` paths never change. Add to the matching
+  submodule, or a new one; never grow `mod.rs`.
+- **Big files split when you're already in them**: a test file or `gui`
+  renderer over ~3k lines gets broken up by scenario or panel as part of the
+  change that touches it — never as a standalone project.
+- **app-core: one module per mode** in `app/<mode>.rs`. The target is a
+  `lib.rs` holding only `Mode`, `App` and dispatch; it isn't there yet, so new
+  mode logic never lands in it, and existing logic moves out when you are
+  changing it.
 
 ## Rust idioms
 
@@ -123,7 +150,7 @@ When a schema changes:
 - **`balance_sim.rs` is the balance regression gate** — a deterministic
   battle simulator asserting level curves from live constants and real
   assets. Check `cargo test -p feral-processes-engine balance_sim` after any
-  change to `tuning.rs`, a species or an item. A moved curve means
+  change to `tuning/`, a species or an item. A moved curve means
   progression changed.
 
 ## Process weight

@@ -71,10 +71,10 @@ pub struct CaravanDef {
     /// a raised quality floor — rather than the plain drop rates every other
     /// row uses.
     ///
-    /// Content rather than a `tuning.rs` constant for `rows`' reason: how
+    /// Content rather than a `tuning/` constant for `rows`' reason: how
     /// much stock a trader carries and what grade it is are the same
     /// question asked twice, and `weights` already settles the third. The
-    /// *magnitudes* of a standout roll stay in `tuning.rs`, exactly as a
+    /// *magnitudes* of a standout roll stay in `tuning/`, exactly as a
     /// perk's cost is data while its effect is not.
     ///
     /// Rounded **up**, so any non-zero share puts at least one standout row

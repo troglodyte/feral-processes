@@ -189,7 +189,7 @@ fn a_disgruntled_program_walks_toward_the_amenity() {
     sulk(&mut game, staff[0]);
     let start = at(&game, staff[0]);
     assert!(
-        (start.x - 4).abs() > 1,
+        (start.x - 4).abs() > 2,
         "the fixture must start the body away from the Bay, got {start:?}"
     );
 
@@ -209,9 +209,50 @@ fn a_disgruntled_program_walks_toward_the_amenity() {
     // **Arrival, not "closer".** The wander alone moves an idle body a tile
     // a beat, so a test that only asks whether the gap shrank passes without
     // the errand existing at all.
+    let site = Position { x: 4, y: 0 };
+    let radius = game.amenities_for_test().nearest_any(site).unwrap().2;
     assert!(
-        (now.x - 4).abs() <= 1 && now.y.abs() <= 1,
+        crate::game::base::offshift::in_reach(now, site, radius),
         "it must reach the Bay at (4, 0): started {start:?}, reached {now:?}"
+    );
+}
+
+/// A sulking body at its amenity mills there like an off-shift one, and the
+/// fondness clock keeps running because it never steps out of reach.
+#[test]
+fn a_disgruntled_program_mills_within_the_amenitys_reach() {
+    let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    {
+        let mut pos = game.world.get_mut::<Position>(staff[0]).unwrap();
+        pos.x = 3;
+        pos.y = 0;
+    }
+    sulk(&mut game, staff[0]);
+    let site = Position { x: 4, y: 0 };
+    let radius = game.amenities_for_test().nearest_any(site).unwrap().2;
+
+    let mut tiles = std::collections::HashSet::new();
+    for _ in 0..80 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        super::needs::set_tick(&mut game, next);
+        game.schedule_base_labour();
+        game.remember(
+            staff[0],
+            "ran_down",
+            crate::components::MemorySubject::Nothing,
+        );
+        let p = at(&game, staff[0]);
+        assert!(
+            crate::game::base::offshift::in_reach(p, site, radius),
+            "milling never leaves reach: {p:?}"
+        );
+        tiles.insert((p.x, p.y));
+    }
+
+    assert!(
+        tiles.len() >= 3,
+        "it moved around the Bay rather than holding one tile: {tiles:?}"
     );
 }
 

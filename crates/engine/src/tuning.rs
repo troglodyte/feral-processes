@@ -2586,6 +2586,15 @@ pub const IDLE_STAFF_RING_TILES: i32 = 3;
 /// a seeded test in an unrelated file.
 pub const IDLE_STAFF_STEP_TICKS: u64 = 6;
 
+/// How many `IDLE_STAFF_STEP_TICKS` beats pass between the step offers a
+/// program standing at its amenity gets.
+///
+/// Cosmetic, like the wander's own pace. Held perfectly still for a whole
+/// refill a body read as stuck beside the building; at the wander's pace it
+/// read as pacing. Every other beat sits between the two, and a body offered
+/// a tile out of reach or a hold still stays put for that offer.
+pub const AMENITY_MILL_BEATS: u64 = 2;
+
 /// Integrity fraction below which a base-staff program takes itself off the
 /// line and goes to a Repair Bay — see `Game::admit_the_badly_hurt`.
 ///

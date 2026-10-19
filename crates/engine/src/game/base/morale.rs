@@ -300,13 +300,13 @@ impl Game {
     ///
     /// `step_off_shift`'s twin, and deliberately its shape: **this is the one
     /// place a route is judged**, an `Err` latches, and a body already in
-    /// reach stands still rather than being offered a tile that would walk it
-    /// straight back out again.
+    /// reach answers with the leash it mills inside rather than being offered
+    /// a tile that would walk it straight back out again.
     pub(crate) fn step_respite(
         &mut self,
         worker: Entity,
         amenities: &Amenities,
-    ) -> Result<(), NoPost> {
+    ) -> Result<Option<(Position, i32)>, NoPost> {
         let here = self
             .world
             .get::<Position>(worker)
@@ -314,9 +314,9 @@ impl Game {
             .ok_or(NoPost::NoRoute)?;
         let (site, _, radius) = amenities.nearest_any(here).ok_or(NoPost::NoRoute)?;
         if in_reach(here, site, radius) {
-            return Ok(());
+            return Ok(Some((site, radius)));
         }
-        self.walk_idle_toward(worker, here, site)
+        self.walk_idle_toward(worker, here, site).map(|()| None)
     }
 
     /// Gives the errand up: the amenity exists and this body cannot walk to

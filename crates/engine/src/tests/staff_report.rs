@@ -129,9 +129,10 @@ fn coverage_lists_a_boxed_in_bay_and_counts_those_below_critical() {
     let (mut game, staff) = game_with_staff(95, 2);
     let bay = find_structure_by_kind(&mut game, "defrag_bay").unwrap();
     let site = *game.world.get::<Position>(bay).unwrap();
+    let r = game.amenities().servicing(&coherence())[0].2;
     let mut kept = false;
-    for dy in -1..=1 {
-        for dx in -1..=1 {
+    for dy in -r..=r {
+        for dx in -r..=r {
             let (x, y) = (site.x + dx, site.y + dy);
             if (dx, dy) == (0, 0) || !game.world.resource::<base_grid::BaseGrid>().walkable(x, y) {
                 continue;

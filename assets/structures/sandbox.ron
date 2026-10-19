@@ -7,7 +7,7 @@
     build_cost: [("core_fragment", 10)],
     work: None,
     services: [
-        (need: "slack", per_tick: 0.5, radius: 1),
+        (need: "slack", per_tick: 0.5, radius: 2),
     ],
     power_draw: 1,
     room_tags: ["recreation"],

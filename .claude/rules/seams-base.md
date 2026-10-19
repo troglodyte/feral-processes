@@ -210,7 +210,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **An idle program wanders the base, and laid floor is the leash.**
   `wander_step` offers one of the eight neighbours of the tile the body is
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
-  the ring it replaced was absolute.
+  the ring it replaced was absolute. A body arrived at its amenity takes the
+  same `Game::wander_one` leashed to the amenity's reach, every
+  `AMENITY_MILL_BEATS` beats.
 - **A body may cross a structure's own floor but never stop on it**, the
   wander declining `Game::structure_tiles` and `Game::build_site_tiles`
   where `blocked_tiles` still emits anchors alone.

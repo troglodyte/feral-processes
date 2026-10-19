@@ -28,6 +28,11 @@ fn crowded_bay(seed: u32, n: usize) -> (Game, Position, Vec<Entity>) {
     (game, site, staff)
 }
 
+/// The Defrag Bay's reach, off the asset rather than restated.
+fn reach(game: &mut Game) -> i32 {
+    game.amenities().servicing(&coherence())[0].2
+}
+
 fn put(game: &mut Game, who: Entity, x: i32, y: i32) {
     let mut pos = game.world.get_mut::<Position>(who).unwrap();
     pos.x = x;
@@ -127,9 +132,10 @@ fn an_incumbent_is_not_evicted_by_a_newcomer() {
 /// Fills every open reach tile of the bay at `site` but one with a Depot and
 /// returns the one left standing.
 fn box_in_to_one_tile(game: &mut Game, site: Position) -> (i32, i32) {
+    let r = reach(game);
     let mut keep = None;
-    for dy in -1..=1 {
-        for dx in -1..=1 {
+    for dy in -r..=r {
+        for dx in -r..=r {
             let (x, y) = (site.x + dx, site.y + dy);
             if (dx, dy) == (0, 0) || !game.world.resource::<BaseGrid>().walkable(x, y) {
                 continue;
@@ -143,7 +149,7 @@ fn box_in_to_one_tile(game: &mut Game, site: Position) -> (i32, i32) {
     }
     let taken = game.structure_tiles();
     let grid = game.world.resource::<BaseGrid>();
-    assert_eq!(open_tiles(grid, site, 1, &taken), 1, "one tile left open");
+    assert_eq!(open_tiles(grid, site, r, &taken), 1, "one tile left open");
     keep.unwrap()
 }
 
@@ -259,15 +265,24 @@ fn the_emptier_newcomer_gets_the_free_place() {
 fn an_off_shift_program_routes_to_the_bay_with_a_free_place() {
     let (mut game, site, staff) = crowded_bay(74, 3);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    place_now(&mut game, "defrag_bay", 2, 4).expect("a second bay");
+    // Far enough that the two reach boxes do not overlap.
+    let r = reach(&mut game);
+    let gap = 2 * r + 2;
+    lay_floor_box(
+        &mut game,
+        (site.x - r, site.y),
+        (site.x + r + 3, site.y + gap + r),
+    );
+    place_now(&mut game, "defrag_bay", 2, gap).expect("a second bay");
     let second = game
         .world
         .iter_entities()
         .filter_map(|e| e.get::<Position>().copied().filter(|p| *p != site))
-        .find(|p| (p.x, p.y) == (site.x, site.y + 4))
+        .find(|p| (p.x, p.y) == (site.x, site.y + gap))
         .expect("the second bay stands");
-    // staff[0] starts nearer the first bay.
-    put(&mut game, staff[0], site.x + 3, site.y + 1);
+    // staff[0] starts nearer the first bay, and far enough out of its reach
+    // that the setup tick's step cannot win it a place there.
+    put(&mut game, staff[0], site.x + r + 2, site.y + 1);
     game.tick();
     let (critical, _) = threshold(&game, &coherence());
     set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
@@ -279,8 +294,8 @@ fn an_off_shift_program_routes_to_the_bay_with_a_free_place() {
     }
 
     let at = *game.world.get::<Position>(staff[0]).unwrap();
-    assert!(in_reach(at, second, 1), "it went to the free bay: {at:?}");
-    assert!(!in_reach(at, site, 1));
+    assert!(in_reach(at, second, r), "it went to the free bay: {at:?}");
+    assert!(!in_reach(at, site, r));
 }
 
 /// `ServicedAt` is not saved; the first tick after a load re-claims.

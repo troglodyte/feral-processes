@@ -666,7 +666,7 @@ impl Game {
     /// error to invent for an empty list.
     ///
     /// Bounded by the stock actually standing, `TransferBasket`'s own
-    /// clamp-not-refuse convention (`take_from_adjacent`), and reported per
+    /// clamp-not-refuse convention (`take_from_stock`), and reported per
     /// unit through `Game::grant_loot` with `LootSource::Outpost` —
     /// correction 5's second, later event, distinct from the cycle's own
     /// `base_ledger::Event::Extract`.

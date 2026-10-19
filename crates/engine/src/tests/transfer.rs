@@ -989,3 +989,201 @@ fn any_structure_flagged_indexes_storage_is_a_terminal() {
 
     assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 3);
 }
+
+// ---- the transfer scoped to one structure (`TransferAt`) ----
+
+fn set_row(game: &Game, at: TransferAt, id: &str) -> Option<TransferRow> {
+    game.transfer_offer_at(at)
+        .into_iter()
+        .find(|r| r.item == ItemId::from(id))
+}
+
+/// Two Depots beside the party: each one's offer is its own stock, a take
+/// drains only it, and the put budget is its room alone.
+#[test]
+fn a_scoped_offer_lists_one_depots_stock_and_commits_only_there() {
+    let mut game = Game::new(1800, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let a = stocked(
+        &mut game,
+        "depot",
+        p.x + 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 6)],
+    );
+    let b = stocked(
+        &mut game,
+        "depot",
+        p.x - 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 9)],
+    );
+    set_inventory(&mut game, &[]);
+
+    let at_a = TransferAt::Structure(a);
+    assert_eq!(
+        set_row(&game, at_a, ids::CORE_FRAGMENT).unwrap().on_shelves,
+        6
+    );
+    assert_eq!(
+        set_row(&game, TransferAt::Structure(b), ids::CORE_FRAGMENT)
+            .unwrap()
+            .on_shelves,
+        9
+    );
+    // Room is A's 14 free slots, not A + B's 25.
+    assert_eq!(game.transfer_room_at(at_a), Some(14));
+
+    game.transfer_items_at(
+        at_a,
+        &TransferBasket::items(&[(ItemId::from(ids::CORE_FRAGMENT), 8)], &[]),
+    );
+    assert_eq!(pack_count(&game, ids::CORE_FRAGMENT), 6);
+    assert_eq!(
+        game.world.get::<Stock>(b).unwrap().output[&ItemId::from(ids::CORE_FRAGMENT)],
+        9,
+        "the other Depot is untouched"
+    );
+}
+
+#[test]
+fn a_scoped_put_stops_at_that_depots_room() {
+    let mut game = Game::new(1801, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let a = stocked(&mut game, "depot", p.x + 1, p.y, 5, &[]);
+    let b = stocked(&mut game, "depot", p.x - 1, p.y, 50, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 20)]);
+
+    let at_a = TransferAt::Structure(a);
+    assert_eq!(set_row(&game, at_a, ids::CORE_FRAGMENT).unwrap().can_put, 5);
+    let (_, given) = game.transfer_items_at(
+        at_a,
+        &TransferBasket::items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 20)]),
+    );
+    assert_eq!(given, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert!(game.world.get::<Stock>(b).unwrap().output.is_empty());
+}
+
+/// A machine's offer is its own shelf — and a Depot beside it is not on it.
+#[test]
+fn a_machines_scoped_offer_is_its_own_shelf() {
+    let mut game = Game::new(1802, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let machine = stocked(
+        &mut game,
+        "extractor",
+        p.x,
+        p.y - 1,
+        20,
+        &[(ids::CORE_FRAGMENT, 3)],
+    );
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 8)],
+    );
+    set_inventory(&mut game, &[]);
+
+    let row = set_row(&game, TransferAt::Structure(machine), ids::CORE_FRAGMENT).unwrap();
+    assert_eq!(row.on_shelves, 3);
+}
+
+/// Beside a terminal, its page is today's terminal-wide offer.
+#[test]
+fn a_terminals_scoped_offer_equals_the_pooled_one() {
+    let mut game = Game::new(1803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let terminal = bare(&mut game, "storage_terminal", p.x + 1, p.y);
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 10,
+        p.y + 4,
+        50,
+        &[(ids::CORE_FRAGMENT, 7)],
+    );
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 2)]);
+
+    assert_eq!(
+        game.transfer_offer_at(TransferAt::Structure(terminal)),
+        game.transfer_offer()
+    );
+    assert_eq!(
+        game.transfer_room_at(TransferAt::Structure(terminal)),
+        game.transfer_room()
+    );
+}
+
+/// `PackOnly` reaches no shelf at all: the pack's carriers and nothing else.
+#[test]
+fn a_pack_only_offer_reaches_no_shelf() {
+    let mut game = Game::new(1804, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 1,
+        p.y,
+        50,
+        &[(ids::CORE_FRAGMENT, 7)],
+    );
+    set_inventory(&mut game, &[]);
+    assert!(game.transfer_offer_at(TransferAt::PackOnly).is_empty());
+    assert_eq!(game.transfer_room_at(TransferAt::PackOnly), None);
+}
+
+/// A rack's offer is that rack's slots after the pack's carriers, and the
+/// other rack beside the party is not in it.
+#[test]
+fn a_racks_scoped_offer_lists_that_racks_slots_and_the_pack() {
+    use crate::components::{DownedPrograms, Racked};
+    use crate::items::DownedProgram;
+    let mut game = Game::new(1805, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let one = DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: crate::components::Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    let rack_a = spawn_machine_at(&mut game, "quarantine_rack", p.x + 1, p.y);
+    let rack_b = spawn_machine_at(&mut game, "quarantine_rack", p.x - 1, p.y);
+    game.world
+        .entity_mut(rack_a)
+        .insert(Racked(vec![one.clone()]));
+    game.world
+        .entity_mut(rack_b)
+        .insert(Racked(vec![one.clone(), one.clone()]));
+    let player = game.player_entity();
+    game.world
+        .entity_mut(player)
+        .insert(DownedPrograms(vec![one.clone()]));
+
+    let at_a = TransferAt::Structure(rack_a);
+    let offer = game.rack_offer_at(at_a);
+    assert_eq!(offer.len(), 2, "one pack carrier then rack A's one slot");
+    assert!(!offer[0].racked && offer[1].racked);
+    assert_eq!(
+        game.rack_offer().len(),
+        4,
+        "the pooled offer still sees both"
+    );
+
+    // Row 0 is the pack carrier: it lands on rack A, not B.
+    game.transfer_items_at(at_a, &TransferBasket::carriers(&[0]));
+    assert_eq!(game.world.get::<Racked>(rack_a).unwrap().0.len(), 2);
+    assert_eq!(game.world.get::<Racked>(rack_b).unwrap().0.len(), 2);
+}

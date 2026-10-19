@@ -405,7 +405,10 @@ fn two_rows_of_one_item_cannot_overfill_a_bench() {
         .add(ItemId::from(ids::ANNEALED_CORE), 30);
 
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let (given, _) = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
+    let (given, _) = game.give_to_shelves(
+        &game.pooled_shelves(),
+        &[(core.clone(), 15), (core.clone(), 15)],
+    );
 
     assert_eq!(given, vec![(core, 20)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
@@ -461,7 +464,10 @@ fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
         .unwrap()
         .add(ItemId::from(ids::CHARGE_COIL), 10);
 
-    let (given, _) = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
+    let (given, _) = game.give_to_shelves(
+        &game.pooled_shelves(),
+        &[(ItemId::from(ids::CHARGE_COIL), 10)],
+    );
 
     assert!(given.is_empty());
     assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
@@ -500,7 +506,7 @@ fn a_depot_beside_the_bench_does_not_take_the_cores_first() {
         .add(ItemId::from(ids::ANNEALED_CORE), 25);
 
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let (given, _) = game.give_to_adjacent(&[(core.clone(), 25)]);
+    let (given, _) = game.give_to_shelves(&game.pooled_shelves(), &[(core.clone(), 25)]);
 
     assert_eq!(given, vec![(core, 25)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);

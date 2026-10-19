@@ -901,7 +901,7 @@ impl Game {
     /// when a base somehow has two touching the party's cell.
     ///
     /// Adjacency rather than ownership, unlike `can_extract_routines`: this
-    /// is a physical handover, and `take_from_adjacent` / `give_to_adjacent`
+    /// is a physical handover, and `take_from_stock` / `give_to_shelves`
     /// are the rule for those. Sorted by tile before the pick,
     /// `adjacent_stock`'s reason — bevy's iteration order is not stable and
     /// an identical save must answer one keypress the same way on every run.

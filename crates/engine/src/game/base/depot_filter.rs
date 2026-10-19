@@ -7,7 +7,7 @@
 //! before this shipped.
 //!
 //! **`depot_accepts` is the one door.** Both things that put cargo into a
-//! Depot read it — `deposit::give_to_adjacent` for the player's own hand
+//! Depot read it — `deposit::give_to_shelves` for the player's own hand
 //! and `hauling::haul_step_system` for the crew — because a rule only one
 //! of them obeyed would let the transfer screen smuggle past what the
 //! screen itself says the Depot refuses. Nothing on the *take* side asks:

@@ -3,7 +3,7 @@
 //! action.
 //!
 //! The union of `collect.rs` and `deposit.rs`. It reimplements neither —
-//! `take_from_adjacent` and `give_to_adjacent` are the two movers, and this
+//! `take_from_stock` and `give_to_shelves` are the two movers, and this
 //! module is the offer, the two refusals and the one commit door.
 
 use crate::items::DownedProgram;
@@ -51,7 +51,91 @@ impl TransferBasket {
     }
 }
 
+/// Which structure a transfer reaches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferAt {
+    /// That one structure's shelf, rack or sink — or, for an Index
+    /// Terminal, every Depot in the base.
+    Structure(Entity),
+    /// No structure: the pack's downed programs and nothing else.
+    PackOnly,
+}
+
+/// What a transfer can take from and put into, resolved once per call so
+/// the offer, the room figures and the commit all read the same sets.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Shelves {
+    pub stock: Vec<Entity>,
+    pub depots: Vec<Entity>,
+    pub sinks: Vec<(Entity, ItemId, u32)>,
+    pub racks: Vec<Entity>,
+}
+
 impl Game {
+    /// Everything beside the party at once: today's pooled reach, which the
+    /// unscoped functions below keep until the pages replace them.
+    pub(crate) fn pooled_shelves(&self) -> Shelves {
+        Shelves {
+            stock: self.reachable_stock(),
+            depots: self.reachable_depots(),
+            sinks: self.supply_sinks(),
+            racks: self.adjacent_racks(),
+        }
+    }
+
+    /// The reach of one transfer page. An Index Terminal reaches every
+    /// Depot in the base; any other structure reaches only itself, in
+    /// whichever sets it qualifies for.
+    fn shelves_of(&self, at: TransferAt) -> Shelves {
+        let TransferAt::Structure(e) = at else {
+            return Shelves::default();
+        };
+        if self.indexes_storage(e) {
+            let depots = self.indexed_depots();
+            return Shelves {
+                stock: depots.clone(),
+                depots,
+                ..Shelves::default()
+            };
+        }
+        Shelves {
+            stock: if self.world.get::<Stock>(e).is_some() {
+                vec![e]
+            } else {
+                Vec::new()
+            },
+            depots: if self.is_depot(e) && self.world.get::<Stock>(e).is_some() {
+                vec![e]
+            } else {
+                Vec::new()
+            },
+            sinks: self.supply_sink_of(e).into_iter().collect(),
+            racks: if self.is_rack(e) { vec![e] } else { Vec::new() },
+        }
+    }
+
+    /// `transfer_offer` scoped to one structure.
+    pub fn transfer_offer_at(&self, at: TransferAt) -> Vec<TransferRow> {
+        self.offer_over(&self.shelves_of(at))
+    }
+
+    /// `rack_offer` scoped to one structure: the pack's carriers, then that
+    /// rack's own. Row indices are the handle `transfer_items_at` takes.
+    pub fn rack_offer_at(&self, at: TransferAt) -> Vec<crate::views::TransferCarrier> {
+        self.rack_offer_over(&self.shelves_of(at).racks)
+    }
+
+    /// `transfer_room` scoped to one structure.
+    pub fn transfer_room_at(&self, at: TransferAt) -> Option<u32> {
+        self.room_over(&self.shelves_of(at))
+    }
+
+    /// `transfer_items` scoped to one structure.
+    pub fn transfer_items_at(&mut self, at: TransferAt, basket: &TransferBasket) -> (Moved, Moved) {
+        let shelves = self.shelves_of(at);
+        self.items_over(&shelves, basket)
+    }
+
     /// Every item the party could move in either direction, in `ItemId`
     /// order.
     ///
@@ -77,6 +161,10 @@ impl Game {
     /// sitting on a shelf. A banked item may still have `on_shelves`, since a
     /// Research Node produces one.
     pub fn transfer_offer(&self) -> Vec<TransferRow> {
+        self.offer_over(&self.pooled_shelves())
+    }
+
+    fn offer_over(&self, shelves: &Shelves) -> Vec<TransferRow> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
@@ -88,7 +176,7 @@ impl Game {
         // second explicit sort that could drift from the log line's.
         let mut rows: std::collections::BTreeMap<ItemId, TransferRow> =
             std::collections::BTreeMap::new();
-        for structure in self.reachable_stock() {
+        for structure in shelves.stock.iter().copied() {
             let stock = self.world.get::<Stock>(structure).unwrap();
             for (item, qty) in stock.output.iter() {
                 if *qty == 0 || *item == currency {
@@ -104,8 +192,8 @@ impl Game {
                     .on_shelves += qty;
             }
         }
-        let depot_beside = !self.reachable_depots().is_empty();
-        let sinks = self.supply_sinks();
+        let depot_beside = !shelves.depots.is_empty();
+        let sinks = &shelves.sinks;
         let player = self.player_entity();
         if let Some(inv) = self.world.get::<Inventory>(player) {
             for (item, qty) in inv.items.iter() {
@@ -123,7 +211,7 @@ impl Game {
                 let may_put = !self.is_banked(item)
                     && (depot_beside || sinks.iter().any(|(_, supply, _)| supply == item));
                 let can_put = if may_put {
-                    (*qty).min(self.deposit_room_for(item))
+                    (*qty).min(self.deposit_room_for(shelves, item))
                 } else {
                     0
                 };
@@ -195,13 +283,17 @@ impl Game {
     ///
     /// Guarded exactly as `transfer_offer` is, and for the same reason.
     pub fn rack_offer(&self) -> Vec<crate::views::TransferCarrier> {
+        self.rack_offer_over(&self.adjacent_racks())
+    }
+
+    fn rack_offer_over(&self, racks: &[Entity]) -> Vec<crate::views::TransferCarrier> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
         if self.require_base().is_err() {
             return Vec::new();
         }
-        self.carrier_slots()
+        self.carrier_slots(racks)
             .into_iter()
             .map(|(program, rack)| crate::views::TransferCarrier {
                 label: self.downed_program_label(&program),
@@ -213,14 +305,14 @@ impl Game {
     /// `rack_offer`'s rows with the world's own handles still attached —
     /// the program and, for a racked one, which rack is holding it. Private
     /// because an `Entity` never crosses into a view.
-    fn carrier_slots(&self) -> Vec<(DownedProgram, Option<Entity>)> {
+    fn carrier_slots(&self, racks: &[Entity]) -> Vec<(DownedProgram, Option<Entity>)> {
         let player = self.player_entity();
         let mut rows: Vec<(DownedProgram, Option<Entity>)> = self
             .world
             .get::<crate::components::DownedPrograms>(player)
             .map(|held| held.0.iter().cloned().map(|p| (p, None)).collect())
             .unwrap_or_default();
-        for rack in self.adjacent_racks() {
+        for rack in racks.iter().copied() {
             let Some(racked) = self.world.get::<crate::components::Racked>(rack) else {
                 continue;
             };
@@ -286,10 +378,14 @@ impl Game {
     /// room line reading 0 beside an Extractor, which claims the base is
     /// full when it has no shelf at all.
     pub fn transfer_room(&self) -> Option<u32> {
-        if !self.has_put_target() {
+        self.room_over(&self.pooled_shelves())
+    }
+
+    fn room_over(&self, shelves: &Shelves) -> Option<u32> {
+        if !self.has_put_target_over(shelves) {
             return None;
         }
-        Some(self.deposit_room())
+        Some(self.deposit_room_over(shelves))
     }
 
     /// Moves a basket in both directions as one action, reporting what was
@@ -305,6 +401,11 @@ impl Game {
     /// and only if anything moved — an empty or all-zero basket is a silent
     /// no-op costing no turn.
     pub fn transfer_items(&mut self, basket: &TransferBasket) -> (Moved, Moved) {
+        let shelves = self.pooled_shelves();
+        self.items_over(&shelves, basket)
+    }
+
+    fn items_over(&mut self, shelves: &Shelves, basket: &TransferBasket) -> (Moved, Moved) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return (Moved::new(), Moved::new());
         }
@@ -315,13 +416,13 @@ impl Game {
         // what makes one basket one commit: a carrier half that cannot go
         // through takes the item half with it rather than leaving the
         // player a half-moved basket to work out.
-        if let Err(refusal) = self.check_carrier_basket(&basket.carriers) {
+        if let Err(refusal) = self.check_carrier_basket(&basket.carriers, &shelves.racks) {
             self.note_refusal(refusal);
             return (Moved::new(), Moved::new());
         }
-        let taken = self.take_from_adjacent(&basket.take);
-        let (given, loads) = self.give_to_adjacent(&basket.give);
-        let carriers = self.move_carriers(&basket.carriers);
+        let taken = self.take_from_stock(&shelves.stock, &basket.take);
+        let (given, loads) = self.give_to_shelves(shelves, &basket.give);
+        let carriers = self.move_carriers(&basket.carriers, &shelves.racks);
 
         if !taken.is_empty() {
             let summary = self.moved_summary(&taken);
@@ -354,11 +455,11 @@ impl Game {
     /// The pack ceiling is checked on the **net**: a basket that puts one
     /// carrier away and takes another back is legal at exactly the cap,
     /// which is what the picker's own clamps already offer.
-    fn check_carrier_basket(&self, rows: &[usize]) -> Result<(), String> {
+    fn check_carrier_basket(&self, rows: &[usize], racks: &[Entity]) -> Result<(), String> {
         if rows.is_empty() {
             return Ok(());
         }
-        let slots = self.carrier_slots();
+        let slots = self.carrier_slots(racks);
         let (mut taking, mut giving) = (0usize, 0usize);
         for row in rows
             .iter()
@@ -379,11 +480,7 @@ impl Game {
         if held + taking - giving.min(held) > crate::tuning::MAX_DOWNED_PROGRAMS {
             return Err("You have no room to carry another downed program.".to_string());
         }
-        let room: u32 = self
-            .adjacent_racks()
-            .into_iter()
-            .map(|rack| self.rack_room(rack))
-            .sum();
+        let room: u32 = racks.iter().map(|rack| self.rack_room(*rack)).sum();
         if giving as u32 > room {
             return Err("The racks here are full.".to_string());
         }
@@ -396,11 +493,11 @@ impl Game {
     /// empties a rack and refills it from the pack lands both halves. Rows
     /// are resolved against one snapshot of `carrier_slots` and removed
     /// **back to front**, so an earlier removal cannot shift a later index.
-    fn move_carriers(&mut self, rows: &[usize]) -> u32 {
+    fn move_carriers(&mut self, rows: &[usize], racks: &[Entity]) -> u32 {
         if rows.is_empty() {
             return 0;
         }
-        let slots = self.carrier_slots();
+        let slots = self.carrier_slots(racks);
         let wanted: Vec<usize> = rows
             .iter()
             .copied()
@@ -446,10 +543,7 @@ impl Game {
         // Put back in the order the player is looking at, and into the
         // first rack with room in `(x, y)` order.
         for program in to_rack.into_iter().rev() {
-            let landed = self
-                .adjacent_racks()
-                .into_iter()
-                .find(|rack| self.rack_room(*rack) > 0);
+            let landed = racks.iter().copied().find(|rack| self.rack_room(*rack) > 0);
             let Some(rack) = landed else {
                 // Unreachable behind `check_carrier_basket`, and the carrier
                 // goes back in the pack rather than being dropped if it ever

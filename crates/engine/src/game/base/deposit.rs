@@ -2,6 +2,7 @@
 //! `Stock::output` — the mirror of `collect.rs`, giving instead of taking,
 //! and the give half of `transfer.rs`.
 
+use crate::game::base::transfer::Shelves;
 use crate::*;
 
 /// A structure hand-loaded in one give: which, with what, and how many.
@@ -44,28 +45,32 @@ impl Game {
     /// the one hand-delivery to a machine, so it asks for the machine to be
     /// the thing the party is standing at.
     pub(crate) fn supply_sinks(&self) -> Vec<(Entity, ItemId, u32)> {
-        let db = self.world.resource::<StructureDb>();
         self.adjacent_stock()
             .into_iter()
-            .filter_map(|e| {
-                let def = db.get(&self.world.get::<Structure>(e)?.kind)?;
-                if def.stores || def.supply_capacity.is_none() {
-                    return None;
-                }
-                let item = def.spends_supply()?.clone();
-                let held = self.world.get::<Stock>(e)?.input.get(&item).copied();
-                let room = def
-                    .supply_input_capacity()
-                    .saturating_sub(held.unwrap_or(0));
-                Some((e, item, room))
-            })
+            .filter_map(|e| self.supply_sink_of(e))
             .collect()
+    }
+
+    /// This structure as a put target for a supply item, with the room left
+    /// in its input — `None` for a shelf, a structure with no authored
+    /// capacity or one that spends nothing.
+    pub(crate) fn supply_sink_of(&self, e: Entity) -> Option<(Entity, ItemId, u32)> {
+        let def = self.structure_def_of(e)?;
+        if def.stores || def.supply_capacity.is_none() {
+            return None;
+        }
+        let item = def.spends_supply()?.clone();
+        let held = self.world.get::<Stock>(e)?.input.get(&item).copied();
+        let room = def
+            .supply_input_capacity()
+            .saturating_sub(held.unwrap_or(0));
+        Some((e, item, room))
     }
 
     /// Whether anything beside the party takes a put: a Depot, or a
     /// structure that spends a supply.
-    pub(crate) fn has_put_target(&self) -> bool {
-        !self.reachable_depots().is_empty() || !self.supply_sinks().is_empty()
+    pub(crate) fn has_put_target_over(&self, shelves: &Shelves) -> bool {
+        !shelves.depots.is_empty() || !shelves.sinks.is_empty()
     }
 
     fn only_depots(&self, cells: Vec<Entity>) -> Vec<Entity> {
@@ -86,6 +91,11 @@ impl Game {
     /// pack promises the picker twice the space that exists, and the missing
     /// half is discovered as a silent short fill.
     pub fn deposit_room(&self) -> u32 {
+        self.deposit_room_over(&self.pooled_shelves())
+    }
+
+    /// `deposit_room` across an explicit shelf set.
+    pub(crate) fn deposit_room_over(&self, shelves: &Shelves) -> u32 {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return 0;
         }
@@ -93,15 +103,15 @@ impl Game {
             return 0;
         }
         let carried = self.puttable_carried();
-        let sinks: u32 = self
-            .supply_sinks()
-            .into_iter()
+        let sinks: u32 = shelves
+            .sinks
+            .iter()
             .filter(|(_, item, _)| carried.contains(item))
             .map(|(.., room)| room)
             .sum();
         sinks
             + self
-                .depots_for_put()
+                .depots_for_put(shelves)
                 .into_iter()
                 .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
                 .sum::<u32>()
@@ -118,8 +128,8 @@ impl Game {
     /// The budget is one number across every row, so it cannot express a
     /// per-item answer; this is the coarse half, and `TransferRow::can_put`
     /// is the exact one.
-    fn depots_for_put(&self) -> Vec<Entity> {
-        let depots = self.reachable_depots();
+    fn depots_for_put(&self, shelves: &Shelves) -> Vec<Entity> {
+        let depots = shelves.depots.clone();
         let carried = self.puttable_carried();
         if carried.is_empty() {
             return depots;
@@ -152,19 +162,19 @@ impl Game {
     /// The exact figure the coarse budget above cannot give, and what
     /// `TransferRow::can_put` is clamped to: a Depot refusing this item is
     /// not room for it however empty it stands.
-    pub(crate) fn deposit_room_for(&self, item: &ItemId) -> u32 {
-        let sinks: u32 = self
-            .supply_sinks()
-            .into_iter()
+    pub(crate) fn deposit_room_for(&self, shelves: &Shelves, item: &ItemId) -> u32 {
+        let sinks: u32 = shelves
+            .sinks
+            .iter()
             .filter(|(_, supply, _)| supply == item)
             .map(|(.., room)| room)
             .sum();
         sinks
-            + self
-                .reachable_depots()
-                .into_iter()
-                .filter(|e| self.depot_accepts(*e, item))
-                .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
+            + shelves
+                .depots
+                .iter()
+                .filter(|e| self.depot_accepts(**e, item))
+                .map(|e| self.world.get::<Stock>(*e).unwrap().output_room())
                 .sum::<u32>()
     }
 
@@ -185,12 +195,13 @@ impl Game {
     /// sink's `supply_input_capacity`, and against each Depot's
     /// `output_room()` as the fill walks them in `(x, y)` order — and each
     /// Depot's own filter, `depot_accepts`.
-    pub(crate) fn give_to_adjacent(
+    pub(crate) fn give_to_shelves(
         &mut self,
+        shelves: &Shelves,
         give: &[(ItemId, u32)],
     ) -> (Vec<(ItemId, u32)>, Vec<SinkLoad>) {
-        let depots = self.reachable_depots();
-        let mut sinks = self.supply_sinks();
+        let depots = shelves.depots.clone();
+        let mut sinks = shelves.sinks.clone();
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         let mut loads = Vec::new();
         for (item, qty) in give {

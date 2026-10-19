@@ -1346,8 +1346,8 @@ impl Game {
     /// guard going inside: `wield_program` calls `remove_companion` to stand
     /// a member down before taking it as a weapon, so a `require_base` in
     /// there would refuse wielding in the field as a side effect, through a
-    /// function the player never invoked. `take_from_adjacent` /
-    /// `give_to_adjacent`'s exact shape, one axis along: the mover is
+    /// function the player never invoked. `take_from_stock` /
+    /// `give_to_shelves`'s exact shape, one axis along: the mover is
     /// guard-free by construction and the caller owns the refusal.
     pub fn stand_down_companion(&mut self, creature: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {

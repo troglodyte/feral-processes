@@ -1638,3 +1638,52 @@ fn the_machine_report_lists_stalls_worst_first_then_damage() {
     assert_eq!(rows[2].damage, Some((2, 5)));
     assert_eq!(rows[0].damage, None);
 }
+
+/// A fuel fetch is a `GatherResource` posting at a supplier that runs no job
+/// of its own, so `accepts_a_program` alone refuses it. Re-attached through
+/// that gate, the load came back and the trip did not: a body holding a cell
+/// with no `Task` is outside the posting pool (`Carrying` is a forced edge)
+/// and outside every idle errand, so it wandered with the cell for good.
+#[test]
+fn a_fuel_carrier_mid_trip_keeps_its_trip_across_a_save_and_load() {
+    let mut game = base_with_home(4107);
+    let (recharger, _) = recharger_beside_a_depot(&mut game, 10);
+    let carrier = spawn_tamed(&mut game, 500, 3);
+    park_at_post(&mut game, carrier, recharger);
+    game.world.entity_mut(carrier).insert((
+        Task {
+            kind: crate::components::TaskKind::GatherResource,
+            target: recharger,
+            progress: 0,
+            required: 1,
+        },
+        crate::components::Carrying {
+            item: ItemId::from(ids::POWER_CELL),
+            qty: 1,
+        },
+    ));
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_fuel_carrier_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = find_structure_by_kind(&mut loaded, "recharger_node").unwrap();
+    let mut carriers = loaded
+        .world
+        .query::<(&crate::components::Carrying, Option<&Task>)>();
+    let (load, task) = carriers
+        .iter(&loaded.world)
+        .next()
+        .expect("the carrier comes back holding its cell");
+    assert_eq!(load.item, ItemId::from(ids::POWER_CELL));
+    assert_eq!(
+        task.map(|t| (t.target, t.kind)),
+        Some((reloaded, crate::components::TaskKind::GatherResource)),
+        "the cell is on its way to the recharger, and the trip has to come \
+         back with it"
+    );
+}

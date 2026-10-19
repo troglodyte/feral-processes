@@ -133,9 +133,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `components::DepotFilter` meaning the shelf takes anything.
 - **A Depot pulls only what it accepts, only from a worked producer, and
   `Game::auto_filter_depots` fires once, from `Game::spawn_structure` and only for the Depot; setting a machine's recipe never touches a Depot.**
-- **Taking and putting are one screen, one basket and one commit** —
-  `Mode::Transfer`, opened with `c`.
-- **The put side is one budget and the take side is per row, and the screen
+- **Taking and putting are one screen, one basket and one commit, scoped to
+  one structure** — `Mode::Transfer`, the hub's Inventory page.
+- **The put side is one budget (one structure's room) and the take side is per row, and the screen
   must tell "no Depot" from "a full Depot".** `App::put_available` subtracts
   the *other* rows from `basket_room` so the highlighted row can still be
   lowered and raised; `App::take_available` is that row's shelf alone.
@@ -277,8 +277,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs
   nothing.
-- **The rig's tool screen is `[F]`**, because `c` already opens the transfer
-  picker at a rig and `T` is one of `EASTER_EGGS.md`'s hidden keys.
+- **The rig's tool screen is the Tool page of the structure hub, never a map
+  key**, and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**
 - **Three of the five classes do something at a post, each in a different
@@ -448,7 +448,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
 
-- **`[c]` is the interact dispatcher: it acts on what `Game::adjacent_interactions` lists and nothing else.**
+- **`[c]` opens the structure hub, and `Game::adjacent_structures` is the one answer to what is beside the party and which pages each has.**
 - **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
 

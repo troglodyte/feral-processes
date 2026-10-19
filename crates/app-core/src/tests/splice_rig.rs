@@ -1,4 +1,4 @@
-//! `Mode::SpliceRig`: `[I]` in base space beside a Splice Rig.
+//! `Mode::SpliceRig`: the Splice page of a Splice Rig's hub.
 
 use super::support::*;
 use crate::*;
@@ -26,37 +26,36 @@ fn view(app: &App) -> feral_processes_engine::ImplantView {
 }
 
 #[test]
-fn i_beside_a_rig_opens_the_screen_and_esc_closes_it() {
+fn c_beside_a_rig_opens_the_screen_and_esc_closes_it() {
     let mut app = app_beside_a_splice_rig_carrying(9301, &[(LATTICE, 1)]);
 
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::SpliceRig);
     assert_eq!(app.splice_rig.as_ref().unwrap().view.installable.len(), 1);
 
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::SpliceRig, "Esc goes to the rail first");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.splice_rig.is_none());
 }
 
 #[test]
-fn i_away_from_a_rig_refuses_and_logs() {
+fn c_away_from_a_rig_opens_no_splice_screen() {
     let mut app = test_app(9302);
     found_the_base(&mut app);
     app.mode = Mode::Playing;
 
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(
-        app.status_line.as_deref(),
-        Some("There is no Splice Rig here.")
-    );
+    assert!(app.splice_rig.is_none());
 }
 
 #[test]
 fn installing_within_the_cap_is_immediate_and_consumes_the_item() {
     let mut app = app_beside_a_splice_rig_carrying(9303, &[(LATTICE, 1)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
 
     app.handle_key(GameKey::Char('I'));
 
@@ -74,7 +73,7 @@ fn installing_within_the_cap_is_immediate_and_consumes_the_item() {
 #[test]
 fn installing_past_the_cap_asks_first_and_y_commits() {
     let mut app = app_beside_a_splice_rig_carrying(9304, &[(LATTICE, 1), (LEDGER, 1)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
     // Rows are sorted by item id: the ledger, then the lattice.
     app.handle_key(GameKey::Char('2'));
     app.handle_key(GameKey::Char('I'));
@@ -98,7 +97,7 @@ fn installing_past_the_cap_asks_first_and_y_commits() {
 #[test]
 fn declining_the_overload_confirm_changes_nothing() {
     let mut app = app_beside_a_splice_rig_carrying(9305, &[(LATTICE, 1), (LEDGER, 1)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Char('2'));
     app.handle_key(GameKey::Char('I'));
     app.handle_key(GameKey::Char('2'));
@@ -120,7 +119,7 @@ fn declining_the_overload_confirm_changes_nothing() {
 #[test]
 fn r_removes_for_fragments_and_a_short_pack_surfaces_the_refusal() {
     let mut app = app_beside_a_splice_rig_carrying(9306, &[(LATTICE, 1)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Char('I'));
     assert_eq!(view(&app).installed.len(), 1);
 
@@ -135,7 +134,7 @@ fn r_removes_for_fragments_and_a_short_pack_surfaces_the_refusal() {
 #[test]
 fn r_with_fragments_returns_the_item() {
     let mut app = app_beside_a_splice_rig_carrying(9307, &[(LATTICE, 1), ("core_fragment", 40)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Char('I'));
     assert_eq!(view(&app).installed.len(), 1);
 
@@ -149,7 +148,7 @@ fn r_with_fragments_returns_the_item() {
 #[test]
 fn the_verbs_on_the_wrong_kind_of_row_refuse_without_acting() {
     let mut app = app_beside_a_splice_rig_carrying(9308, &[(LATTICE, 1)]);
-    app.handle_key(GameKey::Char('I'));
+    app.handle_key(GameKey::Char('c'));
 
     app.handle_key(GameKey::Char('R'));
 

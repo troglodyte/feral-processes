@@ -21,7 +21,7 @@ pub(crate) const ORTHOGONAL: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)
 /// `systems::power_grid_system` pulls a supplier's Power Cell out of the same
 /// four tiles, and the moment those two walks could differ the base stops
 /// reading as a physical line. Neither caller can use
-/// `Game::take_from_adjacent` — that one is the *player's* collect, keyed on
+/// `Game::take_from_stock` — that one is the *player's* collect, keyed on
 /// where the party stands and needing `&mut Game`, which a bevy system does
 /// not have.
 ///
@@ -134,17 +134,22 @@ impl Game {
         if !self.indexes_storage_here() {
             return adjacent;
         }
-        let db = self.world.resource::<StructureDb>();
+        self.stock_in_order(|e| adjacent.contains(&e) || self.is_depot(e))
+    }
+
+    /// Every Depot in the base, in `(x, y)` order — what an Index Terminal
+    /// indexes.
+    pub(crate) fn indexed_depots(&self) -> Vec<Entity> {
+        self.stock_in_order(|e| self.is_depot(e))
+    }
+
+    /// The stock-bearing entities `keep` accepts, in `(x, y)` order for
+    /// `adjacent_stock`'s reason.
+    fn stock_in_order(&self, keep: impl Fn(Entity) -> bool) -> Vec<Entity> {
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
-            .filter(|e| e.contains::<Stock>())
-            .filter(|e| {
-                adjacent.contains(&e.id())
-                    || e.get::<Structure>()
-                        .and_then(|s| db.get(&s.kind))
-                        .is_some_and(|d| d.stores)
-            })
+            .filter(|e| e.contains::<Stock>() && keep(e.id()))
             .filter_map(|e| {
                 let p = e.get::<Position>()?;
                 Some((p.x, p.y, e.id()))
@@ -161,20 +166,33 @@ impl Game {
         let Some((px, py)) = self.base_pos() else {
             return false;
         };
-        let db = self.world.resource::<StructureDb>();
         self.world.iter_entities().any(|e| {
-            let (Some(structure), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
+            let Some(p) = e.get::<Position>() else {
                 return false;
             };
             ORTHOGONAL
                 .iter()
                 .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
-                && db.get(&structure.kind).is_some_and(|d| d.indexes_storage)
+                && self.indexes_storage(e.id())
         })
     }
 
-    /// Moves an exact basket off the structures `reachable_stock` names —
-    /// the adjacent ones, plus every Depot beside a terminal — and reports what
+    /// Whether this structure is flagged `StructureDef::indexes_storage` —
+    /// the per-entity question `indexes_storage_here` and the structure hub
+    /// both ask.
+    pub(crate) fn indexes_storage(&self, structure: Entity) -> bool {
+        self.structure_def_of(structure)
+            .is_some_and(|d| d.indexes_storage)
+    }
+
+    /// The def of a standing structure, `None` for anything else.
+    pub(crate) fn structure_def_of(&self, entity: Entity) -> Option<&StructureDef> {
+        let kind = &self.world.get::<Structure>(entity)?.kind;
+        self.world.resource::<StructureDb>().get(kind)
+    }
+
+    /// Moves an exact basket off the structures `shelves.stock` names —
+    /// the structure's own, or every indexed Depot for a terminal — and reports what
     /// actually landed, keyed and ordered by `ItemId`.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
@@ -184,14 +202,17 @@ impl Game {
     ///
     /// An over-ask is clamped rather than refused, and units leave a buffer
     /// through `hauling::take_from` alone.
-    pub(crate) fn take_from_adjacent(&mut self, want: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
+    pub(crate) fn take_from_stock(
+        &mut self,
+        neighbours: &[Entity],
+        want: &[(ItemId, u32)],
+    ) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
-        let neighbours = self.reachable_stock();
 
         let mut taken: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in want {
             let mut outstanding = *qty;
-            for structure in &neighbours {
+            for structure in neighbours {
                 if outstanding == 0 {
                     break;
                 }

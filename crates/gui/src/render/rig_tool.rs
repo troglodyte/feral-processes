@@ -27,26 +27,25 @@ pub(super) fn draw_rig_tool(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let body = match screen {
+    let body = page_rows(screen, selected);
+    draw_popup("Rig tool", PopupSize::Large, &body, refusal, painter, m);
+}
+
+/// The screen's rows, shared by the popup and the structure hub's page.
+pub(super) fn page_rows(screen: Option<&RigToolScreen>, selected: usize) -> Vec<Row> {
+    match screen {
         Some(screen) => body_rows(screen, selected),
         // Unreachable through `App`, which closes the screen the moment the
         // rig stops answering — drawn rather than asserted, because a
         // renderer that panics takes the window with it.
         None => vec![text_row("There is no rig here.")],
-    };
-    draw_popup("Rig tool", PopupSize::Large, &body, refusal, painter, m);
+    }
 }
 
 fn body_rows(screen: &RigToolScreen, selected: usize) -> Vec<Row> {
     let view = &screen.view;
     let (x, y) = view.tile;
     let mut body = vec![text_row(format!("{} at ({x}, {y})", view.name))];
-    if screen.of > 1 {
-        body.push(text_row(format!(
-            "One of {} beside you; Tab for the next",
-            screen.of
-        )));
-    }
     match &view.installed {
         Some(row) => body.push(text_row(format!(
             "Fitted: {} — {}, tier {}, {} ticks a program",
@@ -178,7 +177,6 @@ mod tests {
             .collect();
         RigToolScreen {
             rig: Entity::PLACEHOLDER,
-            of: 1,
             view: RigToolView {
                 tile: (0, 0),
                 name: "Teardown Rig".to_string(),
@@ -208,6 +206,10 @@ mod tests {
             .expect("the shipped assets define tools");
         let row = cols.row(&widest.name, widest.category.as_str(), u32::MAX, u64::MAX);
         let header = cols.header();
+        crate::render::base_report::assert_rows_fit(
+            &[item_row(row.clone(), false), text_row(header.clone())],
+            "rig tool page",
+        );
 
         with_painter(|p| {
             let m = ui_metrics(900.0);

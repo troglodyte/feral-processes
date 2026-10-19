@@ -580,7 +580,7 @@ pub struct StructureDef {
     pub dispatches_sorties: bool,
     /// Whether standing beside this structure reaches every Depot in the
     /// base rather than only the ones beside the party — see
-    /// `Game::reachable_depots`. Machine buffers and racks stay walk-up.
+    /// `Game::shelves_of`. Machine buffers and racks stay walk-up.
     ///
     /// `dispatches_sorties`' shape and for its reason: a flag rather than
     /// the engine naming the shipped id, so a mod's second terminal is a

@@ -1422,7 +1422,7 @@ impl Game {
 
     /// Everything that can refuse one sale, and **how many would actually
     /// leave the pack** — an over-ask is clamped to what is held rather than
-    /// refused, which is `transfer_items`' rule and the reason this returns a
+    /// refused, which is `transfer_items_at`' rule and the reason this returns a
     /// count rather than `()`.
     ///
     /// No side effect, so a basket can ask it of every row before the first

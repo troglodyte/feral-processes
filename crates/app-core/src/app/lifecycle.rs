@@ -68,6 +68,7 @@ impl App {
             pending_post_structure: None,
             menu_origin: None,
             hub_last: [None; 3],
+            structure_hub: None,
             command_return_row: None,
             hub_on_rail: true,
             etch_return: None,
@@ -146,7 +147,7 @@ impl App {
             route_cargo_amounts: Vec::new(),
             route_standing: false,
             basket_room: None,
-            transfer_source: TransferSource::Base,
+            transfer_source: TransferSource::Base(TransferAt::PackOnly),
             pending_craft: None,
             craft_quantity_input: String::new(),
             careful_craft: false,
@@ -514,6 +515,7 @@ impl App {
         // most wanted. `an_arena_fight_still_writes_telemetry` is what stops
         // this being folded back inside for tidiness.
         self.flush_battle_telemetry();
+        self.refresh_structure_hub();
         if self.in_arena() {
             return;
         }

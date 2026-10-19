@@ -1,4 +1,4 @@
-//! `Mode::Siphon`: `[P]` beside a Power Siphon in base space.
+//! `Mode::Siphon`: the Siphon page of a Power Siphon's hub.
 
 use super::support::*;
 use crate::*;
@@ -12,8 +12,16 @@ fn app_beside_a_siphon(seed: u32) -> App {
     app
 }
 
+fn siphon_beside(game: &Game) -> Entity {
+    game.adjacent_structures()
+        .into_iter()
+        .find(|s| s.pages.contains(&StructurePage::Siphon))
+        .expect("a siphon beside the party")
+        .entity
+}
+
 fn the_siphon(app: &App) -> Entity {
-    app.game.as_ref().unwrap().adjacent_siphons()[0]
+    siphon_beside(app.game.as_ref().unwrap())
 }
 
 fn pet_hp(game: &mut Game, program: Entity) -> i32 {
@@ -24,50 +32,34 @@ fn pet_hp(game: &mut Game, program: Entity) -> i32 {
         .hp
 }
 
-fn log_has(app: &App, fragment: &str) -> bool {
-    app.game
-        .as_ref()
-        .unwrap()
-        .message_history(usize::MAX)
-        .iter()
-        .any(|l| l.text.contains(fragment))
-}
-
 #[test]
-fn p_at_no_siphon_refuses_and_logs() {
+fn c_beside_a_structure_with_no_siphon_page_opens_no_siphon() {
     let mut app = app_owning_a_program_and_a_station_of("no_siphon", "research_node", 9101);
     stand_beside_the_extractor(&mut app);
 
-    app.handle_key(GameKey::Char('P'));
+    app.handle_key(GameKey::Char('c'));
 
-    assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(
-        app.status_line.as_deref(),
-        Some("There is no Power Siphon here.")
-    );
-    assert!(log_has(&app, "There is no Power Siphon here."));
+    assert_ne!(app.mode, Mode::Siphon);
+    assert!(app.siphon.is_none());
 }
 
 #[test]
-fn p_at_an_empty_siphon_opens_the_picker_and_a_pick_holds_the_program() {
+fn c_at_an_empty_siphon_opens_the_picker_and_a_pick_holds_the_program() {
     let mut app = app_beside_a_siphon(9102);
     let program = app.game.as_mut().unwrap().base_staff()[0];
 
-    app.handle_key(GameKey::Char('P'));
+    app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Siphon);
     app.handle_key(GameKey::Char('1'));
 
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_mut().unwrap();
     assert_eq!(game.program_role(program), Some(ProgramRole::Siphoned));
-    assert_eq!(
-        game.siphon_holder(game.adjacent_siphons()[0]),
-        Some(program)
-    );
+    assert_eq!(game.siphon_holder(siphon_beside(game)), Some(program));
 }
 
 #[test]
-fn p_at_an_occupied_siphon_offers_release_and_confirming_releases() {
+fn c_at_an_occupied_siphon_offers_release_and_confirming_releases() {
     let mut app = app_beside_a_siphon(9103);
     let program = app.game.as_mut().unwrap().base_staff()[0];
     let siphon = the_siphon(&app);
@@ -78,7 +70,7 @@ fn p_at_an_occupied_siphon_offers_release_and_confirming_releases() {
         .unwrap();
     let hp_before = pet_hp(app.game.as_mut().unwrap(), program);
 
-    app.handle_key(GameKey::Char('P'));
+    app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Siphon);
     app.handle_key(GameKey::Char('1'));
 
@@ -96,7 +88,8 @@ fn esc_leaves_the_siphon_screen_writing_nothing() {
     let siphon = the_siphon(&app);
     let log_before = app.game.as_ref().unwrap().message_history(usize::MAX).len();
 
-    app.handle_key(GameKey::Char('P'));
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::Playing);
@@ -111,7 +104,7 @@ fn esc_leaves_the_siphon_screen_writing_nothing() {
 fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
     let mut app = app_beside_a_siphon(9106);
     let program = app.game.as_mut().unwrap().base_staff()[0];
-    app.handle_key(GameKey::Char('P'));
+    app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Siphon);
 
     // Walked away while the screen was open.

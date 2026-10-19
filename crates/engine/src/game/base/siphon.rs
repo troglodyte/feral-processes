@@ -109,30 +109,6 @@ impl Game {
             .map(|e| e.id())
     }
 
-    /// Every siphon orthogonally beside the party in base space, in `(x, y)`
-    /// order — `adjacent_teardown_rigs`' reach.
-    pub fn adjacent_siphons(&self) -> Vec<Entity> {
-        let Some((px, py)) = self.base_pos() else {
-            return Vec::new();
-        };
-        let mut found: Vec<(i32, i32, Entity)> = self
-            .world
-            .iter_entities()
-            .filter(|e| self.is_siphon(e.id()))
-            .filter_map(|e| {
-                let p = e.get::<Position>()?;
-                Some((p.x, p.y, e.id()))
-            })
-            .filter(|(x, y, _)| {
-                crate::game::base::collect::ORTHOGONAL
-                    .iter()
-                    .any(|(dx, dy)| (*x, *y) == (px + dx, py + dy))
-            })
-            .collect();
-        found.sort();
-        found.into_iter().map(|(_, _, e)| e).collect()
-    }
-
     /// The one place a release writes: the marker comes off and the price
     /// comes out of the program, whichever door asked.
     fn let_go(&mut self, program: Entity) {

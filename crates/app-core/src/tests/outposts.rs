@@ -196,7 +196,7 @@ fn shift_c_opens_transfer_with_the_outposts_stock() {
 }
 
 /// The commit reaches `Game::take_from_outpost` rather than
-/// `Game::transfer_items` — the whole point of `TransferSource`. A taken
+/// `Game::transfer_items_at` — the whole point of `TransferSource`. A taken
 /// unit must leave the outpost's stock and land in the pack, and the screen
 /// must return to `Mode::OutpostVisit`, not the raw map.
 #[test]

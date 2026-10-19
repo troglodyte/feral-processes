@@ -1,5 +1,6 @@
-//! `[c]` as the interact key: one thing beside the party acts at once,
-//! several ask which side, nothing is refused as before.
+//! `[c]` as the interact key: it opens the structure hub for what is beside
+//! the party, refuses when there is nothing, and the removed map keys stay
+//! removed.
 
 use super::support::*;
 use crate::*;
@@ -20,6 +21,7 @@ fn c_with_nothing_beside_the_party_stays_on_the_map() {
     let mut app = app_in_base_with_programs(2402, 2);
     app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Playing);
+    assert!(app.structure_hub.is_none());
 }
 
 #[test]
@@ -43,113 +45,89 @@ fn escaping_the_rebuild_picker_commits_nothing() {
     let mut app = app_beside_a_rebuild_site(2404, false);
     app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_build.is_none());
+    assert!(app.structure_hub.is_none());
     assert_eq!(site_count(&mut app), 1);
 }
 
 #[test]
-fn c_with_a_depot_and_a_site_asks_which_side_and_routes_each() {
+fn c_with_a_depot_and_a_site_opens_the_site_east_then_tab_reaches_the_depot() {
     let mut app = app_beside_a_rebuild_site(2405, true);
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "the site is east, first clockwise"
+    );
 
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::Transfer, "the Depot is west");
-    app.handle_key(GameKey::Esc);
-
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
-    app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::BuildProgram, "the site is east");
 }
 
 #[test]
-fn a_side_with_nothing_is_refused_and_esc_backs_out() {
-    let mut app = app_beside_a_rebuild_site(2406, true);
-    app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::Playing);
-    assert!(app.status_line.is_some());
-
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing);
-}
-
-#[test]
-fn c_with_a_depot_and_a_machine_asks_which_side_and_the_machine_opens_its_recipe() {
+fn c_with_a_depot_and_a_machine_opens_the_machine_and_its_recipe_is_a_page() {
     let mut app = app_between_a_depot_and_a_machine(2407);
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
+    assert_eq!(
+        app.mode,
+        Mode::Transfer,
+        "the Factory is east: its shelf first"
+    );
 
-    app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::MachineRecipe, "the Factory is east");
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::MachineRecipe);
     assert!(app.machine_recipe.is_some());
-    app.handle_key(GameKey::Esc);
 
-    app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::Transfer, "the Depot is west");
 }
 
 #[test]
-fn on_a_shared_side_the_arrow_opens_the_machines_recipe_and_c_again_moves_cargo() {
-    let mut app = app_beside_a_set_machine_holding_output(2408);
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(
-        app.mode,
-        Mode::InteractDirection,
-        "cargo and a recipe, both east"
-    );
-
-    app.handle_key(GameKey::Right);
-    assert_eq!(
-        app.mode,
-        Mode::MachineRecipe,
-        "the machine wins its own side"
-    );
-    app.handle_key(GameKey::Esc);
-
-    app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::Transfer, "c again is the cargo");
-}
-
-#[test]
-fn c_again_with_no_cargo_beside_the_party_is_refused() {
+fn c_beside_two_rebuild_sites_opens_one_and_tab_the_other() {
     let mut app = app_beside_two_rebuild_sites(2409);
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
-
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(app.status_line.as_deref(), Some("No cargo to move here."));
-    assert!(
-        app.game
-            .as_ref()
-            .unwrap()
-            .message_history(usize::MAX)
-            .iter()
-            .any(|l| l.text == "No cargo to move here."),
-        "the refusal went through App::refuse, so the log has it too"
-    );
+    assert_eq!(app.mode, Mode::BuildProgram);
+    let first = app.structure_hub.as_ref().unwrap().current().entity;
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::BuildProgram);
+    assert_ne!(app.structure_hub.as_ref().unwrap().current().entity, first);
 }
 
-/// The transfer is aimed at the Depot even when a machine sorts before it,
-/// so the arrow toward a visible Depot is never refused.
 #[test]
-fn the_arrow_toward_a_depot_opens_the_transfer_when_the_machine_sorts_first() {
+fn the_cycle_goes_clockwise_whichever_structure_sorts_first_by_tile() {
     let mut app = app_beside_a_machine_west_and_a_depot_east(2410);
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
+    assert_eq!(
+        app.mode,
+        Mode::Transfer,
+        "the Depot is east, first clockwise"
+    );
+    assert_eq!(app.structure_hub.as_ref().unwrap().current().name, "Depot");
 
-    app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::Transfer, "the Depot is east");
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.structure_hub.as_ref().unwrap().current().dir, (-1, 0));
+}
 
+#[test]
+fn a_set_machine_holding_output_opens_on_its_shelf_with_the_recipe_a_page_on() {
+    let mut app = app_beside_a_set_machine_holding_output(2408);
     app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Left);
-    assert_eq!(app.mode, Mode::MachineRecipe, "the Factory is west");
+    assert_eq!(app.mode, Mode::Transfer);
+    assert_eq!(app.basket_rows.len(), 1, "the three blocks on its shelf");
+
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::MachineRecipe);
+}
+
+/// The rig tool, siphon and splice keys moved into the hub as pages.
+#[test]
+fn f_p_and_i_on_the_map_do_nothing() {
+    let mut app = app_beside_depots(2412, 1, 0, &[]);
+    for key in ['F', 'P', 'I'] {
+        app.handle_key(GameKey::Char(key));
+        assert_eq!(app.mode, Mode::Playing, "{key}");
+        assert!(app.status_line.is_none(), "{key}");
+    }
 }

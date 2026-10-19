@@ -48,7 +48,7 @@ pub use feral_processes_engine::ProgramRole;
 ///
 /// **Items come first and carriers after**, and that ordering is load-bearing:
 /// a carrier row's position less the item count is its index into
-/// `Game::rack_offer()`, which is what `TransferBasket::carriers` names.
+/// `Game::rack_offer_at`, which is what `TransferBasket::carriers` names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TransferEntry {
     Item(TransferRow),
@@ -80,12 +80,13 @@ impl TransferEntry {
 /// Set by whichever opener called `App::open_transfer` and read only by
 /// `App::commit_transfer`, so the one basket and one commit stay shared
 /// while the door they spend through differs underneath —
-/// `Game::transfer_items` against `Game::take_from_outpost`. An outpost's
+/// `Game::transfer_items_at` against `Game::take_from_outpost`. An outpost's
 /// rows carry `can_put: 0` (`Game::outpost_transfer_offer`), so a basket
 /// built against one never has anything in `TransferBasket::give`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferSource {
-    Base,
+    /// The base's own shelves, scoped to one structure (or the pack alone).
+    Base(TransferAt),
     Outpost((i32, i32)),
 }
 
@@ -96,7 +97,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::InteractionKind;
 use feral_processes_engine::achievements::{AchievementDb, Profile};
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::battle::DamageRange;
@@ -112,6 +112,7 @@ use feral_processes_engine::sorties::SortieId;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
+use feral_processes_engine::{AdjacentStructure, StructurePage, TransferAt};
 // Neither `Duty` nor `WorkSection` is named by a non-test call site — the
 // handler matches `column.key` and reads `row.section` without spelling either,
 // and only a test constructs one to compare against — so both are
@@ -1585,16 +1586,16 @@ pub enum Mode {
     /// for a reveal to swallow.
     TacticalResult,
     Transfer,
-    /// One Depot's allow/deny list, opened with `[F]` from the transfer
-    /// picker — see `App::depot_filter`.
+    /// One Depot's allow/deny list, a page of the structure hub, opened from
+    /// a Depot's rail — see `App::depot_filter`.
     ///
     /// A screen of its own rather than a section of the picker: the picker
     /// is a basket of quantities committed in one action, and this is a
     /// standing instruction to a building that takes effect the moment it
     /// is set. Nothing here is spent, so there is nothing to commit.
     DepotFilter,
-    /// Which tool the Teardown Rig beside the party runs on — `[F]` in base
-    /// space. A screen of its own rather than a page of `Mode::Tools`,
+    /// Which tool the Teardown Rig beside the party runs on — the Tool
+    /// page of its hub. A screen of its own rather than a page of `Mode::Tools`,
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
     /// What the Extractor, Factory, Assembler or Printer beside the party
@@ -1602,8 +1603,8 @@ pub enum Mode {
     MachineRecipe,
     /// Asks before a recipe change empties a set machine.
     MachineRecipeConfirm,
-    /// Build an implant into the player or cut one out — `[I]` in base
-    /// space beside a Splice Rig. See `App::splice_rig`.
+    /// Build an implant into the player or cut one out — the Splice
+    /// page of a Splice Rig's hub. See `App::splice_rig`.
     SpliceRig,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
@@ -1750,12 +1751,6 @@ pub enum Mode {
     /// row moved down one screen to `Mode::BuildProgram`, which is the
     /// first point the target is known.
     UpgradeDirection,
-    /// Aiming `[c]` when more than one neighbouring structure has
-    /// something to do — see `Game::adjacent_interactions`. The side picked
-    /// runs that side's interaction; a side with none is refused. Only
-    /// reached with two or more sides, so the common single-target `[c]`
-    /// never sees it.
-    InteractDirection,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -2474,7 +2469,6 @@ impl Mode {
             | Mode::RemoveDirection
             | Mode::TrapDirection
             | Mode::UpgradeDirection
-            | Mode::InteractDirection
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::StructureManifest
@@ -2852,15 +2846,20 @@ pub const PARTY_PAGES: &[HubPage] = &[
 ];
 
 /// A rail of pages with one cursor, shared by the base report, the
-/// inventory and the party.
+/// inventory, the party and the structure beside you.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hub {
     Base,
     Inventory,
     Party,
+    /// One structure's pages: which they are depends on the structure, so
+    /// they come from `App::structure_hub` rather than a table.
+    Structure,
 }
 
 impl Hub {
+    /// The hubs with a fixed table, which `App::hub_last` remembers a screen
+    /// for. `Structure` is opened fresh each time and has neither.
     pub const ALL: [Hub; 3] = [Hub::Base, Hub::Inventory, Hub::Party];
 
     pub fn title(self) -> &'static str {
@@ -2868,34 +2867,156 @@ impl Hub {
             Hub::Base => "BASE REPORT",
             Hub::Inventory => "INVENTORY",
             Hub::Party => "PARTY",
+            Hub::Structure => "STRUCTURE",
         }
     }
 
-    pub fn pages(self) -> &'static [HubPage] {
+    /// The fixed rail of a shared hub; empty for `Structure`, whose rail is
+    /// the current structure's pages (`Hub::pages`).
+    pub fn table(self) -> &'static [HubPage] {
         match self {
             Hub::Base => BASE_REPORT_PAGES,
             Hub::Inventory => INVENTORY_PAGES,
             Hub::Party => PARTY_PAGES,
+            Hub::Structure => &[],
         }
     }
 
-    /// Index into `App::hub_last`.
-    fn slot(self) -> usize {
-        self as usize
+    /// The rail, in order. The structure hub's is the current structure's
+    /// pages, so it needs the `App`.
+    pub fn pages(self, app: &App) -> Vec<&'static HubPage> {
+        match self {
+            Hub::Structure => app
+                .structure_hub
+                .as_ref()
+                .map(|h| {
+                    h.current()
+                        .pages
+                        .iter()
+                        .map(|&p| structure_page(p))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            fixed => fixed.table().iter().collect(),
+        }
+    }
+
+    /// Index into `App::hub_last`; `Structure` has none.
+    fn slot(self) -> Option<usize> {
+        Hub::ALL.iter().position(|&h| h == self)
     }
 }
 
-/// Which hub `mode` belongs to and where it sits there as `(hub, page,
-/// screen)`, or `None` for a mode outside every hub.
+/// The structure hub's page table: a rail title and the one screen each
+/// `StructurePage` is. Which pages a structure shows, and in what order, is
+/// the engine's answer (`AdjacentStructure::pages`).
+pub fn structure_page(page: StructurePage) -> &'static HubPage {
+    match page {
+        StructurePage::Inventory => &HubPage {
+            title: "Inventory",
+            screens: &[Mode::Transfer],
+        },
+        StructurePage::Filter => &HubPage {
+            title: "Filter",
+            screens: &[Mode::DepotFilter],
+        },
+        StructurePage::Recipe => &HubPage {
+            title: "Recipe",
+            screens: &[Mode::MachineRecipe],
+        },
+        StructurePage::Tool => &HubPage {
+            title: "Tool",
+            screens: &[Mode::RigTool],
+        },
+        StructurePage::Siphon => &HubPage {
+            title: "Siphon",
+            screens: &[Mode::Siphon],
+        },
+        StructurePage::Splice => &HubPage {
+            title: "Splice",
+            screens: &[Mode::SpliceRig],
+        },
+        StructurePage::Grow => &HubPage {
+            title: "Grow",
+            screens: &[Mode::FarmRecipe],
+        },
+        StructurePage::Rebuild => &HubPage {
+            title: "Rebuild",
+            screens: &[Mode::BuildProgram],
+        },
+        StructurePage::Info => &HubPage {
+            title: "Info",
+            screens: &[Mode::StructureManifest],
+        },
+    }
+}
+
+/// The structures beside the party that the structure hub cycles through,
+/// and which one is showing. Re-read from the engine after every key and
+/// tick (`App::refresh_structure_hub`), so a structure that goes or a step
+/// that takes the party away is noticed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructureHub {
+    pub cycle: Vec<AdjacentStructure>,
+    pub at: usize,
+}
+
+impl StructureHub {
+    /// The structure on show. `at` is kept inside `cycle` by every writer.
+    pub fn current(&self) -> &AdjacentStructure {
+        &self.cycle[self.at]
+    }
+
+    /// The compass word for the side the current structure is first beside.
+    pub fn side(&self) -> &'static str {
+        match self.current().dir {
+            (0, -1) => "north",
+            (1, 0) => "east",
+            (0, 1) => "south",
+            _ => "west",
+        }
+    }
+}
+
+/// Which shared hub `mode` belongs to and where it sits there as `(hub,
+/// page, screen)`, or `None` for a mode outside every fixed table. The
+/// structure hub's screens are not here: `App::hub_at` knows those.
 pub fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
     Hub::ALL.into_iter().find_map(|hub| {
-        hub.pages().iter().enumerate().find_map(|(p, page)| {
+        hub.table().iter().enumerate().find_map(|(p, page)| {
             page.screens
                 .iter()
                 .position(|&s| s == mode)
                 .map(|screen| (hub, p, screen))
         })
     })
+}
+
+impl App {
+    /// Which hub the current mode belongs to and where it sits there, the
+    /// structure hub included. A structure-hub screen counts only while
+    /// `structure_hub` is open, so the modes it borrows (`Transfer`,
+    /// `BuildProgram`) are plain screens the rest of the time.
+    pub fn hub_at(&self) -> Option<(Hub, usize, usize)> {
+        self.hub_for(self.mode)
+    }
+
+    /// `hub_at` for another mode, for the popups drawn over a hub screen
+    /// (`base_popup_parent`).
+    pub fn hub_for(&self, mode: Mode) -> Option<(Hub, usize, usize)> {
+        hub_of(mode).or_else(|| {
+            Hub::Structure
+                .pages(self)
+                .iter()
+                .enumerate()
+                .find_map(|(p, page)| {
+                    page.screens
+                        .iter()
+                        .position(|&s| s == mode)
+                        .map(|screen| (Hub::Structure, p, screen))
+                })
+        })
+    }
 }
 
 /// The hub screen a popup is drawn over, for the popups that are children of
@@ -2905,6 +3026,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
     match mode {
         Mode::WorkOrderPick | Mode::WorkOrderQuantity => Some(Mode::WorkOrders),
         Mode::StructureAssign => Some(Mode::Structures),
+        Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
         _ => None,
     }
 }
@@ -2985,6 +3107,9 @@ pub struct App {
     /// been opened, which lands on the base's Overview, the inventory's Items
     /// or the party's Companions.
     hub_last: [Option<Mode>; 3],
+    /// The structure hub while it is open: the structures beside the party
+    /// and which one is showing. `None` whenever the player is not in it.
+    pub structure_hub: Option<StructureHub>,
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
@@ -3362,7 +3487,7 @@ pub struct App {
     /// install it is asking to confirm. Session state, `rig_tool`'s reason.
     pub splice_rig: Option<SpliceRigScreen>,
     /// The Power Siphon `Mode::Siphon` is acting on. Re-validated against
-    /// `Game::adjacent_siphons` on every key, since the machine can be
+    /// `Game::adjacent_structures` on every key, since the machine can be
     /// destroyed or walked away from while the screen is open.
     pub siphon: Option<Entity>,
     /// How many of each caravan row the basket is holding, **index-aligned**

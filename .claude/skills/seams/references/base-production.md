@@ -187,8 +187,8 @@
   pull phase read.
 
 - **A Depot's filter is the *denied* set and `Game::depot_accepts` is the one
-  door** — `components::DepotFilter`, edited from `Mode::DepotFilter` (`[F]`
-  out of the transfer picker). Denied and not allowed so the empty case is
+  door** — `components::DepotFilter`, edited from `Mode::DepotFilter` (the
+  Filter page of the structure hub). Denied and not allowed so the empty case is
   the default the whole feature is inert under: every Depot in every existing
   save takes anything, and `denied_items` is additive behind
   `#[serde(default)]` with **no `SAVE_FORMAT_VERSION` bump**. The component
@@ -206,9 +206,9 @@
   item nobody wants. `TransferRow::can_put` is now a quantity as well as a
   permission, and **only the permission (`may_put`) creates the row**, or a
   full or filtered Depot silently deletes the line naming what you carry. And
-  `c` opens the picker on an **empty** offer when a Depot stands there, since
-  `[F]` is only reachable from inside it and a just-built Depot is exactly
-  the one worth setting up. Nothing on the take side asks — a filter says
+  `c` opens the hub on a Depot's Inventory page even when its offer is
+  **empty**, since the Filter page is one rail step away and a just-built Depot
+  is exactly the one worth setting up. Nothing on the take side asks — a filter says
   what may come **in**, and `DepotFilterRow::held` is drawn beside the denied
   mark so the two do not read as a contradiction. **`return_to_depots` is
   the third door in and is exempt on purpose**: a refund is goods the base
@@ -217,23 +217,26 @@
   let a closed shelf destroy materials while the player was away.
   `a_refund_ignores_the_filter` pins it, because it reads like an oversight.
 
-- **Taking and putting are one screen, one basket and one commit** —
-  `Mode::Transfer`, opened with `c`. `game/base/transfer.rs` holds the union
-  offer (`transfer_offer`), the room (`transfer_room`), the two refusals
-  (`refuse_transfer`) and the one commit door (`transfer_items`); it
-  reimplements neither half. The two movers are `take_from_adjacent` and
+- **Taking and putting are one screen, one basket and one commit, scoped to
+  one structure** — `Mode::Transfer`, the Inventory page of the structure hub
+  opened with `c`. `game/base/transfer.rs` holds the scoped offer
+  (`transfer_offer_at`), the room (`transfer_room_at`), the two refusals
+  (`refuse_transfer`) and the one commit door (`transfer_items_at`), each
+  taking a `TransferAt`; the pooled offer over every adjacent shelf is not an
+  option on any structure page, or a Depot page shows its neighbour's stock
+  and reads as a bug. It reimplements neither half. The two movers are `take_from_adjacent` and
   `give_to_adjacent`, **guard-free, log-free and tick-free** by construction,
-  so the caller owns the announcement and the turn. **`transfer_items` takes
+  so the caller owns the announcement and the turn. **`transfer_items_at` takes
   before it gives**: a rebalance that empties a full Depot and refills it
   from the pack lands both halves only in that order, and the other way the
-  give clamps to zero *silently*. The reach is `ORTHOGONAL` through the
-  private `adjacent_stock`, and `hauling::take_from` is still the one way a
+  give clamps to zero *silently*. The reach is resolved per structure by
+  `shelves_of` (an Index Terminal reaches its indexed Depots), and `hauling::take_from` is still the one way a
   unit leaves a buffer. **The trap is that the scan is sorted by `(x, y)`**:
   a partial take across two neighbours holding the same item must drain them
   in the same order every run, and a bare `reverse()` does not prove it. An
   over-ask is clamped, never refused, at both ends.
 
-- **The put side is one budget and the take side is per row, and the screen
+- **The put side is one budget (one structure's room) and the take side is per row, and the screen
   must tell "no Depot" from "a full Depot".** `App::put_available` subtracts
   the *other* rows from `basket_room` so the highlighted row can still be
   lowered and raised; `App::take_available` is that row's shelf alone. A
@@ -243,7 +246,7 @@
   and **`None` is "no Depot beside you" while `Some(0)` is "a Depot with
   nothing left"**: the room line is omitted entirely on `None`, since a line
   reading 0 beside an Extractor claims the base is full when it has no shelf
-  at all. `Game::transfer_room` is the one call that answers both, and
+  at all. `Game::transfer_room_at` is the one call that answers both, and
   nothing infers the `None` from a zero. Three silent traps besides: the pack
   side must filter `ItemDef::banked` (a bank is not cargo, though a banked
   item on a *shelf* is still a real take row), must close entirely without a
@@ -518,10 +521,10 @@
   field, and a field *removed* is the one case field-named RON does not
   excuse from a `SAVE_FORMAT_VERSION` bump.
 
-- **The rig's screen is `[F]`, and both of the obvious keys were wrong.**
-  Not `c`: a rig declares `capacity`, so `adjacent_stock` already finds it
-  and `c` opens the transfer picker there — binding the holder to it forks
-  on whether the output buffer happens to be empty. Not `T` either, which
+- **The rig's tool screen is the Tool page of the structure hub, and the
+  obvious map keys were wrong.** `c` once forked on whether the output buffer
+  was empty, which is why it had its own key; the hub carries Inventory (when
+  the rig holds stock) and Tool as pages instead. `T` was never an option, which
   `crates/engine/EASTER_EGGS.md` reserves for the battle taunt and throw:
   a documented feature cannot own a key no help page may name, and
   `no_shipped_help_page_names_a_hidden_key` is what fails the build.

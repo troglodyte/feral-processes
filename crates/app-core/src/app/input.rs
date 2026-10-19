@@ -291,7 +291,6 @@ impl App {
             Mode::TrapDirection => self.handle_trap_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::UpgradeDirection => self.handle_upgrade_direction_key(key),
-            Mode::InteractDirection => self.handle_interact_direction_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),
@@ -449,8 +448,18 @@ impl App {
             self.refresh_perk_previews();
         }
         // Every hub screen is reopened from where the player last was.
-        if let Some((hub, ..)) = hub_of(self.mode) {
-            self.hub_last[hub.slot()] = Some(self.mode);
+        if let Some((hub, ..)) = self.hub_at()
+            && let Some(slot) = hub.slot()
+        {
+            self.hub_last[slot] = Some(self.mode);
+        }
+        // The structure hub is only open while a mode of its own is up; any
+        // other mode (the map after an action, a popup) means it was left.
+        if self.structure_hub.is_some()
+            && self.hub_at().is_none()
+            && self.mode != Mode::MachineRecipeConfirm
+        {
+            self.structure_hub = None;
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no

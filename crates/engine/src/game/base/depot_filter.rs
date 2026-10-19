@@ -7,7 +7,7 @@
 //! before this shipped.
 //!
 //! **`depot_accepts` is the one door.** Both things that put cargo into a
-//! Depot read it — `deposit::give_to_adjacent` for the player's own hand
+//! Depot read it — `deposit::give_to_shelves` for the player's own hand
 //! and `hauling::haul_step_system` for the crew — because a rule only one
 //! of them obeyed would let the transfer screen smuggle past what the
 //! screen itself says the Depot refuses. Nothing on the *take* side asks:
@@ -125,7 +125,7 @@ impl Game {
     ///
     /// The screen's row list and `set_all_depot_filters`' catalogue are the
     /// same call, so "deny all" cannot deny something the player was never
-    /// shown. The two exclusions are `transfer_offer`'s own: the trade
+    /// shown. The two exclusions are `offer_over`'s own: the trade
     /// currency is what cargo is priced in rather than cargo, and a banked
     /// item never reaches a shelf to be refused from one.
     pub(crate) fn filterable_items(&self) -> Vec<ItemId> {
@@ -220,29 +220,7 @@ impl Game {
     }
 
     pub(crate) fn is_depot(&self, entity: Entity) -> bool {
-        let Some(structure) = self.world.get::<Structure>(entity) else {
-            return false;
-        };
-        self.world
-            .resource::<StructureDb>()
-            .get(&structure.kind)
-            .is_some_and(|d| d.stores)
-    }
-
-    /// The adjacent Depots the filter screen can be opened on, in the same
-    /// `(x, y)` order the transfer picker fills them in.
-    ///
-    /// `pub` because the screen holds the entity it is editing and needs
-    /// the list to cycle through; a re-read on every open is what makes a
-    /// Depot demolished while the screen was shut simply not be there.
-    pub fn adjacent_depot_entities(&self) -> Vec<Entity> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Vec::new();
-        }
-        if self.require_base().is_err() {
-            return Vec::new();
-        }
-        self.adjacent_depots()
+        self.structure_def_of(entity).is_some_and(|d| d.stores)
     }
 
     /// One Depot's filter as the screen draws it — the header line, then a

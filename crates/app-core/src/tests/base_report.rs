@@ -354,6 +354,10 @@ fn each_popup_child_names_the_hub_screen_it_draws_over() {
         base_popup_parent(Mode::StructureAssign),
         Some(Mode::Structures)
     );
+    assert_eq!(
+        base_popup_parent(Mode::MachineRecipeConfirm),
+        Some(Mode::MachineRecipe)
+    );
     assert_eq!(base_popup_parent(Mode::WorkOrders), None);
     assert_eq!(base_popup_parent(Mode::Playing), None);
 }
@@ -734,7 +738,7 @@ fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
 fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
-        for mode in hub.pages().iter().flat_map(|p| p.screens) {
+        for mode in hub.table().iter().flat_map(|p| p.screens) {
             assert!(!seen.contains(mode), "{mode:?} is in two hubs");
             seen.push(*mode);
         }

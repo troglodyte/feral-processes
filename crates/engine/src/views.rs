@@ -3931,7 +3931,7 @@ pub struct MemoryRow {
 }
 
 /// One item the transfer screen offers a row for — see
-/// `Game::transfer_offer`.
+/// `Game::transfer_offer_at`.
 ///
 /// The union of the two old offers: `on_shelves` is what the adjacent
 /// `Stock` buffers are holding of it, `carried` what the pack holds. An item
@@ -3955,14 +3955,14 @@ pub struct TransferRow {
 }
 
 /// One downed program the transfer picker offers, on whichever side of the
-/// basket it is currently standing — see `Game::rack_offer`.
+/// basket it is currently standing — see `Game::rack_offer_at`.
 ///
 /// **Not a widened `TransferRow`.** That row's three figures are quantities
 /// of a fungible item, and a carrier has none: its range is `[-1, +1]` and
 /// its two columns are 1/0 or 0/1. `racked` is which side it is sitting on,
 /// and the screen derives both figures from it.
 ///
-/// No handle on the program itself: the **index** into `rack_offer`'s list
+/// No handle on the program itself: the **index** into `rack_offer_at`'s list
 /// is what the basket names, `load_teardown_rig`'s own idiom, so an
 /// `Entity` never crosses into a view.
 #[derive(Clone, Debug, PartialEq, Eq)]

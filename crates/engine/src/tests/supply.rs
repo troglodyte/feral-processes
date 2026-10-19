@@ -339,7 +339,7 @@ fn give_cores(game: &mut Game, qty: u32) -> Vec<(ItemId, u32)> {
         .unwrap()
         .add(ItemId::from(ids::ANNEALED_CORE), qty);
     let basket = TransferBasket::items(&[], &[(ItemId::from(ids::ANNEALED_CORE), qty)]);
-    game.transfer_items(&basket).1
+    game.transfer_items_at(adjacent_at(game), &basket).1
 }
 
 fn carried(game: &Game, item: &str) -> u32 {
@@ -358,7 +358,7 @@ fn a_player_beside_a_bench_loads_it_with_cores_up_to_its_capacity() {
     let mut game = base(9320);
     let bench = bench_beside_player(&mut game);
     assert!(
-        game.transfer_offer()
+        game.transfer_offer_at(adjacent_at(&game))
             .iter()
             .all(|r| r.item.0 != ids::ANNEALED_CORE),
         "no cores carried, so no row yet"
@@ -369,18 +369,18 @@ fn a_player_beside_a_bench_loads_it_with_cores_up_to_its_capacity() {
         .unwrap()
         .add(ItemId::from(ids::ANNEALED_CORE), 25);
     let row = game
-        .transfer_offer()
+        .transfer_offer_at(adjacent_at(&game))
         .into_iter()
         .find(|r| r.item.0 == ids::ANNEALED_CORE)
         .expect("the bench's row is offered");
     assert_eq!(row.can_put, 20, "the bench's capacity is the permission");
-    assert_eq!(game.transfer_room(), Some(20));
+    assert_eq!(game.transfer_room_at(adjacent_at(&game)), Some(20));
 
     let given = game
-        .transfer_items(&TransferBasket::items(
-            &[],
-            &[(ItemId::from(ids::ANNEALED_CORE), 25)],
-        ))
+        .transfer_items_at(
+            adjacent_at(&game),
+            &TransferBasket::items(&[], &[(ItemId::from(ids::ANNEALED_CORE), 25)]),
+        )
         .1;
     assert_eq!(given, vec![(ItemId::from(ids::ANNEALED_CORE), 20)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
@@ -405,7 +405,10 @@ fn two_rows_of_one_item_cannot_overfill_a_bench() {
         .add(ItemId::from(ids::ANNEALED_CORE), 30);
 
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let (given, _) = game.give_to_adjacent(&[(core.clone(), 15), (core.clone(), 15)]);
+    let (given, _) = game.give_to_shelves(
+        &game.shelves_of(TransferAt::Structure(bench)),
+        &[(core.clone(), 15), (core.clone(), 15)],
+    );
 
     assert_eq!(given, vec![(core, 20)]);
     assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
@@ -418,10 +421,10 @@ fn a_bench_takes_only_its_supply_item_by_hand() {
     let bench = bench_beside_player(&mut game);
     let before = carried(&game, ids::CORE_FRAGMENT);
     let given = game
-        .transfer_items(&TransferBasket::items(
-            &[],
-            &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
-        ))
+        .transfer_items_at(
+            adjacent_at(&game),
+            &TransferBasket::items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]),
+        )
         .1;
     assert!(given.is_empty());
     assert_eq!(carried(&game, ids::CORE_FRAGMENT), before);
@@ -461,7 +464,10 @@ fn a_turret_without_an_authored_capacity_is_not_loaded_by_hand() {
         .unwrap()
         .add(ItemId::from(ids::CHARGE_COIL), 10);
 
-    let (given, _) = game.give_to_adjacent(&[(ItemId::from(ids::CHARGE_COIL), 10)]);
+    let (given, _) = game.give_to_shelves(
+        &game.shelves_of(TransferAt::Structure(turret)),
+        &[(ItemId::from(ids::CHARGE_COIL), 10)],
+    );
 
     assert!(given.is_empty());
     assert_eq!(hopper(&game, turret, ids::CHARGE_COIL), 0);
@@ -478,7 +484,7 @@ fn beside_a_bench_with_no_depot_only_its_supply_is_puttable() {
     inv.add(ItemId::from(ids::BYTECODE_BLOCK), 3);
 
     let rows: Vec<_> = game
-        .transfer_offer()
+        .transfer_offer_at(adjacent_at(&game))
         .into_iter()
         .map(|r| (r.item.0, r.can_put))
         .collect();
@@ -490,29 +496,24 @@ fn beside_a_bench_with_no_depot_only_its_supply_is_puttable() {
 }
 
 #[test]
-fn a_depot_beside_the_bench_does_not_take_the_cores_first() {
-    let mut game = base(9325);
+fn loading_a_bench_says_so_and_a_depot_put_keeps_its_own_line() {
+    let mut game = base(9326);
     let bench = bench_beside_player(&mut game);
     let depot = deploy(&mut game, "depot", -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::ANNEALED_CORE), 25);
-
     let core = ItemId::from(ids::ANNEALED_CORE);
-    let (given, _) = game.give_to_adjacent(&[(core.clone(), 25)]);
 
-    assert_eq!(given, vec![(core, 25)]);
-    assert_eq!(hopper(&game, bench, ids::ANNEALED_CORE), 20);
-    assert_eq!(node_output(&game, depot, ids::ANNEALED_CORE), 5);
-}
-
-#[test]
-fn loading_a_bench_says_so_and_a_depot_put_keeps_its_own_line() {
-    let mut game = base(9326);
-    bench_beside_player(&mut game);
-    deploy(&mut game, "depot", -1, 0);
-    give_cores(&mut game, 25);
+    game.transfer_items_at(
+        TransferAt::Structure(bench),
+        &TransferBasket::items(&[], &[(core.clone(), 25)]),
+    );
+    game.transfer_items_at(
+        TransferAt::Structure(depot),
+        &TransferBasket::items(&[], &[(core, 5)]),
+    );
 
     let said: Vec<String> = game
         .message_log(200)

@@ -71,12 +71,13 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
 /// report's attention marks; a hub without any passes `None`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn paint_frame(
-    title: &str,
-    pages: &[HubPage],
+    title: (&str, &str),
+    pages: &[&HubPage],
     page: usize,
     screen: usize,
     keybar_mode: Option<Mode>,
     on_rail: bool,
+    structures: Option<usize>,
     flags: Option<&BaseReportFlags>,
     refusal: Option<&str>,
     painter: &Painter,
@@ -102,7 +103,7 @@ pub(super) fn paint_frame(
     if let Some(mode) = keybar_mode {
         draw_groups(
             l.keybar,
-            &keybar_groups(mode, pages, page, on_rail),
+            &keybar_groups(mode, pages, page, on_rail, structures),
             painter,
             m,
         );
@@ -129,8 +130,8 @@ pub(super) fn paint_frame(
 #[allow(clippy::too_many_arguments)]
 fn draw_rail(
     rail: &RailGeom,
-    hub_title: &str,
-    pages: &[HubPage],
+    hub_title: (&str, &str),
+    pages: &[&HubPage],
     selected: usize,
     focused: bool,
     flags: Option<&BaseReportFlags>,
@@ -146,13 +147,17 @@ fn draw_rail(
         hud::palette::DIVIDER,
     );
     if let Some(title) = rail.title {
-        painter.ui_bold(
-            hub_title,
-            title.x,
-            title.y + title.h * 0.75,
-            m.small(),
-            hud::palette::PANE_TITLE,
-        );
+        // The tail ("(2 of 3)") is the part that says where the cycle is,
+        // so the head gives way to it, never the other way round.
+        let (head, tail) = hub_title;
+        let room = title.w - painter.measure_ui_advance(tail, m.small());
+        let head = elided_to_fit(painter, head, m.small(), room);
+        let base = title.y + title.h * 0.75;
+        painter.ui_bold(&head, title.x, base, m.small(), hud::palette::PANE_TITLE);
+        if !tail.is_empty() {
+            let x = title.x + painter.measure_ui_advance(&head, m.small());
+            painter.ui_bold(tail, x, base, m.small(), hud::palette::PANE_TITLE);
+        }
     }
     let w = rail_window(pages.len(), selected, rail.fits());
     let mut slot = 0;
@@ -216,7 +221,7 @@ fn draw_rail(
 /// A one-screen page draws no dots.
 fn draw_title(
     title: &Rect,
-    pages: &[HubPage],
+    pages: &[&HubPage],
     page: usize,
     screen: usize,
     painter: &Painter,
@@ -240,16 +245,36 @@ fn draw_title(
 /// what the cursor does where it is.
 pub(super) fn keybar_groups(
     mode: Mode,
-    pages: &[HubPage],
+    pages: &[&HubPage],
     page: usize,
     on_rail: bool,
+    structures: Option<usize>,
 ) -> Vec<Vec<hud::strip::Piece>> {
+    // Only Tab steps the structure hub's cycle, and only when there is
+    // another structure to step to.
+    let cycle = structures
+        .filter(|&n| n > 1)
+        .map(|_| vec![keycap("Tab", "next structure")]);
     if on_rail {
         let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
-        return [nav, vec![keycap("Esc", "close")]]
+        return [Some(nav), cycle, Some(vec![keycap("Esc", "close")])]
             .into_iter()
+            .flatten()
             .map(group)
             .collect();
+    }
+    if structures.is_some() {
+        // The screen owns Left/Right and prints its own keys in its rows;
+        // Esc walks page, then rail, then map.
+        return [
+            Some(vec![keycap("[ ]", "page")]),
+            cycle,
+            Some(vec![keycap("Esc", "pages")]),
+        ]
+        .into_iter()
+        .flatten()
+        .map(group)
+        .collect();
     }
     let step = if pages[page].screens.len() > 1 {
         keycap("←/→", "screen")
@@ -388,13 +413,19 @@ mod tests {
             Mode::Structures,
             Mode::Alerts,
         ] {
-            let page = hub_of(mode).unwrap().1;
+            let page = feral_processes_app_core::hub_of(mode).unwrap().1;
             let text = |on_rail| -> String {
-                keybar_groups(mode, BASE_REPORT_PAGES, page, on_rail)
-                    .iter()
-                    .flatten()
-                    .map(|(t, _, _)| t.as_str())
-                    .collect()
+                keybar_groups(
+                    mode,
+                    &BASE_REPORT_PAGES.iter().collect::<Vec<_>>(),
+                    page,
+                    on_rail,
+                    None,
+                )
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect()
             };
             let rail = text(true);
             assert!(rail.contains("page"), "{mode:?}: {rail}");
@@ -403,5 +434,60 @@ mod tests {
             let rows = text(false);
             assert!(rows.contains("menu"), "{mode:?}: {rows}");
         }
+    }
+
+    fn bar_text(structures: Option<usize>, on_rail: bool) -> String {
+        let pages = [feral_processes_app_core::structure_page(
+            feral_processes_engine::StructurePage::Inventory,
+        )];
+        keybar_groups(Mode::Transfer, &pages, 0, on_rail, structures)
+            .iter()
+            .flatten()
+            .map(|(t, _, _)| t.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn only_a_cycle_of_two_or_more_structures_offers_tab() {
+        for on_rail in [false, true] {
+            assert!(bar_text(Some(2), on_rail).contains("next structure"));
+            assert!(!bar_text(Some(1), on_rail).contains("next structure"));
+            assert!(!bar_text(None, on_rail).contains("next structure"));
+        }
+    }
+
+    /// A modded structure's name is cut to make room; the position in the
+    /// cycle is the part that must survive.
+    #[test]
+    fn a_long_structure_name_is_elided_and_the_cycle_position_survives() {
+        let m = ui_metrics(720.0);
+        let name = "W".repeat(80);
+        let page = feral_processes_app_core::structure_page(
+            feral_processes_engine::StructurePage::Inventory,
+        );
+        let (_, shapes) = with_painter(|p| {
+            paint_frame(
+                (&name, " — north (2 of 3)"),
+                &[page],
+                0,
+                0,
+                None,
+                false,
+                Some(3),
+                None,
+                None,
+                p,
+                &m,
+            );
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn.iter().any(|t| t.contains("(2 of 3)")),
+            "the position was cut: {drawn:?}"
+        );
+        assert!(
+            !drawn.iter().any(|t| t.contains(&name)),
+            "the name was not elided: {drawn:?}"
+        );
     }
 }

@@ -775,17 +775,6 @@ fn the_view_reports_load_cap_rows_and_installable_items() {
 }
 
 #[test]
-fn the_rig_is_adjacent_only_beside_the_party() {
-    let mut game = new_game();
-    stand_in_base(&mut game);
-    assert!(!game.adjacent_splice_rig());
-    spawn_structure_at(&mut game, "splice_rig", 5, 5);
-    assert!(!game.adjacent_splice_rig());
-    spawn_structure_at(&mut game, "splice_rig", 1, 0);
-    assert!(game.adjacent_splice_rig());
-}
-
-#[test]
 fn a_tactical_fight_rolls_battle_start_statuses_too() {
     let mut game = new_game();
     add_def(&mut game, rejecting_def("always", 1.0));

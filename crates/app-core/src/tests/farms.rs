@@ -89,6 +89,7 @@ fn esc_leaves_the_recipe_picker_without_sowing() {
     let mut app = app_beside_a_plot(6004);
     app.handle_key(GameKey::Char('c'));
     app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_plot.is_none());
     assert!(tiles(&app).iter().all(|t| t.crop.is_none()));
@@ -125,17 +126,13 @@ fn c_aims_at_a_plot_from_any_side_holding_one_of_its_tiles() {
         .find(|t| t.pos == (px - 1, py))
         .unwrap()
         .plot;
-    let offered = game.adjacent_interactions();
-    assert_eq!(offered.len(), 2, "{offered:?}");
-    let first = offered
-        .iter()
-        .find(|i| i.kind == InteractionKind::Plot(plot))
-        .unwrap()
-        .dir;
-    let other = if first == (-1, 0) { 'k' } else { 'h' };
+    let cycle = game.adjacent_structures();
+    assert_eq!(cycle.len(), 2, "{cycle:?}");
 
     app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Char(other));
+    if app.structure_hub.as_ref().unwrap().current().entity != plot {
+        app.handle_key(GameKey::Tab);
+    }
 
     assert_eq!(app.mode, Mode::FarmRecipe);
     assert_eq!(app.pending_plot, Some(plot));

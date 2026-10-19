@@ -3034,7 +3034,7 @@ mod deed_sites {
         assert!(!deeds(&game).contains(&Deed::Examined));
     }
 
-    /// `transfer_items` ticks, and the tick is what drains the queue — so
+    /// `transfer_items_at` ticks, and the tick is what drains the queue — so
     /// these two read the contract rather than `RunFeats`. The deed is
     /// written *before* that tick deliberately, so the mission advances on
     /// the action rather than a tick behind it.
@@ -3071,16 +3071,16 @@ mod deed_sites {
         // base's own origin, and `Position` is the surface tile.
         stand_in_base(&mut game);
         stocked(&mut game, "extractor", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
-        let (taken, _) = game.transfer_items(&TransferBasket::items(
-            &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
-            &[],
-        ));
+        let (taken, _) = game.transfer_items_at(
+            adjacent_at(&game),
+            &TransferBasket::items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]),
+        );
         assert!(!taken.is_empty(), "the fixture has to move something");
         assert!(finished_take_mission(&game));
     }
 
     /// The negative half, and the one that catches a `note_deed` written
-    /// unconditionally at the top of `transfer_items`: a player who only put
+    /// unconditionally at the top of `transfer_items_at`: a player who only put
     /// something in has not done what the mission asks.
     #[test]
     fn only_putting_into_a_container_writes_no_deed() {
@@ -3088,10 +3088,10 @@ mod deed_sites {
         stand_in_base(&mut game);
         stocked(&mut game, "depot", 1, 0, &[]);
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 10)]);
-        let (_, given) = game.transfer_items(&TransferBasket::items(
-            &[],
-            &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
-        ));
+        let (_, given) = game.transfer_items_at(
+            adjacent_at(&game),
+            &TransferBasket::items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 4)]),
+        );
         assert!(!given.is_empty(), "the fixture has to move something");
         assert!(!finished_take_mission(&game));
     }

@@ -81,7 +81,7 @@ pub enum Deed {
     /// A decompile succeeded. `Game::attempt_decompile`.
     Tamed,
     /// The transfer screen moved something *out* of a container.
-    /// `Game::transfer_items`.
+    /// `Game::transfer_items_at`.
     TookFromContainer,
     /// A work order was queued with `standing` set.
     /// `Game::queue_work_order`.

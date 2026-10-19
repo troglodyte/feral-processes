@@ -228,22 +228,12 @@ impl Game {
         false
     }
 
-    /// Whether a Splice Rig touches the party's cell — what the map key
-    /// opens the screen on. `adjacent_teardown_rigs`' rule, minus the Vec:
-    /// nothing here needs to tell two rigs apart.
-    pub fn adjacent_splice_rig(&self) -> bool {
-        let Some((px, py)) = self.base_pos() else {
-            return false;
-        };
-        self.world.iter_entities().any(|e| {
-            let (Some(s), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
-                return false;
-            };
-            s.kind == SPLICE_RIG
-                && crate::game::base::collect::ORTHOGONAL
-                    .iter()
-                    .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
-        })
+    /// Whether this structure is a Splice Rig — the per-entity test the
+    /// structure hub's Splice page asks.
+    pub(crate) fn is_splice_rig(&self, structure: Entity) -> bool {
+        self.world
+            .get::<Structure>(structure)
+            .is_some_and(|s| s.kind == SPLICE_RIG)
     }
 
     /// Everything the Splice Rig screen shows: Load against the cap, what is

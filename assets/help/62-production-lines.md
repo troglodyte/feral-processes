@@ -6,7 +6,7 @@ as an ingredient or as the power it burns. An Extractor making Core Fragments be
 making Core Fragments side by side are not, because neither makes anything the other needs.
 
 An Extractor, Factory, Assembler or Printer makes nothing until you tell it what to. Place the
-machine, stand beside it and press c to pick a recipe from the ones you have researched. A machine
+machine, stand beside it, press c and open its Recipe page to pick from the recipes you have researched. A machine
 with no recipe wears a ? on the map. Changing a machine that is already set asks first, and the
 change empties what the machine held to the Depots, or onto the floor beside it when they are full.
 

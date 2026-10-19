@@ -931,7 +931,7 @@ fn frame(
     // The base report turns its pages on `[`/`]`, which reach the app as
     // typed text above; volume there would move with every page, and the
     // popups drawn over a hub screen sit in the same frame.
-    let volume_keys = feral_processes_app_core::hub_of(fe.app.mode).is_none()
+    let volume_keys = fe.app.hub_at().is_none()
         && feral_processes_app_core::base_popup_parent(fe.app.mode).is_none();
     if volume_keys && input.keyboard.just_pressed(KeyCode::BracketLeft) {
         fe.volume = (fe.volume - VOLUME_STEP).max(0.0);

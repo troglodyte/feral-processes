@@ -901,7 +901,7 @@ impl Game {
     /// when a base somehow has two touching the party's cell.
     ///
     /// Adjacency rather than ownership, unlike `can_extract_routines`: this
-    /// is a physical handover, and `take_from_adjacent` / `give_to_adjacent`
+    /// is a physical handover, and `take_from_stock` / `give_to_shelves`
     /// are the rule for those. Sorted by tile before the pick,
     /// `adjacent_stock`'s reason — bevy's iteration order is not stable and
     /// an identical save must answer one keypress the same way on every run.
@@ -918,14 +918,12 @@ impl Game {
         let Some((px, py)) = self.base_pos() else {
             return Vec::new();
         };
-        let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
+            .filter(|e| self.is_teardown_rig(e.id()))
             .filter_map(|e| {
-                let kind = &e.get::<Structure>()?.kind;
                 let p = e.get::<Position>()?;
-                db.get(kind)?.strips.as_ref()?;
                 Some((p.x, p.y, e.id()))
             })
             .filter(|(x, y, _)| {
@@ -936,6 +934,13 @@ impl Game {
             .collect();
         found.sort();
         found.into_iter().map(|(_, _, e)| e).collect()
+    }
+
+    /// Whether this structure strips downed programs — the per-entity test
+    /// `adjacent_teardown_rigs` and the structure hub's Tool page share.
+    pub(crate) fn is_teardown_rig(&self, structure: Entity) -> bool {
+        self.structure_def_of(structure)
+            .is_some_and(|d| d.strips.is_some())
     }
 
     /// How many more programs this rig's hopper will take.

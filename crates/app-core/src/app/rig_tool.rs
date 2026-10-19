@@ -1,9 +1,8 @@
 //! The Teardown Rig's tool holder: which tool the base's extractor runs on.
 //!
-//! Opened with `[F]` beside a rig. `Mode::DepotFilter`'s shape rung for
-//! rung — a screen that acts on one machine, re-read after every edit and
-//! closing itself the moment that machine stops being one the player is
-//! standing at.
+//! A page of the structure hub (`app/structure_hub.rs`) on a rig.
+//! `Mode::DepotFilter`'s shape rung for rung — a screen that acts on one
+//! machine, re-read after every edit.
 //!
 //! It is a separate screen from `Mode::Tools` on purpose: that one is the
 //! player's own slots, and one screen meaning two things depending on where
@@ -20,97 +19,43 @@ use crate::*;
 pub struct RigToolScreen {
     pub rig: Entity,
     pub view: RigToolView,
-    /// How many rigs are beside the party, so the screen can say whether
-    /// `Tab` will do anything.
-    pub of: usize,
 }
 
 impl App {
-    /// Opens the tool holder for the first adjacent rig, or refuses.
-    ///
-    /// The refusal goes through `App::refuse`, so the sentence lands in the
-    /// log the player scrolls back through as well as on the status line —
-    /// a key that reads as doing nothing is the failure being avoided.
-    ///
-    /// **Answers whether anything happened**, and a refusal answers `false`.
-    /// `after_world_action` clears `status_line` on a key that acted, so
-    /// reporting a refusal as an action wipes the sentence that was just
-    /// written — which is the same silence the refusal exists to prevent.
-    pub(crate) fn open_rig_tool(&mut self) -> bool {
-        let Some(game) = &self.game else {
-            return false;
-        };
-        let rigs = game.adjacent_teardown_rigs();
-        let Some(rig) = rigs.first().copied() else {
-            self.refuse("There is no rig here to fit.");
-            return false;
-        };
-        if self.show_rig_tool(rig, rigs.len()) {
+    /// Opens the tool holder on one rig, the hub's Tool page.
+    pub(crate) fn open_rig_tool_for(&mut self, rig: Entity) -> bool {
+        let shown = self.show_rig_tool(rig);
+        if shown {
             self.menu_selected = 0;
             self.mode = Mode::RigTool;
         }
-        true
-    }
-
-    /// Moves to the next adjacent rig, wrapping. A no-op with one.
-    pub(crate) fn cycle_rig_tool(&mut self) {
-        let Some((game, current)) = self
-            .game
-            .as_ref()
-            .zip(self.rig_tool.as_ref().map(|s| s.rig))
-        else {
-            return;
-        };
-        let rigs = game.adjacent_teardown_rigs();
-        let next = rigs
-            .iter()
-            .position(|e| *e == current)
-            .map(|i| (i + 1) % rigs.len().max(1))
-            .and_then(|i| rigs.get(i).copied());
-        match next {
-            Some(rig) => {
-                if self.show_rig_tool(rig, rigs.len()) {
-                    self.menu_selected = 0;
-                }
-            }
-            None => self.leave_rig_tool(),
-        }
+        shown
     }
 
     /// Re-reads one rig into the screen, reporting whether it is still
-    /// there. `false` closes the screen — the machine has been demolished,
-    /// swept, or walked away from while this was open.
-    fn show_rig_tool(&mut self, rig: Entity, of: usize) -> bool {
+    /// there. `false` leaves the screen empty; the hub's refresh closes it.
+    fn show_rig_tool(&mut self, rig: Entity) -> bool {
         let Some(view) = self.game.as_ref().and_then(|g| g.rig_tool_view(rig)) else {
-            self.leave_rig_tool();
+            self.rig_tool = None;
             return false;
         };
-        self.rig_tool = Some(RigToolScreen { rig, view, of });
+        self.rig_tool = Some(RigToolScreen { rig, view });
         true
     }
 
-    pub(crate) fn leave_rig_tool(&mut self) {
-        self.rig_tool = None;
-        self.mode = Mode::Playing;
-    }
-
     fn refresh_rig_tool(&mut self) {
-        if let Some(screen) = &self.rig_tool {
-            let (rig, of) = (screen.rig, screen.of);
-            self.show_rig_tool(rig, of);
+        if let Some(rig) = self.rig_tool.as_ref().map(|s| s.rig) {
+            self.show_rig_tool(rig);
         }
     }
 
     pub(crate) fn handle_rig_tool_key(&mut self, key: GameKey) {
         let Some(screen) = &self.rig_tool else {
-            self.mode = Mode::Playing;
             return;
         };
         let (rig, rows) = (screen.rig, screen.view.candidates.len());
         match key {
-            GameKey::Esc => self.leave_rig_tool(),
             GameKey::Up | GameKey::Down => self.scroll(key, rows),
-            GameKey::Tab => self.cycle_rig_tool(),
             GameKey::Enter => self.fit_selected_rig_tool(rig),
             // Uppercase, because a lowercase letter picks a row everywhere
             // else in the game — and `selected_index` answers `None` for

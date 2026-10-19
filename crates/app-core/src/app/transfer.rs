@@ -7,7 +7,7 @@ use crate::*;
 impl App {
     /// Snapshots the offer and opens the picker with every row at zero.
     ///
-    /// `room` comes straight from `Game::transfer_room` and is passed
+    /// `room` comes straight from `Game::transfer_room_at` and is passed
     /// through untouched: `None` is "no Depot beside you", `Some(0)` is "a
     /// Depot with nothing left", and the screen has to be able to tell them
     /// apart.
@@ -20,7 +20,7 @@ impl App {
         source: TransferSource,
     ) {
         // Items first, carriers after: a carrier row's position less the
-        // item count is its index into `Game::rack_offer()`, which is what
+        // item count is its index into `Game::rack_offer_at`, which is what
         // `basket_request` hands the commit door.
         let entries: Vec<TransferEntry> = rows
             .into_iter()
@@ -36,13 +36,30 @@ impl App {
         self.mode = Mode::Transfer;
     }
 
+    /// Opens the picker on one structure's shelves, or on the pack's downed
+    /// programs alone. A structure that is not a rack carries no carrier
+    /// rows: the pack's downed programs have nowhere to go there.
+    pub(crate) fn open_transfer_for(&mut self, at: TransferAt) {
+        let Some(game) = &self.game else { return };
+        let rack_room = match at {
+            TransferAt::Structure(e) => game.rack_room(e),
+            TransferAt::PackOnly => 0,
+        };
+        let carriers = match at {
+            TransferAt::Structure(e) if game.rack_slots(e) == 0 => Vec::new(),
+            _ => game.rack_offer_at(at),
+        };
+        let (rows, room) = (game.transfer_offer_at(at), game.transfer_room_at(at));
+        self.open_transfer(rows, carriers, room, rack_room, TransferSource::Base(at));
+    }
+
     /// Moves the basket and closes the screen.
     ///
     /// The two halves are split out of one signed list here rather than kept
     /// as two lists in `App`: the row is the thing the player edits, and a
     /// row has one amount.
     ///
-    /// An all-zero basket never reaches the engine. `Game::transfer_items`
+    /// An all-zero basket never reaches the engine. `Game::transfer_items_at`
     /// and `Game::take_from_outpost` already make that request a no-op, so
     /// calling through would be harmless today — but then two places would
     /// both have to keep the no-op true.
@@ -61,8 +78,8 @@ impl App {
             && let Some(game) = &mut self.game
         {
             match self.transfer_source {
-                TransferSource::Base => {
-                    game.transfer_items(&basket);
+                TransferSource::Base(at) => {
+                    game.transfer_items_at(at, &basket);
                 }
                 TransferSource::Outpost(tile) => {
                     self.status_line = game.take_from_outpost(tile, &basket).err();

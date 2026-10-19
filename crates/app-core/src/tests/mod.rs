@@ -67,6 +67,7 @@ mod sprite_forge;
 mod stack;
 mod stack_market;
 mod stockpile;
+mod structure_hub;
 mod tactical;
 mod telemetry;
 mod tools;

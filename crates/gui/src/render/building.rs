@@ -813,8 +813,34 @@ pub(super) fn draw_build_program(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let tier = commit.as_ref().map_or(1, BuildCommit::tier);
-    let candidates = match &commit {
+    let (rows, nothing_qualifies) = build_program_page(game, commit.as_ref(), selected);
+    draw_popup(
+        build_program_title(commit.as_ref()),
+        PopupSize::Large,
+        &rows,
+        refusal.or(nothing_qualifies.as_deref()),
+        painter,
+        m,
+    );
+}
+
+fn build_program_title(commit: Option<&BuildCommit>) -> &'static str {
+    if commit.is_some_and(|c| c.rebuild) {
+        "Rebuild a structure"
+    } else {
+        "Commit a program"
+    }
+}
+
+/// The build-program screen's rows and the line it shows when no program
+/// qualifies, shared by the popup and the structure hub's Rebuild page.
+pub(super) fn build_program_page(
+    game: &mut Game,
+    commit: Option<&BuildCommit>,
+    selected: usize,
+) -> (Vec<Row>, Option<String>) {
+    let tier = commit.map_or(1, BuildCommit::tier);
+    let candidates = match commit {
         Some(commit) => game.build_candidates(&commit.structure, commit.goal()),
         // With no pending order there is nothing to be for, so there is
         // nothing to quote — the box is still drawn, empty, rather than
@@ -827,22 +853,11 @@ pub(super) fn draw_build_program(
     // suitable from one that has exactly one program and may spend none of
     // it. See `no_candidates_refusal`.
     let last_program = floored_by_the_last_program(game);
-    let rows = build_program_rows(commit.as_ref(), &candidates, selected);
+    let rows = build_program_rows(commit, &candidates, selected);
     let nothing_qualifies = candidates
         .is_empty()
         .then(|| no_candidates_refusal(tier, last_program));
-    draw_popup(
-        if commit.as_ref().is_some_and(|c| c.rebuild) {
-            "Rebuild a structure"
-        } else {
-            "Commit a program"
-        },
-        PopupSize::Large,
-        &rows,
-        refusal.or(nothing_qualifies.as_deref()),
-        painter,
-        m,
-    );
+    (rows, nothing_qualifies)
 }
 
 /// `Mode::PinSubject` — modelled on `draw_build_program`'s shape.
@@ -978,6 +993,16 @@ pub(super) fn draw_siphon(
     painter: &Painter,
     m: &Metrics,
 ) {
+    let rows = siphon_page_rows(game, siphon, selected);
+    draw_popup("Power Siphon", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The siphon screen's rows, shared by the popup and the structure hub.
+pub(super) fn siphon_page_rows(
+    game: &mut Game,
+    siphon: Option<Entity>,
+    selected: usize,
+) -> Vec<Row> {
     let holder = siphon
         .and_then(|s| game.siphon_holder(s))
         .map(|e| game.creature_label(e));
@@ -989,13 +1014,12 @@ pub(super) fn draw_siphon(
             .map(|e| game.creature_label(e))
             .collect()
     };
-    let rows = siphon_rows(
+    siphon_rows(
         holder.as_deref(),
         &staff,
         selected,
         Game::siphon_release_ceiling_percent(),
-    );
-    draw_popup("Power Siphon", PopupSize::Large, &rows, refusal, painter, m);
+    )
 }
 
 #[cfg(test)]

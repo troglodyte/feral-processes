@@ -22,14 +22,19 @@ pub(super) fn draw_splice_rig(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let body = match screen {
+    let body = page_rows(screen, selected);
+    draw_popup("Splice Rig", PopupSize::Large, &body, refusal, painter, m);
+}
+
+/// The screen's rows, shared by the popup and the structure hub's page.
+pub(super) fn page_rows(screen: Option<&SpliceRigScreen>, selected: usize) -> Vec<Row> {
+    match screen {
         Some(screen) => body_rows(screen, selected),
         // Unreachable through `App`, which closes the screen when the rig
         // stops being beside the party — drawn rather than asserted, because
         // a renderer that panics takes the window with it.
         None => vec![text_row("There is no Splice Rig here.")],
-    };
-    draw_popup("Splice Rig", PopupSize::Large, &body, refusal, painter, m);
+    }
 }
 
 /// The extra share of Power drain an upkeep figure stands for, as a whole

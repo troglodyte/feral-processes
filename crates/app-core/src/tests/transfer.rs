@@ -26,16 +26,14 @@ fn amounts(app: &App) -> Vec<i64> {
     app.basket_amounts.clone()
 }
 
-/// Opens the picker on two mining nodes — a shelf with no Depot beside it,
-/// so every row is a take and the put budget is closed. Both sides hold the
-/// same stock and the picker pools them, so the rows read 12 and 4.
+/// Opens the picker on the first of two mining nodes — a shelf with no Depot
+/// beside it, so every row is a take and the put budget is closed. Each
+/// holds the same stock, and the picker shows only the one on show, so the
+/// rows read 6 and 2.
 ///
-/// Two presses: a machine offers its recipe menu on the same side as its
-/// shelf, so the first `c` asks which, and `c` again is the cargo.
+/// One press opens the first machine's shelf; the other is a `Tab` away.
 fn picker(seed: u32) -> App {
     let mut app = app_beside_stocked_machines(seed, &ITEMS);
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection);
     app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Transfer);
     app
@@ -97,15 +95,13 @@ fn c_opens_the_transfer_window_with_an_empty_basket() {
     let mut app = app_beside_stocked_machines(970, &[(ITEM, 6)]);
 
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection, "cargo or recipe?");
-    app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.basket_rows.len(), 1);
     assert_eq!(
         app.basket_rows[0].item().unwrap().on_shelves,
-        12,
-        "both machines pooled"
+        6,
+        "one machine's shelf, not both pooled"
     );
     assert_eq!(amounts(&app), vec![0]);
 }
@@ -123,7 +119,6 @@ fn opening_the_transfer_window_spends_no_turn() {
     app.status_line = Some("still explaining something".to_string());
 
     app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
@@ -133,21 +128,15 @@ fn opening_the_transfer_window_spends_no_turn() {
     );
 }
 
-/// Two empty machines still offer their recipe menus, so `c` asks which
-/// side; `c` again asks for cargo there is none of, and is refused without
-/// an empty window to back out of.
+/// An empty machine still has a shelf page, and it opens on no rows.
 #[test]
-fn c_with_no_cargo_on_either_side_asks_about_the_machines_and_c_again_is_refused() {
+fn c_beside_an_empty_machine_opens_an_empty_window() {
     let mut app = app_beside_stocked_machines(972, &[(ITEM, 0)]);
 
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(app.mode, Mode::InteractDirection, "a machine on each side");
 
-    app.handle_key(GameKey::Char('c'));
-
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::Transfer);
     assert!(app.basket_rows.is_empty());
-    assert_eq!(app.status_line.as_deref(), Some("No cargo to move here."));
 }
 
 /// **Left takes out and Right puts in**, which is the arrow moving stock in
@@ -371,7 +360,7 @@ fn lowercase_a_and_n_do_nothing() {
 
     app.handle_key(GameKey::Char('A'));
     app.handle_key(GameKey::Char('n'));
-    assert_eq!(amounts(&app), vec![12, 4], "and lowercase n clears nothing");
+    assert_eq!(amounts(&app), vec![6, 2], "and lowercase n clears nothing");
     assert_eq!(app.mode, Mode::Transfer);
 }
 
@@ -397,6 +386,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
     let before = app.game.as_ref().unwrap().current_tick();
+    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
 
     app.menu_selected = shelf;
     app.handle_key(GameKey::Char('4'));
@@ -407,7 +397,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_ref().unwrap();
     assert_eq!(game.current_tick(), before + 1, "one commit, one turn");
-    let offer = game.transfer_offer();
+    let offer = game.transfer_offer_at(at);
     let shelf_now = offer.iter().find(|r| r.item == item(ITEM)).unwrap();
     assert_eq!(
         shelf_now.on_shelves,
@@ -426,13 +416,14 @@ fn enter_moves_both_halves_and_spends_one_turn() {
 fn enter_on_an_empty_basket_moves_nothing() {
     let mut app = picker(987);
     let before = app.game.as_ref().unwrap().current_tick();
-    let offer = app.game.as_ref().unwrap().transfer_offer();
+    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Enter);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
-    assert_eq!(app.game.as_ref().unwrap().transfer_offer(), offer);
+    assert_eq!(app.game.as_ref().unwrap().transfer_offer_at(at), offer);
 }
 
 /// Abandoning the screen moves nothing and costs no turn.
@@ -440,24 +431,33 @@ fn enter_on_an_empty_basket_moves_nothing() {
 fn esc_moves_nothing_and_spends_no_turn() {
     let mut app = picker(988);
     let before = app.game.as_ref().unwrap().current_tick();
-    let offer = app.game.as_ref().unwrap().transfer_offer();
+    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Char('9'));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::Transfer,
+        "the first Esc only reaches the rail"
+    );
     app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
-    assert_eq!(app.game.as_ref().unwrap().transfer_offer(), offer);
+    assert_eq!(app.game.as_ref().unwrap().transfer_offer_at(at), offer);
 }
 
 /// Every exit clears all three fields, so a reopened screen can never show a
 /// stale shelf, a stale pack or a room figure from the last one.
 #[test]
 fn both_exits_leave_nothing_stale() {
-    for leave in [GameKey::Enter, GameKey::Esc] {
+    for leave in [vec![GameKey::Enter], vec![GameKey::Esc, GameKey::Esc]] {
         let mut app = depot_picker(989, SHELF, &[(ITEM, 2)]);
         app.handle_key(GameKey::Char('2'));
-        app.handle_key(leave);
+        for key in leave.iter().copied() {
+            app.handle_key(key);
+        }
 
         assert!(app.basket_rows.is_empty(), "{leave:?} left rows behind");
         assert!(
@@ -587,7 +587,7 @@ fn take_everything_fills_a_carrier_row_to_one_and_no_further() {
     assert_eq!(app.basket_amounts, vec![0, 1, 1]);
 }
 
-/// The row's position less the item count is its `rack_offer` index, which
+/// The row's position less the item count is its `rack_offer_at` index, which
 /// is the whole of why items are listed first.
 #[test]
 fn the_basket_names_carriers_by_their_offer_index() {
@@ -604,15 +604,17 @@ fn the_basket_names_carriers_by_their_offer_index() {
     assert!(basket.take.is_empty() && basket.give.is_empty());
 }
 
-/// A downed program in the pack and no shelf beside the party: the engine
-/// offers the transfer at `(0, 0)` and `c` must open it rather than refuse.
+/// A downed program in the pack and no shelf beside the party: `c` opens
+/// the pack-only transfer rather than refuse.
 #[test]
 fn c_opens_the_transfer_for_a_downed_program_with_no_shelf_beside() {
     let mut app = app_in_base_holding_a_downed_program(973);
+    let game = app.game.as_ref().unwrap();
+    assert!(game.adjacent_structures().is_empty(), "no shelf beside");
     assert_eq!(
-        app.game.as_ref().unwrap().adjacent_interactions().len(),
+        game.rack_offer_at(TransferAt::PackOnly).len(),
         1,
-        "the engine offers the transfer"
+        "the engine offers the pack's program"
     );
 
     app.handle_key(GameKey::Char('c'));

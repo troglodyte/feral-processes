@@ -1062,6 +1062,9 @@ impl Game {
         // every stage below — the `on_shift` filter, the drift's Bay arm,
         // the diff's unconditional free — already knows what to do with.
         self.admit_the_badly_hurt(&staff, &bays);
+        // Before the drift and the matching, so the body it frees is in the
+        // pool this same beat.
+        self.set_down_unposted_loads(&staff);
         // **The walking pool is wider than the posting pool.** A pinned
         // subject is not `Staff` — `base_staff` excludes it the moment
         // `role_of` reads its `components::UnderStudy` marker — so it is

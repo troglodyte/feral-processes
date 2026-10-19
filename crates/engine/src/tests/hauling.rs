@@ -2720,3 +2720,34 @@ fn a_depot_that_refuses_the_output_beside_a_node_does_not_hold_the_carrier_back(
 
     assert!(node_output(&game, far, ids::CORE_FRAGMENT) > 0);
 }
+
+/// A load with no errand behind it — no `Task` to deliver under and no
+/// `Clearing` trip — is set down. `Carrying` keeps a body out of the posting
+/// pool and out of every idle errand, so nothing else would ever end the hold:
+/// a save written before the supply-run reload fix carried seven such bodies,
+/// each wandering the base with a Power Cell while the farm went untended.
+#[test]
+fn a_staff_load_with_no_errand_behind_it_is_set_down() {
+    let mut game = base(4108);
+    let body = spawn_tamed(&mut game, 500, 3);
+    *game.world.get_mut::<Position>(body).unwrap() = Position { x: 2, y: 1 };
+    game.world.entity_mut(body).insert(Carrying {
+        item: ItemId::from(ids::POWER_CELL),
+        qty: 1,
+    });
+
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    assert!(
+        game.world.get::<Carrying>(body).is_none(),
+        "nothing will ever deliver this load, so the body must not keep it"
+    );
+    let mut floor = game.world.query::<&crate::components::FloorItem>();
+    let cells = floor
+        .iter(&game.world)
+        .filter(|f| f.0 == crate::items::FloorThing::Item(ItemId::from(ids::POWER_CELL)))
+        .count();
+    assert_eq!(cells, 1, "set down, never destroyed");
+}

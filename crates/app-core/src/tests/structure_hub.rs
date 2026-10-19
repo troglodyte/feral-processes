@@ -117,6 +117,37 @@ fn losing_the_current_structure_steps_to_the_next() {
 }
 
 #[test]
+fn losing_the_last_structure_in_the_cycle_wraps_to_the_first() {
+    let mut app = app_beside_a_machine_and_two_depots(2609);
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Tab);
+    let hub = app.structure_hub.as_ref().unwrap();
+    assert_eq!(hub.at, 2, "precondition: on the last of three");
+    let last = hub.current().entity;
+    app.game.as_mut().unwrap().remove_structure(last).unwrap();
+    app.handle_key(GameKey::Up);
+    let hub = app.structure_hub.as_ref().expect("two remain");
+    assert_eq!(hub.cycle.len(), 2);
+    assert_eq!(hub.at, 0, "wrapped, not left on the previous one");
+}
+
+#[test]
+fn a_page_whose_structure_is_gone_closes_the_hub_instead_of_keeping_the_last_page() {
+    let mut app = app_beside_a_teardown_rig_holding(2610, Vec::new());
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::RigTool, "precondition: the Tool page is up");
+    let rig = app.structure_hub.as_ref().unwrap().current().entity;
+    app.game.as_mut().unwrap().remove_structure(rig).unwrap();
+
+    app.enter_structure_page(0);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.structure_hub.is_none());
+    assert!(app.rig_tool.is_none());
+}
+
+#[test]
 fn a_basket_left_by_tab_is_discarded() {
     let mut app = app_between_a_depot_and_a_machine(2608);
     give_player_items(&mut app, &[("power_cell", 3)]);

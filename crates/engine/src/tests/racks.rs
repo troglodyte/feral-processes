@@ -98,7 +98,7 @@ fn a_structure_that_racks_nothing_gets_no_shelf_and_drops_a_stored_one() {
 }
 
 // ---------------------------------------------------------------------------
-// The carrier half of the basket: `Game::rack_offer` and the one commit door.
+// The carrier half of the basket: `Game::rack_offer_at` and the one commit door.
 // ---------------------------------------------------------------------------
 
 /// The player standing at (3,4) with a rack at (3,3), `held` carriers in the
@@ -150,7 +150,7 @@ fn shelf_of(game: &Game, rack: Entity) -> Vec<u32> {
 #[test]
 fn the_offer_lists_the_pack_then_the_shelves() {
     let (game, _) = player_beside_a_rack(2, 2);
-    let offer = game.rack_offer();
+    let offer = game.rack_offer_at(adjacent_at(&game));
     assert_eq!(offer.len(), 4);
     assert!(!offer[0].racked && !offer[1].racked, "the pack comes first");
     assert!(offer[2].racked && offer[3].racked);
@@ -165,7 +165,7 @@ fn the_offer_lists_the_pack_then_the_shelves() {
 fn a_carrier_crosses_to_the_side_it_is_not_on() {
     let (mut game, rack) = player_beside_a_rack(1, 1);
     // Row 0 is the pack's, row 1 the shelf's — one of each, both ways at once.
-    game.transfer_items(&TransferBasket::carriers(&[0, 1]));
+    game.transfer_items_at(adjacent_at(&game), &TransferBasket::carriers(&[0, 1]));
     assert_eq!(pack_of(&game), vec![101]);
     assert_eq!(shelf_of(&game, rack), vec![1]);
 }
@@ -176,8 +176,8 @@ fn a_carrier_crosses_to_the_side_it_is_not_on() {
 fn a_take_past_the_pack_ceiling_is_refused_and_nothing_moves() {
     let (mut game, rack) = player_beside_a_rack(crate::tuning::MAX_DOWNED_PROGRAMS as u32, 1);
     let before = pack_of(&game);
-    let row = game.rack_offer().len() - 1;
-    game.transfer_items(&TransferBasket::carriers(&[row]));
+    let row = game.rack_offer_at(adjacent_at(&game)).len() - 1;
+    game.transfer_items_at(adjacent_at(&game), &TransferBasket::carriers(&[row]));
     assert_eq!(pack_of(&game), before, "the pack is untouched");
     assert_eq!(shelf_of(&game, rack), vec![101], "and so is the shelf");
 }
@@ -186,7 +186,7 @@ fn a_take_past_the_pack_ceiling_is_refused_and_nothing_moves() {
 fn a_put_with_no_room_on_any_rack_is_refused_and_nothing_moves() {
     let (mut game, rack) = player_beside_a_rack(1, 8);
     let before = shelf_of(&game, rack);
-    game.transfer_items(&TransferBasket::carriers(&[0]));
+    game.transfer_items_at(adjacent_at(&game), &TransferBasket::carriers(&[0]));
     assert_eq!(pack_of(&game), vec![1], "the pack is untouched");
     assert_eq!(shelf_of(&game, rack), before, "and so is the shelf");
 }
@@ -208,33 +208,13 @@ fn a_refused_carrier_half_takes_the_item_half_with_it() {
         give: vec![(item.clone(), 3)],
         carriers: vec![0],
     };
-    game.transfer_items(&basket);
+    game.transfer_items_at(adjacent_at(&game), &basket);
     assert_eq!(
         game.world.get::<Inventory>(player).unwrap().count(&item),
         before,
         "the item half is refused with the carrier half"
     );
     assert_eq!(shelf_of(&game, rack).len(), 8);
-}
-
-/// `plan_adjacent_take`'s ordering discipline, not a second rule.
-#[test]
-fn a_put_lands_in_the_first_rack_with_room_in_tile_order() {
-    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base_at(&mut game, 3, 4);
-    let west = spawn_machine_at(&mut game, "quarantine_rack", 2, 4);
-    let east = spawn_machine_at(&mut game, "quarantine_rack", 4, 4);
-    let player = game.player_entity();
-    game.world
-        .get_mut::<crate::components::DownedPrograms>(player)
-        .unwrap()
-        .0
-        .push(program(7));
-    assert_eq!(game.adjacent_racks(), vec![west, east], "sorted by tile");
-
-    game.transfer_items(&TransferBasket::carriers(&[0]));
-    assert_eq!(shelf_of(&game, west), vec![7]);
-    assert!(shelf_of(&game, east).is_empty());
 }
 
 // ---------------------------------------------------------------------------

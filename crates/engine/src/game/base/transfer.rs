@@ -18,7 +18,7 @@ pub type Moved = Vec<(ItemId, u32)>;
 ///
 /// A parameter object rather than a fourth and fifth positional argument.
 /// The two item lists are quantities of a fungible thing; `carriers` is a
-/// list of **indices into `Game::rack_offer()`**, `load_teardown_rig`'s own
+/// list of **indices into `Game::rack_offer_at`**, `load_teardown_rig`'s own
 /// index idiom, because a carrier has no id to name it by and an `Entity`
 /// is not stable across a save.
 #[derive(Default, Clone, Debug)]
@@ -38,7 +38,7 @@ impl TransferBasket {
         }
     }
 
-    /// A carriers-only basket, by row index into `Game::rack_offer()`.
+    /// A carriers-only basket, by row index into `Game::rack_offer_at`.
     pub fn carriers(rows: &[usize]) -> Self {
         Self {
             carriers: rows.to_vec(),
@@ -72,21 +72,10 @@ pub(crate) struct Shelves {
 }
 
 impl Game {
-    /// Everything beside the party at once: today's pooled reach, which the
-    /// unscoped functions below keep until the pages replace them.
-    pub(crate) fn pooled_shelves(&self) -> Shelves {
-        Shelves {
-            stock: self.reachable_stock(),
-            depots: self.reachable_depots(),
-            sinks: self.supply_sinks(),
-            racks: self.adjacent_racks(),
-        }
-    }
-
     /// The reach of one transfer page. An Index Terminal reaches every
     /// Depot in the base; any other structure reaches only itself, in
     /// whichever sets it qualifies for.
-    fn shelves_of(&self, at: TransferAt) -> Shelves {
+    pub(crate) fn shelves_of(&self, at: TransferAt) -> Shelves {
         let TransferAt::Structure(e) = at else {
             return Shelves::default();
         };
@@ -114,23 +103,23 @@ impl Game {
         }
     }
 
-    /// `transfer_offer` scoped to one structure.
+    /// Every item the party could move in either direction at one
+    /// structure; the rules are `offer_over`'s.
     pub fn transfer_offer_at(&self, at: TransferAt) -> Vec<TransferRow> {
         self.offer_over(&self.shelves_of(at))
     }
 
-    /// `rack_offer` scoped to one structure: the pack's carriers, then that
-    /// rack's own. Row indices are the handle `transfer_items_at` takes.
+    /// The pack's carriers, then that rack's own (`rack_offer_over`). Row indices are the handle `transfer_items_at` takes.
     pub fn rack_offer_at(&self, at: TransferAt) -> Vec<crate::views::TransferCarrier> {
         self.rack_offer_over(&self.shelves_of(at).racks)
     }
 
-    /// `transfer_room` scoped to one structure.
+    /// Room at one structure, `None` when it is no put target (`room_over`).
     pub fn transfer_room_at(&self, at: TransferAt) -> Option<u32> {
         self.room_over(&self.shelves_of(at))
     }
 
-    /// `transfer_items` scoped to one structure.
+    /// Moves a basket at one structure (`items_over`).
     pub fn transfer_items_at(&mut self, at: TransferAt, basket: &TransferBasket) -> (Moved, Moved) {
         let shelves = self.shelves_of(at);
         self.items_over(&shelves, basket)
@@ -160,10 +149,6 @@ impl Game {
     /// side**, so an item that can go nowhere is listed only when it is also
     /// sitting on a shelf. A banked item may still have `on_shelves`, since a
     /// Research Node produces one.
-    pub fn transfer_offer(&self) -> Vec<TransferRow> {
-        self.offer_over(&self.pooled_shelves())
-    }
-
     fn offer_over(&self, shelves: &Shelves) -> Vec<TransferRow> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
@@ -281,11 +266,7 @@ impl Game {
     /// whole of what makes it one: the basket names rows, and this call and
     /// the commit both build the list the same way from the same world.
     ///
-    /// Guarded exactly as `transfer_offer` is, and for the same reason.
-    pub fn rack_offer(&self) -> Vec<crate::views::TransferCarrier> {
-        self.rack_offer_over(&self.adjacent_racks())
-    }
-
+    /// Guarded exactly as `offer_over` is, and for the same reason.
     fn rack_offer_over(&self, racks: &[Entity]) -> Vec<crate::views::TransferCarrier> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
@@ -302,7 +283,7 @@ impl Game {
             .collect()
     }
 
-    /// `rack_offer`'s rows with the world's own handles still attached —
+    /// `rack_offer_over`'s rows with the world's own handles still attached —
     /// the program and, for a racked one, which rack is holding it. Private
     /// because an `Entity` never crosses into a view.
     fn carrier_slots(&self, racks: &[Entity]) -> Vec<(DownedProgram, Option<Entity>)> {
@@ -364,10 +345,6 @@ impl Game {
     /// with nothing left": a screen inferring the first from a zero draws a
     /// room line reading 0 beside an Extractor, which claims the base is
     /// full when it has no shelf at all.
-    pub fn transfer_room(&self) -> Option<u32> {
-        self.room_over(&self.pooled_shelves())
-    }
-
     fn room_over(&self, shelves: &Shelves) -> Option<u32> {
         if !self.has_put_target_over(shelves) {
             return None;
@@ -387,11 +364,6 @@ impl Game {
     /// that order, each skipped when its half is empty. Then one `tick()`,
     /// and only if anything moved — an empty or all-zero basket is a silent
     /// no-op costing no turn.
-    pub fn transfer_items(&mut self, basket: &TransferBasket) -> (Moved, Moved) {
-        let shelves = self.pooled_shelves();
-        self.items_over(&shelves, basket)
-    }
-
     fn items_over(&mut self, shelves: &Shelves, basket: &TransferBasket) -> (Moved, Moved) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return (Moved::new(), Moved::new());
@@ -476,7 +448,7 @@ impl Game {
 
     /// Moves the checked carriers and returns how many crossed.
     ///
-    /// Taken before given, `transfer_items`' own order, so a basket that
+    /// Taken before given, `items_over`'s own order, so a basket that
     /// empties a rack and refills it from the pack lands both halves. Rows
     /// are resolved against one snapshot of `carrier_slots` and removed
     /// **back to front**, so an earlier removal cannot shift a later index.

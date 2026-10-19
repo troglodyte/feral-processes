@@ -3901,6 +3901,41 @@ pub(crate) fn app_between_a_depot_and_a_machine(seed: u32) -> App {
     app
 }
 
+/// `app_between_a_depot_and_a_machine` with a second Depot south at
+/// `(0, 1)`: three structures in the hub's cycle, machine, south Depot,
+/// west Depot.
+pub(crate) fn app_beside_a_machine_and_two_depots(seed: u32) -> App {
+    let mut app = app_between_a_depot_and_a_machine(seed);
+    let path = scratch_path("machine_and_two_depots", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.structures.push(save::StructureSave {
+        recipe: None,
+        kind: "depot".to_string(),
+        position: (0, 1),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+    app.mode = Mode::Playing;
+    app
+}
+
 /// `app_beside_a_machine` with the Factory east at `(1, 0)` set to
 /// `bytecode_block` and holding three of them on its output shelf, so the
 /// transfer and the recipe menu are offered on the same side.

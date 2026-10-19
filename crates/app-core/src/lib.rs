@@ -48,7 +48,7 @@ pub use feral_processes_engine::ProgramRole;
 ///
 /// **Items come first and carriers after**, and that ordering is load-bearing:
 /// a carrier row's position less the item count is its index into
-/// `Game::rack_offer()`, which is what `TransferBasket::carriers` names.
+/// `Game::rack_offer_at`, which is what `TransferBasket::carriers` names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TransferEntry {
     Item(TransferRow),
@@ -80,7 +80,7 @@ impl TransferEntry {
 /// Set by whichever opener called `App::open_transfer` and read only by
 /// `App::commit_transfer`, so the one basket and one commit stay shared
 /// while the door they spend through differs underneath —
-/// `Game::transfer_items` against `Game::take_from_outpost`. An outpost's
+/// `Game::transfer_items_at` against `Game::take_from_outpost`. An outpost's
 /// rows carry `can_put: 0` (`Game::outpost_transfer_offer`), so a basket
 /// built against one never has anything in `TransferBasket::give`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1586,16 +1586,16 @@ pub enum Mode {
     /// for a reveal to swallow.
     TacticalResult,
     Transfer,
-    /// One Depot's allow/deny list, opened with `[F]` from the transfer
-    /// picker — see `App::depot_filter`.
+    /// One Depot's allow/deny list, a page of the structure hub, opened from
+    /// a Depot's rail — see `App::depot_filter`.
     ///
     /// A screen of its own rather than a section of the picker: the picker
     /// is a basket of quantities committed in one action, and this is a
     /// standing instruction to a building that takes effect the moment it
     /// is set. Nothing here is spent, so there is nothing to commit.
     DepotFilter,
-    /// Which tool the Teardown Rig beside the party runs on — `[F]` in base
-    /// space. A screen of its own rather than a page of `Mode::Tools`,
+    /// Which tool the Teardown Rig beside the party runs on — the Tool
+    /// page of its hub. A screen of its own rather than a page of `Mode::Tools`,
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
     /// What the Extractor, Factory, Assembler or Printer beside the party
@@ -1603,8 +1603,8 @@ pub enum Mode {
     MachineRecipe,
     /// Asks before a recipe change empties a set machine.
     MachineRecipeConfirm,
-    /// Build an implant into the player or cut one out — `[I]` in base
-    /// space beside a Splice Rig. See `App::splice_rig`.
+    /// Build an implant into the player or cut one out — the Splice
+    /// page of a Splice Rig's hub. See `App::splice_rig`.
     SpliceRig,
     /// Picking an action for the party member in `Game::battle_active_slot`.
     /// The menu comes from `Game::battle_action_options`, so the action set
@@ -3487,7 +3487,7 @@ pub struct App {
     /// install it is asking to confirm. Session state, `rig_tool`'s reason.
     pub splice_rig: Option<SpliceRigScreen>,
     /// The Power Siphon `Mode::Siphon` is acting on. Re-validated against
-    /// `Game::adjacent_siphons` on every key, since the machine can be
+    /// `Game::adjacent_structures` on every key, since the machine can be
     /// destroyed or walked away from while the screen is open.
     pub siphon: Option<Entity>,
     /// How many of each caravan row the basket is holding, **index-aligned**

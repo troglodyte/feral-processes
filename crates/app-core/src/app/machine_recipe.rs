@@ -44,11 +44,13 @@ impl MachineRecipeScreen {
 
 impl App {
     /// Opens the recipe menu on one adjacent machine, the hub's Recipe page.
-    pub(crate) fn open_machine_recipe_for(&mut self, machine: Entity) {
-        if self.show_machine_recipe(machine) {
+    pub(crate) fn open_machine_recipe_for(&mut self, machine: Entity) -> bool {
+        let shown = self.show_machine_recipe(machine);
+        if shown {
             self.menu_selected = 0;
             self.mode = Mode::MachineRecipe;
         }
+        shown
     }
 
     /// Re-reads one machine into the screen, reporting whether it is still

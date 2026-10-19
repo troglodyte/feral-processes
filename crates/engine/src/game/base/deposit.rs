@@ -9,32 +9,6 @@ use crate::*;
 pub(crate) type SinkLoad = (Entity, ItemId, u32);
 
 impl Game {
-    /// The Depots a transfer puts into: `reachable_stock` under
-    /// the Depot filter, so beside an Index Terminal that is every Depot in
-    /// the base.
-    pub(crate) fn reachable_depots(&self) -> Vec<Entity> {
-        self.only_depots(self.reachable_stock())
-    }
-
-    /// The structures orthogonally beside the party that spend a `supply`
-    /// item, author a `supply_capacity` and are not shelves, each with the
-    /// item they take and the room left in their input, in `(x, y)` order.
-    ///
-    /// **Only an authored capacity can be hand-loaded**: a Turret or a Shield
-    /// is stocked by its haulers alone, so a capacity-less structure is not a
-    /// put target however much supply it spends.
-    ///
-    /// **Beside, never `reachable`**: an Index Terminal widens what a shelf
-    /// can be reached from and a machine's buffer stays walk-up. Loading is
-    /// the one hand-delivery to a machine, so it asks for the machine to be
-    /// the thing the party is standing at.
-    pub(crate) fn supply_sinks(&self) -> Vec<(Entity, ItemId, u32)> {
-        self.adjacent_stock()
-            .into_iter()
-            .filter_map(|e| self.supply_sink_of(e))
-            .collect()
-    }
-
     /// This structure as a put target for a supply item, with the room left
     /// in its input — `None` for a shelf, a structure with no authored
     /// capacity or one that spends nothing.
@@ -57,28 +31,17 @@ impl Game {
         !shelves.depots.is_empty() || !shelves.sinks.is_empty()
     }
 
-    fn only_depots(&self, cells: Vec<Entity>) -> Vec<Entity> {
-        cells.into_iter().filter(|e| self.is_depot(*e)).collect()
-    }
-
-    /// Room left across every adjacent Depot's `output` — the shared budget
-    /// the picker has to enforce live.
+    /// Room left across a shelf set's Depots and supply sinks, the shared
+    /// budget the picker has to enforce live. Read through
+    /// `Game::transfer_room_at`, which tells a zero here apart from there
+    /// being no Depot at all.
     ///
-    /// Same guards as the offer, and the same empty answer for each: it is a
-    /// claim about what is beside the party, so like `transfer_offer` it
-    /// needs no `require_surface` of its own. **Read through
-    /// `Game::transfer_room`**, which is what tells a zero here apart from
-    /// there being no Depot at all.
+    /// Same guards as the offer, and the same empty answer for each.
     ///
     /// **A Depot that will take nothing the party is carrying is not room**
     /// — see `depots_for_put`. Summed blind, a shelf filtering out the whole
     /// pack promises the picker twice the space that exists, and the missing
     /// half is discovered as a silent short fill.
-    pub fn deposit_room(&self) -> u32 {
-        self.deposit_room_over(&self.pooled_shelves())
-    }
-
-    /// `deposit_room` across an explicit shelf set.
     pub(crate) fn deposit_room_over(&self, shelves: &Shelves) -> u32 {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return 0;
@@ -124,7 +87,7 @@ impl Game {
             .collect()
     }
 
-    /// What the pack holds that a Depot could ever take: `transfer_offer`'s
+    /// What the pack holds that a Depot could ever take: `offer_over`'s
     /// two exclusions, asked of the inventory rather than of the catalogue.
     fn puttable_carried(&self) -> Vec<ItemId> {
         let currency = self.trade_currency();

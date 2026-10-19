@@ -22,11 +22,13 @@ pub struct DepotFilterScreen {
 
 impl App {
     /// Opens the filter on one Depot, the hub's Filter page.
-    pub(crate) fn open_depot_filter_for(&mut self, depot: Entity) {
-        if self.show_depot_filter(depot) {
+    pub(crate) fn open_depot_filter_for(&mut self, depot: Entity) -> bool {
+        let shown = self.show_depot_filter(depot);
+        if shown {
             self.menu_selected = 0;
             self.mode = Mode::DepotFilter;
         }
+        shown
     }
 
     /// Re-reads one Depot into the screen, reporting whether it is still

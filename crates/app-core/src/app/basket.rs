@@ -105,7 +105,7 @@ impl App {
     ///
     /// A pending *take* deliberately does not credit the budget: a take may
     /// come off a machine that is not a Depot, so crediting it would offer
-    /// room that never appears. Under-offering is safe — `transfer_items`
+    /// room that never appears. Under-offering is safe — `transfer_items_at`
     /// takes before it gives, so the real room at the commit is never
     /// smaller than this.
     pub(crate) fn put_available(&self, row: usize) -> u32 {
@@ -255,7 +255,7 @@ impl App {
                     .give
                     .push((row.item.clone(), n.unsigned_abs() as u32)),
                 // The row's position less the item count — `open_transfer`'s
-                // ordering is what makes that the `rack_offer` index.
+                // ordering is what makes that the `rack_offer_at` index.
                 TransferEntry::Carrier(_) => basket.carriers.push(i - items),
             }
         }

@@ -246,7 +246,7 @@
   and **`None` is "no Depot beside you" while `Some(0)` is "a Depot with
   nothing left"**: the room line is omitted entirely on `None`, since a line
   reading 0 beside an Extractor claims the base is full when it has no shelf
-  at all. `Game::transfer_room` is the one call that answers both, and
+  at all. `Game::transfer_room_at` is the one call that answers both, and
   nothing infers the `None` from a zero. Three silent traps besides: the pack
   side must filter `ItemDef::banked` (a bank is not cargo, though a banked
   item on a *shelf* is still a real take row), must close entirely without a

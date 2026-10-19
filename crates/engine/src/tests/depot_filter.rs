@@ -30,8 +30,15 @@ fn player_tile(game: &Game) -> Position {
     *game.world.get::<Position>(game.player_entity()).unwrap()
 }
 
+/// The Index Terminal beside the party, which is how a test reads or moves
+/// across several Depots at once.
+fn terminal(game: &mut Game) -> TransferAt {
+    let p = player_tile(game);
+    TransferAt::Structure(spawn_structure_at(game, "storage_terminal", p.x, p.y + 1))
+}
+
 fn row(game: &Game, id: &str) -> TransferRow {
-    game.transfer_offer()
+    game.transfer_offer_at(adjacent_at(game))
         .into_iter()
         .find(|r| r.item == ItemId::from(id))
         .unwrap_or_else(|| panic!("no row for {id}"))
@@ -127,13 +134,14 @@ fn a_denied_item_lands_in_the_next_depot_instead() {
     let p = player_tile(&game);
     let first = depot(&mut game, p.x - 1, p.y, &[]);
     let second = depot(&mut game, p.x + 1, p.y, &[]);
+    let at = terminal(&mut game);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
     deny(&mut game, first, ids::CORE_FRAGMENT);
 
-    let (_, given) = game.transfer_items(&TransferBasket::items(
-        &[],
-        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
-    ));
+    let (_, given) = game.transfer_items_at(
+        at,
+        &TransferBasket::items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]),
+    );
 
     assert_eq!(given, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
     assert_eq!(node_output(&game, first, ids::CORE_FRAGMENT), 0);
@@ -161,10 +169,10 @@ fn an_item_every_depot_refuses_cannot_be_put_at_all() {
         "but the screen must not offer a put nothing will take"
     );
 
-    let (_, given) = game.transfer_items(&TransferBasket::items(
-        &[],
-        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
-    ));
+    let (_, given) = game.transfer_items_at(
+        adjacent_at(&game),
+        &TransferBasket::items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]),
+    );
     assert!(given.is_empty());
     assert_eq!(
         game.world
@@ -187,10 +195,10 @@ fn a_denied_item_already_on_the_shelf_can_still_be_taken() {
     deny(&mut game, shelf, ids::CORE_FRAGMENT);
 
     assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 6);
-    let (taken, _) = game.transfer_items(&TransferBasket::items(
-        &[(ItemId::from(ids::CORE_FRAGMENT), 6)],
-        &[],
-    ));
+    let (taken, _) = game.transfer_items_at(
+        adjacent_at(&game),
+        &TransferBasket::items(&[(ItemId::from(ids::CORE_FRAGMENT), 6)], &[]),
+    );
     assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 6)]);
 }
 
@@ -203,6 +211,7 @@ fn can_put_counts_only_the_depots_that_accept_the_item() {
     let p = player_tile(&game);
     let refusing = depot(&mut game, p.x - 1, p.y, &[]);
     let accepting = depot(&mut game, p.x + 1, p.y, &[(ids::CORE_FRAGMENT, 197)]);
+    let at = terminal(&mut game);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 40)]);
     deny(&mut game, refusing, ids::CORE_FRAGMENT);
 
@@ -212,7 +221,11 @@ fn can_put_counts_only_the_depots_that_accept_the_item() {
         "precondition: three slots left on the only shelf that will take it"
     );
     assert_eq!(
-        row(&game, ids::CORE_FRAGMENT).can_put,
+        game.transfer_offer_at(at)
+            .into_iter()
+            .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+            .unwrap()
+            .can_put,
         3,
         "the refusing Depot's 200 free slots are not room for this item"
     );
@@ -228,11 +241,12 @@ fn the_put_budget_ignores_a_depot_that_refuses_the_whole_pack() {
     let p = player_tile(&game);
     let refusing = depot(&mut game, p.x - 1, p.y, &[]);
     depot(&mut game, p.x + 1, p.y, &[]);
+    let at = terminal(&mut game);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 10)]);
     deny(&mut game, refusing, ids::CORE_FRAGMENT);
 
     assert_eq!(
-        game.transfer_room(),
+        game.transfer_room_at(at),
         Some(200),
         "one shelf's worth of room, not two"
     );
@@ -251,7 +265,7 @@ fn a_depot_that_refuses_everything_is_still_a_depot() {
     game.set_all_depot_filters(shelf, false);
 
     assert_eq!(
-        game.transfer_room(),
+        game.transfer_room_at(adjacent_at(&game)),
         Some(0),
         "a full shelf and a closed one read the same, and neither is None"
     );

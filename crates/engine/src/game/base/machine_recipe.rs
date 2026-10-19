@@ -11,7 +11,7 @@ use crate::Game;
 use crate::components::{
     MachineRecipe, Position, ResourceNode, Stock, Structure, StructureTier, Task, TaskKind,
 };
-use crate::game::base::{collect::ORTHOGONAL, stock};
+use crate::game::base::stock;
 use crate::items::{FloorThing, ItemId};
 use crate::items_db::ItemDb;
 use crate::research::ResearchDb;
@@ -31,35 +31,11 @@ impl Game {
         Some(Placed { def, recipe })
     }
 
-    /// Whether this structure is a configurable machine — the per-entity
-    /// test `adjacent_machines` and the structure hub's Recipe page share.
+    /// Whether this structure is a configurable machine — the per-entity test
+    /// the structure hub's Recipe page asks.
     pub(crate) fn is_machine(&self, structure: Entity) -> bool {
         self.structure_def_of(structure)
             .is_some_and(|d| d.machine.is_some())
-    }
-
-    /// Every configurable machine touching the party's cell, lowest tile
-    /// first — `adjacent_teardown_rigs`' reach and ordering.
-    pub fn adjacent_machines(&self) -> Vec<Entity> {
-        let Some((px, py)) = self.base_pos() else {
-            return Vec::new();
-        };
-        let mut found: Vec<(i32, i32, Entity)> = self
-            .world
-            .iter_entities()
-            .filter(|e| self.is_machine(e.id()))
-            .filter_map(|e| {
-                let p = e.get::<Position>()?;
-                Some((p.x, p.y, e.id()))
-            })
-            .filter(|(x, y, _)| {
-                ORTHOGONAL
-                    .iter()
-                    .any(|(dx, dy)| (*x, *y) == (px + dx, py + dy))
-            })
-            .collect();
-        found.sort();
-        found.into_iter().map(|(_, _, e)| e).collect()
     }
 
     /// What the recipe menu draws for `machine`; `None` when it is not a

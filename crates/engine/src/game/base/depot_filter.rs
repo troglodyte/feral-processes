@@ -125,7 +125,7 @@ impl Game {
     ///
     /// The screen's row list and `set_all_depot_filters`' catalogue are the
     /// same call, so "deny all" cannot deny something the player was never
-    /// shown. The two exclusions are `transfer_offer`'s own: the trade
+    /// shown. The two exclusions are `offer_over`'s own: the trade
     /// currency is what cargo is priced in rather than cargo, and a banked
     /// item never reaches a shelf to be refused from one.
     pub(crate) fn filterable_items(&self) -> Vec<ItemId> {

@@ -5,7 +5,12 @@ use crate::*;
 
 fn recipe_of(app: &App) -> Option<ItemId> {
     let game = app.game.as_ref().unwrap();
-    let machine = game.adjacent_machines()[0];
+    let machine = game
+        .adjacent_structures()
+        .into_iter()
+        .find(|s| s.pages.contains(&StructurePage::Recipe))
+        .expect("a machine beside the party")
+        .entity;
     game.machine_recipe_view(machine).unwrap().current
 }
 

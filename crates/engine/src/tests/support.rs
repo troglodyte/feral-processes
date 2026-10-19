@@ -3561,13 +3561,21 @@ pub(crate) fn reseed_rng(game: &mut Game, seed: u64) {
 /// here rather than in the engine because "select everything, then commit"
 /// is a fixture's convenience and not a verb the game has.
 pub(crate) fn take_everything_adjacent(game: &mut Game) -> Vec<(ItemId, u32)> {
-    let all: Vec<(ItemId, u32)> = game
-        .transfer_offer()
-        .into_iter()
-        .filter(|r| r.on_shelves > 0)
-        .map(|r| (r.item, r.on_shelves))
-        .collect();
-    game.transfer_items(&TransferBasket::items(&all, &[])).0
+    let mut taken = Vec::new();
+    for near in game.adjacent_structures() {
+        let at = TransferAt::Structure(near.entity);
+        let all: Vec<(ItemId, u32)> = game
+            .transfer_offer_at(at)
+            .into_iter()
+            .filter(|r| r.on_shelves > 0)
+            .map(|r| (r.item, r.on_shelves))
+            .collect();
+        taken.extend(
+            game.transfer_items_at(at, &TransferBasket::items(&all, &[]))
+                .0,
+        );
+    }
+    taken
 }
 
 /// A costed `Heal` — the shape that reaches the field routine list once
@@ -3731,4 +3739,13 @@ pub(crate) fn floor_things(game: &mut Game) -> Vec<((i32, i32), crate::items::Fl
         .collect();
     rows.sort_by_key(|(c, _)| *c);
     rows
+}
+
+/// The one structure beside the party, as a transfer scope — what a
+/// player's hub is open on. Panics when there is none or several, so a
+/// fixture that meant a particular structure says which.
+pub(crate) fn adjacent_at(game: &Game) -> TransferAt {
+    let found = game.adjacent_structures();
+    assert_eq!(found.len(), 1, "expected exactly one structure beside");
+    TransferAt::Structure(found[0].entity)
 }

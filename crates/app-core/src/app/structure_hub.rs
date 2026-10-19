@@ -3,7 +3,9 @@
 //!
 //! `App::structure_hub` holds the cycle the engine reported
 //! (`Game::adjacent_structures`) and which structure is showing; each page is
-//! one existing screen, opened for that structure by its `_for` opener.
+//! one existing screen, opened for that structure by its `_for` opener. An
+//! opener that finds its structure gone closes the hub rather than leaving the
+//! previous page up.
 //! Opening, cycling and turning pages spend no turn.
 
 use crate::*;
@@ -40,9 +42,24 @@ impl App {
         };
         match page {
             StructurePage::Inventory => self.open_transfer_for(TransferAt::Structure(entity)),
-            StructurePage::Filter => self.open_depot_filter_for(entity),
-            StructurePage::Recipe => self.open_machine_recipe_for(entity),
-            StructurePage::Tool => self.open_rig_tool_for(entity),
+            StructurePage::Filter => {
+                if !self.open_depot_filter_for(entity) {
+                    self.close_structure_hub();
+                    return;
+                }
+            }
+            StructurePage::Recipe => {
+                if !self.open_machine_recipe_for(entity) {
+                    self.close_structure_hub();
+                    return;
+                }
+            }
+            StructurePage::Tool => {
+                if !self.open_rig_tool_for(entity) {
+                    self.close_structure_hub();
+                    return;
+                }
+            }
             StructurePage::Siphon => self.open_siphon_for(entity),
             StructurePage::Splice => self.open_splice_rig(),
             StructurePage::Grow => {
@@ -120,7 +137,9 @@ impl App {
             return;
         }
         let kept = cycle.iter().position(|s| s.entity == was);
-        let at = kept.unwrap_or(old_at.min(cycle.len() - 1));
+        // The vanished structure's successor slides into its slot; past the
+        // end the cycle wraps to its first.
+        let at = kept.unwrap_or(if old_at < cycle.len() { old_at } else { 0 });
         let page_kept =
             |hub: &StructureHub, p: usize| hub.current().pages.get(p) == cycle[at].pages.get(p);
         let keep = kept.is_some()

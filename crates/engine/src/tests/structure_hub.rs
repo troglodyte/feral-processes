@@ -113,6 +113,13 @@ fn nothing_is_offered_in_a_battle_or_outside_the_base() {
     let mut game = fresh();
     with_shelf(&mut game, "depot", 1, 0);
     assert_eq!(game.adjacent_structures().len(), 1);
+
+    let player = game.player_entity();
+    insert_battle(&mut game, player, Vec::new());
+    assert!(game.adjacent_structures().is_empty(), "in a battle");
+    game.world.remove_resource::<BattleState>();
+    assert_eq!(game.adjacent_structures().len(), 1, "and back after it");
+
     game.world.insert_resource(Locale::Surface);
     assert!(game.adjacent_structures().is_empty());
 }

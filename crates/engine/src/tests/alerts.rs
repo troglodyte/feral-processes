@@ -372,7 +372,7 @@ fn a_resolved_stall_leaves_its_alert_on_the_board() {
     assert_eq!(game.alerts().len(), 1);
     let count_before = game.alerts()[0].count;
 
-    // `take_everything_adjacent` (`Game::transfer_items`) ticks once itself
+    // `take_everything_adjacent` (`Game::transfer_items_at`) ticks once itself
     // on a non-empty take, and `ALERT_NODE`'s one-tick, no-`level` cycle
     // means that single tick is exactly enough to resume and pay out again
     // deterministically — no extra `game.tick()` needed or wanted, since a

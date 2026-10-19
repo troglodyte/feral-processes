@@ -386,6 +386,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
     let before = app.game.as_ref().unwrap().current_tick();
+    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
 
     app.menu_selected = shelf;
     app.handle_key(GameKey::Char('4'));
@@ -396,7 +397,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_ref().unwrap();
     assert_eq!(game.current_tick(), before + 1, "one commit, one turn");
-    let offer = game.transfer_offer();
+    let offer = game.transfer_offer_at(at);
     let shelf_now = offer.iter().find(|r| r.item == item(ITEM)).unwrap();
     assert_eq!(
         shelf_now.on_shelves,
@@ -415,13 +416,14 @@ fn enter_moves_both_halves_and_spends_one_turn() {
 fn enter_on_an_empty_basket_moves_nothing() {
     let mut app = picker(987);
     let before = app.game.as_ref().unwrap().current_tick();
-    let offer = app.game.as_ref().unwrap().transfer_offer();
+    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Enter);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
-    assert_eq!(app.game.as_ref().unwrap().transfer_offer(), offer);
+    assert_eq!(app.game.as_ref().unwrap().transfer_offer_at(at), offer);
 }
 
 /// Abandoning the screen moves nothing and costs no turn.
@@ -585,7 +587,7 @@ fn take_everything_fills_a_carrier_row_to_one_and_no_further() {
     assert_eq!(app.basket_amounts, vec![0, 1, 1]);
 }
 
-/// The row's position less the item count is its `rack_offer` index, which
+/// The row's position less the item count is its `rack_offer_at` index, which
 /// is the whole of why items are listed first.
 #[test]
 fn the_basket_names_carriers_by_their_offer_index() {

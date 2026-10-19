@@ -12,8 +12,16 @@ fn app_beside_a_siphon(seed: u32) -> App {
     app
 }
 
+fn siphon_beside(game: &Game) -> Entity {
+    game.adjacent_structures()
+        .into_iter()
+        .find(|s| s.pages.contains(&StructurePage::Siphon))
+        .expect("a siphon beside the party")
+        .entity
+}
+
 fn the_siphon(app: &App) -> Entity {
-    app.game.as_ref().unwrap().adjacent_siphons()[0]
+    siphon_beside(app.game.as_ref().unwrap())
 }
 
 fn pet_hp(game: &mut Game, program: Entity) -> i32 {
@@ -47,10 +55,7 @@ fn c_at_an_empty_siphon_opens_the_picker_and_a_pick_holds_the_program() {
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_mut().unwrap();
     assert_eq!(game.program_role(program), Some(ProgramRole::Siphoned));
-    assert_eq!(
-        game.siphon_holder(game.adjacent_siphons()[0]),
-        Some(program)
-    );
+    assert_eq!(game.siphon_holder(siphon_beside(game)), Some(program));
 }
 
 #[test]

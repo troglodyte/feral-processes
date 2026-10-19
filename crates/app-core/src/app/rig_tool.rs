@@ -23,11 +23,13 @@ pub struct RigToolScreen {
 
 impl App {
     /// Opens the tool holder on one rig, the hub's Tool page.
-    pub(crate) fn open_rig_tool_for(&mut self, rig: Entity) {
-        if self.show_rig_tool(rig) {
+    pub(crate) fn open_rig_tool_for(&mut self, rig: Entity) -> bool {
+        let shown = self.show_rig_tool(rig);
+        if shown {
             self.menu_selected = 0;
             self.mode = Mode::RigTool;
         }
+        shown
     }
 
     /// Re-reads one rig into the screen, reporting whether it is still

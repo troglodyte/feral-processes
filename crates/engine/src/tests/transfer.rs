@@ -861,7 +861,7 @@ fn without_a_terminal_a_distant_depot_stays_out_of_reach() {
     let mut game = Game::new(1791, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let p = player_tile(&game);
-    stocked(
+    let far = stocked(
         &mut game,
         "depot",
         p.x + 10,
@@ -871,8 +871,10 @@ fn without_a_terminal_a_distant_depot_stays_out_of_reach() {
     );
     set_inventory(&mut game, &[(ids::POWER_CELL, 3)]);
 
-    assert!(game.transfer_offer_at(TransferAt::PackOnly).is_empty());
-    assert_eq!(game.transfer_room_at(TransferAt::PackOnly), None);
+    assert!(
+        game.adjacent_structures().iter().all(|s| s.entity != far),
+        "a distant Depot is not beside the party"
+    );
 }
 
 /// A terminal across the base does nothing — it has to be beside the party.
@@ -881,8 +883,8 @@ fn a_terminal_that_is_not_beside_the_party_widens_nothing() {
     let mut game = Game::new(1792, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let p = player_tile(&game);
-    bare(&mut game, "storage_terminal", p.x + 5, p.y);
-    stocked(
+    let terminal = bare(&mut game, "storage_terminal", p.x + 5, p.y);
+    let far = stocked(
         &mut game,
         "depot",
         p.x + 10,
@@ -890,9 +892,21 @@ fn a_terminal_that_is_not_beside_the_party_widens_nothing() {
         50,
         &[(ids::CORE_FRAGMENT, 7)],
     );
+    let near = stocked(&mut game, "depot", p.x + 1, p.y, 50, &[]);
+    set_inventory(&mut game, &[]);
 
-    assert!(game.transfer_offer_at(TransferAt::PackOnly).is_empty());
-    assert_eq!(game.transfer_room_at(TransferAt::PackOnly), None);
+    let beside: Vec<Entity> = game
+        .adjacent_structures()
+        .iter()
+        .map(|s| s.entity)
+        .collect();
+    assert_eq!(beside, vec![near]);
+    assert!(!beside.contains(&terminal) && !beside.contains(&far));
+    assert_eq!(
+        set_row(&game, TransferAt::Structure(near), ids::CORE_FRAGMENT).map_or(0, |r| r.on_shelves),
+        0,
+        "the far depot's stock is not on the near Depot's page"
+    );
 }
 
 /// Machines stay walk-up: collecting from a machine is its own errand, and
@@ -1090,10 +1104,11 @@ fn a_machines_scoped_offer_is_its_own_shelf() {
     assert_eq!(row.on_shelves, 3);
 }
 
-/// Beside a terminal, its page is today's terminal-wide offer.
+/// An Index Terminal's page merges its indexed Depots: one row per item,
+/// the shelf count the sum.
 #[test]
-fn a_terminals_scoped_offer_equals_the_pooled_one() {
-    let mut game = Game::new(1803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn a_terminal_page_merges_two_depots_holding_the_same_item_into_one_row() {
+    let mut game = Game::new(1805, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let p = player_tile(&game);
     let terminal = bare(&mut game, "storage_terminal", p.x + 1, p.y);
@@ -1105,16 +1120,23 @@ fn a_terminals_scoped_offer_equals_the_pooled_one() {
         50,
         &[(ids::CORE_FRAGMENT, 7)],
     );
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 2)]);
+    stocked(
+        &mut game,
+        "depot",
+        p.x - 10,
+        p.y,
+        50,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+    set_inventory(&mut game, &[]);
 
-    assert_eq!(
-        game.transfer_offer_at(TransferAt::Structure(terminal)),
-        game.transfer_offer_at(adjacent_at(&game))
-    );
-    assert_eq!(
-        game.transfer_room_at(TransferAt::Structure(terminal)),
-        game.transfer_room_at(adjacent_at(&game))
-    );
+    let rows = game.transfer_offer_at(TransferAt::Structure(terminal));
+    let of_item: Vec<_> = rows
+        .iter()
+        .filter(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .collect();
+    assert_eq!(of_item.len(), 1);
+    assert_eq!(of_item[0].on_shelves, 12);
 }
 
 /// `PackOnly` reaches no shelf at all: the pack's carriers and nothing else.

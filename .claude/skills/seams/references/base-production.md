@@ -226,11 +226,11 @@
   option on any structure page, or a Depot page shows its neighbour's stock
   and reads as a bug. It reimplements neither half. The two movers are `take_from_adjacent` and
   `give_to_adjacent`, **guard-free, log-free and tick-free** by construction,
-  so the caller owns the announcement and the turn. **`transfer_items` takes
+  so the caller owns the announcement and the turn. **`transfer_items_at` takes
   before it gives**: a rebalance that empties a full Depot and refills it
   from the pack lands both halves only in that order, and the other way the
-  give clamps to zero *silently*. The reach is `ORTHOGONAL` through the
-  private `adjacent_stock`, and `hauling::take_from` is still the one way a
+  give clamps to zero *silently*. The reach is resolved per structure by
+  `shelves_of` (an Index Terminal reaches its indexed Depots), and `hauling::take_from` is still the one way a
   unit leaves a buffer. **The trap is that the scan is sorted by `(x, y)`**:
   a partial take across two neighbours holding the same item must drain them
   in the same order every run, and a bare `reverse()` does not prove it. An

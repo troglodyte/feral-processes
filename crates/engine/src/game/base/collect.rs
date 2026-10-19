@@ -191,8 +191,8 @@ impl Game {
         self.world.resource::<StructureDb>().get(kind)
     }
 
-    /// Moves an exact basket off the structures `reachable_stock` names —
-    /// the adjacent ones, plus every Depot beside a terminal — and reports what
+    /// Moves an exact basket off the structures `shelves.stock` names —
+    /// the structure's own, or every indexed Depot for a terminal — and reports what
     /// actually landed, keyed and ordered by `ItemId`.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every

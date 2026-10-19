@@ -130,8 +130,7 @@ impl Game {
     /// and separately each load a supply sink took. An item that is an
     /// adjacent sink's supply fills the sink before any Depot, or a shelf
     /// beside the bench would swallow what was meant to load it; everything
-    /// else goes to `reachable_depots` — the adjacent ones, or every one
-    /// beside a terminal.
+    /// else goes to `shelves.depots`.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and

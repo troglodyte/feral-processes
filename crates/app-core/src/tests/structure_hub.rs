@@ -147,6 +147,40 @@ fn a_page_whose_structure_is_gone_closes_the_hub_instead_of_keeping_the_last_pag
     assert!(app.rig_tool.is_none());
 }
 
+/// Opens the hub, removes the structure under it and re-enters its `page`.
+fn hub_page_after_removal(mut app: App, page: StructurePage) -> App {
+    app.handle_key(GameKey::Char('c'));
+    let hub = app.structure_hub.as_ref().expect("hub open");
+    let at = hub
+        .current()
+        .pages
+        .iter()
+        .position(|p| *p == page)
+        .expect("the structure has that page");
+    let entity = hub.current().entity;
+    app.game.as_mut().unwrap().remove_structure(entity).unwrap();
+    app.enter_structure_page(at);
+    app
+}
+
+#[test]
+fn a_filter_page_whose_depot_is_gone_closes_the_hub() {
+    let app = hub_page_after_removal(app_beside_depots(2611, 1, 0, &[]), StructurePage::Filter);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.structure_hub.is_none());
+}
+
+#[test]
+fn a_recipe_page_whose_machine_is_gone_closes_the_hub() {
+    let app = hub_page_after_removal(
+        app_beside_a_machine(2612, "factory", None),
+        StructurePage::Recipe,
+    );
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.structure_hub.is_none());
+    assert!(app.machine_recipe.is_none());
+}
+
 #[test]
 fn a_basket_left_by_tab_is_discarded() {
     let mut app = app_between_a_depot_and_a_machine(2608);

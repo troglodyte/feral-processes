@@ -334,7 +334,6 @@ pub(in crate::render) fn keybar_segments(actions: Option<&[(String, String)]>) -
         keycap("x", "examine"),
         keycap("e", "drain"),
         keycap("r", "recharge"),
-        keycap("p", "party"),
         keycap("t", "trade"),
         keycap("s", "save"),
     ]

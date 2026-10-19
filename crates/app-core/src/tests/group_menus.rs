@@ -8,15 +8,10 @@ fn labels(rows: &[GroupMenuRow]) -> Vec<&'static str> {
 }
 
 #[test]
-fn b_opens_the_hub_and_p_opens_the_party_hub() {
+fn b_opens_the_hub() {
     let mut app = test_app(4001);
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseOverview);
-
-    let mut app = test_app(4001);
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.mode, Mode::Companion);
-    assert!(app.hub_on_rail);
 }
 
 /// The whole point of clause 2: a row is not offered when the screen behind
@@ -173,7 +168,7 @@ fn the_command_pages_drop_their_base_rows_underground_too() {
     }
 }
 
-/// The party hub is deliberately almost all non-surface — managing what you
+/// The party pages are deliberately almost all non-surface — managing what you
 /// brought with you is exactly what the Stack is for.
 #[test]
 fn the_party_hub_survives_going_underground() {

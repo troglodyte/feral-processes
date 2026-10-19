@@ -162,17 +162,13 @@ impl App {
             self.walk = None;
         }
         match key {
-            // The group menu `p` and the base hub `b`. Seventeen keys used
+            // The inventory `i` and the base hub `b`. Seventeen keys used
             // to sit on this screen doing what these now reach; see
             // `group_menu.rs` for why none of them survive as an alias.
             // Dev-only, and inert unless FERAL_DEV_CONSOLE opened the gate.
             GameKey::Char(c) if c == DEV_CONSOLE_KEY && self.dev_console_enabled() => {
                 self.mode = Mode::DevConsole;
                 self.menu_selected = 0;
-                return;
-            }
-            GameKey::Char('p') => {
-                self.open_party_hub();
                 return;
             }
             GameKey::Char('i') => {

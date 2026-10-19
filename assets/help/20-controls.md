@@ -32,13 +32,11 @@ Your menus and stores:
   the rail, and [ and ] turn pages from anywhere. Esc on the rail leaves for wherever you opened
   it from. b reopens the page you left. The Overview shows where the base is short, and Enter
   opens the highlighted page.
-- p — your party, a rail of pages like the base report's: Companions (your roster), Programs
-  (manifests, fuse, refactor, develop), Routines (install, etch, extract) and Perks. The rail and
-  page keys work as they do under b, and p reopens the page you left.
 - ? — this manual
-- i — your inventory, a rail of pages like the base report's: Items (your pack), Phase keys,
-  Downed programs and Tools. The rail and page keys work as they do under b, and i reopens the
-  page you left.
+- i — your inventory and your party, a rail of pages like the base report's: Items (your pack),
+  Phase keys, Downed programs and Tools, then Companions (your roster), Programs (manifests,
+  fuse, refactor, develop), Routines (install, etch, extract) and Perks. The rail and page keys
+  work as they do under b, and i reopens the page you left.
 - D — the Downed programs page of your inventory: the downed programs you are holding, and the
   tools that take them apart. The same key opens it from Items. See
   [taking a program apart](extraction).

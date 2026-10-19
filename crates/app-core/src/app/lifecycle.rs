@@ -67,7 +67,7 @@ impl App {
             pending_build: None,
             pending_post_structure: None,
             menu_origin: None,
-            hub_last: [None; 3],
+            hub_last: [None; Hub::ALL.len()],
             structure_hub: None,
             command_return_row: None,
             hub_on_rail: true,

@@ -4,7 +4,7 @@ paths:
   - "crates/engine/src/perks.rs"
   - "crates/engine/src/talents*"
   - "crates/engine/src/achievements*"
-  - "crates/engine/src/tuning.rs"
+  - "crates/engine/src/tuning/**"
   - "crates/engine/src/items.rs"
   - "crates/engine/src/species*"
   - "crates/engine/src/structures*"
@@ -54,13 +54,13 @@ that are not in any one README.
     investment.
   - `StatGain` perks: `purchase_stat_gain` says what buying one grants;
     `unlock_perk` stays the one writer of `Stats`.
-  - Per-level magnitudes stay in `tuning.rs`; only cost crossed to data.
+  - Per-level magnitudes stay in `tuning/`; only cost crossed to data.
   - A hook belongs where its sources meet (`Obfuscation` is read inside
     `raise_trace`, not at the six raisers). A repeated hook means the wrong seam.
   - **Variant order is save format** (bincode is positional;
     `PlayerSave::unlocked_perks` holds indices): append, or bump
     `SAVE_FORMAT_VERSION`.
-- **`tuning.rs` is deliberately code, not data**: difficulty stays in Rust
+- **`tuning/` is deliberately code, not data**: difficulty stays in Rust
   even where content is a file. Every hardcoded knob is a documented
   `pub const` there in labelled sections; new tuning goes there, never
   inline, and never a duplicate of a `.ron` value.

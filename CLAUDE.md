@@ -78,7 +78,7 @@ FERAL_DEV_NO_SIEGES=1 cargo run                      # the siege clock never run
 ## Content: data or code
 
 Moddability is not a goal. New content kinds default to Rust (enums,
-`tuning.rs`): string ids, loaders, schema READMEs and census tests cost more
+`tuning/`): string ids, loaders, schema READMEs and census tests cost more
 than they buy for a handful of entries. Make a new `assets/<kind>/` only
 when it will hold many entries tuned often, or isn't code (help markdown,
 sprites, sounds, effects). The large sets already in `assets/` (items,
@@ -107,7 +107,7 @@ When a schema changes:
   Pattern: `battle::attackers_in_group`, `battle::slot_aggro_weight`,
   `battle::expected_damage`, `systems::node_payout`.
 - Composition over inheritance; no global mutable state; named constants in
-  `tuning.rs`; no optimization without evidence.
+  `tuning/`; no optimization without evidence.
 - **New discrete/turn-based logic is plain Rust** — structs owned in one
   place plus pure functions over them, not new components reached by
   `world.get`. ECS is for many entities ticking (staff, wanderers, tasks).
@@ -149,7 +149,7 @@ When a schema changes:
 - **`balance_sim.rs` is the balance regression gate** — a deterministic
   battle simulator asserting level curves from live constants and real
   assets. Check `cargo test -p feral-processes-engine balance_sim` after any
-  change to `tuning.rs`, a species or an item. A moved curve means
+  change to `tuning/`, a species or an item. A moved curve means
   progression changed.
 
 ## Process weight

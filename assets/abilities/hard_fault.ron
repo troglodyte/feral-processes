@@ -1,6 +1,6 @@
 (
     id: "hard_fault",
-    fx: Some("zap"),
+    fx: Some("debuff"),
     name: "Hard Fault Everyone",
     // Exclusive: the Overseer's. A two-round stun across every hostile in
     // the fight is the single strongest tempo swing in the game, which is

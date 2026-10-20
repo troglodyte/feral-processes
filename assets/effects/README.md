@@ -44,7 +44,7 @@ flight when the next body acts.
 |---|---|
 | `Sparks` | the blow's own hit burst, drawn only when damage lands; listing it adds nothing over `impact: []` |
 | `Explosion(radius: r)` | an expanding ring and a heavier burst |
-| `Zap` | short crackle lines |
+| `Zap` | short white crackle lines; drawn on every covered cell of an area |
 | `Slash` | a swipe from the attacker's centre on through the cell |
 | `Smoke` | a grey puff that drifts up and fades |
 | `Flash` | the whole tile tinted in the effect's `color`, fading out; drawn on every covered cell of an area |
@@ -53,4 +53,4 @@ flight when the next body acts.
 
 ## Shipped
 
-`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`, `explosion_large` (a volatile prop going up), `heal` (green), `buff` (cyan). The last two are for ally-facing routines.
+`streak`, `laser_pulse`, `beam`, `zap`, `slash`, `explosion`, `explosion_large` (a volatile prop going up), `heal` (green), `buff` (cyan), `cleanse` (white) for ally-facing routines; `drain` (magenta) and `debuff` (yellow), a crackle and a tinted tile on every covered cell, for routines that siphon from or weaken their targets.

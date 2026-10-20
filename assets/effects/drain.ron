@@ -1,0 +1,7 @@
+(
+    id: "drain",
+    color: Some(Magenta),
+    travel: Zap,
+    impact: [Zap, Flash],
+    shake: 0.0,
+)

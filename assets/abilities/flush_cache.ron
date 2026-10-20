@@ -1,5 +1,6 @@
 (
     id: "flush_cache",
+    fx: Some("cleanse"),
     name: "Flush Cache Party",
     description: "Clear status conditions from the whole party",
     target: WholeParty,

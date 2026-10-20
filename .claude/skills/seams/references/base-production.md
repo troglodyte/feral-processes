@@ -558,11 +558,15 @@
   room: both routes in go through `Game::hopper_room`.
 
 - **A task-less `CarryingProgram` body is a rack carrier, and the forced edge
-  covers every holder.** The scheduler excludes a carrier from the pool the
-  way it excludes a `Carrying` hauler; written as `is_rack_carrier` alone, a
-  rig's posted fetcher that the matching re-seated lost its `Task` still
-  holding the kill and was neither fetcher nor carrier — uncounted and never
-  delivered. In `drift_idle_staff` the delivery arm ranks above `OffShift`
+  holds exactly that, never a rig's posted fetcher.** The scheduler excludes
+  a rack carrier from the pool the way it excludes a `Carrying` hauler. A
+  rig's posted fetcher is not held: if the matching re-seats it, it loses its
+  `Task` still holding the kill, becomes a rack carrier, and the free loop
+  hands the kill back through `drop_load`, so nothing is lost. Widening the
+  edge to every `CarryingProgram` holder (an earlier fix, on the false belief
+  that such a body was uncounted and undelivered) instead pinned a fetcher to
+  a rig that had lost its tool, gone dark or filled, for ever, with other work
+  waiting. In `drift_idle_staff` the delivery arm ranks above `OffShift`
   and respite (`is_on_shift` keeps a carrier on shift whatever it is marked,
   so the amenity walk would otherwise march the kill to a Bay); the pick-up
   ranks above clearing, because a kill in a station's slot stalls the whole

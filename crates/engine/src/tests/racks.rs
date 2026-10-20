@@ -227,7 +227,7 @@ use crate::components::{CarryingProgram, Hopper, Task, TaskKind};
 /// A staffed, lit Teardown Rig at (3,3) with a Quarantine Rack at (3,2)
 /// holding `racked` carriers, and the rig hand-loaded once so it has a
 /// standing tool. Returns `(game, rig, rack, worker)`.
-fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
+pub(super) fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
     let mut game = Game::new(4220, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base_at(&mut game, 3, 4);
     let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);

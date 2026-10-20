@@ -289,29 +289,78 @@ fn an_idle_carrier_is_not_posted_to_a_job() {
     assert_eq!(all_programs(&mut game, station, rack), vec![7]);
 }
 
-/// A rig's fetcher is posted while it carries. If the matching ever
-/// un-seats it, it loses its `Task` still holding the kill, and then it is
-/// neither a fetcher nor a rack carrier by the narrow predicate: uncounted
-/// and never delivered. Any body holding a program is held in place.
+/// A rig's fetcher is posted while it carries. If the matching un-seats it
+/// (the post is no longer wanted) it loses its `Task` still holding the kill
+/// and becomes a rack carrier, which the free loop hands back through the
+/// shelter chain: the kill is kept and the body is free for other work.
 #[test]
-fn a_posted_fetcher_holding_a_program_is_never_re_matched() {
+fn a_re_matched_fetchers_kill_ends_up_kept() {
     let (mut game, _station, rack) = base_with_station_and_rack();
-    let job = wanted_job(&mut game);
+    wanted_job(&mut game);
     let fetcher = a_carrier(&mut game);
-    // Posted to something the scheduler does not want, so only the forced
-    // edge keeps it from being freed or sent to the wanted job.
+    // Posted to something the scheduler does not want, so the matching frees
+    // it.
     game.world.entity_mut(fetcher).insert(a_task(rack));
 
-    for _ in 0..4 {
+    for _ in 0..30 {
         game.tick();
-        let task = game.world.get::<Task>(fetcher);
-        assert_eq!(
-            task.map(|t| t.target),
-            Some(rack),
-            "a fetcher holding a kill kept its post (the wanted job is {job:?})"
-        );
-        assert!(game.world.get::<CarryingProgram>(fetcher).is_some());
     }
+    assert!(
+        game.world.get::<CarryingProgram>(fetcher).is_none(),
+        "the freed fetcher still holds the kill"
+    );
+    assert!(kept(&mut game).contains(&7), "the kill was lost");
+    assert_eq!(pack_programs(&game), 0, "research never uses the pack");
+}
+
+/// The rig loses its tool after the pickup and another job is waiting: the
+/// posted fetcher must not be pinned to a rig that can never take the
+/// program.
+#[test]
+fn a_fetcher_whose_rig_lost_its_tool_is_freed_and_its_kill_sheltered() {
+    let (mut game, rig, rack, worker) = super::racks::a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    game.remove_rig_tool(rig).unwrap();
+    wanted_job(&mut game);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(racked_levels(&game, rack), vec![201], "the kill is kept");
+}
+
+/// The same pin by a full hopper rather than a missing tool: the fetcher
+/// waits at the rig, and a waiting body is still re-matched when other work
+/// is wanted.
+#[test]
+fn a_fetcher_whose_hopper_is_full_is_freed_and_its_kill_sheltered() {
+    let (mut game, rig, rack, worker) = super::racks::a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    let room = game.hopper_room(rig);
+    for _ in 0..room {
+        game.world
+            .get_mut::<crate::components::Hopper>(rig)
+            .unwrap()
+            .queue
+            .push(crate::components::HopperEntry {
+                program: program(1),
+                tool: crate::tools::ToolId("salvage_clamp".to_string()),
+            });
+    }
+    assert_eq!(game.hopper_room(rig), 0);
+    wanted_job(&mut game);
+
+    for _ in 0..30 {
+        game.tick();
+    }
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert!(
+        racked_levels(&game, rack).contains(&201) || kept(&mut game).contains(&201),
+        "the kill is kept"
+    );
 }
 
 /// One drift beat for `staff`, with the clock wound to the next idle step so

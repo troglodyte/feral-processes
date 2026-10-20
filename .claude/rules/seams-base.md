@@ -286,10 +286,10 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**
 - **A task-less `CarryingProgram` body is a rack carrier
-  (`Game::is_rack_carrier`), and the scheduler's forced edge holds *any*
-  `CarryingProgram` holder out of the posting pool** — a rig's posted
-  fetcher included, or a re-match leaves it holding a kill it will never
-  deliver.
+  (`Game::is_rack_carrier`), and the scheduler's forced edge holds exactly
+  that out of the posting pool, never a rig's posted fetcher** — a re-matched
+  fetcher becomes a rack carrier and `drop_load` shelters its kill, whereas
+  holding it would pin it to a rig that lost its tool, went dark or filled.
 - **Racking ranks in `drift_idle_staff` as two arms: delivery (a body already
   holding a program) above the `OffShift` and respite arms, the pick-up above
   clearing** — and a carrier that has not left its tile for

@@ -3,7 +3,7 @@
 //! never applies to it.
 
 mod effects;
-pub use effects::{SideEffect, side_effect, statuses};
+pub use effects::{SideEffect, arc_damage, next_in_order, ring_around, side_effect, statuses};
 
 use serde::{Deserialize, Serialize};
 use std::ops::Add;

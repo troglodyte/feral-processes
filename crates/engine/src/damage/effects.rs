@@ -8,8 +8,9 @@ use crate::statuses::{StatusBehaviour, StatusDef, StatusId, StatusStacking};
 use crate::tuning::{
     NOISE_JAM_ACCURACY_CUT, NOISE_JAM_ROUNDS, NOISE_JAMMED_STATUS, RADIATION_CORRUPTED_STATUS,
     RADIATION_CORRUPTION_POWER, RADIATION_CORRUPTION_ROUNDS, THERMAL_HEAT_DAMAGE_TAKEN_PCT,
-    THERMAL_HEAT_MAX_STACKS, THERMAL_HEAT_ROUNDS, THERMAL_HEAT_STATUS,
+    THERMAL_HEAT_MAX_STACKS, THERMAL_HEAT_ROUNDS, THERMAL_HEAT_STATUS, VOLTAGE_ARC_SHARE_PCT,
 };
+use bevy_ecs::entity::Entity;
 
 /// A side effect decided by `side_effect`. Concrete, not a general effect
 /// type: each new kind of effect is a variant here.
@@ -21,6 +22,8 @@ pub enum SideEffect {
         rounds: u32,
         power: i32,
     },
+    /// Part of the hit arcs to the target's neighbour (`arc_damage`).
+    Arc,
 }
 
 /// The side effect of a landed hit of `ty` on a target resisting it by
@@ -46,8 +49,37 @@ pub fn side_effect(ty: DamageType, resist_pct: i32) -> Option<SideEffect> {
             power: 0,
         }),
         // Magnetic acts in mitigation (`ignores_deflection`), not as a status.
-        DamageType::Magnetic | DamageType::Voltage => None,
+        DamageType::Magnetic => None,
+        DamageType::Voltage => Some(SideEffect::Arc),
     }
+}
+
+/// What arcs to the neighbour of a Voltage hit that landed `landed`. Zero
+/// means no arc.
+pub fn arc_damage(landed: i32) -> i32 {
+    landed * VOLTAGE_ARC_SHARE_PCT / 100
+}
+
+/// The body after `who` in `order`, wrapping round, or `None` when `who` is
+/// alone in it or not in it. `order` is the caller's living bodies of one
+/// side; the abstract models and a sortie all reduce to this.
+pub fn next_in_order(order: &[Entity], who: Entity) -> Option<Entity> {
+    let at = order.iter().position(|&e| e == who)?;
+    let next = order[(at + 1) % order.len()];
+    (next != who).then_some(next)
+}
+
+/// The cells in the ring around `footprint`: every cell touching it (corners
+/// included) that is not part of it, sorted so a caller's pick is stable.
+pub fn ring_around(footprint: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    let mut ring: Vec<(i32, i32)> = footprint
+        .iter()
+        .flat_map(|&(x, y)| (-1..=1).flat_map(move |dx| (-1..=1).map(move |dy| (x + dx, y + dy))))
+        .filter(|cell| !footprint.contains(cell))
+        .collect();
+    ring.sort_unstable();
+    ring.dedup();
+    ring
 }
 
 /// The statuses the side effects arm, defined here so they exist whatever
@@ -150,8 +182,45 @@ mod tests {
     }
 
     #[test]
-    fn a_type_with_no_effect_yet_does_nothing() {
-        assert_eq!(side_effect(DamageType::Voltage, 0), None);
+    fn magnetic_has_no_side_effect_because_it_acts_in_mitigation() {
+        assert_eq!(side_effect(DamageType::Magnetic, 0), None);
+    }
+
+    #[test]
+    fn voltage_arcs_and_resistance_at_the_threshold_blocks_it() {
+        assert_eq!(side_effect(DamageType::Voltage, 0), Some(SideEffect::Arc));
+        assert!(side_effect(DamageType::Voltage, SIDE_EFFECT_BLOCK_THRESHOLD - 1).is_some());
+        assert_eq!(
+            side_effect(DamageType::Voltage, SIDE_EFFECT_BLOCK_THRESHOLD),
+            None
+        );
+    }
+
+    #[test]
+    fn an_arc_is_half_the_landed_hit_rounded_down() {
+        assert_eq!(arc_damage(20), 10);
+        assert_eq!(arc_damage(7), 3);
+        assert_eq!(arc_damage(1), 0);
+        assert_eq!(arc_damage(0), 0);
+    }
+
+    #[test]
+    fn the_next_body_wraps_and_a_lone_one_has_none() {
+        let e = |i| Entity::from_raw_u32(i).unwrap();
+        let order = [e(1), e(2), e(3)];
+        assert_eq!(next_in_order(&order, e(1)), Some(e(2)));
+        assert_eq!(next_in_order(&order, e(3)), Some(e(1)));
+        assert_eq!(next_in_order(&[e(1)], e(1)), None);
+        assert_eq!(next_in_order(&order, e(9)), None);
+    }
+
+    #[test]
+    fn the_ring_around_one_cell_is_its_eight_neighbours() {
+        let ring = ring_around(&[(5, 5)]);
+        assert_eq!(ring.len(), 8);
+        assert!(!ring.contains(&(5, 5)) && ring.contains(&(6, 6)));
+        let two = ring_around(&[(5, 5), (6, 5)]);
+        assert_eq!(two.len(), 10);
     }
 
     #[test]

@@ -510,7 +510,7 @@ impl Game {
     ///
     /// Two orderings in the tail are load-bearing. The wielded-program proc
     /// comes *after* the front's death is resolved, so a routine can never
-    /// land on a corpse and never fires at all once `finish_group_member`
+    /// land on a corpse and never fires at all once `finish_member`
     /// has ended the battle. And it comes before the return, so its own
     /// kills are reaped inside `proc_wielded_routine` the way
     /// `resolve_one_action`'s `Special` arm reaps its own.
@@ -620,6 +620,11 @@ impl Game {
             if index > 0 && !self.creature_alive(entity) {
                 break;
             }
+            // Swept before any swing landed, so an arc from an earlier body
+            // can have killed this one already.
+            if index > 0 && !self.creature_alive(body) {
+                continue;
+            }
             // Every body takes its own `resolve_and_apply_attack` with the
             // same band — no new damage path, so mitigation, affinity and
             // every rung of the fumble ladder hold for free, and the ladder
@@ -633,16 +638,13 @@ impl Game {
             self.log_swing(MessageKind::PartyDamage, outcome, body, line);
         }
 
-        if wide.is_some() {
-            // A wide swing drops bodies from any rank, and a corpse left in
-            // a group is promoted to front and then attacked as though
-            // alive — the Special arm's reason for reaping the same way.
-            // After the sweep and never per body, or a swing that empties a
-            // group re-letters it half way through its own sweep.
-            if self.reap_dead_members(player) {
-                return SwingControl::BattleOver;
-            }
-        } else if !self.creature_alive(front) && self.finish_group_member(live, player) {
+        // A wide swing drops bodies from any rank and a Voltage arc kills
+        // the target's neighbour, so a narrow swing can too; a corpse left
+        // in a group is promoted to front and then attacked as though
+        // alive — the Special arm's reason for reaping the same way.
+        // After the sweep and never per body, or a swing that empties a
+        // group re-letters it half way through its own sweep.
+        if self.reap_dead_members(player) {
             return SwingControl::BattleOver;
         }
         SwingControl::Swung
@@ -1332,10 +1334,6 @@ impl Game {
         }
     }
 
-    pub(crate) fn finish_group_member(&mut self, group: usize, player: Entity) -> bool {
-        self.finish_member(group, 0, player)
-    }
-
     /// How an entity reads as the *object* of a log line — "you" for the
     /// player, its own name otherwise. `creature_label` is the subject form
     /// and returns "You" for the player, which reads wrong mid-sentence.
@@ -1713,6 +1711,11 @@ impl Game {
             MessageKind::Heal
         };
         for &recipient in recipients {
+            // The list was built before the first swing, and a Voltage arc
+            // from an earlier recipient can have killed this one.
+            if !self.creature_alive(recipient) {
+                continue;
+            }
             // A buff can land on the player or on a companion, so the log
             // names whoever got it rather than assuming "you".
             let on = self.target_label(recipient);

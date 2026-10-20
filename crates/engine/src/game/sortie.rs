@@ -700,7 +700,9 @@ impl Game {
                 let profile = self.natural_profile_of(actor);
                 let swing =
                     crate::battle::Swing::plain(profile.range).with_type(profile.damage_type);
-                self.resolve_and_apply_attack(actor, front, swing);
+                // No battle resource to read the defender's side from, so
+                // an arc takes its neighbour from this order.
+                self.resolve_and_apply_attack_among(actor, front, swing, Some(targets));
             }
         }
     }

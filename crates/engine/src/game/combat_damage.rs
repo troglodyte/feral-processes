@@ -156,18 +156,19 @@ impl Game {
                 _ => None,
             })
             .clamp(0, 100);
+        let mut accuracy =
+            battle::accuracy_of(speed, level, self.accuracy_bonus(entity) + swing.accuracy);
+        // Skipped at zero: scaling by 100/100 is not the identity in f64.
+        if jam != 0 {
+            accuracy = accuracy * (100 - jam) as f64 / 100.0;
+        }
         let derived = self
             .world
             .get::<crate::components::Derived>(entity)
             .copied()
             .unwrap_or_default();
         battle::Combatant {
-            accuracy: battle::accuracy_of(
-                speed,
-                level,
-                self.accuracy_bonus(entity) + swing.accuracy,
-            ) * (100 - jam) as f64
-                / 100.0,
+            accuracy,
             evasion,
             atk: self.status_scaled(entity, self.effective_atk(entity), |b| match b {
                 StatusBehaviour::AtkPercent(n) => Some(*n),
@@ -282,6 +283,19 @@ impl Game {
         defender: Entity,
         swing: battle::Swing,
     ) -> battle::AttackOutcome {
+        self.resolve_and_apply_attack_among(attacker, defender, swing, None)
+    }
+
+    /// `resolve_and_apply_attack` for a fight that has no battle resource to
+    /// read the defender's side from (a sortie): `side` is the defender's
+    /// side in order, and a Voltage arc picks its neighbour from it.
+    pub(crate) fn resolve_and_apply_attack_among(
+        &mut self,
+        attacker: Entity,
+        defender: Entity,
+        swing: battle::Swing,
+        side: Option<&[Entity]>,
+    ) -> battle::AttackOutcome {
         let attacker_profile = self.combatant_profile(attacker, swing);
         // The defender's own band, so an Opening rung's riposte — rolled
         // inside `resolve_attack` — deals real damage rather than zero.
@@ -331,7 +345,7 @@ impl Game {
         // already closes from the other side.
         let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
         if let Some(ty) = swing.damage_type {
-            self.type_side_effect(defender, ty, landed);
+            self.type_side_effect(defender, ty, landed, side);
         }
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
@@ -363,7 +377,13 @@ impl Game {
     ///
     /// Called from `resolve_and_apply_attack` only, so status ticks, recoil
     /// and arcs, which reach `apply_damage_typed` too, never trigger one.
-    fn type_side_effect(&mut self, defender: Entity, ty: DamageType, landed: i32) {
+    fn type_side_effect(
+        &mut self,
+        defender: Entity,
+        ty: DamageType,
+        landed: i32,
+        side: Option<&[Entity]>,
+    ) {
         if landed <= 0 || !self.creature_alive(defender) {
             return;
         }
@@ -379,8 +399,94 @@ impl Game {
                 self.arm_status(defender, &id, rounds, power);
                 self.log_status_landing(&id, &label, None);
             }
+            Some(damage::SideEffect::Arc) => self.arc_to_neighbour(defender, landed, side),
             None => {}
         }
+    }
+
+    /// Sends the arc of a landed Voltage hit to `defender`'s neighbour. It is
+    /// a plain typed `apply_damage_typed`, not another attack: it cannot
+    /// miss, crit, fumble or recoil, it does not arc again, and the
+    /// neighbour's own resistance cuts it. A kill goes through `lower_hp`.
+    fn arc_to_neighbour(&mut self, defender: Entity, landed: i32, side: Option<&[Entity]>) {
+        let arc = damage::arc_damage(landed);
+        if arc <= 0 {
+            return;
+        }
+        let Some(neighbour) = self.arc_neighbour(defender, side) else {
+            return;
+        };
+        let ty = Some(DamageType::Voltage);
+        let resisted = {
+            let cut = self.mitigate_with_resist(neighbour, arc, ty, Some(0))
+                - self.mitigate_incoming_damage_typed(neighbour, arc, ty);
+            (cut > 0).then_some(damage::Resisted {
+                ty: DamageType::Voltage,
+                amount: cut,
+            })
+        };
+        let dealt = self.apply_damage_typed(neighbour, arc, ty);
+        let name = self.target_label(neighbour);
+        let note = damage::resisted_note(resisted);
+        self.log(format!("The charge arcs to {name} for {dealt}.{note}"));
+    }
+
+    /// Who an arc from `defender` reaches: a body on its own side, found
+    /// without a draw. `side` is the defender's side in order when the caller
+    /// has no battle resource to read it from (a sortie); otherwise a battle
+    /// map takes the lowest-id same-side body touching the defender's
+    /// footprint, and the group model takes the next living member of the
+    /// defender's group or the next occupied party slot, wrapping round.
+    pub(crate) fn arc_neighbour(
+        &self,
+        defender: Entity,
+        side: Option<&[Entity]>,
+    ) -> Option<Entity> {
+        if let Some(side) = side {
+            let living: Vec<Entity> = side
+                .iter()
+                .copied()
+                .filter(|&e| self.arc_candidate(e, defender))
+                .collect();
+            return damage::next_in_order(&living, defender);
+        }
+        if let Some(battle) = self.world.get_resource::<TacticalBattle>() {
+            let ring = damage::ring_around(&battle.cells_of(defender));
+            let hostile = self.acts_for_hostiles(defender);
+            return crate::tactical::reach::recipients_in_cells(battle, defender, &ring)
+                .into_iter()
+                .filter(|&e| {
+                    e != defender
+                        && self.arc_candidate(e, defender)
+                        && self.acts_for_hostiles(e) == hostile
+                })
+                .min();
+        }
+        let order: Vec<Entity> = if self.is_hostile(defender) {
+            self.world
+                .get_resource::<BattleState>()?
+                .groups
+                .iter()
+                .find(|g| g.members.contains(&defender))?
+                .members
+                .iter()
+                .copied()
+                .filter(|&e| self.arc_candidate(e, defender))
+                .collect()
+        } else {
+            self.living_party()
+                .into_iter()
+                .filter(|&e| self.arc_candidate(e, defender))
+                .collect()
+        };
+        damage::next_in_order(&order, defender)
+    }
+
+    /// Whether `e` can be named as the arc's neighbour: alive, and not
+    /// cloaked — a door that names a body filters the cloaked ones. The
+    /// defender itself stays in the order, which is what finds its place in it.
+    fn arc_candidate(&self, e: Entity, defender: Entity) -> bool {
+        self.creature_alive(e) && (e == defender || !self.is_cloaked(e))
     }
 
     /// The band `entity` swings for when nobody has told us which move it is

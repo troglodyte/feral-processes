@@ -17,8 +17,10 @@ Paths are under `crates/engine/src/` unless they start with `assets/`.
   (`game/inspection.rs:2392,2525`, using `natural_profile_of`, which carries
   the type) call it. No third formatter.
 - **Resistance in `stat_summary`:** after the scalar stats, one part per
-  non-zero type in `DamageType::ALL` order: `+30% Thermal resist`. Signed
-  like the rest, so a swap delta still reads.
+  non-zero type in `DamageType::ALL` order: `+30 Thermal RES`. Signed
+  like the rest, so a swap delta still reads. Short because the swap popup
+  is width-bound (a worst delta carries two RES parts), and it reads the way
+  MIT already does: a bare point figure, no percent sign.
 - **The log names the type only when resistance cut the hit.** An uncut
   typed hit logs exactly as today. That keeps every existing log-string test
   green, and it is the one fact the player can act on.

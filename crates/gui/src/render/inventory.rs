@@ -1427,7 +1427,10 @@ mod tests {
             &[
                 " 206–310 DMG +103 ATK +103 MIT +138 ACC +103 DECOMP +30 Noise RES T3/3"
                     .to_string(),
-                " -206–-310 DMG -103 ATK -103 MIT -138 ACC -103 DECOMP -30 Noise RES".to_string(),
+                // Measured over every same-slot pair of shipped copies by
+                // `no_shipped_gear_swap_delta_outgrows_the_measured_width`.
+                " 34–103 DMG +103 ATK +241 MIT -103 ACC -172 EVA -34 DECOMP -30 Noise RES +30 Radiation RES"
+                    .to_string(),
             ],
         );
         assert_eq!(

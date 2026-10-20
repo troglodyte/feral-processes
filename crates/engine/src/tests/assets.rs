@@ -6566,7 +6566,7 @@ fn every_damage_type_a_shipped_attack_carries_has_armour_resisting_it() {
     for (ty, source) in carried {
         let countered = items.all().any(|def| {
             matches!(def.worn_stats(), Some((slot, stats))
-                if slot != EquipmentSlot::Weapon && stats.resist.get(ty) > 0)
+                if slot == EquipmentSlot::Armor && stats.resist.get(ty) > 0)
         });
         assert!(
             countered,

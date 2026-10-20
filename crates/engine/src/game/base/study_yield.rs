@@ -29,6 +29,7 @@ use crate::components::{
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
 use crate::game::base::offshift::Amenities;
 use crate::items::{DownedProgram, FloorThing};
+use crate::situations::chebyshev;
 use crate::structures::StructureDb;
 
 /// The beat's racking work, shared by every idle body in the pass.
@@ -38,10 +39,6 @@ pub(crate) struct RackBoard {
     /// Rack room not spoken for by a body already walking one: what a new
     /// pick-up may still claim.
     spare: u32,
-}
-
-fn chebyshev(a: Position, b: Position) -> i32 {
-    (a.x - b.x).abs().max((a.y - b.y).abs())
 }
 
 impl Game {
@@ -72,7 +69,7 @@ impl Game {
     fn programs_in_transit(&self) -> u32 {
         self.world
             .iter_entities()
-            .filter(|e| e.contains::<CarryingProgram>() && !e.contains::<Task>())
+            .filter(|e| self.is_rack_carrier(e.id()))
             .count() as u32
     }
 

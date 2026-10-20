@@ -1185,9 +1185,10 @@ impl Game {
             if def.racks.is_some() {
                 entity.insert(crate::components::Racked(s.racked.clone()));
             }
-            // Never dropped by a def change, unlike the two above: a held
-            // program is a kill, and a station a mod has since stopped
-            // calling one would otherwise eat it.
+            // Not gated on the def, unlike the two above: a held program is
+            // a kill, and a structure that has merely stopped studying would
+            // otherwise eat it. (A structure whose def is gone altogether is
+            // skipped at the top of this loop, with everything on it.)
             if s.study_yield.is_some() {
                 entity.insert(crate::components::StudyYield(s.study_yield.clone()));
             }

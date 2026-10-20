@@ -590,6 +590,49 @@ impl Game {
             .collect()
     }
 
+    /// Every non-anchor footprint cell of a standing structure within the
+    /// `(center, half_w, half_h)` window — the walkable floor cells a
+    /// multi-cell structure draws with its own fill, never the anchor, which
+    /// draws the structure's own glyph. Every footprint above 1 gets it, not
+    /// only a Research Station's: without the fill a 2x2 Holding Cell draws
+    /// its anchor alone and reads as 1x1. **The renderer's only
+    /// way to ask**, so gui holds no copy of the footprint geometry.
+    ///
+    /// **Read once per frame, beside `view_tiles_at`, rather than once per
+    /// tile** — `view_finishes_at`'s own shape and the same indexing:
+    /// `[row][col]` with row `ty + half_h` for `ty` in `-half_h..=half_h`,
+    /// col symmetric on `tx`. The doc this replaced cited `view_finishes_at`
+    /// as its precedent while doing the opposite — a fresh `QueryState` and a
+    /// cloned `Vec<(Position, StructureId)>` built inside `draw_surface_map`'s
+    /// per-tile loop, ~2,500 `QueryState` constructions and ~1,250
+    /// allocations a frame at a typical pane's tile count. `&self` and
+    /// `iter_entities()` rather than a query, `study_station`'s own
+    /// reason: no `QueryState` to construct or repeat.
+    pub fn view_structure_floor_at(
+        &self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<bool>> {
+        let (cx, cy) = center;
+        let width = (2 * half_w + 1).max(0) as usize;
+        let height = (2 * half_h + 1).max(0) as usize;
+        let mut rows = vec![vec![false; width]; height];
+        for (_, pos, side) in self.structure_footprints() {
+            let anchor = (pos.x, pos.y);
+            for cell in crate::tactical::footprint_cells_at(anchor, side) {
+                if cell == anchor {
+                    continue;
+                }
+                let (dx, dy) = (cell.0 - cx, cell.1 - cy);
+                if dx.abs() <= half_w && dy.abs() <= half_h {
+                    rows[(dy + half_h) as usize][(dx + half_w) as usize] = true;
+                }
+            }
+        }
+        rows
+    }
+
     /// Whether `entity` is a structure whose def is a door
     /// (`StructureDef::door`) — a room boundary the crew walks through.
     pub(crate) fn is_door(&self, entity: Entity) -> bool {

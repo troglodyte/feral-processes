@@ -1325,11 +1325,12 @@ impl Game {
         }
         // `settle_research`'s own order (decision 5): no subject pinned,
         // then the station's slot and rack room for the downed program, then
-        // the materials. A subject-gated project can lose its pin after selection — a
-        // battle refusing `abandon_research` (M1), a second Station
-        // resolving first, or the subject simply walking off the pen — and
-        // with a full bill on the shelves this was the only surface left
-        // with nothing to say, so the HUD read "Earning n/cost" forever.
+        // the materials. A subject-gated project can lose its pin after
+        // selection — a battle refusing `abandon_research` (M1), a second
+        // Station resolving first, or the subject simply walking off the
+        // pen — and with a full bill on the shelves this was the only
+        // surface left with nothing to say, so the HUD read "Earning
+        // n/cost" forever.
         if def.requires_subject && self.pinned_subject().is_none() {
             return Some("a subject pinned in the Research Station's pen".to_string());
         }
@@ -1512,11 +1513,11 @@ impl Game {
             return;
         }
         // The conversion: two existing doors and no new function.
-        // `downed_program_for_with_overkill(subject, 0.0)` reads `overkill_
-        // term`'s own identity value, so the condition roll is best-case — a
-        // controlled dissection beats overkilling something in the field.
-        // The program is left standing at the station whose pen held the
-        // subject, never in the player's pack; the gate just above
+        // `downed_program_for_with_overkill(subject, 0.0)` reads
+        // `overkill_term`'s own identity value, so the condition roll is
+        // best-case — a controlled dissection beats overkilling something in
+        // the field. The program is left standing at the station whose pen
+        // held the subject, never in the player's pack; the gate just above
         // guarantees the slot is empty and a rack will have room for it.
         if let Some(subject) = subject
             && let Some(station) = self.study_station()

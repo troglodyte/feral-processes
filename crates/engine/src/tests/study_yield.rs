@@ -516,11 +516,10 @@ fn a_save_keeps_the_program_a_station_is_holding() {
     let (mut game, station, _rack) = base_with_station_and_rack();
     hold(&mut game, station, 7);
 
-    let mut loaded = round_trip(&mut game, "held");
+    let loaded = round_trip(&mut game, "held");
 
     let station = loaded.study_station().expect("the station stands");
     assert_eq!(held_at(&loaded, station).map(|p| p.level), Some(7));
-    let _ = &mut loaded;
 }
 
 #[test]

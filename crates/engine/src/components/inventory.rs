@@ -44,18 +44,20 @@ pub struct HopperEntry {
 /// `StructureDef::strips`, `Game::load_teardown_rig` and
 /// `Game::run_teardown_rigs`.
 ///
-/// **The instance boundary, and it now has three sides.** A `DownedProgram`
-/// exists in three places: `DownedPrograms` on the player, `Racked` on a
-/// Quarantine Rack, and this — plus `CarryingProgram` on a body walking one
-/// from the second to the third. (`StudyYield` is a fourth, but a transient
-/// one: a finished study's program waits there for a body to rack it.) What still holds is the half that matters:
-/// what leaves a **rig** is plain items in `Stock::output`, which is what
+/// **The instance boundary.** A `DownedProgram` is instanced, so it lives in
+/// its own places rather than in `Inventory`: `DownedPrograms` on the player,
+/// `Racked` on a Quarantine Rack, a rig's `Hopper` (this), and
+/// `StudyYield` on a Research Station, where a finished study's program
+/// waits for a body to rack it. `CarryingProgram` is a body walking one
+/// between them: from a rack to a rig, or from a station to a rack. What
+/// still holds is the half that matters: what leaves a **rig** is plain
+/// items in `Stock::output`, which is what
 /// lets hauling, depots, `collect::plan_adjacent_take` and work orders carry
 /// the yield with no instance rule at all — decision 2's seam, which
 /// `GearCopies`' doc above states and which spec §10.1 declines to spend.
 ///
-/// The rack is the one of the three that is not a queue: nothing works
-/// through it, and it is filled and emptied by hand from the `c` picker.
+/// The rack is the one of those that is not a queue: nothing works through
+/// it, and it is filled and emptied by hand from the `c` picker.
 ///
 /// A `Vec` rather than a keyed store, `DownedPrograms`' own reason: two
 /// equal-comparing programs are still two separate kills, and the queue is

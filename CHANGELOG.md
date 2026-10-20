@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.25
+
+**Thermal hits make their target overheat.** Each Thermal hit that lands adds a stack of heat, shown as `HOT`, up to three. Each stack makes the target take 10% more damage from every source, bleeding included, for three rounds. The hit that adds the heat is not boosted by it. Armour that resists Thermal by 50% or more stops the heat from landing. No shipped armour reaches 50% yet. The balance curves did not move.
+
+**Fix:** on a Magnetic hit against armour that resists Magnetic by 50% or more, the "stopped by Magnetic resist" figure no longer counts the armour's deflection.
+
 ## 0.19.24
 
 **Magnetic hits ignore deflection.** Deflection is the flat amount armour takes off every hit, shown as `DEFL` on armour, and a Magnetic hit skips it. A Magnetic hit still loses whatever the target's general mitigation and Magnetic resistance take. Armour that resists Magnetic by 50% or more keeps its deflection. No shipped armour reaches 50% yet. There is no new log line: the hit line reports what resistance stopped, as before. The balance curves did not move.

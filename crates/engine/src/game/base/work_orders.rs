@@ -1438,11 +1438,17 @@ impl Game {
         let mut open = wanted.clone();
         for &worker in &on_shift {
             let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
-            // A body walking a study's program to a rack is held exactly as a
-            // hauler is: posted to a job it would work with the kill in
-            // hand, and the rack errand is the only thing that ends the trip.
-            let carrying =
-                self.world.get::<Carrying>(worker).is_some() || self.is_rack_carrier(worker);
+            // A body holding a downed program is held exactly as a hauler is.
+            // Any holder, not only a task-less rack carrier: a rig's posted
+            // fetcher re-matched here would lose its `Task` still holding the
+            // kill, and be neither fetcher nor carrier — uncounted and never
+            // delivered. The rack errand and the rig's own drop are the only
+            // things that end the trip.
+            let carrying = self.world.get::<Carrying>(worker).is_some()
+                || self
+                    .world
+                    .get::<components::CarryingProgram>(worker)
+                    .is_some();
             let shedding = a_depot_stands
                 && held.is_some_and(|(target, kind)| {
                     kind == TaskKind::GatherResource

@@ -245,27 +245,73 @@ fn a_posted_staffer_may_not_start_the_errand() {
     assert!(!game.may_rack(worker, &amenities));
 }
 
+/// An extractor with an order behind it: the scheduler wants it, which the
+/// control body proves by being posted within a few beats. Without that the
+/// carrier's "never posted" would pass whether or not anything held it back.
+fn wanted_job(game: &mut Game) -> Entity {
+    stand_in_base(game);
+    let machine = spawn_machine_with_recipe_at(game, "extractor", "core_fragment", 2, -4);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("core_fragment"), 5))
+        .unwrap();
+    machine
+}
+
+#[test]
+fn the_scheduler_wants_the_job_a_carrier_is_kept_from() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    wanted_job(&mut game);
+    let free = spawn_tamed(&mut game, 100, 3);
+    game.tick();
+    assert!(
+        game.world.get::<Task>(free).is_some(),
+        "the fixture's job is wanted, so an idle body is posted to it"
+    );
+}
+
 #[test]
 fn an_idle_carrier_is_not_posted_to_a_job() {
     let (mut game, station, rack) = base_with_station_and_rack();
-    let node_worker = spawn_tamed(&mut game, 100, 3);
-    game.world
-        .entity_mut(node_worker)
-        .insert(CarryingProgram(program(4)));
-    // Work for it to be handed: an extractor with a recipe.
-    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, -4);
+    wanted_job(&mut game);
+    let carrier = a_carrier(&mut game);
 
-    for _ in 0..40 {
+    // The rack is nine steps off, so delivery cannot land inside these beats.
+    for _ in 0..4 {
         game.tick();
-        if game.world.get::<CarryingProgram>(node_worker).is_none() {
-            break;
-        }
         assert!(
-            game.world.get::<Task>(node_worker).is_none(),
+            game.world.get::<CarryingProgram>(carrier).is_some(),
+            "delivered too soon for the assertion below to mean anything"
+        );
+        assert!(
+            game.world.get::<Task>(carrier).is_none(),
             "a body holding a kill is never handed a post"
         );
     }
-    assert_eq!(all_programs(&mut game, station, rack), vec![4]);
+    assert_eq!(all_programs(&mut game, station, rack), vec![7]);
+}
+
+/// A rig's fetcher is posted while it carries. If the matching ever
+/// un-seats it, it loses its `Task` still holding the kill, and then it is
+/// neither a fetcher nor a rack carrier by the narrow predicate: uncounted
+/// and never delivered. Any body holding a program is held in place.
+#[test]
+fn a_posted_fetcher_holding_a_program_is_never_re_matched() {
+    let (mut game, _station, rack) = base_with_station_and_rack();
+    let job = wanted_job(&mut game);
+    let fetcher = a_carrier(&mut game);
+    // Posted to something the scheduler does not want, so only the forced
+    // edge keeps it from being freed or sent to the wanted job.
+    game.world.entity_mut(fetcher).insert(a_task(rack));
+
+    for _ in 0..4 {
+        game.tick();
+        let task = game.world.get::<Task>(fetcher);
+        assert_eq!(
+            task.map(|t| t.target),
+            Some(rack),
+            "a fetcher holding a kill kept its post (the wanted job is {job:?})"
+        );
+        assert!(game.world.get::<CarryingProgram>(fetcher).is_some());
+    }
 }
 
 #[test]

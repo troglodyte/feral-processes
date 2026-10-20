@@ -1763,6 +1763,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
+                            damage_type: None,
                         },
                     );
                     let line = match outcome {
@@ -1804,6 +1805,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
+                            damage_type: None,
                         },
                     );
                     let dmg = outcome.damage_to_defender();

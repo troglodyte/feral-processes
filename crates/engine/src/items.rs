@@ -639,6 +639,17 @@ pub struct EquipmentStats {
     /// hits. Each scaler names it by hand for that reason.
     #[serde(default)]
     pub deflection: i32,
+    /// The type of damage a weapon deals; `None` for a blade and for
+    /// everything that is not a weapon. Never scaled, and never summed:
+    /// `Game::gear_bonus` leaves it `None` because a total of types means
+    /// nothing — the wielded weapon's type is read from its own slot.
+    #[serde(default)]
+    pub damage_type: Option<crate::damage::DamageType>,
+    /// Percent resistance per damage type. Carried through all four scaling
+    /// axes unscaled, for `deflection`'s reason: a scaled +20 would reach the
+    /// cap on one piece.
+    #[serde(default)]
+    pub resist: crate::damage::Resistances,
 }
 
 impl EquipmentStats {
@@ -660,6 +671,8 @@ impl EquipmentStats {
             accuracy,
             evasion,
             deflection,
+            damage_type,
+            resist,
         } = self;
         atk == 0
             && mitigation == 0
@@ -667,6 +680,8 @@ impl EquipmentStats {
             && accuracy == 0
             && evasion == 0
             && deflection == 0
+            && damage_type.is_none()
+            && resist == crate::damage::Resistances::default()
             && damage == crate::battle::DamageRange::default()
     }
 
@@ -685,6 +700,8 @@ impl EquipmentStats {
             accuracy,
             evasion,
             deflection,
+            damage_type: _,
+            resist,
         } = self;
         atk > 0
             || mitigation > 0
@@ -692,6 +709,9 @@ impl EquipmentStats {
             || accuracy > 0
             || evasion > 0
             || deflection > 0
+            || crate::damage::DamageType::ALL
+                .iter()
+                .any(|&t| resist.get(t) > 0)
             || damage.max > 0
     }
 
@@ -708,6 +728,8 @@ impl EquipmentStats {
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
             deflection: self.deflection,
+            damage_type: self.damage_type,
+            resist: self.resist,
         }
     }
 
@@ -747,6 +769,8 @@ impl EquipmentStats {
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
             deflection: self.deflection,
+            damage_type: self.damage_type,
+            resist: self.resist,
         }
     }
 
@@ -799,6 +823,8 @@ impl EquipmentStats {
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
             deflection: self.deflection,
+            damage_type: self.damage_type,
+            resist: self.resist,
         }
     }
 
@@ -837,6 +863,8 @@ impl EquipmentStats {
             accuracy: scale(self.accuracy),
             evasion: scale(self.evasion),
             deflection: self.deflection,
+            damage_type: self.damage_type,
+            resist: self.resist,
         }
     }
 }

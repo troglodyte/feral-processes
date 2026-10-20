@@ -67,6 +67,19 @@ impl Add for Resistances {
     }
 }
 
+impl Resistances {
+    /// Every resistance multiplied by `n`: a stacked affix counts `n` times.
+    pub fn times(self, n: i32) -> Resistances {
+        Resistances {
+            thermal: self.thermal * n,
+            magnetic: self.magnetic * n,
+            noise: self.noise * n,
+            voltage: self.voltage * n,
+            radiation: self.radiation * n,
+        }
+    }
+}
+
 /// The effective resistance (percent) to a hit of type `ty`: 0 for an
 /// untyped hit, otherwise the summed value clamped to `0..=DAMAGE_RESIST_CAP`.
 pub fn resist_against(res: Resistances, ty: Option<DamageType>) -> i32 {

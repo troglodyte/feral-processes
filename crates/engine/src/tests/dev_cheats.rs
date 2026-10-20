@@ -377,3 +377,18 @@ fn spawn_companion_refuses_an_unwalkable_tile() {
     assert!(game.dev_spawn_companion().is_err());
     assert_eq!(game.owned_pets().len(), pets);
 }
+
+#[test]
+fn spawn_companion_refuses_a_full_roster() {
+    let mut game = on_a_walkable_field_tile(9404);
+    let player = game.player_entity();
+    while game.roster_room() > 0 {
+        game.world.spawn(Tamed { owner: player });
+    }
+    let pets = game.pet_count();
+
+    let err = game.dev_spawn_companion().unwrap_err();
+
+    assert_eq!(err, "Your roster is full.");
+    assert_eq!(game.pet_count(), pets);
+}

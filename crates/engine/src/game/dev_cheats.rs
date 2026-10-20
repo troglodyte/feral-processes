@@ -94,6 +94,9 @@ impl Game {
     /// one path that hands the player a companion from nothing.
     #[doc(hidden)]
     pub fn dev_spawn_companion(&mut self) -> Result<String, String> {
+        if self.roster_room() == 0 {
+            return Err("Your roster is full.".into());
+        }
         let at = *self
             .world
             .get::<Position>(self.player_entity())

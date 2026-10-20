@@ -286,3 +286,72 @@ fn a_sortie_swing_by_an_unarmed_body_wears_its_first_moves_type() {
         "the sortie swing dropped the type: {resisted} against {open}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Display: the band and its type are one label, resistance reads in summaries.
+
+#[test]
+fn a_typed_band_names_its_type_and_an_untyped_one_is_unchanged() {
+    let game = typed_game();
+    let band = battle::DamageRange { min: 5, max: 10 };
+    assert_eq!(
+        game.damage_label(band, Some(damage::DamageType::Thermal)),
+        "5–10 Thermal"
+    );
+    assert_eq!(game.damage_label(band, None), game.damage_range_label(band));
+}
+
+#[test]
+fn a_typed_weapons_summary_names_the_type() {
+    let game = typed_game();
+    let mods = EquipmentStats {
+        damage: battle::DamageRange { min: 20, max: 20 },
+        atk: 3,
+        damage_type: Some(damage::DamageType::Thermal),
+        ..EquipmentStats::default()
+    };
+    assert_eq!(game.stat_summary(mods), "20 Thermal DMG +3 ATK");
+}
+
+#[test]
+fn an_untyped_weapons_summary_is_what_it_always_was() {
+    let game = typed_game();
+    let mods = EquipmentStats {
+        damage: battle::DamageRange { min: 14, max: 21 },
+        atk: 3,
+        ..EquipmentStats::default()
+    };
+    assert_eq!(game.stat_summary(mods), "14–21 DMG +3 ATK");
+}
+
+#[test]
+fn armour_resistance_reads_after_the_stats_in_type_order() {
+    let game = typed_game();
+    let mods = EquipmentStats {
+        mitigation: 4,
+        resist: damage::Resistances {
+            thermal: 30,
+            voltage: -10,
+            ..Default::default()
+        },
+        ..EquipmentStats::default()
+    };
+    assert_eq!(
+        game.stat_summary(mods),
+        "+4 MIT +30% Thermal resist -10% Voltage resist"
+    );
+}
+
+#[test]
+fn a_bodys_manifest_row_names_the_type_of_its_swing() {
+    let mut game = typed_game();
+    let pyre = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    let row = game.manifest(pyre).unwrap().damage;
+    assert!(row.ends_with(" Thermal"), "a program's row is {row:?}");
+
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "thermal_lance");
+    assert_eq!(game.manifest(player).unwrap().damage, "20 Thermal");
+    equip_weapon(&mut game, player, "steel_blade");
+    assert_eq!(game.manifest(player).unwrap().damage, "20");
+}

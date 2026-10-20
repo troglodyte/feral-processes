@@ -1,6 +1,7 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
+use crate::damage::DamageType;
 use crate::*;
 
 /// Folds a bill's repeated ids into one row each, keeping the order the
@@ -633,7 +634,10 @@ impl Game {
     pub fn stat_summary(&self, mods: crate::items::EquipmentStats) -> String {
         let mut parts = Vec::new();
         if mods.damage != crate::battle::DamageRange::default() {
-            parts.push(format!("{} DMG", self.damage_range_label(mods.damage)));
+            parts.push(format!(
+                "{} DMG",
+                self.damage_label(mods.damage, mods.damage_type)
+            ));
         }
         for (value, name) in [
             (mods.atk, "ATK"),
@@ -645,6 +649,12 @@ impl Game {
         ] {
             if value != 0 {
                 parts.push(format!("{value:+} {name}"));
+            }
+        }
+        for ty in DamageType::ALL {
+            let pct = mods.resist.get(ty);
+            if pct != 0 {
+                parts.push(format!("{pct:+}% {} resist", ty.name()));
             }
         }
         parts.join(" ")

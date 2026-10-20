@@ -337,6 +337,13 @@ impl Game {
     /// Deliberately the first move rather than a rolled one: rolling here
     /// would spend a `GameRng` draw before the band roll and break every
     /// draw-count assertion `resolve_attack` carries.
+    /// What a body's swing reads as on a screen: its band and the type that
+    /// goes with it, through `damage_label`.
+    pub(crate) fn natural_damage_label(&self, entity: Entity) -> String {
+        let profile = self.natural_profile_of(entity);
+        self.damage_label(profile.range, profile.damage_type)
+    }
+
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
         self.natural_profile_of(entity).range
     }

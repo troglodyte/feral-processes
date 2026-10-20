@@ -2389,7 +2389,7 @@ impl Game {
             max_hp: stats.max_hp,
             atk,
             mitigation,
-            damage: self.damage_range_label(self.natural_range_of(entity)),
+            damage: self.natural_damage_label(entity),
             // The same scalar `Stats::power` computes, over the player's
             // *effective* numbers rather than their raw ones.
             power: Stats {
@@ -2522,7 +2522,7 @@ impl Game {
             max_hp: stats.max_hp,
             atk: stats.atk,
             mitigation: stats.mitigation,
-            damage: self.damage_range_label(self.natural_range_of(entity)),
+            damage: self.natural_damage_label(entity),
             power: stats.power(),
             accuracy: self.manifest_accuracy(entity),
             evasion: self.manifest_evasion(entity),

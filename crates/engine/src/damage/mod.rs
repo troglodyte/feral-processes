@@ -24,6 +24,17 @@ impl DamageType {
         DamageType::Voltage,
         DamageType::Radiation,
     ];
+
+    /// The word every screen and log line uses for this type.
+    pub fn name(self) -> &'static str {
+        match self {
+            DamageType::Thermal => "Thermal",
+            DamageType::Magnetic => "Magnetic",
+            DamageType::Noise => "Noise",
+            DamageType::Voltage => "Voltage",
+            DamageType::Radiation => "Radiation",
+        }
+    }
 }
 
 /// Percent resistance to each damage type. Summed across gear; the cap is

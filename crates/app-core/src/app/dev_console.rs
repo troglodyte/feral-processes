@@ -26,9 +26,12 @@ pub const DEV_CONSOLE_KEY: char = '`';
 /// press is not a fast-forward past the thing you were watching for.
 pub const DEV_CONSOLE_TICKS: u32 = 25;
 
-/// Rows a dev picker shows at once: every selector there is, the nine
-/// digits then `a`-`z`. Past that, Up/Down scroll.
-pub(crate) const DEV_PICKER_PAGE: usize = DIGIT_ROWS + 26;
+/// Rows a dev picker shows at once: the nine digits then `a`-`o`, which is
+/// what the popup holds at the smallest window (720px: 25 body rows, one of
+/// them the hint). Not all 35 selectors, because a page the popup has to
+/// scroll hides the rows its last selectors name. Past a page, Up/Down
+/// scroll.
+pub const DEV_PICKER_PAGE: usize = DIGIT_ROWS + 15;
 
 /// What a row does when it is fired.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

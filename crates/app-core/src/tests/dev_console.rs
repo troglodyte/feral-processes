@@ -351,10 +351,14 @@ mod pickers {
     fn scrolling_exposes_the_rows_past_the_last_selector() {
         let mut app = console_app(13);
         let total = app.game.as_ref().unwrap().dev_plain_items().len();
-        assert!(total > 36, "the picker only needs scrolling with 36+ items");
+        assert!(
+            total > DEV_PICKER_PAGE,
+            "the picker only scrolls past a page"
+        );
         open_item_picker(&mut app);
-        assert_eq!(app.dev_item_rows().len(), 35);
-        assert_eq!(app.dev_item_rows().last().unwrap().0, 'z');
+        assert_eq!(app.dev_item_rows().len(), DEV_PICKER_PAGE);
+        let last_selector = menu_shortcut(DEV_PICKER_PAGE - 1);
+        assert_eq!(app.dev_item_rows().last().unwrap().0, last_selector);
 
         for _ in 0..total {
             app.handle_key(GameKey::Down);
@@ -367,9 +371,9 @@ mod pickers {
             last.1,
             "the list's end is reachable"
         );
-        assert_eq!(rows.len(), 35);
+        assert_eq!(rows.len(), DEV_PICKER_PAGE);
 
-        app.handle_key(GameKey::Char('z'));
+        app.handle_key(GameKey::Char(last_selector));
         let gave = app
             .game
             .as_ref()

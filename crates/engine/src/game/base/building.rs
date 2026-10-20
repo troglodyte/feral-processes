@@ -698,47 +698,31 @@ impl Game {
         Ok(Some(snapshot))
     }
 
-    /// Spawns the finished structure `def` on base-space `(x, y)` and
-    /// returns it.
-    ///
-    /// **The one place a structure's component list is written**, and it has
-    /// two callers with nothing else in common: the player founding a Home
-    /// by hand, and the build crew finishing a request. Left inline in
-    /// `place_structure` the list would have had to be copied into
-    /// `run_build_crew`, and nothing would fail to compile when the two
-    /// drifted — a crew-built machine quietly missing its `MachineStatus`
-    /// reads as the base being broken, not as a missing line. This is
-    /// `Game::roster_parts`' argument applied to the other roster.
-    ///
-    /// It performs no checks at all. Every refusal — researched, floored,
-    /// unoccupied, under `max_deployed` — belongs to whoever decided to
-    /// build, and by the time a crew finishes a request those were answered
-    /// when it was filed.
-    ///
-    /// `quality` is what the program spent on this build was worth to it —
-    /// `build_quality_of`'s answer. `None` writes **no component at all**,
-    /// which is the neutral every reader already means: the Home, which
-    /// costs no program, and every hand-spawned fixture.
-    /// Puts a worker's in-transit carrier somewhere it survives: the first
-    /// adjacent-agnostic rack with room in `(x, y)` order, and the player's
-    /// own store when no rack will take it.
+    /// Puts a worker's in-transit carrier somewhere it survives:
+    /// `shelter_program`'s chain — a rack with room, the station's empty
+    /// slot, the floor — and never the player's pack. A rig's fetcher took
+    /// its program off a rack, so a rack is usually where it goes back;
+    /// keeping the pack out is what makes one chain serve rig and research
+    /// carriers alike.
     ///
     /// **Both destruction paths call this before dropping the component**,
     /// and neither would fail to compile without it — the symptom is a lost
-    /// kill with no error. A store that is full is the one case where the
-    /// carrier is genuinely lost, and it says so rather than going quiet.
+    /// kill with no error.
     pub(crate) fn return_carried_program(&mut self, worker: Entity) {
+        // Read first: a body without a tile keeps the component rather than
+        // losing what it cannot place.
+        let Some(at) = self.world.get::<Position>(worker).copied() else {
+            return;
+        };
         let Some(held) = self
             .world
-            .get::<crate::components::CarryingProgram>(worker)
-            .map(|c| c.0.clone())
+            .entity_mut(worker)
+            .take::<crate::components::CarryingProgram>()
+            .map(|c| c.0)
         else {
             return;
         };
-        self.world
-            .entity_mut(worker)
-            .remove::<crate::components::CarryingProgram>();
-        self.shelter_program(held);
+        self.shelter_program(held, at, None);
     }
 
     /// Empties `target`'s `Stock` and reports what came off it, so the
@@ -815,6 +799,27 @@ impl Game {
         }
     }
 
+    /// Spawns the finished structure `def` on base-space `(x, y)` and
+    /// returns it.
+    ///
+    /// **The one place a structure's component list is written**, and it has
+    /// two callers with nothing else in common: the player founding a Home
+    /// by hand, and the build crew finishing a request. Left inline in
+    /// `place_structure` the list would have had to be copied into
+    /// `run_build_crew`, and nothing would fail to compile when the two
+    /// drifted — a crew-built machine quietly missing its `MachineStatus`
+    /// reads as the base being broken, not as a missing line. This is
+    /// `Game::roster_parts`' argument applied to the other roster.
+    ///
+    /// It performs no checks at all. Every refusal — researched, floored,
+    /// unoccupied, under `max_deployed` — belongs to whoever decided to
+    /// build, and by the time a crew finishes a request those were answered
+    /// when it was filed.
+    ///
+    /// `quality` is what the program spent on this build was worth to it —
+    /// `build_quality_of`'s answer. `None` writes **no component at all**,
+    /// which is the neutral every reader already means: the Home, which
+    /// costs no program, and every hand-spawned fixture.
     pub(crate) fn spawn_structure(
         &mut self,
         def: &StructureDef,

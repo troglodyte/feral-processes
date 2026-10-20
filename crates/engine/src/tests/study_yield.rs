@@ -503,3 +503,68 @@ fn dispatching_a_carrier_on_a_sortie_hands_back_its_program() {
     game.dispatch_sortie(&site, &[staff[0], staff[1]]).unwrap();
     assert_handed_back(&mut game, Some(staff[0]));
 }
+
+fn fill_the_pack(game: &mut Game) {
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![program(1); crate::tuning::MAX_DOWNED_PROGRAMS];
+}
+
+/// The shelter chain's last rung is the floor, not the player's pack and not
+/// a log line saying the kill is gone.
+#[test]
+fn a_destroyed_station_sets_its_program_on_the_floor_when_no_rack_has_room() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    hold(&mut game, station, 7);
+
+    game.remove_structure(station).unwrap();
+
+    let mut on_floor = kept(&mut game);
+    on_floor.retain(|&l| l == 7);
+    assert_eq!(on_floor, vec![7]);
+    assert_eq!(pack_programs(&game), 0, "research never uses the pack");
+}
+
+#[test]
+fn a_full_pack_does_not_lose_a_destroyed_stations_program() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    fill_the_pack(&mut game);
+    hold(&mut game, station, 7);
+
+    game.remove_structure(station).unwrap();
+
+    assert!(
+        kept(&mut game).contains(&7),
+        "the kill was lost with the machine"
+    );
+}
+
+#[test]
+fn a_rig_carrier_with_no_rack_room_sets_its_program_on_the_floor() {
+    let (mut game, _station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    fill_the_pack(&mut game);
+    let carrier = a_carrier(&mut game);
+
+    game.return_carried_program(carrier);
+
+    assert!(game.world.get::<CarryingProgram>(carrier).is_none());
+    assert!(kept(&mut game).contains(&7), "the kill was lost");
+    assert_eq!(pack_programs(&game), crate::tuning::MAX_DOWNED_PROGRAMS);
+}
+
+#[test]
+fn a_hold_ended_with_the_rack_full_and_the_slot_taken_leaves_the_program_on_the_floor() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    hold(&mut game, station, 8);
+    let carrier = a_carrier(&mut game);
+
+    game.pin_subject(carrier, station).unwrap();
+
+    assert!(kept(&mut game).contains(&7));
+    assert_eq!(held_at(&game, station).map(|p| p.level), Some(8));
+    assert_eq!(pack_programs(&game), 0);
+}

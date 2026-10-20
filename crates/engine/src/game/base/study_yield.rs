@@ -27,7 +27,7 @@ use crate::components::{
 };
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
 use crate::game::base::offshift::Amenities;
-use crate::items::DownedProgram;
+use crate::items::{DownedProgram, FloorThing};
 use crate::structures::StructureDb;
 
 /// The beat's racking work, shared by every idle body in the pass.
@@ -121,9 +121,23 @@ impl Game {
             .insert(StudyYield(Some(program)));
     }
 
-    /// Puts a program somewhere it survives: the first rack with room, else
-    /// the player's own store, else it is lost and the log says so.
-    pub(crate) fn shelter_program(&mut self, held: DownedProgram) {
+    /// Puts a program somewhere it survives, and never in the player's pack
+    /// (research does not use it): the first rack with room, else the
+    /// station's empty slot, else the floor around `at`. `closing` is a
+    /// station being destroyed, whose slot is no place to leave anything.
+    ///
+    /// **The last rung is the floor, not a log line saying it is lost.** A
+    /// claimed rack's room can shrink under the claim (the player's own put,
+    /// a demolition), so "no rack has room" is reachable and the kill must
+    /// still outlast it. `Game::set_down` is the door that cannot fail; a
+    /// floor program is picked up by hand like any other.
+    pub(crate) fn shelter_program(
+        &mut self,
+        held: DownedProgram,
+        at: Position,
+        closing: Option<Entity>,
+    ) {
+        let label = self.downed_program_label(&held);
         if let Some(rack) = self
             .quarantine_racks()
             .into_iter()
@@ -134,28 +148,30 @@ impl Game {
             shelf.0.push(held);
             return;
         }
-        let label = self.downed_program_label(&held);
-        let player = self.player_entity();
-        let room = self
-            .world
-            .get::<crate::components::DownedPrograms>(player)
-            .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
-        if room {
-            if let Some(mut store) = self
-                .world
-                .get_mut::<crate::components::DownedPrograms>(player)
-            {
-                store.0.push(held);
-            }
-            self.log_base(format!("{label} comes back to your pack."));
-        } else {
-            self.log_base(format!("{label} is lost with the machine."));
+        if let Some(station) = self.study_station().filter(|&s| {
+            Some(s) != closing
+                && self
+                    .world
+                    .get::<StudyYield>(s)
+                    .is_none_or(|slot| slot.0.is_none())
+        }) {
+            self.hold_at_station(station, held);
+            return;
         }
+        self.log_base(format!(
+            "No rack has room — {label} is set down on the floor."
+        ));
+        self.set_down(at, vec![FloorThing::Program(held)]);
     }
 
     /// A destroyed station's held program, put somewhere it survives. Called
     /// at both destruction paths, beside `return_rig_tool`.
     pub(crate) fn return_study_yield(&mut self, station: Entity) {
+        // Read before the take: a station without a tile keeps its slot
+        // rather than losing what it cannot place.
+        let Some(at) = self.world.get::<Position>(station).copied() else {
+            return;
+        };
         let Some(held) = self
             .world
             .get_mut::<StudyYield>(station)
@@ -163,7 +179,7 @@ impl Game {
         else {
             return;
         };
-        self.shelter_program(held);
+        self.shelter_program(held, at, Some(station));
     }
 
     /// `None` when nothing is held at a station and nobody is walking one:
@@ -296,6 +312,9 @@ impl Game {
     /// anywhere it survives. A body is never left holding what it cannot
     /// place, and the kill is never dropped.
     fn put_carried_program_back(&mut self, worker: Entity) {
+        let Some(at) = self.world.get::<Position>(worker).copied() else {
+            return;
+        };
         let Some(held) = self
             .world
             .entity_mut(worker)
@@ -304,6 +323,9 @@ impl Game {
         else {
             return;
         };
+        // `shelter_program` tries a rack with room first, even one this body
+        // could not reach; the station slot is where an unreachable errand
+        // leaves it, so that comes before the rack.
         let slot = self.study_station().filter(|&s| {
             self.world
                 .get::<StudyYield>(s)
@@ -311,7 +333,7 @@ impl Game {
         });
         match slot {
             Some(station) => self.hold_at_station(station, held),
-            None => self.shelter_program(held),
+            None => self.shelter_program(held, at, None),
         }
     }
 }

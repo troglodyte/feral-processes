@@ -228,12 +228,12 @@ impl Game {
         if let Some(Tidying(thing)) = self.world.entity_mut(who).take::<Tidying>() {
             things.push(thing);
         }
-        if let Some(crate::components::CarryingProgram(held)) = self
-            .world
-            .entity_mut(who)
-            .take::<crate::components::CarryingProgram>()
+        if let Some(crate::components::CarryingProgram(held)) =
+            self.world
+                .entity_mut(who)
+                .take::<crate::components::CarryingProgram>()
         {
-            self.shelter_program(held);
+            self.shelter_program(held, pos, None);
         }
         self.set_down(pos, things);
     }

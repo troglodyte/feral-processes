@@ -228,6 +228,11 @@ impl Game {
                 .get::<Hopper>(rig)
                 .and_then(|h| h.standing_tool.clone())
             else {
+                // Unlike a full hopper, a missing tool does not clear by
+                // itself: the player must fit one. Waiting would hold the
+                // kill (and the body) until then, so it goes back through
+                // the shelter chain.
+                self.return_carried_program(worker);
                 return;
             };
             let label = self.downed_program_label(&held);

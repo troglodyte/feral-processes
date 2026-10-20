@@ -431,3 +431,24 @@ fn a_put_into_room_promised_to_a_carried_program_is_refused() {
     assert_eq!(pack_of(&game), vec![1], "the pack is untouched");
     assert_eq!(shelf_of(&game, rack), before, "and so is the shelf");
 }
+
+/// A fetcher whose rig lost its tool after the pickup has nowhere to put
+/// the program, and with no other work wanted nothing re-matches it: it must
+/// hand the kill back rather than stand holding it for ever.
+#[test]
+fn a_fetcher_at_a_rig_with_no_tool_shelters_its_program() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    game.remove_rig_tool(rig).unwrap();
+
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(
+        shelf_of(&game, rack),
+        vec![201],
+        "the kill is back on a rack"
+    );
+}

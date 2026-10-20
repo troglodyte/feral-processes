@@ -510,7 +510,7 @@ impl Game {
     ///
     /// Two orderings in the tail are load-bearing. The wielded-program proc
     /// comes *after* the front's death is resolved, so a routine can never
-    /// land on a corpse and never fires at all once `finish_group_member`
+    /// land on a corpse and never fires at all once `finish_member`
     /// has ended the battle. And it comes before the return, so its own
     /// kills are reaped inside `proc_wielded_routine` the way
     /// `resolve_one_action`'s `Special` arm reaps its own.
@@ -1332,10 +1332,6 @@ impl Game {
             }
             false
         }
-    }
-
-    pub(crate) fn finish_group_member(&mut self, group: usize, player: Entity) -> bool {
-        self.finish_member(group, 0, player)
     }
 
     /// How an entity reads as the *object* of a log line — "you" for the

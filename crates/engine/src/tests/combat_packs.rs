@@ -317,7 +317,7 @@ fn wiping_the_front_group_promotes_the_group_behind_it() {
     );
 
     game.world.get_mut::<Stats>(glitch).unwrap().hp = 0;
-    let battle_over = game.finish_group_member(0, player);
+    let battle_over = game.finish_member(0, 0, player);
 
     assert!(!battle_over, "the scrapper group is still standing");
     let battle = game.world.resource::<BattleState>();
@@ -345,7 +345,7 @@ fn a_planned_target_follows_its_group_and_fizzles_when_that_group_dies() {
 
     // The *front* group falls, so everything behind it shifts down one.
     game.world.get_mut::<Stats>(glitch).unwrap().hp = 0;
-    game.finish_group_member(0, player);
+    game.finish_member(0, 0, player);
 
     assert_eq!(
         game.retarget(0),
@@ -376,7 +376,7 @@ fn a_stale_target_group_index_does_not_wrap_onto_the_front_group() {
     game.start_battle(vec![glitch, scrapper]);
 
     game.world.get_mut::<Stats>(scrapper).unwrap().hp = 0;
-    game.finish_group_member(1, player);
+    game.finish_member(1, 0, player);
 
     assert_eq!(game.retarget(1), None);
     assert_eq!(game.retarget(0), Some(0), "the front group is untouched");

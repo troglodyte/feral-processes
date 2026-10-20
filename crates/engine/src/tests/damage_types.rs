@@ -1167,8 +1167,8 @@ fn damage_while_hot(stacks: u32, setup: impl Fn(&mut Game, Entity)) -> i32 {
 fn a_hot_target_takes_more_from_an_untyped_hit() {
     let cold = damage_while_hot(0, |_, _| {});
     let hot = damage_while_hot(2, |_, _| {});
-    assert!(cold > 0);
-    assert!(hot > cold, "{hot} on a hot target vs {cold}");
+    // Glitch's one point of mitigation comes off after the 20% raise.
+    assert_eq!((cold, hot), (99, 119), "10% per stack, two stacks");
 }
 
 #[test]
@@ -1188,8 +1188,7 @@ fn a_hot_target_takes_more_from_a_bleed_tick() {
         before - hp(&game, target)
     };
     let (cold, hot) = (bleed_loss(0), bleed_loss(3));
-    assert!(cold > 0);
-    assert!(hot > cold, "bleed {hot} on a hot target vs {cold}");
+    assert_eq!((cold, hot), (20, 26), "10% per stack, three stacks");
 }
 
 #[test]
@@ -1301,7 +1300,11 @@ fn an_arc_never_names_a_cloaked_body() {
     let (player, m) = wild_group(&mut game, 3);
     game.arm_cloak(m[1], 3);
     let (_, lost) = landed_volt_hit(&mut game, player, m[0], &m);
-    assert_eq!((lost[1], lost[2] > 0), (0, true), "the cloaked body is skipped");
+    assert_eq!(
+        (lost[1], lost[2] > 0),
+        (0, true),
+        "the cloaked body is skipped"
+    );
 }
 
 #[test]

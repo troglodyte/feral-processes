@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.18
+
+**The structure screen (`c`) moves with the arrow keys the way the base report (`b`) and the inventory (`i`) do.** It opens with the cursor on the list of pages down the left: Up and Down pick a page, Right steps onto it, and Left or Esc steps back to the list. Before, it opened inside the first page, Left did nothing to leave it, and only Esc reached the list. Tab still steps to the next structure beside you.
+
+**On a structure's Inventory page, `+` takes one unit and `-` puts one in; on a Depot's Filter page, `+` allows a row and `-` denies it.** These were Left and Right, which now move between the page and the list as on every other screen of this kind. Shift and Ctrl with Left or Right still go to the end of a row and halve the gap, as before.
+
 ## 0.19.17
 
 **Finishing a research project with a subject no longer needs room in your own store of downed programs.** The subject's downed program now waits at the Research Station, and an idle base program carries it to a Quarantine Rack with room. Before, a full store of ten stalled the project for good, and building racks did nothing because research only ever put the program in your store. Research now waits only for a rack with a free slot ("needs room on a Quarantine Rack") or for the last program to be carried away. A carried program is never lost: if the rack fills up on the way, or the carrier is pulled off the errand, it goes to another rack, back to the station, or onto the floor.

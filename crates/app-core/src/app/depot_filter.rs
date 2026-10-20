@@ -49,12 +49,10 @@ impl App {
         let (depot, rows) = (screen.depot, screen.view.rows.len());
         match key {
             GameKey::Up | GameKey::Down => self.scroll(key, rows),
-            // The table reads `item | denied | allowed`, so an arrow moves
-            // the row toward the column it points at — the transfer
-            // picker's own convention, which is the screen this one is
-            // opened from.
-            GameKey::Left => self.set_selected_depot_filter(depot, false),
-            GameKey::Right => self.set_selected_depot_filter(depot, true),
+            // `+` lets the row in and `-` keeps it out — the transfer
+            // page's keys beside it, since the hub spends the bare arrows.
+            GameKey::Char('+' | '=') => self.set_selected_depot_filter(depot, true),
+            GameKey::Char('-') => self.set_selected_depot_filter(depot, false),
             // Uppercase, because a lowercase letter picks a row everywhere
             // else in the game.
             GameKey::Char('A') => self.set_whole_depot_filter(depot, true),

@@ -55,6 +55,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
   must be the *only* source of them, for the base's pages and the party's.
+- **Every hub — `b`, `i` and `c` — walks one nav rule,
+  `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
+  takes an arrow or `Esc` back from it.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and

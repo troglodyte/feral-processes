@@ -12,7 +12,8 @@ use crate::*;
 
 impl App {
     /// `[c]`: the hub for the structures beside the party, on the first
-    /// clockwise from north and its first page, cursor in the page. With no
+    /// clockwise from north and its first page, cursor on the rail —
+    /// `open_base_report`'s rule. With no
     /// structure beside, the pack's downed programs alone open the transfer
     /// screen; the caller has already refused when there is nothing at all.
     pub(crate) fn open_structure_hub(&mut self) {
@@ -24,11 +25,11 @@ impl App {
         }
         self.structure_hub = Some(StructureHub { cycle, at: 0 });
         self.enter_structure_page(0);
-        self.hub_on_rail = false;
+        self.hub_on_rail = true;
     }
 
     /// Opens the current structure's `page`th page: the screen's own opener,
-    /// cursor in the page. Whatever the previous page held is dropped first,
+    /// leaving the cursor on whichever half it was. Whatever the previous page held is dropped first,
     /// so a basket left by a page turn or `Tab` is discarded.
     pub(crate) fn enter_structure_page(&mut self, page: usize) {
         self.drop_page_state();
@@ -82,24 +83,8 @@ impl App {
         };
     }
 
-    /// Turns to the page `by` places along the current structure's rail,
-    /// wrapping.
-    pub(crate) fn turn_structure_page(&mut self, by: isize) {
-        let Some((_, page, _)) = self.hub_at() else {
-            return;
-        };
-        let count = self
-            .structure_hub
-            .as_ref()
-            .map_or(0, |h| h.current().pages.len() as isize);
-        if count == 0 {
-            return;
-        }
-        let next = (page as isize + by).rem_euclid(count) as usize;
-        self.enter_structure_page(next);
-    }
-
-    /// `Tab`: the next structure clockwise, wrapping, on its first page.
+    /// `Tab`: the next structure clockwise, wrapping, on its first page, the
+    /// cursor staying on whichever half it was.
     pub(crate) fn step_structure(&mut self, by: isize) {
         let Some(hub) = &mut self.structure_hub else {
             return;
@@ -107,7 +92,6 @@ impl App {
         let count = hub.cycle.len() as isize;
         hub.at = (hub.at as isize + by).rem_euclid(count) as usize;
         self.enter_structure_page(0);
-        self.hub_on_rail = false;
     }
 
     /// Leaves the hub for the map.
@@ -164,13 +148,5 @@ impl App {
         if matches!(self.pending_build, Some(PendingBuild::Rebuild { .. })) {
             self.pending_build = None;
         }
-    }
-
-    /// Whether `Esc` belongs to the open page before the hub: a question the
-    /// page is asking is answered by it, not abandoned.
-    pub(crate) fn page_owns_esc(&self) -> bool {
-        self.splice_rig
-            .as_ref()
-            .is_some_and(|s| s.confirm.is_some())
     }
 }

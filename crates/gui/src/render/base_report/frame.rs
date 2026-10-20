@@ -263,26 +263,29 @@ pub(super) fn keybar_groups(
             .map(group)
             .collect();
     }
-    if structures.is_some() {
-        // The screen owns Left/Right and prints its own keys in its rows;
-        // Esc walks page, then rail, then map.
-        return [
-            Some(vec![keycap("[ ]", "page")]),
-            cycle,
-            Some(vec![keycap("Esc", "pages")]),
-        ]
-        .into_iter()
-        .flatten()
-        .map(group)
-        .collect();
-    }
     let step = if pages[page].screens.len() > 1 {
         keycap("←/→", "screen")
     } else {
         keycap("←", "menu")
     };
     let nav = vec![step, keycap("[ ]", "page")];
-    let acts = match mode {
+    let acts = screen_keys(mode);
+    [
+        Some(acts),
+        Some(nav),
+        cycle,
+        Some(vec![keycap("Esc", "menu")]),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|g| !g.is_empty())
+    .map(group)
+    .collect()
+}
+
+/// What the cursor does on `mode`'s own rows, for the keybar's first group.
+fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
+    match mode {
         Mode::BaseOverview => vec![keycap("↑/↓", "select"), keycap("Enter", "open")],
         Mode::Alerts => vec![keycap("↑/↓", "select"), keycap("x/d", "dismiss")],
         Mode::StaffWellbeing
@@ -326,13 +329,14 @@ pub(super) fn keybar_groups(
             keycap("I", "install"),
             keycap("X", "pull"),
         ],
+        Mode::Transfer => vec![
+            keycap("↑/↓", "select"),
+            keycap("+/-", "take/put"),
+            keycap("Enter", "transfer"),
+        ],
+        Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],
         _ => Vec::new(),
-    };
-    [acts, nav, vec![keycap("Esc", "menu")]]
-        .into_iter()
-        .filter(|g| !g.is_empty())
-        .map(group)
-        .collect()
+    }
 }
 
 /// The content rect at a window size, for the censuses that hold a screen's
@@ -453,6 +457,16 @@ mod tests {
             assert!(bar_text(Some(2), on_rail).contains("next structure"));
             assert!(!bar_text(Some(1), on_rail).contains("next structure"));
             assert!(!bar_text(None, on_rail).contains("next structure"));
+        }
+    }
+
+    /// A structure's page reads like the base report's: its own keys, then
+    /// the way back to the rail.
+    #[test]
+    fn a_structure_page_names_its_keys_and_the_way_back_like_any_hub_page() {
+        let rows = bar_text(Some(2), false);
+        for want in ["take/put", "←", "menu", "page", "next structure"] {
+            assert!(rows.contains(want), "{want:?} missing: {rows}");
         }
     }
 

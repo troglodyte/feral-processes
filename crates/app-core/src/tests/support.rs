@@ -2836,6 +2836,16 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
     panic!("{label:?} is not offered right now; pages: {offered:?}");
 }
 
+/// `[c]` and into the first page: the hub opens on its rail, so a test
+/// about a page's own keys needs the `Right` a player would press.
+pub(crate) fn open_structure_page(app: &mut App) {
+    app.handle_key(GameKey::Char('c'));
+    // A refused `c` leaves the map up, where Right would walk the player.
+    if app.structure_hub.is_some() && app.hub_on_rail {
+        app.handle_key(GameKey::Right);
+    }
+}
+
 /// Opens `target`'s hub with its own key, walks `]` to `target`'s page and
 /// Right off the rail and along its screens to `target`, the way a player
 /// reaches a screen that no longer has a menu row of its own.

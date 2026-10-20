@@ -21,8 +21,9 @@ const HEADER_LEAD: &str = "  ";
 const COLUMN_GAP: &str = "  ";
 
 /// The three headings, in the order they are drawn. `you` is the pack,
-/// `container` is the adjacent shelves — so the arrows read off the table:
-/// Left pulls toward `you`, Right pushes toward `container`.
+/// `container` is the adjacent shelves — so the modified arrows read off the
+/// table: Shift/Ctrl+Left pull toward `you`, Shift/Ctrl+Right push toward
+/// `container`.
 ///
 /// **There is no `change` column.** The two figures are what the transfer
 /// would leave behind rather than what each side is holding now, so a unit
@@ -106,7 +107,7 @@ pub(super) fn body_rows(
     }
     body.extend([
         text_row("Up/Down pick a row; digits and Backspace type an amount"),
-        text_row("Left takes out, Right puts in; Shift for the end, Ctrl halves the gap"),
+        text_row("+ takes out, - puts in; Shift+arrow to the end, Ctrl+arrow halves"),
         text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
     ]);
     body.push(text_row(""));
@@ -227,8 +228,8 @@ impl Columns {
         format!("{HEADER_LEAD}{}", self.line(HEADINGS))
     }
 
-    /// One item's row, drawn as the transfer would leave it: pressing Right
-    /// takes units off `you` and puts them on `container`, and Left the other
+    /// One item's row, drawn as the transfer would leave it: pressing `-`
+    /// takes units off `you` and puts them on `container`, and `+` the other
     /// way. That movement is the whole of what the screen says about the
     /// basket, which is why there is no `change` column beside it.
     fn row(&self, name: &str, carried: u32, on_shelves: u32, amount: i64) -> String {

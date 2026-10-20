@@ -69,7 +69,7 @@ fn body_rows(screen: &DepotFilterScreen, selected: usize) -> Vec<Row> {
         view.room
     ))];
     body.extend([
-        text_row("Up/Down pick a row; Left denies it, Right allows it"),
+        text_row("Up/Down pick a row; - denies it, + allows it"),
         text_row("[A] allow all  [D] deny all  Esc leaves the page"),
         text_row("Denying takes nothing off the shelf — it only stops more arriving"),
         text_row(""),

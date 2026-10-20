@@ -1,4 +1,4 @@
-//! The Depot filter screen: the Filter page of a Depot's hub, an arrow per
+//! The Depot filter screen: the Filter page of a Depot's hub, a key per
 //! row, and the two keys that write the whole list.
 
 use super::support::*;
@@ -13,7 +13,7 @@ fn item(id: &str) -> feral_processes_engine::items::ItemId {
 /// The hub beside `depots` Depots, turned from Inventory to Filter.
 fn filter_screen(seed: u32, depots: i32) -> App {
     let mut app = app_beside_depots(seed, depots, 6, &[(ITEM, 4)]);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Transfer, "the Inventory page opens first");
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::DepotFilter);
@@ -35,34 +35,34 @@ fn allowed(app: &App, id: &str) -> bool {
     screen.view.rows[row_of(app, id)].allowed
 }
 
-/// Left denies and Right allows, the arrow moving the row toward the column
-/// it points at — the transfer picker's own convention, the page beside it.
+/// `-` denies and `+` allows — the transfer page's keys beside it, since the
+/// hub spends the bare arrows on its own navigation.
 #[test]
-fn left_denies_the_selected_row_and_right_allows_it_again() {
+fn minus_denies_the_selected_row_and_plus_allows_it_again() {
     let mut app = filter_screen(3300, 1);
     app.menu_selected = row_of(&app, ITEM);
     assert!(allowed(&app, ITEM), "everything starts allowed");
 
-    app.handle_key(GameKey::Left);
-    assert!(!allowed(&app, ITEM), "Left denies");
+    app.handle_key(GameKey::Char('-'));
+    assert!(!allowed(&app, ITEM), "- denies");
 
-    app.handle_key(GameKey::Right);
-    assert!(allowed(&app, ITEM), "Right allows again");
+    app.handle_key(GameKey::Char('+'));
+    assert!(allowed(&app, ITEM), "+ allows again");
 }
 
-/// Pressing the same arrow twice must not toggle back — an arrow names a
+/// Pressing the same key twice must not toggle back — `+` and `-` name a
 /// state, not a flip, so a held key settles rather than flickering.
 #[test]
-fn an_arrow_is_a_state_and_not_a_toggle() {
+fn plus_and_minus_are_states_and_not_toggles() {
     let mut app = filter_screen(3301, 1);
     app.menu_selected = row_of(&app, ITEM);
 
-    app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('-'));
     assert!(!allowed(&app, ITEM));
 
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('+'));
     assert!(allowed(&app, ITEM));
 }
 
@@ -100,7 +100,7 @@ fn the_lowercase_keys_do_nothing() {
 fn a_denial_lands_on_one_depot_alone() {
     let mut app = filter_screen(3305, 2);
     app.menu_selected = row_of(&app, ITEM);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('-'));
     assert!(!allowed(&app, ITEM));
 
     app.handle_key(GameKey::Tab);
@@ -138,7 +138,7 @@ fn turning_back_to_inventory_comes_up_zeroed() {
 fn a_denial_closes_the_put_on_the_picker_behind_it() {
     let mut app = filter_screen(3308, 1);
     app.menu_selected = row_of(&app, ITEM);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('-'));
     app.handle_key(GameKey::Char('['));
 
     let row = app
@@ -154,7 +154,7 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
 #[test]
 fn a_machine_has_no_filter_page() {
     let mut app = app_beside_stocked_machines(3309, &[(ITEM, 6)]);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     for _ in 0..4 {
         assert_ne!(app.mode, Mode::DepotFilter);
         app.handle_key(GameKey::Char(']'));
@@ -167,7 +167,7 @@ fn a_machine_has_no_filter_page() {
 #[test]
 fn an_empty_depot_and_an_empty_pack_still_open_the_picker() {
     let mut app = app_beside_depots(3310, 1, 0, &[]);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::Transfer);
     assert!(

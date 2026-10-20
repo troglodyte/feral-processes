@@ -11,7 +11,7 @@ const ITEM: &str = "core_fragment";
 /// the order the rows come back in, so the tests can index them.
 const ITEMS: [(&str, u32); 2] = [(ITEM, 6), ("power_cell", 2)];
 /// What the room-agnostic Depot fixtures put on the shelf. Small on purpose:
-/// these tests are about the pack and the arrows, so the Depot's remaining
+/// these tests are about the pack and the amount keys, so the Depot's remaining
 /// room must never be the binding clamp —
 /// `digits_type_into_the_rows_current_sign` pins a give against a pack of 40
 /// and would read as a clamp bug the moment `depot_capacity() - SHELF` fell
@@ -34,7 +34,7 @@ fn amounts(app: &App) -> Vec<i64> {
 /// One press opens the first machine's shelf; the other is a `Tab` away.
 fn picker(seed: u32) -> App {
     let mut app = app_beside_stocked_machines(seed, &ITEMS);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Transfer);
     app
 }
@@ -76,7 +76,7 @@ fn depot_capacity() -> u32 {
 /// wants left.
 fn depot_picker(seed: u32, filled: u32, pack: &[(&str, u32)]) -> App {
     let mut app = app_beside_depots(seed, 1, filled, pack);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Transfer);
     app
 }
@@ -94,7 +94,7 @@ fn row_of(app: &App, id: &str) -> usize {
 fn c_opens_the_transfer_window_with_an_empty_basket() {
     let mut app = app_beside_stocked_machines(970, &[(ITEM, 6)]);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.basket_rows.len(), 1);
@@ -118,7 +118,7 @@ fn opening_the_transfer_window_spends_no_turn() {
     let before = app.game.as_ref().unwrap().current_tick();
     app.status_line = Some("still explaining something".to_string());
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
@@ -133,43 +133,41 @@ fn opening_the_transfer_window_spends_no_turn() {
 fn c_beside_an_empty_machine_opens_an_empty_window() {
     let mut app = app_beside_stocked_machines(972, &[(ITEM, 0)]);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::Transfer);
     assert!(app.basket_rows.is_empty());
 }
 
-/// **Left takes out and Right puts in**, which is the arrow moving stock in
-/// the direction of the column it heads for: the screen is a table reading
-/// `change | you | container`, so Left pulls off the container toward you and
-/// Right pushes from you into it. This test is the pin.
+/// **`+` takes out and `-` puts in**, the sign of the amount: the bare
+/// arrows belong to the structure hub's navigation. This test is the pin.
 #[test]
-fn left_takes_out_and_right_puts_in() {
+fn plus_takes_out_and_minus_puts_in() {
     let mut app = depot_picker(973, SHELF, &[(ITEM, 5)]);
     let row = row_of(&app, ITEM);
     app.menu_selected = row;
 
-    app.handle_key(GameKey::Left);
-    assert_eq!(app.basket_amounts[row], 1, "Left takes off the shelf");
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('+'));
+    assert_eq!(app.basket_amounts[row], 1, "+ takes off the shelf");
+    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(
         app.basket_amounts[row], -1,
-        "Right walks back through zero and puts into the Depot"
+        "- walks back through zero and puts into the Depot"
     );
 }
 
-/// Both arrows saturate at their own end rather than running past it.
+/// `+` and `-` saturate at their own end rather than running past it.
 #[test]
-fn the_arrows_saturate_at_both_ends() {
+fn plus_and_minus_saturate_at_both_ends() {
     let mut app = picker_with_shelf(974, 2);
 
     for _ in 0..4 {
-        app.handle_key(GameKey::Left);
+        app.handle_key(GameKey::Char('+'));
     }
     assert_eq!(amounts(&app), vec![2], "nothing more is on the shelf");
     for _ in 0..6 {
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Char('-'));
     }
     assert_eq!(amounts(&app), vec![0], "and nothing in the pack to put in");
 }
@@ -231,7 +229,7 @@ fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
         3,
         "the row being edited does not spend its own budget"
     );
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[first], -2, "so it can be lowered again");
 }
 
@@ -289,10 +287,10 @@ fn digits_type_into_the_rows_current_sign() {
     app.handle_key(GameKey::Char('3'));
     assert_eq!(app.basket_amounts[row], 3, "a row at zero types a take");
 
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[row], -1);
     app.handle_key(GameKey::Char('2'));
     assert_eq!(app.basket_amounts[row], -12, "and keeps the sign it is in");
@@ -501,20 +499,20 @@ fn carrier_picker(held: usize, racked: usize, rack_room: u32) -> App {
 #[test]
 fn a_carrier_row_clamps_to_one_either_way() {
     let mut app = carrier_picker(1, 1, 8);
-    // Row 0 is the pack's — a put, so only Right moves it.
-    for key in [GameKey::Right, GameKey::Right, GameKey::Right] {
+    // Row 0 is the pack's — a put, so only `-` moves it.
+    for key in [GameKey::Char('-'), GameKey::Char('-'), GameKey::Char('-')] {
         app.handle_key(key);
     }
     assert_eq!(app.basket_amounts[0], -1);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[0], 0, "and no further the other way");
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[0], 0, "a pack-side carrier has no take");
 
     app.menu_selected = 1;
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[1], 1);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[1], 1);
 }
 
@@ -549,7 +547,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
     let first = MAX_DOWNED_PROGRAMS - 1;
     assert_eq!(app.take_available(first), 1);
     app.menu_selected = first;
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[first], 1);
     assert_eq!(
         app.take_available(first + 1),
@@ -558,7 +556,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
     );
     // And a pending put frees it again — the net is what the commit checks.
     app.menu_selected = 0;
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.take_available(first + 1), 1);
 }
 
@@ -566,7 +564,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
 fn the_rack_budget_is_shared_across_the_pack_side_rows() {
     let mut app = carrier_picker(2, 0, 1);
     assert_eq!(app.put_available(0), 1);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.put_available(1), 0, "one slot, one put");
     assert_eq!(app.put_available(0), 1, "the edited row keeps its own");
 }
@@ -617,7 +615,7 @@ fn c_opens_the_transfer_for_a_downed_program_with_no_shelf_beside() {
         "the engine offers the pack's program"
     );
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::Transfer);
 }
@@ -628,13 +626,13 @@ fn c_opens_the_transfer_for_a_downed_program_with_no_shelf_beside() {
 fn c_beside_a_refit_bench_lets_the_basket_put_cores_up_to_its_capacity() {
     let mut app = app_beside_a_refit_bench_carrying(982, 25);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Transfer);
     let row = row_of(&app, "annealed_core");
     assert_eq!(app.basket_rows[row].item().unwrap().can_put, 20);
     app.menu_selected = row;
     for _ in 0..25 {
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Char('-'));
     }
 
     assert_eq!(amounts(&app)[row], -20, "the 21st core is not offered");

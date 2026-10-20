@@ -16,7 +16,7 @@ fn recipe_of(app: &App) -> Option<ItemId> {
 
 /// `[c]` opens the machine's hub on its shelf; `]` turns to the recipe.
 fn open_recipe(app: &mut App) {
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(app);
     assert_eq!(app.mode, Mode::Transfer, "the shelf is the first page");
     app.handle_key(GameKey::Char(']'));
 }

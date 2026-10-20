@@ -5,16 +5,18 @@ use crate::*;
 
 impl App {
     /// Runs ahead of every hub screen's own handler and answers whether it
-    /// took the key. The hub has one cursor, on the rail or in the screen
-    /// (`hub_on_rail`). On the rail, Up/Down walk the pages (wrapping),
-    /// Right or Enter moves the cursor into the screen, Esc leaves to
-    /// wherever the hub was opened from, and every other key is swallowed —
-    /// a row jump or a screen action with no cursor on the screen would act
-    /// on a row the player cannot see is chosen. In the screen, a page's
-    /// screens lie in a row to the right of the rail: Right steps to the next
-    /// (stopping at the last), Left to the previous and off the first back to
-    /// the rail, and Esc goes straight to the rail. Everything else falls
-    /// through. `[`/`]` turn pages from either half.
+    /// took the key. One rule for every hub. The hub has one cursor, on the
+    /// rail or in the screen (`hub_on_rail`). On the rail, Up/Down walk the
+    /// pages (wrapping), Right or Enter moves the cursor into the screen, Esc
+    /// leaves to wherever the hub was opened from, and every other key is
+    /// swallowed — a row jump or a screen action with no cursor on the screen
+    /// would act on a row the player cannot see is chosen. In the screen, a
+    /// page's screens lie in a row to the right of the rail: Right steps to
+    /// the next (stopping at the last), Left to the previous and off the
+    /// first back to the rail, and Esc goes straight to the rail — unless the
+    /// screen claims the key first (`screen_claims`). Everything else falls
+    /// through. `[`/`]` turn pages from either half, and in the structure
+    /// hub `Tab` steps to the next structure.
     ///
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
@@ -22,65 +24,69 @@ impl App {
         let Some((hub, page, screen)) = self.hub_at() else {
             return false;
         };
-        if hub == Hub::Structure {
-            return self.handle_structure_hub_nav(key);
-        }
-        let table = hub.table();
-        let pages = table.len();
-        let turn = |by: usize| table[(page + by) % pages].screens[0];
-        let screens = table[page].screens;
+        let pages = hub.pages(self);
+        let count = pages.len();
+        let screens = pages[page].screens;
         match key {
-            GameKey::Char(']') => self.mode = turn(1),
-            GameKey::Char('[') => self.mode = turn(pages - 1),
+            GameKey::Char(']') => self.turn_page(hub, (page + 1) % count),
+            GameKey::Char('[') => self.turn_page(hub, (page + count - 1) % count),
+            GameKey::Tab if hub == Hub::Structure => self.step_structure(1),
             _ if self.hub_on_rail => match key {
-                GameKey::Down => self.mode = turn(1),
-                GameKey::Up => self.mode = turn(pages - 1),
+                GameKey::Down => self.turn_page(hub, (page + 1) % count),
+                GameKey::Up => self.turn_page(hub, (page + count - 1) % count),
                 GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
-                GameKey::Esc => self.close_screen(),
+                GameKey::Esc => self.leave_hub(hub),
                 _ => {}
             },
-            // With a program picked Esc steps back to the list, which the
-            // downed-program handler owns; Left would strand that pick on
-            // the rail.
-            GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => return false,
+            _ if self.screen_claims(key) => return false,
             GameKey::Esc => self.hub_on_rail = true,
-            // The duty table spends Left and Right on its column cursor, so
-            // it only leaves off its first and last columns.
-            GameKey::Left if !(self.mode == Mode::BaseStaff && self.work_column > 0) => {
-                match screen.checked_sub(1) {
-                    Some(prev) => self.mode = screens[prev],
-                    None => self.hub_on_rail = true,
-                }
-            }
-            GameKey::Right if screen + 1 < screens.len() && !self.on_inner_staff_column() => {
-                self.mode = screens[screen + 1];
-            }
+            GameKey::Left => match screen.checked_sub(1) {
+                Some(prev) => self.mode = screens[prev],
+                None => self.hub_on_rail = true,
+            },
+            GameKey::Right if screen + 1 < screens.len() => self.mode = screens[screen + 1],
             _ => return false,
         }
         true
     }
 
-    /// The structure hub's rule, apart from the shared hubs': each page is
-    /// one screen that owns its arrows (Inventory spends Left and Right on
-    /// moving stock), so the rail is reached by `Esc` and `[`/`]` turn pages
-    /// from anywhere. `Tab` steps to the next structure. `Esc` from the
-    /// rail leaves for the map.
-    fn handle_structure_hub_nav(&mut self, key: GameKey) -> bool {
+    /// Whether the screen in the hub wants `key` before the hub's own rule
+    /// does: an arrow or `Esc` the screen spends on a cursor or a question of
+    /// its own.
+    fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
-            GameKey::Char(']') => self.turn_structure_page(1),
-            GameKey::Char('[') => self.turn_structure_page(-1),
-            GameKey::Tab => self.step_structure(1),
-            _ if self.hub_on_rail => match key {
-                GameKey::Down => self.turn_structure_page(1),
-                GameKey::Up => self.turn_structure_page(-1),
-                GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
-                GameKey::Esc => self.close_structure_hub(),
-                _ => {}
-            },
-            GameKey::Esc if !self.page_owns_esc() => self.hub_on_rail = true,
-            _ => return false,
+            // With a program picked Esc steps back to the list, which the
+            // downed-program handler owns; Left would strand that pick on
+            // the rail.
+            GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => true,
+            // A question the page is asking is answered by it, not
+            // abandoned.
+            GameKey::Esc => self
+                .splice_rig
+                .as_ref()
+                .is_some_and(|s| s.confirm.is_some()),
+            // The duty table spends Left and Right on its column cursor, so
+            // it only leaves off its first and last columns.
+            GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,
+            GameKey::Right => self.on_inner_staff_column(),
+            _ => false,
         }
-        true
+    }
+
+    /// Opens page `page` of `hub` on its first screen. A structure's page is
+    /// opened for that structure by its own opener.
+    fn turn_page(&mut self, hub: Hub, page: usize) {
+        match hub {
+            Hub::Structure => self.enter_structure_page(page),
+            fixed => self.mode = fixed.table()[page].screens[0],
+        }
+    }
+
+    fn leave_hub(&mut self, hub: Hub) {
+        match hub {
+            Hub::Structure => self.close_structure_hub(),
+            _ => self.close_screen(),
+        }
     }
 
     fn last_in(&self, hub: Hub) -> Option<Mode> {

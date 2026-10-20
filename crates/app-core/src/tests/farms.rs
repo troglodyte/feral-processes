@@ -70,7 +70,7 @@ fn app_beside_a_plot(seed: u32) -> App {
 #[test]
 fn c_beside_a_plot_opens_the_recipe_picker_and_a_row_sows_it() {
     let mut app = app_beside_a_plot(6003);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     let before = tick(&app);
     app.handle_key(GameKey::Char('1'));
@@ -87,7 +87,7 @@ fn c_beside_a_plot_opens_the_recipe_picker_and_a_row_sows_it() {
 #[test]
 fn esc_leaves_the_recipe_picker_without_sowing() {
     let mut app = app_beside_a_plot(6004);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -98,7 +98,7 @@ fn esc_leaves_the_recipe_picker_without_sowing() {
 #[test]
 fn the_picker_opens_on_the_current_recipe() {
     let mut app = app_beside_a_plot(6005);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.farm_recipe_row(), 0);
     let rows = app.farm_recipe_rows();
     assert!(!rows.is_empty());
@@ -106,7 +106,7 @@ fn the_picker_opens_on_the_current_recipe() {
     // Rows 1-9 are the digits; the picker is far shorter than that.
     assert!(last < 9);
     app.handle_key(GameKey::Char(char::from(b'1' + last as u8)));
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     assert_eq!(app.farm_recipe_row(), last);
 }
@@ -129,7 +129,7 @@ fn c_aims_at_a_plot_from_any_side_holding_one_of_its_tiles() {
     let cycle = game.adjacent_structures();
     assert_eq!(cycle.len(), 2, "{cycle:?}");
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     if app.structure_hub.as_ref().unwrap().current().entity != plot {
         app.handle_key(GameKey::Tab);
     }

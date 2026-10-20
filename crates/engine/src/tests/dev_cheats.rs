@@ -2,6 +2,7 @@
 //! code, so these assert what a player would get after cheating.
 
 use super::support::*;
+use crate::resources::ActiveResearch;
 use crate::*;
 
 /// A Home on the player's tile and the party in the base, with nothing in
@@ -211,4 +212,77 @@ fn warp_is_refused_mid_battle() {
 
     assert!(game.dev_warp_to_zone(from + 1).is_err());
     assert_eq!(game.world.resource::<ZoneLevel>().0, from);
+}
+
+fn research_node(game: &Game, want: impl Fn(&crate::research::ResearchDef) -> bool) -> ResearchId {
+    game.world
+        .resource::<ResearchDb>()
+        .all()
+        .find(|d| want(d))
+        .map(|d| d.id.clone())
+        .expect("a shipped node of that shape")
+}
+
+#[test]
+fn unlock_research_grants_a_blocked_node_without_a_bill() {
+    let mut game = bare_base(9301);
+    let id = research_node(&game, |d| {
+        !d.requires.is_empty() && d.teaches.is_none() && d.cost > 0
+    });
+    assert!(!game.is_researched(id.as_str()));
+
+    let said = game.dev_unlock_research(&id).unwrap();
+
+    assert!(game.is_researched(id.as_str()), "{said}");
+}
+
+#[test]
+fn unlock_research_clears_the_active_node_it_grants() {
+    let mut game = bare_base(9302);
+    let id = research_node(&game, |d| d.teaches.is_none() && d.cost > 0);
+    let other = research_node(&game, |d| d.teaches.is_none() && d.id != id);
+    game.world.resource_mut::<ActiveResearch>().id = Some(id.clone());
+
+    game.dev_unlock_research(&id).unwrap();
+    assert!(game.world.resource::<ActiveResearch>().id.is_none());
+
+    game.world.resource_mut::<ActiveResearch>().id = Some(id.clone());
+    game.dev_unlock_research(&other).unwrap();
+    assert_eq!(
+        game.world.resource::<ActiveResearch>().id,
+        Some(id),
+        "unlocking some other node leaves the active one alone"
+    );
+}
+
+#[test]
+fn unlock_research_refuses_a_granted_or_unknown_node() {
+    let mut game = bare_base(9303);
+    let id = research_node(&game, |d| d.teaches.is_none());
+    game.dev_unlock_research(&id).unwrap();
+
+    assert!(game.dev_unlock_research(&id).is_err(), "already granted");
+    assert!(
+        game.dev_unlock_research(&ResearchId::from("no_such_node"))
+            .is_err()
+    );
+}
+
+#[test]
+fn unlock_research_puts_a_routine_node_in_known_routines() {
+    let mut game = bare_base(9304);
+    let id = research_node(&game, |d| d.teaches.is_some());
+    let ability = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id.as_str())
+        .unwrap()
+        .teaches
+        .clone()
+        .unwrap();
+
+    game.dev_unlock_research(&id).unwrap();
+
+    assert!(game.knows_routine(&ability));
+    assert!(!game.world.resource::<Research>().0.contains(&id));
 }

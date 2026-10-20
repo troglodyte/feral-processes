@@ -65,4 +65,25 @@ impl Game {
         self.warp_to_zone(zone)?;
         Ok(format!("Warped to zone {zone}."))
     }
+
+    /// Grants a research node whatever its prerequisites, cost, materials or
+    /// required subject, through `grant_research` — the half of completion
+    /// that follows the bill — so the log, notification and active-selection
+    /// clearing are play's own.
+    #[doc(hidden)]
+    pub fn dev_unlock_research(&mut self, id: &ResearchId) -> Result<String, String> {
+        let Some(def) = self
+            .world
+            .resource::<ResearchDb>()
+            .get(id.as_str())
+            .cloned()
+        else {
+            return Err(format!("No research called {id}."));
+        };
+        if self.node_researched(&def) {
+            return Err(format!("{} is already researched.", def.name));
+        }
+        self.grant_research(&def);
+        Ok(format!("Unlocked {}.", def.name))
+    }
 }

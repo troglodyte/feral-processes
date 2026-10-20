@@ -31,3 +31,17 @@ pub const RADIATION_CORRUPTION_POWER: i32 = 2;
 
 /// Rounds a Radiation hit keeps its target corrupted.
 pub const RADIATION_CORRUPTION_ROUNDS: u32 = 3;
+
+// ── Thermal: heat ───────────────────────────────────────────────────────
+
+/// The built-in status a landed Thermal hit arms (`damage::statuses`).
+pub const THERMAL_HEAT_STATUS: &str = "heat";
+
+/// Most stacks of heat a body can carry.
+pub const THERMAL_HEAT_MAX_STACKS: u32 = 3;
+
+/// Percent more damage a hot body takes, per stack.
+pub const THERMAL_HEAT_DAMAGE_TAKEN_PCT: i32 = 10;
+
+/// Rounds a Thermal hit keeps its target hot.
+pub const THERMAL_HEAT_ROUNDS: u32 = 3;

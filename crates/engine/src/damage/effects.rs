@@ -7,7 +7,8 @@ use super::{DamageType, side_effect_blocked};
 use crate::statuses::{StatusBehaviour, StatusDef, StatusId, StatusStacking};
 use crate::tuning::{
     NOISE_JAM_ACCURACY_CUT, NOISE_JAM_ROUNDS, NOISE_JAMMED_STATUS, RADIATION_CORRUPTED_STATUS,
-    RADIATION_CORRUPTION_POWER, RADIATION_CORRUPTION_ROUNDS,
+    RADIATION_CORRUPTION_POWER, RADIATION_CORRUPTION_ROUNDS, THERMAL_HEAT_DAMAGE_TAKEN_PCT,
+    THERMAL_HEAT_MAX_STACKS, THERMAL_HEAT_ROUNDS, THERMAL_HEAT_STATUS,
 };
 
 /// A side effect decided by `side_effect`. Concrete, not a general effect
@@ -39,8 +40,13 @@ pub fn side_effect(ty: DamageType, resist_pct: i32) -> Option<SideEffect> {
             rounds: RADIATION_CORRUPTION_ROUNDS,
             power: RADIATION_CORRUPTION_POWER,
         }),
+        DamageType::Thermal => Some(SideEffect::Arm {
+            id: THERMAL_HEAT_STATUS,
+            rounds: THERMAL_HEAT_ROUNDS,
+            power: 0,
+        }),
         // Magnetic acts in mitigation (`ignores_deflection`), not as a status.
-        DamageType::Thermal | DamageType::Magnetic | DamageType::Voltage => None,
+        DamageType::Magnetic | DamageType::Voltage => None,
     }
 }
 
@@ -69,6 +75,20 @@ pub fn statuses() -> Vec<StatusDef> {
             inflict: "Data starts corrupting on {target}!".into(),
             tick: "Corruption eats {n} Integrity from {target}.".into(),
             expire: "Corruption is purged from {target}.".into(),
+        },
+        StatusDef {
+            id: StatusId::from(THERMAL_HEAT_STATUS),
+            name: "Overheating".into(),
+            tag: "HOT".into(),
+            stacking: StatusStacking::Stack {
+                max: THERMAL_HEAT_MAX_STACKS,
+            },
+            behaviours: vec![StatusBehaviour::DamageTakenPercent(
+                THERMAL_HEAT_DAMAGE_TAKEN_PCT,
+            )],
+            inflict: "Overheating on {target}!".into(),
+            tick: String::new(),
+            expire: "Heat dissipates from {target}.".into(),
         },
     ]
 }
@@ -113,8 +133,25 @@ mod tests {
     }
 
     #[test]
+    fn thermal_arms_heat_and_resistance_at_the_threshold_blocks_it() {
+        assert_eq!(
+            side_effect(DamageType::Thermal, 0),
+            Some(SideEffect::Arm {
+                id: "heat",
+                rounds: THERMAL_HEAT_ROUNDS,
+                power: 0
+            })
+        );
+        assert!(side_effect(DamageType::Thermal, SIDE_EFFECT_BLOCK_THRESHOLD - 1).is_some());
+        assert_eq!(
+            side_effect(DamageType::Thermal, SIDE_EFFECT_BLOCK_THRESHOLD),
+            None
+        );
+    }
+
+    #[test]
     fn a_type_with_no_effect_yet_does_nothing() {
-        assert_eq!(side_effect(DamageType::Thermal, 0), None);
+        assert_eq!(side_effect(DamageType::Voltage, 0), None);
     }
 
     #[test]

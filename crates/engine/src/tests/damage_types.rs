@@ -13,6 +13,12 @@ use crate::*;
 const THERMAL_LANCE: &str = r#"(id: "thermal_lance", name: "Thermal Lance", glyph: Some('/'),
     description: "test", value: Some(1),
     equipment: Some((Weapon, (damage: (min: 20, max: 20), damage_type: Some(Thermal)))))"#;
+const NOISE_HORN: &str = r#"(id: "noise_horn", name: "Noise Horn", glyph: Some('/'),
+    description: "test", value: Some(1),
+    equipment: Some((Weapon, (damage: (min: 20, max: 20), damage_type: Some(Noise)))))"#;
+const NOISE_PLATE: &str = r#"(id: "noise_plate", name: "Noise Plate", glyph: Some('"'),
+    description: "test", value: Some(1),
+    equipment: Some((Armor, (resist: (noise: 50)))))"#;
 const STEEL_BLADE: &str = r#"(id: "steel_blade", name: "Steel Blade", glyph: Some('/'),
     description: "test", value: Some(1),
     equipment: Some((Weapon, (damage: (min: 20, max: 20)))))"#;
@@ -47,6 +53,8 @@ fn typed_game() -> Game {
             ("thermal_lance.ron", THERMAL_LANCE),
             ("steel_blade.ron", STEEL_BLADE),
             ("heat_plate.ron", HEAT_PLATE),
+            ("noise_horn.ron", NOISE_HORN),
+            ("noise_plate.ron", NOISE_PLATE),
         ],
         &[("pyre.ron", PYRE), ("twin.ron", TWIN)],
         &[],
@@ -607,4 +615,128 @@ fn an_untyped_hit_and_a_typed_hit_into_no_resistance_report_nothing() {
     let stream = landing_swing_stream(ty);
     assert!(landed(typed_swing(ty, true, stream)) > 0);
     assert_eq!(resisted_of(typed_swing(ty, true, stream)), None);
+}
+
+// ---------------------------------------------------------------------------
+// Noise jams the target's aim.
+
+fn is_jammed(game: &Game, e: Entity) -> bool {
+    game.world
+        .get::<StatusEffects>(e)
+        .is_some_and(|s| s.active.iter().any(|a| a.id.0 == "jammed"))
+}
+
+/// What one Noise swing did to a sturdy target that does, or does not, wear
+/// `noise_plate`, on `stream`: the Integrity it lost and whether it is jammed.
+/// `battle_map` picks the model; the abstract round otherwise.
+fn noise_swing(battle_map: bool, armoured: bool, stream: u64) -> (i32, bool) {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "noise_horn");
+    if battle_map {
+        let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+        let target = pack[0];
+        if armoured {
+            equip_armor(&mut game, target, "noise_plate");
+        }
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, target]);
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(target, beside),
+            "fixture: the target must stand within reach"
+        );
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        assert!(game.tactical_attack(target), "the swing must happen");
+        (before - hp(&game, target), is_jammed(&game, target))
+    } else {
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "noise_plate");
+        }
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        game.party_member_attacks(0, player, 0, player);
+        (before - hp(&game, target), is_jammed(&game, target))
+    }
+}
+
+fn noise_hit_jams_blocks_and_miss_applies_nothing(battle_map: bool) {
+    let (stream, _) = (0..512u64)
+        .map(|s| (s, noise_swing(battle_map, false, s)))
+        .find(|&(_, (dmg, _))| dmg >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    assert!(
+        noise_swing(battle_map, false, stream).1,
+        "a landed hit jams"
+    );
+    let (dmg, jammed) = noise_swing(battle_map, true, stream);
+    assert!(dmg > 0, "the plate must not turn the hit into a miss");
+    assert!(!jammed, "50% noise resistance blocks the jam");
+    let miss = (0..512u64)
+        .map(|s| noise_swing(battle_map, false, s))
+        .find(|&(dmg, _)| dmg == 0)
+        .expect("no stream in 0..512 missed");
+    assert!(!miss.1, "a miss applies nothing");
+}
+
+#[test]
+fn a_noise_hit_jams_in_the_abstract_round() {
+    noise_hit_jams_blocks_and_miss_applies_nothing(false);
+}
+
+#[test]
+fn a_noise_hit_jams_on_the_battle_map() {
+    noise_hit_jams_blocks_and_miss_applies_nothing(true);
+}
+
+#[test]
+fn a_jammed_attackers_accuracy_is_cut() {
+    let mut game = typed_game();
+    let wild = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    let swing = battle::Swing::plain(battle::DamageRange { min: 1, max: 1 });
+    let before = game.combatant_profile(wild, swing).accuracy;
+    game.arm_status(
+        wild,
+        &StatusId::from("jammed"),
+        crate::tuning::NOISE_JAM_ROUNDS,
+        0,
+    );
+    let after = game.combatant_profile(wild, swing).accuracy;
+    assert!(before > 0.0);
+    let want = before * (100 - crate::tuning::NOISE_JAM_ACCURACY_CUT) as f64 / 100.0;
+    assert!((after - want).abs() < 1e-9, "{after} against {want}");
+}
+
+#[test]
+fn the_built_in_jammed_survives_a_save_and_load() {
+    let mut game = typed_game();
+    let wild = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    let id = StatusId::from("jammed");
+    game.arm_status(wild, &id, 2, 0);
+    assert!(is_jammed(&game, wild));
+    let path =
+        std::env::temp_dir().join(format!("feral_processes_jammed_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        loaded.world.resource::<StatusDb>().contains(&id),
+        "the load path must define the built-in"
+    );
+    // Statuses are scoped to one intrusion and are not written to a save, so
+    // the status itself is gone; arming it again on the loaded game works.
+    let again = loaded.spawn_wild_creature("glitch", 5, 5).unwrap();
+    loaded.arm_status(again, &id, 2, 0);
+    assert!(is_jammed(&loaded, again));
 }

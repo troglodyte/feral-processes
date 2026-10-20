@@ -42,6 +42,8 @@ pub enum StatusBehaviour {
     DamagePerRound,
     SkipTurn,
     EvasionCut(i32),
+    /// Accuracy cut by percent per stack, `EvasionCut`'s twin on the attacking side.
+    AccuracyCut(i32),
     AtkPercent(i32),
     MitigationPercent(i32),
     HealBlock,
@@ -141,6 +143,23 @@ impl StatusDb {
             }
         }
         Ok((db, warnings))
+    }
+
+    /// Adds the statuses the engine defines itself (`damage::statuses`), for
+    /// side effects that must exist whatever the asset directory holds. A
+    /// file already using a built-in id loses to it, with a warning.
+    pub(crate) fn with_builtins(mut self) -> (Self, Vec<String>) {
+        let mut warnings = Vec::new();
+        for def in crate::damage::statuses() {
+            if self.defs.contains_key(&def.id) {
+                warnings.push(format!(
+                    "status {:?} in assets/statuses is a built-in id: the built-in wins",
+                    def.id.0
+                ));
+            }
+            self.defs.insert(def.id.clone(), def);
+        }
+        (self, warnings)
     }
 
     /// Adds or replaces a def, so a test can carry a status no shipped file

@@ -2,6 +2,9 @@
 //! shrugs off. A hit with no type (`None`) is ordinary damage and resistance
 //! never applies to it.
 
+mod effects;
+pub use effects::{SideEffect, side_effect, statuses};
+
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
 

@@ -1,5 +1,6 @@
 (
     id: "watchdog",
+    fx: Some("cleanse"),
     name: "Watchdog Party",
     // Exclusive and PASSIVE: the Overseer's. Fires the round a condition
     // lands on its holder and clears it off everyone, which makes a party

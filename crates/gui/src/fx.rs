@@ -1498,10 +1498,12 @@ impl Fx {
             };
             for impact in &bolt.def.impact {
                 // An area covers every cell; a single-cell impact lands on
-                // the aim alone.
+                // the aim alone — `Sparks` is the blow's own hit burst and
+                // `Slash` swipes from the attacker, so neither means
+                // anything on a cell nobody aimed at.
                 let area = matches!(
                     impact,
-                    Impact::Explosion { .. } | Impact::Smoke | Impact::Flash
+                    Impact::Explosion { .. } | Impact::Smoke | Impact::Flash | Impact::Zap
                 );
                 let targets: &[(i32, i32)] = if area {
                     cells
@@ -2377,6 +2379,36 @@ mod tests {
         let landed = lines_at(&mut fx, BOLT_SECONDS + 0.1);
         assert!(flight >= 1);
         assert!(landed >= 2 * 16, "expected a ring per cell, got {landed}");
+    }
+
+    /// Landed line count of a `zap` cue over `cells`.
+    fn zap_lines(cells: Vec<(i32, i32)>) -> usize {
+        let mut fx = with_library();
+        fx.begin_frame(
+            0.0,
+            FrameCues {
+                routines: vec![RoutineCue {
+                    from: (0, 0),
+                    aim: (3, 0),
+                    cells,
+                    color: GlyphColor::Cyan,
+                    fx: Some("zap".into()),
+                }],
+                ..Default::default()
+            },
+            true,
+        );
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        fx.begin_frame(BOLT_SECONDS + 0.01, FrameCues::default(), true);
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+        crate::paint::painted_line_count(&shapes)
+    }
+
+    #[test]
+    fn a_zap_crackles_on_every_covered_cell() {
+        let one = zap_lines(vec![(3, 0)]);
+        assert!(one > 0);
+        assert_eq!(zap_lines(vec![(3, 0), (4, 0), (5, 0)]), 3 * one);
     }
 
     /// Draws `id`'s cue over `cells` and returns (mid-flight, landed) rect

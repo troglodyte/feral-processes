@@ -221,10 +221,13 @@ mod tests {
             "explosion_large",
             "heal",
             "buff",
+            "drain",
+            "debuff",
+            "cleanse",
         ] {
             assert_eq!(lib.get(Some(id)).id, id);
         }
-        assert_eq!(lib.defs.len(), 9);
+        assert_eq!(lib.defs.len(), 12);
         assert_eq!(
             lib.get(Some("laser_pulse")).travel,
             Travel::Pulses { count: 3 }

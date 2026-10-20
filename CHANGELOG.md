@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.19
+
+**The dev keypad (backtick, with `FERAL_DEV_CONSOLE` or `FERAL_DEV` set) has four new rows: Free build, Give item, Warp to zone and Spawn companion.** Free build is a toggle whose row shows whether it is on; while it is on, building, upgrading and rebuilding cost no materials and finish at once, though a rebuild still spends its program. The toggle is never saved. Give item opens a list of every item that is not gear, with how many you hold, and each pick gives ten. Warp to zone lists the next twenty zones and refuses during a fight. Spawn companion adds a program of a species that can appear on your tile, and refuses when your roster is full. Reaching a late-game state to look at it used to take an hour of play.
+
+**With the dev console enabled, `U` on the research screen unlocks a project at once, with no materials and no prerequisites.** In the graph view (`G`) it unlocks the node under the cursor; in the list it unlocks the active project. Without the dev console, `U` does nothing there.
+
 ## 0.19.18
 
 **The structure screen (`c`) moves with the arrow keys the way the base report (`b`) and the inventory (`i`) do.** It opens with the cursor on the list of pages down the left: Up and Down pick a page, Right steps onto it, and Left or Esc steps back to the list. Before, it opened inside the first page, Left did nothing to leave it, and only Esc reached the list. Tab still steps to the next structure beside you.

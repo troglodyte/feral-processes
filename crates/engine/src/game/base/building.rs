@@ -551,6 +551,10 @@ impl Game {
                 ));
                 continue;
             }
+            // `structure_build_cost` quotes nothing under free build, and the
+            // site freezes that quote: a program-needing wreck filed now stays
+            // free to finish even if the toggle is switched off before the
+            // player commits its program. Deliberate for a dev cheat.
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
             site.recipe = ruin.recipe;
@@ -1565,6 +1569,9 @@ impl Game {
             else {
                 continue;
             };
+            // Priced by the live quote, so under free build this refunds
+            // nothing: a cheat-built structure cannot be torn down for
+            // materials it never cost.
             for (item, qty) in self.structure_build_cost(&def) {
                 let share = qty * STRUCTURE_REMOVAL_REFUND_PERCENT / 100;
                 if share == 0 {

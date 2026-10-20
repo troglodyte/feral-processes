@@ -89,7 +89,8 @@ impl Game {
 
     /// Adds one random species from what can spawn on the player's current
     /// tile as a companion. The pool is `habitat_pools` with the field
-    /// spawner's own depth (`None`), sorted by id and drawn with the seeded
+    /// spawner's own depth (the party's Stack depth, `None` on the surface),
+    /// sorted by id and drawn with the seeded
     /// game RNG; the adoption mirrors `deliver_offer`'s `Program` arm, the
     /// one path that hands the player a companion from nothing.
     #[doc(hidden)]
@@ -101,7 +102,8 @@ impl Game {
             .world
             .get::<Position>(self.player_entity())
             .ok_or("The player has no tile.")?;
-        let Some((mut pool, _)) = self.habitat_pools(at.x, at.y, None, 0) else {
+        let depth = self.stack_pos().map(|pos| pos.depth);
+        let Some((mut pool, _)) = self.habitat_pools(at.x, at.y, depth, 0) else {
             return Err("Nothing can spawn on this tile.".into());
         };
         if pool.is_empty() {

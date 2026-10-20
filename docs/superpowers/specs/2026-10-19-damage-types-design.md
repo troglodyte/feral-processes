@@ -1,6 +1,6 @@
 # Damage types and resistances — staged design
 
-**Status:** draft for approval. Supersedes
+**Status:** approved 2026-10-20; Stage 1 planned. Supersedes
 `2026-10-16-damage-types-parked.md`, which holds the brainstorm and the
 directions rejected there.
 

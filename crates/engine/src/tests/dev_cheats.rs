@@ -175,3 +175,40 @@ fn plain_items_are_sorted_by_name_and_hold_no_gear() {
         "the held count rides along"
     );
 }
+
+#[test]
+fn warp_targets_are_the_twenty_zones_ahead() {
+    let mut game = bare_base(9201);
+    set_zone(&mut game, 3);
+
+    let targets = game.dev_warp_targets();
+
+    assert_eq!(targets.first(), Some(&4));
+    assert_eq!(targets.len(), 20);
+    assert!(targets.windows(2).all(|w| w[1] == w[0] + 1));
+}
+
+#[test]
+fn warp_lands_on_the_zone_through_the_real_breach() {
+    let mut game = bare_base(9202);
+    let from = game.world.resource::<ZoneLevel>().0;
+
+    let said = game.dev_warp_to_zone(from + 2).unwrap();
+
+    assert_eq!(game.world.resource::<ZoneLevel>().0, from + 2);
+    assert!(said.contains(&(from + 2).to_string()), "{said}");
+    assert!(
+        game.dev_warp_to_zone(from).is_err(),
+        "warping back stays refused"
+    );
+}
+
+#[test]
+fn warp_is_refused_mid_battle() {
+    let mut game = bare_base(9203);
+    start_battle_with_a_wild_program(&mut game);
+    let from = game.world.resource::<ZoneLevel>().0;
+
+    assert!(game.dev_warp_to_zone(from + 1).is_err());
+    assert_eq!(game.world.resource::<ZoneLevel>().0, from);
+}

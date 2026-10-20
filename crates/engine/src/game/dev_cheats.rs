@@ -46,4 +46,23 @@ impl Game {
         rows.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
         rows
     }
+
+    /// The zones a warp may target: the next `DEV_WARP_SPAN` after the
+    /// current one. Bounded because each warped zone runs a full
+    /// `enter_next_zone`; the game has no last zone to cap at.
+    #[doc(hidden)]
+    pub fn dev_warp_targets(&self) -> Vec<u32> {
+        let current = self.world.resource::<ZoneLevel>().0;
+        (current + 1..=current + crate::tuning::DEV_WARP_SPAN).collect()
+    }
+
+    /// `warp_to_zone` behind the keypad's refusals: never mid-battle.
+    #[doc(hidden)]
+    pub fn dev_warp_to_zone(&mut self, zone: u32) -> Result<String, String> {
+        if self.has_active_battle() {
+            return Err("Can't warp during a battle.".into());
+        }
+        self.warp_to_zone(zone)?;
+        Ok(format!("Warped to zone {zone}."))
+    }
 }

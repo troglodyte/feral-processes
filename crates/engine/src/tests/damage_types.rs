@@ -1007,3 +1007,17 @@ fn skipping_deflection_is_not_reported_as_resisted() {
     assert_eq!(cut.ty, Magnetic);
     assert!(cut.amount > 0);
 }
+
+#[test]
+fn a_resisted_magnetic_hit_reports_only_the_type_cut() {
+    use damage::DamageType::Magnetic;
+    let stream = (0..512u64)
+        .find(|&s| landed(plated_swing(None, "defl_plate", s)) >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    // Same deflection, no resistance: what the hit would land with only the
+    // type cut removed.
+    let uncut = landed(plated_swing(None, "defl_plate", stream));
+    let real = plated_swing(Some(Magnetic), "mag_defl_plate", stream);
+    let cut = resisted_of(real).expect("the resisted cut is reported");
+    assert_eq!(cut.amount, uncut - landed(real));
+}

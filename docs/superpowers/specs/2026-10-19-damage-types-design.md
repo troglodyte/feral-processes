@@ -1,6 +1,6 @@
 # Damage types and resistances — staged design
 
-**Status:** approved 2026-10-20; Stage 1 shipped in `v0.19.20`. Supersedes
+**Status:** approved 2026-10-20; Stage 1 shipped in `v0.19.20`, Stage 2 in `v0.19.21`. Supersedes
 `2026-10-16-damage-types-parked.md`, which holds the brainstorm and the
 directions rejected there.
 

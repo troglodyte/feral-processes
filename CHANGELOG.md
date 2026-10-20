@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.21
+
+**Weapons, armour and program attacks now have damage types, and armour resists them.** Arc Lance and Interrupt Coil deal voltage; Plasma Router and Overclock Core thermal; Broadcast Storm and Scatter Lance noise; Siege Compiler magnetic. The blades stay plain. Ablative Plating resists thermal, Static Mesh noise, Parity Weave radiation, Null Weave and Nullsteel Plate magnetic, and Hardened Shell voltage, each by 30. Twenty-one program moves carry a type too: Shock and Pulse are voltage, Static Burst and Flood are noise, Corrupt is radiation, and so on. A weapon's damage now reads like `5–10 Voltage DMG` and armour like `+30 Thermal RES`. Wherever a body's damage is shown, it carries the type as well.
+
+**The battle log says when armour soaked part of a hit,** as `(3 stopped by Thermal resist)` after the damage. A hit that resistance did not touch reads exactly as before. Types do nothing besides damage yet. The extra effects come one type at a time in the next releases, and no single piece of gear resists enough to block them. The balance curves did not move. The threat colour, capture odds, kill XP estimate and gear power rating do not count resistance yet, and a typed move's routine description does not name its type.
+
 ## 0.19.20
 
 **Groundwork for damage types; no change in play.** Weapons, armour, species attacks and abilities can now carry a damage type (thermal, magnetic, noise, voltage or radiation) and resistances to each, capped at 75%. A worn weapon's type replaces a program's own, as its damage band already does. No item, species or ability sets either yet, so every hit lands exactly as before; later stages add the types, how they show on screen, and what each one does.

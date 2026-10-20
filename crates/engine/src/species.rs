@@ -444,15 +444,19 @@ impl SpeciesDef {
     /// level-up page's typical-foe projection can read a species' reach
     /// with no `Game` and no entity to ask `Kit::of` about.
     pub fn natural_range(&self) -> crate::battle::DamageRange {
-        self.moves
-            .first()
+        self.natural_move()
             .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range())
     }
 
-    /// The damage type of the move `natural_range` reads: the type follows
+    /// The damage type of the band `natural_range` gives: the type follows
     /// the band.
     pub fn natural_type(&self) -> Option<crate::damage::DamageType> {
-        self.moves.first().and_then(|mv| mv.damage_type)
+        self.natural_move().and_then(|mv| mv.damage_type)
+    }
+
+    /// The move a swing made without rolling one takes its band and type from.
+    fn natural_move(&self) -> Option<&MoveDef> {
+        self.moves.first()
     }
 
     /// This species' catalogue Analysis: its authored `analysis` base, or the

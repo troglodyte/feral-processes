@@ -112,6 +112,14 @@ When a schema changes:
   place plus pure functions over them, not new components reached by
   `world.get`. ECS is for many entities ticking (staff, wanderers, tasks).
   Existing ECS code is not migrated for its own sake.
+- **Functional core, imperative shell for `impl Game` methods**: gather
+  (`&self`, builds a plain input struct from `World`, sorted by stable id) →
+  decide (a pure `fn(input, &mut Rng) -> Outcome` that takes no `&World` or
+  `&Game`) → apply (`&mut self` writes the `Outcome` back and notifies). Test
+  the decide step directly. Extract it when you are changing a
+  `game/*.rs` method, not as a migration. Keep the RNG draw order unchanged
+  and check `balance_sim` afterwards; `Outcome` is concrete per feature,
+  never one generic `Effect` enum.
 - **RNG never depends on query iteration order**: sort by a stable id before
   drawing inside a loop over a query, so a new `Resource` or component can't
   shift the stream.

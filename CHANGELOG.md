@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.22
+
+**Noise hits jam their target's targeting.** A target hit by a Noise attack has its accuracy cut by 30% for two rounds, shown as `JAM`, and misses more while it lasts. This works on both kinds of battle and in sorties. Armour that resists Noise by 50% or more stops the jam from landing. No shipped armour reaches 50% yet, so nothing blocks it in the current game. The balance curves did not move.
+
 ## 0.19.21
 
 **Weapons, armour and program attacks now have damage types, and armour resists them.** Arc Lance and Interrupt Coil deal voltage; Plasma Router and Overclock Core thermal; Broadcast Storm and Scatter Lance noise; Siege Compiler magnetic. The blades stay plain. Ablative Plating resists thermal, Static Mesh noise, Parity Weave radiation, Null Weave and Nullsteel Plate magnetic, and Hardened Shell voltage, each by 30. Twenty-one program moves carry a type too: Shock and Pulse are voltage, Static Burst and Flood are noise, Corrupt is radiation, and so on. A weapon's damage now reads like `5–10 Voltage DMG` and armour like `+30 Thermal RES`. Wherever a body's damage is shown, it carries the type as well.

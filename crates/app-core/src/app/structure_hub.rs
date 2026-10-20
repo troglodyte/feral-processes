@@ -29,8 +29,9 @@ impl App {
     }
 
     /// Opens the current structure's `page`th page: the screen's own opener,
-    /// leaving the cursor on whichever half it was. Whatever the previous page held is dropped first,
-    /// so a basket left by a page turn or `Tab` is discarded.
+    /// leaving the cursor on whichever half it was. Whatever the previous
+    /// page held is dropped first, so a basket left by a page turn or `Tab`
+    /// is discarded.
     pub(crate) fn enter_structure_page(&mut self, page: usize) {
         self.drop_page_state();
         let Some(hub) = &self.structure_hub else {

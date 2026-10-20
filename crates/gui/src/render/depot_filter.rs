@@ -1,10 +1,9 @@
 //! One Depot's allow/deny list: what this shelf will take in, a row per
 //! gear or disk family and one per remaining item.
 //!
-//! The table reads `item | denied | allowed | held`, and that order is the
-//! screen's only instruction: **an arrow moves the row toward the column it
-//! points at**, which is the transfer picker's own convention read one
-//! screen further in.
+//! The table reads `item | denied | allowed | held`; `-` denies a row and
+//! `+` allows it, the transfer page's keys, because the structure hub
+//! spends the bare arrows on its own navigation.
 
 use super::popup::*;
 use super::*;

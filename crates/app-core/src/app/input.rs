@@ -223,7 +223,7 @@ impl App {
         // The transfer picker and the caravan basket are those screens — see
         // `app/basket.rs` and `app/caravan.rs`. The creation wizard's Points
         // step is the fourth and `Mode::AllocateStats` the fifth: they borrow the
-        // transfer picker's key idiom whole, so they need the same four keys
+        // caravan basket's key idiom whole, so they need the same four keys
         // to reach them unfolded.
         // **Miss one here and its four modified arrows are folded to bare
         // `Left`/`Right` before its handler ever sees them**, so Shift and

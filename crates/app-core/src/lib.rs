@@ -1379,7 +1379,7 @@ impl CreationStep {
     /// Points.
     ///
     /// **One list, because two things read it and they must agree.** A
-    /// spending step gives Left/Right to its basket (`Mode::Transfer`'s
+    /// spending step gives Left/Right to its basket (the caravan basket's
     /// rule) rather than to paging, and writes its own live footer instead
     /// of a fixed one. The Perks step shipped in the second of those and
     /// outside the paging carve-out, so its own footer said "Left/Right

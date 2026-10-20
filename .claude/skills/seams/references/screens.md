@@ -142,10 +142,15 @@
   (open in the page, Left/Right to the page, rail by `Esc` alone) and read as
   a different screen from the base report's; a page that wants an arrow adds
   an arm to `screen_claims`, never a guard inside the nav match or a second
-  nav function. What is per hub is only how a page is turned (`turn_page`:
-  a structure page is re-opened for its structure), how the hub is left
-  (`leave_hub`) and `Tab`, which is the structure hub's alone and keeps the
-  cursor on whichever half it was.
+  nav function. **What a hub *is* is its `HubKind` (`app/hub.rs`), one impl
+  in that hub's module**, and neither the nav nor gui names a hub: a fixed
+  hub writes `title` and `table` and takes the defaults, and the structure
+  hub overrides `pages`, `turn` (a page is re-opened for its structure),
+  `leave`, `key` (`Tab`, keeping the cursor on whichever half it was),
+  `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
+  `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
+  coming back, and gui choosing a draw path by hub rather than by mode is
+  the same trap (`render/mod.rs`'s `page_rows` is by mode).
 - **A Broker's board is derived, never stored** — seeded off
   `(world seed, zone, epoch)`. No save field, no `GameRng` draw, no
   save-scumming, and it rotates on its own. Readable from **anywhere**,

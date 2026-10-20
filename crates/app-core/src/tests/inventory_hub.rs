@@ -61,8 +61,13 @@ fn assert_on_items_in_page(app: &App) {
 
 #[test]
 fn the_inventory_hub_lists_eight_pages_in_rail_order() {
-    assert_eq!(Hub::Inventory.title(), "INVENTORY");
-    let titles: Vec<_> = Hub::Inventory.table().iter().map(|p| p.title).collect();
+    assert_eq!(Hub::Inventory.kind().title(), "INVENTORY");
+    let titles: Vec<_> = Hub::Inventory
+        .kind()
+        .table()
+        .iter()
+        .map(|p| p.title)
+        .collect();
     assert_eq!(
         titles,
         [

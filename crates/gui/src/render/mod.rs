@@ -1187,37 +1187,40 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let popup_parent = base_popup_parent(app.mode).and_then(|p| base_report::HubFrame::of(app, p));
     let on_rail = app.hub_on_rail;
     let Some(game) = &mut app.game else { return };
-    // A structure's page: the same rows its popup would draw, in the hub's
-    // frame instead. The shared hubs follow, further down.
-    if let Some(frame) = hub_frame.as_ref().filter(|f| f.is_structure()) {
-        let (rows, nothing_qualifies) = match app.mode {
-            Mode::Transfer => (
-                transfer::body_rows(&transfer_entries, app.basket_room, selected),
-                None,
-            ),
-            Mode::DepotFilter => (
-                depot_filter::page_rows(depot_filter.as_ref(), selected),
-                None,
-            ),
-            Mode::MachineRecipe => (
-                machine_recipe::page_rows(machine_recipe.as_ref(), selected),
-                None,
-            ),
-            Mode::RigTool => (rig_tool::page_rows(rig_tool.as_ref(), selected), None),
-            Mode::Siphon => (building::siphon_page_rows(game, siphon, selected), None),
-            Mode::SpliceRig => (splice_rig::page_rows(splice_rig.as_ref(), selected), None),
-            Mode::FarmRecipe => (farm_recipe::body_rows(&farm_recipe, selected), None),
-            Mode::BuildProgram => {
-                building::build_program_page(game, build_commit.as_ref(), selected)
-            }
-            Mode::StructureManifest => (
-                structure_manifest::structure_rows(game, app.pending_structure_manifest)
-                    .unwrap_or_else(|| vec![text_row("That structure is gone. Esc to go back.")]),
-                None,
-            ),
-            other => (vec![text_row(format!("No page for {other:?}."))], None),
-        };
-        base_report::draw_structure_page(
+    // A hub page whose screen is also a popup: the same rows, in the hub's
+    // frame instead. Every other hub screen is drawn by `draw_base_report`,
+    // further down.
+    let page_rows = hub_frame.as_ref().and_then(|_| match app.mode {
+        Mode::Transfer => Some((
+            transfer::body_rows(&transfer_entries, app.basket_room, selected),
+            None,
+        )),
+        Mode::DepotFilter => Some((
+            depot_filter::page_rows(depot_filter.as_ref(), selected),
+            None,
+        )),
+        Mode::MachineRecipe => Some((
+            machine_recipe::page_rows(machine_recipe.as_ref(), selected),
+            None,
+        )),
+        Mode::RigTool => Some((rig_tool::page_rows(rig_tool.as_ref(), selected), None)),
+        Mode::Siphon => Some((building::siphon_page_rows(game, siphon, selected), None)),
+        Mode::SpliceRig => Some((splice_rig::page_rows(splice_rig.as_ref(), selected), None)),
+        Mode::FarmRecipe => Some((farm_recipe::body_rows(&farm_recipe, selected), None)),
+        Mode::BuildProgram => Some(building::build_program_page(
+            game,
+            build_commit.as_ref(),
+            selected,
+        )),
+        Mode::StructureManifest => Some((
+            structure_manifest::structure_rows(game, app.pending_structure_manifest)
+                .unwrap_or_else(|| vec![text_row("That structure is gone. Esc to go back.")]),
+            None,
+        )),
+        _ => None,
+    });
+    if let (Some(frame), Some((rows, nothing_qualifies))) = (&hub_frame, page_rows) {
+        base_report::draw_hub_page(
             frame,
             app.mode,
             &rows,
@@ -1256,7 +1259,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_machine_recipe(machine_recipe.as_ref(), selected, refusal, painter, m)
         }
         Mode::MachineRecipeConfirm => {
-            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             draw_machine_recipe_confirm(machine_recipe.as_ref(), selected, refusal, painter, m)
         }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
@@ -1283,11 +1286,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::WorkOrderPick => {
-            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             draw_work_order_pick(&orderable, selected, refusal, painter, m)
         }
         Mode::WorkOrderQuantity => {
-            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             draw_work_order_quantity(
                 game,
                 app.pending_order.clone(),
@@ -1674,7 +1677,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::History => draw_history(game, selected, refusal, painter, m),
         Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
-            base_report::draw_popup_parent(game, popup_parent.as_ref(), painter, m);
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             if let Some(staffing) = &staffing {
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }

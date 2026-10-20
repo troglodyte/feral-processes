@@ -231,3 +231,28 @@ fn a_basket_left_by_tab_is_discarded() {
     app.handle_key(GameKey::Tab);
     assert!(app.basket_amounts.iter().all(|n| *n == 0));
 }
+
+#[test]
+fn only_a_cycle_of_two_or_more_structures_offers_tab() {
+    let tab = |app: &App| {
+        Hub::Structure
+            .kind()
+            .extra_keys(app)
+            .contains(&("Tab", "next structure"))
+    };
+    let mut two = app_between_a_depot_and_a_machine(2611);
+    two.handle_key(GameKey::Char('c'));
+    assert!(tab(&two));
+    let mut one = app_beside_depots(2612, 1, 0, &[("power_cell", 3)]);
+    one.handle_key(GameKey::Char('c'));
+    assert!(!tab(&one));
+}
+
+#[test]
+fn the_heading_keeps_the_cycle_position_as_its_tail() {
+    let mut app = app_between_a_depot_and_a_machine(2613);
+    app.handle_key(GameKey::Char('c'));
+    let (head, tail) = Hub::Structure.kind().heading(&app);
+    assert_eq!(head, current_name(&app));
+    assert!(tail.ends_with("(1 of 2)"), "{tail}");
+}

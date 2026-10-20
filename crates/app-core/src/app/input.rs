@@ -448,10 +448,8 @@ impl App {
             self.refresh_perk_previews();
         }
         // Every hub screen is reopened from where the player last was.
-        if let Some((hub, ..)) = self.hub_at()
-            && let Some(slot) = hub.slot()
-        {
-            self.hub_last[slot] = Some(self.mode);
+        if let Some((hub, ..)) = self.hub_at() {
+            self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The structure hub is only open while a mode of its own is up; any
         // other mode (the map after an action, a popup) means it was left.

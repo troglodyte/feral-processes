@@ -172,7 +172,7 @@ impl App {
                 return;
             }
             GameKey::Char('i') => {
-                self.open_inventory_hub();
+                self.open_hub(Hub::Inventory);
                 return;
             }
             // The downed-program store: a body goes down in most fights and
@@ -324,7 +324,7 @@ impl App {
             // Before the underground hand-off for `N`'s reason below, so it
             // opens from the Stack as well.
             GameKey::Char('b') => {
-                self.open_base_report();
+                self.open_hub(Hub::Base);
                 return;
             }
             // Bound up here, beside `L`/`u`/`f` and for their reason: this

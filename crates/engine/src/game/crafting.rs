@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::damage::DamageType;
 use crate::tuning::{
     QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT,
 };
@@ -873,6 +874,18 @@ impl Game {
     /// a range rather than as a minus sign in front of `max`.
     pub fn damage_range_label(&self, range: battle::DamageRange) -> String {
         crate::abilities::range_label(range)
+    }
+
+    /// `damage_range_label` plus the damage type that goes with the band —
+    /// `"5–10 Thermal"`, or exactly the bare range when the band is untyped.
+    /// **The one place a band and its type are joined**, so the summary, the
+    /// inspect pages and the body rows cannot word it differently.
+    pub fn damage_label(&self, range: battle::DamageRange, ty: Option<DamageType>) -> String {
+        let band = self.damage_range_label(range);
+        match ty {
+            Some(ty) => format!("{band} {}", ty.name()),
+            None => band,
+        }
     }
 
     /// What one *worn* item is worth — `copy_bonus` at the level the copy

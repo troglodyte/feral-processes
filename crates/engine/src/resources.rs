@@ -467,8 +467,8 @@ pub enum ImpactKind {
 impl From<AttackOutcome> for ImpactKind {
     fn from(outcome: AttackOutcome) -> Self {
         match outcome {
-            AttackOutcome::Crit { dmg } => ImpactKind::Crit(dmg),
-            AttackOutcome::Hit { dmg } => ImpactKind::Damage(dmg),
+            AttackOutcome::Crit { dmg, .. } => ImpactKind::Crit(dmg),
+            AttackOutcome::Hit { dmg, .. } => ImpactKind::Damage(dmg),
             AttackOutcome::Miss => ImpactKind::Miss,
             AttackOutcome::Fumble(_) => ImpactKind::Fumble,
         }

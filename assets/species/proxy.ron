@@ -12,7 +12,7 @@
     base_speed: 12,
     moves: [
         (name: "Backdoor", power: 12, spread: 3),
-        (name: "Spoof", power: 9, spread: 2, ranged: true),
+        (name: "Spoof", power: 9, spread: 2, ranged: true, damage_type: Some(Noise)),
     ],
     work_resource: None,
     abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v2", level: 4)],

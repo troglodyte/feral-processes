@@ -4,7 +4,7 @@
     glyph: Some('"'),
     description: "Standard armor. Solid, unglamorous protection.",
     value: Some(12),
-    equipment: Some((Armor, (mitigation: 9))),
+    equipment: Some((Armor, (mitigation: 9, resist: (voltage: 30)))),
     craftable: Some((cost: [("bytecode_block", 3)], requires_structure: Some("workbench"), research: Some("armor_bench"))),
     droppable: Some([("crawler", 0.1), ("sentinel", 0.08)]),
 )

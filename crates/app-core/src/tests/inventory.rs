@@ -218,7 +218,7 @@ fn equip_preview_tag_leads_with_the_slot_the_item_would_take() {
     );
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::ABLATIVE_PLATING), 0), 1),
-        " (ARM +12 MIT)"
+        " (ARM +12 MIT +30 Thermal RES)"
     );
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::CORTEX_HACK), 0), 1),
@@ -959,7 +959,7 @@ fn the_displayed_range_scales_on_all_three_axes() {
 /// popup`; this asks the shipped assets whether the string that test
 /// measures is still the worst case, which is the same division of labour
 /// the name-column pair already uses.
-const WIDEST_MEASURED_SWAP_STATS: usize = 55;
+const WIDEST_MEASURED_SWAP_STATS: usize = 69;
 #[test]
 fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
     let mut app = test_app(932);
@@ -1011,6 +1011,77 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
         worst.0,
         worst.1,
         WIDEST_MEASURED_SWAP_STATS
+    );
+}
+
+/// **The twin for the delta column.** `swap_delta` prints a signed figure per
+/// axis, and an armour swap can move a resistance on each of two types as well
+/// as the six stat axes, which `no_shipped_gear_summary_outgrows_the_swap_stats_
+/// column` (one piece, never a difference) cannot see. Measured over every
+/// same-slot pair of shipped copies — each as the candidate and each as the
+/// worn piece, and bare — at the top rarity and fusion tier and both
+/// qualities, so the minus signs and the widest figures are both in it.
+const WIDEST_MEASURED_SWAP_DELTA: usize = 89;
+#[test]
+fn no_shipped_gear_swap_delta_outgrows_the_measured_width() {
+    let mut app = test_app(933);
+    let game = app.game.as_mut().expect("test_app builds a game");
+
+    let affixes: Vec<Vec<AffixId>> = std::iter::once(Vec::new())
+        .chain(game.affix_defs().into_iter().map(|a| vec![a.id]))
+        .collect();
+    let mut by_slot: Vec<(EquipmentSlot, Vec<EquipmentStats>)> = Vec::new();
+    for def in game
+        .item_defs()
+        .into_iter()
+        .filter(|d| d.equipment.is_some())
+    {
+        let Some((slot, _)) = game.equipment_of(&def.id) else {
+            continue;
+        };
+        let at = match by_slot.iter().position(|(s, _)| *s == slot) {
+            Some(i) => i,
+            None => {
+                by_slot.push((slot, vec![EquipmentStats::default()]));
+                by_slot.len() - 1
+            }
+        };
+        for affix in &affixes {
+            for quality in [QUALITY_DEFAULT, QUALITY_MAX] {
+                let copy = GearCopy::with_affixes(
+                    def.id.clone(),
+                    Rarity::ALL[Rarity::ALL.len() - 1],
+                    MAX_FUSIONS,
+                    affix.clone(),
+                    quality,
+                );
+                if let Some(mods) = game.copy_bonus(&copy, 10) {
+                    by_slot[at].1.push(mods);
+                }
+            }
+        }
+    }
+
+    let mut worst = (String::new(), 0usize);
+    for (_, pool) in &by_slot {
+        for &mods in pool {
+            for &worn in pool {
+                let delta = swap_delta(game, mods, worn);
+                if delta.chars().count() > worst.1 {
+                    worst = (delta.clone(), delta.chars().count());
+                }
+            }
+        }
+    }
+
+    assert!(
+        worst.1 <= WIDEST_MEASURED_SWAP_DELTA,
+        "{:?} is {} cells and the gui measures a worst case of {} — update the \
+         string in `the_widest_swap_row_still_fits_its_popup` and this bound \
+         together",
+        worst.0,
+        worst.1,
+        WIDEST_MEASURED_SWAP_DELTA
     );
 }
 

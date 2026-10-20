@@ -3087,7 +3087,10 @@ fn a_swing_off_the_board_queues_no_cue() {
     let player = game.player_entity();
     game.log_swing(
         crate::resources::MessageKind::PartyDamage,
-        crate::battle::AttackOutcome::Crit { dmg: 12 },
+        crate::battle::AttackOutcome::Crit {
+            dmg: 12,
+            resisted: None,
+        },
         player,
         "you tear it clean through",
     );

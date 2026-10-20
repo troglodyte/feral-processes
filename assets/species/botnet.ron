@@ -13,7 +13,7 @@
     parents: Some(("worm", "virus")),
     base_speed: 9,
     moves: [
-        (name: "Flood", power: 6, spread: 2, ranged: true, effect: Some((kind: "bleed", chance: 0.4, duration: 2, power: 3))),
+        (name: "Flood", power: 6, spread: 2, ranged: true, effect: Some((kind: "bleed", chance: 0.4, duration: 2, power: 3)), damage_type: Some(Noise)),
         (name: "Payload Crawl", power: 9, spread: 3),
     ],
     work_resource: Some("core_fragment"),

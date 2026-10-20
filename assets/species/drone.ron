@@ -11,7 +11,7 @@
     habitats: [OpenGrid, Backplane],
     base_speed: 8,
     moves: [
-        (name: "Buzz", power: 4, spread: 1),
+        (name: "Buzz", power: 4, spread: 1, damage_type: Some(Noise)),
         (name: "Recon Ping", power: 3, spread: 1, ranged: true),
     ],
     work_resource: Some("core_fragment"),

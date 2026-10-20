@@ -24,6 +24,17 @@ impl DamageType {
         DamageType::Voltage,
         DamageType::Radiation,
     ];
+
+    /// The word every screen and log line uses for this type.
+    pub fn name(self) -> &'static str {
+        match self {
+            DamageType::Thermal => "Thermal",
+            DamageType::Magnetic => "Magnetic",
+            DamageType::Noise => "Noise",
+            DamageType::Voltage => "Voltage",
+            DamageType::Radiation => "Radiation",
+        }
+    }
 }
 
 /// Percent resistance to each damage type. Summed across gear; the cap is
@@ -96,9 +107,40 @@ pub fn side_effect_blocked(resist_pct: i32) -> bool {
     resist_pct >= SIDE_EFFECT_BLOCK_THRESHOLD
 }
 
+/// How much of a hit a resistance stopped, and which type stopped it. Only
+/// built when `amount > 0`, so an uncut hit has none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Resisted {
+    pub ty: DamageType,
+    pub amount: i32,
+}
+
+/// The suffix every hit line appends: what resistance cut, or nothing. **The
+/// one formatter**, so every path that words a hit words the cut the same.
+pub fn resisted_note(resisted: Option<Resisted>) -> String {
+    match resisted {
+        Some(r) => format!(" ({} stopped by {} resist)", r.amount, r.ty.name()),
+        None => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_resisted_note_names_the_type_and_the_amount() {
+        let r = Resisted {
+            ty: DamageType::Thermal,
+            amount: 3,
+        };
+        assert_eq!(resisted_note(Some(r)), " (3 stopped by Thermal resist)");
+    }
+
+    #[test]
+    fn no_resistance_adds_nothing_to_a_line() {
+        assert_eq!(resisted_note(None), "");
+    }
 
     #[test]
     fn the_cap_clamps_a_sum_over_100() {

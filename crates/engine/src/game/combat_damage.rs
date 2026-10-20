@@ -305,6 +305,13 @@ impl Game {
             self.break_cloak(attacker);
             return outcome;
         }
+        // Both reads are `&self` and draw nothing, taken before the damage
+        // lands so the figure is what the armour stopped of *this* hit.
+        let resisted = swing.damage_type.and_then(|ty| {
+            let amount = self.mitigate_incoming_damage_typed(defender, rolled, None)
+                - self.mitigate_incoming_damage_typed(defender, rolled, Some(ty));
+            (amount > 0).then_some(damage::Resisted { ty, amount })
+        });
         // **The returned outcome carries what *landed*, not what was
         // rolled.** Mitigation is applied inside `apply_damage`, so the two
         // differ for every defender with any at all — and callers use this
@@ -324,8 +331,14 @@ impl Game {
         // every source of damage and not only for a swing.
         self.break_cloak(attacker);
         match outcome {
-            battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit { dmg: landed },
-            battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit { dmg: landed },
+            battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit {
+                dmg: landed,
+                resisted,
+            },
+            battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit {
+                dmg: landed,
+                resisted,
+            },
             other => other,
         }
     }
@@ -339,6 +352,13 @@ impl Game {
     /// draw-count assertion `resolve_attack` carries.
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
         self.natural_profile_of(entity).range
+    }
+
+    /// What a body's swing reads as on a screen: its band and the type that
+    /// goes with it, through `damage_label`.
+    pub(crate) fn natural_damage_label(&self, entity: Entity) -> String {
+        let profile = self.natural_profile_of(entity);
+        self.damage_label(profile.range, profile.damage_type)
     }
 
     /// `natural_range_of` with the type that goes with the band: the first

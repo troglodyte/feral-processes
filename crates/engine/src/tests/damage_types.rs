@@ -355,3 +355,71 @@ fn a_bodys_manifest_row_names_the_type_of_its_swing() {
     equip_weapon(&mut game, player, "steel_blade");
     assert_eq!(game.manifest(player).unwrap().damage, "20");
 }
+
+// ---------------------------------------------------------------------------
+// The outcome carries what resistance stopped.
+
+/// One 20-wide swing of `ty` at a sturdy target that does, or does not, wear
+/// `heat_plate`, on `stream`.
+fn typed_swing(
+    ty: Option<damage::DamageType>,
+    armoured: bool,
+    stream: u64,
+) -> battle::AttackOutcome {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    if armoured {
+        equip_armor(&mut game, target, "heat_plate");
+    }
+    let attacker = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    insert_battle(&mut game, player, vec![target]);
+    reseed_rng(&mut game, stream);
+    let band = battle::DamageRange { min: 20, max: 20 };
+    game.resolve_and_apply_attack(attacker, target, battle::Swing::plain(band).with_type(ty))
+}
+
+fn landed(o: battle::AttackOutcome) -> i32 {
+    o.damage_to_defender()
+}
+
+fn resisted_of(o: battle::AttackOutcome) -> Option<damage::Resisted> {
+    match o {
+        battle::AttackOutcome::Hit { resisted, .. }
+        | battle::AttackOutcome::Crit { resisted, .. } => resisted,
+        _ => None,
+    }
+}
+
+fn landing_swing_stream(ty: Option<damage::DamageType>) -> u64 {
+    (0..512u64)
+        .find(|&s| landed(typed_swing(ty, false, s)) >= 10)
+        .expect("no stream in 0..512 landed the swing")
+}
+
+#[test]
+fn a_typed_hit_into_matching_armour_reports_what_was_stopped() {
+    let ty = Some(damage::DamageType::Thermal);
+    let stream = landing_swing_stream(ty);
+    let open = typed_swing(ty, false, stream);
+    let cut = typed_swing(ty, true, stream);
+    let note = resisted_of(cut).expect("the cut was not reported");
+    assert_eq!(note.ty, damage::DamageType::Thermal);
+    assert!(note.amount > 0);
+    assert_eq!(landed(open) - landed(cut), note.amount);
+    assert_eq!(resisted_of(open), None);
+}
+
+#[test]
+fn an_untyped_hit_and_a_typed_hit_into_no_resistance_report_nothing() {
+    let stream = landing_swing_stream(None);
+    assert!(landed(typed_swing(None, true, stream)) > 0);
+    assert_eq!(resisted_of(typed_swing(None, true, stream)), None);
+
+    // Voltage meets a plate that resists only Thermal.
+    let ty = Some(damage::DamageType::Voltage);
+    let stream = landing_swing_stream(ty);
+    assert!(landed(typed_swing(ty, true, stream)) > 0);
+    assert_eq!(resisted_of(typed_swing(ty, true, stream)), None);
+}

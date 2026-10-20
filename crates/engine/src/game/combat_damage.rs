@@ -312,6 +312,13 @@ impl Game {
         // Reporting the pre-mitigation roll would claim damage the target
         // never took, the same trap `restore_hp` returning its landed figure
         // already closes from the other side.
+        // Both reads are `&self` and draw nothing, taken before the damage
+        // lands so the figure is what the armour stopped of *this* hit.
+        let resisted = swing.damage_type.and_then(|ty| {
+            let amount = self.mitigate_incoming_damage_typed(defender, rolled, None)
+                - self.mitigate_incoming_damage_typed(defender, rolled, Some(ty));
+            (amount > 0).then_some(damage::Resisted { ty, amount })
+        });
         let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
@@ -324,8 +331,14 @@ impl Game {
         // every source of damage and not only for a swing.
         self.break_cloak(attacker);
         match outcome {
-            battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit { dmg: landed },
-            battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit { dmg: landed },
+            battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit {
+                dmg: landed,
+                resisted,
+            },
+            battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit {
+                dmg: landed,
+                resisted,
+            },
             other => other,
         }
     }

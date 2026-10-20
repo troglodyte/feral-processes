@@ -232,8 +232,16 @@ pub enum FumbleRung {
 pub enum AttackOutcome {
     Fumble(FumbleRung),
     Miss,
-    Hit { dmg: i32 },
-    Crit { dmg: i32 },
+    /// `resisted` is `None` from `resolve_attack`: resistance is applied in
+    /// `Game::resolve_and_apply_attack`, which fills it in.
+    Hit {
+        dmg: i32,
+        resisted: Option<crate::damage::Resisted>,
+    },
+    Crit {
+        dmg: i32,
+        resisted: Option<crate::damage::Resisted>,
+    },
 }
 
 impl AttackOutcome {
@@ -242,7 +250,7 @@ impl AttackOutcome {
     /// the fumbler, so neither is defender-facing damage.
     pub fn damage_to_defender(self) -> i32 {
         match self {
-            AttackOutcome::Hit { dmg } | AttackOutcome::Crit { dmg } => dmg,
+            AttackOutcome::Hit { dmg, .. } | AttackOutcome::Crit { dmg, .. } => dmg,
             AttackOutcome::Miss | AttackOutcome::Fumble(_) => 0,
         }
     }
@@ -300,12 +308,14 @@ fn resolve_attack_inner(
         let rolled = attacker.range.roll(rng);
         return AttackOutcome::Crit {
             dmg: rolled * CRIT_ROLL_MULTIPLIER + attacker.atk,
+            resisted: None,
         };
     }
     if r < h {
         let rolled = attacker.range.roll(rng);
         return AttackOutcome::Hit {
             dmg: rolled + attacker.atk,
+            resisted: None,
         };
     }
     if fumble > 0.0 && r >= 1.0 - fumble {
@@ -1211,7 +1221,13 @@ mod tests {
         let mut rng = rng_whose_first_roll_is_in(0.0..CRIT_CHANCE);
         let outcome = resolve_attack(attacker, defender, &mut rng);
         // 4 rolled, doubled to 8, plus a flat atk of 10 that is NOT doubled.
-        assert_eq!(outcome, AttackOutcome::Crit { dmg: 18 });
+        assert_eq!(
+            outcome,
+            AttackOutcome::Crit {
+                dmg: 18,
+                resisted: None
+            }
+        );
     }
 
     #[test]
@@ -1220,7 +1236,13 @@ mod tests {
         let defender = combatant(12.0, 12.0, 0, DamageRange::default());
         let mut rng = rng_whose_first_roll_is_in(CRIT_CHANCE..0.5);
         let outcome = resolve_attack(attacker, defender, &mut rng);
-        assert_eq!(outcome, AttackOutcome::Hit { dmg: 14 });
+        assert_eq!(
+            outcome,
+            AttackOutcome::Hit {
+                dmg: 14,
+                resisted: None
+            }
+        );
     }
 
     #[test]
@@ -1255,7 +1277,10 @@ mod tests {
         let mut rng = rng_whose_first_roll_is_in(0.1..0.3);
         assert_eq!(
             resolve_attack(attacker, defender, &mut rng),
-            AttackOutcome::Crit { dmg: 18 }
+            AttackOutcome::Crit {
+                dmg: 18,
+                resisted: None
+            }
         );
     }
 

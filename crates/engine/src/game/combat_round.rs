@@ -703,10 +703,10 @@ impl Game {
     ) -> String {
         if entity == self.player_entity() {
             return match outcome {
-                battle::AttackOutcome::Crit { dmg } => {
+                battle::AttackOutcome::Crit { dmg, .. } => {
                     format!("Your {move_name} lands unchecked — {dmg} straight through!")
                 }
-                battle::AttackOutcome::Hit { dmg } => {
+                battle::AttackOutcome::Hit { dmg, .. } => {
                     format!("You inject {move_name} for {dmg} Integrity.")
                 }
                 battle::AttackOutcome::Miss => format!("Your {move_name} is refused."),
@@ -715,10 +715,10 @@ impl Game {
         }
         let name = self.creature_label(entity);
         match outcome {
-            battle::AttackOutcome::Crit { dmg } => {
+            battle::AttackOutcome::Crit { dmg, .. } => {
                 format!("{name}'s {move_name} lands unchecked — {dmg} straight through!")
             }
-            battle::AttackOutcome::Hit { dmg } => {
+            battle::AttackOutcome::Hit { dmg, .. } => {
                 format!("{name} injects {move_name} for {dmg} Integrity.")
             }
             battle::AttackOutcome::Miss => format!("{name}'s {move_name} is refused."),
@@ -1799,10 +1799,10 @@ impl Game {
                         },
                     );
                     let line = match outcome {
-                        battle::AttackOutcome::Crit { dmg } => {
+                        battle::AttackOutcome::Crit { dmg, .. } => {
                             format!("{name} overruns {on} for {dmg} Integrity!")
                         }
-                        battle::AttackOutcome::Hit { dmg } => {
+                        battle::AttackOutcome::Hit { dmg, .. } => {
                             format!("{name} lands on {on} for {dmg} Integrity.")
                         }
                         battle::AttackOutcome::Miss => format!("{name} is bounds-checked by {on}."),

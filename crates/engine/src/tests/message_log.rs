@@ -228,11 +228,17 @@ fn a_refusal_stays_out_of_the_log_during_a_battle() {
 fn swing_outcome_reduces_every_attack_outcome_band() {
     use crate::battle::{AttackOutcome, FumbleRung};
     assert_eq!(
-        SwingOutcome::from(AttackOutcome::Crit { dmg: 9 }),
+        SwingOutcome::from(AttackOutcome::Crit {
+            dmg: 9,
+            resisted: None
+        }),
         SwingOutcome::Crit
     );
     assert_eq!(
-        SwingOutcome::from(AttackOutcome::Hit { dmg: 4 }),
+        SwingOutcome::from(AttackOutcome::Hit {
+            dmg: 4,
+            resisted: None
+        }),
         SwingOutcome::Hit
     );
     assert_eq!(SwingOutcome::from(AttackOutcome::Miss), SwingOutcome::Miss);
@@ -259,7 +265,10 @@ fn log_swing_stamps_the_line_with_its_outcome() {
     let player = game.player_entity();
     game.log_swing(
         MessageKind::PartyDamage,
-        crate::battle::AttackOutcome::Crit { dmg: 12 },
+        crate::battle::AttackOutcome::Crit {
+            dmg: 12,
+            resisted: None,
+        },
         player,
         "you tear it clean through",
     );

@@ -311,11 +311,11 @@ impl Game {
         if targets_companion {
             let name = self.creature_label(target);
             let line = match outcome {
-                battle::AttackOutcome::Crit { dmg } => format!(
+                battle::AttackOutcome::Crit { dmg, .. } => format!(
                     "The rogue program's {} lands unchecked on {} — {dmg} straight through!",
                     mv.name, name
                 ),
-                battle::AttackOutcome::Hit { dmg } => format!(
+                battle::AttackOutcome::Hit { dmg, .. } => format!(
                     "The rogue program injects {} into {} for {dmg} Integrity.",
                     mv.name, name
                 ),
@@ -339,11 +339,11 @@ impl Game {
             }
         } else {
             let line = match outcome {
-                battle::AttackOutcome::Crit { dmg } => format!(
+                battle::AttackOutcome::Crit { dmg, .. } => format!(
                     "The rogue program's {} lands unchecked — {dmg} straight through!",
                     mv.name
                 ),
-                battle::AttackOutcome::Hit { dmg } => {
+                battle::AttackOutcome::Hit { dmg, .. } => {
                     format!("The rogue program injects {} for {dmg} Integrity.", mv.name)
                 }
                 battle::AttackOutcome::Miss => {

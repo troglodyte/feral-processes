@@ -390,8 +390,8 @@ impl Game {
     /// Puts a rig's tool back in the player's pack. The pack is unbounded —
     /// `Inventory` is a plain `Vec` with no capacity anywhere — so this
     /// cannot fail and there is no "lost" rung to write. That is the whole
-    /// difference from `return_carried_program`, whose third rung exists
-    /// because `DownedPrograms` **is** capped.
+    /// difference from `return_carried_program`, which needs a floor rung
+    /// because racks fill.
     fn hand_back_rig_tool(&mut self, tool: &ToolId) {
         self.grant_loot(ItemId::tool(tool), 1, LootSource::Refund);
     }

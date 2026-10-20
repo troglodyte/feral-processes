@@ -759,10 +759,11 @@ impl Game {
 
     /// Hands a demolished rack's shelf back to the player's own store.
     ///
-    /// `return_carried_program`'s third rung at the second site that owes
-    /// it: `DownedPrograms` is capped where `Inventory` is not, so this
-    /// return can genuinely refuse, and what it cannot take is announced
-    /// rather than dropped in silence.
+    /// Unlike `shelter_program` it ends in the player's store and has a
+    /// "lost" rung: `DownedPrograms` is capped where `Inventory` is not, so
+    /// this return can genuinely refuse, and what it cannot take is
+    /// announced rather than dropped in silence. The player demolished the
+    /// rack on purpose, and a full store is theirs to clear.
     ///
     /// **It does not try another rack first, and that is the difference
     /// from `return_carried_program`.** A Home cascade demolishes every

@@ -273,8 +273,10 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   exception to the rule above.
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**,
   so it outlives the building.
-- **A downed program lives in three places now, and the rack is the only one
-  that is not a queue.**
+- **A downed program lives in four places now, and the rack is the only one
+  that is not a queue** — the fourth is a Research Station's `StudyYield`,
+  where a finished study's program waits for a body to rack it, and
+  research never touches the player's pack.
 - **A rig holds its own tool and the player holds theirs** —
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs
@@ -283,6 +285,21 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   key**, and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**
+- **A task-less `CarryingProgram` body is a rack carrier
+  (`Game::is_rack_carrier`), and the scheduler's forced edge holds *any*
+  `CarryingProgram` holder out of the posting pool** — a rig's posted
+  fetcher included, or a re-match leaves it holding a kill it will never
+  deliver.
+- **Racking ranks in `drift_idle_staff` as two arms: delivery (a body already
+  holding a program) above the `OffShift` and respite arms, the pick-up above
+  clearing** — and a carrier that has not left its tile for
+  `RACK_CARRY_PATIENCE_BEATS` hands the program back through the shelter
+  chain, so being held out of the pool is bounded.
+- **`Game::shelter_program` is the one never-lose chain — a rack with room,
+  the station's empty slot, then the floor through `Game::set_down` — and it
+  never uses the player's pack**; `return_carried_program` and
+  `return_study_yield` call it, and `Game::drop_load` calls it for a
+  `CarryingProgram`, so every door that ends a hold also keeps the kill.
 - **Three of the five classes do something at a post, each in a different
   system.** The Leech bonus rides the **scaled** branch only, which is why
   `CycleModifiers` carries the *class* rather than a finished bonus.
@@ -446,7 +463,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `systems::feeds` over the pull's reach, Teardown Rigs are never members, and a body that is not staff (the player's own
   `work_structure`) removes only its own member from the line's candidates before `collapse` picks the active machine; the want drops only when every wanted member is held.**
 - **A held program is `ProgramRole::Siphoned` and grid supply is counted off the `Siphoned` marker, so removing the marker is the whole release; every despawn path for a siphon must release first.**
-- **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `Game::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions.
+- **A carrier's load is never destroyed: every path that ends a hold other than delivery calls `Game::drop_load`, never `remove::<Carrying>()` or a bare despawn** — builder and besieger loads are the exceptions; `drop_load` also hands back a `CarryingProgram`, which is why a door that frees or removes a body needs no program-specific code.
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
 

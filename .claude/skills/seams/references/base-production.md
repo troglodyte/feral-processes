@@ -541,12 +541,37 @@
   the three sites fails to compile if it is missed and the symptom is a lost
   kill with no error. `is_on_shift` returns true for a holder, as it does for
   `Carrying`; the two destruction paths **put the carrier back** rather than
-  adding it to the dropped tuple — `Game::return_carried_program`, first rack
-  with room in `(x, y)` order, then the player's store, and only then "lost
-  with the machine". All three are verified by deletion, which is the bar a
+  adding it to the dropped tuple — `Game::return_carried_program`, which is
+  `Game::shelter_program`'s chain: first rack with room in `(x, y)` order,
+  then the Research Station's empty slot, then the floor through
+  `Game::set_down`. The player's store is deliberately not in it (research
+  never uses the pack) and there is no "lost" rung: a claimed rack's room can
+  shrink under the claim — the player's own put, a demolition, `stow_program`'s
+  overflow — so "no rack has room" is reachable and the kill must outlast it.
+  `Game::drop_load` calls the same chain for a `CarryingProgram`, which is
+  what covers every door that frees or removes a body (pin, build spend, sale,
+  permadeath, fuse, wield, enlist, sortie): they were already calling
+  `drop_load` for `Carrying`, and a task-less rack carrier passes doors that
+  used to refuse posted programs. All three are verified by deletion, which is the bar a
   fourth site would owe too. The fetch itself sits in `run_teardown_rigs`
   because that is where it cannot disagree with the strip about the hopper's
   room: both routes in go through `Game::hopper_room`.
+
+- **A task-less `CarryingProgram` body is a rack carrier, and the forced edge
+  covers every holder.** The scheduler excludes a carrier from the pool the
+  way it excludes a `Carrying` hauler; written as `is_rack_carrier` alone, a
+  rig's posted fetcher that the matching re-seated lost its `Task` still
+  holding the kill and was neither fetcher nor carrier — uncounted and never
+  delivered. In `drift_idle_staff` the delivery arm ranks above `OffShift`
+  and respite (`is_on_shift` keeps a carrier on shift whatever it is marked,
+  so the amenity walk would otherwise march the kill to a Bay); the pick-up
+  ranks above clearing, because a kill in a station's slot stalls the whole
+  research line where product in a machine blocks one machine. Being held
+  out of the pool is bounded: `walk_idle_toward` returns `Ok` for a wait (the
+  party or a body in the way), so `RackWait` counts passes on one tile and
+  `RACK_CARRY_PATIENCE_BEATS` hands the program back. Tests must prove the
+  scheduler *wants* the job (a control body gets posted) before asserting a
+  carrier is not — the first version stayed green with the guard deleted.
 
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**, so
   it outlives the building — and now outlives a breach too. **Breaching

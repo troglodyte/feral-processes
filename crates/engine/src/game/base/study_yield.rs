@@ -16,7 +16,15 @@
 //!
 //! **It ranks above clearing** on `drift_idle_staff`'s fall-through: a kill
 //! sitting in a slot stalls the whole research line, where a machine's
-//! finished output only blocks that machine.
+//! finished output only blocks that machine. A body already *holding* one
+//! ranks higher still, above the `OffShift` and respite arms, and gives up
+//! after `RACK_CARRY_PATIENCE_BEATS` on one tile rather than being held out
+//! of the posting pool for ever.
+//!
+//! **A downed program is never lost and never goes to the pack**:
+//! `shelter_program` is the one chain (rack, station slot, floor), and
+//! `Game::drop_load` calls it, so any door that frees a carrier keeps the
+//! kill.
 
 use bevy_ecs::prelude::*;
 

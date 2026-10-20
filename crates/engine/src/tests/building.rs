@@ -4492,7 +4492,6 @@ fn demolishing_a_quarantine_rack_returns_its_programs() {
 
 /// `DownedPrograms` is capped, so unlike the pack this return really can
 /// refuse — and it has to say so rather than going quiet.
-/// `return_carried_program`'s third rung, at the second site that owes it.
 #[test]
 fn a_full_store_is_told_what_a_demolished_rack_could_not_return() {
     use crate::components::{DownedPrograms, Racked};

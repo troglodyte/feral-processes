@@ -95,10 +95,13 @@
   `no_research_node_is_gated_below_its_own_prerequisite` catches as a gate
   that can never fire.
 
-- **A downed program lives in three places now, and the rack is the only one
+- **A downed program lives in four places now, and the rack is the only one
   that is not a queue.** `DownedPrograms` on the player, `Racked` on a
-  Quarantine Rack, `Hopper` on a rig — plus `CarryingProgram` on a body
-  walking one from the second to the third. The pack and the hopper are both
+  Quarantine Rack, `Hopper` on a rig, and `StudyYield` on a Research Station
+  (a finished study's program, waiting for crew) — plus `CarryingProgram` on
+  a body walking one between them: rack to rig, or station to rack. The
+  station slot is not `Racked` on purpose: every `Racked` reader (the `c`
+  picker, rack room, the rig fetch) would otherwise treat it as shelf. The pack and the hopper are both
   *worked through*; a rack is a shelf nothing works through, which is why
   `stores` stays false on it (that flag means "a hauler may empty items into
   it", and no item ever enters a rack) and why it needed its own census

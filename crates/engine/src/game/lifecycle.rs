@@ -3903,6 +3903,8 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (statuses, status_warnings) =
         crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
     warnings.extend(status_warnings);
+    let (statuses, builtin_warnings) = statuses.with_builtins();
+    warnings.extend(builtin_warnings);
     warnings.extend(abilities.drop_unknown_status_riders(&statuses));
     for (name, id) in [
         ("exposed fumble rung", crate::tuning::FUMBLE_EXPOSED_STATUS),

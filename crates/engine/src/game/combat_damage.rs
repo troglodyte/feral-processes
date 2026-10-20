@@ -150,6 +150,12 @@ impl Game {
             })
             .clamp(0, 100);
         let evasion = evasion * (100 - cut) as f64 / 100.0;
+        let jam = self
+            .status_sum(entity, |b| match b {
+                StatusBehaviour::AccuracyCut(n) => Some(*n),
+                _ => None,
+            })
+            .clamp(0, 100);
         let derived = self
             .world
             .get::<crate::components::Derived>(entity)
@@ -160,7 +166,8 @@ impl Game {
                 speed,
                 level,
                 self.accuracy_bonus(entity) + swing.accuracy,
-            ),
+            ) * (100 - jam) as f64
+                / 100.0,
             evasion,
             atk: self.status_scaled(entity, self.effective_atk(entity), |b| match b {
                 StatusBehaviour::AtkPercent(n) => Some(*n),
@@ -320,6 +327,9 @@ impl Game {
         // never took, the same trap `restore_hp` returning its landed figure
         // already closes from the other side.
         let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
+        if let Some(ty) = swing.damage_type {
+            self.type_side_effect(defender, ty, landed);
+        }
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
         // and not inside `apply_damage`. Below the `rolled <= 0` return
@@ -340,6 +350,33 @@ impl Game {
                 resisted,
             },
             other => other,
+        }
+    }
+
+    /// The side effect of a typed hit that landed `landed` on `defender`:
+    /// decided by `damage::side_effect` from the armour's resistance, then
+    /// armed and worded here. Nothing for a hit that did nothing or killed,
+    /// so a dead body never reads a status line. Draws no randomness.
+    ///
+    /// Called from `resolve_and_apply_attack` only, so status ticks, recoil
+    /// and arcs, which reach `apply_damage_typed` too, never trigger one.
+    fn type_side_effect(&mut self, defender: Entity, ty: DamageType, landed: i32) {
+        if landed <= 0 || !self.creature_alive(defender) {
+            return;
+        }
+        let resist = damage::resist_against(self.gear_bonus(defender).resist, Some(ty));
+        match damage::side_effect(ty, resist) {
+            Some(damage::SideEffect::Arm { id, rounds, power }) => {
+                let id = StatusId::from(id);
+                let label = if defender == self.player_entity() {
+                    "You".to_string()
+                } else {
+                    self.creature_label(defender)
+                };
+                self.arm_status(defender, &id, rounds, power);
+                self.log_status_landing(&id, &label, None);
+            }
+            None => {}
         }
     }
 

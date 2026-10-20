@@ -390,6 +390,7 @@ impl CreationCatalogue {
     pub fn load(assets_dir: &std::path::Path) -> std::io::Result<Self> {
         let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets_dir.join("abilities"))?;
         let (statuses, _) = crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
+        let (statuses, _) = statuses.with_builtins();
         let (items, _) = crate::items_db::ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
         // Absent-is-silent, `ClassDb`'s own contract: an empty catalogue
         // leaves the class step with no rows, which is the pre-class game.

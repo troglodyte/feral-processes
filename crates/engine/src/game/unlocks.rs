@@ -1537,6 +1537,14 @@ impl Game {
                 self.log(format!("{name} is spent in the study."));
             }
         }
+        self.grant_research(&def);
+    }
+
+    /// Everything a finished node does once its bill and subject are settled:
+    /// the grant, the log line, the notification, the deed and the clearing of
+    /// the active selection when it is this node. `settle_research` and the
+    /// dev unlock both call it, so a cheat grants exactly what play does.
+    pub(crate) fn grant_research(&mut self, def: &ResearchDef) {
         // "Researched means known" (spec §1): a routine node writes its
         // ability into `KnownRoutines` and never touches `Research`, so a
         // routine node's researched state has exactly one record.
@@ -1559,19 +1567,28 @@ impl Game {
         // Stack. A plain `log()` is `MessageKind::Info`, which
         // `retain_outcomes_since_battle` prunes.
         self.log_base(format!("Research complete: {}.", def.name));
-        let unlocks = self.research_unlocks(&def);
+        let unlocks = self.research_unlocks(def);
         self.notify_filled(
             crate::notifications::NotificationKind::ResearchComplete,
             &[("name", &def.name), ("description", &def.description)],
             unlocks,
         );
         self.note_deed(crate::contracts::Deed::FinishedResearch);
-        self.grant_research_knowledge(&def);
-        {
+        self.grant_research_knowledge(def);
+        let cleared_active = {
             let mut research = self.world.resource_mut::<ActiveResearch>();
-            research.id = None;
+            let is_active = research.id.as_ref() == Some(&def.id);
+            if is_active {
+                research.id = None;
+            }
             research.progress.remove(&def.id);
+            is_active
+        };
+        // Only the active project's own bill: a dev unlock of some other node
+        // must not strip the orders `select_research` filed once and never
+        // re-files.
+        if cleared_active {
+            self.withdraw_research_orders();
         }
-        self.withdraw_research_orders();
     }
 }

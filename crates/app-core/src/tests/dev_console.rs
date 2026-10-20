@@ -240,3 +240,219 @@ mod master_flag {
         assert!(on(Some("00"), None));
     }
 }
+
+/// Opens the keypad with the cursor on `action`'s row and presses Enter.
+fn fire_row(app: &mut App, action: DevAction) {
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    app.menu_selected = App::dev_console_rows()
+        .iter()
+        .position(|r| r.action == action)
+        .expect("the table must offer this row");
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn the_free_build_row_toggles_and_its_label_shows_the_state() {
+    let mut app = console_app(8);
+    let row = App::dev_console_rows()
+        .iter()
+        .find(|r| r.action == DevAction::ToggleFreeBuild)
+        .expect("the table must offer free build");
+    assert!(app.dev_row_label(row).ends_with("(off)"));
+
+    fire_row(&mut app, DevAction::ToggleFreeBuild);
+
+    assert!(app.game.as_ref().unwrap().dev_free_build());
+    assert!(app.dev_row_label(row).ends_with("(on)"));
+    assert_eq!(app.mode, Mode::DevConsole);
+    assert!(app.status_line.is_some(), "a toggle has to say what it did");
+
+    fire_row_again(&mut app);
+    assert!(!app.game.as_ref().unwrap().dev_free_build());
+}
+
+/// Enter on the row the cursor is already on.
+fn fire_row_again(app: &mut App) {
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn the_other_rows_keep_their_static_label() {
+    let app = console_app(9);
+    for row in App::dev_console_rows()
+        .iter()
+        .filter(|r| r.action != DevAction::ToggleFreeBuild)
+    {
+        assert_eq!(app.dev_row_label(row), row.label);
+    }
+}
+
+#[test]
+fn the_companion_row_adopts_one_or_says_why_not() {
+    let mut app = console_app(10);
+    let before = app.game.as_mut().unwrap().manifest_roster().len();
+
+    fire_row(&mut app, DevAction::SpawnCompanion);
+
+    let line = app.status_line.clone().expect("a press has to report back");
+    let after = app.game.as_mut().unwrap().manifest_roster().len();
+    if line.ends_with("is yours") {
+        assert_eq!(after, before + 1);
+    } else {
+        assert_eq!(after, before, "a refusal adopts nothing: {line}");
+    }
+}
+
+/// The two dev pickers: the item picker (rows from `Game::dev_plain_items`,
+/// scrolled by `menu_selected`) and the zone picker (`dev_warp_targets`).
+mod pickers {
+    use super::*;
+
+    fn open_item_picker(app: &mut App) {
+        fire_row(app, DevAction::GiveItem);
+    }
+
+    #[test]
+    fn the_item_row_opens_the_picker_and_esc_returns_to_the_keypad() {
+        let mut app = console_app(11);
+        open_item_picker(&mut app);
+        assert_eq!(app.mode, Mode::DevItemPicker);
+
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::DevConsole);
+    }
+
+    #[test]
+    fn picking_an_item_gives_ten_and_stays_open() {
+        let mut app = console_app(12);
+        let (id, _, held) = app.game.as_ref().unwrap().dev_plain_items()[0].clone();
+        open_item_picker(&mut app);
+
+        app.handle_key(GameKey::Char('1'));
+
+        assert_eq!(app.mode, Mode::DevItemPicker);
+        let now = app
+            .game
+            .as_ref()
+            .unwrap()
+            .dev_plain_items()
+            .into_iter()
+            .find(|(i, _, _)| *i == id)
+            .unwrap()
+            .2;
+        assert_eq!(now, held + 10);
+        assert!(app.status_line.is_some());
+        let rows = app.dev_item_rows();
+        assert_eq!(rows[0].2, held + 10, "the row's count follows the gift");
+    }
+
+    #[test]
+    fn scrolling_exposes_the_rows_past_the_last_selector() {
+        let mut app = console_app(13);
+        let total = app.game.as_ref().unwrap().dev_plain_items().len();
+        assert!(
+            total > DEV_PICKER_PAGE,
+            "the picker only scrolls past a page"
+        );
+        open_item_picker(&mut app);
+        assert_eq!(app.dev_item_rows().len(), DEV_PICKER_PAGE);
+        let last_selector = menu_shortcut(DEV_PICKER_PAGE - 1);
+        assert_eq!(app.dev_item_rows().last().unwrap().0, last_selector);
+
+        for _ in 0..total {
+            app.handle_key(GameKey::Down);
+        }
+
+        let rows = app.dev_item_rows();
+        let last = app.game.as_ref().unwrap().dev_plain_items()[total - 1].clone();
+        assert_eq!(
+            rows.last().unwrap().1,
+            last.1,
+            "the list's end is reachable"
+        );
+        assert_eq!(rows.len(), DEV_PICKER_PAGE);
+
+        app.handle_key(GameKey::Char(last_selector));
+        let gave = app
+            .game
+            .as_ref()
+            .unwrap()
+            .dev_plain_items()
+            .into_iter()
+            .find(|(i, _, _)| *i == last.0)
+            .unwrap()
+            .2;
+        assert_eq!(
+            gave,
+            last.2 + 10,
+            "a selector picks within the visible page"
+        );
+    }
+
+    #[test]
+    fn the_zone_picker_lists_zones_ahead_and_a_pick_warps_and_closes() {
+        let mut app = console_app(14);
+        let targets = app.game.as_ref().unwrap().dev_warp_targets();
+        fire_row(&mut app, DevAction::WarpZone);
+        assert_eq!(app.mode, Mode::DevZonePicker);
+        assert_eq!(app.dev_zone_rows()[0].1, targets[0]);
+
+        app.handle_key(GameKey::Char('1'));
+
+        assert_ne!(app.mode, Mode::DevZonePicker, "a pick closes the picker");
+        assert_eq!(
+            app.game.as_ref().unwrap().dev_warp_targets()[0],
+            targets[0] + 1,
+            "the breach ran forward one zone"
+        );
+        assert!(app.status_line.is_some());
+    }
+
+    #[test]
+    fn a_refused_warp_is_said_and_leaves_the_picker_open() {
+        let mut app = crate::tests::battle::battling_app();
+        app.enable_dev_console_for_test();
+        app.mode = Mode::DevZonePicker;
+
+        app.handle_key(GameKey::Char('1'));
+
+        assert_eq!(app.mode, Mode::DevZonePicker);
+        assert!(app.status_line.as_deref().unwrap().contains("battle"));
+    }
+
+    #[test]
+    fn esc_on_the_zone_picker_returns_to_the_keypad() {
+        let mut app = console_app(16);
+        fire_row(&mut app, DevAction::WarpZone);
+        app.handle_key(GameKey::Esc);
+        assert_eq!(app.mode, Mode::DevConsole);
+    }
+}
+
+/// A picker's `menu_selected` is its scroll offset, so the keypad's own row
+/// has to be parked across the side trip or Esc lands on whatever offset the
+/// picker had scrolled to.
+#[test]
+fn esc_from_a_picker_keeps_the_keypads_highlighted_row() {
+    for action in [DevAction::GiveItem, DevAction::WarpZone] {
+        let mut app = console_app(5);
+        app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+        let row = App::dev_console_rows()
+            .iter()
+            .position(|r| r.action == action)
+            .expect("the keypad has the picker's row");
+        app.menu_selected = row;
+
+        app.handle_key(GameKey::Enter);
+        assert!(matches!(
+            app.mode,
+            Mode::DevItemPicker | Mode::DevZonePicker
+        ));
+        app.handle_key(GameKey::Down);
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::DevConsole);
+        assert_eq!(app.menu_selected, row, "{action:?}");
+    }
+}

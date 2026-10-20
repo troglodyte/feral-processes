@@ -366,3 +366,81 @@ fn routine_research_graph_stepping_and_enter_stay_in_the_routine_tree() {
         "Enter takes the node under the graph cursor on, same as the list's row key"
     );
 }
+
+/// `U` is the dev keypad's research cheat: live on the graph's cursor node
+/// only when the dev console is on.
+mod dev_unlock {
+    use super::*;
+    use feral_processes_engine::ResearchState;
+
+    fn open_research(seed: u32, console: bool) -> App {
+        let mut app = app_in_base_with_a_research_node(seed);
+        if console {
+            app.enable_dev_console_for_test();
+        }
+        open_command(&mut app, "Research");
+        app
+    }
+
+    /// Parks the graph cursor on the first node that is still `Locked`.
+    fn cursor_on_a_blocked_node(app: &mut App) -> String {
+        let nodes = app
+            .game
+            .as_ref()
+            .unwrap()
+            .research_nodes(ResearchTree::Base);
+        let idx = nodes
+            .iter()
+            .position(|n| matches!(n.state, ResearchState::Locked { .. }))
+            .expect("a fresh base has locked nodes");
+        app.menu_selected = idx;
+        nodes[idx].id.clone()
+    }
+
+    #[test]
+    fn u_grants_the_node_under_the_graph_cursor() {
+        let mut app = open_research(601, true);
+        assert!(app.research_graph_view);
+        let id = cursor_on_a_blocked_node(&mut app);
+        assert!(!app.game.as_ref().unwrap().is_researched(&id));
+
+        app.handle_key(GameKey::Char('U'));
+
+        assert!(app.game.as_ref().unwrap().is_researched(&id));
+    }
+
+    #[test]
+    fn u_does_nothing_without_the_dev_console() {
+        let mut app = open_research(602, false);
+        let id = cursor_on_a_blocked_node(&mut app);
+
+        app.handle_key(GameKey::Char('U'));
+
+        assert!(!app.game.as_ref().unwrap().is_researched(&id));
+        assert_eq!(app.mode, Mode::Research);
+    }
+
+    #[test]
+    fn u_in_the_list_with_nothing_active_says_to_use_the_graph() {
+        let mut app = open_research(603, true);
+        to_the_list(&mut app);
+        assert_eq!(active_project(&app), None);
+
+        app.handle_key(GameKey::Char('U'));
+
+        assert!(app.status_line.as_deref().unwrap().contains("Press G"));
+    }
+
+    #[test]
+    fn u_in_the_list_unlocks_the_active_project() {
+        let mut app = open_research(604, true);
+        to_the_list(&mut app);
+        app.handle_key(GameKey::Char('1'));
+        let taken = active_project(&app).expect("the first row is takeable");
+
+        app.handle_key(GameKey::Char('U'));
+
+        assert!(app.game.as_ref().unwrap().is_researched(&taken));
+        assert_eq!(active_project(&app), None);
+    }
+}

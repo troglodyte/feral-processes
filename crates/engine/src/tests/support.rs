@@ -882,7 +882,7 @@ pub(super) fn file_upgrade(game: &mut Game, structure: Entity) -> Result<(), Str
 /// so a fixture whose whole point is that there is nobody to build still has
 /// nobody. The spare is added only when it is needed, so a fixture that
 /// already staffed its base is left exactly as it staged itself.
-fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entity> {
+pub(super) fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entity> {
     if !game.structure_needs_program(kind) {
         return None;
     }

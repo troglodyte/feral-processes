@@ -14,7 +14,7 @@
 //! `Game` that runs the same body the game runs, so what the console puts on
 //! screen is evidence about the game rather than about the console.
 
-use crate::{App, GameKey, Mode};
+use crate::{App, DIGIT_ROWS, GameKey, Mode, menu_shortcut};
 use std::ffi::OsStr;
 
 /// Opens the console from the map. Backtick, by console convention, and it
@@ -25,6 +25,13 @@ pub const DEV_CONSOLE_KEY: char = '`';
 /// — spawns, production, needs decay — visibly move, small enough that a
 /// press is not a fast-forward past the thing you were watching for.
 pub const DEV_CONSOLE_TICKS: u32 = 25;
+
+/// Rows a dev picker shows at once: the nine digits then `a`-`o`, which is
+/// what the popup holds at the smallest window (720px: 25 body rows, one of
+/// them the hint). Not all 35 selectors, because a page the popup has to
+/// scroll hides the rows its last selectors name. Past a page, Up/Down
+/// scroll.
+pub const DEV_PICKER_PAGE: usize = DIGIT_ROWS + 15;
 
 /// What a row does when it is fired.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -43,6 +50,15 @@ pub enum DevAction {
     Encounter,
     AdvanceTicks,
     CycleEnemyStrength,
+    /// A session-only toggle (`Game::dev_set_free_build`); its row label
+    /// carries the state, see `App::dev_row_label`.
+    ToggleFreeBuild,
+    /// Adopts one species drawn from the player's tile, no tick spent.
+    SpawnCompanion,
+    /// Opens `Mode::DevItemPicker`.
+    GiveItem,
+    /// Opens `Mode::DevZonePicker`.
+    WarpZone,
     /// The one row that opens a screen instead of provoking an event —
     /// `Mode::SpritePicker`. It lives on the keypad rather than on a key of
     /// its own because the keypad is already the map's dev door and is
@@ -113,6 +129,23 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Cycle enemy strength",
         action: DevAction::CycleEnemyStrength,
+    },
+    DevConsoleRow {
+        label: "Free build",
+        action: DevAction::ToggleFreeBuild,
+    },
+    DevConsoleRow {
+        label: "Spawn companion from this tile",
+        action: DevAction::SpawnCompanion,
+    },
+    // The pickers sit with the other opener, below every trigger.
+    DevConsoleRow {
+        label: "Give item (x10)",
+        action: DevAction::GiveItem,
+    },
+    DevConsoleRow {
+        label: "Warp to zone",
+        action: DevAction::WarpZone,
     },
     // Below the triggers, being the one row that provokes nothing: it opens
     // the Sprite Forge over whatever the map is showing. Kept here rather
@@ -189,6 +222,18 @@ impl App {
         DEV_ROWS
     }
 
+    /// The text the renderer draws for a row: the static label, except the
+    /// free-build row, which appends the toggle's state. The table is
+    /// `&'static`, so the one dynamic label is answered here rather than
+    /// making every row's text a call.
+    pub fn dev_row_label(&self, row: &DevConsoleRow) -> String {
+        if row.action != DevAction::ToggleFreeBuild {
+            return row.label.to_string();
+        }
+        let on = self.game.as_ref().is_some_and(|g| g.dev_free_build());
+        format!("{} ({})", row.label, if on { "on" } else { "off" })
+    }
+
     /// Whether the console may be opened at all.
     pub fn dev_console_enabled(&self) -> bool {
         self.dev_console
@@ -228,8 +273,22 @@ impl App {
         // Ahead of the game borrow and the `after_world_action` tail alike:
         // this row opens a screen, which spends no tick and needs no world
         // to act on. Every arm below it does both.
-        if action == DevAction::OpenSpriteForge {
-            self.open_sprite_forge();
+        match action {
+            DevAction::OpenSpriteForge => {
+                self.open_sprite_forge();
+                return;
+            }
+            DevAction::GiveItem => return self.open_dev_picker(Mode::DevItemPicker),
+            DevAction::WarpZone => return self.open_dev_picker(Mode::DevZonePicker),
+            _ => {}
+        }
+        // Also ahead of the tail: neither can start a fight or move the
+        // player, and the tail would clear the line they are about to set.
+        if matches!(
+            action,
+            DevAction::ToggleFreeBuild | DevAction::SpawnCompanion
+        ) {
+            self.fire_untimed_dev_action(action);
             return;
         }
         let Some(game) = self.game.as_mut() else {
@@ -275,7 +334,11 @@ impl App {
             // `use_ability`'s `Tamper` arm's pattern, so a row that opens a
             // screen cannot quietly acquire a tick by being added to this
             // match instead.
-            DevAction::OpenSpriteForge => unreachable!("handled above"),
+            DevAction::OpenSpriteForge
+            | DevAction::GiveItem
+            | DevAction::WarpZone
+            | DevAction::ToggleFreeBuild
+            | DevAction::SpawnCompanion => unreachable!("handled above"),
         }
         self.after_world_action(true, false, 0);
         match said {
@@ -283,5 +346,72 @@ impl App {
             Some(Err(e)) => self.refuse(e),
             None => {}
         }
+    }
+
+    /// The rows that change the run without spending a tick.
+    fn fire_untimed_dev_action(&mut self, action: DevAction) {
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
+        let said = match action {
+            DevAction::ToggleFreeBuild => {
+                let on = !game.dev_free_build();
+                game.dev_set_free_build(on);
+                Ok(format!("Free build: {}.", if on { "on" } else { "off" }))
+            }
+            DevAction::SpawnCompanion => game.dev_spawn_companion(),
+            _ => unreachable!("only the untimed rows are routed here"),
+        };
+        match said {
+            Ok(line) => self.status_line = Some(line),
+            Err(e) => self.refuse(e),
+        }
+    }
+
+    /// The one door into the two dev pickers. `menu_origin` is the keypad, so
+    /// Esc (`close_screen`) comes back to it.
+    fn open_dev_picker(&mut self, picker: Mode) {
+        self.status_line = None;
+        self.menu_origin = Some(self.mode);
+        self.dev_console_row = self.menu_selected;
+        self.mode = picker;
+    }
+
+    /// Esc from a picker: back to the keypad on the row that opened it.
+    pub(crate) fn close_dev_picker(&mut self) {
+        self.close_screen();
+        self.menu_selected = self.dev_console_row;
+    }
+
+    /// Up/Down scroll a picker whose rows outnumber its selectors.
+    /// `menu_selected` is the scroll offset, clamped so the last page stays
+    /// full. Returns whether the key was a scroll.
+    pub(crate) fn scroll_dev_picker(&mut self, key: GameKey, len: usize) -> bool {
+        let last = len.saturating_sub(DEV_PICKER_PAGE);
+        match key {
+            GameKey::Up => self.menu_selected = self.menu_selected.saturating_sub(1),
+            GameKey::Down => self.menu_selected = (self.menu_selected + 1).min(last),
+            _ => return false,
+        }
+        true
+    }
+
+    /// The absolute row a selector key names on the current page of a
+    /// picker `len` rows long.
+    pub(crate) fn dev_picker_pick(&self, key: GameKey, len: usize) -> Option<usize> {
+        let GameKey::Char(c) = key else { return None };
+        let slot = (0..DEV_PICKER_PAGE).find(|&i| menu_shortcut(i) == c)?;
+        let idx = self.menu_selected + slot;
+        (idx < len).then_some(idx)
+    }
+
+    /// The visible page of a picker: each row with its selector.
+    pub(crate) fn dev_picker_page<T: Clone>(&self, rows: &[T]) -> Vec<(char, T)> {
+        rows.iter()
+            .skip(self.menu_selected)
+            .take(DEV_PICKER_PAGE)
+            .enumerate()
+            .map(|(i, row)| (menu_shortcut(i), row.clone()))
+            .collect()
     }
 }

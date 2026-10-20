@@ -18,7 +18,9 @@ pub use app::building::{
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
-pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
+pub use app::dev_console::{
+    DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DEV_PICKER_PAGE, DevAction, DevConsoleRow,
+};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
@@ -1682,6 +1684,13 @@ pub enum Mode {
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
+    /// Every plain item, off the dev keypad's `Give item` row. A pick adds
+    /// ten and the picker stays open; `menu_selected` is the scroll offset.
+    /// Esc returns to the keypad.
+    DevItemPicker,
+    /// The next zones ahead, off the keypad's `Warp to zone` row. A pick
+    /// runs the real breach forward and closes to the map.
+    DevZonePicker,
     Craft,
     CraftQuantity,
     /// A hand-compile in flight — `Game::begin_hand_craft` has armed
@@ -2434,6 +2443,8 @@ impl Mode {
             | Mode::Playing
             // Opened from the map only, so it never layers over a fight.
             | Mode::DevConsole
+            | Mode::DevItemPicker
+            | Mode::DevZonePicker
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
@@ -2836,6 +2847,10 @@ pub struct App {
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
     command_return_row: Option<usize>,
+    /// The dev keypad's highlighted row while a picker is open. A picker
+    /// spends `menu_selected` as its scroll offset, so Esc restores the
+    /// keypad's row from here (`close_dev_picker`).
+    dev_console_row: usize,
     /// Which half of the hub holds its one cursor: the page rail, or the
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.

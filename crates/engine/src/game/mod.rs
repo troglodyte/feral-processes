@@ -31,6 +31,7 @@ pub(crate) mod crafting;
 pub(crate) mod creation;
 pub(crate) mod derived;
 pub(crate) mod descriptions;
+pub(crate) mod dev_cheats;
 pub(crate) mod ending;
 pub(crate) mod environment;
 pub(crate) mod extraction;

@@ -373,7 +373,14 @@ impl App {
     fn open_dev_picker(&mut self, picker: Mode) {
         self.status_line = None;
         self.menu_origin = Some(self.mode);
+        self.dev_console_row = self.menu_selected;
         self.mode = picker;
+    }
+
+    /// Esc from a picker: back to the keypad on the row that opened it.
+    pub(crate) fn close_dev_picker(&mut self) {
+        self.close_screen();
+        self.menu_selected = self.dev_console_row;
     }
 
     /// Up/Down scroll a picker whose rows outnumber its selectors.

@@ -28,7 +28,7 @@ impl App {
 
     pub(crate) fn handle_dev_item_picker_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.close_screen();
+            self.close_dev_picker();
             return;
         }
         let Some(items) = self.game.as_ref().map(|g| g.dev_plain_items()) else {

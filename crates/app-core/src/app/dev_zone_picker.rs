@@ -16,7 +16,7 @@ impl App {
 
     pub(crate) fn handle_dev_zone_picker_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
-            self.close_screen();
+            self.close_dev_picker();
             return;
         }
         let Some(zones) = self.game.as_ref().map(|g| g.dev_warp_targets()) else {

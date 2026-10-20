@@ -70,6 +70,7 @@ impl App {
             hub_last: [None; Hub::ALL.len()],
             structure_hub: None,
             command_return_row: None,
+            dev_console_row: 0,
             hub_on_rail: true,
             etch_return: None,
             pending_remove_structure: None,

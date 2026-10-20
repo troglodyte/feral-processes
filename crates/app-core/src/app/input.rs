@@ -90,6 +90,9 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // edit row 30, back out, and press `t` on the same row.
             | (Mode::SpritePicker, Mode::SpriteEditor)
             | (Mode::SpriteEditor, Mode::SpritePicker)
+            // `close_dev_picker` has already put the keypad's row back.
+            | (Mode::DevItemPicker, Mode::DevConsole)
+            | (Mode::DevZonePicker, Mode::DevConsole)
             // Buying a level opens its page and `Enter` comes back: the
             // player is buying down a list, and losing the row after each
             // level would make that key, page, scroll, key.

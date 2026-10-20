@@ -2847,6 +2847,10 @@ pub struct App {
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
     command_return_row: Option<usize>,
+    /// The dev keypad's highlighted row while a picker is open. A picker
+    /// spends `menu_selected` as its scroll offset, so Esc restores the
+    /// keypad's row from here (`close_dev_picker`).
+    dev_console_row: usize,
     /// Which half of the hub holds its one cursor: the page rail, or the
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.

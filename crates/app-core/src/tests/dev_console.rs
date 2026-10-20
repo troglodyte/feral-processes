@@ -429,3 +429,30 @@ mod pickers {
         assert_eq!(app.mode, Mode::DevConsole);
     }
 }
+
+/// A picker's `menu_selected` is its scroll offset, so the keypad's own row
+/// has to be parked across the side trip or Esc lands on whatever offset the
+/// picker had scrolled to.
+#[test]
+fn esc_from_a_picker_keeps_the_keypads_highlighted_row() {
+    for action in [DevAction::GiveItem, DevAction::WarpZone] {
+        let mut app = console_app(5);
+        app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+        let row = App::dev_console_rows()
+            .iter()
+            .position(|r| r.action == action)
+            .expect("the keypad has the picker's row");
+        app.menu_selected = row;
+
+        app.handle_key(GameKey::Enter);
+        assert!(matches!(
+            app.mode,
+            Mode::DevItemPicker | Mode::DevZonePicker
+        ));
+        app.handle_key(GameKey::Down);
+        app.handle_key(GameKey::Esc);
+
+        assert_eq!(app.mode, Mode::DevConsole);
+        assert_eq!(app.menu_selected, row, "{action:?}");
+    }
+}

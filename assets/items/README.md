@@ -182,7 +182,10 @@ any non-finite `taming_potency`, `consume.power`, or
     //               (`thermal`, `magnetic`, `noise`, `voltage`, `radiation`,
     //               each optional). Summed across everything worn and
     //               capped at `tuning::DAMAGE_RESIST_CAP` per type; never
-    //               scaled. Nothing ships with a type or a resistance yet.
+    //               scaled. A new typed weapon needs a shipped armour resisting its
+    //               type: the census (`tests/assets.rs`,
+    //               `every_damage_type_a_shipped_attack_carries_has_armour_resisting_it`)
+    //               fails without one.
     //
     // The two defensive axes are meant to be a real choice: heavy armour
     // buys `mitigation` and takes every hit smaller, light armour buys

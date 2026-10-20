@@ -338,7 +338,7 @@ fn armour_resistance_reads_after_the_stats_in_type_order() {
     };
     assert_eq!(
         game.stat_summary(mods),
-        "+4 MIT +30% Thermal resist -10% Voltage resist"
+        "+4 MIT +30 Thermal RES -10 Voltage RES"
     );
 }
 

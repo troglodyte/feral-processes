@@ -4,6 +4,6 @@
     glyph: Some('"'),
     description: "Researched armor. Sheds a layer per hit.",
     value: Some(25),
-    equipment: Some((Armor, (mitigation: 12))),
+    equipment: Some((Armor, (mitigation: 12, resist: (thermal: 30)))),
     droppable: Some([("rootkit", 0.3)]),
 )

@@ -6525,3 +6525,68 @@ fn an_item_without_a_glyph_floors_as_the_default() {
     let def: ItemDef = ron::from_str(r#"(id: "x", name: "X")"#).unwrap();
     assert_eq!(def.floor_glyph(), crate::items_db::DEFAULT_FLOOR_GLYPH);
 }
+
+fn shipped_items_and_species() -> (crate::items_db::ItemDb, SpeciesDb) {
+    let assets = test_assets_dir();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
+    let (species, _) = SpeciesDb::load_dir(&assets.join("species"), &abilities).unwrap();
+    (items, species)
+}
+
+/// A typed weapon or move with no armour against its type is an attack the
+/// player cannot answer, which defeats the point of a type (spec, § Stage 2).
+/// Add the counter-armour in the same change as the first weapon or move of
+/// a new type.
+#[test]
+fn every_damage_type_a_shipped_attack_carries_has_armour_resisting_it() {
+    use crate::damage::DamageType;
+    let (items, species) = shipped_items_and_species();
+
+    let mut carried: Vec<(DamageType, String)> = Vec::new();
+    for def in items.all() {
+        if let Some((EquipmentSlot::Weapon, stats)) = def.worn_stats()
+            && let Some(ty) = stats.damage_type
+        {
+            carried.push((ty, format!("weapon {}", def.id)));
+        }
+    }
+    for def in species.all() {
+        for mv in &def.moves {
+            if let Some(ty) = mv.damage_type {
+                carried.push((ty, format!("{} {}", def.id, mv.name)));
+            }
+        }
+    }
+    assert!(
+        !carried.is_empty(),
+        "the census must see typed attacks, or it passes vacuously"
+    );
+
+    for (ty, source) in carried {
+        let countered = items.all().any(|def| {
+            matches!(def.worn_stats(), Some((slot, stats))
+                if slot != EquipmentSlot::Weapon && stats.resist.get(ty) > 0)
+        });
+        assert!(
+            countered,
+            "{source} deals {} damage but no shipped armour resists it",
+            ty.name()
+        );
+    }
+}
+
+#[test]
+fn shipped_tags_reach_their_defs() {
+    use crate::damage::DamageType;
+    let (items, species) = shipped_items_and_species();
+
+    let (_, lance) = items.get("arc_lance").unwrap().worn_stats().unwrap();
+    assert_eq!(lance.damage_type, Some(DamageType::Voltage));
+    let (_, plate) = items.get("ablative_plating").unwrap().worn_stats().unwrap();
+    assert_eq!(plate.resist.get(DamageType::Thermal), 30);
+
+    let shock = &species.get("scrapper").unwrap().moves;
+    let shock = shock.iter().find(|m| m.name == "Shock").unwrap();
+    assert_eq!(shock.damage_type, Some(DamageType::Voltage));
+}

@@ -1425,8 +1425,9 @@ mod tests {
         let lines = wrapped_row_lines(
             head,
             &[
-                " 206–310 DMG +103 ATK +103 MIT +138 ACC +103 DECOMP T3/3".to_string(),
-                " -206–-310 DMG -103 ATK -103 MIT -138 ACC -103 DECOMP".to_string(),
+                " 206–310 DMG +103 ATK +103 MIT +138 ACC +103 DECOMP +30 Noise RES T3/3"
+                    .to_string(),
+                " -206–-310 DMG -103 ATK -103 MIT -138 ACC -103 DECOMP -30 Noise RES".to_string(),
             ],
         );
         assert_eq!(

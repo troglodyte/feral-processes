@@ -654,7 +654,7 @@ impl Game {
         for ty in DamageType::ALL {
             let pct = mods.resist.get(ty);
             if pct != 0 {
-                parts.push(format!("{pct:+}% {} resist", ty.name()));
+                parts.push(format!("{pct:+} {} RES", ty.name()));
             }
         }
         parts.join(" ")

@@ -12,8 +12,8 @@
     habitats: [Deadlock, NullSector],
     base_speed: 10,
     moves: [
-        (name: "Fray", power: 9, spread: 2, effect: Some((kind: "bleed", chance: 0.45, duration: 3, power: 4))),
-        (name: "Static Burst", power: 7, spread: 2, ranged: true),
+        (name: "Fray", power: 9, spread: 2, effect: Some((kind: "bleed", chance: 0.45, duration: 3, power: 4)), damage_type: Some(Radiation)),
+        (name: "Static Burst", power: 7, spread: 2, ranged: true, damage_type: Some(Noise)),
     ],
     work_resource: None,
     abilities: [(id: "cascade_overflow", level: 2), (id: "segfault_v3", level: 4)],

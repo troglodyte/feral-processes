@@ -13,7 +13,7 @@
     parents: Some(("glitch", "trojan")),
     base_speed: 11,
     moves: [
-        (name: "Phase Burst", power: 6, spread: 2, ranged: true),
+        (name: "Phase Burst", power: 6, spread: 2, ranged: true, damage_type: Some(Voltage)),
         (name: "Masked Strike", power: 9, spread: 3, effect: Some((kind: "stun", chance: 0.3, duration: 1, power: 0))),
     ],
     work_resource: Some("power_cell"),

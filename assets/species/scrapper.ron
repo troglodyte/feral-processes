@@ -13,7 +13,7 @@
     base_speed: 10,
     moves: [
         (name: "Ram", power: 8, spread: 2),
-        (name: "Shock", power: 11, spread: 3),
+        (name: "Shock", power: 11, spread: 3, damage_type: Some(Voltage)),
     ],
     work_resource: Some("core_fragment"),
     can_nest: true,

@@ -162,6 +162,9 @@ is skipped with a warning logged in-game rather than crashing startup.
         // cuts the hit. A worn weapon replaces the move's type with its own,
         // the way it replaces the band.
         (name: "Static Jab", power: 6, damage_type: Some(Voltage)),
+        // A new typed move needs a shipped armour resisting its type: the
+        // census `every_damage_type_a_shipped_attack_carries_has_armour_resisting_it`
+        // (`tests/assets.rs`) fails without one.
 
         // Optional per-move; omit `effect` entirely for a plain damage-only
         // move. If set, landing this move has a `chance` (0.0-1.0) to also

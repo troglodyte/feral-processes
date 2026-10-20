@@ -36,6 +36,7 @@ stack.
 | `AccuracyCut(percent)` | accuracy cut by percent x stacks |
 | `AtkPercent(percent)` | attack scaled by percent x stacks |
 | `MitigationPercent(percent)` | mitigation scaled by percent x stacks |
+| `DamageTakenPercent(percent)` | damage taken scaled up by percent x stacks, before the general cut |
 | `HealBlock` | heals restore nothing |
 
 ## Stacking

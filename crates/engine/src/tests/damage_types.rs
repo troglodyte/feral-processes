@@ -1021,3 +1021,186 @@ fn a_resisted_magnetic_hit_reports_only_the_type_cut() {
     let cut = resisted_of(real).expect("the resisted cut is reported");
     assert_eq!(cut.amount, uncut - landed(real));
 }
+
+// ---------------------------------------------------------------------------
+// Thermal heats the target.
+
+fn heat_stacks(game: &Game, e: Entity) -> u32 {
+    game.world
+        .get::<StatusEffects>(e)
+        .and_then(|s| s.active.iter().find(|a| a.id.0 == "heat").map(|a| a.stacks))
+        .unwrap_or(0)
+}
+
+/// `noise_swing` for a Thermal swing: the Integrity lost and the heat stacks.
+fn thermal_swing(battle_map: bool, armoured: bool, stream: u64) -> (i32, u32) {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "thermal_lance");
+    if battle_map {
+        let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+        let target = pack[0];
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, target]);
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(target, beside),
+            "fixture: the target must stand within reach"
+        );
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        assert!(game.tactical_attack(target), "the swing must happen");
+        (before - hp(&game, target), heat_stacks(&game, target))
+    } else {
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        game.party_member_attacks(0, player, 0, player);
+        (before - hp(&game, target), heat_stacks(&game, target))
+    }
+}
+
+fn thermal_hit_heats_blocks_and_miss_applies_nothing(battle_map: bool) {
+    let (stream, _) = (0..512u64)
+        .map(|s| (s, thermal_swing(battle_map, false, s)))
+        .find(|&(_, (dmg, _))| dmg >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    assert_eq!(
+        thermal_swing(battle_map, false, stream).1,
+        1,
+        "a landed hit heats"
+    );
+    let (dmg, stacks) = thermal_swing(battle_map, true, stream);
+    assert!(dmg > 0, "the plate must not turn the hit into a miss");
+    assert_eq!(stacks, 0, "50% thermal resistance blocks the heat");
+    let miss = (0..512u64)
+        .map(|s| thermal_swing(battle_map, false, s))
+        .find(|&(dmg, _)| dmg == 0)
+        .expect("no stream in 0..512 missed");
+    assert_eq!(miss.1, 0, "a miss applies nothing");
+}
+
+#[test]
+fn a_thermal_hit_heats_in_the_abstract_round() {
+    thermal_hit_heats_blocks_and_miss_applies_nothing(false);
+}
+
+#[test]
+fn a_thermal_hit_heats_on_the_battle_map() {
+    thermal_hit_heats_blocks_and_miss_applies_nothing(true);
+}
+
+#[test]
+fn repeated_thermal_hits_stack_heat_up_to_the_cap() {
+    use damage::DamageType::Thermal;
+    let mut game = typed_game();
+    let player = game.player_entity();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    let attacker = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    insert_battle(&mut game, player, vec![target]);
+    let band = battle::DamageRange { min: 20, max: 20 };
+    let mut seen = vec![];
+    for _ in 0..200 {
+        game.resolve_and_apply_attack(
+            attacker,
+            target,
+            battle::Swing::plain(band).with_type(Some(Thermal)),
+        );
+        let stacks = heat_stacks(&game, target);
+        assert!(stacks <= crate::tuning::THERMAL_HEAT_MAX_STACKS);
+        if stacks > 0 && seen.last() != Some(&stacks) {
+            seen.push(stacks);
+        }
+    }
+    assert_eq!(
+        seen,
+        (1..=crate::tuning::THERMAL_HEAT_MAX_STACKS).collect::<Vec<_>>(),
+        "each landed hit adds one stack, then it holds at the cap"
+    );
+}
+
+/// Integrity `apply_damage(100)` takes off a sturdy target carrying
+/// `stacks` of heat, after `setup`.
+fn damage_while_hot(stacks: u32, setup: impl Fn(&mut Game, Entity)) -> i32 {
+    let mut game = typed_game();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    setup(&mut game, target);
+    for _ in 0..stacks {
+        game.arm_status(
+            target,
+            &StatusId::from("heat"),
+            crate::tuning::THERMAL_HEAT_ROUNDS,
+            0,
+        );
+    }
+    let before = hp(&game, target);
+    game.apply_damage(target, 100);
+    before - hp(&game, target)
+}
+
+#[test]
+fn a_hot_target_takes_more_from_an_untyped_hit() {
+    let cold = damage_while_hot(0, |_, _| {});
+    let hot = damage_while_hot(2, |_, _| {});
+    assert!(cold > 0);
+    assert!(hot > cold, "{hot} on a hot target vs {cold}");
+}
+
+#[test]
+fn a_hot_target_takes_more_from_a_bleed_tick() {
+    let bleed_loss = |stacks: u32| {
+        let mut game = typed_game();
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        game.arm_status(target, &StatusId::from("bleed"), 3, 20);
+        for _ in 0..stacks {
+            game.arm_status(target, &StatusId::from("heat"), 3, 0);
+        }
+        let before = hp(&game, target);
+        // The landing round is exempt; the next one charges.
+        game.tick_status_effects(target, "It");
+        game.tick_status_effects(target, "It");
+        before - hp(&game, target)
+    };
+    let (cold, hot) = (bleed_loss(0), bleed_loss(3));
+    assert!(cold > 0);
+    assert!(hot > cold, "bleed {hot} on a hot target vs {cold}");
+}
+
+#[test]
+fn the_hit_that_applies_heat_is_not_boosted_by_it() {
+    use damage::DamageType::Thermal;
+    let stream = landing_swing_stream(None);
+    let plain = landed(typed_swing(None, false, stream));
+    let hot = landed(typed_swing(Some(Thermal), false, stream));
+    assert_eq!(hot, plain, "the first hit pays no heat");
+}
+
+#[test]
+fn heat_lines_read_for_you_and_for_a_program() {
+    let defs = crate::damage::statuses();
+    let def = defs.iter().find(|d| d.id.0 == "heat").unwrap();
+    for who in ["You", "Glitch"] {
+        for line in [def.inflict_line(who), def.expire_line(who)] {
+            assert!(line.contains(who) && !line.contains('{'), "{line}");
+            assert!(!line.contains("'s"), "{line}");
+        }
+    }
+}

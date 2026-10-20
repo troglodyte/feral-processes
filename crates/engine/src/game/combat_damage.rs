@@ -607,6 +607,17 @@ impl Game {
         } else {
             gear.deflection
         };
+        // Heat and its kin raise the blow before any cut. Zero skips the
+        // arithmetic entirely so an unaffected body's numbers cannot move.
+        let taken = self.status_sum(target, |b| match b {
+            StatusBehaviour::DamageTakenPercent(n) => Some(*n),
+            _ => None,
+        });
+        let dmg = if taken == 0 || dmg <= 0 {
+            dmg
+        } else {
+            (dmg as f64 * (100 + taken).max(0) as f64 / 100.0).round() as i32
+        };
         battle::damage_after_mitigation_typed(
             dmg,
             self.effective_mitigation(target),

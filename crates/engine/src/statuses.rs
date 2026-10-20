@@ -46,6 +46,10 @@ pub enum StatusBehaviour {
     AccuracyCut(i32),
     AtkPercent(i32),
     MitigationPercent(i32),
+    /// Every hit taken is scaled up by percent per stack, before the
+    /// general cut. Read in `mitigate_with_resist`, so it covers ticks and
+    /// props as well as swings.
+    DamageTakenPercent(i32),
     HealBlock,
 }
 

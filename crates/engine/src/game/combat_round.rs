@@ -703,11 +703,13 @@ impl Game {
     ) -> String {
         if entity == self.player_entity() {
             return match outcome {
-                battle::AttackOutcome::Crit { dmg, .. } => {
-                    format!("Your {move_name} lands unchecked — {dmg} straight through!")
+                battle::AttackOutcome::Crit { dmg, resisted } => {
+                    let note = damage::resisted_note(resisted);
+                    format!("Your {move_name} lands unchecked — {dmg} straight through!{note}")
                 }
-                battle::AttackOutcome::Hit { dmg, .. } => {
-                    format!("You inject {move_name} for {dmg} Integrity.")
+                battle::AttackOutcome::Hit { dmg, resisted } => {
+                    let note = damage::resisted_note(resisted);
+                    format!("You inject {move_name} for {dmg} Integrity.{note}")
                 }
                 battle::AttackOutcome::Miss => format!("Your {move_name} is refused."),
                 battle::AttackOutcome::Fumble(rung) => self.fumble_line_for_player(move_name, rung),
@@ -715,11 +717,13 @@ impl Game {
         }
         let name = self.creature_label(entity);
         match outcome {
-            battle::AttackOutcome::Crit { dmg, .. } => {
-                format!("{name}'s {move_name} lands unchecked — {dmg} straight through!")
+            battle::AttackOutcome::Crit { dmg, resisted } => {
+                let note = damage::resisted_note(resisted);
+                format!("{name}'s {move_name} lands unchecked — {dmg} straight through!{note}")
             }
-            battle::AttackOutcome::Hit { dmg, .. } => {
-                format!("{name} injects {move_name} for {dmg} Integrity.")
+            battle::AttackOutcome::Hit { dmg, resisted } => {
+                let note = damage::resisted_note(resisted);
+                format!("{name} injects {move_name} for {dmg} Integrity.{note}")
             }
             battle::AttackOutcome::Miss => format!("{name}'s {move_name} is refused."),
             battle::AttackOutcome::Fumble(rung) => {
@@ -1799,11 +1803,13 @@ impl Game {
                         },
                     );
                     let line = match outcome {
-                        battle::AttackOutcome::Crit { dmg, .. } => {
-                            format!("{name} overruns {on} for {dmg} Integrity!")
+                        battle::AttackOutcome::Crit { dmg, resisted } => {
+                            let note = damage::resisted_note(resisted);
+                            format!("{name} overruns {on} for {dmg} Integrity!{note}")
                         }
-                        battle::AttackOutcome::Hit { dmg, .. } => {
-                            format!("{name} lands on {on} for {dmg} Integrity.")
+                        battle::AttackOutcome::Hit { dmg, resisted } => {
+                            let note = damage::resisted_note(resisted);
+                            format!("{name} lands on {on} for {dmg} Integrity.{note}")
                         }
                         battle::AttackOutcome::Miss => format!("{name} is bounds-checked by {on}."),
                         battle::AttackOutcome::Fumble(rung) => {

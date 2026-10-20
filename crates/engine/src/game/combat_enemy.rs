@@ -311,13 +311,17 @@ impl Game {
         if targets_companion {
             let name = self.creature_label(target);
             let line = match outcome {
-                battle::AttackOutcome::Crit { dmg, .. } => format!(
-                    "The rogue program's {} lands unchecked on {} — {dmg} straight through!",
-                    mv.name, name
+                battle::AttackOutcome::Crit { dmg, resisted } => format!(
+                    "The rogue program's {} lands unchecked on {} — {dmg} straight through!{}",
+                    mv.name,
+                    name,
+                    damage::resisted_note(resisted)
                 ),
-                battle::AttackOutcome::Hit { dmg, .. } => format!(
-                    "The rogue program injects {} into {} for {dmg} Integrity.",
-                    mv.name, name
+                battle::AttackOutcome::Hit { dmg, resisted } => format!(
+                    "The rogue program injects {} into {} for {dmg} Integrity.{}",
+                    mv.name,
+                    name,
+                    damage::resisted_note(resisted)
                 ),
                 battle::AttackOutcome::Miss => {
                     format!("The rogue program's {} is refused by {}.", mv.name, name)
@@ -339,13 +343,16 @@ impl Game {
             }
         } else {
             let line = match outcome {
-                battle::AttackOutcome::Crit { dmg, .. } => format!(
-                    "The rogue program's {} lands unchecked — {dmg} straight through!",
-                    mv.name
+                battle::AttackOutcome::Crit { dmg, resisted } => format!(
+                    "The rogue program's {} lands unchecked — {dmg} straight through!{}",
+                    mv.name,
+                    damage::resisted_note(resisted)
                 ),
-                battle::AttackOutcome::Hit { dmg, .. } => {
-                    format!("The rogue program injects {} for {dmg} Integrity.", mv.name)
-                }
+                battle::AttackOutcome::Hit { dmg, resisted } => format!(
+                    "The rogue program injects {} for {dmg} Integrity.{}",
+                    mv.name,
+                    damage::resisted_note(resisted)
+                ),
                 battle::AttackOutcome::Miss => {
                     format!("The rogue program's {} is refused.", mv.name)
                 }

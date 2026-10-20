@@ -357,6 +357,144 @@ fn a_bodys_manifest_row_names_the_type_of_its_swing() {
 }
 
 // ---------------------------------------------------------------------------
+// The log names the type when resistance cut the hit, on every path.
+
+const NOTE: &str = "stopped by Thermal resist)";
+
+fn log_texts(game: &Game) -> Vec<String> {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .map(|l| l.text.clone())
+        .collect()
+}
+
+fn is_crit_line(l: &str) -> bool {
+    l.contains("straight through") || l.contains("overruns")
+}
+
+/// The verbs of a landed plain hit on each path; a fumble line shares none.
+fn is_plain_hit_line(l: &str) -> bool {
+    l.contains(" inject") || l.contains("lands on")
+}
+
+/// Runs `scenario` on the first 512 streams, armoured and not. Every landed
+/// line armoured must carry the note, and a plain hit and a crit must each
+/// have been seen doing so; unarmoured, none may.
+fn assert_note_in_log(scenario: impl Fn(bool, u64) -> Vec<String>) {
+    let (mut hit, mut crit) = (false, false);
+    for stream in 0..512u64 {
+        let open = scenario(false, stream);
+        assert!(
+            !open.iter().any(|l| l.contains(NOTE)),
+            "stream {stream}: an uncut hit named a resistance: {open:?}"
+        );
+        for line in scenario(true, stream) {
+            let landed = is_crit_line(&line) || is_plain_hit_line(&line);
+            if landed {
+                assert!(line.contains(NOTE), "stream {stream}: {line:?}");
+                hit |= is_plain_hit_line(&line);
+                crit |= is_crit_line(&line);
+            }
+        }
+    }
+    assert!(hit, "no stream landed a plain hit");
+    assert!(crit, "no stream landed a crit");
+}
+
+#[test]
+fn the_abstract_party_swing_line_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let player = game.player_entity();
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        equip_weapon(&mut game, player, "thermal_lance");
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        game.party_member_attacks(0, player, 0, player);
+        log_texts(&game)
+    });
+}
+
+#[test]
+fn the_tactical_swing_line_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+        let player = game.player_entity();
+        let target = pack[0];
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        equip_weapon(&mut game, player, "thermal_lance");
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, target]);
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(target, beside),
+            "fixture: the target must stand within reach"
+        );
+        reseed_rng(&mut game, stream);
+        assert!(game.tactical_attack(target), "the swing must happen");
+        log_texts(&game)
+    });
+}
+
+#[test]
+fn the_ability_line_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let player = game.player_entity();
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        let pyre = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![target]);
+        let ability = game
+            .world
+            .resource::<SpeciesDb>()
+            .get("pyre")
+            .unwrap()
+            .basic_attacks()
+            .remove(0);
+        reseed_rng(&mut game, stream);
+        game.use_ability(&ability, pyre, "Pyre", &[target]);
+        log_texts(&game)
+    });
+}
+
+#[test]
+fn the_wild_swing_line_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let player = game.player_entity();
+        let wild = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+        sturdy(&mut game, player);
+        if armoured {
+            equip_armor(&mut game, player, "heat_plate");
+        }
+        insert_battle(&mut game, player, vec![wild]);
+        reseed_rng(&mut game, stream);
+        game.wild_retaliate(wild, 0, player);
+        log_texts(&game)
+    });
+}
+
+// ---------------------------------------------------------------------------
 // The outcome carries what resistance stopped.
 
 /// One 20-wide swing of `ty` at a sturdy target that does, or does not, wear

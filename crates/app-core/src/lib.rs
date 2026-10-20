@@ -10,6 +10,7 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
+pub use app::base_report::{BASE_REPORT_PAGES, base_page_flag};
 pub use app::building::{
     BuildMenu, BuildRow, Roster, RosterRow, StaffAction, StaffRow, Staffing, WorkOrderRow,
     roster_rows,
@@ -21,6 +22,8 @@ pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevCon
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
+pub use app::hub::{Hub, HubKind, HubPage, hub_of};
+pub use app::inventory_hub::INVENTORY_PAGES;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::level_up::LevelUpOrigin;
@@ -35,6 +38,7 @@ pub use app::sprite_editor::{
 };
 pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
+pub use app::structure_hub::{StructureHub, structure_page};
 pub use app::tactical::prop_readout;
 pub use app::telemetry::append_records;
 pub use feral_processes_engine::ProgramRole;
@@ -1379,7 +1383,7 @@ impl CreationStep {
     /// Points.
     ///
     /// **One list, because two things read it and they must agree.** A
-    /// spending step gives Left/Right to its basket (`Mode::Transfer`'s
+    /// spending step gives Left/Right to its basket (the caravan basket's
     /// rule) rather than to paging, and writes its own live footer instead
     /// of a fixed one. The Perks step shipped in the second of those and
     /// outside the paging carve-out, so its own footer said "Left/Right
@@ -2737,280 +2741,6 @@ fn action_from(kind: ActionKind, c: Collected) -> Option<BattleAction> {
     }
 }
 
-/// One page of a hub: a rail entry, and the screens `Right`/`Left` step
-/// through on it.
-pub struct HubPage {
-    pub title: &'static str,
-    pub screens: &'static [Mode],
-}
-
-/// The base report's one table: the rail, the screen order and "is this mode
-/// in the hub" are all read off it, so a page cannot be on the rail and
-/// missing from the nav. Rail order is the order here; `[` and `]` walk it.
-pub const BASE_REPORT_PAGES: &[HubPage] = &[
-    HubPage {
-        title: "Overview",
-        screens: &[Mode::BaseOverview],
-    },
-    HubPage {
-        title: "Build",
-        screens: &[Mode::BaseBuild],
-    },
-    HubPage {
-        title: "Research",
-        screens: &[Mode::BaseResearch],
-    },
-    HubPage {
-        title: "Trade",
-        screens: &[Mode::BaseTrade],
-    },
-    HubPage {
-        title: "Compile",
-        screens: &[Mode::BaseCompile],
-    },
-    HubPage {
-        title: "Staff",
-        screens: &[
-            Mode::StaffWellbeing,
-            Mode::StaffCoverage,
-            Mode::StaffDiscontent,
-        ],
-    },
-    HubPage {
-        title: "Production",
-        screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
-    },
-    HubPage {
-        title: "Stock",
-        screens: &[Mode::BaseStock],
-    },
-    HubPage {
-        title: "Work orders",
-        screens: &[Mode::WorkOrders],
-    },
-    HubPage {
-        title: "Staffing",
-        screens: &[Mode::BaseStaff, Mode::Structures],
-    },
-    HubPage {
-        title: "Build orders",
-        screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
-    },
-    HubPage {
-        title: "Alerts",
-        screens: &[Mode::Alerts],
-    },
-];
-
-/// The inventory's table, in rail order: what you carry, then who you carry
-/// it with. The roster and Perks are pages in their own right; the two
-/// command pages hold the errands that act on programs and on routines.
-pub const INVENTORY_PAGES: &[HubPage] = &[
-    HubPage {
-        title: "Items",
-        screens: &[Mode::Inventory],
-    },
-    HubPage {
-        title: "Phase keys",
-        screens: &[Mode::PhaseKeys],
-    },
-    HubPage {
-        title: "Downed programs",
-        screens: &[Mode::DownedPrograms],
-    },
-    HubPage {
-        title: "Tools",
-        screens: &[Mode::Tools],
-    },
-    HubPage {
-        title: "Companions",
-        screens: &[Mode::Companion],
-    },
-    HubPage {
-        title: "Programs",
-        screens: &[Mode::PartyPrograms],
-    },
-    HubPage {
-        title: "Routines",
-        screens: &[Mode::PartyRoutines],
-    },
-    HubPage {
-        title: "Perks",
-        screens: &[Mode::Perks],
-    },
-];
-
-/// A rail of pages with one cursor, shared by the base report, the
-/// inventory and the structure beside you.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Hub {
-    Base,
-    Inventory,
-    /// One structure's pages: which they are depends on the structure, so
-    /// they come from `App::structure_hub` rather than a table.
-    Structure,
-}
-
-impl Hub {
-    /// The hubs with a fixed table, which `App::hub_last` remembers a screen
-    /// for. `Structure` is opened fresh each time and has neither.
-    pub const ALL: [Hub; 2] = [Hub::Base, Hub::Inventory];
-
-    pub fn title(self) -> &'static str {
-        match self {
-            Hub::Base => "BASE REPORT",
-            Hub::Inventory => "INVENTORY",
-            Hub::Structure => "STRUCTURE",
-        }
-    }
-
-    /// The fixed rail of a shared hub; empty for `Structure`, whose rail is
-    /// the current structure's pages (`Hub::pages`).
-    pub fn table(self) -> &'static [HubPage] {
-        match self {
-            Hub::Base => BASE_REPORT_PAGES,
-            Hub::Inventory => INVENTORY_PAGES,
-            Hub::Structure => &[],
-        }
-    }
-
-    /// The rail, in order. The structure hub's is the current structure's
-    /// pages, so it needs the `App`.
-    pub fn pages(self, app: &App) -> Vec<&'static HubPage> {
-        match self {
-            Hub::Structure => app
-                .structure_hub
-                .as_ref()
-                .map(|h| {
-                    h.current()
-                        .pages
-                        .iter()
-                        .map(|&p| structure_page(p))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            fixed => fixed.table().iter().collect(),
-        }
-    }
-
-    /// Index into `App::hub_last`; `Structure` has none.
-    fn slot(self) -> Option<usize> {
-        Hub::ALL.iter().position(|&h| h == self)
-    }
-}
-
-/// The structure hub's page table: a rail title and the one screen each
-/// `StructurePage` is. Which pages a structure shows, and in what order, is
-/// the engine's answer (`AdjacentStructure::pages`).
-pub fn structure_page(page: StructurePage) -> &'static HubPage {
-    match page {
-        StructurePage::Inventory => &HubPage {
-            title: "Inventory",
-            screens: &[Mode::Transfer],
-        },
-        StructurePage::Filter => &HubPage {
-            title: "Filter",
-            screens: &[Mode::DepotFilter],
-        },
-        StructurePage::Recipe => &HubPage {
-            title: "Recipe",
-            screens: &[Mode::MachineRecipe],
-        },
-        StructurePage::Tool => &HubPage {
-            title: "Tool",
-            screens: &[Mode::RigTool],
-        },
-        StructurePage::Siphon => &HubPage {
-            title: "Siphon",
-            screens: &[Mode::Siphon],
-        },
-        StructurePage::Splice => &HubPage {
-            title: "Splice",
-            screens: &[Mode::SpliceRig],
-        },
-        StructurePage::Grow => &HubPage {
-            title: "Grow",
-            screens: &[Mode::FarmRecipe],
-        },
-        StructurePage::Rebuild => &HubPage {
-            title: "Rebuild",
-            screens: &[Mode::BuildProgram],
-        },
-        StructurePage::Info => &HubPage {
-            title: "Info",
-            screens: &[Mode::StructureManifest],
-        },
-    }
-}
-
-/// The structures beside the party that the structure hub cycles through,
-/// and which one is showing. Re-read from the engine after every key and
-/// tick (`App::refresh_structure_hub`), so a structure that goes or a step
-/// that takes the party away is noticed.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StructureHub {
-    pub cycle: Vec<AdjacentStructure>,
-    pub at: usize,
-}
-
-impl StructureHub {
-    /// The structure on show. `at` is kept inside `cycle` by every writer.
-    pub fn current(&self) -> &AdjacentStructure {
-        &self.cycle[self.at]
-    }
-
-    /// The compass word for the side the current structure is first beside.
-    pub fn side(&self) -> &'static str {
-        match self.current().dir {
-            (0, -1) => "north",
-            (1, 0) => "east",
-            (0, 1) => "south",
-            _ => "west",
-        }
-    }
-}
-
-/// Which shared hub `mode` belongs to and where it sits there as `(hub,
-/// page, screen)`, or `None` for a mode outside every fixed table. The
-/// structure hub's screens are not here: `App::hub_at` knows those.
-pub fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
-    Hub::ALL.into_iter().find_map(|hub| {
-        hub.table().iter().enumerate().find_map(|(p, page)| {
-            page.screens
-                .iter()
-                .position(|&s| s == mode)
-                .map(|screen| (hub, p, screen))
-        })
-    })
-}
-
-impl App {
-    /// Which hub the current mode belongs to and where it sits there, the
-    /// structure hub included. A structure-hub screen counts only while
-    /// `structure_hub` is open, so the modes it borrows (`Transfer`,
-    /// `BuildProgram`) are plain screens the rest of the time.
-    pub fn hub_at(&self) -> Option<(Hub, usize, usize)> {
-        self.hub_for(self.mode)
-    }
-
-    /// `hub_at` for another mode, for the popups drawn over a hub screen
-    /// (`base_popup_parent`).
-    pub fn hub_for(&self, mode: Mode) -> Option<(Hub, usize, usize)> {
-        hub_of(mode).or_else(|| {
-            Hub::Structure
-                .pages(self)
-                .iter()
-                .enumerate()
-                .find_map(|(p, page)| {
-                    page.screens
-                        .iter()
-                        .position(|&s| s == mode)
-                        .map(|screen| (Hub::Structure, p, screen))
-                })
-        })
-    }
-}
-
 /// The hub screen a popup is drawn over, for the popups that are children of
 /// one: they are not in `BASE_REPORT_PAGES`, so the nav never sees their
 /// keys, but the renderer keeps the frame up behind them.
@@ -3094,10 +2824,10 @@ pub struct App {
     ///
     /// Always a group menu.
     menu_origin: Option<Mode>,
-    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`,
-    /// `i` and `p` reopen where the player left off. `None` until a hub has
-    /// been opened, which lands on the base's Overview, the inventory's Items
-    /// or the party's Companions.
+    /// The screen last on screen in each hub that `HubKind::remembers`,
+    /// indexed by `Hub::slot`, so `b` and `i` reopen where the player left
+    /// off. `None` until a hub has been opened, which lands on its first
+    /// page.
     hub_last: [Option<Mode>; Hub::ALL.len()],
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.

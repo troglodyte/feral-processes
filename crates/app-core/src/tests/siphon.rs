@@ -37,7 +37,7 @@ fn c_beside_a_structure_with_no_siphon_page_opens_no_siphon() {
     let mut app = app_owning_a_program_and_a_station_of("no_siphon", "research_node", 9101);
     stand_beside_the_extractor(&mut app);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_ne!(app.mode, Mode::Siphon);
     assert!(app.siphon.is_none());
@@ -48,7 +48,7 @@ fn c_at_an_empty_siphon_opens_the_picker_and_a_pick_holds_the_program() {
     let mut app = app_beside_a_siphon(9102);
     let program = app.game.as_mut().unwrap().base_staff()[0];
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
     app.handle_key(GameKey::Char('1'));
 
@@ -70,7 +70,7 @@ fn c_at_an_occupied_siphon_offers_release_and_confirming_releases() {
         .unwrap();
     let hp_before = pet_hp(app.game.as_mut().unwrap(), program);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
     app.handle_key(GameKey::Char('1'));
 
@@ -88,7 +88,7 @@ fn esc_leaves_the_siphon_screen_writing_nothing() {
     let siphon = the_siphon(&app);
     let log_before = app.game.as_ref().unwrap().message_history(usize::MAX).len();
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
 
@@ -104,7 +104,7 @@ fn esc_leaves_the_siphon_screen_writing_nothing() {
 fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
     let mut app = app_beside_a_siphon(9106);
     let program = app.game.as_mut().unwrap().base_staff()[0];
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
 
     // Walked away while the screen was open.

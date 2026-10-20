@@ -223,7 +223,7 @@ impl App {
         // The transfer picker and the caravan basket are those screens — see
         // `app/basket.rs` and `app/caravan.rs`. The creation wizard's Points
         // step is the fourth and `Mode::AllocateStats` the fifth: they borrow the
-        // transfer picker's key idiom whole, so they need the same four keys
+        // caravan basket's key idiom whole, so they need the same four keys
         // to reach them unfolded.
         // **Miss one here and its four modified arrows are folded to bare
         // `Left`/`Right` before its handler ever sees them**, so Shift and
@@ -447,11 +447,11 @@ impl App {
         if self.mode != mode_before && self.mode == Mode::Perks {
             self.refresh_perk_previews();
         }
-        // Every hub screen is reopened from where the player last was.
+        // A hub that remembers is reopened where the player last was.
         if let Some((hub, ..)) = self.hub_at()
-            && let Some(slot) = hub.slot()
+            && hub.kind().remembers()
         {
-            self.hub_last[slot] = Some(self.mode);
+            self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The structure hub is only open while a mode of its own is up; any
         // other mode (the map after an action, a popup) means it was left.

@@ -271,15 +271,16 @@
   listing already say `item != currency && !is_banked(item)`; this is the
   third.
 
-- **On the picker screen an arrow moves stock toward the column it points
-  at.** The screen is a table reading `item | you | container`, so
-  Left pulls off the container toward you (a take, **positive**) and Right
-  pushes from you into it (a put, **negative**). The **sign convention is
-  untouched** by that — only which arrow reaches which end — so nothing below
-  `handle_basket_key` knows the arrows moved, and
-  `left_takes_out_and_right_puts_in` is the pin. This replaced an inversion
-  that was specified and still read as a slip; the caravan's key table used to
-  cite the old test by name to say it was *not* following it. `[A]` writes the
+- **On the picker screen `+` takes and `-` puts — the amount's own sign —
+  because the bare arrows belong to the structure hub's nav.** `+` (and `=`,
+  the unshifted key) raises the row's amount, a take, **positive**; `-`
+  lowers it, a put, **negative**. Putting the amount back on Left/Right would
+  fall through the hub's rule only on a multi-screen page and strand the
+  rail on the rest, and the Depot filter beside it must keep the same pair
+  (`+` allows, `-` denies). Shift/Ctrl+Left/Right still reach the basket —
+  the hub never reads them, and `App::handle_key`'s fold still lists
+  `Transfer` — and keep their direction: Left toward `you`, the take end.
+  `plus_takes_out_and_minus_puts_in` is the pin. `[A]` writes the
   take ceiling over **every** row, clearing a pending give: that is what "take
   everything" means on one axis.
 

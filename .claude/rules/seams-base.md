@@ -139,9 +139,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   must tell "no Depot" from "a full Depot".** `App::put_available` subtracts
   the *other* rows from `basket_room` so the highlighted row can still be
   lowered and raised; `App::take_available` is that row's shelf alone.
-- **On the picker screen an arrow moves stock toward the column it points
-  at** — the table reads `item | you | container`, so Left takes out
-  of the container and Right puts into it.
+- **On the picker screen `+` takes and `-` puts, the amount's own sign,
+  because the bare arrows belong to the structure hub's nav** — Shift/Ctrl
+  on an arrow still reach the basket, Left toward `you`.
 - **The picker's two figures are where the basket would leave the units**,
   `carried + amount` and `on_shelves - amount`, and they are the screen's only
   feedback on it.

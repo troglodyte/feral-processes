@@ -310,7 +310,7 @@ fn c_beside_a_rig_opens_the_tool_holder() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
 
     assert_eq!(app.mode, Mode::RigTool);
     assert!(
@@ -331,7 +331,7 @@ fn the_tool_holder_closes_when_the_party_leaves_the_rig() {
     let mut app = app_beside_a_rig_holding(1);
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
-    app.handle_key(GameKey::Char('c'));
+    open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::RigTool);
 
     stand_in_base_at(&mut app, 9, 9);

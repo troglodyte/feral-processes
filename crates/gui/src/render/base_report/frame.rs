@@ -5,7 +5,6 @@ use super::manifest::elided_to_fit;
 use super::manifest::keybar::{draw_groups, group};
 use super::manifest::layout::{RailGeom, frame_rect, rail_window};
 use super::*;
-use feral_processes_engine::BaseReportFlags;
 use hud::log_frame::keycap;
 
 /// The rail's width in cells: a caret, the longest page title and the `!`.
@@ -65,20 +64,26 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
     }
 }
 
-/// Paints the frame (its keybar only when `keybar_mode` is given) and returns the content rect, already shortened by a
-/// red refusal line when one is up. `on_rail` is whether the rail holds the
-/// hub's one cursor; the rows draw it otherwise. `flags` is the base
-/// report's attention marks; a hub without any passes `None`.
-#[allow(clippy::too_many_arguments)]
+/// What one hub's frame shows, as `HubFrame` took it off the `App`.
+pub(super) struct FrameView<'a> {
+    pub(super) title: (&'a str, &'a str),
+    pub(super) pages: &'a [&'static HubPage],
+    pub(super) page: usize,
+    pub(super) screen: usize,
+    /// Which pages carry the rail's `!`; past its end, none.
+    pub(super) marks: &'a [bool],
+    /// The hub's own keys, as `(key, verb)`.
+    pub(super) extra_keys: &'a [(&'static str, &'static str)],
+}
+
+/// Paints the frame (its keybar only when `keybar_mode` is given) and
+/// returns the content rect, already shortened by a red refusal line when
+/// one is up. `on_rail` is whether the rail holds the hub's one cursor; the
+/// rows draw it otherwise.
 pub(super) fn paint_frame(
-    title: (&str, &str),
-    pages: &[&HubPage],
-    page: usize,
-    screen: usize,
+    view: &FrameView,
     keybar_mode: Option<Mode>,
     on_rail: bool,
-    structures: Option<usize>,
-    flags: Option<&BaseReportFlags>,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -96,14 +101,12 @@ pub(super) fn paint_frame(
         2.0,
         hud::palette::PANE_BORDER,
     );
-    draw_rail(
-        &l.rail, title, pages, page, on_rail, flags, char_w, painter, m,
-    );
-    draw_title(&l.title, pages, page, screen, painter, m);
+    draw_rail(&l.rail, view, on_rail, char_w, painter, m);
+    draw_title(&l.title, view.pages, view.page, view.screen, painter, m);
     if let Some(mode) = keybar_mode {
         draw_groups(
             l.keybar,
-            &keybar_groups(mode, pages, page, on_rail, structures),
+            &keybar_groups(mode, view.pages, view.page, on_rail, view.extra_keys),
             painter,
             m,
         );
@@ -127,18 +130,15 @@ pub(super) fn paint_frame(
 /// The current page always carries the caret; the highlight bar is the
 /// cursor, drawn only while the rail has it and in the rows' own
 /// `SELECT_BG`, so it reads as the one cursor moving rather than a second.
-#[allow(clippy::too_many_arguments)]
 fn draw_rail(
     rail: &RailGeom,
-    hub_title: (&str, &str),
-    pages: &[&HubPage],
-    selected: usize,
+    view: &FrameView,
     focused: bool,
-    flags: Option<&BaseReportFlags>,
     char_w: f32,
     painter: &Painter,
     m: &Metrics,
 ) {
+    let (hub_title, pages, selected) = (view.title, view.pages, view.page);
     painter.rect(
         rail.rect.x + rail.rect.w + m.pad / 2.0,
         rail.rect.y,
@@ -201,7 +201,7 @@ fn draw_rail(
                 hud::palette::EMPHASIS
             },
         );
-        if flags.is_some_and(|f| page_flag(f, page).is_some()) {
+        if view.marks.get(page).copied().unwrap_or(false) {
             painter.ui_bold(
                 "!",
                 rail.rows.x + rail.rows.w - char_w * 2.0,
@@ -248,13 +248,14 @@ pub(super) fn keybar_groups(
     pages: &[&HubPage],
     page: usize,
     on_rail: bool,
-    structures: Option<usize>,
+    extra_keys: &[(&str, &str)],
 ) -> Vec<Vec<hud::strip::Piece>> {
-    // Only Tab steps the structure hub's cycle, and only when there is
-    // another structure to step to.
-    let cycle = structures
-        .filter(|&n| n > 1)
-        .map(|_| vec![keycap("Tab", "next structure")]);
+    let cycle = (!extra_keys.is_empty()).then(|| {
+        extra_keys
+            .iter()
+            .map(|(key, verb)| keycap(key, verb))
+            .collect::<Vec<_>>()
+    });
     if on_rail {
         let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
         return [Some(nav), cycle, Some(vec![keycap("Esc", "close")])]
@@ -263,26 +264,29 @@ pub(super) fn keybar_groups(
             .map(group)
             .collect();
     }
-    if structures.is_some() {
-        // The screen owns Left/Right and prints its own keys in its rows;
-        // Esc walks page, then rail, then map.
-        return [
-            Some(vec![keycap("[ ]", "page")]),
-            cycle,
-            Some(vec![keycap("Esc", "pages")]),
-        ]
-        .into_iter()
-        .flatten()
-        .map(group)
-        .collect();
-    }
     let step = if pages[page].screens.len() > 1 {
         keycap("←/→", "screen")
     } else {
         keycap("←", "menu")
     };
     let nav = vec![step, keycap("[ ]", "page")];
-    let acts = match mode {
+    let acts = screen_keys(mode);
+    [
+        Some(acts),
+        Some(nav),
+        cycle,
+        Some(vec![keycap("Esc", "menu")]),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|g| !g.is_empty())
+    .map(group)
+    .collect()
+}
+
+/// What the cursor does on `mode`'s own rows, for the keybar's first group.
+fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
+    match mode {
         Mode::BaseOverview => vec![keycap("↑/↓", "select"), keycap("Enter", "open")],
         Mode::Alerts => vec![keycap("↑/↓", "select"), keycap("x/d", "dismiss")],
         Mode::StaffWellbeing
@@ -326,13 +330,14 @@ pub(super) fn keybar_groups(
             keycap("I", "install"),
             keycap("X", "pull"),
         ],
+        Mode::Transfer => vec![
+            keycap("↑/↓", "select"),
+            keycap("+/-", "take/put"),
+            keycap("Enter", "transfer"),
+        ],
+        Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],
         _ => Vec::new(),
-    };
-    [acts, nav, vec![keycap("Esc", "menu")]]
-        .into_iter()
-        .filter(|g| !g.is_empty())
-        .map(group)
-        .collect()
+    }
 }
 
 /// The content rect at a window size, for the censuses that hold a screen's
@@ -420,7 +425,7 @@ mod tests {
                     &BASE_REPORT_PAGES.iter().collect::<Vec<_>>(),
                     page,
                     on_rail,
-                    None,
+                    &[],
                 )
                 .iter()
                 .flatten()
@@ -436,23 +441,36 @@ mod tests {
         }
     }
 
-    fn bar_text(structures: Option<usize>, on_rail: bool) -> String {
+    const TAB: &[(&str, &str)] = &[("Tab", "next structure")];
+
+    fn bar_text(extra_keys: &[(&str, &str)], on_rail: bool) -> String {
         let pages = [feral_processes_app_core::structure_page(
             feral_processes_engine::StructurePage::Inventory,
         )];
-        keybar_groups(Mode::Transfer, &pages, 0, on_rail, structures)
+        keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys)
             .iter()
             .flatten()
             .map(|(t, _, _)| t.as_str())
             .collect()
     }
 
+    /// A hub's own keys reach the bar from both halves, and only when the
+    /// hub offers them.
     #[test]
-    fn only_a_cycle_of_two_or_more_structures_offers_tab() {
+    fn a_hubs_own_keys_are_on_the_bar_from_both_halves() {
         for on_rail in [false, true] {
-            assert!(bar_text(Some(2), on_rail).contains("next structure"));
-            assert!(!bar_text(Some(1), on_rail).contains("next structure"));
-            assert!(!bar_text(None, on_rail).contains("next structure"));
+            assert!(bar_text(TAB, on_rail).contains("next structure"));
+            assert!(!bar_text(&[], on_rail).contains("next structure"));
+        }
+    }
+
+    /// A structure's page reads like the base report's: its own keys, then
+    /// the way back to the rail.
+    #[test]
+    fn a_structure_page_names_its_keys_and_the_way_back_like_any_hub_page() {
+        let rows = bar_text(TAB, false);
+        for want in ["take/put", "←", "menu", "page", "next structure"] {
+            assert!(rows.contains(want), "{want:?} missing: {rows}");
         }
     }
 
@@ -467,14 +485,16 @@ mod tests {
         );
         let (_, shapes) = with_painter(|p| {
             paint_frame(
-                (&name, " — north (2 of 3)"),
-                &[page],
-                0,
-                0,
+                &FrameView {
+                    title: (&name, " — north (2 of 3)"),
+                    pages: &[page],
+                    page: 0,
+                    screen: 0,
+                    marks: &[],
+                    extra_keys: TAB,
+                },
                 None,
                 false,
-                Some(3),
-                None,
                 None,
                 p,
                 &m,

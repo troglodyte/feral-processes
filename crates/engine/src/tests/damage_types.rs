@@ -3,8 +3,8 @@
 //! without the resisting armour, so the only difference between the two runs
 //! is the type's cut.
 //!
-//! The typed defs live on this file's own scratch asset directory; nothing in
-//! `assets/` sets a type or a resistance yet.
+//! The typed defs live on this file's own scratch asset directory, so the
+//! scenarios do not depend on which shipped content carries a type.
 
 use super::support::*;
 use crate::tactical::TacticalBattle;
@@ -418,6 +418,53 @@ fn the_abstract_party_swing_line_names_what_was_stopped() {
         reseed_rng(&mut game, stream);
         game.party_member_attacks(0, player, 0, player);
         log_texts(&game)
+    });
+}
+
+/// The non-player arm of `party_swing_line`: a companion's swing, which is
+/// also the arm a hostile's tactical attack and a reaction read through.
+#[test]
+fn a_companions_party_swing_line_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let player = game.player_entity();
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        let pyre = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        game.party_member_attacks(0, pyre, 0, player);
+        log_texts(&game)
+    });
+}
+
+/// `wild_swings_once` has a line of its own when the target is a companion
+/// rather than the player. Both bodies wear the plate so whoever it picks
+/// the note is owed, and only the companion's lines are kept.
+#[test]
+fn the_wild_swing_line_at_a_companion_names_what_was_stopped() {
+    assert_note_in_log(|armoured, stream| {
+        let mut game = typed_game();
+        let player = game.player_entity();
+        let companion = spawn_tamed(&mut game, 5000, 1);
+        enlist(&mut game, companion);
+        let wild = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+        for body in [player, companion] {
+            sturdy(&mut game, body);
+            if armoured {
+                equip_armor(&mut game, body, "heat_plate");
+            }
+        }
+        insert_battle(&mut game, player, vec![wild]);
+        reseed_rng(&mut game, stream);
+        game.wild_retaliate(wild, 0, player);
+        log_texts(&game)
+            .into_iter()
+            .filter(|l| l.contains(" into ") || l.contains("unchecked on"))
+            .collect()
     });
 }
 

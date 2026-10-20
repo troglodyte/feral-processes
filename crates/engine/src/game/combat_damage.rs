@@ -305,13 +305,6 @@ impl Game {
             self.break_cloak(attacker);
             return outcome;
         }
-        // **The returned outcome carries what *landed*, not what was
-        // rolled.** Mitigation is applied inside `apply_damage`, so the two
-        // differ for every defender with any at all — and callers use this
-        // figure for their log line and, in `Drain`'s case, for the heal.
-        // Reporting the pre-mitigation roll would claim damage the target
-        // never took, the same trap `restore_hp` returning its landed figure
-        // already closes from the other side.
         // Both reads are `&self` and draw nothing, taken before the damage
         // lands so the figure is what the armour stopped of *this* hit.
         let resisted = swing.damage_type.and_then(|ty| {
@@ -319,6 +312,13 @@ impl Game {
                 - self.mitigate_incoming_damage_typed(defender, rolled, Some(ty));
             (amount > 0).then_some(damage::Resisted { ty, amount })
         });
+        // **The returned outcome carries what *landed*, not what was
+        // rolled.** Mitigation is applied inside `apply_damage`, so the two
+        // differ for every defender with any at all — and callers use this
+        // figure for their log line and, in `Drain`'s case, for the heal.
+        // Reporting the pre-mitigation roll would claim damage the target
+        // never took, the same trap `restore_hp` returning its landed figure
+        // already closes from the other side.
         let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
@@ -350,15 +350,15 @@ impl Game {
     /// Deliberately the first move rather than a rolled one: rolling here
     /// would spend a `GameRng` draw before the band roll and break every
     /// draw-count assertion `resolve_attack` carries.
+    pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
+        self.natural_profile_of(entity).range
+    }
+
     /// What a body's swing reads as on a screen: its band and the type that
     /// goes with it, through `damage_label`.
     pub(crate) fn natural_damage_label(&self, entity: Entity) -> String {
         let profile = self.natural_profile_of(entity);
         self.damage_label(profile.range, profile.damage_type)
-    }
-
-    pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
-        self.natural_profile_of(entity).range
     }
 
     /// `natural_range_of` with the type that goes with the band: the first

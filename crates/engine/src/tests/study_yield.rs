@@ -762,15 +762,27 @@ fn a_full_pack_does_not_lose_a_destroyed_stations_program() {
 
 #[test]
 fn a_rig_carrier_with_no_rack_room_sets_its_program_on_the_floor() {
-    let (mut game, _station, rack) = base_with_station_and_rack();
+    let (mut game, station, rack) = base_with_station_and_rack();
     game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    // The slot is taken too, or the chain stops one rung short of the floor.
+    hold(&mut game, station, 8);
     fill_the_pack(&mut game);
     let carrier = a_carrier(&mut game);
 
     game.return_carried_program(carrier);
 
     assert!(game.world.get::<CarryingProgram>(carrier).is_none());
-    assert!(kept(&mut game).contains(&7), "the kill was lost");
+    assert_eq!(held_at(&game, station).map(|p| p.level), Some(8));
+    let on_floor: Vec<u32> = game
+        .world
+        .query::<&crate::components::FloorItem>()
+        .iter(&game.world)
+        .filter_map(|f| match &f.0 {
+            crate::items::FloorThing::Program(p) => Some(p.level),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(on_floor, vec![7], "the kill was lost");
     assert_eq!(pack_programs(&game), crate::tuning::MAX_DOWNED_PROGRAMS);
 }
 

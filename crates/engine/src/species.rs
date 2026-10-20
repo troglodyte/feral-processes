@@ -68,6 +68,11 @@ pub struct MoveDef {
     /// as they behaved before it existed.
     #[serde(default)]
     pub ranged: bool,
+    /// The type of damage this move deals; `None` is ordinary damage. A
+    /// worn weapon overrides it, as it overrides the band — see
+    /// `Game::swing_move_at`.
+    #[serde(default)]
+    pub damage_type: Option<crate::damage::DamageType>,
 }
 
 impl MoveDef {
@@ -104,6 +109,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
             power: mv.power,
             spread: mv.spread,
             status: mv.effect.clone(),
+            damage_type: mv.damage_type,
         },
         cooldown: 0,
         // A basic attack is not an aimed routine — it is what a program does
@@ -1451,6 +1457,7 @@ mod tests {
             power,
             spread,
             status,
+            ..
         } = &buzz.effect
         else {
             panic!("a basic attack is direct damage");
@@ -1800,6 +1807,22 @@ mod tests {
         let def: MoveDef = ron::from_str(r#"(name: "Poke", power: 3)"#)
             .expect("a move with no `ranged` field must still parse");
         assert!(!def.ranged, "moves default to melee");
+    }
+
+    #[test]
+    fn a_move_parses_its_damage_type_and_its_basic_attack_carries_it() {
+        let untyped: MoveDef = ron::from_str(r#"(name: "Poke", power: 3)"#).unwrap();
+        assert_eq!(untyped.damage_type, None, "moves default to untyped");
+
+        let zap: MoveDef =
+            ron::from_str(r#"(name: "Zap", power: 3, damage_type: Some(Voltage))"#).unwrap();
+        assert_eq!(zap.damage_type, Some(crate::damage::DamageType::Voltage));
+
+        let ability = basic_attack_ability(&SpeciesId::from("t"), 0, &zap);
+        let AbilityEffect::Damage { damage_type, .. } = ability.effect else {
+            panic!("a basic attack is direct damage");
+        };
+        assert_eq!(damage_type, Some(crate::damage::DamageType::Voltage));
     }
 
     /// The three melee-only bruisers are load-bearing: the reach tests in

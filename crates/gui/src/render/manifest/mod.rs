@@ -1398,6 +1398,7 @@ mod tests {
             spread: 2,
             effect: None,
             ranged: false,
+            damage_type: None,
         }];
         // Every program a player can page to has a class, and a posted one
         // names its structure — so the WORK box is four rows here and two
@@ -1572,6 +1573,7 @@ mod tests {
             spread: 2,
             effect: None,
             ranged: false,
+            damage_type: None,
         };
         let mut program = owned_program(vec![]);
         program.moves = vec![mv("Strike"), mv("Lunge")];

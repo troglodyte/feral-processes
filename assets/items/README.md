@@ -147,8 +147,8 @@ any non-finite `taming_potency`, `consume.power`, or
     // set, this item can be worn in the given slot — one of `Weapon`,
     // `Armor`, `Module` — granting the paired stat bonus while equipped.
     // Stats are `atk`, `mitigation`, `decompiler`, `damage`, `accuracy` and
-    // `evasion`, each optionally omitted (they default to 0), and all six
-    // scale up with the wearer's gear level, with the fusion tier of the
+    // `evasion`, each optionally omitted (they default to 0), and the first
+    // six scale up with the wearer's gear level, with the fusion tier of the
     // *individual copy* worn, and with that copy's rare tier — see
     // `EquipmentStats::scaled_for_level`/`fused_for_tier`/`for_rarity` and
     // `components::GearCopies`. Only equippable items can be fused, and only
@@ -170,6 +170,19 @@ any non-finite `taming_potency`, `consume.power`, or
     //   accuracy    raises the odds an attack lands, against the defender's
     //               evasion
     //   evasion     lowers the odds an attack lands on the wearer
+    //   deflection  flat damage removed from every incoming hit, after the
+    //               percentage cut and before the floor of 1. Capped at
+    //               `tuning::DEFLECTION_MAX` across everything worn, and
+    //               never scaled by level, tier, rarity or quality.
+    //   damage_type A weapon's damage type: `Some(Thermal)`, `Magnetic`,
+    //               `Noise`, `Voltage` or `Radiation`; omitted means
+    //               ordinary damage. A worn weapon's type (or lack of one)
+    //               replaces the wearer's natural move's. Never scaled.
+    //   resist      `(thermal: 20)`: percent resistance per damage type
+    //               (`thermal`, `magnetic`, `noise`, `voltage`, `radiation`,
+    //               each optional). Summed across everything worn and
+    //               capped at `tuning::DAMAGE_RESIST_CAP` per type; never
+    //               scaled. Nothing ships with a type or a resistance yet.
     //
     // The two defensive axes are meant to be a real choice: heavy armour
     // buys `mitigation` and takes every hit smaller, light armour buys

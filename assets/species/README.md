@@ -156,6 +156,13 @@ is skipped with a warning logged in-game rather than crashing startup.
         // melee move regardless, or it does nothing in the front rank.
         (name: "Reaching Move", power: 6, ranged: true),
 
+        // Optional per-move (defaults to ordinary, untyped damage):
+        // `damage_type: Some(Voltage)` (`Thermal`, `Magnetic`, `Noise`,
+        // `Voltage` or `Radiation`). The target's resistance to that type
+        // cuts the hit. A worn weapon replaces the move's type with its own,
+        // the way it replaces the band.
+        (name: "Static Jab", power: 6, damage_type: Some(Voltage)),
+
         // Optional per-move; omit `effect` entirely for a plain damage-only
         // move. If set, landing this move has a `chance` (0.0-1.0) to also
         // inflict a status condition on the target for `duration` battle

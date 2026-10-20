@@ -60,6 +60,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         base_speed: crate::tuning::DEFAULT_BASE_SPEED,
         movement: None,
         moves: vec![crate::species::MoveDef {
+            damage_type: None,
             name: "Test Strike".to_string(),
             power: 5,
             spread: 2,

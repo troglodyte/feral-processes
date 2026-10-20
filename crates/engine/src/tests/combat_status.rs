@@ -1678,6 +1678,7 @@ fn an_unknown_status_on_a_species_move_is_dropped_with_a_warning() {
     use crate::species::{MoveDef, MoveEffect};
     let mut def = generic_species();
     def.moves = vec![MoveDef {
+        damage_type: None,
         name: "Poke".into(),
         power: 1,
         spread: 0,

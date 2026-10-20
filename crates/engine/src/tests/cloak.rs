@@ -265,6 +265,7 @@ fn an_area_routine_that_lands_breaks_the_targets_cloak() {
     let blast = AbilityDef {
         target: AbilityTarget::AllEnemies,
         effect: AbilityEffect::Damage {
+            damage_type: None,
             power: 400,
             spread: 0,
             status: None,
@@ -314,6 +315,7 @@ fn breaking_a_cloak_is_announced_once_and_only_on_the_transition() {
     let swipe = AbilityDef {
         target: AbilityTarget::AllEnemies,
         effect: AbilityEffect::Damage {
+            damage_type: None,
             power: 6,
             spread: 1,
             status: None,
@@ -525,6 +527,7 @@ fn an_area_shape_still_covers_a_cloaked_cell_and_landing_breaks_it() {
     let blast = AbilityDef {
         target: AbilityTarget::AllEnemies,
         effect: AbilityEffect::Damage {
+            damage_type: None,
             power: 20,
             spread: 2,
             status: None,

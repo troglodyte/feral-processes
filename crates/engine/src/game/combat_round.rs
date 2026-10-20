@@ -1743,6 +1743,7 @@ impl Game {
                     power,
                     spread,
                     status,
+                    damage_type,
                 } => {
                     // Mitigation is `apply_damage`'s, not a term here — see
                     // `party_member_attacks` for why passing it to
@@ -1763,7 +1764,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
-                            damage_type: None,
+                            damage_type: *damage_type,
                         },
                     );
                     let line = match outcome {

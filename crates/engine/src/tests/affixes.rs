@@ -859,3 +859,90 @@ fn a_weight_on_a_research_only_affix_warns_but_loads() {
     assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
     assert!(warnings[0].contains("weight"), "{}", warnings[0]);
 }
+
+// ---------------------------------------------------------------------------
+// Damage types: resistance rides gear, a type never rides an affix.
+
+const WARDING: &str = r#"(id: "warding", prefix: Some("Warding"), stats: (resist: (thermal: 20)))"#;
+const WARDING_SMALL: &str =
+    r#"(id: "warding_small", prefix: Some("Lesser"), stats: (resist: (thermal: 15)))"#;
+
+fn warding_game(seed: u32, tag: &str) -> Game {
+    let dir = modded_assets_dir(tag, &[], &[], &[], &[], &[]);
+    std::fs::write(dir.join("affixes").join("warding.ron"), WARDING).unwrap();
+    std::fs::write(dir.join("affixes").join("warding_small.ron"), WARDING_SMALL).unwrap();
+    Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap()
+}
+
+fn warded(item: &str, affix: &str) -> GearCopy {
+    GearCopy {
+        affixes: vec![affix.into()],
+        ..GearCopy::plain(ItemId::from(item))
+    }
+}
+
+#[test]
+fn an_affix_granting_only_resistance_loads() {
+    let dir = affix_dir("affix_resist_only", &[("warding.ron", WARDING)]);
+    let (db, warnings) = load_affixes(&dir);
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.all().count(), 1);
+}
+
+#[test]
+fn an_affix_with_a_damage_type_is_skipped_with_a_warning() {
+    let dir = affix_dir(
+        "affix_typed",
+        &[(
+            "scorching.ron",
+            r#"(id: "scorching", prefix: Some("Scorching"), stats: (atk: 1, damage_type: Some(Thermal)))"#,
+        )],
+    );
+    let (db, warnings) = load_affixes(&dir);
+
+    assert_eq!(db.all().count(), 0, "the affix must be skipped");
+    assert_eq!(warnings.len(), 1, "warnings were {warnings:?}");
+    assert!(warnings[0].contains("scorching.ron"), "{}", warnings[0]);
+}
+
+#[test]
+fn copy_bonus_adds_an_affixs_resistance_and_never_scales_it() {
+    let game = warding_game(4130, "resist_scaling");
+    let plain = GearCopy::plain(ItemId::from("firewall_plating"));
+    assert_eq!(game.copy_bonus(&plain, 1).unwrap().resist.thermal, 0);
+
+    let copy = warded("firewall_plating", "warding");
+    assert_eq!(game.copy_bonus(&copy, 1).unwrap().resist.thermal, 20);
+
+    // Every scaling axis at once, against a control stat proving they acted.
+    let grown = GearCopy {
+        rarity: Rarity::Prismatic,
+        tier: 3,
+        quality: crate::tuning::QUALITY_MAX,
+        ..copy
+    };
+    let bonus = game.copy_bonus(&grown, 10).unwrap();
+    let base = game.copy_bonus(&plain, 1).unwrap();
+    assert!(
+        bonus.mitigation > base.mitigation,
+        "scaling acted on nothing"
+    );
+    assert_eq!(bonus.resist.thermal, 20);
+}
+
+#[test]
+fn gear_bonus_adds_resistance_across_slots_and_has_no_type() {
+    let mut game = warding_game(4131, "resist_slots");
+    let player = game.player_entity();
+    let armour = warded("firewall_plating", "warding");
+    let weapon = warded("arc_lance", "warding_small");
+    for copy in [&armour, &weapon] {
+        game.add_copies(copy, 1);
+        game.equip(player, copy).unwrap();
+    }
+
+    let total = game.gear_bonus(player);
+    assert_eq!(total.resist.thermal, 35);
+    assert_eq!(total.damage_type, None);
+}

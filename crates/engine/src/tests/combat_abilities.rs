@@ -1370,6 +1370,7 @@ fn ability_damage_scales_with_the_users_level() {
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Damage {
+            damage_type: None,
             power: 6,
             spread: 0,
             status: None,
@@ -2063,6 +2064,7 @@ fn a_damage_affinity_perk_uses_the_flat_rate_not_the_level_scaled_one() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let effect = AbilityEffect::Damage {
+        damage_type: None,
         power: 10,
         spread: 0,
         status: None,
@@ -2105,6 +2107,7 @@ fn a_player_affinity_perk_is_clamped_at_affinity_max() {
             AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED,
             8u32,
             AbilityEffect::Damage {
+                damage_type: None,
                 power: 10,
                 spread: 0,
                 status: None,
@@ -2206,6 +2209,7 @@ fn a_wild_carrier_gets_its_species_damage_affinity() {
     // initiative both move.
     let biter = super::support::spawn_wild_without_routine(&mut game, "test_biter", 3, 3);
     let effect = AbilityEffect::Damage {
+        damage_type: None,
         power: 6,
         spread: 0,
         status: None,
@@ -2475,6 +2479,7 @@ fn an_abilitys_spread_scales_with_its_centre() {
 fn converting_a_move_to_an_ability_keeps_its_range_exactly() {
     use crate::species::{MoveDef, basic_attack_ability};
     let mv = MoveDef {
+        damage_type: None,
         name: "Fray".into(),
         power: 9,
         spread: 4,
@@ -2561,6 +2566,7 @@ fn an_aimed_routine_lands_more_often_than_an_unaimed_one() {
                 description: "d".into(),
                 target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
                 effect: crate::abilities::AbilityEffect::Damage {
+                    damage_type: None,
                     power: 10,
                     spread: 0,
                     status: None,

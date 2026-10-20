@@ -454,6 +454,11 @@ pub enum AbilityEffect {
         spread: i32,
         #[serde(default)]
         status: Option<MoveEffect>,
+        /// The damage type this ability deals. Only a species move sets it
+        /// (through `basic_attack_ability`) until authored abilities gain
+        /// types.
+        #[serde(default)]
+        damage_type: Option<crate::damage::DamageType>,
     },
     Heal {
         /// The centre of the restored band — see `spread`.
@@ -1187,6 +1192,7 @@ impl AbilityDef {
                 power,
                 spread,
                 status,
+                ..
             } => (
                 crate::battle::DamageRange::centred(*power, *spread),
                 status.clone(),
@@ -1784,6 +1790,7 @@ pub fn effect_label(
             power,
             spread,
             status,
+            ..
         } => {
             let band = scaled_range(
                 crate::battle::DamageRange::centred(*power, *spread),
@@ -2035,6 +2042,7 @@ mod tests {
             power,
             spread,
             status,
+            ..
         } = def.charged(2, 3).effect
         else {
             panic!()
@@ -2629,6 +2637,7 @@ mod tests {
         );
         assert_eq!(
             AbilityEffect::Damage {
+                damage_type: None,
                 power: 6,
                 spread: 0,
                 status: None

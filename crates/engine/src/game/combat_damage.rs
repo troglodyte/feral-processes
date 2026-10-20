@@ -445,7 +445,7 @@ impl Game {
             let living: Vec<Entity> = side
                 .iter()
                 .copied()
-                .filter(|&e| self.creature_alive(e))
+                .filter(|&e| self.arc_candidate(e, defender))
                 .collect();
             return damage::next_in_order(&living, defender);
         }
@@ -455,7 +455,9 @@ impl Game {
             return crate::tactical::reach::recipients_in_cells(battle, defender, &ring)
                 .into_iter()
                 .filter(|&e| {
-                    e != defender && self.creature_alive(e) && self.acts_for_hostiles(e) == hostile
+                    e != defender
+                        && self.arc_candidate(e, defender)
+                        && self.acts_for_hostiles(e) == hostile
                 })
                 .min();
         }
@@ -468,12 +470,22 @@ impl Game {
                 .members
                 .iter()
                 .copied()
-                .filter(|&e| self.creature_alive(e))
+                .filter(|&e| self.arc_candidate(e, defender))
                 .collect()
         } else {
             self.living_party()
+                .into_iter()
+                .filter(|&e| self.arc_candidate(e, defender))
+                .collect()
         };
         damage::next_in_order(&order, defender)
+    }
+
+    /// Whether `e` can be named as the arc's neighbour: alive, and not
+    /// cloaked — a door that names a body filters the cloaked ones. The
+    /// defender itself stays in the order, which is what finds its place in it.
+    fn arc_candidate(&self, e: Entity, defender: Entity) -> bool {
+        self.creature_alive(e) && (e == defender || !self.is_cloaked(e))
     }
 
     /// The band `entity` swings for when nobody has told us which move it is

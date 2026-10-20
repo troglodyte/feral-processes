@@ -1296,6 +1296,15 @@ fn an_arc_skips_a_fallen_member_and_a_lone_target_gets_none() {
 }
 
 #[test]
+fn an_arc_never_names_a_cloaked_body() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 3);
+    game.arm_cloak(m[1], 3);
+    let (_, lost) = landed_volt_hit(&mut game, player, m[0], &m);
+    assert_eq!((lost[1], lost[2] > 0), (0, true), "the cloaked body is skipped");
+}
+
+#[test]
 fn with_no_battle_and_no_side_there_is_no_neighbour() {
     let mut game = typed_game();
     let a = game.spawn_wild_creature("glitch", 5, 5).unwrap();

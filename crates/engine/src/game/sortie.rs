@@ -697,7 +697,9 @@ impl Game {
                 self.use_ability(&ability, actor, &name, &recipients);
             }
             None => {
-                let swing = crate::battle::Swing::plain(self.natural_range_of(actor));
+                let profile = self.natural_profile_of(actor);
+                let swing =
+                    crate::battle::Swing::plain(profile.range).with_type(profile.damage_type);
                 self.resolve_and_apply_attack(actor, front, swing);
             }
         }

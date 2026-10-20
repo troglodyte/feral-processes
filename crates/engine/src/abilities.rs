@@ -1201,6 +1201,14 @@ impl AbilityDef {
         }
     }
 
+    /// The damage type of a direct-damage ability, `None` for anything else.
+    pub(crate) fn attack_type(&self) -> Option<crate::damage::DamageType> {
+        match &self.effect {
+            AbilityEffect::Damage { damage_type, .. } => *damage_type,
+            _ => None,
+        }
+    }
+
     /// Names the first field holding a NaN or infinity, if any. RON accepts
     /// bare `NaN`/`inf` literals and they survive every clamp downstream —
     /// cheaper to refuse the file at load than to defend every read. Same

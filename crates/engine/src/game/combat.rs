@@ -2,6 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
+use crate::damage::DamageType;
 use crate::game::kit::{self, Kit};
 use crate::tactical::TacticalBattle;
 use crate::tuning::{
@@ -70,6 +71,14 @@ impl std::fmt::Display for RoutineRefusal {
     }
 }
 
+/// What one body swings with: the band and the damage type, decided together
+/// by `Game::attack_profile`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AttackProfile {
+    pub range: battle::DamageRange,
+    pub damage_type: Option<DamageType>,
+}
+
 impl Game {
     /// The damage band `entity` actually swings for, given the `natural`
     /// range its move or ability authored.
@@ -88,12 +97,43 @@ impl Game {
         entity: Entity,
         natural: battle::DamageRange,
     ) -> battle::DamageRange {
+        self.attack_profile(entity, natural, None).range
+    }
+
+    /// The band and the damage type `entity` actually swings with, given the
+    /// `natural` band and type its move authored.
+    ///
+    /// **The one place weapon-versus-natural is decided, for both axes.** A
+    /// weapon that carries a band supplies the type as well, and a blade's
+    /// type is `None` even when the move it overrides has one — a worn
+    /// weapon is the wielder's whole attack. Unarmed, the move's own type
+    /// applies. `attack_range` is this with the type thrown away.
+    pub(crate) fn attack_profile(
+        &self,
+        entity: Entity,
+        natural: battle::DamageRange,
+        natural_type: Option<DamageType>,
+    ) -> AttackProfile {
         let worn = self.gear_bonus(entity).damage;
         if worn == battle::DamageRange::default() {
-            natural
+            AttackProfile {
+                range: natural,
+                damage_type: natural_type,
+            }
         } else {
-            worn
+            AttackProfile {
+                range: worn,
+                damage_type: self.weapon_damage_type(entity),
+            }
         }
+    }
+
+    /// The type of the weapon in `entity`'s weapon slot, `None` for a blade
+    /// or an empty hand. `gear_bonus` cannot answer this: a total of types
+    /// means nothing.
+    fn weapon_damage_type(&self, entity: Entity) -> Option<DamageType> {
+        let worn = self.world.get::<Equipment>(entity)?.weapon.clone()?;
+        self.worn_bonus(&worn)?.damage_type
     }
 
     /// What one swing of `actor`'s weapon lands on past the body it is aimed

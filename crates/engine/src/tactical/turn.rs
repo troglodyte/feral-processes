@@ -527,12 +527,16 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::TacticalFxQueue>()
                 .push(at, crate::resources::TacticalFxKind::Reaction);
-            let (move_name, _) = self.swing_move_at(reactor, Some(reach::distance(at, to)));
+            let rolled = self.swing_move_at(reactor, Some(reach::distance(at, to)));
+            let move_name = rolled.name;
             let range = self.natural_range_of(reactor);
+            let damage_type = self
+                .attack_profile(reactor, rolled.range, rolled.damage_type)
+                .damage_type;
             let outcome = self.resolve_and_apply_attack(
                 reactor,
                 mover,
-                crate::battle::Swing::reaction(range),
+                crate::battle::Swing::reaction(range).with_type(damage_type),
             );
             // **Through the model's own line builder**, so a reaction that
             // misses reads as a miss. A line written here would be a second
@@ -686,8 +690,10 @@ impl Game {
         }
 
         let round_before = self.world.resource::<TacticalBattle>().round;
-        let (move_name, natural) = self.swing_move_at(actor, Some(reach::distance(from, at)));
-        let range = self.attack_range(actor, natural);
+        let rolled = self.swing_move_at(actor, Some(reach::distance(from, at)));
+        let move_name = rolled.name;
+        let crate::game::combat::AttackProfile { range, damage_type } =
+            self.attack_profile(actor, rolled.range, rolled.damage_type);
 
         // A reach weapon sweeps its shape, converted by this model's own
         // converter: `reach::recipients` reads the aim as a *destination*
@@ -755,8 +761,11 @@ impl Game {
                         fx: bolt_fx.clone(),
                     });
             }
-            let outcome =
-                self.resolve_and_apply_attack(actor, body, crate::battle::Swing::plain(range));
+            let outcome = self.resolve_and_apply_attack(
+                actor,
+                body,
+                crate::battle::Swing::plain(range).with_type(damage_type),
+            );
             let line = self.party_swing_line(actor, &move_name, outcome);
             self.log_swing(
                 crate::resources::MessageKind::PartyDamage,

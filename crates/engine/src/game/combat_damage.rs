@@ -7,6 +7,7 @@
 //! is what makes that claim checkable by reading rather than by grepping.
 
 use crate::damage::{self, DamageType};
+use crate::game::combat::AttackProfile;
 use crate::game::kit::Kit;
 use crate::tactical::TacticalBattle;
 use crate::*;
@@ -337,11 +338,18 @@ impl Game {
     /// would spend a `GameRng` draw before the band roll and break every
     /// draw-count assertion `resolve_attack` carries.
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
+        self.natural_profile_of(entity).range
+    }
+
+    /// `natural_range_of` with the type a swing made without rolling a move
+    /// carries: the worn weapon's, or `None` — a first move's type is not
+    /// worn by a body that never rolled it.
+    pub(crate) fn natural_profile_of(&self, entity: Entity) -> AttackProfile {
         let natural = match self.kit_of(entity) {
             Kit::Unarmed => crate::tuning::PLAYER_UNARMED_DAMAGE,
             Kit::Innate(def) | Kit::Emulated { def, .. } => def.natural_range(),
         };
-        self.attack_range(entity, natural)
+        self.attack_profile(entity, natural, None)
     }
 
     /// Applies `dmg` to `target`, cut by `target`'s mitigation and floored

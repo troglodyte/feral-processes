@@ -51,6 +51,7 @@ mod depot_filter;
 mod derived;
 mod derived_programs;
 mod descriptions;
+mod dev_cheats;
 mod difficulty;
 mod disposition;
 mod drop_pods;

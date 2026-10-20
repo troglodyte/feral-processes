@@ -302,7 +302,12 @@ impl Game {
         // free.
         let mut site = BuildSite::new(def.id.clone(), build_cost);
         site.program = committed;
-        self.spawn_build_site(site, x, y);
+        let site = self.spawn_build_site(site, x, y);
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+            self.tick();
+            return Ok(());
+        }
         // Two sentences rather than one with an optional clause: the only
         // order that commits nothing is the Home, which never reaches this
         // line, so the `None` arm exists for a modded exempt structure and
@@ -317,6 +322,22 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Turns the dev free build on or off for this run: while on, a build
+    /// costs no materials and stands the moment it is placed. Not saved —
+    /// `DevFreeBuild` is never inserted by `new` or `load`.
+    #[doc(hidden)]
+    pub fn dev_set_free_build(&mut self, on: bool) {
+        self.world
+            .insert_resource(crate::resources::DevFreeBuild(on));
+    }
+
+    #[doc(hidden)]
+    pub fn dev_free_build(&self) -> bool {
+        self.world
+            .get_resource::<crate::resources::DevFreeBuild>()
+            .is_some_and(|dev| dev.0)
     }
 
     /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
@@ -533,7 +554,11 @@ impl Game {
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
             site.recipe = ruin.recipe;
-            self.spawn_build_site(site, ruin.x, ruin.y);
+            let site = self.spawn_build_site(site, ruin.x, ruin.y);
+            if self.dev_free_build() && !def.needs_program() {
+                self.finish_site_now(site);
+                continue;
+            }
             self.log_base(format!(
                 "Your crew marks out the {} wreck at ({}, {}) to be rebuilt.",
                 def.name, ruin.x, ruin.y
@@ -565,6 +590,9 @@ impl Game {
             .expect("checked above, and commit_for_build despawns only the program");
         build.program = committed;
         build.awaiting_program = false;
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+        }
         Ok(())
     }
 
@@ -1202,6 +1230,9 @@ impl Game {
         if tier >= upgrade.max_tier {
             return None;
         }
+        if self.dev_free_build() {
+            return Some(Vec::new());
+        }
         let next = tier + 1;
         Some(
             upgrade
@@ -1314,15 +1345,16 @@ impl Game {
         // Resolved now and carried on the site, `BuildSite::cost`'s reason:
         // a request filed against one price may not be silently repriced by
         // an edited def while the crew is already hauling to it.
-        let cost: Vec<(ItemId, u32)> = upgrade
-            .cost
-            .iter()
-            .map(|(item, qty)| (item.clone(), qty * next))
-            .collect();
+        let cost = self.upgrade_cost(structure).unwrap_or_default();
 
         let mut site = BuildSite::upgrade(kind.clone(), cost, next);
         site.program = committed;
-        self.world.spawn((site, pos));
+        let site = self.world.spawn((site, pos)).id();
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+            self.tick();
+            return Ok(());
+        }
         self.log_base(match committed_who {
             Some(who) => format!(
                 "You put the {} in for an upgrade to Mk{next} and commit {who} to it — \

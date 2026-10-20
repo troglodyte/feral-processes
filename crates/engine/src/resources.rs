@@ -2090,6 +2090,13 @@ pub struct Ruins(pub Vec<Ruin>);
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DevSieges(pub bool);
 
+/// A dev toggle: while `true`, a build costs no materials and stands the
+/// moment it is placed (`Game::dev_set_free_build`). Never saved and never
+/// inserted by `Game::new` or `load` — a captured save must not carry it —
+/// so absent means off.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct DevFreeBuild(pub bool);
+
 /// The next `components::ProgramId` to hand out. Advanced by
 /// `Game::roster_parts`, which is the only thing that mints one.
 ///

@@ -133,7 +133,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   hauling and banking treat it as a plain-copy store with no instance rule;
   a downed program's species, level, rarity, boss flag and condition make
   it instanced, so it needed the third store rather than a new rule bent
-  into the first one.
+  into the first one. It is not where research puts a program: that waits on
+  a Research Station and is racked by crew, so a full pack cannot stall it.
 - **`Game::extract_program` is the one door a downed program is spent
   through, and every refusal lands before anything is spent** — asserted
   per refusal, since a single test over one path passes against the others.

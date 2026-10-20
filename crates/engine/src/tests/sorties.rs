@@ -441,7 +441,7 @@ fn no_relay_means_no_board() {
 /// build currency, plus `bodies` idle staff on the roster.
 ///
 /// Returns the game, the id of the first site on the board, and the staff.
-fn a_base_ready_to_dispatch(
+pub(super) fn a_base_ready_to_dispatch(
     seed: u32,
     bodies: usize,
     provisions: u32,

@@ -285,6 +285,7 @@ mod tests {
                 standing_tool: None,
                 pod_charged: None,
                 incubating: Vec::new(),
+                study_yield: None,
             });
         }
         save::save_to_file(&path, &data).unwrap();

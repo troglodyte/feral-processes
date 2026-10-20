@@ -105,6 +105,16 @@ pub const IDLE_STAFF_RING_TILES: i32 = 3;
 /// a seeded test in an unrelated file.
 pub const IDLE_STAFF_STEP_TICKS: u64 = 6;
 
+/// How many labour passes a rack carrier may stand on one tile before it
+/// gives its program back to the shelter chain.
+///
+/// A carrier is held out of the posting pool for the whole trip, so a walk
+/// that only ever waits (the party in the one corridor, a body that never
+/// moves) would hold a body out of work for ever. Well past any queue a
+/// squeeze would clear, and short enough that a stuck body is not a
+/// permanent labour loss.
+pub const RACK_CARRY_PATIENCE_BEATS: u32 = 120;
+
 /// How many `IDLE_STAFF_STEP_TICKS` beats pass between the step offers a
 /// program standing at its amenity gets.
 ///

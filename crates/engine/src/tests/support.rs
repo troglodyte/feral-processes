@@ -1394,6 +1394,22 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     let pen = game
         .study_pen(station)
         .expect("research_node.ron declares studies");
+    // And a scratch rack for the gate's room check; the station's slot is
+    // emptied after each completion, standing in for the crew that would
+    // carry the program there.
+    let rack = game
+        .world
+        .spawn((
+            Structure {
+                kind: "quarantine_rack".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_002,
+            },
+            crate::components::Racked::default(),
+        ))
+        .id();
     for node in chain {
         if game.is_researched(&node) {
             continue;
@@ -1429,9 +1445,13 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
             game.is_researched(&node),
             "the fixture must actually land {node}"
         );
+        game.world
+            .entity_mut(station)
+            .remove::<crate::components::StudyYield>();
     }
     game.world.despawn(shelf);
     game.world.despawn(station);
+    game.world.despawn(rack);
 }
 
 /// Stands the party in base space with a Research Node deployed, which is the

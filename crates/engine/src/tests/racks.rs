@@ -227,7 +227,7 @@ use crate::components::{CarryingProgram, Hopper, Task, TaskKind};
 /// A staffed, lit Teardown Rig at (3,3) with a Quarantine Rack at (3,2)
 /// holding `racked` carriers, and the rig hand-loaded once so it has a
 /// standing tool. Returns `(game, rig, rack, worker)`.
-fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
+pub(super) fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
     let mut game = Game::new(4220, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base_at(&mut game, 3, 4);
     let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
@@ -374,10 +374,10 @@ fn destroying_the_rig_by_damage_returns_the_carrier() {
     assert_eq!(shelf_of(&game, rack), vec![201]);
 }
 
-/// With no rack left to take it, the carrier goes to the player's own store
-/// rather than being dropped.
+/// With no rack left to take it, the carrier is set on the floor rather than
+/// dropped, and the player's pack is not touched.
 #[test]
-fn a_returned_carrier_falls_back_to_the_players_store() {
+fn a_returned_carrier_with_no_rack_is_set_on_the_floor() {
     let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
     game.tick();
     // Despawned rather than removed through the door: `remove_structure`
@@ -388,9 +388,12 @@ fn a_returned_carrier_falls_back_to_the_players_store() {
     game.remove_structure(rig).unwrap();
     assert!(game.world.get::<CarryingProgram>(worker).is_none());
     assert!(
-        pack_of(&game).contains(&201),
+        game.floor_items()
+            .iter()
+            .any(|f| f.look == crate::views::FloorLook::Program),
         "the kill survives the machine"
     );
+    assert!(!pack_of(&game).contains(&201), "and the pack is not used");
 }
 
 #[test]
@@ -410,4 +413,42 @@ fn an_in_transit_carrier_survives_save_and_load() {
         .find_map(|e| e.get::<CarryingProgram>())
         .expect("the trip survives quitting mid-walk");
     assert_eq!(held.0.level, 201);
+}
+
+/// Rack room a held or carried program has been promised is not the player's
+/// to fill: the next completion's gate counted on it.
+#[test]
+fn a_put_into_room_promised_to_a_carried_program_is_refused() {
+    let (mut game, rack) = player_beside_a_rack(1, 7);
+    let carrier = spawn_tamed(&mut game, 100, 3);
+    game.world
+        .entity_mut(carrier)
+        .insert(crate::components::CarryingProgram(program(50)));
+    let before = shelf_of(&game, rack);
+
+    game.transfer_items_at(adjacent_at(&game), &TransferBasket::carriers(&[0]));
+
+    assert_eq!(pack_of(&game), vec![1], "the pack is untouched");
+    assert_eq!(shelf_of(&game, rack), before, "and so is the shelf");
+}
+
+/// A fetcher whose rig lost its tool after the pickup has nowhere to put
+/// the program, and with no other work wanted nothing re-matches it: it must
+/// hand the kill back rather than stand holding it for ever.
+#[test]
+fn a_fetcher_at_a_rig_with_no_tool_shelters_its_program() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    game.remove_rig_tool(rig).unwrap();
+
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(
+        shelf_of(&game, rack),
+        vec![201],
+        "the kill is back on a rack"
+    );
 }

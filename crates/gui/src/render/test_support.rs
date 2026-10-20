@@ -392,6 +392,7 @@ pub(super) fn app_in_base_with_an_extractor(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -485,6 +486,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     // And a Research Node with no project, so the same corner has a research
     // line to hide in the two places it is not drawn.
@@ -507,6 +509,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &assets_dir).unwrap()

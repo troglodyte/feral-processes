@@ -1324,21 +1324,24 @@ impl Game {
             return None;
         }
         // `settle_research`'s own order (decision 5): no subject pinned,
-        // then no room for the downed program, then the materials. A
-        // subject-gated project can lose its pin after selection — a
-        // battle refusing `abandon_research` (M1), a second Station
-        // resolving first, or the subject simply walking off the pen — and
-        // with a full bill on the shelves this was the only surface left
-        // with nothing to say, so the HUD read "Earning n/cost" forever.
+        // then the station's slot and rack room for the downed program, then
+        // the materials. A subject-gated project can lose its pin after
+        // selection — a battle refusing `abandon_research` (M1), a second
+        // Station resolving first, or the subject simply walking off the
+        // pen — and with a full bill on the shelves this was the only
+        // surface left with nothing to say, so the HUD read "Earning
+        // n/cost" forever.
         if def.requires_subject && self.pinned_subject().is_none() {
             return Some("a subject pinned in the Research Station's pen".to_string());
         }
-        // `settle_research`'s own order: a subject-gated project with a full
-        // `DownedPrograms` store is exactly as stalled as one short a
-        // material, and reported the same way rather than through a second
-        // surface — see decision 5's ordering.
-        if def.requires_subject && self.downed_programs_full() {
-            return Some("room for another downed program".to_string());
+        // `settle_research`'s own order: a subject-gated project with
+        // nowhere to put what the subject becomes is exactly as stalled as
+        // one short a material, and reported the same way rather than
+        // through a second surface — see decision 5's ordering.
+        if def.requires_subject
+            && let Some(reason) = self.study_yield_blocker()
+        {
+            return Some(reason.to_string());
         }
         def.materials
             .iter()
@@ -1346,23 +1349,14 @@ impl Game {
             .map(|(item, _)| self.item_name(item).to_string())
     }
 
-    /// Whether `components::DownedPrograms` has no room left —
-    /// `push_downed_program`'s own gate, read early by `settle_research` and
-    /// `research_material_shortfall` so a subject is never spent into a full
-    /// store to discover the push failed afterward.
-    fn downed_programs_full(&self) -> bool {
-        self.world
-            .get::<DownedPrograms>(self.player_entity())
-            .is_some_and(|held| held.0.len() >= crate::tuning::MAX_DOWNED_PROGRAMS)
-    }
-
     /// One tick of the completion check: a project finishes when it has the
-    /// progress, a subject if it needs one, room to hold what the subject
-    /// becomes, and the base can pay the whole bill off its shelves.
+    /// progress, a subject if it needs one, somewhere to put what the subject
+    /// becomes (`study_yield_blocker`), and the base can pay the whole bill off its shelves.
     ///
     /// The whole gate is one early-return `||`, and the order is load-bearing
-    /// (decision 5): `progress < cost`, then no subject pinned, then no room
-    /// for the downed program the subject becomes, then the materials. The
+    /// (decision 5): `progress < cost`, then no subject pinned, then the station's
+    /// slot or rack room for the downed program the subject becomes, then the
+    /// materials. The
     /// short-circuit is what stops a subject-gated project spending its
     /// subject — or its materials — on one that is still half-researched,
     /// `a_full_bill_alone_does_not_complete_a_project`'s failure with a worse
@@ -1509,7 +1503,7 @@ impl Game {
             .flatten();
         if progress < def.cost
             || (def.requires_subject && subject.is_none())
-            || (def.requires_subject && self.downed_programs_full())
+            || (def.requires_subject && self.study_yield_blocker().is_some())
             || !crate::game::base::stock::spend_bill_from_base(
                 self,
                 &def.materials,
@@ -1519,22 +1513,23 @@ impl Game {
             return;
         }
         // The conversion: two existing doors and no new function.
-        // `downed_program_for_with_overkill(subject, 0.0)` reads `overkill_
-        // term`'s own identity value, so the condition roll is best-case — a
-        // controlled dissection beats overkilling something in the field.
-        // The room check just above guarantees `push_downed_program`
-        // succeeds; despawning unconditionally after it would eat the body
-        // even on the refusal this repo has already recorded elsewhere.
-        if let Some(subject) = subject {
+        // `downed_program_for_with_overkill(subject, 0.0)` reads
+        // `overkill_term`'s own identity value, so the condition roll is
+        // best-case — a controlled dissection beats overkilling something in
+        // the field. The program is left standing at the station whose pen
+        // held the subject, never in the player's pack; the gate just above
+        // guarantees the slot is empty and a rack will have room for it.
+        if let Some(subject) = subject
+            && let Some(station) = self.study_station()
+        {
             let name = self.creature_label(subject);
             let departing = self
                 .world
                 .get::<crate::components::ProgramId>(subject)
                 .copied()
                 .map(|id| (id, self.creature_short_label(subject)));
-            if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0)
-                && self.push_downed_program(program)
-            {
+            if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0) {
+                self.hold_at_station(station, program);
                 self.world.despawn(subject);
                 if let Some((id, short)) = departing {
                     self.note_departure(id, &short, crate::bonds::Departure::LetGo);

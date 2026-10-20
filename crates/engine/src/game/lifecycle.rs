@@ -1185,6 +1185,13 @@ impl Game {
             if def.racks.is_some() {
                 entity.insert(crate::components::Racked(s.racked.clone()));
             }
+            // Not gated on the def, unlike the two above: a held program is
+            // a kill, and a structure that has merely stopped studying would
+            // otherwise eat it. (A structure whose def is gone altogether is
+            // skipped at the top of this loop, with everything on it.)
+            if s.study_yield.is_some() {
+                entity.insert(crate::components::StudyYield(s.study_yield.clone()));
+            }
             // And again for the bay. Never shrunk below what the save holds:
             // a retune that cut `incubation_slots` — to zero included — must
             // not eat a child.
@@ -2989,6 +2996,7 @@ impl Game {
             Option<&crate::components::DropPod>,
             Option<&crate::components::Incubator>,
             Option<&crate::components::MachineRecipe>,
+            Option<&crate::components::StudyYield>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
@@ -3008,6 +3016,7 @@ impl Game {
             pod,
             incubator,
             recipe,
+            study_yield,
         ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -3035,6 +3044,7 @@ impl Game {
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
                 build_quality: quality.map_or(1.0, |q| q.0),
                 racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
+                study_yield: study_yield.and_then(|y| y.0.clone()),
                 pod_charged: pod.map(|p| p.charged),
                 incubating: incubator.map(|i| i.slots.clone()).unwrap_or_default(),
             });

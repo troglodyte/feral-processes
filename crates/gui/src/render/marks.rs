@@ -685,7 +685,7 @@ pub(super) fn outline_open(
 const PIN_MARK_SIDE: f32 = 0.20;
 
 /// The pin mark's own colour. Plain red, outside `hud::palette`'s role
-/// table for `render/base.rs::STATION_FLOOR_FILL`'s own reason: the palette
+/// table for `render/base.rs::STRUCTURE_FLOOR_FILL`'s own reason: the palette
 /// is addressed by role and neither reserved red fits here. `THREAT` is
 /// hostility and inbound harm, which a program under study is not — the
 /// corner census in `render/base.rs`'s tests is the proof of exactly that —
@@ -699,7 +699,7 @@ pub(super) const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
 ///
 /// Flush against the tile-edge ring rather than inset like every other
 /// mark in this file: a Station's floor cell never draws `outline_open`
-/// (`render/base.rs::STATION_FLOOR_FILL`'s doc), so there is no wall here
+/// (`render/base.rs::STRUCTURE_FLOOR_FILL`'s doc), so there is no wall here
 /// for a flush square to read as painting back in. That flush seat is also
 /// what keeps these apart from the nemesis and patrol marks, which are the
 /// same shape a `IDENTITY_MARK_INSET` further in.

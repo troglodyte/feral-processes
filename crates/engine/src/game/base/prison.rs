@@ -605,10 +605,9 @@ impl Game {
 
     /// A destroyed or demolished cell lets its prisoner go: the body
     /// despawns and its record goes back to the player's list, the protocol
-    /// lost. `CarryingProgram`'s rule (`return_carried_program`): destruction
-    /// returns the program rather than eating it, and the store being full
-    /// logs the loss through `push_downed_program`. A no-op for a structure
-    /// that holds nobody, so every destruction door can call it.
+    /// lost. The store being full logs the loss through
+    /// `push_downed_program`. A no-op for a structure that holds nobody, so
+    /// every destruction door can call it.
     pub(crate) fn release_prisoner(&mut self, structure: Entity) {
         let Some(prisoner) = self.cell_prisoner(structure) else {
             return;

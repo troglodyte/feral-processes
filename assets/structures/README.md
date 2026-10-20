@@ -760,7 +760,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // structure can hold a tamed program *under study*, in the footprint
     // cell diagonally opposite the anchor (see `Game::study_pen`) —
     // `footprint * footprint > 1` for that cell to exist at all. This is
-    // the Research Station's own field.
+    // the Research Station's own field. A finished subject-gated project
+    // leaves its downed program standing here (`StudyYield`, one slot, saved
+    // on the structure) until an idle program carries it to a Quarantine
+    // Rack; the player's pack is never used. The station is not a rack.
     studies: true,
 
     // Optional; can be left out entirely (defaults to false). Whether this

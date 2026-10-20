@@ -36,9 +36,10 @@ const BUILD_SITE_FILL: Color = Color::new(0.30, 0.30, 0.32, 1.0);
 const BUILD_SITE_EDGE: Color = Color::new(0.16, 0.16, 0.18, 1.0);
 const BUILD_SITE_EDGE_PX: f32 = 2.0;
 
-/// A Research Station's own three walkable floor cells — dark yellow/brown,
-/// and outside `hud::palette` for `BUILD_SITE_FILL`'s own reason: the
-/// palette is addressed by role and has no word for "a lab's own floor".
+/// A multi-cell structure's walkable non-anchor floor cells — dark
+/// yellow/brown, and outside `hud::palette` for `BUILD_SITE_FILL`'s own
+/// reason: the palette is addressed by role and has no word for "a
+/// machine's own floor".
 ///
 /// **Drawn with no biome pattern and no outline.** `marks::outline_open`
 /// already owns the tile-edge ring, drawing a machine's walls as 2px lines
@@ -46,7 +47,7 @@ const BUILD_SITE_EDGE_PX: f32 = 2.0;
 /// specifically so nothing reads as painting one of those absent lines back
 /// in — keeping this fill flat and unringed is what leaves the ring
 /// available for the pin marks (`marks::pin_mark_rects`) instead.
-const STATION_FLOOR_FILL: Color = Color::new(0.30, 0.23, 0.09, 1.0);
+const STRUCTURE_FLOOR_FILL: Color = Color::new(0.30, 0.23, 0.09, 1.0);
 
 /// The Excavation plan's three washes, all one hue so a plan reads as one
 /// thing. A committed mark's fill is dim enough to walk over without the
@@ -734,7 +735,7 @@ fn draw_surface_map(
     // `Vec` per tile inside this loop cost ~2,500 `QueryState`
     // constructions and ~1,250 allocations a frame at a typical pane's tile
     // count — `view_finishes_at`'s own precedent, read once here instead.
-    let station_floor = game.view_station_floor_at(center, hw, hh);
+    let structure_floor = game.view_structure_floor_at(center, hw, hh);
     let pinned = game.view_pinned_at(center, hw, hh);
     // Same indexing again. Everywhere off the surface this is all `InSight`,
     // so nothing below carries a locale check of its own.
@@ -1112,22 +1113,22 @@ fn draw_surface_map(
                 }
                 draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig, cloud);
             }
-            // A Research Station's own floor — one of its three non-anchor
+            // A multi-cell structure's own floor — one of its non-anchor
             // footprint cells — takes a flat fill over whatever biome was
             // just drawn underneath. Checked only in base space:
-            // `Game::view_station_floor_at` reads base-space `Position`s, so
-            // asking it on the zone surface would draw a lab floor over
+            // `Game::view_structure_floor_at` reads base-space `Position`s, so
+            // asking it on the zone surface would draw a structure floor over
             // ground these coordinates happen to share only by numeric
             // accident — the same cross-space aliasing `show_effects` and
-            // `cutting` already refuse. `station_floor` is `view_tiles_at`'s
+            // `cutting` already refuse. `structure_floor` is `view_tiles_at`'s
             // own indexing, read once above rather than requeried here.
-            if base_pos.is_some() && station_floor[ry][rx] {
+            if base_pos.is_some() && structure_floor[ry][rx] {
                 painter.rect(
                     cell.x,
                     cell.y,
                     cell.w,
                     cell.h,
-                    at_level(STATION_FLOOR_FILL, vig),
+                    at_level(STRUCTURE_FLOOR_FILL, vig),
                 );
             }
             // Under structures and above the floor, so a room reads as a
@@ -1463,12 +1464,12 @@ fn draw_surface_map(
             // A body under study wears four small red squares on the
             // tile-edge ring — `marks::draw_pin_marks`'s own doc has the
             // geometry.
-            // Base-space only, `view_station_floor_at`'s own reason above.
+            // Base-space only, `view_structure_floor_at`'s own reason above.
             // **`marker` gates the top-left corner here too**, extending
             // this same "the Alt marker borrows the top-left corner" rule
             // rather than inventing a second arbitration between the two —
             // see `corner_marker`'s doc. `pinned` is read once above,
-            // `station_floor`'s own reason.
+            // `structure_floor`'s own reason.
             if base_pos.is_some() && pinned[ry][rx] != PinMark::Unpinned {
                 draw_pin_marks(painter, px, py, tile_px, marker, vig);
             }
@@ -2703,6 +2704,7 @@ mod tests {
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
         save::save_to_file(&path, &data).unwrap();
         app.game = Some(Game::load(&path, &test_assets()).unwrap());
@@ -6579,6 +6581,7 @@ mod tests {
                 standing_tool: None,
                 pod_charged: None,
                 incubating: Vec::new(),
+                study_yield: None,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         Game::load(&path, &test_assets()).unwrap()
@@ -6855,28 +6858,28 @@ mod tests {
         assert_eq!(with, without + 1);
     }
 
-    /// Whether a painted fill is `STATION_FLOOR_FILL`, up to the vignette's
+    /// Whether a painted fill is `STRUCTURE_FLOOR_FILL`, up to the vignette's
     /// own scaling and `Color32`'s rounding — a hue-only match rather than an
     /// exact one, since exactly which tile the camera happens to centre on
     /// moves `vig` by a fraction of a percent. `BUILD_SITE_FILL`'s grey and
     /// `Biome::Platform`'s dark navy both sit far enough from this hue that
     /// the tolerance cannot mistake either for it.
-    fn is_station_floor_fill(c: bevy_egui::egui::Color32) -> bool {
+    fn is_structure_floor_fill(c: bevy_egui::egui::Color32) -> bool {
         let close = |ch: u8, target: f32| ((ch as f32) - target * 255.0).abs() < 12.0;
         c.a() == 255
-            && close(c.r(), STATION_FLOOR_FILL.r)
-            && close(c.g(), STATION_FLOOR_FILL.g)
-            && close(c.b(), STATION_FLOOR_FILL.b)
+            && close(c.r(), STRUCTURE_FLOOR_FILL.r)
+            && close(c.g(), STRUCTURE_FLOOR_FILL.g)
+            && close(c.b(), STRUCTURE_FLOOR_FILL.b)
     }
 
     /// The three non-anchor footprint cells of a standing Research Station
-    /// take `STATION_FLOOR_FILL`; the anchor — which draws the structure's
-    /// own tile and glyph — never does. A plain Home (footprint 1,
-    /// `studies: false`) draws no floor cell at all, the ordinary case the
+    /// take `STRUCTURE_FLOOR_FILL`; the anchor — which draws the structure's
+    /// own tile and glyph — never does. A plain Home (footprint 1) draws no
+    /// floor cell at all, the ordinary case the
     /// render path can reach; the genuinely legacy case (a bare-spawned 1x1
     /// Research Node predating this task) has no door in from outside the
     /// engine crate and is pinned at the engine level instead, in
-    /// `tests/building.rs::view_station_floor_at_excludes_a_bare_spawned_
+    /// `tests/building.rs::view_structure_floor_at_excludes_a_bare_spawned_
     /// nodes_own_anchor`.
     #[test]
     fn a_research_stations_floor_takes_the_fill_and_its_anchor_does_not() {
@@ -6904,7 +6907,7 @@ mod tests {
             painted_fills_and_strokes(shapes)
                 .0
                 .into_iter()
-                .filter(|c| is_station_floor_fill(*c))
+                .filter(|c| is_structure_floor_fill(*c))
                 .count()
         };
         assert_eq!(
@@ -6938,7 +6941,7 @@ mod tests {
         assert_eq!(
             floor_fills(&without_station),
             0,
-            "a structure with no `studies` footprint draws no floor cells at all"
+            "a footprint-1 structure draws no floor cells at all"
         );
     }
 
@@ -6997,6 +7000,7 @@ mod tests {
                 standing_tool: None,
                 pod_charged: Some(charged),
                 incubating: Vec::new(),
+                study_yield: None,
             });
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
         app.game = Some(Game::load(&path, &test_assets()).unwrap());

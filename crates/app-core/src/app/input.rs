@@ -272,6 +272,8 @@ impl App {
             Mode::BattleEmulate => self.handle_battle_emulate_key(key),
             Mode::Build => self.handle_build_key(key),
             Mode::DevConsole => self.handle_dev_console_key(key),
+            Mode::DevItemPicker => self.handle_dev_item_picker_key(key),
+            Mode::DevZonePicker => self.handle_dev_zone_picker_key(key),
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::BuildProgram => self.handle_build_program_key(key),
             Mode::PinSubject => self.handle_pin_subject_key(key),

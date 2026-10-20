@@ -1682,6 +1682,13 @@ pub enum Mode {
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
+    /// Every plain item, off the dev keypad's `Give item` row. A pick adds
+    /// ten and the picker stays open; `menu_selected` is the scroll offset.
+    /// Esc returns to the keypad.
+    DevItemPicker,
+    /// The next zones ahead, off the keypad's `Warp to zone` row. A pick
+    /// runs the real breach forward and closes to the map.
+    DevZonePicker,
     Craft,
     CraftQuantity,
     /// A hand-compile in flight — `Game::begin_hand_craft` has armed
@@ -2434,6 +2441,8 @@ impl Mode {
             | Mode::Playing
             // Opened from the map only, so it never layers over a fight.
             | Mode::DevConsole
+            | Mode::DevItemPicker
+            | Mode::DevZonePicker
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram

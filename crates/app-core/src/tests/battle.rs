@@ -16,7 +16,7 @@ use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
 /// member, and several tests below are about what the UI does with exactly
 /// one group. Multi-group behaviour belongs to the engine's own tests,
 /// which can build a pack directly instead of fishing for a seed.
-fn battling_app() -> App {
+pub(super) fn battling_app() -> App {
     battling_app_with(|_| {})
 }
 

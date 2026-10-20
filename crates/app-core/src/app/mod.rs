@@ -16,6 +16,8 @@ mod crafting;
 pub(crate) mod creation;
 pub(crate) mod depot_filter;
 pub(crate) mod dev_console;
+mod dev_item_picker;
+mod dev_zone_picker;
 pub(crate) mod dispatch;
 mod ending;
 pub(crate) mod excavate;

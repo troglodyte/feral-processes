@@ -1389,6 +1389,35 @@ fn a_narrow_swing_reaps_a_non_front_body_its_arc_killed() {
 }
 
 #[test]
+fn an_ability_skips_a_recipient_an_earlier_arc_already_killed() {
+    let mut checked = 0;
+    for stream in 0..200u64 {
+        let mut game = typed_game();
+        let (player, m) = wild_group(&mut game, 3);
+        game.world.get_mut::<Stats>(m[1]).unwrap().hp = 1;
+        let ability = game
+            .world
+            .resource::<SpeciesDb>()
+            .get("glitch")
+            .unwrap()
+            .basic_attacks()
+            .remove(0);
+        reseed_rng(&mut game, stream);
+        let first = hp(&game, m[0]);
+        game.use_ability(&ability, player, "You", &[m[0], m[1]]);
+        if hp(&game, m[0]) < first && !game.creature_alive(m[1]) {
+            checked += 1;
+            let swings = log_texts(&game)
+                .iter()
+                .filter(|l| l.starts_with("You "))
+                .count();
+            assert_eq!(swings, 1, "the dead recipient was swung at");
+        }
+    }
+    assert!(checked > 0, "no stream landed the first swing");
+}
+
+#[test]
 fn the_abstract_party_arcs_to_the_next_slot_and_wraps() {
     let mut game = typed_game();
     let player = game.player_entity();

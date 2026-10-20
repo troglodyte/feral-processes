@@ -620,6 +620,11 @@ impl Game {
             if index > 0 && !self.creature_alive(entity) {
                 break;
             }
+            // Swept before any swing landed, so an arc from an earlier body
+            // can have killed this one already.
+            if index > 0 && !self.creature_alive(body) {
+                continue;
+            }
             // Every body takes its own `resolve_and_apply_attack` with the
             // same band — no new damage path, so mitigation, affinity and
             // every rung of the fumble ladder hold for free, and the ladder
@@ -1710,6 +1715,11 @@ impl Game {
             MessageKind::Heal
         };
         for &recipient in recipients {
+            // The list was built before the first swing, and a Voltage arc
+            // from an earlier recipient can have killed this one.
+            if !self.creature_alive(recipient) {
+                continue;
+            }
             // A buff can land on the player or on a companion, so the log
             // names whoever got it rather than assuming "you".
             let on = self.target_label(recipient);

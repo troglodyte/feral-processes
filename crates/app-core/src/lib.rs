@@ -2824,10 +2824,10 @@ pub struct App {
     ///
     /// Always a group menu.
     menu_origin: Option<Mode>,
-    /// The screen last on screen in each hub, indexed by `Hub::slot`, so `b`
-    /// and `i` reopen where the player left off (`HubKind::remembers`). `None` until a hub has
-    /// been opened, which lands on the base's Overview, the inventory's Items
-    /// or the party's Companions.
+    /// The screen last on screen in each hub that `HubKind::remembers`,
+    /// indexed by `Hub::slot`, so `b` and `i` reopen where the player left
+    /// off. `None` until a hub has been opened, which lands on its first
+    /// page.
     hub_last: [Option<Mode>; Hub::ALL.len()],
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.

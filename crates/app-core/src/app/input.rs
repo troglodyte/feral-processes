@@ -447,8 +447,10 @@ impl App {
         if self.mode != mode_before && self.mode == Mode::Perks {
             self.refresh_perk_previews();
         }
-        // Every hub screen is reopened from where the player last was.
-        if let Some((hub, ..)) = self.hub_at() {
+        // A hub that remembers is reopened where the player last was.
+        if let Some((hub, ..)) = self.hub_at()
+            && hub.kind().remembers()
+        {
             self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The structure hub is only open while a mode of its own is up; any

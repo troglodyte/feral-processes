@@ -151,10 +151,10 @@ impl HubKind for StructureHubKind {
 
 impl App {
     /// `[c]`: the hub for the structures beside the party, on the first
-    /// clockwise from north and its first page, cursor on the rail —
-    /// `App::open_hub`'s rule. With no
-    /// structure beside, the pack's downed programs alone open the transfer
-    /// screen; the caller has already refused when there is nothing at all.
+    /// clockwise from north, opened by `App::open_hub` like any other. With
+    /// no structure beside, the pack's downed programs alone open the
+    /// transfer screen; the caller has already refused when there is nothing
+    /// at all.
     pub(crate) fn open_structure_hub(&mut self) {
         let Some(game) = &self.game else { return };
         let cycle = game.adjacent_structures();
@@ -163,8 +163,7 @@ impl App {
             return;
         }
         self.structure_hub = Some(StructureHub { cycle, at: 0 });
-        self.enter_structure_page(0);
-        self.hub_on_rail = true;
+        self.open_hub(Hub::Structure);
     }
 
     /// Opens the current structure's `page`th page: the screen's own opener,

@@ -27,8 +27,8 @@ pub trait HubKind: Sync {
         (self.title().to_string(), String::new())
     }
 
-    /// The fixed rail, in order, which `hub_of` and the reopen memory read.
-    /// Empty for a hub whose pages depend on the `App`.
+    /// The fixed rail, in order, which `hub_of` answers from without an
+    /// `App`. Empty for a hub whose pages depend on the `App`.
     fn table(&self) -> &'static [HubPage] {
         &[]
     }
@@ -126,17 +126,14 @@ impl App {
     }
 
     /// `hub_at` for another mode, for the popups drawn over a hub screen
-    /// (`base_popup_parent`). A screen in a hub with no fixed table counts
-    /// only while that hub's pages offer it, so the modes the structure hub
-    /// borrows (`Transfer`, `BuildProgram`) are plain screens the rest of
-    /// the time.
+    /// (`base_popup_parent`). Read off each hub's pages as they stand, so a
+    /// screen in a hub whose pages depend on the `App` counts only while
+    /// they offer it — the modes the structure hub borrows (`Transfer`,
+    /// `BuildProgram`) are plain screens the rest of the time.
     pub fn hub_for(&self, mode: Mode) -> Option<(Hub, usize, usize)> {
-        hub_of(mode).or_else(|| {
-            Hub::ALL
-                .into_iter()
-                .filter(|hub| hub.kind().table().is_empty())
-                .find_map(|hub| find_in(hub, hub.kind().pages(self).into_iter(), mode))
-        })
+        Hub::ALL
+            .into_iter()
+            .find_map(|hub| find_in(hub, hub.kind().pages(self).into_iter(), mode))
     }
 
     /// Opens `hub` where the player left it, or on its first page the first

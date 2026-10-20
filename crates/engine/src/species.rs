@@ -70,7 +70,7 @@ pub struct MoveDef {
     pub ranged: bool,
     /// The type of damage this move deals; `None` is ordinary damage. A
     /// worn weapon overrides it, as it overrides the band — see
-    /// `Game::swing_move_at`.
+    /// `Game::attack_profile`.
     #[serde(default)]
     pub damage_type: Option<crate::damage::DamageType>,
 }
@@ -447,6 +447,12 @@ impl SpeciesDef {
         self.moves
             .first()
             .map_or(crate::tuning::PLAYER_UNARMED_DAMAGE, |mv| mv.range())
+    }
+
+    /// The damage type of the move `natural_range` reads: the type follows
+    /// the band.
+    pub fn natural_type(&self) -> Option<crate::damage::DamageType> {
+        self.moves.first().and_then(|mv| mv.damage_type)
     }
 
     /// This species' catalogue Analysis: its authored `analysis` base, or the

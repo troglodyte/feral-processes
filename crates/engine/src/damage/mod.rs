@@ -52,6 +52,16 @@ impl Resistances {
             DamageType::Radiation => self.radiation,
         }
     }
+    /// Every resistance multiplied by `n`: a stacked affix counts `n` times.
+    pub fn times(self, n: i32) -> Resistances {
+        Resistances {
+            thermal: self.thermal * n,
+            magnetic: self.magnetic * n,
+            noise: self.noise * n,
+            voltage: self.voltage * n,
+            radiation: self.radiation * n,
+        }
+    }
 }
 
 impl Add for Resistances {
@@ -63,19 +73,6 @@ impl Add for Resistances {
             noise: self.noise + o.noise,
             voltage: self.voltage + o.voltage,
             radiation: self.radiation + o.radiation,
-        }
-    }
-}
-
-impl Resistances {
-    /// Every resistance multiplied by `n`: a stacked affix counts `n` times.
-    pub fn times(self, n: i32) -> Resistances {
-        Resistances {
-            thermal: self.thermal * n,
-            magnetic: self.magnetic * n,
-            noise: self.noise * n,
-            voltage: self.voltage * n,
-            radiation: self.radiation * n,
         }
     }
 }

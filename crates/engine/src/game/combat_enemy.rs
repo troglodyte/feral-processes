@@ -279,7 +279,7 @@ impl Game {
         let targets_companion = target != player;
 
         // A wild program can be wearing gear, so its swing goes through
-        // `attack_range` like anybody else's.
+        // `attack_profile` like anybody else's.
         let profile = self.attack_profile(wild, range, mv.attack_type());
         let outcome = self.resolve_and_apply_attack(
             wild,

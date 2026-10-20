@@ -341,15 +341,17 @@ impl Game {
         self.natural_profile_of(entity).range
     }
 
-    /// `natural_range_of` with the type a swing made without rolling a move
-    /// carries: the worn weapon's, or `None` — a first move's type is not
-    /// worn by a body that never rolled it.
+    /// `natural_range_of` with the type that goes with the band: the first
+    /// move's, or the worn weapon's band and type (a blade's `None`
+    /// included) when one is worn. The type follows the band.
     pub(crate) fn natural_profile_of(&self, entity: Entity) -> AttackProfile {
-        let natural = match self.kit_of(entity) {
-            Kit::Unarmed => crate::tuning::PLAYER_UNARMED_DAMAGE,
-            Kit::Innate(def) | Kit::Emulated { def, .. } => def.natural_range(),
+        let (natural, natural_type) = match self.kit_of(entity) {
+            Kit::Unarmed => (crate::tuning::PLAYER_UNARMED_DAMAGE, None),
+            Kit::Innate(def) | Kit::Emulated { def, .. } => {
+                (def.natural_range(), def.natural_type())
+            }
         };
-        self.attack_profile(entity, natural, None)
+        self.attack_profile(entity, natural, natural_type)
     }
 
     /// Applies `dmg` to `target`, cut by `target`'s mitigation and floored

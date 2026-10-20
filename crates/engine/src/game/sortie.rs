@@ -663,7 +663,7 @@ impl Game {
     /// path reads `BattleState`, and it exists to make fights against *the
     /// player* interesting — off-screen it would be modelling an audience
     /// that is not present.
-    fn swing_for_the_squad(&mut self, actor: Entity, front: Entity, targets: &[Entity]) {
+    pub(crate) fn swing_for_the_squad(&mut self, actor: Entity, front: Entity, targets: &[Entity]) {
         let choice = self
             .actor_abilities(actor)
             .into_iter()

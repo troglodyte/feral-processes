@@ -915,7 +915,7 @@ impl Game {
                     evasion: acc.evasion + mods.evasion,
                     deflection: acc.deflection + mods.deflection,
                     // A total of types means nothing; the wielded weapon's
-                    // type is read from the weapon slot (`swing_move_at`).
+                    // type is read from the weapon slot (`Game::attack_profile`).
                     damage_type: None,
                     resist: acc.resist + mods.resist,
                 }

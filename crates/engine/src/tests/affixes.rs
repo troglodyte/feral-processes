@@ -864,11 +864,21 @@ fn a_weight_on_a_research_only_affix_warns_but_loads() {
 // Damage types: resistance rides gear, a type never rides an affix.
 
 const WARDING: &str = r#"(id: "warding", prefix: Some("Warding"), stats: (resist: (thermal: 20)))"#;
+const THERMAL_LANCE: &str = r#"(id: "thermal_lance", name: "Thermal Lance", glyph: Some('/'),
+    description: "test", value: Some(1),
+    equipment: Some((Weapon, (damage: (min: 5, max: 10), damage_type: Some(Thermal)))))"#;
 const WARDING_SMALL: &str =
     r#"(id: "warding_small", prefix: Some("Lesser"), stats: (resist: (thermal: 15)))"#;
 
 fn warding_game(seed: u32, tag: &str) -> Game {
-    let dir = modded_assets_dir(tag, &[], &[], &[], &[], &[]);
+    let dir = modded_assets_dir(
+        tag,
+        &[],
+        &[("thermal_lance.ron", THERMAL_LANCE)],
+        &[],
+        &[],
+        &[],
+    );
     std::fs::write(dir.join("affixes").join("warding.ron"), WARDING).unwrap();
     std::fs::write(dir.join("affixes").join("warding_small.ron"), WARDING_SMALL).unwrap();
     Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap()
@@ -936,7 +946,7 @@ fn gear_bonus_adds_resistance_across_slots_and_has_no_type() {
     let mut game = warding_game(4131, "resist_slots");
     let player = game.player_entity();
     let armour = warded("firewall_plating", "warding");
-    let weapon = warded("arc_lance", "warding_small");
+    let weapon = warded("thermal_lance", "warding_small");
     for copy in [&armour, &weapon] {
         game.add_copies(copy, 1);
         game.equip(player, copy).unwrap();
@@ -944,5 +954,10 @@ fn gear_bonus_adds_resistance_across_slots_and_has_no_type() {
 
     let total = game.gear_bonus(player);
     assert_eq!(total.resist.thermal, 35);
+    assert_eq!(
+        game.copy_bonus(&weapon, 1).unwrap().damage_type,
+        Some(crate::damage::DamageType::Thermal),
+        "the fixture's weapon must be typed for the next line to mean anything"
+    );
     assert_eq!(total.damage_type, None);
 }

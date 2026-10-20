@@ -19,6 +19,17 @@ const STEEL_BLADE: &str = r#"(id: "steel_blade", name: "Steel Blade", glyph: Som
 const HEAT_PLATE: &str = r#"(id: "heat_plate", name: "Heat Plate", glyph: Some('"'),
     description: "test", value: Some(1),
     equipment: Some((Armor, (resist: (thermal: 50)))))"#;
+/// First move untyped, second typed: a body that swings without choosing a
+/// move swings the first.
+const TWIN: &str = r#"(id: "twin", name: "Twin", glyph: 't', color: Red,
+    base_hp: 38, base_atk: 6, base_mitigation: 1, taming_difficulty: 0.15,
+    habitats: [OpenGrid], base_speed: 11,
+    moves: [(name: "Jab", power: 20, spread: 0),
+        (name: "Cinder", power: 20, spread: 0, damage_type: Some(Thermal))],
+    work_resource: Some("power_cell"),
+    taunts: ["glows."],
+    attributes: {"analysis": 5, "persistence": 26, "entropy": 78,
+        "bandwidth": 52, "footprint": 22, "parity": 24})"#;
 const PYRE: &str = r#"(id: "pyre", name: "Pyre", glyph: 'p', color: Red,
     base_hp: 38, base_atk: 6, base_mitigation: 1, taming_difficulty: 0.15,
     habitats: [OpenGrid], base_speed: 11,
@@ -37,7 +48,7 @@ fn typed_game() -> Game {
             ("steel_blade.ron", STEEL_BLADE),
             ("heat_plate.ron", HEAT_PLATE),
         ],
-        &[("pyre.ron", PYRE)],
+        &[("pyre.ron", PYRE), ("twin.ron", TWIN)],
         &[],
         &[],
     );
@@ -202,5 +213,76 @@ fn a_species_move_ability_carries_its_type_through_use_ability() {
     assert!(
         resisted < open,
         "the ability dropped its type: {resisted} against {open}"
+    );
+}
+
+/// The Integrity a battle-map reaction by a `species` body takes off a mover
+/// that does, or does not, wear `heat_plate`, on `stream`.
+fn reaction_hit(species: &str, armoured: bool, stream: u64) -> i32 {
+    let mut game = typed_game();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+    let player = game.player_entity();
+    let reactor = pack[0];
+    game.world.get_mut::<Creature>(reactor).unwrap().species = species.into();
+    sturdy(&mut game, player);
+    if armoured {
+        equip_armor(&mut game, player, "heat_plate");
+    }
+    reseed_rng(&mut game, stream);
+    let before = hp(&game, player);
+    game.provoke(player, vec![reactor]);
+    before - hp(&game, player)
+}
+
+#[test]
+fn a_reaction_wears_the_type_of_the_band_it_swings() {
+    // Pyre's first (and only) move is typed, so its reaction is.
+    let (stream, open) = (0..512u64)
+        .map(|s| (s, reaction_hit("pyre", false, s)))
+        .find(|&(_, dmg)| dmg >= 10)
+        .expect("no stream in 0..512 landed the reaction");
+    assert!(reaction_hit("pyre", true, stream) < open);
+
+    // Twin's first move is untyped. The reaction rolls a move for its name,
+    // and on some streams that is the typed one; the damage stays untyped
+    // because the band it swings is the first move's.
+    let mut landed = 0;
+    for stream in 0..64u64 {
+        let open = reaction_hit("twin", false, stream);
+        if open > 0 {
+            landed += 1;
+            assert_eq!(
+                reaction_hit("twin", true, stream),
+                open,
+                "stream {stream}: the rolled move's type leaked into the reaction"
+            );
+        }
+    }
+    assert!(landed > 8, "too few reactions landed to mean anything");
+}
+
+#[test]
+fn a_sortie_swing_by_an_unarmed_body_wears_its_first_moves_type() {
+    let hit = |armoured: bool, stream: u64| {
+        let mut game = typed_game();
+        let actor = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "heat_plate");
+        }
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        game.swing_for_the_squad(actor, target, &[target]);
+        before - hp(&game, target)
+    };
+    let (stream, open) = (0..512u64)
+        .map(|s| (s, hit(false, s)))
+        .find(|&(_, dmg)| dmg >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    let resisted = hit(true, stream);
+    assert!(
+        resisted < open,
+        "the sortie swing dropped the type: {resisted} against {open}"
     );
 }

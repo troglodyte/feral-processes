@@ -527,16 +527,16 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::TacticalFxQueue>()
                 .push(at, crate::resources::TacticalFxKind::Reaction);
-            let rolled = self.swing_move_at(reactor, Some(reach::distance(at, to)));
-            let move_name = rolled.name;
-            let range = self.natural_range_of(reactor);
-            let damage_type = self
-                .attack_profile(reactor, rolled.range, rolled.damage_type)
-                .damage_type;
+            // Rolled for the name only: the band and its type are the
+            // natural profile's, so the type follows the band.
+            let move_name = self
+                .swing_move_at(reactor, Some(reach::distance(at, to)))
+                .name;
+            let profile = self.natural_profile_of(reactor);
             let outcome = self.resolve_and_apply_attack(
                 reactor,
                 mover,
-                crate::battle::Swing::reaction(range).with_type(damage_type),
+                crate::battle::Swing::reaction(profile.range).with_type(profile.damage_type),
             );
             // **Through the model's own line builder**, so a reaction that
             // misses reads as a miss. A line written here would be a second

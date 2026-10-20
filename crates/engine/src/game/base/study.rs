@@ -372,10 +372,12 @@ impl Game {
         Ok(())
     }
 
-    /// Every non-anchor footprint cell of a standing `studies` structure
-    /// within the `(center, half_w, half_h)` window — the three walkable
-    /// floor cells a Research Station draws with its own fill, never the
-    /// anchor, which draws the structure's own glyph. **The renderer's only
+    /// Every non-anchor footprint cell of a standing structure within the
+    /// `(center, half_w, half_h)` window — the walkable floor cells a
+    /// multi-cell structure draws with its own fill, never the anchor, which
+    /// draws the structure's own glyph. Every footprint above 1 gets it, not
+    /// only a Research Station's: without the fill a 2x2 Holding Cell draws
+    /// its anchor alone and reads as 1x1. **The renderer's only
     /// way to ask**, so gui holds no copy of the footprint geometry.
     ///
     /// **Read once per frame, beside `view_tiles_at`, rather than once per
@@ -388,7 +390,7 @@ impl Game {
     /// allocations a frame at a typical pane's tile count. `&self` and
     /// `iter_entities()` rather than a query, `study_station`'s own
     /// reason: no `QueryState` to construct or repeat.
-    pub fn view_station_floor_at(
+    pub fn view_structure_floor_at(
         &self,
         center: (i32, i32),
         half_w: i32,
@@ -406,9 +408,6 @@ impl Game {
             let Some(def) = db.get(&structure.kind) else {
                 continue;
             };
-            if !def.studies {
-                continue;
-            }
             let Some(pos) = e.get::<Position>() else {
                 continue;
             };
@@ -428,8 +427,8 @@ impl Game {
 
     /// Every **settled** subject within the `(center, half_w, half_h)` window
     /// — the pin mark's own question, same window and indexing as
-    /// `view_station_floor_at` beside it. **The renderer's only way to ask,
-    /// and read once a frame** for `view_station_floor_at`'s reason.
+    /// `view_structure_floor_at` beside it. **The renderer's only way to ask,
+    /// and read once a frame** for `view_structure_floor_at`'s reason.
     ///
     /// A body carrying `components::UnderStudy` is not enough: it must be
     /// standing on its own station's pen, which is what `Game::pinned_subject`

@@ -5308,18 +5308,18 @@ fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project(
     );
 }
 
-/// `Game::view_station_floor_at` is the renderer's only way to ask which
+/// `Game::view_structure_floor_at` is the renderer's only way to ask which
 /// cells a Research Station's own floor fill belongs on — every non-anchor
 /// footprint cell, and never the anchor itself, which draws the structure's
 /// own glyph and tile. **Windowed**, `view_finishes_at`'s own shape: one call
 /// over `(center, half_w, half_h)` returns the whole set, indexed
 /// `[row][col]` with row `dy + half_h` and col `dx + half_w`.
 #[test]
-fn view_station_floor_at_is_every_non_anchor_footprint_cell() {
+fn view_structure_floor_at_is_every_non_anchor_footprint_cell() {
     let (game, station) = base_with_station(4601100);
     let anchor = *game.world.get::<Position>(station).unwrap();
     let half = 6;
-    let rows = game.view_station_floor_at((anchor.x, anchor.y), half, half);
+    let rows = game.view_structure_floor_at((anchor.x, anchor.y), half, half);
     let at = |dx: i32, dy: i32| rows[(dy + half) as usize][(dx + half) as usize];
 
     assert!(
@@ -5340,17 +5340,47 @@ fn view_station_floor_at_is_every_non_anchor_footprint_cell() {
     );
 }
 
+/// Any structure wider than one cell gets the floor fill under its non-anchor
+/// cells, not just a Research Station — otherwise a Holding Cell draws its
+/// anchor glyph alone and reads as 1x1. A footprint-1 structure has no
+/// non-anchor cell, so it gets none.
+#[test]
+fn view_structure_floor_at_fills_every_multi_cell_structure_and_no_single_cell_one() {
+    let mut game = Game::new(4601104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let cell = spawn_structure_at(&mut game, "holding_cell", 5, 5);
+    let anchor = *game.world.get::<Position>(cell).unwrap();
+    let half = 3;
+    let rows = game.view_structure_floor_at((anchor.x, anchor.y), half, half);
+    let at = |dx: i32, dy: i32| rows[(dy + half) as usize][(dx + half) as usize];
+    assert!(!at(0, 0), "the anchor draws the structure's own glyph");
+    for (dx, dy) in [(1, 0), (0, 1), (1, 1)] {
+        assert!(at(dx, dy), "({dx}, {dy}) is a non-anchor Holding Cell cell");
+    }
+
+    let home_entity = game
+        .find_blocking_structure_at(0, 0)
+        .expect("the Home stands");
+    let home = *game.world.get::<Position>(home_entity).unwrap();
+    let rows = game.view_structure_floor_at((home.x, home.y), 1, 1);
+    assert!(
+        rows.iter().flatten().all(|&hit| !hit),
+        "a footprint-1 Home has no non-anchor cell"
+    );
+}
+
 /// A legacy 1x1 Research Node's own anchor never takes the floor fill — the
 /// non-anchor exclusion alone is what this test pins, through a structure
 /// bare-spawned the way an old save's Node would be restored.
 #[test]
-fn view_station_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
+fn view_structure_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
     let mut game = Game::new(4601101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
     let node = spawn_structure_at(&mut game, "research_node", 5, 5);
     let anchor = *game.world.get::<Position>(node).unwrap();
-    let rows = game.view_station_floor_at((anchor.x, anchor.y), 1, 1);
+    let rows = game.view_structure_floor_at((anchor.x, anchor.y), 1, 1);
     assert!(!rows[1][1]);
 }
 
@@ -5360,7 +5390,7 @@ fn view_station_floor_at_excludes_a_bare_spawned_nodes_own_anchor() {
 /// asking a smaller box than the map must not read a hit from a structure
 /// well outside it.
 #[test]
-fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
+fn view_structure_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
     let (mut game, station) = base_with_station(4601103);
     let anchor = *game.world.get::<Position>(station).unwrap();
     let program = spawn_tamed(&mut game, 10, 3);
@@ -5368,7 +5398,7 @@ fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
 
     // A window centred far from the Station and too small to reach it.
     let far = (anchor.x + 50, anchor.y + 50);
-    let floor_rows = game.view_station_floor_at(far, 2, 2);
+    let floor_rows = game.view_structure_floor_at(far, 2, 2);
     let pinned_rows = game.view_pinned_at(far, 2, 2);
     assert!(
         floor_rows.iter().flatten().all(|&hit| !hit),
@@ -5389,7 +5419,7 @@ fn view_station_floor_at_and_view_pinned_at_are_clipped_to_their_window() {
 /// subject stand at this cell. Carrying `UnderStudy` is not enough: the body
 /// has to be on its own station's pen, so the mark, `Game::pinned_subject`
 /// and the research gate are one answer rather than three.
-/// **Windowed**, `view_station_floor_at`'s own shape.
+/// **Windowed**, `view_structure_floor_at`'s own shape.
 #[test]
 fn view_pinned_at_answers_only_for_a_settled_subject() {
     let (mut game, station) = base_with_station(4601102);

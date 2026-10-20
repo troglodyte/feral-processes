@@ -5,7 +5,10 @@
 
 use super::{DamageType, side_effect_blocked};
 use crate::statuses::{StatusBehaviour, StatusDef, StatusId, StatusStacking};
-use crate::tuning::{NOISE_JAM_ACCURACY_CUT, NOISE_JAM_ROUNDS, NOISE_JAMMED_STATUS};
+use crate::tuning::{
+    NOISE_JAM_ACCURACY_CUT, NOISE_JAM_ROUNDS, NOISE_JAMMED_STATUS, RADIATION_CORRUPTED_STATUS,
+    RADIATION_CORRUPTION_POWER, RADIATION_CORRUPTION_ROUNDS,
+};
 
 /// A side effect decided by `side_effect`. Concrete, not a general effect
 /// type: each new kind of effect is a variant here.
@@ -31,26 +34,42 @@ pub fn side_effect(ty: DamageType, resist_pct: i32) -> Option<SideEffect> {
             rounds: NOISE_JAM_ROUNDS,
             power: 0,
         }),
-        DamageType::Thermal
-        | DamageType::Magnetic
-        | DamageType::Voltage
-        | DamageType::Radiation => None,
+        DamageType::Radiation => Some(SideEffect::Arm {
+            id: RADIATION_CORRUPTED_STATUS,
+            rounds: RADIATION_CORRUPTION_ROUNDS,
+            power: RADIATION_CORRUPTION_POWER,
+        }),
+        DamageType::Thermal | DamageType::Magnetic | DamageType::Voltage => None,
     }
 }
 
 /// The statuses the side effects arm, defined here so they exist whatever
 /// `assets/statuses/` holds (`StatusDb::with_builtins`).
 pub fn statuses() -> Vec<StatusDef> {
-    vec![StatusDef {
-        id: StatusId::from(NOISE_JAMMED_STATUS),
-        name: "Jammed".into(),
-        tag: "JAM".into(),
-        stacking: StatusStacking::Refresh,
-        behaviours: vec![StatusBehaviour::AccuracyCut(NOISE_JAM_ACCURACY_CUT)],
-        inflict: "Targeting jammed on {target}!".into(),
-        tick: String::new(),
-        expire: "Targeting clears on {target}.".into(),
-    }]
+    vec![
+        StatusDef {
+            id: StatusId::from(NOISE_JAMMED_STATUS),
+            name: "Jammed".into(),
+            tag: "JAM".into(),
+            stacking: StatusStacking::Refresh,
+            behaviours: vec![StatusBehaviour::AccuracyCut(NOISE_JAM_ACCURACY_CUT)],
+            inflict: "Targeting jammed on {target}!".into(),
+            tick: String::new(),
+            expire: "Targeting clears on {target}.".into(),
+        },
+        // Healing still works, so no `HealBlock`: the corruption is a drain
+        // to outlast, not a lock.
+        StatusDef {
+            id: StatusId::from(RADIATION_CORRUPTED_STATUS),
+            name: "Corrupted".into(),
+            tag: "COR".into(),
+            stacking: StatusStacking::Refresh,
+            behaviours: vec![StatusBehaviour::DamagePerRound],
+            inflict: "Data starts corrupting on {target}!".into(),
+            tick: "Corruption eats {n} Integrity from {target}.".into(),
+            expire: "Corruption is purged from {target}.".into(),
+        },
+    ]
 }
 
 #[cfg(test)]
@@ -71,6 +90,23 @@ mod tests {
         assert!(side_effect(DamageType::Noise, SIDE_EFFECT_BLOCK_THRESHOLD - 1).is_some());
         assert_eq!(
             side_effect(DamageType::Noise, SIDE_EFFECT_BLOCK_THRESHOLD),
+            None
+        );
+    }
+
+    #[test]
+    fn radiation_arms_corrupted_and_resistance_at_the_threshold_blocks_it() {
+        assert_eq!(
+            side_effect(DamageType::Radiation, 0),
+            Some(SideEffect::Arm {
+                id: "corrupted",
+                rounds: RADIATION_CORRUPTION_ROUNDS,
+                power: RADIATION_CORRUPTION_POWER
+            })
+        );
+        assert!(side_effect(DamageType::Radiation, SIDE_EFFECT_BLOCK_THRESHOLD - 1).is_some());
+        assert_eq!(
+            side_effect(DamageType::Radiation, SIDE_EFFECT_BLOCK_THRESHOLD),
             None
         );
     }

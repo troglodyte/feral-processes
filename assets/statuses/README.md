@@ -62,7 +62,8 @@ ticking.
 
 Some statuses are defined by the engine, not by a file here, because a damage
 type's side effect arms them: `jammed` (JAM, accuracy cut by 30%, from Noise
-hits). They exist whatever this directory holds. A file here using a built-in
+hits) and `corrupted` (COR, 2 Integrity lost a round for 3 rounds, from
+Radiation hits; healing still works). They exist whatever this directory holds. A file here using a built-in
 id is ignored and a warning is logged. Armour resisting the type by 50% or
 more stops the effect from landing.
 

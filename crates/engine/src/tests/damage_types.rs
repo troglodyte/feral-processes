@@ -19,6 +19,12 @@ const NOISE_HORN: &str = r#"(id: "noise_horn", name: "Noise Horn", glyph: Some('
 const NOISE_PLATE: &str = r#"(id: "noise_plate", name: "Noise Plate", glyph: Some('"'),
     description: "test", value: Some(1),
     equipment: Some((Armor, (resist: (noise: 50)))))"#;
+const RAD_EMITTER: &str = r#"(id: "rad_emitter", name: "Rad Emitter", glyph: Some('/'),
+    description: "test", value: Some(1),
+    equipment: Some((Weapon, (damage: (min: 20, max: 20), damage_type: Some(Radiation)))))"#;
+const RAD_PLATE: &str = r#"(id: "rad_plate", name: "Rad Plate", glyph: Some('"'),
+    description: "test", value: Some(1),
+    equipment: Some((Armor, (resist: (radiation: 50)))))"#;
 const STEEL_BLADE: &str = r#"(id: "steel_blade", name: "Steel Blade", glyph: Some('/'),
     description: "test", value: Some(1),
     equipment: Some((Weapon, (damage: (min: 20, max: 20)))))"#;
@@ -55,6 +61,8 @@ fn typed_game() -> Game {
             ("heat_plate.ron", HEAT_PLATE),
             ("noise_horn.ron", NOISE_HORN),
             ("noise_plate.ron", NOISE_PLATE),
+            ("rad_emitter.ron", RAD_EMITTER),
+            ("rad_plate.ron", RAD_PLATE),
         ],
         &[("pyre.ron", PYRE), ("twin.ron", TWIN)],
         &[],
@@ -739,4 +747,132 @@ fn the_built_in_jammed_survives_a_save_and_load() {
     let again = loaded.spawn_wild_creature("glitch", 5, 5).unwrap();
     loaded.arm_status(again, &id, 2, 0);
     assert!(is_jammed(&loaded, again));
+}
+
+// ---------------------------------------------------------------------------
+// Radiation corrupts the target.
+
+fn is_corrupted(game: &Game, e: Entity) -> bool {
+    game.world
+        .get::<StatusEffects>(e)
+        .is_some_and(|s| s.active.iter().any(|a| a.id.0 == "corrupted"))
+}
+
+/// `noise_swing` for a Radiation swing: the Integrity lost and whether the
+/// target is corrupted.
+fn radiation_swing(battle_map: bool, armoured: bool, stream: u64) -> (i32, bool) {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "rad_emitter");
+    if battle_map {
+        let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+        let target = pack[0];
+        if armoured {
+            equip_armor(&mut game, target, "rad_plate");
+        }
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, target]);
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(target, beside),
+            "fixture: the target must stand within reach"
+        );
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        assert!(game.tactical_attack(target), "the swing must happen");
+        (before - hp(&game, target), is_corrupted(&game, target))
+    } else {
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        if armoured {
+            equip_armor(&mut game, target, "rad_plate");
+        }
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        game.party_member_attacks(0, player, 0, player);
+        (before - hp(&game, target), is_corrupted(&game, target))
+    }
+}
+
+fn radiation_hit_corrupts_blocks_and_miss_applies_nothing(battle_map: bool) {
+    let (stream, _) = (0..512u64)
+        .map(|s| (s, radiation_swing(battle_map, false, s)))
+        .find(|&(_, (dmg, _))| dmg >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    assert!(
+        radiation_swing(battle_map, false, stream).1,
+        "a landed hit corrupts"
+    );
+    let (dmg, corrupted) = radiation_swing(battle_map, true, stream);
+    assert!(dmg > 0, "the plate must not turn the hit into a miss");
+    assert!(!corrupted, "50% radiation resistance blocks the corruption");
+    let miss = (0..512u64)
+        .map(|s| radiation_swing(battle_map, false, s))
+        .find(|&(dmg, _)| dmg == 0)
+        .expect("no stream in 0..512 missed");
+    assert!(!miss.1, "a miss applies nothing");
+}
+
+#[test]
+fn a_radiation_hit_corrupts_in_the_abstract_round() {
+    radiation_hit_corrupts_blocks_and_miss_applies_nothing(false);
+}
+
+#[test]
+fn a_radiation_hit_corrupts_on_the_battle_map() {
+    radiation_hit_corrupts_blocks_and_miss_applies_nothing(true);
+}
+
+#[test]
+fn corruption_costs_integrity_each_round_and_a_heal_still_lands() {
+    let mut game = typed_game();
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, wild);
+    let id = StatusId::from("corrupted");
+    game.arm_status(
+        wild,
+        &id,
+        crate::tuning::RADIATION_CORRUPTION_ROUNDS,
+        crate::tuning::RADIATION_CORRUPTION_POWER,
+    );
+    // The landing round is exempt; the next one charges.
+    game.tick_status_effects(wild, "It");
+    assert_eq!(hp(&game, wild), 5000);
+    game.tick_status_effects(wild, "It");
+    assert_eq!(
+        hp(&game, wild),
+        5000 - crate::tuning::RADIATION_CORRUPTION_POWER
+    );
+    assert!(is_corrupted(&game, wild));
+    let hurt = hp(&game, wild);
+    assert_eq!(
+        game.restore_hp(wild, 1),
+        1,
+        "corruption does not block healing"
+    );
+    assert_eq!(hp(&game, wild), hurt + 1);
+}
+
+#[test]
+fn corruption_lines_read_for_you_and_for_a_program() {
+    let defs = crate::damage::statuses();
+    let def = defs.iter().find(|d| d.id.0 == "corrupted").unwrap();
+    for who in ["You", "Glitch"] {
+        for line in [
+            def.inflict_line(who),
+            def.tick_line(who, 2),
+            def.expire_line(who),
+        ] {
+            assert!(line.contains(who) && !line.contains('{'), "{line}");
+            assert!(!line.contains("'s") && !line.contains("loses"), "{line}");
+        }
+    }
 }

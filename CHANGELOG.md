@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.20
+
+**Groundwork for damage types; no change in play.** Weapons, armour, species attacks and abilities can now carry a damage type (thermal, magnetic, noise, voltage or radiation) and resistances to each, capped at 75%. A worn weapon's type replaces a program's own, as its damage band already does. No item, species or ability sets either yet, so every hit lands exactly as before; later stages add the types, how they show on screen, and what each one does.
+
+**An area routine now shows its effect on every tile it covers, with a look for each kind.** Drains crackle magenta, debuffs and stat cuts flash yellow, and the cleanses flash white. Before, a zap covered only one tile of an area, and routines with no effect of their own drew a one-tile streak.
+
 ## 0.19.19
 
 **The dev keypad (backtick, with `FERAL_DEV_CONSOLE` or `FERAL_DEV` set) has four new rows: Free build, Give item, Warp to zone and Spawn companion.** Free build is a toggle whose row shows whether it is on; while it is on, building, upgrading and rebuilding cost no materials and finish at once, though a rebuild still spends its program. The toggle is never saved. Give item opens a list of every item that is not gear, with how many you hold, and each pick gives ten. Warp to zone lists the next twenty zones and refuses during a fight. Spawn companion adds a program of a species that can appear on your tile, and refuses when your roster is full. Reaching a late-game state to look at it used to take an hour of play.

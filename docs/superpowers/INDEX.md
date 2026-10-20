@@ -65,7 +65,7 @@ spec resolves to a release tag.
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
 | `2026-08-17-zones-as-difficulty-parked` | parked | no shape chosen |
 | `2026-08-17-item-synergy-burnout-parked` | parked | nothing stacks yet |
-| `2026-10-19-damage-types-design` | draft, awaiting approval; **unbuilt** | five types (Voltage, not Surge) + armour resistance + side effects, in five staged releases; Rust enum, no asset files |
+| `2026-10-19-damage-types-design` | **Stage 1 built** in `v0.19.20` (groundwork; no asset sets a type); Stages 2–5 open | plan `plans/2026-10-20-damage-types-stage-1.md`; `crates/engine/src/damage/`, `Game::attack_profile`; five types (Voltage, not Surge) + armour resistance + side effects, in five staged releases; Rust enum, no asset files |
 | `2026-10-16-damage-types-parked` | **superseded** by `2026-10-19-damage-types-design` | the brainstorm and the rejected directions |
 | `2026-08-18-gear-passives-balance-measurement` | **not run** | a measurement protocol, never executed; the design it measures shipped in `v0.11.2` |
 | `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slices 1 and 2 shipped (slice 2 has its own archived spec); slices 3-4 deliberately deferred |

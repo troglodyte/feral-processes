@@ -20,3 +20,14 @@ pub const NOISE_JAM_ACCURACY_CUT: i32 = 30;
 
 /// Rounds a Noise hit keeps its target jammed.
 pub const NOISE_JAM_ROUNDS: u32 = 2;
+
+// ── Radiation: corrupted ────────────────────────────────────────────────
+
+/// The built-in status a landed Radiation hit arms (`damage::statuses`).
+pub const RADIATION_CORRUPTED_STATUS: &str = "corrupted";
+
+/// Integrity a corrupted body loses each round.
+pub const RADIATION_CORRUPTION_POWER: i32 = 2;
+
+/// Rounds a Radiation hit keeps its target corrupted.
+pub const RADIATION_CORRUPTION_ROUNDS: u32 = 3;

@@ -315,7 +315,10 @@ impl Game {
         // Both reads are `&self` and draw nothing, taken before the damage
         // lands so the figure is what the armour stopped of *this* hit.
         let resisted = swing.damage_type.and_then(|ty| {
-            let amount = self.mitigate_incoming_damage_typed(defender, rolled, None)
+            // The baseline is the same typed path with the resistance
+            // zeroed, so a type's deflection skip cancels out and `resisted`
+            // measures only the type cut.
+            let amount = self.mitigate_with_resist(defender, rolled, Some(ty), Some(0))
                 - self.mitigate_incoming_damage_typed(defender, rolled, Some(ty));
             (amount > 0).then_some(damage::Resisted { ty, amount })
         });
@@ -583,12 +586,30 @@ impl Game {
         dmg: i32,
         ty: Option<DamageType>,
     ) -> i32 {
+        self.mitigate_with_resist(target, dmg, ty, None)
+    }
+
+    /// The one copy of the typed mitigation formula. `resist` overrides the
+    /// target's own resistance to `ty`; `None` reads it off the gear.
+    fn mitigate_with_resist(
+        &self,
+        target: Entity,
+        dmg: i32,
+        ty: Option<DamageType>,
+        resist: Option<i32>,
+    ) -> i32 {
         let gear = self.gear_bonus(target);
+        let resist = resist.unwrap_or_else(|| damage::resist_against(gear.resist, ty));
+        let deflection = if ty.is_some_and(|t| damage::ignores_deflection(t, resist)) {
+            0
+        } else {
+            gear.deflection
+        };
         battle::damage_after_mitigation_typed(
             dmg,
             self.effective_mitigation(target),
-            damage::resist_against(gear.resist, ty),
-            gear.deflection,
+            resist,
+            deflection,
         )
     }
 

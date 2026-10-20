@@ -25,6 +25,15 @@ const RAD_EMITTER: &str = r#"(id: "rad_emitter", name: "Rad Emitter", glyph: Som
 const RAD_PLATE: &str = r#"(id: "rad_plate", name: "Rad Plate", glyph: Some('"'),
     description: "test", value: Some(1),
     equipment: Some((Armor, (resist: (radiation: 50)))))"#;
+const MAG_COIL: &str = r#"(id: "mag_coil", name: "Mag Coil", glyph: Some('/'),
+    description: "test", value: Some(1),
+    equipment: Some((Weapon, (damage: (min: 20, max: 20), damage_type: Some(Magnetic)))))"#;
+const DEFL_PLATE: &str = r#"(id: "defl_plate", name: "Defl Plate", glyph: Some('"'),
+    description: "test", value: Some(1),
+    equipment: Some((Armor, (deflection: 5))))"#;
+const MAG_DEFL_PLATE: &str = r#"(id: "mag_defl_plate", name: "Mag Defl Plate", glyph: Some('"'),
+    description: "test", value: Some(1),
+    equipment: Some((Armor, (deflection: 5, resist: (magnetic: 50)))))"#;
 const STEEL_BLADE: &str = r#"(id: "steel_blade", name: "Steel Blade", glyph: Some('/'),
     description: "test", value: Some(1),
     equipment: Some((Weapon, (damage: (min: 20, max: 20)))))"#;
@@ -63,6 +72,9 @@ fn typed_game() -> Game {
             ("noise_plate.ron", NOISE_PLATE),
             ("rad_emitter.ron", RAD_EMITTER),
             ("rad_plate.ron", RAD_PLATE),
+            ("mag_coil.ron", MAG_COIL),
+            ("defl_plate.ron", DEFL_PLATE),
+            ("mag_defl_plate.ron", MAG_DEFL_PLATE),
         ],
         &[("pyre.ron", PYRE), ("twin.ron", TWIN)],
         &[],
@@ -875,4 +887,123 @@ fn corruption_lines_read_for_you_and_for_a_program() {
             assert!(!line.contains("'s") && !line.contains("loses"), "{line}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Magnetic ignores deflection.
+
+const DEFLECTION: i32 = 5;
+
+/// The Integrity one swing of `weapon` takes off a sturdy target wearing
+/// `plate`, on `stream`. `battle_map` picks the model.
+fn deflection_swing(battle_map: bool, weapon: &str, plate: &str, stream: u64) -> i32 {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, weapon);
+    if battle_map {
+        let pack = crate::tests::tactical::tactical_fight(&mut game, 1, 5000);
+        let target = pack[0];
+        equip_armor(&mut game, target, plate);
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, target]);
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(target, beside),
+            "fixture: the target must stand within reach"
+        );
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        assert!(game.tactical_attack(target), "the swing must happen");
+        before - hp(&game, target)
+    } else {
+        let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+        sturdy(&mut game, target);
+        equip_armor(&mut game, target, plate);
+        insert_battle(&mut game, player, vec![target]);
+        reseed_rng(&mut game, stream);
+        let before = hp(&game, target);
+        game.party_member_attacks(0, player, 0, player);
+        before - hp(&game, target)
+    }
+}
+
+fn magnetic_ignores_deflection_on(battle_map: bool) {
+    let stream = (0..512u64)
+        .find(|&s| deflection_swing(battle_map, "steel_blade", "defl_plate", s) >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    let blade = deflection_swing(battle_map, "steel_blade", "defl_plate", stream);
+    let coil = deflection_swing(battle_map, "mag_coil", "defl_plate", stream);
+    assert_eq!(
+        coil,
+        blade + DEFLECTION,
+        "magnetic lands the deflection too"
+    );
+    // Not a Magnetic effect at all, and not a shipped-type shortcut: another
+    // type still pays deflection on the same stream.
+    let noise = deflection_swing(battle_map, "noise_horn", "defl_plate", stream);
+    assert_eq!(noise, blade, "a non-magnetic typed hit pays deflection");
+    let resistant = deflection_swing(battle_map, "mag_coil", "mag_defl_plate", stream);
+    assert!(
+        resistant < coil && resistant > 0,
+        "50% magnetic resistance keeps deflection ({resistant} vs {coil})"
+    );
+    let miss = (0..512u64)
+        .find(|&s| deflection_swing(battle_map, "mag_coil", "defl_plate", s) == 0)
+        .expect("no stream in 0..512 missed");
+    assert_eq!(
+        deflection_swing(battle_map, "steel_blade", "defl_plate", miss),
+        0
+    );
+}
+
+#[test]
+fn a_magnetic_hit_ignores_deflection_in_the_abstract_round() {
+    magnetic_ignores_deflection_on(false);
+}
+
+#[test]
+fn a_magnetic_hit_ignores_deflection_on_the_battle_map() {
+    magnetic_ignores_deflection_on(true);
+}
+
+/// `resolve_and_apply_attack` outcome of a 20-wide `ty` swing into `plate`.
+fn plated_swing(ty: Option<damage::DamageType>, plate: &str, stream: u64) -> battle::AttackOutcome {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    equip_armor(&mut game, target, plate);
+    let attacker = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    insert_battle(&mut game, player, vec![target]);
+    reseed_rng(&mut game, stream);
+    let band = battle::DamageRange { min: 20, max: 20 };
+    game.resolve_and_apply_attack(attacker, target, battle::Swing::plain(band).with_type(ty))
+}
+
+#[test]
+fn skipping_deflection_is_not_reported_as_resisted() {
+    use damage::DamageType::{Magnetic, Noise};
+    let stream = (0..512u64)
+        .find(|&s| landed(plated_swing(None, "defl_plate", s)) >= 10)
+        .expect("no stream in 0..512 landed the swing");
+    let plain = plated_swing(None, "defl_plate", stream);
+    let mag = plated_swing(Some(Magnetic), "defl_plate", stream);
+    assert_eq!(landed(mag), landed(plain) + DEFLECTION);
+    assert_eq!(resisted_of(mag), None);
+    assert_eq!(
+        resisted_of(plated_swing(Some(Noise), "defl_plate", stream)),
+        None
+    );
+    // Resistance below the block threshold still reports only its own cut.
+    let cut = resisted_of(plated_swing(Some(Magnetic), "mag_defl_plate", stream))
+        .expect("the resisted cut is reported");
+    assert_eq!(cut.ty, Magnetic);
+    assert!(cut.amount > 0);
 }

@@ -39,6 +39,7 @@ pub fn side_effect(ty: DamageType, resist_pct: i32) -> Option<SideEffect> {
             rounds: RADIATION_CORRUPTION_ROUNDS,
             power: RADIATION_CORRUPTION_POWER,
         }),
+        // Magnetic acts in mitigation (`ignores_deflection`), not as a status.
         DamageType::Thermal | DamageType::Magnetic | DamageType::Voltage => None,
     }
 }

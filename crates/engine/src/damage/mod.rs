@@ -110,6 +110,13 @@ pub fn side_effect_blocked(resist_pct: i32) -> bool {
     resist_pct >= SIDE_EFFECT_BLOCK_THRESHOLD
 }
 
+/// Whether a hit of `ty` against a target resisting it by `resist_pct` skips
+/// the target's flat deflection. Magnetic does, until resistance blocks the
+/// effect like any other type's.
+pub fn ignores_deflection(ty: DamageType, resist_pct: i32) -> bool {
+    ty == DamageType::Magnetic && !side_effect_blocked(resist_pct)
+}
+
 /// How much of a hit a resistance stopped, and which type stopped it. Only
 /// built when `amount > 0`, so an uncut hit has none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +183,24 @@ mod tests {
             assert_eq!(type_cut(d, 0), d);
         }
         assert_eq!(type_cut(10.0, 50), 5.0);
+    }
+
+    #[test]
+    fn only_unresisted_magnetic_ignores_deflection() {
+        assert!(ignores_deflection(DamageType::Magnetic, 0));
+        assert!(ignores_deflection(
+            DamageType::Magnetic,
+            SIDE_EFFECT_BLOCK_THRESHOLD - 1
+        ));
+        assert!(!ignores_deflection(
+            DamageType::Magnetic,
+            SIDE_EFFECT_BLOCK_THRESHOLD
+        ));
+        for ty in DamageType::ALL {
+            if ty != DamageType::Magnetic {
+                assert!(!ignores_deflection(ty, 0));
+            }
+        }
     }
 
     #[test]

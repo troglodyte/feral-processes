@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.24
+
+**Magnetic hits ignore deflection.** Deflection is the flat amount armour takes off every hit, shown as `DEFL` on armour, and a Magnetic hit skips it. A Magnetic hit still loses whatever the target's general mitigation and Magnetic resistance take. Armour that resists Magnetic by 50% or more keeps its deflection. No shipped armour reaches 50% yet. There is no new log line: the hit line reports what resistance stopped, as before. The balance curves did not move.
+
 ## 0.19.23
 
 **Radiation hits corrupt their target.** A target hit by a Radiation attack loses 2 Integrity each round for three rounds, shown as `COR`. Another Radiation hit restarts the count rather than adding to it. Healing still works on a corrupted body. Armour that resists Radiation by 50% or more stops the corruption from landing. No shipped armour reaches 50% yet, so nothing blocks it in the current game. The balance curves did not move.

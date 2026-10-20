@@ -119,6 +119,18 @@ pub struct CarryingProgram(pub DownedProgram);
 #[derive(Component, Default, Clone, Debug)]
 pub struct StudyYield(pub Option<DownedProgram>);
 
+/// How long a rack carrier has stood on one tile: the tile it was last seen
+/// on and the consecutive labour passes it has not left it.
+///
+/// Runtime only, by omission from the save — a reload restarts the count,
+/// which only delays the give-up. Cleared by `Game::rack_carrier_stalled`
+/// the moment the body moves or stops being a carrier.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RackWait {
+    pub at: Position,
+    pub beats: u32,
+}
+
 /// A loose floor item an idle program is carrying to a stockpile cell.
 ///
 /// The cleanup carry state, kept separate from `Carrying`, which stays one

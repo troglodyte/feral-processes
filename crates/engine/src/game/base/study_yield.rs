@@ -23,7 +23,8 @@ use bevy_ecs::prelude::*;
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    Carrying, CarryingProgram, Position, Racked, Structure, StudyYield, Task, Tidying, UnderStudy,
+    Carrying, CarryingProgram, Position, RackWait, Racked, Structure, StudyYield, Task, Tidying,
+    UnderStudy,
 };
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
 use crate::game::base::offshift::Amenities;
@@ -217,6 +218,51 @@ impl Game {
             && w.get::<Tidying>().is_none()
             && w.get::<Carrying>().is_none()
             && self.is_on_shift(worker, amenities)
+    }
+
+    /// The racking arm of `drift_idle_staff`: the gate and the beat in one
+    /// call, so the carrier arm above the need arms and the pick-up arm
+    /// below them cannot gate differently. `board` is `None` when nothing is
+    /// held or in transit.
+    pub(crate) fn try_rack(
+        &mut self,
+        worker: Entity,
+        amenities: &Amenities,
+        board: &mut Option<RackBoard>,
+    ) -> bool {
+        board.is_some()
+            && self.may_rack(worker, amenities)
+            && board.as_mut().is_some_and(|b| self.rack_step(worker, b))
+    }
+
+    /// Counts the labour passes a rack carrier has stood on one tile, and
+    /// past `tuning::RACK_CARRY_PATIENCE_BEATS` hands the program back.
+    ///
+    /// A carrier is held out of the posting pool for the whole trip, and a
+    /// walk is allowed to *wait* (`walk_idle_toward` returns `Ok` for a body
+    /// or the party in the way), so without a bound a stuck body would be
+    /// lost to labour for ever. It gives the kill back the way a carrier with
+    /// no reachable rack does, and is free again.
+    pub(crate) fn rack_carrier_patience(&mut self, worker: Entity) {
+        let Some(here) = self.world.get::<Position>(worker).copied() else {
+            return;
+        };
+        if !self.is_rack_carrier(worker) {
+            self.world.entity_mut(worker).remove::<RackWait>();
+            return;
+        }
+        let beats = match self.world.get::<RackWait>(worker) {
+            Some(wait) if wait.at == here => wait.beats + 1,
+            _ => 0,
+        };
+        if beats >= crate::tuning::RACK_CARRY_PATIENCE_BEATS {
+            self.world.entity_mut(worker).remove::<RackWait>();
+            self.put_carried_program_back(worker);
+            return;
+        }
+        self.world
+            .entity_mut(worker)
+            .insert(RackWait { at: here, beats });
     }
 
     /// One beat of the errand. Returns whether the body spent it.

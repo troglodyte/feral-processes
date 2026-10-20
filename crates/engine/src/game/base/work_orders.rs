@@ -2644,6 +2644,7 @@ impl Game {
             if self.world.get::<components::Downed>(worker).is_some() {
                 self.return_carried_program(worker);
             }
+            self.rack_carrier_patience(worker);
             let sharing = self
                 .world
                 .get::<Position>(worker)
@@ -2709,6 +2710,21 @@ impl Game {
                     continue;
                 }
             }
+            // **A body already holding a program delivers it before any need
+            // or mood takes it anywhere**: `is_on_shift` keeps a carrier in
+            // the pool whatever it is marked, and the amenity walk below
+            // would otherwise march the kill to a Bay and leave it there.
+            // Only the delivery half — the pick-up stays below, where it
+            // ranks against the other errands.
+            if !sharing
+                && self.is_rack_carrier(worker)
+                && self.try_rack(worker, amenities, &mut racking)
+            {
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    beat.held.insert((p.x, p.y));
+                }
+                continue;
+            }
             // A body with an errand walks it. `Err` is the one place a route
             // is ever judged: it gives the post up and latches the need, so
             // the gate does not hand it straight back on the next beat.
@@ -2750,11 +2766,7 @@ impl Game {
             // the whole research line, where product in a machine blocks
             // only that machine. Gated like clearing, bar the
             // `CarryingProgram` exclusion — a carrier is this errand's own.
-            if !sharing
-                && racking.is_some()
-                && self.may_rack(worker, amenities)
-                && racking.as_mut().is_some_and(|b| self.rack_step(worker, b))
-            {
+            if !sharing && self.try_rack(worker, amenities, &mut racking) {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));
                 }

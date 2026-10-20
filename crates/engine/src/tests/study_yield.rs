@@ -314,6 +314,131 @@ fn a_posted_fetcher_holding_a_program_is_never_re_matched() {
     }
 }
 
+/// One drift beat for `staff`, with the clock wound to the next idle step so
+/// the wander cadence cannot make a test depend on tick parity.
+fn drift_beat(game: &mut Game, staff: &[Entity]) {
+    let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+    game.world
+        .resource_mut::<crate::resources::GameClock>()
+        .tick = next;
+    let amenities = game.amenities();
+    let bays = game.repair_bays();
+    game.drift_idle_staff_for_test(staff, &amenities, &bays);
+}
+
+/// A Home, a Defrag Bay east of it, a rack west, and a carrier between them.
+fn carrier_between_a_rack_and_an_amenity() -> (Game, Entity, Entity) {
+    let mut game = Game::new(5103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = super::needs::a_base_with_an_amenity(&mut game, 1);
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", -4, 0);
+    let carrier = staff[0];
+    game.world
+        .entity_mut(carrier)
+        .insert(CarryingProgram(program(7)));
+    (game, carrier, rack)
+}
+
+#[test]
+fn an_off_shift_carrier_racks_before_it_walks_to_its_amenity() {
+    let (mut game, carrier, rack) = carrier_between_a_rack_and_an_amenity();
+    game.world
+        .entity_mut(carrier)
+        .insert(crate::components::OffShift {
+            need: crate::needs::NeedId::from("coherence"),
+        });
+    for _ in 0..12 {
+        drift_beat(&mut game, &[carrier]);
+    }
+    assert_eq!(
+        racked_levels(&game, rack),
+        vec![7],
+        "the kill was carried to the amenity instead"
+    );
+}
+
+#[test]
+fn a_carrier_on_respite_racks_before_it_walks_to_the_amenity() {
+    let (mut game, carrier, rack) = carrier_between_a_rack_and_an_amenity();
+    game.world
+        .entity_mut(carrier)
+        .insert(crate::components::Disgruntled {
+            grievance: crate::components::Grievance::Sulking,
+            stranded: false,
+            told: false,
+        });
+    for _ in 0..12 {
+        drift_beat(&mut game, &[carrier]);
+    }
+    assert_eq!(racked_levels(&game, rack), vec![7]);
+}
+
+/// A rack with room that no route reaches is not a destination: nothing
+/// leaves the station for it.
+#[test]
+fn a_rack_with_room_that_cannot_be_reached_is_not_chosen() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    let rack_at = *game.world.get::<Position>(rack).unwrap();
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ] {
+        spawn_structure_at(&mut game, "wall", rack_at.x + dx, rack_at.y + dy);
+    }
+    hold(&mut game, station, 7);
+    let worker = spawn_tamed(&mut game, 100, 3);
+
+    for _ in 0..60 {
+        game.tick();
+        assert!(
+            game.world.get::<CarryingProgram>(worker).is_none(),
+            "picked up for a rack it cannot reach"
+        );
+    }
+    assert_eq!(held_at(&game, station).map(|p| p.level), Some(7));
+}
+
+/// A walk that waits for ever (the party standing in the only corridor) must
+/// not hold a body out of the posting pool for ever: past the patience the
+/// kill goes back through the shelter chain and the body is free again.
+#[test]
+fn a_carrier_that_cannot_make_progress_gives_up_after_the_patience() {
+    let mut game = Game::new(5104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    // A one-wide corridor well off the starting pocket, rack at its far end.
+    lay_floor_box(&mut game, (20, 30), (26, 30));
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", 26, 30);
+    let carrier = spawn_tamed(&mut game, 100, 3);
+    *game.world.get_mut::<Position>(carrier).unwrap() = Position { x: 21, y: 30 };
+    game.world
+        .entity_mut(carrier)
+        .insert(CarryingProgram(program(7)));
+    // The party stands on the next corridor cell: the walk waits, as it does
+    // for any body in its way.
+    game.world
+        .insert_resource(crate::resources::Locale::Base { x: 22, y: 30 });
+
+    let patience = crate::tuning::RACK_CARRY_PATIENCE_BEATS;
+    for _ in 0..patience / 2 {
+        drift_beat(&mut game, &[carrier]);
+    }
+    assert!(
+        game.world.get::<CarryingProgram>(carrier).is_some(),
+        "gave up before the patience ran out"
+    );
+    for _ in 0..patience {
+        drift_beat(&mut game, &[carrier]);
+    }
+    assert!(game.world.get::<CarryingProgram>(carrier).is_none());
+    assert_eq!(kept(&mut game), vec![7], "and the kill is somewhere");
+    assert_eq!(racked_levels(&game, rack), vec![7]);
+}
+
 #[test]
 fn a_rack_lost_mid_trip_puts_the_program_back_on_the_station() {
     let (mut game, station, rack) = base_with_station_and_rack();

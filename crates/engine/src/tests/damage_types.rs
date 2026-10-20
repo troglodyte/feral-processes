@@ -34,6 +34,12 @@ const DEFL_PLATE: &str = r#"(id: "defl_plate", name: "Defl Plate", glyph: Some('
 const MAG_DEFL_PLATE: &str = r#"(id: "mag_defl_plate", name: "Mag Defl Plate", glyph: Some('"'),
     description: "test", value: Some(1),
     equipment: Some((Armor, (deflection: 5, resist: (magnetic: 50)))))"#;
+const VOLT_ROD: &str = r#"(id: "volt_rod", name: "Volt Rod", glyph: Some('/'),
+    description: "test", value: Some(1),
+    equipment: Some((Weapon, (damage: (min: 20, max: 20), damage_type: Some(Voltage)))))"#;
+const VOLT_PLATE: &str = r#"(id: "volt_plate", name: "Volt Plate", glyph: Some('"'),
+    description: "test", value: Some(1),
+    equipment: Some((Armor, (resist: (voltage: 50)))))"#;
 const STEEL_BLADE: &str = r#"(id: "steel_blade", name: "Steel Blade", glyph: Some('/'),
     description: "test", value: Some(1),
     equipment: Some((Weapon, (damage: (min: 20, max: 20)))))"#;
@@ -75,6 +81,8 @@ fn typed_game() -> Game {
             ("mag_coil.ron", MAG_COIL),
             ("defl_plate.ron", DEFL_PLATE),
             ("mag_defl_plate.ron", MAG_DEFL_PLATE),
+            ("volt_rod.ron", VOLT_ROD),
+            ("volt_plate.ron", VOLT_PLATE),
         ],
         &[("pyre.ron", PYRE), ("twin.ron", TWIN)],
         &[],
@@ -1203,4 +1211,283 @@ fn heat_lines_read_for_you_and_for_a_program() {
             assert!(!line.contains("'s"), "{line}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Voltage arcs to the target's neighbour.
+
+fn volt_swing() -> battle::Swing {
+    let band = battle::DamageRange { min: 20, max: 20 };
+    battle::Swing::plain(band).with_type(Some(damage::DamageType::Voltage))
+}
+
+/// Swings `attacker` at `defender` until the swing lands, and returns what
+/// landed with how much each of `watch` lost to that one swing.
+fn landed_volt_hit(
+    game: &mut Game,
+    attacker: Entity,
+    defender: Entity,
+    watch: &[Entity],
+) -> (i32, Vec<i32>) {
+    for _ in 0..200 {
+        let before: Vec<i32> = watch.iter().map(|&e| hp(game, e)).collect();
+        let outcome = game.resolve_and_apply_attack(attacker, defender, volt_swing());
+        if landed(outcome) > 0 {
+            let lost = watch
+                .iter()
+                .zip(before)
+                .map(|(&e, b)| b - hp(game, e))
+                .collect();
+            return (landed(outcome), lost);
+        }
+    }
+    panic!("no swing landed in 200 tries");
+}
+
+/// A sturdy wild group of `n` in the abstract model, in order, and the
+/// player standing outside it.
+fn wild_group(game: &mut Game, n: usize) -> (Entity, Vec<Entity>) {
+    let player = game.player_entity();
+    sturdy(game, player);
+    let members: Vec<Entity> = (0..n)
+        .map(|_| {
+            let e = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+            sturdy(game, e);
+            e
+        })
+        .collect();
+    let group = battle::EnemyGroup::new(
+        battle::GroupId::new(0),
+        crate::species::SpeciesId::from("glitch"),
+        members.clone(),
+    );
+    insert_battle_with_groups(game, player, vec![group]);
+    (player, members)
+}
+
+#[test]
+fn an_arc_goes_to_the_next_member_of_the_defenders_group_and_wraps() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 3);
+    let (dealt, lost) = landed_volt_hit(&mut game, player, m[0], &m);
+    // Glitch carries no mitigation or resistance, so the arc is the full
+    // half of what landed.
+    assert_eq!(lost, vec![dealt, damage::arc_damage(dealt), 0]);
+    let (_, lost) = landed_volt_hit(&mut game, player, m[2], &m);
+    assert!(lost[0] > 0, "the last member arcs round to the first");
+    assert_eq!(lost[1], 0, "the arc does not chain");
+}
+
+#[test]
+fn an_arc_skips_a_fallen_member_and_a_lone_target_gets_none() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 3);
+    game.world.get_mut::<Stats>(m[1]).unwrap().hp = 0;
+    let (_, lost) = landed_volt_hit(&mut game, player, m[0], &m);
+    assert_eq!(
+        (lost[1], lost[2] > 0),
+        (0, true),
+        "the living next takes it"
+    );
+
+    let mut game = typed_game();
+    let (_, m) = wild_group(&mut game, 1);
+    assert_eq!(game.arc_neighbour(m[0], None), None);
+}
+
+#[test]
+fn with_no_battle_and_no_side_there_is_no_neighbour() {
+    let mut game = typed_game();
+    let a = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    let _b = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    assert_eq!(game.arc_neighbour(a, None), None);
+}
+
+#[test]
+fn an_arc_respects_the_neighbours_resistance_and_names_it() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 2);
+    equip_armor(&mut game, m[1], "volt_plate");
+    let (dealt, lost) = landed_volt_hit(&mut game, player, m[0], &m);
+    let arc = damage::arc_damage(dealt);
+    assert!(
+        lost[1] > 0 && lost[1] < arc,
+        "50% resistance cuts the arc: {} against {arc}",
+        lost[1]
+    );
+    let log = log_texts(&game);
+    assert!(
+        log.iter()
+            .any(|l| l.starts_with("The charge arcs to Glitch")
+                && l.contains("stopped by Voltage resist)")),
+        "{log:?}"
+    );
+}
+
+#[test]
+fn a_target_resisting_half_of_voltage_blocks_the_arc() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 2);
+    equip_armor(&mut game, m[0], "volt_plate");
+    let (dealt, lost) = landed_volt_hit(&mut game, player, m[0], &m);
+    assert!(dealt > 0 && lost[0] == dealt, "the primary still takes it");
+    assert_eq!(lost[1], 0, "the resisting primary blocks the arc");
+}
+
+#[test]
+fn a_miss_arcs_nothing() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 2);
+    for _ in 0..500 {
+        let before: Vec<i32> = m.iter().map(|&e| hp(&game, e)).collect();
+        let outcome = game.resolve_and_apply_attack(player, m[0], volt_swing());
+        if matches!(outcome, battle::AttackOutcome::Miss) {
+            let after: Vec<i32> = m.iter().map(|&e| hp(&game, e)).collect();
+            assert_eq!(after, before, "a miss changed someone's Integrity");
+            return;
+        }
+    }
+    panic!("no miss in 500 swings");
+}
+
+#[test]
+fn an_arc_that_kills_goes_through_the_death_path() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 2);
+    game.world.get_mut::<Stats>(m[1]).unwrap().hp = 1;
+    let _ = landed_volt_hit(&mut game, player, m[0], &m);
+    assert!(!game.creature_alive(m[1]));
+}
+
+#[test]
+fn the_abstract_party_arcs_to_the_next_slot_and_wraps() {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    sturdy(&mut game, player);
+    let companion = spawn_tamed(&mut game, 5000, 1);
+    enlist(&mut game, companion);
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    insert_battle(&mut game, player, vec![wild]);
+    let both = [player, companion];
+    let (dealt, lost) = landed_volt_hit(&mut game, wild, player, &both);
+    assert_eq!(lost[0], dealt);
+    assert!(lost[1] > 0, "the player's arc goes to the next slot");
+    let (_, lost) = landed_volt_hit(&mut game, wild, companion, &both);
+    assert!(lost[0] > 0, "the last slot arcs round to the player");
+    let line = log_texts(&game)
+        .into_iter()
+        .rev()
+        .find(|l| l.starts_with("The charge arcs to "))
+        .unwrap();
+    assert!(line.starts_with("The charge arcs to you for "), "{line}");
+}
+
+#[test]
+fn the_battle_map_arcs_to_the_lowest_id_same_side_body_touching_the_target() {
+    let mut game = typed_game();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 4, 5000);
+    let player = game.player_entity();
+    sturdy(&mut game, player);
+    let (tx, ty) = {
+        let b = game.world.resource::<TacticalBattle>();
+        let (px, py) = b.cell_of(player).unwrap();
+        (px + 1, py)
+    };
+    let place = |game: &mut Game, body: Entity, cell: (i32, i32)| {
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, cell),
+            "fixture: {cell:?} must be free"
+        );
+    };
+    place(&mut game, pack[0], (tx, ty));
+    place(&mut game, pack[2], (tx + 1, ty));
+    place(&mut game, pack[1], (tx + 1, ty + 1));
+    place(&mut game, pack[3], (tx + 6, ty));
+    let first = pack[1].min(pack[2]);
+    let other = pack[1].max(pack[2]);
+    let watch = [first, other, pack[3], player];
+    let (_, lost) = landed_volt_hit(&mut game, player, pack[0], &watch);
+    assert!(lost[0] > 0, "the lowest-id neighbour takes the arc");
+    assert_eq!(lost[1], 0, "only one neighbour is picked");
+    assert_eq!(lost[2], 0, "a body out of the ring is untouched");
+    assert_eq!(lost[3], 0, "the other side is never a neighbour");
+}
+
+#[test]
+fn a_battle_map_target_with_no_neighbour_gets_no_arc() {
+    let mut game = typed_game();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 2, 5000);
+    let player = game.player_entity();
+    let (px, py) = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .unwrap();
+    let mut battle = game.world.resource_mut::<TacticalBattle>();
+    assert!(battle.move_to(pack[0], (px + 1, py)));
+    assert!(battle.move_to(pack[1], (px + 7, py)));
+    assert_eq!(game.arc_neighbour(pack[0], None), None);
+}
+
+#[test]
+fn a_sortie_arcs_along_the_order_it_was_handed() {
+    let mut game = typed_game();
+    let actor = game.spawn_wild_creature("pyre", 5, 5).unwrap();
+    equip_weapon(&mut game, actor, "volt_rod");
+    let targets: Vec<Entity> = (0..3)
+        .map(|_| {
+            let e = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+            sturdy(&mut game, e);
+            e
+        })
+        .collect();
+    for _ in 0..200 {
+        let before: Vec<i32> = targets.iter().map(|&e| hp(&game, e)).collect();
+        game.swing_for_the_squad(actor, targets[0], &targets);
+        let lost: Vec<i32> = targets
+            .iter()
+            .zip(before)
+            .map(|(&e, b)| b - hp(&game, e))
+            .collect();
+        if lost[0] > 0 {
+            assert!(lost[1] > 0, "the next in the squad's order takes the arc");
+            assert_eq!(lost[2], 0, "the arc does not chain");
+            return;
+        }
+    }
+    panic!("no sortie swing landed");
+}
+
+#[test]
+fn a_voltage_hit_arcs_in_the_real_tactical_attack() {
+    let mut game = typed_game();
+    let pack = crate::tests::tactical::tactical_fight(&mut game, 2, 5000);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "volt_rod");
+    let (px, py) = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .unwrap();
+    for (body, cell) in [(pack[0], (px + 1, py)), (pack[1], (px + 2, py))] {
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, cell)
+        );
+    }
+    for stream in 0..200u64 {
+        reseed_rng(&mut game, stream);
+        let (a, b) = (hp(&game, pack[0]), hp(&game, pack[1]));
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, pack[0]]);
+        if game.tactical_attack(pack[0]) && hp(&game, pack[0]) < a {
+            assert!(hp(&game, pack[1]) < b, "the swing's hit arcs on the map");
+            return;
+        }
+    }
+    panic!("no swing landed");
 }

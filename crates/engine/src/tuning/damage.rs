@@ -45,3 +45,8 @@ pub const THERMAL_HEAT_DAMAGE_TAKEN_PCT: i32 = 10;
 
 /// Rounds a Thermal hit keeps its target hot.
 pub const THERMAL_HEAT_ROUNDS: u32 = 3;
+
+// ── Voltage: arc ────────────────────────────────────────────────────────
+
+/// Percent of a landed Voltage hit that arcs on to the target's neighbour.
+pub const VOLTAGE_ARC_SHARE_PCT: i32 = 50;

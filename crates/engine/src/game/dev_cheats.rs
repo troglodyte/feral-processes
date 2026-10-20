@@ -86,4 +86,34 @@ impl Game {
         self.grant_research(&def);
         Ok(format!("Unlocked {}.", def.name))
     }
+
+    /// Adds one random species from what can spawn on the player's current
+    /// tile as a companion. The pool is `habitat_pools` with the field
+    /// spawner's own depth (`None`), sorted by id and drawn with the seeded
+    /// game RNG; the adoption mirrors `deliver_offer`'s `Program` arm, the
+    /// one path that hands the player a companion from nothing.
+    #[doc(hidden)]
+    pub fn dev_spawn_companion(&mut self) -> Result<String, String> {
+        let at = *self
+            .world
+            .get::<Position>(self.player_entity())
+            .ok_or("The player has no tile.")?;
+        let Some((mut pool, _)) = self.habitat_pools(at.x, at.y, None, 0) else {
+            return Err("Nothing can spawn on this tile.".into());
+        };
+        if pool.is_empty() {
+            return Err("Nothing can spawn on this tile.".into());
+        }
+        pool.sort();
+        let species = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            pool[rng.0.random_range(0..pool.len())].clone()
+        };
+        let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+        let anchor = self.anchor_position().unwrap_or((0, 0));
+        match self.adopt_program(&species, anchor.0, anchor.1, mult) {
+            Some(program) => Ok(format!("{} is yours", self.creature_label(program))),
+            None => Err(format!("{species} would not come.")),
+        }
+    }
 }

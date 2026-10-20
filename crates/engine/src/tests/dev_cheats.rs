@@ -286,3 +286,72 @@ fn unlock_research_puts_a_routine_node_in_known_routines() {
     assert!(game.knows_routine(&ability));
     assert!(!game.world.resource::<Research>().0.contains(&id));
 }
+
+/// The species of the one program `dev_spawn_companion` added.
+fn spawn_companion(game: &mut Game) -> Result<String, (String, String)> {
+    let before: Vec<Entity> = game.owned_pets().iter().map(|p| p.entity).collect();
+    let said = game.dev_spawn_companion().map_err(|e| (e, String::new()))?;
+    let added: Vec<Entity> = game
+        .owned_pets()
+        .iter()
+        .map(|p| p.entity)
+        .filter(|e| !before.contains(e))
+        .collect();
+    assert_eq!(added.len(), 1, "exactly one companion joined: {said}");
+    Ok(game
+        .world
+        .get::<Creature>(added[0])
+        .unwrap()
+        .species
+        .clone())
+}
+
+fn on_a_walkable_field_tile(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let at = *game.world.get::<Position>(player).unwrap();
+    assert!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(at.x, at.y)
+            .walkable
+    );
+    game
+}
+
+#[test]
+fn spawn_companion_draws_from_the_tiles_pool_and_joins_the_roster() {
+    let mut game = on_a_walkable_field_tile(9401);
+    let at = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (pool, _) = game.habitat_pools(at.x, at.y, None, 0).unwrap();
+
+    let species = spawn_companion(&mut game).unwrap();
+
+    assert!(pool.contains(&species), "{species} not in {pool:?}");
+}
+
+#[test]
+fn spawn_companion_is_deterministic_per_seed() {
+    let first = spawn_companion(&mut on_a_walkable_field_tile(9402)).unwrap();
+    let second = spawn_companion(&mut on_a_walkable_field_tile(9402)).unwrap();
+
+    assert_eq!(first, second);
+}
+
+#[test]
+fn spawn_companion_refuses_an_unwalkable_tile() {
+    let mut game = on_a_walkable_field_tile(9403);
+    let player = game.player_entity();
+    let blocked = (-40..40)
+        .flat_map(|x| (-40..40).map(move |y| (x, y)))
+        .find(|&(x, y)| !game.world.resource_mut::<WorldMap>().tile(x, y).walkable)
+        .expect("the zone has some wall");
+    game.world.entity_mut(player).insert(Position {
+        x: blocked.0,
+        y: blocked.1,
+    });
+    let pets = game.owned_pets().len();
+
+    assert!(game.dev_spawn_companion().is_err());
+    assert_eq!(game.owned_pets().len(), pets);
+}

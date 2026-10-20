@@ -1357,6 +1357,35 @@ fn an_arc_that_kills_goes_through_the_death_path() {
     game.world.get_mut::<Stats>(m[1]).unwrap().hp = 1;
     let _ = landed_volt_hit(&mut game, player, m[0], &m);
     assert!(!game.creature_alive(m[1]));
+    assert_eq!(hp(&game, m[1]), 0, "the arc took the last Integrity");
+    assert!(
+        log_texts(&game)
+            .iter()
+            .any(|l| l.starts_with("The charge arcs to Glitch")),
+        "the kill is narrated as an arc"
+    );
+}
+
+#[test]
+fn a_narrow_swing_reaps_a_non_front_body_its_arc_killed() {
+    let mut game = typed_game();
+    let (player, m) = wild_group(&mut game, 3);
+    equip_weapon(&mut game, player, "volt_rod");
+    game.world.get_mut::<Stats>(m[1]).unwrap().hp = 1;
+    for stream in 0..200u64 {
+        reseed_rng(&mut game, stream);
+        game.party_member_attacks(0, player, 0, player);
+        if !game.creature_alive(m[1]) {
+            assert!(
+                !game.world.resource::<BattleState>().groups[0]
+                    .members
+                    .contains(&m[1]),
+                "the arc's corpse was left in the group"
+            );
+            return;
+        }
+    }
+    panic!("no arc killed the neighbour");
 }
 
 #[test]

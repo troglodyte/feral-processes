@@ -633,16 +633,13 @@ impl Game {
             self.log_swing(MessageKind::PartyDamage, outcome, body, line);
         }
 
-        if wide.is_some() {
-            // A wide swing drops bodies from any rank, and a corpse left in
-            // a group is promoted to front and then attacked as though
-            // alive — the Special arm's reason for reaping the same way.
-            // After the sweep and never per body, or a swing that empties a
-            // group re-letters it half way through its own sweep.
-            if self.reap_dead_members(player) {
-                return SwingControl::BattleOver;
-            }
-        } else if !self.creature_alive(front) && self.finish_group_member(live, player) {
+        // A wide swing drops bodies from any rank and a Voltage arc kills
+        // the target's neighbour, so a narrow swing can too; a corpse left
+        // in a group is promoted to front and then attacked as though
+        // alive — the Special arm's reason for reaping the same way.
+        // After the sweep and never per body, or a swing that empties a
+        // group re-letters it half way through its own sweep.
+        if self.reap_dead_members(player) {
             return SwingControl::BattleOver;
         }
         SwingControl::Swung

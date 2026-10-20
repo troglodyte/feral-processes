@@ -65,7 +65,8 @@ spec resolves to a release tag.
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
 | `2026-08-17-zones-as-difficulty-parked` | parked | no shape chosen |
 | `2026-08-17-item-synergy-burnout-parked` | parked | nothing stacks yet |
-| `2026-10-16-damage-types-parked` | parked | no damage types exist; shape is five physical forces + resistances + side effects |
+| `2026-10-19-damage-types-design` | draft, awaiting approval; **unbuilt** | five types (Voltage, not Surge) + armour resistance + side effects, in five staged releases; Rust enum, no asset files |
+| `2026-10-16-damage-types-parked` | **superseded** by `2026-10-19-damage-types-design` | the brainstorm and the rejected directions |
 | `2026-08-18-gear-passives-balance-measurement` | **not run** | a measurement protocol, never executed; the design it measures shipped in `v0.11.2` |
 | `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slices 1 and 2 shipped (slice 2 has its own archived spec); slices 3-4 deliberately deferred |
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |

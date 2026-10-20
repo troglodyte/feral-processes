@@ -6,6 +6,8 @@
 //! emits and the reap that clears the fallen out of their group in one file
 //! is what makes that claim checkable by reading rather than by grepping.
 
+use crate::damage::{self, DamageType};
+use crate::game::combat::AttackProfile;
 use crate::game::kit::Kit;
 use crate::tactical::TacticalBattle;
 use crate::*;
@@ -310,7 +312,7 @@ impl Game {
         // Reporting the pre-mitigation roll would claim damage the target
         // never took, the same trap `restore_hp` returning its landed figure
         // already closes from the other side.
-        let landed = self.apply_damage(defender, rolled);
+        let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
         // and not inside `apply_damage`. Below the `rolled <= 0` return
@@ -336,11 +338,20 @@ impl Game {
     /// would spend a `GameRng` draw before the band roll and break every
     /// draw-count assertion `resolve_attack` carries.
     pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
-        let natural = match self.kit_of(entity) {
-            Kit::Unarmed => crate::tuning::PLAYER_UNARMED_DAMAGE,
-            Kit::Innate(def) | Kit::Emulated { def, .. } => def.natural_range(),
+        self.natural_profile_of(entity).range
+    }
+
+    /// `natural_range_of` with the type that goes with the band: the first
+    /// move's, or the worn weapon's band and type (a blade's `None`
+    /// included) when one is worn. The type follows the band.
+    pub(crate) fn natural_profile_of(&self, entity: Entity) -> AttackProfile {
+        let (natural, natural_type) = match self.kit_of(entity) {
+            Kit::Unarmed => (crate::tuning::PLAYER_UNARMED_DAMAGE, None),
+            Kit::Innate(def) | Kit::Emulated { def, .. } => {
+                (def.natural_range(), def.natural_type())
+            }
         };
-        self.attack_range(entity, natural)
+        self.attack_profile(entity, natural, natural_type)
     }
 
     /// Applies `dmg` to `target`, cut by `target`'s mitigation and floored
@@ -360,7 +371,18 @@ impl Game {
     /// landed figure rather than its requested one. A log line printing the
     /// requested number claims damage the target never took.
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) -> i32 {
-        let dealt = self.mitigate_incoming_damage(target, dmg);
+        self.apply_damage_typed(target, dmg, None)
+    }
+
+    /// `apply_damage` for a hit of a damage type: the target's resistance to
+    /// that type cuts it after the general mitigation.
+    pub(crate) fn apply_damage_typed(
+        &mut self,
+        target: Entity,
+        dmg: i32,
+        ty: Option<DamageType>,
+    ) -> i32 {
+        let dealt = self.mitigate_incoming_damage_typed(target, dmg, ty);
         let dealt = self.dead_mans_switch(target, dealt);
         self.lower_hp(target, dealt);
         // "An area attack connected." The third and last `break_cloak`
@@ -495,10 +517,21 @@ impl Game {
     /// passes through untouched rather than being raised to 1. A target that
     /// neither cuts by percentage nor deflects also passes through untouched.
     pub(crate) fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
-        battle::damage_after_mitigation(
+        self.mitigate_incoming_damage_typed(target, dmg, None)
+    }
+
+    pub(crate) fn mitigate_incoming_damage_typed(
+        &self,
+        target: Entity,
+        dmg: i32,
+        ty: Option<DamageType>,
+    ) -> i32 {
+        let gear = self.gear_bonus(target);
+        battle::damage_after_mitigation_typed(
             dmg,
             self.effective_mitigation(target),
-            self.gear_bonus(target).deflection,
+            damage::resist_against(gear.resist, ty),
+            gear.deflection,
         )
     }
 

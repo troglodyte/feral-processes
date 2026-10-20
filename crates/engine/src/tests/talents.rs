@@ -367,6 +367,7 @@ fn an_affinity_talent_sharpens_the_category_it_names_and_no_other() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let plain = developed(&mut game, TALENT_START_LEVEL + 4);
     let damage = AbilityEffect::Damage {
+        damage_type: None,
         power: 10,
         spread: 0,
         status: None,
@@ -425,6 +426,7 @@ fn an_affinity_talent_is_clamped_at_the_ceiling() {
         game.ability_affinity(
             pet,
             &AbilityEffect::Damage {
+                damage_type: None,
                 power: 10,
                 spread: 0,
                 status: None,
@@ -442,6 +444,7 @@ fn an_affinity_talent_on_the_player_changes_nothing() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let damage = AbilityEffect::Damage {
+        damage_type: None,
         power: 10,
         spread: 0,
         status: None,

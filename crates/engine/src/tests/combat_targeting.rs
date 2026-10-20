@@ -649,6 +649,7 @@ fn install_test_species(
         base_speed,
         moves: move_name
             .map(|name| MoveDef {
+                damage_type: None,
                 name: name.to_string(),
                 power: 2,
                 spread: 0,

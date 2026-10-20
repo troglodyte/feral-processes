@@ -71,7 +71,8 @@ fn a_body_of_an_unknown_species_is_unarmed() {
 fn the_unarmed_player_swings_a_data_strike() {
     let mut game = game();
     let player = game.player_entity();
-    let (name, band) = game.swing_move_at(player, None);
+    let swing = game.swing_move_at(player, None);
+    let (name, band) = (swing.name, swing.range);
     assert_eq!(name, "data strike");
     assert_eq!(band, PLAYER_UNARMED_DAMAGE);
 }
@@ -99,7 +100,8 @@ fn the_unarmed_player_swings_at_arms_length() {
 fn a_stray_body_swings_a_raw_signal_burst() {
     let mut game = game();
     let stray = body(&mut game, "no_such_species");
-    let (name, band) = game.swing_move_at(stray, None);
+    let swing = game.swing_move_at(stray, None);
+    let (name, band) = (swing.name, swing.range);
     assert_eq!(name, "a raw signal burst");
     assert_eq!(band, PLAYER_UNARMED_DAMAGE);
 }

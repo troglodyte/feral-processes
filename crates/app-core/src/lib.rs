@@ -631,6 +631,8 @@ fn swap_delta(game: &Game, mods: EquipmentStats, worn: EquipmentStats) -> String
             accuracy: mods.accuracy - worn.accuracy,
             evasion: mods.evasion - worn.evasion,
             deflection: mods.deflection - worn.deflection,
+            damage_type: None,
+            resist: mods.resist + worn.resist.times(-1),
         },
     );
     if delta.is_empty() {

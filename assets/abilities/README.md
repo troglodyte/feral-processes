@@ -118,6 +118,12 @@ way deleting the Currency item does.
     //     the others. An id no status file defines drops the rider at load,
     //     with a warning.
     //
+    //     Also optional: `damage_type: Some(Thermal)` (and `Magnetic`,
+    //     `Noise`, `Voltage`, `Radiation`). No shipped ability sets it yet;
+    //     a species move sets it through its basic-attack conversion, and an
+    //     authored ability that sets it deals typed damage, cut by the
+    //     target's resistance to that type.
+    //
     //   Heal(power: 8, spread: 2)
     //     Restores Integrity, capped at the recipient's maximum. `power` is
     //     the *centre* of the band and `spread` its half-width, exactly as

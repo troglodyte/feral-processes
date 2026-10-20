@@ -18,6 +18,7 @@ pub mod classes;
 pub mod components;
 pub mod contracts;
 pub mod crops;
+pub mod damage;
 pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;

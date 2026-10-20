@@ -258,6 +258,7 @@ impl Game {
             range: band,
             accuracy: def.accuracy,
             cover_ignored: def.tactical_shape().ignores_cover(),
+            damage_type: None,
         };
         let attacker = self.combatant_profile(entity, swing);
         let aimed: Vec<AimedVictim> = self

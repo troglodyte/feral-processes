@@ -48,9 +48,13 @@ property `assets/policies/enemy_battle.ron` has.
     // do. Added afterwards it would dwindle across a run, which is the
     // opposite of what a rolled property is for.
     //
-    // The same seven fields `EquipmentStats` carries — `atk`, `mitigation`,
+    // The same nine fields `EquipmentStats` carries — `atk`, `mitigation`,
     // `decompiler`, `damage`, `accuracy`, `evasion`, `deflection` (see
-    // "Deflection" below; it is the one stat that is not scaled). `mitigation` was `def`
+    // "Deflection" below; it is not scaled), `resist` (percent resistance
+    // per damage type, e.g. `resist: (thermal: 20)`; not scaled, and an
+    // affix granting only resistance is valid) and `damage_type`, which an
+    // affix may NOT set: a file that does is skipped with a warning, because
+    // a weapon's type belongs to the base item. `mitigation` was `def`
     // and is now percentage points rather than points of absorption, so an
     // affix that used to add 1 point of armour should read as roughly 3
     // points of percentage. A `damage` affix widens a weapon's band:

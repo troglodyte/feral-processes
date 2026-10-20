@@ -99,6 +99,10 @@ pub struct Swing {
     /// boulder. A `Single`, a `Line` and a `Cone` are all shots, and cover
     /// is what a shot is refused by.
     pub cover_ignored: bool,
+    /// The damage type this swing deals, if any. The target's resistance to
+    /// it cuts the hit in `Game::apply_damage_typed`. `None` is ordinary
+    /// damage that no resistance touches.
+    pub damage_type: Option<crate::damage::DamageType>,
 }
 
 impl Swing {
@@ -110,6 +114,15 @@ impl Swing {
             accuracy: 0,
             free: false,
             cover_ignored: false,
+            damage_type: None,
+        }
+    }
+
+    /// This swing, dealing `damage_type`.
+    pub fn with_type(self, damage_type: Option<crate::damage::DamageType>) -> Self {
+        Swing {
+            damage_type,
+            ..self
         }
     }
 
@@ -378,15 +391,30 @@ pub fn plain_hit(range: DamageRange, atk: i32) -> f64 {
 /// deflects pass through untouched. `deflection` is clamped to
 /// `DEFLECTION_MAX` here so no caller can forget the cap.
 pub fn damage_after_mitigation(dmg: i32, percent: i32, deflection: i32) -> i32 {
+    damage_after_mitigation_typed(dmg, percent, 0, deflection)
+}
+
+/// `damage_after_mitigation` with a damage-type resistance (percent, already
+/// capped by `damage::resist_against`) applied after the general cut.
+///
+/// Rounds once, after *both* cuts: rounding between them can discard a point
+/// the combined operation keeps, for the reason the untyped form gives.
+pub fn damage_after_mitigation_typed(
+    dmg: i32,
+    percent: i32,
+    type_resist: i32,
+    deflection: i32,
+) -> i32 {
     let deflection = deflection.clamp(0, crate::tuning::DEFLECTION_MAX);
-    if dmg <= 0 || (percent <= 0 && deflection == 0) {
+    if dmg <= 0 || (percent <= 0 && type_resist <= 0 && deflection == 0) {
         return dmg;
     }
-    let reduced = if percent > 0 {
-        (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32
+    let general = if percent > 0 {
+        (dmg as f32 * (1.0 - percent as f32 / 100.0)) as f64
     } else {
-        dmg
+        dmg as f64
     };
+    let reduced = crate::damage::type_cut(general, type_resist.max(0)).round() as i32;
     (reduced - deflection).max(1)
 }
 
@@ -808,6 +836,51 @@ mod tests {
     use crate::tuning::{
         CRIT_CHANCE, FUMBLE_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_MITIGATION_PERCENT,
     };
+
+    #[test]
+    fn typed_mitigation_with_no_resistance_is_the_untyped_one() {
+        // The formula as it stood before types existed, written out.
+        let old = |dmg: i32, p: i32, defl: i32| {
+            let defl = defl.clamp(0, crate::tuning::DEFLECTION_MAX);
+            if dmg <= 0 || (p <= 0 && defl == 0) {
+                return dmg;
+            }
+            let reduced = if p > 0 {
+                (dmg as f32 * (1.0 - p as f32 / 100.0)).round() as i32
+            } else {
+                dmg
+            };
+            (reduced - defl).max(1)
+        };
+        for dmg in -1..40 {
+            for percent in [0, 2, 10, 25, 50, 75] {
+                for deflection in [0, 1, 3, 6, 9] {
+                    let expected = old(dmg, percent, deflection);
+                    assert_eq!(
+                        damage_after_mitigation_typed(dmg, percent, 0, deflection),
+                        expected,
+                        "dmg {dmg} percent {percent} deflection {deflection}"
+                    );
+                    assert_eq!(damage_after_mitigation(dmg, percent, deflection), expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_typed_hit_with_resistance_lands_less() {
+        // No general cut and no deflection: only the early return could
+        // swallow the resistance.
+        assert_eq!(damage_after_mitigation_typed(10, 0, 50, 0), 5);
+        assert!(damage_after_mitigation_typed(20, 10, 40, 1) < damage_after_mitigation(20, 10, 1));
+    }
+
+    #[test]
+    fn rounding_happens_after_both_cuts() {
+        // 5 -> 2.5 (general 50%) -> 1.25 (type 50%) -> 1. Rounding the
+        // general cut first would give 3, then 1.5, then 2.
+        assert_eq!(damage_after_mitigation_typed(5, 50, 50, 0), 1);
+    }
 
     fn duel(ehp: f64, damage: f64) -> DuelSide {
         DuelSide { ehp, damage }

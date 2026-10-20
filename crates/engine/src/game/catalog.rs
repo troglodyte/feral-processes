@@ -1165,6 +1165,8 @@ fn scale_stats(stats: crate::items::EquipmentStats, count: u32) -> crate::items:
         accuracy: stats.accuracy * n,
         evasion: stats.evasion * n,
         deflection: stats.deflection * n,
+        damage_type: stats.damage_type,
+        resist: stats.resist.times(n),
     }
 }
 

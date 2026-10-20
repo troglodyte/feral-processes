@@ -26,6 +26,7 @@ use crate::components::{Rarity, Stats};
 
 mod base;
 mod combat;
+mod damage;
 mod economy;
 mod encounters;
 mod items;
@@ -41,6 +42,7 @@ mod tactical;
 
 pub use base::*;
 pub use combat::*;
+pub use damage::*;
 pub use economy::*;
 pub use encounters::*;
 pub use items::*;

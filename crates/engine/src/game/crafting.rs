@@ -838,6 +838,10 @@ impl Game {
                     accuracy: acc.accuracy + affix.stats.accuracy,
                     evasion: acc.evasion + affix.stats.evasion,
                     deflection: acc.deflection + affix.stats.deflection,
+                    // An affix never sets a type (the loader refuses it), so
+                    // the base's survives.
+                    damage_type: acc.damage_type,
+                    resist: acc.resist + affix.stats.resist,
                 });
         // A spent copy stays worn and inert: zero, not absent, so the
         // equip/unequip delta stays exact whether or not it is broken.
@@ -910,6 +914,10 @@ impl Game {
                     accuracy: acc.accuracy + mods.accuracy,
                     evasion: acc.evasion + mods.evasion,
                     deflection: acc.deflection + mods.deflection,
+                    // A total of types means nothing; the wielded weapon's
+                    // type is read from the weapon slot (`Game::attack_profile`).
+                    damage_type: None,
+                    resist: acc.resist + mods.resist,
                 }
             })
     }

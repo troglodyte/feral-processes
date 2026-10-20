@@ -1,0 +1,141 @@
+//! Damage types: which kind of harm a hit does, and how much of it a target
+//! shrugs off. A hit with no type (`None`) is ordinary damage and resistance
+//! never applies to it.
+
+use serde::{Deserialize, Serialize};
+use std::ops::Add;
+
+use crate::tuning::{DAMAGE_RESIST_CAP, SIDE_EFFECT_BLOCK_THRESHOLD};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DamageType {
+    Thermal,
+    Magnetic,
+    Noise,
+    Voltage,
+    Radiation,
+}
+
+impl DamageType {
+    pub const ALL: [DamageType; 5] = [
+        DamageType::Thermal,
+        DamageType::Magnetic,
+        DamageType::Noise,
+        DamageType::Voltage,
+        DamageType::Radiation,
+    ];
+}
+
+/// Percent resistance to each damage type. Summed across gear; the cap is
+/// applied at use (`resist_against`), not here.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Resistances {
+    #[serde(default)]
+    pub thermal: i32,
+    #[serde(default)]
+    pub magnetic: i32,
+    #[serde(default)]
+    pub noise: i32,
+    #[serde(default)]
+    pub voltage: i32,
+    #[serde(default)]
+    pub radiation: i32,
+}
+
+impl Resistances {
+    pub fn get(self, ty: DamageType) -> i32 {
+        match ty {
+            DamageType::Thermal => self.thermal,
+            DamageType::Magnetic => self.magnetic,
+            DamageType::Noise => self.noise,
+            DamageType::Voltage => self.voltage,
+            DamageType::Radiation => self.radiation,
+        }
+    }
+    /// Every resistance multiplied by `n`: a stacked affix counts `n` times.
+    pub fn times(self, n: i32) -> Resistances {
+        Resistances {
+            thermal: self.thermal * n,
+            magnetic: self.magnetic * n,
+            noise: self.noise * n,
+            voltage: self.voltage * n,
+            radiation: self.radiation * n,
+        }
+    }
+}
+
+impl Add for Resistances {
+    type Output = Resistances;
+    fn add(self, o: Resistances) -> Resistances {
+        Resistances {
+            thermal: self.thermal + o.thermal,
+            magnetic: self.magnetic + o.magnetic,
+            noise: self.noise + o.noise,
+            voltage: self.voltage + o.voltage,
+            radiation: self.radiation + o.radiation,
+        }
+    }
+}
+
+/// The effective resistance (percent) to a hit of type `ty`: 0 for an
+/// untyped hit, otherwise the summed value clamped to `0..=DAMAGE_RESIST_CAP`.
+pub fn resist_against(res: Resistances, ty: Option<DamageType>) -> i32 {
+    ty.map_or(0, |t| res.get(t).clamp(0, DAMAGE_RESIST_CAP))
+}
+
+/// `dmg` after a type resistance. The identity at 0.
+pub fn type_cut(dmg: f64, resist_pct: i32) -> f64 {
+    if resist_pct == 0 {
+        return dmg;
+    }
+    dmg * (1.0 - resist_pct as f64 / 100.0)
+}
+
+/// Whether a resistance is high enough to stop a type's side effect.
+pub fn side_effect_blocked(resist_pct: i32) -> bool {
+    resist_pct >= SIDE_EFFECT_BLOCK_THRESHOLD
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_cap_clamps_a_sum_over_100() {
+        let res = Resistances {
+            thermal: 60,
+            ..Default::default()
+        } + Resistances {
+            thermal: 70,
+            ..Default::default()
+        };
+        assert_eq!(res.thermal, 130);
+        assert_eq!(
+            resist_against(res, Some(DamageType::Thermal)),
+            DAMAGE_RESIST_CAP
+        );
+    }
+
+    #[test]
+    fn an_untyped_hit_resists_nothing() {
+        let res = Resistances {
+            thermal: 50,
+            ..Default::default()
+        };
+        assert_eq!(resist_against(res, None), 0);
+    }
+
+    #[test]
+    fn type_cut_is_the_identity_at_zero() {
+        for d in [0.0, 1.0, 7.5, 123.0] {
+            assert_eq!(type_cut(d, 0), d);
+        }
+        assert_eq!(type_cut(10.0, 50), 5.0);
+    }
+
+    #[test]
+    fn the_threshold_fires_at_exactly_the_constant() {
+        assert!(!side_effect_blocked(SIDE_EFFECT_BLOCK_THRESHOLD - 1));
+        assert!(side_effect_blocked(SIDE_EFFECT_BLOCK_THRESHOLD));
+    }
+}

@@ -2,12 +2,34 @@
 //! effective stats, and rendering the result as a `BattleView`.
 
 use crate::abilities::PassiveTrigger;
+use crate::damage::DamageType;
+use crate::game::combat::AttackProfile;
 use crate::game::kit::Kit;
 use crate::tuning::{
     ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS, PLAYER_UNARMED_DAMAGE,
     WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
 };
 use crate::*;
+
+/// The move one body swings with, rolled by `Game::swing_move_at`.
+#[derive(Clone, Debug)]
+pub(crate) struct SwingMove {
+    pub name: String,
+    pub range: battle::DamageRange,
+    /// The rolled move's own type, before a worn weapon overrides it in
+    /// `Game::attack_profile`. `None` when unarmed.
+    pub damage_type: Option<DamageType>,
+}
+
+impl SwingMove {
+    fn untyped(name: &str, range: battle::DamageRange) -> Self {
+        SwingMove {
+            name: name.to_string(),
+            range,
+            damage_type: None,
+        }
+    }
+}
 
 /// What one swing did to the turn it belongs to. Three states rather than a
 /// bool because "the battle ended" and "there is nothing left to aim at" ask
@@ -556,8 +578,13 @@ impl Game {
         let Some(front) = self.front_of_group(live) else {
             return SwingControl::NoTarget;
         };
-        let (move_name, natural) = self.swing_move(entity);
-        let range = self.attack_range(entity, natural);
+        let SwingMove {
+            name: move_name,
+            range: natural,
+            damage_type: natural_type,
+        } = self.swing_move(entity);
+        let AttackProfile { range, damage_type } =
+            self.attack_profile(entity, natural, natural_type);
 
         // The recipient list is built **once**, before anything is swung at,
         // and the front is first and never dropped from it: a blast centred
@@ -597,7 +624,11 @@ impl Game {
             // same band — no new damage path, so mitigation, affinity and
             // every rung of the fumble ladder hold for free, and the ladder
             // rolls per body because a wide swing is a sloppy swing.
-            let outcome = self.resolve_and_apply_attack(entity, body, battle::Swing::plain(range));
+            let outcome = self.resolve_and_apply_attack(
+                entity,
+                body,
+                battle::Swing::plain(range).with_type(damage_type),
+            );
             let line = self.party_swing_line(entity, &move_name, outcome);
             self.log_swing(MessageKind::PartyDamage, outcome, body, line);
         }
@@ -625,7 +656,7 @@ impl Game {
     /// **Read off the entity, never off a battle slot.** Slot 0 was the
     /// player only because `Party` is indexed that way in the abstract
     /// model; a body on a tactical battle map has no slot at all.
-    pub(crate) fn swing_move(&mut self, entity: Entity) -> (String, battle::DamageRange) {
+    pub(crate) fn swing_move(&mut self, entity: Entity) -> SwingMove {
         self.swing_move_at(entity, None)
     }
 
@@ -636,24 +667,24 @@ impl Game {
     /// gate has already let swing must have *something* to swing, and a
     /// modded species whose only reaching move was filtered out would
     /// otherwise narrate a fumble it did not make.
-    pub(crate) fn swing_move_at(
-        &mut self,
-        entity: Entity,
-        distance: Option<u32>,
-    ) -> (String, battle::DamageRange) {
+    pub(crate) fn swing_move_at(&mut self, entity: Entity, distance: Option<u32>) -> SwingMove {
         match self.kit_of(entity) {
             Kit::Unarmed if entity == self.player_entity() => {
-                return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
+                return SwingMove::untyped("data strike", PLAYER_UNARMED_DAMAGE);
             }
-            Kit::Unarmed => return ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
+            Kit::Unarmed => return SwingMove::untyped("a raw signal burst", PLAYER_UNARMED_DAMAGE),
             Kit::Innate(_) | Kit::Emulated { .. } => {}
         }
         let rolled = self
             .roll_species_move_in_range(entity, distance)
             .or_else(|| self.roll_species_move(entity));
         match rolled {
-            Some(mv) => (mv.name.clone(), mv.attack_parts().0),
-            None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
+            Some(mv) => SwingMove {
+                name: mv.name.clone(),
+                range: mv.attack_parts().0,
+                damage_type: mv.attack_type(),
+            },
+            None => SwingMove::untyped("a raw signal burst", PLAYER_UNARMED_DAMAGE),
         }
     }
 
@@ -1743,6 +1774,7 @@ impl Game {
                     power,
                     spread,
                     status,
+                    damage_type,
                 } => {
                     // Mitigation is `apply_damage`'s, not a term here — see
                     // `party_member_attacks` for why passing it to
@@ -1763,6 +1795,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
+                            damage_type: *damage_type,
                         },
                     );
                     let line = match outcome {
@@ -1804,6 +1837,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
+                            damage_type: None,
                         },
                     );
                     let dmg = outcome.damage_to_defender();

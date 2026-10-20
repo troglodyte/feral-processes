@@ -158,6 +158,9 @@ impl AffixDef {
         // affix shape. A penalty on its own is not: nothing weighs it, so
         // the copy that rolled it is one no player has a reason to equip,
         // and the roll that produced it was a wasted one.
+        if self.stats.damage_type.is_some() {
+            return Some("sets a damage type, which only a base item or a move may carry");
+        }
         if !self.stats.has_upside() {
             return Some("grants no positive stat, so it is a cost with nothing to weigh it");
         }

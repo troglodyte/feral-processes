@@ -279,9 +279,13 @@ impl Game {
         let targets_companion = target != player;
 
         // A wild program can be wearing gear, so its swing goes through
-        // `attack_range` like anybody else's.
-        let band = self.attack_range(wild, range);
-        let outcome = self.resolve_and_apply_attack(wild, target, battle::Swing::plain(band));
+        // `attack_profile` like anybody else's.
+        let profile = self.attack_profile(wild, range, mv.attack_type());
+        let outcome = self.resolve_and_apply_attack(
+            wild,
+            target,
+            battle::Swing::plain(profile.range).with_type(profile.damage_type),
+        );
         let dmg = outcome.damage_to_defender();
         // A missed swing lands no rider. The gate below already dropped it
         // most turns; this drops it on every turn the attack did not land.

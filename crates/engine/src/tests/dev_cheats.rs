@@ -97,6 +97,25 @@ fn free_build_rebuild_still_consumes_its_program() {
     );
 }
 
+/// The counterpart that makes the program assertion above mean something:
+/// the program is spent either way, and it is the structure standing at once
+/// that free build adds.
+#[test]
+fn rebuild_without_free_build_spends_the_program_but_raises_nothing_yet() {
+    let mut game = bare_base(9006);
+    let (px, py) = game.base_pos().unwrap();
+    let mut site = BuildSite::new(StructureId::from("extractor"), vec![]);
+    site.awaiting_program = true;
+    let site = game.world.spawn((site, Position { x: px + 1, y: py })).id();
+    let program = build_program(&mut game, &"extractor".to_string(), 1).expect("a program");
+
+    game.commit_rebuild_program(site, program).unwrap();
+
+    assert!(game.world.get_entity(program).is_err(), "program spent");
+    assert!(structure_at(&mut game, 1, 0).is_none(), "not raised yet");
+    assert!(game.world.get::<BuildSite>(site).is_some(), "still a site");
+}
+
 #[test]
 fn free_build_does_not_survive_a_save() {
     let mut game = bare_base(9005);

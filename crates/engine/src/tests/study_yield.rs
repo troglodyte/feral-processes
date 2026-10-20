@@ -488,6 +488,34 @@ fn a_carrier_that_cannot_make_progress_gives_up_after_the_patience() {
     assert_eq!(racked_levels(&game, rack), vec![7]);
 }
 
+/// Patience counts passes on *one* tile: a body that is moving, however
+/// slowly, is making progress and is not given up on.
+#[test]
+fn patience_starts_over_when_the_carrier_moves() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    let patience = crate::tuning::RACK_CARRY_PATIENCE_BEATS;
+    let start = *game.world.get::<Position>(carrier).unwrap();
+
+    for _ in 0..patience {
+        game.rack_carrier_patience(carrier);
+    }
+    game.world.get_mut::<Position>(carrier).unwrap().x = start.x + 1;
+    for _ in 0..patience {
+        game.rack_carrier_patience(carrier);
+    }
+    assert!(
+        game.world.get::<CarryingProgram>(carrier).is_some(),
+        "two stretches each short of the patience added up across a move"
+    );
+
+    game.rack_carrier_patience(carrier);
+    assert!(
+        game.world.get::<CarryingProgram>(carrier).is_none(),
+        "and one tile's patience still runs out"
+    );
+}
+
 #[test]
 fn a_rack_lost_mid_trip_puts_the_program_back_on_the_station() {
     let (mut game, station, rack) = base_with_station_and_rack();

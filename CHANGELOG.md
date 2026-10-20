@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.26
+
+**Voltage hits arc to a neighbour.** When a Voltage hit lands and the target survives it, half of the damage jumps to one of the target's allies. On a battle map that is an ally standing next to the target; in a group fight or a sortie it is the next member after the target in its group or party order. The arc cannot miss, it never jumps a second time, it never lands on a cloaked body, and the neighbour's own Voltage resistance reduces it. Armour that resists Voltage by 50% or more takes the hit but stops the arc. No shipped armour reaches 50% yet. A Voltage routine used in a sortie does not arc yet; only weapon and basic attacks do. The balance curves did not move.
+
+**Fix:** a body killed in the middle of a group by a hit's side effect now leaves the fight at once. Before, a later blow could reach it as though it were still standing, and an attack that hits several targets now skips one that has already gone down.
+
 ## 0.19.25
 
 **Thermal hits make their target overheat.** Each Thermal hit that lands adds a stack of heat, shown as `HOT`, up to three. Each stack makes the target take 10% more damage from every source, bleeding included, for three rounds. The hit that adds the heat is not boosted by it. Armour that resists Thermal by 50% or more stops the heat from landing. No shipped armour reaches 50% yet. The balance curves did not move.

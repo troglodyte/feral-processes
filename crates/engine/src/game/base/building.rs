@@ -738,50 +738,7 @@ impl Game {
         self.world
             .entity_mut(worker)
             .remove::<crate::components::CarryingProgram>();
-
-        let racks: Vec<(i32, i32, Entity)> = {
-            let db = self.world.resource::<StructureDb>();
-            let mut found: Vec<(i32, i32, Entity)> = self
-                .world
-                .iter_entities()
-                .filter_map(|e| {
-                    let kind = &e.get::<Structure>()?.kind;
-                    let p = e.get::<Position>()?;
-                    db.get(kind)?.racks.as_ref()?;
-                    e.contains::<crate::components::Racked>()
-                        .then_some((p.x, p.y, e.id()))
-                })
-                .collect();
-            found.sort();
-            found
-        };
-        if let Some(rack) = racks
-            .into_iter()
-            .map(|(_, _, e)| e)
-            .find(|rack| self.rack_room(*rack) > 0)
-            && let Some(mut shelf) = self.world.get_mut::<crate::components::Racked>(rack)
-        {
-            shelf.0.push(held);
-            return;
-        }
-
-        let label = self.downed_program_label(&held);
-        let player = self.player_entity();
-        let room = self
-            .world
-            .get::<crate::components::DownedPrograms>(player)
-            .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
-        if room {
-            if let Some(mut store) = self
-                .world
-                .get_mut::<crate::components::DownedPrograms>(player)
-            {
-                store.0.push(held);
-            }
-            self.log_base(format!("{label} comes back to your pack."));
-        } else {
-            self.log_base(format!("{label} is lost with the machine."));
-        }
+        self.shelter_program(held);
     }
 
     /// Empties `target`'s `Stock` and reports what came off it, so the
@@ -1615,6 +1572,8 @@ impl Game {
             // The rig's own tool is carried in exactly as a program is, and
             // comes back out the same way. `Game::return_rig_tool`.
             self.return_rig_tool(target);
+            // And a station's held program: see `Game::return_study_yield`.
+            self.return_study_yield(target);
             if let Some(pos) = self.world.get::<Position>(target).copied() {
                 self.clear_pending_build_at(pos.x, pos.y);
             }

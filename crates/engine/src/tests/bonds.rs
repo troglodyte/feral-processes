@@ -436,6 +436,7 @@ fn a_program_spent_in_the_study_is_let_go() {
     let mut game = Game::new(4501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
+    spawn_machine_at(&mut game, "quarantine_rack", 6, 2);
     let leaving = spawn_tamed(&mut game, 10, 3);
     let id = id_of(&game, leaving);
     pin_subject_at_pen(&mut game, leaving, node);

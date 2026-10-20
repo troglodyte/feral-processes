@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::DecompileReach;
 use crate::base_grid::BaseGrid;
+use crate::components::Racked;
 use crate::items::DownedProgram;
 use crate::views::{PinMark, ResearchReadout};
 use crate::*;
@@ -2965,7 +2966,7 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
 
 /// M2 (final whole-branch review): once progress is full and the bill is
 /// paid, a subject-gated project with no pinned subject is exactly as
-/// stalled as one short a material or a full `DownedPrograms` store —
+/// stalled as one short a material or with nowhere to put the program —
 /// `settle_research`'s own ordering already treats it that way — but
 /// `research_material_shortfall` never said so, so the HUD read "Earning
 /// n/cost" forever with no stall line once the subject was gone. The
@@ -3025,7 +3026,8 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_blocked() {
 }
 
 /// The conversion: `downed_program_for_with_overkill(subject, 0.0)` →
-/// `push_downed_program` → despawn. The level comes off the subject's real
+/// `hold_at_station` → despawn. The pack is never involved: it is full here
+/// and the completion goes through anyway. The level comes off the subject's real
 /// `Experience`, not `ZoneLevel` — `ability_user_level`'s distinction from a
 /// wild kill — and a routine installed on the subject comes back as
 /// `carried`, since nothing about the test species' (declared-nothing) kit
@@ -3038,6 +3040,14 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
     let program = spawn_tamed(&mut game, 10, 3);
     game.world.get_mut::<Experience>(program).unwrap().level = 4;
     let species = game.world.get::<Creature>(program).unwrap().species.clone();
+    spawn_machine_at(&mut game, "quarantine_rack", 6, 2);
+    {
+        let player = game.player_entity();
+        game.world.get_mut::<DownedPrograms>(player).unwrap().0 = (0
+            ..crate::tuning::MAX_DOWNED_PROGRAMS)
+            .map(|_| filler_downed_program())
+            .collect();
+    }
     let prize = game
         .world
         .resource::<AbilityDb>()
@@ -3060,31 +3070,43 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
         game.world.get_entity(program).is_err(),
         "the subject leaves the world when it is spent"
     );
+    assert_eq!(
+        game.world
+            .get::<DownedPrograms>(game.player_entity())
+            .unwrap()
+            .0
+            .len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS,
+        "research never touches the pack"
+    );
     let held = game
         .world
-        .get::<DownedPrograms>(game.player_entity())
-        .unwrap()
-        .0
-        .clone();
-    assert_eq!(held.len(), 1, "exactly one DownedProgram must appear");
-    assert_eq!(held[0].species, species);
+        .get::<crate::components::StudyYield>(node)
+        .and_then(|y| y.0.clone())
+        .expect("the program is held at the station whose pen held the subject");
+    assert_eq!(held.species, species);
     assert_eq!(
-        held[0].level, 4,
+        held.level, 4,
         "level must come from the subject's real Experience, not ZoneLevel"
     );
     assert_eq!(
-        held[0].carried,
+        held.carried,
         Some(prize),
         "a routine installed on the subject comes back as carried"
     );
+    assert!(
+        game.world.get::<Racked>(node).is_none(),
+        "the station must never read as a rack"
+    );
 }
 
-/// A full `DownedPrograms` store refuses the conversion, and that refusal
-/// blocks the whole completion — reported the way a material shortfall is,
-/// through `Game::research_material_shortfall` — rather than eating the
-/// body and discovering the push failed afterward.
+/// No rack room refuses the conversion, and that refusal blocks the whole
+/// completion — reported the way a material shortfall is, through
+/// `Game::research_material_shortfall` — rather than eating the body and
+/// discovering afterward that the program has nowhere to go. A full pack is
+/// irrelevant now: research never uses it.
 #[test]
-fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
+fn no_rack_room_blocks_a_subject_gated_completion() {
     let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
@@ -3101,24 +3123,17 @@ fn a_full_downed_programs_store_blocks_a_subject_gated_completion() {
         .get("paging")
         .unwrap()
         .cost;
-    {
-        let player = game.player_entity();
-        let mut held = game.world.get_mut::<DownedPrograms>(player).unwrap();
-        held.0 = (0..crate::tuning::MAX_DOWNED_PROGRAMS)
-            .map(|_| filler_downed_program())
-            .collect();
-    }
     assert_eq!(
         game.research_material_shortfall(),
-        Some("room for another downed program".to_string()),
-        "a full store must be reported before the bill is even considered"
+        Some("room on a Quarantine Rack".to_string()),
+        "no rack at all must be reported before the bill is even considered"
     );
 
     game.tick();
 
     assert!(
         !game.is_researched("paging"),
-        "a full store must block completion"
+        "no rack room must block completion"
     );
     assert!(
         game.world

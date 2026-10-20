@@ -130,6 +130,7 @@ mod staff_report;
 mod stock;
 mod stockpiles;
 mod structure_hub;
+mod study_yield;
 mod sulking;
 mod summons;
 mod supply;

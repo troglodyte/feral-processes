@@ -1438,7 +1438,11 @@ impl Game {
         let mut open = wanted.clone();
         for &worker in &on_shift {
             let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
-            let carrying = self.world.get::<Carrying>(worker).is_some();
+            // A body walking a study's program to a rack is held exactly as a
+            // hauler is: posted to a job it would work with the kill in
+            // hand, and the rack errand is the only thing that ends the trip.
+            let carrying =
+                self.world.get::<Carrying>(worker).is_some() || self.is_rack_carrier(worker);
             let shedding = a_depot_stands
                 && held.is_some_and(|(target, kind)| {
                     kind == TaskKind::GatherResource
@@ -2608,6 +2612,7 @@ impl Game {
         // cell.
         let mut board = self.tidy_board();
         let mut clearing = self.clear_board();
+        let mut racking = self.rack_board();
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -2624,6 +2629,14 @@ impl Game {
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
+            }
+            // A downed body is the only one `is_on_shift` ever frees while it
+            // holds a program, and a benched body can still be lost in a
+            // raid: shelter the kill before it walks to the Bay. Here rather
+            // than in the scheduler's free loop, which its empty-queue guard
+            // can skip.
+            if self.world.get::<components::Downed>(worker).is_some() {
+                self.return_carried_program(worker);
             }
             let sharing = self
                 .world
@@ -2722,6 +2735,20 @@ impl Game {
                     Ok(_) => {}
                     Err(_) => self.strand_respite(worker),
                 }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    beat.held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // **Above clearing**: a kill sitting in a station's slot stalls
+            // the whole research line, where product in a machine blocks
+            // only that machine. Gated like clearing, bar the
+            // `CarryingProgram` exclusion — a carrier is this errand's own.
+            if !sharing
+                && racking.is_some()
+                && self.may_rack(worker, amenities)
+                && racking.as_mut().is_some_and(|b| self.rack_step(worker, b))
+            {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));
                 }

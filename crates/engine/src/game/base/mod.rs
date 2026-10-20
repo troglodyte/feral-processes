@@ -39,6 +39,7 @@ pub(crate) mod siphon;
 pub(crate) mod stock;
 pub(crate) mod structure_hub;
 pub(crate) mod study;
+pub(crate) mod study_yield;
 pub(crate) mod tantrum;
 pub(crate) mod teardown;
 pub(crate) mod tidy;

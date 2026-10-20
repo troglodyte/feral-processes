@@ -47,7 +47,8 @@ pub struct HopperEntry {
 /// **The instance boundary, and it now has three sides.** A `DownedProgram`
 /// exists in three places: `DownedPrograms` on the player, `Racked` on a
 /// Quarantine Rack, and this — plus `CarryingProgram` on a body walking one
-/// from the second to the third. What still holds is the half that matters:
+/// from the second to the third. (`StudyYield` is a fourth, but a transient
+/// one: a finished study's program waits there for a body to rack it.) What still holds is the half that matters:
 /// what leaves a **rig** is plain items in `Stock::output`, which is what
 /// lets hauling, depots, `collect::plan_adjacent_take` and work orders carry
 /// the yield with no instance rule at all — decision 2's seam, which
@@ -100,6 +101,23 @@ pub struct Hopper {
 /// it with the `Task`.
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
+
+/// The downed program a finished subject-gated project left standing at its
+/// Research Station, waiting for an idle body to walk it to a Quarantine Rack
+/// (`game::base::study_yield`).
+///
+/// **Not `Racked`, and not the player's pack.** The station must not read as
+/// a rack anywhere — every `Racked` reader (the `c` picker, rack room, the
+/// crew's rig fetch) would otherwise treat it as shelf — and research no
+/// longer touches the pack, so a full pack cannot stall it. One slot: a
+/// station holding a program gates the next completion until the crew has
+/// moved it.
+///
+/// Written lazily by `Game::hold_at_station` rather than at spawn, so a
+/// hand-spawned station in a fixture needs nothing; `None` and an absent
+/// component read the same.
+#[derive(Component, Default, Clone, Debug)]
+pub struct StudyYield(pub Option<DownedProgram>);
 
 /// A loose floor item an idle program is carrying to a stockpile cell.
 ///

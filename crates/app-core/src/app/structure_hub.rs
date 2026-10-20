@@ -10,11 +10,151 @@
 
 use crate::*;
 
+/// The structure hub's page table: a rail title and the one screen each
+/// `StructurePage` is. Which pages a structure shows, and in what order, is
+/// the engine's answer (`AdjacentStructure::pages`).
+pub fn structure_page(page: StructurePage) -> &'static HubPage {
+    match page {
+        StructurePage::Inventory => &HubPage {
+            title: "Inventory",
+            screens: &[Mode::Transfer],
+        },
+        StructurePage::Filter => &HubPage {
+            title: "Filter",
+            screens: &[Mode::DepotFilter],
+        },
+        StructurePage::Recipe => &HubPage {
+            title: "Recipe",
+            screens: &[Mode::MachineRecipe],
+        },
+        StructurePage::Tool => &HubPage {
+            title: "Tool",
+            screens: &[Mode::RigTool],
+        },
+        StructurePage::Siphon => &HubPage {
+            title: "Siphon",
+            screens: &[Mode::Siphon],
+        },
+        StructurePage::Splice => &HubPage {
+            title: "Splice",
+            screens: &[Mode::SpliceRig],
+        },
+        StructurePage::Grow => &HubPage {
+            title: "Grow",
+            screens: &[Mode::FarmRecipe],
+        },
+        StructurePage::Rebuild => &HubPage {
+            title: "Rebuild",
+            screens: &[Mode::BuildProgram],
+        },
+        StructurePage::Info => &HubPage {
+            title: "Info",
+            screens: &[Mode::StructureManifest],
+        },
+    }
+}
+
+/// The structures beside the party that the structure hub cycles through,
+/// and which one is showing. Re-read from the engine after every key and
+/// tick (`App::refresh_structure_hub`), so a structure that goes or a step
+/// that takes the party away is noticed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructureHub {
+    pub cycle: Vec<AdjacentStructure>,
+    pub at: usize,
+}
+
+impl StructureHub {
+    /// The structure on show. `at` is kept inside `cycle` by every writer.
+    pub fn current(&self) -> &AdjacentStructure {
+        &self.cycle[self.at]
+    }
+
+    /// The compass word for the side the current structure is first beside.
+    pub fn side(&self) -> &'static str {
+        match self.current().dir {
+            (0, -1) => "north",
+            (1, 0) => "east",
+            (0, 1) => "south",
+            _ => "west",
+        }
+    }
+}
+
+/// The structure hub as a hub: its rail is the current structure's pages,
+/// opened fresh each time, and `Tab` steps the cycle.
+pub(crate) struct StructureHubKind;
+
+impl HubKind for StructureHubKind {
+    fn title(&self) -> &'static str {
+        "STRUCTURE"
+    }
+
+    /// The structure's name, then where it is in the cycle — the part that
+    /// must survive when a long name is elided.
+    fn heading(&self, app: &App) -> (String, String) {
+        match &app.structure_hub {
+            Some(open) => (
+                open.current().name.clone(),
+                format!(
+                    " — {} ({} of {})",
+                    open.side(),
+                    open.at + 1,
+                    open.cycle.len()
+                ),
+            ),
+            None => (self.title().to_string(), String::new()),
+        }
+    }
+
+    fn pages(&self, app: &App) -> Vec<&'static HubPage> {
+        app.structure_hub
+            .as_ref()
+            .map(|h| {
+                h.current()
+                    .pages
+                    .iter()
+                    .map(|&p| structure_page(p))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn remembers(&self) -> bool {
+        false
+    }
+
+    fn turn(&self, app: &mut App, page: usize) {
+        app.enter_structure_page(page);
+    }
+
+    fn leave(&self, app: &mut App) {
+        app.close_structure_hub();
+    }
+
+    fn key(&self, app: &mut App, key: GameKey) -> bool {
+        if key != GameKey::Tab {
+            return false;
+        }
+        app.step_structure(1);
+        true
+    }
+
+    /// `Tab` only when there is another structure to step to.
+    fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
+        match &app.structure_hub {
+            Some(open) if open.cycle.len() > 1 => vec![("Tab", "next structure")],
+            _ => Vec::new(),
+        }
+    }
+}
+
 impl App {
     /// `[c]`: the hub for the structures beside the party, on the first
-    /// clockwise from north and its first page, cursor in the page. With no
-    /// structure beside, the pack's downed programs alone open the transfer
-    /// screen; the caller has already refused when there is nothing at all.
+    /// clockwise from north, opened by `App::open_hub` like any other. With
+    /// no structure beside, the pack's downed programs alone open the
+    /// transfer screen; the caller has already refused when there is nothing
+    /// at all.
     pub(crate) fn open_structure_hub(&mut self) {
         let Some(game) = &self.game else { return };
         let cycle = game.adjacent_structures();
@@ -23,13 +163,13 @@ impl App {
             return;
         }
         self.structure_hub = Some(StructureHub { cycle, at: 0 });
-        self.enter_structure_page(0);
-        self.hub_on_rail = false;
+        self.open_hub(Hub::Structure);
     }
 
     /// Opens the current structure's `page`th page: the screen's own opener,
-    /// cursor in the page. Whatever the previous page held is dropped first,
-    /// so a basket left by a page turn or `Tab` is discarded.
+    /// leaving the cursor on whichever half it was. Whatever the previous
+    /// page held is dropped first, so a basket left by a page turn or `Tab`
+    /// is discarded.
     pub(crate) fn enter_structure_page(&mut self, page: usize) {
         self.drop_page_state();
         let Some(hub) = &self.structure_hub else {
@@ -82,24 +222,8 @@ impl App {
         };
     }
 
-    /// Turns to the page `by` places along the current structure's rail,
-    /// wrapping.
-    pub(crate) fn turn_structure_page(&mut self, by: isize) {
-        let Some((_, page, _)) = self.hub_at() else {
-            return;
-        };
-        let count = self
-            .structure_hub
-            .as_ref()
-            .map_or(0, |h| h.current().pages.len() as isize);
-        if count == 0 {
-            return;
-        }
-        let next = (page as isize + by).rem_euclid(count) as usize;
-        self.enter_structure_page(next);
-    }
-
-    /// `Tab`: the next structure clockwise, wrapping, on its first page.
+    /// `Tab`: the next structure clockwise, wrapping, on its first page, the
+    /// cursor staying on whichever half it was.
     pub(crate) fn step_structure(&mut self, by: isize) {
         let Some(hub) = &mut self.structure_hub else {
             return;
@@ -107,7 +231,6 @@ impl App {
         let count = hub.cycle.len() as isize;
         hub.at = (hub.at as isize + by).rem_euclid(count) as usize;
         self.enter_structure_page(0);
-        self.hub_on_rail = false;
     }
 
     /// Leaves the hub for the map.
@@ -164,13 +287,5 @@ impl App {
         if matches!(self.pending_build, Some(PendingBuild::Rebuild { .. })) {
             self.pending_build = None;
         }
-    }
-
-    /// Whether `Esc` belongs to the open page before the hub: a question the
-    /// page is asking is answered by it, not abandoned.
-    pub(crate) fn page_owns_esc(&self) -> bool {
-        self.splice_rig
-            .as_ref()
-            .is_some_and(|s| s.confirm.is_some())
     }
 }

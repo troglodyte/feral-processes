@@ -4,7 +4,7 @@
 //! to draw a frame, and these modules only add inherent methods to it.
 
 pub(crate) mod arena;
-mod base_report;
+pub(crate) mod base_report;
 mod basket;
 mod battle;
 mod breeding;
@@ -16,6 +16,8 @@ mod crafting;
 pub(crate) mod creation;
 pub(crate) mod depot_filter;
 pub(crate) mod dev_console;
+mod dev_item_picker;
+mod dev_zone_picker;
 pub(crate) mod dispatch;
 mod ending;
 pub(crate) mod excavate;
@@ -24,9 +26,11 @@ mod field;
 mod floor_hands;
 pub(crate) mod group_menu;
 mod hover;
+pub(crate) mod hub;
 pub(crate) mod input;
 mod inspection;
 mod inventory;
+pub(crate) mod inventory_hub;
 pub(crate) mod level_up;
 mod lifecycle;
 pub mod machine_recipe;
@@ -49,7 +53,7 @@ pub(crate) mod sprite_forge;
 pub(crate) mod stack_market;
 pub(crate) mod stat_allocation;
 mod stockpile;
-mod structure_hub;
+pub(crate) mod structure_hub;
 pub(crate) mod tactical;
 pub(crate) mod telemetry;
 mod tools;

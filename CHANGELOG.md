@@ -53,6 +53,26 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.19
+
+**The dev keypad (backtick, with `FERAL_DEV_CONSOLE` or `FERAL_DEV` set) has four new rows: Free build, Give item, Warp to zone and Spawn companion.** Free build is a toggle whose row shows whether it is on; while it is on, building, upgrading and rebuilding cost no materials and finish at once, though a rebuild still spends its program. The toggle is never saved. Give item opens a list of every item that is not gear, with how many you hold, and each pick gives ten. Warp to zone lists the next twenty zones and refuses during a fight. Spawn companion adds a program of a species that can appear on your tile, and refuses when your roster is full. Reaching a late-game state to look at it used to take an hour of play.
+
+**With the dev console enabled, `U` on the research screen unlocks a project at once, with no materials and no prerequisites.** In the graph view (`G`) it unlocks the node under the cursor; in the list it unlocks the active project. Without the dev console, `U` does nothing there.
+
+## 0.19.18
+
+**The structure screen (`c`) moves with the arrow keys the way the base report (`b`) and the inventory (`i`) do.** It opens with the cursor on the list of pages down the left: Up and Down pick a page, Right steps onto it, and Left or Esc steps back to the list. Before, it opened inside the first page, Left did nothing to leave it, and only Esc reached the list. Tab still steps to the next structure beside you.
+
+**On a structure's Inventory page, `+` takes one unit and `-` puts one in; on a Depot's Filter page, `+` allows a row and `-` denies it.** These were Left and Right, which now move between the page and the list as on every other screen of this kind. Shift and Ctrl with Left or Right still go to the end of a row and halve the gap, as before.
+
+## 0.19.17
+
+**Finishing a research project with a subject no longer needs room in your own store of downed programs.** The subject's downed program now waits at the Research Station, and an idle base program carries it to a Quarantine Rack with room. Before, a full store of ten stalled the project for good, and building racks did nothing because research only ever put the program in your store. Research now waits only for a rack with a free slot ("needs room on a Quarantine Rack") or for the last program to be carried away. A carried program is never lost: if the rack fills up on the way, or the carrier is pulled off the errand, it goes to another rack, back to the station, or onto the floor.
+
+**Racking a downed program by hand at `c` leaves room for one already on its way.** A slot that a carried program is headed for no longer counts as free, so the delivery always has somewhere to go.
+
+**A Holding Cell and a Drop Pod Terminal look 2x2 on the base map.** Like the Research Station, every building wider than one tile now lays a floor under the rest of its footprint. Before, only the building's own letter showed, on one tile.
+
 ## 0.19.16
 
 **Nothing changes in play; this release reorganises the engine's code.** The three largest shared files (the tuning numbers, the component types and the screen read-models) were each one file of 4,000 to 6,500 lines that nearly every change edited. Each is now a folder split by subsystem, with every name still reached the same way, so the game builds and behaves exactly as in 0.19.15.

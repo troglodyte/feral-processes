@@ -325,7 +325,9 @@
   onto every other `Inventory` reader (recipes, `Stock`, hauling, banking)
   or silently collapse two programs that shouldn't collapse. `GearCopies`
   is the precedent for exactly this shape; `DownedPrograms` reads it and
-  grants *into* `Inventory` via `grant_loot`, never the reverse.
+  grants *into* `Inventory` via `grant_loot`, never the reverse. Research does
+  not fill it: a finished study's program waits on the station's
+  `StudyYield` and crew rack it, so a full store cannot stall research.
 - **`FIGHT_CONDITION_WEIGHT` ships at `0.0`, and the fight axis is
   structurally inert, not merely zero-weighted.** `apply_damage` clamps HP
   to zero before `award_loot` ever runs, so `Game::overkill_term` reads a

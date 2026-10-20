@@ -702,6 +702,7 @@ fn with_a_drop_pod(mut app: App, seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

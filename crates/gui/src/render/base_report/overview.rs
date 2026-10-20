@@ -49,7 +49,7 @@ fn page_status(
         };
         return (text, TEXT_DIM);
     }
-    match page_flag(flags, page) {
+    match feral_processes_app_core::base_page_flag(flags, page) {
         Some(why) => (why.to_string(), YELLOW),
         None => ("ok".to_string(), TEXT_DIM),
     }

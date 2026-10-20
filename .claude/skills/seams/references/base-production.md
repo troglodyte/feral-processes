@@ -271,15 +271,16 @@
   listing already say `item != currency && !is_banked(item)`; this is the
   third.
 
-- **On the picker screen an arrow moves stock toward the column it points
-  at.** The screen is a table reading `item | you | container`, so
-  Left pulls off the container toward you (a take, **positive**) and Right
-  pushes from you into it (a put, **negative**). The **sign convention is
-  untouched** by that — only which arrow reaches which end — so nothing below
-  `handle_basket_key` knows the arrows moved, and
-  `left_takes_out_and_right_puts_in` is the pin. This replaced an inversion
-  that was specified and still read as a slip; the caravan's key table used to
-  cite the old test by name to say it was *not* following it. `[A]` writes the
+- **On the picker screen `+` takes and `-` puts — the amount's own sign —
+  because the bare arrows belong to the structure hub's nav.** `+` (and `=`,
+  the unshifted key) raises the row's amount, a take, **positive**; `-`
+  lowers it, a put, **negative**. Putting the amount back on Left/Right would
+  fall through the hub's rule only on a multi-screen page and strand the
+  rail on the rest, and the Depot filter beside it must keep the same pair
+  (`+` allows, `-` denies). Shift/Ctrl+Left/Right still reach the basket —
+  the hub never reads them, and `App::handle_key`'s fold still lists
+  `Transfer` — and keep their direction: Left toward `you`, the take end.
+  `plus_takes_out_and_minus_puts_in` is the pin. `[A]` writes the
   take ceiling over **every** row, clearing a pending give: that is what "take
   everything" means on one axis.
 
@@ -541,12 +542,46 @@
   the three sites fails to compile if it is missed and the symptom is a lost
   kill with no error. `is_on_shift` returns true for a holder, as it does for
   `Carrying`; the two destruction paths **put the carrier back** rather than
-  adding it to the dropped tuple — `Game::return_carried_program`, first rack
-  with room in `(x, y)` order, then the player's store, and only then "lost
-  with the machine". All three are verified by deletion, which is the bar a
+  adding it to the dropped tuple — `Game::return_carried_program`, which is
+  `Game::shelter_program`'s chain: first rack with room in `(x, y)` order,
+  then the Research Station's empty slot, then the floor through
+  `Game::set_down`. The player's store is deliberately not in it (research
+  never uses the pack) and there is no "lost" rung: a claimed rack's room can
+  shrink under the claim — a demolition, a rig fetcher's kill sheltered onto
+  a rack, `stow_program`'s overflow (the player's own put is refused) — so
+  "no rack has room" is reachable and the kill must outlast it. The one
+  exception to "never the pack": with no free floor cell `set_down` falls
+  back to `stow_program`, which fills the downed store (or a rack, or the
+  store past its cap); very hard to reach, and the log names where it went
+  rather than claiming the floor.
+  `Game::drop_load` calls the same chain for a `CarryingProgram`, which is
+  what covers every door that frees or removes a body (pin, build spend, sale,
+  permadeath, fuse, wield, enlist, sortie): they were already calling
+  `drop_load` for `Carrying`, and a task-less rack carrier passes doors that
+  used to refuse posted programs. All three are verified by deletion, which is the bar a
   fourth site would owe too. The fetch itself sits in `run_teardown_rigs`
   because that is where it cannot disagree with the strip about the hopper's
   room: both routes in go through `Game::hopper_room`.
+
+- **A task-less `CarryingProgram` body is a rack carrier, and the forced edge
+  holds exactly that, never a rig's posted fetcher.** The scheduler excludes
+  a rack carrier from the pool the way it excludes a `Carrying` hauler. A
+  rig's posted fetcher is not held: if the matching re-seats it, it loses its
+  `Task` still holding the kill, becomes a rack carrier, and the free loop
+  hands the kill back through `drop_load`, so nothing is lost. Widening the
+  edge to every `CarryingProgram` holder (an earlier fix, on the false belief
+  that such a body was uncounted and undelivered) instead pinned a fetcher to
+  a rig that had lost its tool, gone dark or filled, for ever, with other work
+  waiting. In `drift_idle_staff` the delivery arm ranks above `OffShift`
+  and respite (`is_on_shift` keeps a carrier on shift whatever it is marked,
+  so the amenity walk would otherwise march the kill to a Bay); the pick-up
+  ranks above clearing, because a kill in a station's slot stalls the whole
+  research line where product in a machine blocks one machine. Being held
+  out of the pool is bounded: `walk_idle_toward` returns `Ok` for a wait (the
+  party or a body in the way), so `RackWait` counts passes on one tile and
+  `RACK_CARRY_PATIENCE_BEATS` hands the program back. Tests must prove the
+  scheduler *wants* the job (a control body gets posted) before asserting a
+  carrier is not — the first version stayed green with the guard deleted.
 
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**, so
   it outlives the building — and now outlives a breach too. **Breaching

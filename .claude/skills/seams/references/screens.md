@@ -136,6 +136,21 @@
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_surface`'s caller list.
+- **Every hub — `b`, `i` and `c` — walks one nav rule,
+  `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
+  takes an arrow or `Esc` back from it.** The structure hub had its own rule
+  (open in the page, Left/Right to the page, rail by `Esc` alone) and read as
+  a different screen from the base report's; a page that wants an arrow adds
+  an arm to `screen_claims`, never a guard inside the nav match or a second
+  nav function. **What a hub *is* is its `HubKind` (`app/hub.rs`), one impl
+  in that hub's module**, and neither the nav nor gui names a hub: a fixed
+  hub writes `title` and `table` and takes the defaults, and the structure
+  hub overrides `pages`, `turn` (a page is re-opened for its structure),
+  `leave`, `key` (`Tab`, keeping the cursor on whichever half it was),
+  `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
+  `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
+  coming back, and gui choosing a draw path by hub rather than by mode is
+  the same trap (`render/mod.rs`'s `page_rows` is by mode).
 - **A Broker's board is derived, never stored** — seeded off
   `(world seed, zone, epoch)`. No save field, no `GameRng` draw, no
   save-scumming, and it rotates on its own. Readable from **anywhere**,

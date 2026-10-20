@@ -27,7 +27,8 @@ use crate::components::{
 };
 use crate::game::base::{hauling, stock};
 use crate::items::ItemId;
-use crate::structures::StructureDb;
+use crate::save;
+use crate::structures::{StructureDb, StructureDef};
 use crate::{Game, tuning};
 
 /// Where a unit of material can be picked up from, and the tile a body has
@@ -578,77 +579,13 @@ impl Game {
             BuildGoal::New => {
                 self.consume_site(site);
                 self.world.entity_mut(worker).remove::<Task>();
-                let quality = program
-                    .as_ref()
-                    .map(|p| crate::game::base::building::build_quality_of(&def, p));
-                // A filed site is still walkable ground, so a walker — a
-                // patient arriving by radius, a hauler passing through — can
-                // be standing on it now. Moved aside here rather than kept
-                // off the site for its whole life, because only the raise
-                // turns the ground into a building.
-                let footprint =
-                    crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
-                self.displace_bodies_from(&footprint);
-                let raised = self.spawn_structure(&def, target.x, target.y, quality);
-                if let Some(item) = recipe {
-                    self.restore_machine_recipe(raised, &item);
-                }
-                self.displace_floor_items_from(&footprint);
-                self.log_base(format!("Your crew finishes the {}.", def.name));
+                self.complete_new_build(&def, target, program.as_ref(), recipe);
             }
             BuildGoal::Upgrade { to_tier } => {
-                // Resolved by **tile**, which is why the site never held an
-                // `Entity`: there is nothing to dangle when the machine is
-                // destroyed underneath the request.
-                let machine = {
-                    let mut query = self
-                        .world
-                        .query_filtered::<(Entity, &Position), With<Structure>>();
-                    query
-                        .iter(&self.world)
-                        .find(|(_, p)| p.x == target.x && p.y == target.y)
-                        .map(|(e, _)| e)
-                };
-                // Left standing rather than despawned where it cannot
-                // commit — the missing-def arm's precedent, extended to a
-                // machine that is gone and to a tier the ceiling no longer
-                // permits. The materials are still on the cell.
-                let Some(machine) = machine else {
-                    return;
-                };
-                let permitted = def
-                    .upgrade
-                    .as_ref()
-                    .is_some_and(|upgrade| to_tier <= self.upgrade_ceiling(upgrade));
-                if !permitted {
-                    return;
+                if self.complete_upgrade(&def, target, to_tier, program.as_ref()) {
+                    self.consume_site(site);
+                    self.world.entity_mut(worker).remove::<Task>();
                 }
-                self.world
-                    .entity_mut(machine)
-                    .insert(StructureTier(to_tier));
-                // **Overwritten**, not averaged and not kept at the better of
-                // the two: the machine you are standing in front of is the
-                // one this program just finished, and an upgrade is a build.
-                if let Some(program) = &program {
-                    let quality = crate::game::base::building::build_quality_of(&def, program);
-                    self.world
-                        .entity_mut(machine)
-                        .insert(crate::components::BuildQuality(quality));
-                }
-                // A node that opted into chance-based yield tracks its tier
-                // as its level; one that always succeeds (level None) stays
-                // that way.
-                if let Some(mut node) = self.world.get_mut::<ResourceNode>(machine)
-                    && node.level.is_some()
-                {
-                    node.level = Some(to_tier);
-                }
-                self.consume_site(site);
-                self.world.entity_mut(worker).remove::<Task>();
-                self.log_base(format!(
-                    "Your crew finishes upgrading the {} to Mk{to_tier}.",
-                    def.name
-                ));
             }
             BuildGoal::Recharge => {
                 // Resolved by **tile**, `Upgrade`'s own reason: the site
@@ -676,6 +613,131 @@ impl Game {
                 self.world.entity_mut(worker).remove::<Task>();
                 self.log_base(format!("Your crew reloads the {}.", def.name));
             }
+        }
+    }
+
+    /// Applies an upgrade's landing to the machine standing on `target`:
+    /// the tier, the program's figure and the node's level. `false` when
+    /// there is nothing to land on or the ceiling no longer permits it, so a
+    /// caller leaves its site standing. The half of a finished upgrade that
+    /// needs no crew, shared by `raise_one_tick` and the dev free build.
+    pub(crate) fn complete_upgrade(
+        &mut self,
+        def: &StructureDef,
+        target: Position,
+        to_tier: u32,
+        program: Option<&save::CreatureSave>,
+    ) -> bool {
+        let machine = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Position), With<Structure>>();
+            query
+                .iter(&self.world)
+                .find(|(_, p)| p.x == target.x && p.y == target.y)
+                .map(|(e, _)| e)
+        };
+        // Left standing rather than despawned where it cannot
+        // commit — the missing-def arm's precedent, extended to a
+        // machine that is gone and to a tier the ceiling no longer
+        // permits. The materials are still on the cell.
+        let Some(machine) = machine else {
+            return false;
+        };
+        let permitted = def
+            .upgrade
+            .as_ref()
+            .is_some_and(|upgrade| to_tier <= self.upgrade_ceiling(upgrade));
+        if !permitted {
+            return false;
+        }
+        self.world
+            .entity_mut(machine)
+            .insert(StructureTier(to_tier));
+        // **Overwritten**, not averaged and not kept at the better of
+        // the two: the machine you are standing in front of is the
+        // one this program just finished, and an upgrade is a build.
+        if let Some(program) = program {
+            let quality = crate::game::base::building::build_quality_of(def, program);
+            self.world
+                .entity_mut(machine)
+                .insert(crate::components::BuildQuality(quality));
+        }
+        // A node that opted into chance-based yield tracks its tier
+        // as its level; one that always succeeds (level None) stays
+        // that way.
+        if let Some(mut node) = self.world.get_mut::<ResourceNode>(machine)
+            && node.level.is_some()
+        {
+            node.level = Some(to_tier);
+        }
+        self.log_base(format!(
+            "Your crew finishes upgrading the {} to Mk{to_tier}.",
+            def.name
+        ));
+        true
+    }
+
+    /// Stands the structure itself up on `target`: spawn, restored recipe,
+    /// bodies and floor items moved aside. The half of a finished build that
+    /// needs no crew, shared by `raise_one_tick` and the dev free build.
+    pub(crate) fn complete_new_build(
+        &mut self,
+        def: &StructureDef,
+        target: Position,
+        program: Option<&save::CreatureSave>,
+        recipe: Option<ItemId>,
+    ) {
+        let quality = program.map(|p| crate::game::base::building::build_quality_of(def, p));
+        // A filed site is still walkable ground, so a walker — a
+        // patient arriving by radius, a hauler passing through — can
+        // be standing on it now. Moved aside here rather than kept
+        // off the site for its whole life, because only the raise
+        // turns the ground into a building.
+        let footprint = crate::tactical::footprint_cells_at((target.x, target.y), def.footprint);
+        self.displace_bodies_from(&footprint);
+        let raised = self.spawn_structure(def, target.x, target.y, quality);
+        if let Some(item) = recipe {
+            self.restore_machine_recipe(raised, &item);
+        }
+        self.displace_floor_items_from(&footprint);
+        self.log_base(format!("Your crew finishes the {}.", def.name));
+    }
+
+    /// Finishes a just-filed `New` or `Upgrade` site on the spot, for the
+    /// dev free build: the same spend of the committed program
+    /// (`consume_site`) and the same completion a crew's last tick runs.
+    pub(crate) fn finish_site_now(&mut self, site: Entity) {
+        let Some((kind, goal, program, recipe, at)) = self
+            .world
+            .get::<BuildSite>(site)
+            .zip(self.world.get::<Position>(site))
+            .map(|(b, p)| {
+                (
+                    b.structure.clone(),
+                    b.goal,
+                    b.program.clone(),
+                    b.recipe.clone(),
+                    *p,
+                )
+            })
+        else {
+            return;
+        };
+        let Some(def) = self.world.resource::<StructureDb>().get(&kind).cloned() else {
+            return;
+        };
+        match goal {
+            BuildGoal::New => {
+                self.consume_site(site);
+                self.complete_new_build(&def, at, program.as_ref(), recipe);
+            }
+            BuildGoal::Upgrade { to_tier } => {
+                if self.complete_upgrade(&def, at, to_tier, program.as_ref()) {
+                    self.consume_site(site);
+                }
+            }
+            BuildGoal::Recharge => {}
         }
     }
 

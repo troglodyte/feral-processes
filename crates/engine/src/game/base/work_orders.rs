@@ -1438,7 +1438,14 @@ impl Game {
         let mut open = wanted.clone();
         for &worker in &on_shift {
             let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
-            let carrying = self.world.get::<Carrying>(worker).is_some();
+            // A task-less body walking a program to a rack is held exactly as
+            // a hauler is. A rig's posted fetcher is deliberately not: if the
+            // matching frees it, it loses its `Task` still holding the kill
+            // and becomes a rack carrier, which the free loop hands back
+            // through `drop_load`. Holding it would pin it to a rig that has
+            // lost its tool, gone dark or filled, for ever.
+            let carrying =
+                self.world.get::<Carrying>(worker).is_some() || self.is_rack_carrier(worker);
             let shedding = a_depot_stands
                 && held.is_some_and(|(target, kind)| {
                     kind == TaskKind::GatherResource
@@ -2608,6 +2615,7 @@ impl Game {
         // cell.
         let mut board = self.tidy_board();
         let mut clearing = self.clear_board();
+        let mut racking = self.rack_board();
         let crowded: std::collections::HashSet<(i32, i32)> = {
             let mut seen: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
             let mut twice: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -2625,6 +2633,15 @@ impl Game {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
             }
+            // A downed body is the only one `is_on_shift` ever frees while it
+            // holds a program, and a benched body can still be lost in a
+            // raid: shelter the kill before it walks to the Bay. Here rather
+            // than in the scheduler's free loop, which its empty-queue guard
+            // can skip.
+            if self.world.get::<components::Downed>(worker).is_some() {
+                self.return_carried_program(worker);
+            }
+            self.rack_carrier_patience(worker);
             let sharing = self
                 .world
                 .get::<Position>(worker)
@@ -2690,6 +2707,21 @@ impl Game {
                     continue;
                 }
             }
+            // **A body already holding a program delivers it before any need
+            // or mood takes it anywhere**: `is_on_shift` keeps a carrier in
+            // the pool whatever it is marked, and the amenity walk below
+            // would otherwise march the kill to a Bay and leave it there.
+            // Only the delivery half — the pick-up stays below, where it
+            // ranks against the other errands.
+            if !sharing
+                && self.is_rack_carrier(worker)
+                && self.try_rack(worker, amenities, &mut racking)
+            {
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    beat.held.insert((p.x, p.y));
+                }
+                continue;
+            }
             // A body with an errand walks it. `Err` is the one place a route
             // is ever judged: it gives the post up and latches the need, so
             // the gate does not hand it straight back on the next beat.
@@ -2722,6 +2754,16 @@ impl Game {
                     Ok(_) => {}
                     Err(_) => self.strand_respite(worker),
                 }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    beat.held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // **Above clearing**: a kill sitting in a station's slot stalls
+            // the whole research line, where product in a machine blocks
+            // only that machine. Gated like clearing, bar the
+            // `CarryingProgram` exclusion — a carrier is this errand's own.
+            if !sharing && self.try_rack(worker, amenities, &mut racking) {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));
                 }

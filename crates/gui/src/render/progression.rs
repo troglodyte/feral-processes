@@ -394,10 +394,15 @@ pub(super) fn research_menu_rows(
     selected: usize,
     currency: &str,
     active: Option<&(String, u32, u32)>,
+    dev_unlock: bool,
 ) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(research_header(active), CYAN),
-        text_row("Pick a row's key to work it. A to abandon. G for the tree. Esc to close"),
+        text_row(if dev_unlock {
+            "Pick a row's key to work it. A to abandon. U to unlock. G for the tree. Esc to close"
+        } else {
+            "Pick a row's key to work it. A to abandon. G for the tree. Esc to close"
+        }),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
@@ -444,6 +449,7 @@ pub(super) fn draw_research_menu(
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
+    dev_unlock: bool,
 ) {
     let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes(tree);
@@ -451,7 +457,7 @@ pub(super) fn draw_research_menu(
     let (title, rows) = match tree {
         ResearchTree::Base => (
             "Research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
         ),
         // The routine tree's own empty line: nothing is discovered and
         // nothing is visible, so there is nothing to number — a header and
@@ -465,7 +471,7 @@ pub(super) fn draw_research_menu(
         ),
         ResearchTree::Routines => (
             "Routine research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
         ),
         // Two empty lines, because "closed" and "open but nothing found yet"
         // call for different actions from the player.
@@ -479,7 +485,7 @@ pub(super) fn draw_research_menu(
         ),
         ResearchTree::Affixes => (
             "Affix research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
         ),
     };
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
@@ -540,6 +546,22 @@ mod tests {
     use crate::paint::with_painter;
     use feral_processes_engine::DifficultyMode;
 
+    fn hint_of(rows: &[Row]) -> &str {
+        match &rows[1] {
+            Row::Text(t) => t,
+            _ => panic!("row 1 is the hint"),
+        }
+    }
+
+    /// `U` is advertised only where it is bound: with the dev console on.
+    #[test]
+    fn the_research_hint_names_u_only_with_the_dev_console() {
+        let off = research_menu_rows(&[], 0, "Research Data", None, false);
+        let on = research_menu_rows(&[], 0, "Research Data", None, true);
+        assert!(!hint_of(&off).contains("U to unlock"));
+        assert!(hint_of(&on).contains("U to unlock"));
+    }
+
     /// The three questions a playtest of this screen would ask, answered
     /// without standing a window up: a gated node explains itself, a
     /// doubly-held node names both reasons, and an ungated locked node reads
@@ -593,7 +615,7 @@ mod tests {
             recommended: false,
         };
         let label = |node: ResearchStatus| {
-            research_menu_rows(&[node], 0, "Research Data", None)
+            research_menu_rows(&[node], 0, "Research Data", None, false)
                 .into_iter()
                 .find_map(|r| match r {
                     Row::Item { text, .. } if text.contains("Automation") => Some(text),
@@ -634,7 +656,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data", None);
+        let rows = research_menu_rows(&[node], 0, "Research Data", None, false);
         let at = |needle: &str| {
             rows.iter()
                 .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
@@ -674,7 +696,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data", None);
+        let rows = research_menu_rows(&[node], 0, "Research Data", None, false);
 
         let conversion = rows
             .iter()
@@ -949,7 +971,13 @@ mod tests {
         let screens = [
             (
                 "Research",
-                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency()), None),
+                research_menu_rows(
+                    &nodes,
+                    0,
+                    game.item_name(&game.research_currency()),
+                    None,
+                    false,
+                ),
             ),
             (
                 "Perks",
@@ -1143,6 +1171,7 @@ mod tests {
                 None,
                 p,
                 &ui_metrics(900.0),
+                false,
             )
         });
         let drawn = crate::paint::painted_text(&shapes);
@@ -1179,6 +1208,7 @@ mod tests {
                 None,
                 p,
                 &ui_metrics(900.0),
+                false,
             )
         });
         let drawn = crate::paint::painted_text(&shapes);

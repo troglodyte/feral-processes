@@ -8,20 +8,20 @@ use super::*;
 /// them deliberately — it is one more list of labelled actions, and a file
 /// of its own would only separate it from the helpers it shares.
 ///
-/// The rows come from `App::dev_console_rows`, the same table the handler
-/// dispatches, so a label here can never name an action the press does not
-/// take.
+/// The labels come from `App::dev_row_label` over `App::dev_console_rows`,
+/// the same table the handler dispatches, so a label here can never name an
+/// action the press does not take.
 pub(super) fn draw_dev_console(
-    rows: &[DevConsoleRow],
+    labels: &[String],
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let mut out = vec![text_row("Dev build only. Esc to close.")];
-    for (i, row) in rows.iter().enumerate() {
+    for (i, label) in labels.iter().enumerate() {
         out.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), row.label),
+            format!("[{}] {}", menu_shortcut(i), label),
             i == selected,
         ));
     }

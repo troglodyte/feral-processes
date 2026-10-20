@@ -1,116 +1,107 @@
-//! Hub navigation. Each `Hub`'s `pages()` is its only list of pages;
-//! everything here is read off it.
+//! The base report (`b`): its rail, and the handlers of the screens on it.
+//! The nav is the shared hub rule (`app/hub.rs`).
 
 use crate::*;
+use feral_processes_engine::BaseReportFlags;
+
+/// The base report's one table: the rail, the screen order and "is this mode
+/// in the hub" are all read off it, so a page cannot be on the rail and
+/// missing from the nav. Rail order is the order here; `[` and `]` walk it.
+pub const BASE_REPORT_PAGES: &[HubPage] = &[
+    HubPage {
+        title: "Overview",
+        screens: &[Mode::BaseOverview],
+    },
+    HubPage {
+        title: "Build",
+        screens: &[Mode::BaseBuild],
+    },
+    HubPage {
+        title: "Research",
+        screens: &[Mode::BaseResearch],
+    },
+    HubPage {
+        title: "Trade",
+        screens: &[Mode::BaseTrade],
+    },
+    HubPage {
+        title: "Compile",
+        screens: &[Mode::BaseCompile],
+    },
+    HubPage {
+        title: "Staff",
+        screens: &[
+            Mode::StaffWellbeing,
+            Mode::StaffCoverage,
+            Mode::StaffDiscontent,
+        ],
+    },
+    HubPage {
+        title: "Production",
+        screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
+    },
+    HubPage {
+        title: "Stock",
+        screens: &[Mode::BaseStock],
+    },
+    HubPage {
+        title: "Work orders",
+        screens: &[Mode::WorkOrders],
+    },
+    HubPage {
+        title: "Staffing",
+        screens: &[Mode::BaseStaff, Mode::Structures],
+    },
+    HubPage {
+        title: "Build orders",
+        screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+    },
+    HubPage {
+        title: "Alerts",
+        screens: &[Mode::Alerts],
+    },
+];
+
+/// The base report as a hub: a fixed table, the attention marks off
+/// `Game::base_report_flags`.
+pub(crate) struct BaseReport;
+
+impl HubKind for BaseReport {
+    fn title(&self) -> &'static str {
+        "BASE REPORT"
+    }
+
+    fn table(&self) -> &'static [HubPage] {
+        BASE_REPORT_PAGES
+    }
+
+    fn marks(&self, app: &App) -> Vec<bool> {
+        let Some(game) = &app.game else {
+            return Vec::new();
+        };
+        let flags = game.base_report_flags();
+        (0..BASE_REPORT_PAGES.len())
+            .map(|page| base_page_flag(&flags, page).is_some())
+            .collect()
+    }
+}
+
+/// Why `page` is flagged, if it is: the engine's reason for the page's
+/// first screen. A page the engine has no flag for is never flagged.
+pub fn base_page_flag(flags: &BaseReportFlags, page: usize) -> Option<&str> {
+    match BASE_REPORT_PAGES[page].screens[0] {
+        Mode::StaffWellbeing => flags.staff.as_deref(),
+        Mode::BaseOutput => flags.production.as_deref(),
+        Mode::BaseStock => flags.stock.as_deref(),
+        Mode::BuildOrders => flags.build_orders.as_deref(),
+        Mode::WorkOrders => flags.work_orders.as_deref(),
+        Mode::BaseStaff => flags.staffing.as_deref(),
+        Mode::Alerts => flags.alerts.as_deref(),
+        _ => None,
+    }
+}
 
 impl App {
-    /// Runs ahead of every hub screen's own handler and answers whether it
-    /// took the key. The hub has one cursor, on the rail or in the screen
-    /// (`hub_on_rail`). On the rail, Up/Down walk the pages (wrapping),
-    /// Right or Enter moves the cursor into the screen, Esc leaves to
-    /// wherever the hub was opened from, and every other key is swallowed —
-    /// a row jump or a screen action with no cursor on the screen would act
-    /// on a row the player cannot see is chosen. In the screen, a page's
-    /// screens lie in a row to the right of the rail: Right steps to the next
-    /// (stopping at the last), Left to the previous and off the first back to
-    /// the rail, and Esc goes straight to the rail. Everything else falls
-    /// through. `[`/`]` turn pages from either half.
-    ///
-    /// `Esc` on the rail leaves the hub rather than stepping back a page:
-    /// the rail is a set of siblings, not a history.
-    pub(crate) fn handle_hub_nav(&mut self, key: GameKey) -> bool {
-        let Some((hub, page, screen)) = self.hub_at() else {
-            return false;
-        };
-        if hub == Hub::Structure {
-            return self.handle_structure_hub_nav(key);
-        }
-        let table = hub.table();
-        let pages = table.len();
-        let turn = |by: usize| table[(page + by) % pages].screens[0];
-        let screens = table[page].screens;
-        match key {
-            GameKey::Char(']') => self.mode = turn(1),
-            GameKey::Char('[') => self.mode = turn(pages - 1),
-            _ if self.hub_on_rail => match key {
-                GameKey::Down => self.mode = turn(1),
-                GameKey::Up => self.mode = turn(pages - 1),
-                GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
-                GameKey::Esc => self.close_screen(),
-                _ => {}
-            },
-            // With a program picked Esc steps back to the list, which the
-            // downed-program handler owns; Left would strand that pick on
-            // the rail.
-            GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => return false,
-            GameKey::Esc => self.hub_on_rail = true,
-            // The duty table spends Left and Right on its column cursor, so
-            // it only leaves off its first and last columns.
-            GameKey::Left if !(self.mode == Mode::BaseStaff && self.work_column > 0) => {
-                match screen.checked_sub(1) {
-                    Some(prev) => self.mode = screens[prev],
-                    None => self.hub_on_rail = true,
-                }
-            }
-            GameKey::Right if screen + 1 < screens.len() && !self.on_inner_staff_column() => {
-                self.mode = screens[screen + 1];
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    /// The structure hub's rule, apart from the shared hubs': each page is
-    /// one screen that owns its arrows (Inventory spends Left and Right on
-    /// moving stock), so the rail is reached by `Esc` and `[`/`]` turn pages
-    /// from anywhere. `Tab` steps to the next structure. `Esc` from the
-    /// rail leaves for the map.
-    fn handle_structure_hub_nav(&mut self, key: GameKey) -> bool {
-        match key {
-            GameKey::Char(']') => self.turn_structure_page(1),
-            GameKey::Char('[') => self.turn_structure_page(-1),
-            GameKey::Tab => self.step_structure(1),
-            _ if self.hub_on_rail => match key {
-                GameKey::Down => self.turn_structure_page(1),
-                GameKey::Up => self.turn_structure_page(-1),
-                GameKey::Right | GameKey::Enter => self.hub_on_rail = false,
-                GameKey::Esc => self.close_structure_hub(),
-                _ => {}
-            },
-            GameKey::Esc if !self.page_owns_esc() => self.hub_on_rail = true,
-            _ => return false,
-        }
-        true
-    }
-
-    fn last_in(&self, hub: Hub) -> Option<Mode> {
-        hub.slot().and_then(|i| self.hub_last[i])
-    }
-
-    fn in_downed_drill_down(&self) -> bool {
-        self.mode == Mode::DownedPrograms && self.pending_downed_program_index.is_some()
-    }
-
-    /// Whether Right on the duty table still has a column to move to.
-    fn on_inner_staff_column(&mut self) -> bool {
-        self.mode == Mode::BaseStaff && self.work_column + 1 < self.base_staff_table().columns.len()
-    }
-
-    /// Opens the hub where the player left it, or on Overview the first
-    /// time, with the cursor on the rail. `b` opens it from the map
-    /// with no `menu_origin`, so `Esc` from the rail returns there.
-    pub(crate) fn open_base_report(&mut self) {
-        self.mode = self.last_in(Hub::Base).unwrap_or(Mode::BaseOverview);
-        self.hub_on_rail = true;
-    }
-
-    /// Opens the inventory where the player left it, or on Items the first
-    /// time, with the cursor on the rail — `open_base_report`'s rule.
-    pub(crate) fn open_inventory_hub(&mut self) {
-        self.mode = self.last_in(Hub::Inventory).unwrap_or(Mode::Inventory);
-        self.hub_on_rail = true;
-    }
-
     /// Overview: a cursor over the pages after itself. `Enter`, or a row's
     /// own shortcut, jumps to that page's first screen.
     pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {

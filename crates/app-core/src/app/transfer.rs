@@ -42,7 +42,7 @@ impl App {
     pub(crate) fn open_transfer_for(&mut self, at: TransferAt) {
         let Some(game) = &self.game else { return };
         let rack_room = match at {
-            TransferAt::Structure(e) => game.rack_room(e),
+            TransferAt::Structure(e) => game.rack_room_open(e),
             TransferAt::PackOnly => 0,
         };
         let carriers = match at {

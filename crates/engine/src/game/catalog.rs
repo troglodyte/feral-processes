@@ -966,6 +966,9 @@ impl Game {
     }
 
     pub fn structure_build_cost(&self, def: &StructureDef) -> Vec<(ItemId, u32)> {
+        if self.dev_free_build() {
+            return Vec::new();
+        }
         if def.first_free
             && !self
                 .world

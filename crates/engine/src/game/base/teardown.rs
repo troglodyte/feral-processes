@@ -228,6 +228,11 @@ impl Game {
                 .get::<Hopper>(rig)
                 .and_then(|h| h.standing_tool.clone())
             else {
+                // Unlike a full hopper, a missing tool does not clear by
+                // itself: the player must fit one. Waiting would hold the
+                // kill (and the body) until then, so it goes back through
+                // the shelter chain.
+                self.return_carried_program(worker);
                 return;
             };
             let label = self.downed_program_label(&held);
@@ -282,22 +287,15 @@ impl Game {
     /// the body stays on its post and nothing is announced, `build_wants`'
     /// deadlock rule.
     fn stocked_rack_in_reach(&mut self, worker: Entity) -> Option<Entity> {
-        let stocked: Vec<(i32, i32, Entity)> = {
-            let db = self.world.resource::<StructureDb>();
-            let mut found: Vec<(i32, i32, Entity)> = self
-                .world
-                .iter_entities()
-                .filter_map(|e| {
-                    let kind = &e.get::<Structure>()?.kind;
-                    let p = e.get::<Position>()?;
-                    db.get(kind)?.racks.as_ref()?;
-                    let shelf = e.get::<crate::components::Racked>()?;
-                    (!shelf.0.is_empty()).then_some((p.x, p.y, e.id()))
-                })
-                .collect();
-            found.sort();
-            found
-        };
+        let stocked: Vec<(i32, i32, Entity)> = self
+            .quarantine_racks()
+            .into_iter()
+            .filter(|&(_, _, rack)| {
+                self.world
+                    .get::<crate::components::Racked>(rack)
+                    .is_some_and(|shelf| !shelf.0.is_empty())
+            })
+            .collect();
         if stocked.is_empty() {
             return None;
         }

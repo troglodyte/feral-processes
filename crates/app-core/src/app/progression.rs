@@ -2,7 +2,7 @@
 
 use crate::*;
 use feral_processes_engine::StatOwner;
-use feral_processes_engine::{GraphDir, ResearchTree};
+use feral_processes_engine::{GraphDir, ResearchState, ResearchTree};
 
 impl App {
     /// Picks a numbered perk to unlock; stays open so multiple can be
@@ -113,6 +113,9 @@ impl App {
             self.report(outcome);
             return;
         }
+        // Dev-only and unbound otherwise. Uppercase for `G`'s and `A`'s
+        // reason; it needs the id list, so it waits for it below.
+        let dev_unlock = key == GameKey::Char('U') && self.dev_console_enabled();
         // Collecting the ids through `as_ref().map` (rather than a
         // `let Some(game) = &self.game` binding) ends the borrow here —
         // `selected_index` needs `&mut self`.
@@ -124,6 +127,10 @@ impl App {
         }) else {
             return;
         };
+        if dev_unlock {
+            self.dev_unlock_research(tree, &ids);
+            return;
+        }
         if !self.research_graph_view {
             if let Some(idx) = self.selected_index(key, ids.len()) {
                 let id = ids[idx].clone();
@@ -163,6 +170,34 @@ impl App {
             let Some(game) = &mut self.game else { return };
             let outcome = game.select_research(&id);
             self.report(outcome);
+        }
+    }
+
+    /// The dev console's `U`: the graph's cursor node, or in the list view
+    /// (which has no cursor) the active project.
+    fn dev_unlock_research(&mut self, tree: ResearchTree, ids: &[String]) {
+        let Some(game) = self.game.as_ref() else {
+            return;
+        };
+        let target = if self.research_graph_view {
+            ids.get(self.menu_selected.min(ids.len().saturating_sub(1)))
+                .cloned()
+        } else {
+            game.research_nodes(tree)
+                .into_iter()
+                .find(|n| n.state == ResearchState::Active)
+                .map(|n| n.id)
+        };
+        let Some(id) = target else {
+            self.refuse("Press G and put the cursor on a node.");
+            return;
+        };
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
+        match game.dev_unlock_research(&id) {
+            Ok(line) => self.status_line = Some(line),
+            Err(e) => self.refuse(e),
         }
     }
 }

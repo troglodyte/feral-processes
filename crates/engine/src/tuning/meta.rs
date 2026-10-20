@@ -243,3 +243,7 @@ pub const TRAP_CONDITION_PENALTY: u8 = 15;
 /// How many rows the alert board holds before the oldest is dropped — see
 /// `alerts::post`.
 pub const ALERT_BOARD_CAP: usize = 50;
+
+/// How many zones ahead the dev keypad's warp picker lists. Each warped zone
+/// runs a full `enter_next_zone`, so the list is bounded.
+pub const DEV_WARP_SPAN: u32 = 20;

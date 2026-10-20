@@ -44,17 +44,20 @@ pub struct HopperEntry {
 /// `StructureDef::strips`, `Game::load_teardown_rig` and
 /// `Game::run_teardown_rigs`.
 ///
-/// **The instance boundary, and it now has three sides.** A `DownedProgram`
-/// exists in three places: `DownedPrograms` on the player, `Racked` on a
-/// Quarantine Rack, and this — plus `CarryingProgram` on a body walking one
-/// from the second to the third. What still holds is the half that matters:
-/// what leaves a **rig** is plain items in `Stock::output`, which is what
+/// **The instance boundary.** A `DownedProgram` is instanced, so it lives in
+/// its own places rather than in `Inventory`: `DownedPrograms` on the player,
+/// `Racked` on a Quarantine Rack, a rig's `Hopper` (this), and
+/// `StudyYield` on a Research Station, where a finished study's program
+/// waits for a body to rack it. `CarryingProgram` is a body walking one
+/// between them: from a rack to a rig, or from a station to a rack. What
+/// still holds is the half that matters: what leaves a **rig** is plain
+/// items in `Stock::output`, which is what
 /// lets hauling, depots, `collect::plan_adjacent_take` and work orders carry
 /// the yield with no instance rule at all — decision 2's seam, which
 /// `GearCopies`' doc above states and which spec §10.1 declines to spend.
 ///
-/// The rack is the one of the three that is not a queue: nothing works
-/// through it, and it is filled and emptied by hand from the `c` picker.
+/// The rack is the one of those that is not a queue: nothing works through
+/// it, and it is filled and emptied by hand from the `c` picker.
 ///
 /// A `Vec` rather than a keyed store, `DownedPrograms`' own reason: two
 /// equal-comparing programs are still two separate kills, and the queue is
@@ -100,6 +103,35 @@ pub struct Hopper {
 /// it with the `Task`.
 #[derive(Component, Clone, Debug)]
 pub struct CarryingProgram(pub DownedProgram);
+
+/// The downed program a finished subject-gated project left standing at its
+/// Research Station, waiting for an idle body to walk it to a Quarantine Rack
+/// (`game::base::study_yield`).
+///
+/// **Not `Racked`, and not the player's pack.** The station must not read as
+/// a rack anywhere — every `Racked` reader (the `c` picker, rack room, the
+/// crew's rig fetch) would otherwise treat it as shelf — and research no
+/// longer touches the pack, so a full pack cannot stall it. One slot: a
+/// station holding a program gates the next completion until the crew has
+/// moved it.
+///
+/// Written lazily by `Game::hold_at_station` rather than at spawn, so a
+/// hand-spawned station in a fixture needs nothing; `None` and an absent
+/// component read the same.
+#[derive(Component, Default, Clone, Debug)]
+pub struct StudyYield(pub Option<DownedProgram>);
+
+/// How long a rack carrier has stood on one tile: the tile it was last seen
+/// on and the consecutive labour passes it has not left it.
+///
+/// Runtime only, by omission from the save — a reload restarts the count,
+/// which only delays the give-up. Cleared by `Game::rack_carrier_patience`
+/// the moment the body moves or stops being a carrier.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RackWait {
+    pub at: Position,
+    pub beats: u32,
+}
 
 /// A loose floor item an idle program is carrying to a stockpile cell.
 ///

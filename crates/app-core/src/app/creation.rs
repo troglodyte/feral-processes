@@ -428,7 +428,7 @@ impl App {
         }
         // Left and Right page the wizard — but only on the steps that do
         // not spend, where the two keys already mean "take one" and "put
-        // one back" (`Mode::Transfer`'s rule, which those screens share).
+        // one back" (the caravan basket's rule, which those screens share).
         // Those are the steps a player cannot leave early anyway, so what
         // pages them is Enter and Esc.
         if !self.creation_step.spends() {
@@ -777,7 +777,7 @@ impl App {
         self.advance_creation();
     }
 
-    /// `Mode::Transfer`'s key idiom exactly: the cursor moves on Up/Down
+    /// The caravan basket's key idiom exactly: the cursor moves on Up/Down
     /// through `App::scroll` — a digit is never a row pick here, since
     /// there are only four rows and every one of them is a quantity —
     /// Left/Right adjusts the highlighted row, `ShiftLeft`/`ShiftRight`

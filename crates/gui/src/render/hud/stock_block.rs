@@ -503,13 +503,13 @@ mod tests {
     }
 
     /// A reason longer than its column wraps onto further lines rather than
-    /// being cut: "needs room for another…" names no problem the player can
+    /// being cut: "needs crew to carry the last…" names no problem the player can
     /// act on. Every word survives, in order, and every line is measured to
     /// fit its column.
     #[test]
     fn a_long_stall_reason_wraps_whole_rather_than_being_cut() {
         let m = ui_metrics(900.0);
-        let short_of = "room for another downed program";
+        let short_of = "crew to carry the last program to a rack";
         let research = ResearchReadout::Stalled {
             name: "Outpost Founding".to_string(),
             short_of: short_of.to_string(),

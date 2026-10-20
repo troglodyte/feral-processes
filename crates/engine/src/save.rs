@@ -1512,6 +1512,13 @@ pub struct StructureSave {
     /// with an empty one.
     #[serde(default)]
     pub racked: Vec<crate::items::DownedProgram>,
+    /// The program a finished study left at this Research Station — see
+    /// `components::StudyYield`. `DownedProgram` directly, `racked`'s
+    /// precedent. Defaulted, so a save written before the slot existed loads
+    /// with an empty one (research then put it in the player's pack, so no
+    /// program is stranded).
+    #[serde(default)]
+    pub study_yield: Option<crate::items::DownedProgram>,
     /// A Breeding Bay's slots — see `components::Incubator`. `Incubation`
     /// directly, `racked`'s precedent: every roll was fixed when the
     /// breeding started, so a reload must not re-roll it. Empty on a

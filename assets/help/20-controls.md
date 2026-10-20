@@ -45,12 +45,13 @@ Acting on the world:
 
 - c — open the structure beside you. It has one screen with a page for everything you can do with
   that structure: Inventory, Filter (a Depot), Recipe (a machine), Tool (a Teardown Rig), Siphon,
-  Splice, Grow (a farm plot), Rebuild (a wreck) and Info. [ and ] turn pages and Esc steps back to
-  the page list, then out. With more than one structure beside you, Tab steps to the next one
+  Splice, Grow (a farm plot), Rebuild (a wreck) and Info. The rail and page keys work as in the
+  base report: Up/Down walk the pages, Right steps onto a page, Left or Esc steps back to the rail,
+  and Esc on the rail leaves. With more than one structure beside you, Tab steps to the next one
   clockwise from north. Inventory is that one structure's own shelf, with a row per item and the
-  columns you, container — so Left takes off the shelf toward you and Right puts your own cargo
-  onto it. [A] takes the lot; Shift goes to the end of a row and Ctrl halves the gap; typing digits
-  sets an amount; [N] clears the basket
+  columns you, container — + takes off the shelf toward you and - puts your own cargo onto it.
+  [A] takes the lot; Shift+Left/Right goes to the end of a row and Ctrl+Left/Right halves the gap;
+  typing digits sets an amount; [N] clears the basket
 - t — trade
 - a — call a routine
 - x — examine a direction

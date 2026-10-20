@@ -413,6 +413,7 @@ pub(super) fn draw_research_graph(
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
+    dev_unlock: bool,
 ) {
     let (screen_w, screen_h) = (painter.screen_w(), painter.screen_h());
     // The graph draws no popup, so it owes its own backdrop — and it has to
@@ -442,7 +443,11 @@ pub(super) fn draw_research_graph(
         Color::new(0.25, 0.85, 0.85, 1.0),
     );
     painter.ui(
-        "G list  arrows move  Enter work  A abandon  Esc close",
+        if dev_unlock {
+            "G list  arrows move  Enter work  A abandon  U unlock  Esc close"
+        } else {
+            "G list  arrows move  Enter work  A abandon  Esc close"
+        },
         geo.panel.x,
         m.line_height,
         m.small(),
@@ -1017,7 +1022,7 @@ mod tests {
                 .position(|n| n.name.contains(name))
                 .unwrap_or_else(|| panic!("{name} is a shipped node"));
             let (_, shapes) = with_painter(|p| {
-                draw_research_graph(&mut game, ResearchTree::Base, selected, None, p, &m)
+                draw_research_graph(&mut game, ResearchTree::Base, selected, None, p, &m, false)
             });
             let text = painted_text(&shapes).join("\n");
             assert!(
@@ -1040,8 +1045,9 @@ mod tests {
             game.discover_research(&def.id);
         }
         let m = ui_metrics(720.0);
-        let (_, shapes) =
-            with_painter(|p| draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m));
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
+        });
         let text = painted_text(&shapes).join("\n");
         assert!(
             !text.contains("Model Inspection"),
@@ -1085,6 +1091,7 @@ mod tests {
                 Some("Not enough data."),
                 p,
                 &m,
+                false,
             )
         });
         let text = painted_text(&shapes).join("\n");
@@ -1119,7 +1126,7 @@ mod tests {
         let want_name = node.name.clone();
         let m = ui_metrics(720.0);
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, picked, None, p, &m)
+            draw_research_graph(&mut game, ResearchTree::Base, picked, None, p, &m, false)
         });
         let text = painted_text(&shapes).join("\n");
         assert!(text.contains(&want_name), "the panel names the node");
@@ -1152,7 +1159,7 @@ mod tests {
         let m = ui_metrics(720.0);
 
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, blocked, None, p, &m)
+            draw_research_graph(&mut game, ResearchTree::Base, blocked, None, p, &m, false)
         });
         let painted = painted_text(&shapes);
         assert!(
@@ -1207,8 +1214,9 @@ mod tests {
             .count();
         assert!(locked > 0, "a fresh run has amber nodes to draw");
         let m = ui_metrics(720.0);
-        let (_, shapes) =
-            with_painter(|p| draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m));
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
+        });
         assert_eq!(
             painted_rect_stroke_count(&shapes, super::super::progression::LOCKED_BY_PREREQ),
             locked,
@@ -1230,6 +1238,7 @@ mod tests {
                 Some("Requires Zone 3 first."),
                 p,
                 &m,
+                false,
             )
         });
         assert!(
@@ -1258,6 +1267,7 @@ mod tests {
                 Some("No project to abandon."),
                 p,
                 &m,
+                false,
             )
         });
         assert!(
@@ -1277,8 +1287,9 @@ mod tests {
     fn the_graph_paints_a_backdrop_over_the_whole_window_first() {
         let mut game = Game::new(936, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let m = ui_metrics(720.0);
-        let (_, shapes) =
-            with_painter(|p| draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m));
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
+        });
         let fills = painted_fills(&shapes);
         let (index, rect) = *fills.first().expect("the screen paints something");
         assert_eq!(index, 0, "the backdrop must be the very first shape");

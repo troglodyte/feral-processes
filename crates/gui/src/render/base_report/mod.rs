@@ -1,7 +1,8 @@
-//! The hub screens (base report, inventory): a page rail down the left and the current screen's
-//! rows in the content rect beside it. The pages and their screens come from
-//! `app_core::Hub::pages`; this module only draws what that table
-//! says, so a page cannot be on the rail and missing from the nav.
+//! The hub screens: a page rail down the left and the current screen's rows
+//! in the content rect beside it. The heading, pages, marks and extra keys
+//! come from the hub's `app_core::HubKind`; this module only draws what it
+//! says, so a page cannot be on the rail and missing from the nav, and no
+//! hub is named here.
 //!
 //! Each absorbed screen is a row builder drawn by `draw_rows_in`, not a
 //! popup: the frame owns the chrome, the screen owns its rows.
@@ -21,8 +22,8 @@ mod stock;
 
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::{BASE_REPORT_PAGES, GroupMenuRow, Hub, HubPage, WorkOrderRow};
-use feral_processes_engine::{BaseReportFlags, PerkPreview, WorkTable};
+use feral_processes_app_core::{BASE_REPORT_PAGES, GroupMenuRow, HubPage, WorkOrderRow};
+use feral_processes_engine::{PerkPreview, WorkTable};
 
 /// What the screens that read `App` state rather than the `Game` are drawn
 /// from, taken off the app before `app.game` is borrowed — the same
@@ -43,10 +44,9 @@ pub(super) struct AppScreens<'a> {
 }
 
 /// Where a mode sits in its hub and what the frame says about it, taken off
-/// the `App` before `app.game` is borrowed. The structure hub's rail and
-/// title are per-structure, so the frame cannot read them off a static table.
+/// the `App` before `app.game` is borrowed. Everything here is the hub's
+/// `HubKind` answering for itself, so no hub is named in this module.
 pub(super) struct HubFrame {
-    hub: Hub,
     mode: Mode,
     /// The rail heading as `(head, tail)`: the tail is kept whole when the
     /// head is elided to fit.
@@ -54,61 +54,47 @@ pub(super) struct HubFrame {
     pages: Vec<&'static HubPage>,
     page: usize,
     screen: usize,
-    /// The number of structures in the cycle, for the structure hub only.
-    structures: Option<usize>,
+    /// Which pages carry the rail's `!`.
+    marks: Vec<bool>,
+    /// The hub's own keys, as `(key, verb)`.
+    extra_keys: Vec<(&'static str, &'static str)>,
 }
 
 impl HubFrame {
     /// `mode`'s place in whichever hub is showing it, `None` outside every hub.
     pub(super) fn of(app: &App, mode: Mode) -> Option<Self> {
         let (hub, page, screen) = app.hub_for(mode)?;
-        let (title, structures) = match (hub, &app.structure_hub) {
-            (Hub::Structure, Some(open)) => {
-                let (n, of) = (open.at + 1, open.cycle.len());
-                (
-                    (
-                        open.current().name.clone(),
-                        format!(" — {} ({n} of {of})", open.side()),
-                    ),
-                    Some(of),
-                )
-            }
-            _ => ((hub.title().to_string(), String::new()), None),
-        };
+        let kind = hub.kind();
         Some(HubFrame {
-            hub,
             mode,
-            title,
-            pages: hub.pages(app),
+            title: kind.heading(app),
+            pages: kind.pages(app),
             page,
             screen,
-            structures,
+            marks: kind.marks(app),
+            extra_keys: kind.extra_keys(app),
         })
     }
 
-    pub(super) fn is_structure(&self) -> bool {
-        self.structures.is_some()
-    }
-
-    #[allow(clippy::too_many_arguments)]
     fn paint(
         &self,
         keybar_mode: Option<Mode>,
         on_rail: bool,
-        flags: Option<&BaseReportFlags>,
         refusal: Option<&str>,
         painter: &Painter,
         m: &Metrics,
     ) -> Rect {
         frame::paint_frame(
-            (&self.title.0, &self.title.1),
-            &self.pages,
-            self.page,
-            self.screen,
+            &frame::FrameView {
+                title: (&self.title.0, &self.title.1),
+                pages: &self.pages,
+                page: self.page,
+                screen: self.screen,
+                marks: &self.marks,
+                extra_keys: &self.extra_keys,
+            },
             keybar_mode,
             on_rail,
-            self.structures,
-            flags,
             refusal,
             painter,
             m,
@@ -116,10 +102,10 @@ impl HubFrame {
     }
 }
 
-/// Draws a structure hub page whose rows the caller built: the frame, then
-/// the rows in its content rect. The structure's screens are the same row
-/// lists their popups draw, so only the chrome differs.
-pub(super) fn draw_structure_page(
+/// Draws a hub page whose rows the caller built: the frame, then the rows
+/// in its content rect. These are screens whose row lists their popups draw
+/// too, so only the chrome differs.
+pub(super) fn draw_hub_page(
     frame: &HubFrame,
     mode: Mode,
     rows: &[Row],
@@ -128,7 +114,7 @@ pub(super) fn draw_structure_page(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let content = frame.paint(Some(mode), on_rail, None, refusal, painter, m);
+    let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     draw_rows_in(content, rows, !on_rail, painter, m);
 }
 
@@ -143,23 +129,15 @@ pub(super) fn draw_base_report(
     painter: &Painter,
     m: &Metrics,
 ) {
-    // Only the base report has attention marks to compute and draw.
-    let is_base = frame.hub == Hub::Base;
-    let flags = if is_base {
+    let mode = frame.mode;
+    // The Overview spells out the flags the rail marks with `!`.
+    let flags = if mode == Mode::BaseOverview {
         game.base_report_flags()
     } else {
         Default::default()
     };
-    let mode = frame.mode;
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
-    let content = frame.paint(
-        Some(mode),
-        app_screens.on_rail,
-        is_base.then_some(&flags),
-        refusal,
-        painter,
-        m,
-    );
+    let content = frame.paint(Some(mode), app_screens.on_rail, refusal, painter, m);
     draw_rows_in(content, &rows, !app_screens.on_rail, painter, m);
 }
 
@@ -168,18 +146,10 @@ pub(super) fn draw_base_report(
 /// opaque and lets whatever lies under it through, which over the map is
 /// the point and over a screen of text is unreadable, so the rows wait
 /// until the popup is gone. The child owns the cursor and the refusal line.
-pub(super) fn draw_popup_parent(
-    game: &Game,
-    parent: Option<&HubFrame>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(parent) = parent else {
-        return;
-    };
-    // Only the base report has attention marks.
-    let flags = (parent.hub == Hub::Base).then(|| game.base_report_flags());
-    parent.paint(None, false, flags.as_ref(), None, painter, m);
+pub(super) fn draw_popup_parent(parent: Option<&HubFrame>, painter: &Painter, m: &Metrics) {
+    if let Some(parent) = parent {
+        parent.paint(None, false, None, painter, m);
+    }
 }
 
 /// The rows of one hub screen. Every figure comes from the engine; this only
@@ -243,24 +213,6 @@ pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
         .iter()
         .enumerate()
         .map(|(page, entry)| (page, entry.screens[0]))
-}
-
-/// Why `page` is flagged, if it is: the engine's reason for the page's
-/// first screen. A page the engine has no flag for is never flagged.
-pub(super) fn page_flag(
-    flags: &feral_processes_engine::BaseReportFlags,
-    page: usize,
-) -> Option<&str> {
-    match BASE_REPORT_PAGES[page].screens[0] {
-        Mode::StaffWellbeing => flags.staff.as_deref(),
-        Mode::BaseOutput => flags.production.as_deref(),
-        Mode::BaseStock => flags.stock.as_deref(),
-        Mode::BuildOrders => flags.build_orders.as_deref(),
-        Mode::WorkOrders => flags.work_orders.as_deref(),
-        Mode::BaseStaff => flags.staffing.as_deref(),
-        Mode::Alerts => flags.alerts.as_deref(),
-        _ => None,
-    }
 }
 
 /// What every screen's width census shares.

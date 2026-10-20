@@ -1,10 +1,9 @@
 //! One Depot's allow/deny list: what this shelf will take in, a row per
 //! gear or disk family and one per remaining item.
 //!
-//! The table reads `item | denied | allowed | held`, and that order is the
-//! screen's only instruction: **an arrow moves the row toward the column it
-//! points at**, which is the transfer picker's own convention read one
-//! screen further in.
+//! The table reads `item | denied | allowed | held`; `-` denies a row and
+//! `+` allows it, the transfer page's keys, because the structure hub
+//! spends the bare arrows on its own navigation.
 
 use super::popup::*;
 use super::*;
@@ -69,7 +68,7 @@ fn body_rows(screen: &DepotFilterScreen, selected: usize) -> Vec<Row> {
         view.room
     ))];
     body.extend([
-        text_row("Up/Down pick a row; Left denies it, Right allows it"),
+        text_row("Up/Down pick a row; - denies it, + allows it"),
         text_row("[A] allow all  [D] deny all  Esc leaves the page"),
         text_row("Denying takes nothing off the shelf — it only stops more arriving"),
         text_row(""),

@@ -882,7 +882,7 @@ pub(super) fn file_upgrade(game: &mut Game, structure: Entity) -> Result<(), Str
 /// so a fixture whose whole point is that there is nobody to build still has
 /// nobody. The spare is added only when it is needed, so a fixture that
 /// already staffed its base is left exactly as it staged itself.
-fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entity> {
+pub(super) fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entity> {
     if !game.structure_needs_program(kind) {
         return None;
     }
@@ -1394,6 +1394,22 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     let pen = game
         .study_pen(station)
         .expect("research_node.ron declares studies");
+    // And a scratch rack for the gate's room check; the station's slot is
+    // emptied after each completion, standing in for the crew that would
+    // carry the program there.
+    let rack = game
+        .world
+        .spawn((
+            Structure {
+                kind: "quarantine_rack".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_002,
+            },
+            crate::components::Racked::default(),
+        ))
+        .id();
     for node in chain {
         if game.is_researched(&node) {
             continue;
@@ -1429,9 +1445,13 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
             game.is_researched(&node),
             "the fixture must actually land {node}"
         );
+        game.world
+            .entity_mut(station)
+            .remove::<crate::components::StudyYield>();
     }
     game.world.despawn(shelf);
     game.world.despawn(station);
+    game.world.despawn(rack);
 }
 
 /// Stands the party in base space with a Research Node deployed, which is the

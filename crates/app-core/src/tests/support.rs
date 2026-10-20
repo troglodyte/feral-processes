@@ -417,6 +417,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -459,6 +460,7 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -1616,6 +1618,7 @@ pub(crate) fn app_owning_a_program_and_an_extractor_deep(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     data.structures.push(save::StructureSave {
         recipe: None,
@@ -1637,6 +1640,7 @@ pub(crate) fn app_owning_a_program_and_an_extractor_deep(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -1791,6 +1795,7 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -1936,6 +1941,7 @@ pub(crate) fn app_owning_one_deep_program_and_an_extractor(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -2073,6 +2079,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -2829,6 +2836,16 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
     panic!("{label:?} is not offered right now; pages: {offered:?}");
 }
 
+/// `[c]` and into the first page: the hub opens on its rail, so a test
+/// about a page's own keys needs the `Right` a player would press.
+pub(crate) fn open_structure_page(app: &mut App) {
+    app.handle_key(GameKey::Char('c'));
+    // A refused `c` leaves the map up, where Right would walk the player.
+    if app.structure_hub.is_some() && app.hub_on_rail {
+        app.handle_key(GameKey::Right);
+    }
+}
+
 /// Opens `target`'s hub with its own key, walks `]` to `target`'s page and
 /// Right off the rail and along its screens to `target`, the way a player
 /// reaches a screen that no longer has a menu row of its own.
@@ -2839,7 +2856,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         Hub::Inventory => 'i',
         Hub::Structure => unreachable!("hub_of names the shared hubs only"),
     }));
-    for _ in 0..hub.table().len() {
+    for _ in 0..hub.kind().table().len() {
         if hub_of(app.mode).map(|(_, p, _)| p) == Some(page) {
             break;
         }
@@ -2916,6 +2933,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -3076,6 +3094,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -3214,6 +3233,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
     }
     data.player.inventory = pack
@@ -3288,6 +3308,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -3358,6 +3379,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -3407,6 +3429,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -3582,6 +3605,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             standing_tool: None,
             pod_charged: None,
             incubating: Vec::new(),
+            study_yield: None,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };
@@ -3682,6 +3706,7 @@ fn app_at_a_bench(
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     // A plain copy lives in `inventory`; `gear_copies` holds only modded ones.
     data.player.inventory = inventory;
@@ -3744,6 +3769,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     };
     data.structures.push(substrate_factory);
     save::save_to_file(&path, &data).unwrap();
@@ -3793,6 +3819,7 @@ pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool
         standing_tool: None,
         pod_charged: None,
         incubating: vec![None],
+        study_yield: None,
     });
     data.player
         .inventory
@@ -3858,6 +3885,7 @@ pub(crate) fn app_beside_a_machine_west_and_a_depot_east(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
@@ -3893,6 +3921,7 @@ pub(crate) fn app_between_a_depot_and_a_machine(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
@@ -3928,6 +3957,7 @@ pub(crate) fn app_beside_a_machine_and_two_depots(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
@@ -3988,6 +4018,7 @@ pub(crate) fn app_beside_a_machine(seed: u32, kind: &str, recipe: Option<&str>) 
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
 

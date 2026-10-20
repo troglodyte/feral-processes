@@ -1882,6 +1882,27 @@ mod tests {
         }
     }
 
+    /// A full dev picker page must be on screen at once at every window
+    /// height, or its last selectors name rows the popup scrolled out of
+    /// sight.
+    #[test]
+    fn a_full_dev_item_page_is_inside_the_visible_window() {
+        let page: Vec<(char, String, u32)> = (0..feral_processes_app_core::DEV_PICKER_PAGE)
+            .map(|i| (menu_shortcut(i), format!("Item {i}"), 10))
+            .collect();
+        let rows = super::super::dev_pickers::item_picker_rows(&page);
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            let l = popup_layout(window_h, 0.85, &rows, 0, &m);
+            assert!(
+                l.offset + l.capacity >= l.body.len(),
+                "at {window_h}px only {} of {} rows fit",
+                l.capacity,
+                l.body.len()
+            );
+        }
+    }
+
     /// The two progression pickers' real rows for `n` entries with row
     /// `selected` highlighted, built through the shipping row builders for
     /// `build_menu_rows_fixture`'s reason.
@@ -2009,6 +2030,7 @@ mod tests {
                     selected,
                     "Research Data",
                     None,
+                    false,
                 ),
             ),
         ]

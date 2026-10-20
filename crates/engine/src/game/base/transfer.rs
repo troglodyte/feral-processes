@@ -309,6 +309,14 @@ impl Game {
         self.rack_slots(rack).saturating_sub(held)
     }
 
+    /// `rack_room`, less what a held or carried research program has already
+    /// been promised: what a put may still fill. The base-wide claim is
+    /// subtracted whole, never split per rack, so this is a ceiling the
+    /// picker clamps to and the commit re-checks.
+    pub fn rack_room_open(&self, rack: Entity) -> u32 {
+        self.rack_room(rack).min(self.free_rack_room())
+    }
+
     /// Room left across the adjacent Depots, or `None` when there is no
     /// Depot beside the party at all.
     ///
@@ -413,6 +421,9 @@ impl Game {
         let room: u32 = racks.iter().map(|rack| self.rack_room(*rack)).sum();
         if giving as u32 > room {
             return Err("The racks here are full.".to_string());
+        }
+        if giving as u32 > self.free_rack_room() {
+            return Err("The rest of the room is promised to a program being carried.".to_string());
         }
         Ok(())
     }

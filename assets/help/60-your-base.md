@@ -147,8 +147,8 @@ The rest of what a base does:
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
 - A Depot's Filter page, one page down from its Inventory under c, sets what it will accept. Weapons, armor, modules and
-  etched disks each get one row for the whole family, and every other item a row of its own; Left
-  denies a row and Right allows it, [A] and [D] write the whole list at once, and Tab walks to the
+  etched disks each get one row for the whole family, and every other item a row of its own; -
+  denies a row and + allows it, [A] and [D] write the whole list at once, and Tab walks to the
   next structure beside you when there is more than one. A Depot refuses nothing until you say so.
   What is denied simply never lands there — your crew carries it to the next Depot instead, and back
   to the machine it came from if none will take it, so two Depots with opposite lists sort the base

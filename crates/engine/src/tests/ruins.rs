@@ -339,3 +339,30 @@ mod adjacent {
         assert_eq!(cycle[1].dir, (-1, 0));
     }
 }
+
+#[test]
+fn free_build_raises_a_programless_wreck_at_once_but_a_node_still_waits() {
+    let mut game = base(2208);
+    let (px, py) = game.base_pos().unwrap();
+    game.dev_set_free_build(true);
+    {
+        let mut ruins = game.world.resource_mut::<Ruins>();
+        ruins.0.push(ruin("shield", px + 1, py));
+        ruins.0.push(ruin("extractor", px + 2, py));
+    }
+
+    game.file_ruins();
+
+    let standing = |game: &mut Game, kind: &str| {
+        let mut q = game.world.query::<&Structure>();
+        q.iter(&game.world).any(|s| s.kind == kind)
+    };
+    assert!(standing(&mut game, "shield"), "raised with no crew or bill");
+    assert!(
+        !standing(&mut game, "extractor"),
+        "a node needs its program"
+    );
+    let left = sites(&mut game);
+    assert_eq!(left.len(), 1, "only the node's site remains");
+    assert!(left[0].1, "and it is waiting for that program");
+}

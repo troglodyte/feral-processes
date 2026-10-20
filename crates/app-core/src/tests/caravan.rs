@@ -58,6 +58,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         standing_tool: None,
         pod_charged: None,
         incubating: Vec::new(),
+        study_yield: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();

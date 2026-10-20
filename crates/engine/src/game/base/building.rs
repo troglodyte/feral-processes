@@ -302,7 +302,12 @@ impl Game {
         // free.
         let mut site = BuildSite::new(def.id.clone(), build_cost);
         site.program = committed;
-        self.spawn_build_site(site, x, y);
+        let site = self.spawn_build_site(site, x, y);
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+            self.tick();
+            return Ok(());
+        }
         // Two sentences rather than one with an optional clause: the only
         // order that commits nothing is the Home, which never reaches this
         // line, so the `None` arm exists for a modded exempt structure and
@@ -317,6 +322,22 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Turns the dev free build on or off for this run: while on, a build
+    /// costs no materials and stands the moment it is placed. Not saved —
+    /// `DevFreeBuild` is never inserted by `new` or `load`.
+    #[doc(hidden)]
+    pub fn dev_set_free_build(&mut self, on: bool) {
+        self.world
+            .insert_resource(crate::resources::DevFreeBuild(on));
+    }
+
+    #[doc(hidden)]
+    pub fn dev_free_build(&self) -> bool {
+        self.world
+            .get_resource::<crate::resources::DevFreeBuild>()
+            .is_some_and(|dev| dev.0)
     }
 
     /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
@@ -530,10 +551,18 @@ impl Game {
                 ));
                 continue;
             }
+            // `structure_build_cost` quotes nothing under free build, and the
+            // site freezes that quote: a program-needing wreck filed now stays
+            // free to finish even if the toggle is switched off before the
+            // player commits its program. Deliberate for a dev cheat.
             let mut site = BuildSite::new(def.id.clone(), self.structure_build_cost(&def));
             site.awaiting_program = def.needs_program();
             site.recipe = ruin.recipe;
-            self.spawn_build_site(site, ruin.x, ruin.y);
+            let site = self.spawn_build_site(site, ruin.x, ruin.y);
+            if self.dev_free_build() && !def.needs_program() {
+                self.finish_site_now(site);
+                continue;
+            }
             self.log_base(format!(
                 "Your crew marks out the {} wreck at ({}, {}) to be rebuilt.",
                 def.name, ruin.x, ruin.y
@@ -565,6 +594,9 @@ impl Game {
             .expect("checked above, and commit_for_build despawns only the program");
         build.program = committed;
         build.awaiting_program = false;
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+        }
         Ok(())
     }
 
@@ -698,90 +730,31 @@ impl Game {
         Ok(Some(snapshot))
     }
 
-    /// Spawns the finished structure `def` on base-space `(x, y)` and
-    /// returns it.
-    ///
-    /// **The one place a structure's component list is written**, and it has
-    /// two callers with nothing else in common: the player founding a Home
-    /// by hand, and the build crew finishing a request. Left inline in
-    /// `place_structure` the list would have had to be copied into
-    /// `run_build_crew`, and nothing would fail to compile when the two
-    /// drifted — a crew-built machine quietly missing its `MachineStatus`
-    /// reads as the base being broken, not as a missing line. This is
-    /// `Game::roster_parts`' argument applied to the other roster.
-    ///
-    /// It performs no checks at all. Every refusal — researched, floored,
-    /// unoccupied, under `max_deployed` — belongs to whoever decided to
-    /// build, and by the time a crew finishes a request those were answered
-    /// when it was filed.
-    ///
-    /// `quality` is what the program spent on this build was worth to it —
-    /// `build_quality_of`'s answer. `None` writes **no component at all**,
-    /// which is the neutral every reader already means: the Home, which
-    /// costs no program, and every hand-spawned fixture.
-    /// Puts a worker's in-transit carrier somewhere it survives: the first
-    /// adjacent-agnostic rack with room in `(x, y)` order, and the player's
-    /// own store when no rack will take it.
+    /// Puts a worker's in-transit carrier somewhere it survives:
+    /// `shelter_program`'s chain — a rack with room, the station's empty
+    /// slot, the floor — and never the player's pack. A rig's fetcher took
+    /// its program off a rack, so a rack is usually where it goes back;
+    /// keeping the pack out is what makes one chain serve rig and research
+    /// carriers alike.
     ///
     /// **Both destruction paths call this before dropping the component**,
     /// and neither would fail to compile without it — the symptom is a lost
-    /// kill with no error. A store that is full is the one case where the
-    /// carrier is genuinely lost, and it says so rather than going quiet.
+    /// kill with no error.
     pub(crate) fn return_carried_program(&mut self, worker: Entity) {
+        // Read first: a body without a tile keeps the component rather than
+        // losing what it cannot place.
+        let Some(at) = self.world.get::<Position>(worker).copied() else {
+            return;
+        };
         let Some(held) = self
             .world
-            .get::<crate::components::CarryingProgram>(worker)
-            .map(|c| c.0.clone())
+            .entity_mut(worker)
+            .take::<crate::components::CarryingProgram>()
+            .map(|c| c.0)
         else {
             return;
         };
-        self.world
-            .entity_mut(worker)
-            .remove::<crate::components::CarryingProgram>();
-
-        let racks: Vec<(i32, i32, Entity)> = {
-            let db = self.world.resource::<StructureDb>();
-            let mut found: Vec<(i32, i32, Entity)> = self
-                .world
-                .iter_entities()
-                .filter_map(|e| {
-                    let kind = &e.get::<Structure>()?.kind;
-                    let p = e.get::<Position>()?;
-                    db.get(kind)?.racks.as_ref()?;
-                    e.contains::<crate::components::Racked>()
-                        .then_some((p.x, p.y, e.id()))
-                })
-                .collect();
-            found.sort();
-            found
-        };
-        if let Some(rack) = racks
-            .into_iter()
-            .map(|(_, _, e)| e)
-            .find(|rack| self.rack_room(*rack) > 0)
-            && let Some(mut shelf) = self.world.get_mut::<crate::components::Racked>(rack)
-        {
-            shelf.0.push(held);
-            return;
-        }
-
-        let label = self.downed_program_label(&held);
-        let player = self.player_entity();
-        let room = self
-            .world
-            .get::<crate::components::DownedPrograms>(player)
-            .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
-        if room {
-            if let Some(mut store) = self
-                .world
-                .get_mut::<crate::components::DownedPrograms>(player)
-            {
-                store.0.push(held);
-            }
-            self.log_base(format!("{label} comes back to your pack."));
-        } else {
-            self.log_base(format!("{label} is lost with the machine."));
-        }
+        self.shelter_program(held, at, None);
     }
 
     /// Empties `target`'s `Stock` and reports what came off it, so the
@@ -818,10 +791,11 @@ impl Game {
 
     /// Hands a demolished rack's shelf back to the player's own store.
     ///
-    /// `return_carried_program`'s third rung at the second site that owes
-    /// it: `DownedPrograms` is capped where `Inventory` is not, so this
-    /// return can genuinely refuse, and what it cannot take is announced
-    /// rather than dropped in silence.
+    /// Unlike `shelter_program` it ends in the player's store and has a
+    /// "lost" rung: `DownedPrograms` is capped where `Inventory` is not, so
+    /// this return can genuinely refuse, and what it cannot take is
+    /// announced rather than dropped in silence. The player demolished the
+    /// rack on purpose, and a full store is theirs to clear.
     ///
     /// **It does not try another rack first, and that is the difference
     /// from `return_carried_program`.** A Home cascade demolishes every
@@ -858,6 +832,27 @@ impl Game {
         }
     }
 
+    /// Spawns the finished structure `def` on base-space `(x, y)` and
+    /// returns it.
+    ///
+    /// **The one place a structure's component list is written**, and it has
+    /// two callers with nothing else in common: the player founding a Home
+    /// by hand, and the build crew finishing a request. Left inline in
+    /// `place_structure` the list would have had to be copied into
+    /// `run_build_crew`, and nothing would fail to compile when the two
+    /// drifted — a crew-built machine quietly missing its `MachineStatus`
+    /// reads as the base being broken, not as a missing line. This is
+    /// `Game::roster_parts`' argument applied to the other roster.
+    ///
+    /// It performs no checks at all. Every refusal — researched, floored,
+    /// unoccupied, under `max_deployed` — belongs to whoever decided to
+    /// build, and by the time a crew finishes a request those were answered
+    /// when it was filed.
+    ///
+    /// `quality` is what the program spent on this build was worth to it —
+    /// `build_quality_of`'s answer. `None` writes **no component at all**,
+    /// which is the neutral every reader already means: the Home, which
+    /// costs no program, and every hand-spawned fixture.
     pub(crate) fn spawn_structure(
         &mut self,
         def: &StructureDef,
@@ -1239,6 +1234,9 @@ impl Game {
         if tier >= upgrade.max_tier {
             return None;
         }
+        if self.dev_free_build() {
+            return Some(Vec::new());
+        }
         let next = tier + 1;
         Some(
             upgrade
@@ -1351,15 +1349,16 @@ impl Game {
         // Resolved now and carried on the site, `BuildSite::cost`'s reason:
         // a request filed against one price may not be silently repriced by
         // an edited def while the crew is already hauling to it.
-        let cost: Vec<(ItemId, u32)> = upgrade
-            .cost
-            .iter()
-            .map(|(item, qty)| (item.clone(), qty * next))
-            .collect();
+        let cost = self.upgrade_cost(structure).unwrap_or_default();
 
         let mut site = BuildSite::upgrade(kind.clone(), cost, next);
         site.program = committed;
-        self.world.spawn((site, pos));
+        let site = self.world.spawn((site, pos)).id();
+        if self.dev_free_build() {
+            self.finish_site_now(site);
+            self.tick();
+            return Ok(());
+        }
         self.log_base(match committed_who {
             Some(who) => format!(
                 "You put the {} in for an upgrade to Mk{next} and commit {who} to it — \
@@ -1570,6 +1569,9 @@ impl Game {
             else {
                 continue;
             };
+            // Priced by the live quote, so under free build this refunds
+            // nothing: a cheat-built structure cannot be torn down for
+            // materials it never cost.
             for (item, qty) in self.structure_build_cost(&def) {
                 let share = qty * STRUCTURE_REMOVAL_REFUND_PERCENT / 100;
                 if share == 0 {
@@ -1615,6 +1617,8 @@ impl Game {
             // The rig's own tool is carried in exactly as a program is, and
             // comes back out the same way. `Game::return_rig_tool`.
             self.return_rig_tool(target);
+            // And a station's held program: see `Game::return_study_yield`.
+            self.return_study_yield(target);
             if let Some(pos) = self.world.get::<Position>(target).copied() {
                 self.clear_pending_build_at(pos.x, pos.y);
             }

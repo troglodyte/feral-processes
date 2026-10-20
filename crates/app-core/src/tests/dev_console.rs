@@ -240,3 +240,65 @@ mod master_flag {
         assert!(on(Some("00"), None));
     }
 }
+
+/// Opens the keypad with the cursor on `action`'s row and presses Enter.
+fn fire_row(app: &mut App, action: DevAction) {
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    app.menu_selected = App::dev_console_rows()
+        .iter()
+        .position(|r| r.action == action)
+        .expect("the table must offer this row");
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn the_free_build_row_toggles_and_its_label_shows_the_state() {
+    let mut app = console_app(8);
+    let row = App::dev_console_rows()
+        .iter()
+        .find(|r| r.action == DevAction::ToggleFreeBuild)
+        .expect("the table must offer free build");
+    assert!(app.dev_row_label(row).ends_with("(off)"));
+
+    fire_row(&mut app, DevAction::ToggleFreeBuild);
+
+    assert!(app.game.as_ref().unwrap().dev_free_build());
+    assert!(app.dev_row_label(row).ends_with("(on)"));
+    assert_eq!(app.mode, Mode::DevConsole);
+    assert!(app.status_line.is_some(), "a toggle has to say what it did");
+
+    fire_row_again(&mut app);
+    assert!(!app.game.as_ref().unwrap().dev_free_build());
+}
+
+/// Enter on the row the cursor is already on.
+fn fire_row_again(app: &mut App) {
+    app.handle_key(GameKey::Enter);
+}
+
+#[test]
+fn the_other_rows_keep_their_static_label() {
+    let app = console_app(9);
+    for row in App::dev_console_rows()
+        .iter()
+        .filter(|r| r.action != DevAction::ToggleFreeBuild)
+    {
+        assert_eq!(app.dev_row_label(row), row.label);
+    }
+}
+
+#[test]
+fn the_companion_row_adopts_one_or_says_why_not() {
+    let mut app = console_app(10);
+    let before = app.game.as_mut().unwrap().manifest_roster().len();
+
+    fire_row(&mut app, DevAction::SpawnCompanion);
+
+    let line = app.status_line.clone().expect("a press has to report back");
+    let after = app.game.as_mut().unwrap().manifest_roster().len();
+    if line.ends_with("is yours") {
+        assert_eq!(after, before + 1);
+    } else {
+        assert_eq!(after, before, "a refusal adopts nothing: {line}");
+    }
+}

@@ -43,6 +43,11 @@ pub enum DevAction {
     Encounter,
     AdvanceTicks,
     CycleEnemyStrength,
+    /// A session-only toggle (`Game::dev_set_free_build`); its row label
+    /// carries the state, see `App::dev_row_label`.
+    ToggleFreeBuild,
+    /// Adopts one species drawn from the player's tile, no tick spent.
+    SpawnCompanion,
     /// The one row that opens a screen instead of provoking an event —
     /// `Mode::SpritePicker`. It lives on the keypad rather than on a key of
     /// its own because the keypad is already the map's dev door and is
@@ -113,6 +118,14 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Cycle enemy strength",
         action: DevAction::CycleEnemyStrength,
+    },
+    DevConsoleRow {
+        label: "Free build",
+        action: DevAction::ToggleFreeBuild,
+    },
+    DevConsoleRow {
+        label: "Spawn companion from this tile",
+        action: DevAction::SpawnCompanion,
     },
     // Below the triggers, being the one row that provokes nothing: it opens
     // the Sprite Forge over whatever the map is showing. Kept here rather
@@ -189,6 +202,18 @@ impl App {
         DEV_ROWS
     }
 
+    /// The text the renderer draws for a row: the static label, except the
+    /// free-build row, which appends the toggle's state. The table is
+    /// `&'static`, so the one dynamic label is answered here rather than
+    /// making every row's text a call.
+    pub fn dev_row_label(&self, row: &DevConsoleRow) -> String {
+        if row.action != DevAction::ToggleFreeBuild {
+            return row.label.to_string();
+        }
+        let on = self.game.as_ref().is_some_and(|g| g.dev_free_build());
+        format!("{} ({})", row.label, if on { "on" } else { "off" })
+    }
+
     /// Whether the console may be opened at all.
     pub fn dev_console_enabled(&self) -> bool {
         self.dev_console
@@ -230,6 +255,16 @@ impl App {
         // to act on. Every arm below it does both.
         if action == DevAction::OpenSpriteForge {
             self.open_sprite_forge();
+            return;
+        }
+        // Also ahead of the tail: a toggle and an adoption spend no tick, and
+        // the tail's tick would age the world under a state change the dev
+        // is trying to observe.
+        if matches!(
+            action,
+            DevAction::ToggleFreeBuild | DevAction::SpawnCompanion
+        ) {
+            self.fire_untimed_dev_action(action);
             return;
         }
         let Some(game) = self.game.as_mut() else {
@@ -275,13 +310,35 @@ impl App {
             // `use_ability`'s `Tamper` arm's pattern, so a row that opens a
             // screen cannot quietly acquire a tick by being added to this
             // match instead.
-            DevAction::OpenSpriteForge => unreachable!("handled above"),
+            DevAction::OpenSpriteForge | DevAction::ToggleFreeBuild | DevAction::SpawnCompanion => {
+                unreachable!("handled above")
+            }
         }
         self.after_world_action(true, false, 0);
         match said {
             Some(Ok(line)) => self.status_line = Some(line),
             Some(Err(e)) => self.refuse(e),
             None => {}
+        }
+    }
+
+    /// The rows that change the run without spending a tick.
+    fn fire_untimed_dev_action(&mut self, action: DevAction) {
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
+        let said = match action {
+            DevAction::ToggleFreeBuild => {
+                let on = !game.dev_free_build();
+                game.dev_set_free_build(on);
+                Ok(format!("Free build: {}.", if on { "on" } else { "off" }))
+            }
+            DevAction::SpawnCompanion => game.dev_spawn_companion(),
+            _ => unreachable!("only the untimed rows are routed here"),
+        };
+        match said {
+            Ok(line) => self.status_line = Some(line),
+            Err(e) => self.refuse(e),
         }
     }
 }

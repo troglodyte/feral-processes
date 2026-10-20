@@ -110,3 +110,68 @@ fn free_build_does_not_survive_a_save() {
 
     assert!(!loaded.dev_free_build());
 }
+
+fn held(game: &Game, id: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(id))
+}
+
+fn some_item(game: &Game, gear: bool) -> ItemId {
+    game.world
+        .resource::<ItemDb>()
+        .all()
+        .find(|d| d.equipment.is_some() == gear)
+        .map(|d| d.id.clone())
+        .expect("the shipped items hold both kinds")
+}
+
+#[test]
+fn give_item_adds_the_quantity() {
+    let mut game = bare_base(9101);
+    let id = some_item(&game, false);
+    let before = held(&game, id.as_str());
+
+    let said = game.dev_give_item(&id, 10).unwrap();
+
+    assert_eq!(held(&game, id.as_str()), before + 10);
+    assert!(said.starts_with("10 × "), "{said}");
+}
+
+#[test]
+fn give_item_refuses_gear_and_unknown_ids() {
+    let mut game = bare_base(9102);
+    let gear = some_item(&game, true);
+
+    assert!(game.dev_give_item(&gear, 10).is_err());
+    assert_eq!(held(&game, gear.as_str()), 0);
+    assert!(
+        game.dev_give_item(&ItemId::from("no_such_item"), 10)
+            .is_err()
+    );
+}
+
+#[test]
+fn plain_items_are_sorted_by_name_and_hold_no_gear() {
+    let mut game = bare_base(9103);
+    let id = some_item(&game, false);
+    game.dev_give_item(&id, 3).unwrap();
+
+    let rows = game.dev_plain_items();
+
+    assert!(!rows.is_empty());
+    assert!(rows.windows(2).all(|w| w[0].1 <= w[1].1), "sorted by name");
+    let db = game.world.resource::<ItemDb>();
+    assert!(
+        rows.iter()
+            .all(|(id, ..)| db.get(id.as_str()).unwrap().equipment.is_none()),
+        "no gear"
+    );
+    let row = rows.iter().find(|r| r.0 == id).unwrap();
+    assert_eq!(
+        row.2,
+        held(&game, id.as_str()),
+        "the held count rides along"
+    );
+}

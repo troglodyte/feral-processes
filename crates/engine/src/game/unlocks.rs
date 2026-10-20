@@ -1575,13 +1575,20 @@ impl Game {
         );
         self.note_deed(crate::contracts::Deed::FinishedResearch);
         self.grant_research_knowledge(def);
-        {
+        let cleared_active = {
             let mut research = self.world.resource_mut::<ActiveResearch>();
-            if research.id.as_ref() == Some(&def.id) {
+            let is_active = research.id.as_ref() == Some(&def.id);
+            if is_active {
                 research.id = None;
             }
             research.progress.remove(&def.id);
+            is_active
+        };
+        // Only the active project's own bill: a dev unlock of some other node
+        // must not strip the orders `select_research` filed once and never
+        // re-files.
+        if cleared_active {
+            self.withdraw_research_orders();
         }
-        self.withdraw_research_orders();
     }
 }

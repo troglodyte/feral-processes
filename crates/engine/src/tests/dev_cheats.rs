@@ -2,7 +2,7 @@
 //! code, so these assert what a player would get after cheating.
 
 use super::support::*;
-use crate::resources::ActiveResearch;
+use crate::resources::{ActiveResearch, WorkOrders};
 use crate::*;
 
 /// A Home on the player's tile and the party in the base, with nothing in
@@ -252,6 +252,28 @@ fn unlock_research_clears_the_active_node_it_grants() {
         game.world.resource::<ActiveResearch>().id,
         Some(id),
         "unlocking some other node leaves the active one alone"
+    );
+}
+
+#[test]
+fn unlocking_another_node_keeps_the_active_projects_material_orders() {
+    let mut game = bare_base(9305);
+    let id = research_node(&game, |d| d.teaches.is_none() && d.cost > 0);
+    let other = research_node(&game, |d| d.teaches.is_none() && d.id != id);
+    game.world.resource_mut::<ActiveResearch>().id = Some(id.clone());
+    let order = WorkOrder::batch(ItemId::from("core_fragment"), 3).with_research();
+    game.world.resource_mut::<WorkOrders>().0.push(order);
+
+    game.dev_unlock_research(&other).unwrap();
+    assert!(
+        game.work_orders().iter().any(|o| o.for_research),
+        "the active project's orders are filed once, at selection"
+    );
+
+    game.dev_unlock_research(&id).unwrap();
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "granting the active node itself withdraws them"
     );
 }
 

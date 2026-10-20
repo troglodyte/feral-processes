@@ -156,18 +156,19 @@ impl Game {
                 _ => None,
             })
             .clamp(0, 100);
+        let mut accuracy =
+            battle::accuracy_of(speed, level, self.accuracy_bonus(entity) + swing.accuracy);
+        // Skipped at zero: scaling by 100/100 is not the identity in f64.
+        if jam != 0 {
+            accuracy = accuracy * (100 - jam) as f64 / 100.0;
+        }
         let derived = self
             .world
             .get::<crate::components::Derived>(entity)
             .copied()
             .unwrap_or_default();
         battle::Combatant {
-            accuracy: battle::accuracy_of(
-                speed,
-                level,
-                self.accuracy_bonus(entity) + swing.accuracy,
-            ) * (100 - jam) as f64
-                / 100.0,
+            accuracy,
             evasion,
             atk: self.status_scaled(entity, self.effective_atk(entity), |b| match b {
                 StatusBehaviour::AtkPercent(n) => Some(*n),

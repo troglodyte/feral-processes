@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.17
+
+**Finishing a research project with a subject no longer needs room in your own store of downed programs.** The subject's downed program now waits at the Research Station, and an idle base program carries it to a Quarantine Rack with room. Before, a full store of ten stalled the project for good, and building racks did nothing because research only ever put the program in your store. Research now waits only for a rack with a free slot ("needs room on a Quarantine Rack") or for the last program to be carried away. A carried program is never lost: if the rack fills up on the way, or the carrier is pulled off the errand, it goes to another rack, back to the station, or onto the floor.
+
+**Racking a downed program by hand at `c` leaves room for one already on its way.** A slot that a carried program is headed for no longer counts as free, so the delivery always has somewhere to go.
+
+**A Holding Cell and a Drop Pod Terminal look 2x2 on the base map.** Like the Research Station, every building wider than one tile now lays a floor under the rest of its footprint. Before, only the building's own letter showed, on one tile.
+
 ## 0.19.16
 
 **Nothing changes in play; this release reorganises the engine's code.** The three largest shared files (the tuning numbers, the component types and the screen read-models) were each one file of 4,000 to 6,500 lines that nearly every change edited. Each is now a folder split by subsystem, with every name still reached the same way, so the game builds and behaves exactly as in 0.19.15.

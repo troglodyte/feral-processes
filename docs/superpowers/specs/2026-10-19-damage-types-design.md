@@ -199,7 +199,7 @@ General rules (Claude's calls):
 | Type | Side effect | Built from |
 |---|---|---|
 | **Noise** | jams the target: its accuracy drops for a few rounds | a status; a new accuracy-cut behaviour if `EvasionCut` / `AtkPercent` can't express it |
-| **Radiation** | corruption: damage each round, and the target can't be repaired or healed while it lasts | a status with `DamagePerRound` + `HealBlock` (both exist) |
+| **Radiation** | corruption: damage each round while it lasts; healing and repair still work (the user's call) | a status with `DamagePerRound` (exists) |
 | **Magnetic** | erasure: the hit ignores flat deflection | no status; skips the deflection step in mitigation when the target is below the threshold |
 | **Thermal** | heat: stacks on the target, and a hot target takes more damage from every source | a stacking status with a new "damage taken +%" behaviour; may later tie to the Temperature tamper (not in scope) |
 | **Voltage** | arc: a share of the landed damage jumps to one adjacent enemy | no status; see below |

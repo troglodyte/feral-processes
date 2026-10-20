@@ -546,8 +546,13 @@
   then the Research Station's empty slot, then the floor through
   `Game::set_down`. The player's store is deliberately not in it (research
   never uses the pack) and there is no "lost" rung: a claimed rack's room can
-  shrink under the claim — the player's own put, a demolition, `stow_program`'s
-  overflow — so "no rack has room" is reachable and the kill must outlast it.
+  shrink under the claim — a demolition, a rig fetcher's kill sheltered onto
+  a rack, `stow_program`'s overflow (the player's own put is refused) — so
+  "no rack has room" is reachable and the kill must outlast it. The one
+  exception to "never the pack": with no free floor cell `set_down` falls
+  back to `stow_program`, which fills the downed store (or a rack, or the
+  store past its cap); very hard to reach, and the log names where it went
+  rather than claiming the floor.
   `Game::drop_load` calls the same chain for a `CarryingProgram`, which is
   what covers every door that frees or removes a body (pin, build spend, sale,
   permadeath, fuse, wield, enlist, sortie): they were already calling

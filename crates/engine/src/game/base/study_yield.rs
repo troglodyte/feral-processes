@@ -133,10 +133,16 @@ impl Game {
     /// station being destroyed, whose slot is no place to leave anything.
     ///
     /// **The last rung is the floor, not a log line saying it is lost.** A
-    /// claimed rack's room can shrink under the claim (the player's own put,
-    /// a demolition), so "no rack has room" is reachable and the kill must
-    /// still outlast it. `Game::set_down` is the door that cannot fail; a
-    /// floor program is picked up by hand like any other.
+    /// claimed rack's room can shrink under the claim (a demolition, a rig
+    /// fetcher's kill sheltered onto a rack, `stow_program`'s overflow), so
+    /// "no rack has room" is reachable and the kill must still outlast it.
+    /// `Game::set_down` is the door that cannot fail; a floor program is
+    /// picked up by hand like any other.
+    ///
+    /// **The one exception to "never the pack":** with no free floor cell
+    /// `set_down` falls back to `stow_program`, which fills the player's
+    /// downed store (or a rack, or the store past its cap). Very hard to
+    /// reach, and the log says which it was.
     pub(crate) fn shelter_program(
         &mut self,
         held: DownedProgram,
@@ -164,9 +170,14 @@ impl Game {
             self.hold_at_station(station, held);
             return;
         }
-        self.log_base(format!(
-            "No rack has room — {label} is set down on the floor."
-        ));
+        // With no free floor cell `set_down` falls back to `stow_program`,
+        // which says where the program really went; claiming the floor first
+        // would be a lie.
+        if !self.free_floor_cells(at, 1).is_empty() {
+            self.log_base(format!(
+                "No rack has room — {label} is set down on the floor."
+            ));
+        }
         self.set_down(at, vec![FloorThing::Program(held)]);
     }
 

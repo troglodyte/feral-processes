@@ -297,7 +297,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   chain, so being held out of the pool is bounded.
 - **`Game::shelter_program` is the one never-lose chain — a rack with room,
   the station's empty slot, then the floor through `Game::set_down` — and it
-  never uses the player's pack**; `return_carried_program` and
+  never uses the player's pack, bar `set_down`'s own no-free-floor fallback
+  to `stow_program`**; `return_carried_program` and
   `return_study_yield` call it, and `Game::drop_load` calls it for a
   `CarryingProgram`, so every door that ends a hold also keeps the kill.
 - **Three of the five classes do something at a post, each in a different

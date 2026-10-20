@@ -374,3 +374,132 @@ fn a_save_keeps_a_carrier_mid_trip_and_it_finishes_the_delivery() {
         racked_levels(g, rack) == vec![7]
     });
 }
+
+/// Every program a base keeps for later, as levels: rack shelves, station
+/// slots and the floor. Not a body's hands and not the player's pack: a
+/// door that ends a hold must have put the kill somewhere that outlasts the
+/// body, and research never uses the pack.
+fn kept(game: &mut Game) -> Vec<u32> {
+    let mut levels: Vec<u32> = game
+        .world
+        .query::<&Racked>()
+        .iter(&game.world)
+        .flat_map(|r| r.0.iter().map(|p| p.level))
+        .collect();
+    levels.extend(
+        game.world
+            .query::<&StudyYield>()
+            .iter(&game.world)
+            .filter_map(|y| y.0.as_ref().map(|p| p.level)),
+    );
+    levels.extend(
+        game.world
+            .query::<&crate::components::FloorItem>()
+            .iter(&game.world)
+            .filter_map(|f| match &f.0 {
+                crate::items::FloorThing::Program(p) => Some(p.level),
+                _ => None,
+            }),
+    );
+    levels.sort();
+    levels
+}
+
+fn pack_programs(game: &Game) -> usize {
+    game.world
+        .get::<DownedPrograms>(game.player_entity())
+        .unwrap()
+        .0
+        .len()
+}
+
+/// A task-less body holding a level-7 kill: a rack carrier mid-trip.
+fn a_carrier(game: &mut Game) -> Entity {
+    let carrier = spawn_tamed(game, 100, 3);
+    game.world
+        .entity_mut(carrier)
+        .insert(CarryingProgram(program(7)));
+    carrier
+}
+
+fn assert_handed_back(game: &mut Game, carrier: Option<Entity>) {
+    if let Some(carrier) = carrier {
+        assert!(
+            game.world.get::<CarryingProgram>(carrier).is_none(),
+            "the body that left the labour pool still holds the kill"
+        );
+    }
+    assert_eq!(kept(game), vec![7], "the kill was lost with the door");
+    assert_eq!(pack_programs(game), 0, "research never uses the pack");
+}
+
+#[test]
+fn pinning_a_carrier_hands_back_its_program() {
+    let (mut game, station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    game.pin_subject(carrier, station).unwrap();
+    assert_handed_back(&mut game, Some(carrier));
+}
+
+#[test]
+fn spending_a_carrier_on_a_build_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    spawn_tamed(&mut game, 100, 3);
+    assert!(game.commit_program(carrier).is_some());
+    assert_handed_back(&mut game, None);
+}
+
+#[test]
+fn wielding_a_carrier_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    game.wield_program(carrier).unwrap();
+    assert_handed_back(&mut game, Some(carrier));
+}
+
+#[test]
+fn enlisting_a_carrier_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    enlist(&mut game, carrier);
+    assert_handed_back(&mut game, Some(carrier));
+}
+
+#[test]
+fn selling_a_carrier_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    let carrier = a_carrier(&mut game);
+    game.dissolve_tamed_program(carrier, crate::bonds::Departure::LetGo);
+    assert_handed_back(&mut game, None);
+}
+
+#[test]
+fn a_permadeath_carrier_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    *game.world.resource_mut::<DifficultyMode>() = DifficultyMode::Permadeath;
+    let carrier = a_carrier(&mut game);
+    game.bench_or_dissolve(carrier);
+    assert_handed_back(&mut game, None);
+}
+
+#[test]
+fn fusing_a_carrier_hands_back_its_program() {
+    let (mut game, _station, _rack) = base_with_station_and_rack();
+    unlock_research_chain(&mut game, "program_refactoring");
+    let carrier = a_carrier(&mut game);
+    let other = spawn_tamed(&mut game, 100, 3);
+    game.fuse_companions(carrier, other, None).unwrap();
+    assert_handed_back(&mut game, None);
+}
+
+#[test]
+fn dispatching_a_carrier_on_a_sortie_hands_back_its_program() {
+    let (mut game, site, staff) = super::sorties::a_base_ready_to_dispatch(5101, 4, 500);
+    spawn_machine_at(&mut game, "quarantine_rack", -6, -6);
+    game.world
+        .entity_mut(staff[0])
+        .insert(CarryingProgram(program(7)));
+    game.dispatch_sortie(&site, &[staff[0], staff[1]]).unwrap();
+    assert_handed_back(&mut game, Some(staff[0]));
+}

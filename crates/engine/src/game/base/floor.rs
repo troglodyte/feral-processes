@@ -210,8 +210,10 @@ impl Game {
 
     /// Puts `who`'s load on the floor around its tile, one unit per tile, and
     /// ends the hold: a hauler's `Carrying`, a clearer's `Carrying` with its
-    /// `Clearing` marker, and a tidier's `Tidying` alike. A no-op if `who`
-    /// carries nothing or has no tile.
+    /// `Clearing` marker, and a tidier's `Tidying` alike. A rack carrier's or
+    /// rig fetcher's `CarryingProgram` is not a pile: it goes through
+    /// `shelter_program`, so every door that ends a hold also keeps the kill.
+    /// A no-op if `who` carries nothing or has no tile.
     pub(crate) fn drop_load(&mut self, who: Entity) {
         let Some(pos) = self.world.get::<Position>(who).copied() else {
             return;
@@ -225,6 +227,13 @@ impl Game {
         }
         if let Some(Tidying(thing)) = self.world.entity_mut(who).take::<Tidying>() {
             things.push(thing);
+        }
+        if let Some(crate::components::CarryingProgram(held)) = self
+            .world
+            .entity_mut(who)
+            .take::<crate::components::CarryingProgram>()
+        {
+            self.shelter_program(held);
         }
         self.set_down(pos, things);
     }

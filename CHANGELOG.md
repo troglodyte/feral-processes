@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.23
+
+**Radiation hits corrupt their target.** A target hit by a Radiation attack loses 2 Integrity each round for three rounds, shown as `COR`. Another Radiation hit restarts the count rather than adding to it. Healing still works on a corrupted body. Armour that resists Radiation by 50% or more stops the corruption from landing. No shipped armour reaches 50% yet, so nothing blocks it in the current game. The balance curves did not move.
+
 ## 0.19.22
 
 **Noise hits jam their target's targeting.** A target hit by a Noise attack has its accuracy cut by 30% for two rounds, shown as `JAM`, and misses more while it lasts. This works on both kinds of battle and in sorties. Armour that resists Noise by 50% or more stops the jam from landing. No shipped armour reaches 50% yet, so nothing blocks it in the current game. The balance curves did not move.

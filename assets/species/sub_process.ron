@@ -6,6 +6,7 @@
     base_hp: 43,
     base_atk: 4,
     base_mitigation: 3,
+    resist: (thermal: 20),
     taming_difficulty: 0.3,
     habitats: [OpenGrid, NullSector],
     base_speed: 12,

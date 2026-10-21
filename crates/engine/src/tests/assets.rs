@@ -6589,4 +6589,29 @@ fn shipped_tags_reach_their_defs() {
     let shock = &species.get("scrapper").unwrap().moves;
     let shock = shock.iter().find(|m| m.name == "Shock").unwrap();
     assert_eq!(shock.damage_type, Some(DamageType::Voltage));
+
+    let construct = species.get("construct").unwrap();
+    assert_eq!(construct.resist.get(DamageType::Voltage), 30);
+}
+
+/// Blocking a side effect takes armour: no shipped species reaches the
+/// threshold on its own natural resistance.
+#[test]
+fn no_shipped_species_blocks_a_side_effect_by_itself() {
+    use crate::damage::DamageType;
+    let (_, species) = shipped_items_and_species();
+    let mut resisting = 0;
+    for def in species.all() {
+        for ty in DamageType::ALL {
+            let pct = def.resist.get(ty);
+            resisting += usize::from(pct > 0);
+            assert!(
+                !crate::damage::side_effect_blocked(pct),
+                "{} resists {} by {pct} on its own",
+                def.id,
+                ty.name()
+            );
+        }
+    }
+    assert!(resisting > 0, "the census must see a species resistance");
 }

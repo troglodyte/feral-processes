@@ -6,6 +6,7 @@
     base_hp: 136,
     base_atk: 6,
     base_mitigation: 12,
+    resist: (magnetic: 20, voltage: 20),
     taming_difficulty: 0.65,
     growth_multiplier: 1.5,
     habitats: [Deadlock],

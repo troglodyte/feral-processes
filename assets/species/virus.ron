@@ -6,6 +6,7 @@
     base_hp: 122,
     base_atk: 10,
     base_mitigation: 8,
+    resist: (radiation: 20),
     taming_difficulty: 0.6,
     growth_multiplier: 1.5,
     habitats: [NullSector, Backplane],

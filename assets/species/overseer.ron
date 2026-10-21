@@ -6,6 +6,7 @@
     base_hp: 180,
     base_atk: 11,
     base_mitigation: 15,
+    resist: (thermal: 30, radiation: 30),
     taming_difficulty: 0.828,
     growth_multiplier: 2.0,
     habitats: [OpenGrid, Backplane, NullSector, Deadlock],

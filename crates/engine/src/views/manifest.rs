@@ -300,7 +300,7 @@ pub struct ProgramManifest {
     /// section entirely rather than drawing five rows of 1.00.
     pub affinities: Vec<(AffinityKind, f32)>,
     /// The species' natural damage-type resistances (`SpeciesDef::resist`),
-    /// percent, non-zero only, in `DamageType::ALL` order. Armour is not in
+    /// percent, positive only, in `DamageType::ALL` order. Armour is not in
     /// it: this is what the program *is*, and gear shows on its own rows.
     pub resistances: Vec<(crate::damage::DamageType, i32)>,
     /// The class this species reads as, which decides what it does when

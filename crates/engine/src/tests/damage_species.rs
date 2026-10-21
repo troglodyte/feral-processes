@@ -175,3 +175,13 @@ fn a_programs_manifest_lists_its_species_resistances_and_not_its_armour() {
     );
     assert!(resistances(worm).is_empty());
 }
+
+#[test]
+fn a_negative_resistance_is_not_listed() {
+    let res = damage::Resistances {
+        thermal: -20,
+        voltage: 10,
+        ..Default::default()
+    };
+    assert_eq!(res.resisted(), vec![(damage::DamageType::Voltage, 10)]);
+}

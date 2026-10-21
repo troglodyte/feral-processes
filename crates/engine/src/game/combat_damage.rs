@@ -327,7 +327,8 @@ impl Game {
             return outcome;
         }
         // Both reads are `&self` and draw nothing, taken before the damage
-        // lands so the figure is what the armour stopped of *this* hit.
+        // lands so the figure is what resistance (`type_resistances`)
+        // stopped of *this* hit.
         let resisted = swing.damage_type.and_then(|ty| {
             // The baseline is the same typed path with only the type cut
             // zeroed; the deflection decision still reads the real
@@ -371,7 +372,7 @@ impl Game {
     }
 
     /// The side effect of a typed hit that landed `landed` on `defender`:
-    /// decided by `damage::side_effect` from the armour's resistance, then
+    /// decided by `damage::side_effect` from `type_resistances`, then
     /// armed and worded here. Nothing for a hit that did nothing or killed,
     /// so a dead body never reads a status line. Draws no randomness.
     ///
@@ -707,7 +708,7 @@ impl Game {
     }
 
     /// The one copy of the typed mitigation formula. `cut_resist` overrides
-    /// the resistance the percentage cut uses; `None` reads it off the gear.
+    /// the resistance the percentage cut uses; `None` reads `type_resistances`.
     /// Whether deflection is skipped always reads the target's real
     /// resistance.
     fn mitigate_with_resist(

@@ -28,8 +28,9 @@ Paths are under `crates/engine/src/` unless stated. Read
   reaches `SIDE_EFFECT_BLOCK_THRESHOLD` (50): blocking a side effect still
   takes armour. A census test holds that.
 - **Display.** `ProgramManifest::resistances: Vec<(DamageType, i32)>`,
-  non-zero entries in `DamageType::ALL` order, rendered as a RESISTANCES
-  ledger beside AFFINITIES and omitted when empty.
+  positive entries in `DamageType::ALL` order, rendered as one "Resists"
+  row in the SPECIES box (5 of its 6 rows at worst, so no box is added to
+  the tightest page) and omitted when empty.
 - AI forecasts and gear rating stay untyped (spec, § Left to the builder).
 
 ## Tasks
@@ -41,7 +42,7 @@ Paths are under `crates/engine/src/` unless stated. Read
    threshold blocks a side effect; an emulating player borrows it.
 2. Asset values + `assets/species/README.md`; census test in `tests/assets.rs`
    (construct resists Voltage; no species alone reaches the threshold).
-3. Manifest field + gui RESISTANCES ledger; view test and a gui render test.
+3. Manifest field + gui SPECIES "Resists" row; view test and a gui render test.
 
 ## Gates
 

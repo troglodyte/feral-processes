@@ -337,11 +337,11 @@ mod tests {
             base_speed,
             analysis,
             affinities: vec![],
-            // Two types, the most any shipped species resists: the widest
-            // value SPECIES' Resists row draws, and the row it adds.
+            // Overseer's pair, the widest shipped value SPECIES' Resists row
+            // draws, and the row it adds.
             resistances: vec![
-                (feral_processes_engine::damage::DamageType::Magnetic, 30),
-                (feral_processes_engine::damage::DamageType::Voltage, 30),
+                (feral_processes_engine::damage::DamageType::Thermal, 30),
+                (feral_processes_engine::damage::DamageType::Radiation, 30),
             ],
             // The two boss species are the only shipped programs with no
             // class, and a boss cannot be tamed or posted — so a job row is

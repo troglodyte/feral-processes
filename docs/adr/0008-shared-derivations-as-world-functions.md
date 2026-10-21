@@ -1,31 +1,39 @@
 # 0008 Shared derivations are functions of `&World`
 
-Status: Proposed (2026-10-16)
+- Status: Proposed
+- Decided by: Claude — proposed, awaiting the user
+- Date: 2026-10-16 (narrowed 2026-10-21)
+- Pattern: Shared pure function
+- Depends on: [0005](0005-engine-queries-take-self-not-mut-self.md)
 
 ## Context
 
-`tick_inner` (`crates/engine/src/game/turn.rs:241-496`) runs about 49 hand-ordered `Game` passes around one `schedule.run` (`:364`) of about fifteen bevy systems.
-Several passes are `&mut Game` methods rather than systems because they need a `Game`-level derivation — `creature_label` for the repair-bay line, `extraction_yield` for the teardown rig — and a system has queries and resources, not a `Game`.
-The memory graph records those as forced, and they are, as long as the derivation is a method.
+A derivation such as `Game::creature_label` or an extraction yield is needed both by `Game` methods and by code that has only a `World` — a bevy system has queries and resources, not a `Game`.
+When the derivation is a method, the second consumer either becomes a `&mut Game` pass or copies the formula, and a copy drifts.
+`CLAUDE.md` already says a doc comment claiming to mirror other code must be a call, not a copy.
 
-But `Game` is `{ world, schedule }` and nothing else, so every `&self` derivation is already a function of the `World`.
-The pattern exists: `power::ledger(&World)` (`game/base/power.rs:155`) is called by `power_grid_system` (`systems.rs:995`) and by `Game` methods, and neither copies the formula.
+`Game` is `{ world, schedule }`, so every `&self` derivation is already a function of the `World`.
+The pattern exists: `power::ledger(&World, …)` is called by `power_grid_system` and by `Game` methods, and neither copies the formula.
 
 ## Decision
 
-Extract shared derivations as `pub(crate) fn name(&World, …)` beside their domain, with the `Game` method becoming a one-line call.
-Then, one pass at a time and only where a pass has no other reason to be hand-ordered, move it into the schedule as an ordered system set.
-A pass whose doc comment gives a reason other than "needs `Game`" stays where it is.
+Extract a shared derivation as `pub(crate) fn name(&World, …)` beside its domain, with the `Game` method becoming a one-line call.
+Every consumer — method, system, view — calls it; none restates it.
+Do it when a second consumer appears or a copy is found, not as a sweep.
+
+## Alternatives considered
+
+- Keep derivations as methods and pass `&Game` around. A system cannot hold one.
+- Move the hand-ordered `tick_inner` passes into the ECS schedule once their derivations are free functions. Rejected; see [0011](0011-restructurings-considered-and-rejected.md).
 
 ## Consequences
 
-The "forced `&mut Game` pass" argument stays true for every pass not yet converted, so no seam breaks.
-Systems get explicit ordering, which is what ADR 0001's executor change wants.
-The hand-ordered list shrinks, and a new tick pass has a default home.
-This follows ADR 0005: a derivation is only extractable once the method it comes from is `&self`.
+The "mirrors must be a call" rule has one shape to point to.
+A `&mut Game` pass that exists only to reach a derivation can call the function instead, but stays a `Game` pass ([0021](0021-plain-rust-over-ecs-for-discrete-logic.md)).
+Extraction needs the source method to be `&self` first, hence the dependency on 0005.
 
 ## Evidence
 
-- `crates/engine/src/game/turn.rs:241-496` — `tick_inner`.
-- `crates/engine/src/game/base/power.rs:155` — `ledger(&World)`.
-- `crates/engine/src/systems.rs:995` — the system that calls it.
+- `crates/engine/src/game/base/power.rs` — `power::ledger`.
+- `crates/engine/src/systems.rs` — `power_grid_system`.
+- `crates/engine/src/battle.rs` — `attackers_in_group`, `slot_aggro_weight`, `expected_damage`.

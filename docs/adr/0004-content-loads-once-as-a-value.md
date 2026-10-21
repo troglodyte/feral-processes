@@ -1,37 +1,40 @@
 # 0004 Content loads once, as a value
 
-Status: Proposed (2026-10-16)
+- Status: Proposed
+- Decided by: Claude — proposed, awaiting the user
+- Date: 2026-10-16 (revised 2026-10-21)
+- Pattern: Ports and adapters
 
 ## Context
 
-`load_asset_dbs(&Path)` in `crates/engine/src/game/lifecycle.rs:3877` is already the one loader, but it takes a path and every `*Db::load_dir` reads the disk itself.
-Nothing is cached: each of about 2,788 test `Game` constructions re-parses about 602 `.ron` files, and `Game::load` re-parses too.
+`load_asset_dbs(&Path)` in `crates/engine/src/game/lifecycle.rs` is already the one loader, but it takes a path and every `*Db::load_dir` reads the disk itself.
+Nothing is cached: each of the thousands of test `Game` constructions re-parses about six hundred `.ron` files, and `Game::load` re-parses too.
 
 Because the door is a path, tests build fixtures by copying files.
-`copy_shipped_assets` in `crates/engine/src/tests/support.rs:542-577` copies fifteen asset directories (abilities, achievements, affixes, attributes, behaviours, crops, descriptions, items, perks, policies, research, species, statuses, structures, talents).
-The loader also reads classes, implants, outposts, phase_keys, settlements, story and tools, and a missing directory is silent.
-So the ~267 fixture uses test a game without that content and nothing complains.
-A test fixture species is also injected into the production loader under `#[cfg(test)]`.
-
-The one test that guards loading, `every_shipped_asset_file_loads_without_a_warning` (`crates/engine/src/tests/assets.rs:203`), matches only the substring "skipped invalid"; at least ten other warning shapes ("skipped unreadable nemesis file", "species …: unknown ability", "dropped floor finish") pass it.
+`copy_shipped_assets` in `crates/engine/src/tests/support.rs` copies a hand-kept list of about sixteen asset directories, while the loader also reads others, and a missing directory is silent.
+So a fixture tests a game without that content and nothing complains.
+A test fixture species is also injected into the production loader under `#[cfg(test)]` (`SpeciesDb::insert`, `SpeciesDb::retain`).
 
 ## Decision
 
-Introduce a public `Content` value holding every `*Db`, with a pure parser over `(kind, name, text)` and a filesystem adapter that walks `assets/`.
-`Game::new_with_content(Content, …)` and `Game::load` take the value; `Game::new` becomes the convenience that loads from a path once.
+Introduce a `Content` value holding every `*Db`, with a pure parser over `(kind, name, text)` and a filesystem adapter that walks `assets/`.
+`Game::new_with_content(Content, …)` and `Game::load` take the value; `Game::new` stays the convenience that loads from a path once.
 Tests build a `Content` from the shipped set plus overrides instead of copying directories, which removes the subset trap by construction.
-The warning test asserts on `AssetDbs.warnings` (`lifecycle.rs:3868`) being empty, not on a substring.
+
+## Alternatives considered
+
+- Cache the parsed dbs behind a `OnceLock` keyed by path. Saves the parse but keeps the copied-directory fixtures and the subset trap.
+- Make `copy_shipped_assets` copy every directory. Fixes the trap today; the next new directory reintroduces it.
 
 ## Consequences
 
-Test wall-clock drops by the parse cost times 2,788.
-Modded, scratch and shipped content become the same type, so a test that overrides one species no longer loses seven other kinds.
-Packed assets (an APK, a single archive) become possible through a second adapter — the Android feasibility note named this as its engine blocker.
+Test wall-clock drops by the parse cost times the number of constructions.
+A test that overrides one species no longer loses other kinds.
 The `#[cfg(test)]` fixture species moves out of production code.
-This is a one-crate change with no save-format bump; `Game::new`'s signature for callers in app-core and launcher stays.
+One crate, no save-format bump; `Game::new`'s signature for app-core and launcher stays.
 
 ## Evidence
 
-- `crates/engine/src/game/lifecycle.rs:3877` — `load_asset_dbs`.
-- `crates/engine/src/tests/support.rs:542-577` — `copy_shipped_assets`.
-- `crates/engine/src/tests/assets.rs:203` — substring match.
+- `crates/engine/src/game/lifecycle.rs` — `load_asset_dbs`, `AssetDbs`.
+- `crates/engine/src/tests/support.rs` — `copy_shipped_assets`.
+- Memory: `engine-test-fixture-copies-a-subset-of-asset-dirs`.

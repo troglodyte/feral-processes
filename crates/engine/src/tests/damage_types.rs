@@ -1571,3 +1571,102 @@ fn a_voltage_hit_arcs_in_the_real_tactical_attack() {
     }
     panic!("no swing landed");
 }
+
+// ---------------------------------------------------------------------------
+// Typed authored routines: a Drain carries its type, the label names it.
+
+fn drain_def(ty: &str) -> crate::abilities::AbilityDef {
+    ron::from_str(&format!(
+        r#"(id: "test_drain", name: "Test Drain", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 20, heal_fraction: 0.5, damage_type: {ty}))"#
+    ))
+    .unwrap()
+}
+
+/// The Integrity a drain by the player takes off a target that does, or does
+/// not, wear `heat_plate`, and the Integrity the player got back.
+fn drain_hit(ty: &str, armoured: bool, stream: u64) -> (i32, i32) {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    if armoured {
+        equip_armor(&mut game, target, "heat_plate");
+    }
+    {
+        let mut s = game.world.get_mut::<Stats>(player).unwrap();
+        s.max_hp = 5000;
+        s.hp = 1;
+    }
+    insert_battle(&mut game, player, vec![target]);
+    reseed_rng(&mut game, stream);
+    let before = hp(&game, target);
+    game.use_ability(&drain_def(ty), player, "You", &[target]);
+    (before - hp(&game, target), hp(&game, player) - 1)
+}
+
+fn drain_landing_stream(ty: &str) -> u64 {
+    (0..512u64)
+        .find(|&s| drain_hit(ty, false, s).0 >= 10)
+        .expect("no stream in 0..512 landed the drain")
+}
+
+#[test]
+fn a_typed_drain_is_cut_by_resistance_and_heals_off_the_cut_figure() {
+    let stream = drain_landing_stream("Some(Thermal)");
+    let (open, _) = drain_hit("Some(Thermal)", false, stream);
+    let (cut, healed) = drain_hit("Some(Thermal)", true, stream);
+    assert!(
+        cut < open,
+        "the drain dropped its type: {cut} against {open}"
+    );
+    assert_eq!(healed, (cut as f32 * 0.5).round() as i32);
+}
+
+#[test]
+fn an_untyped_drain_ignores_typed_resistance() {
+    let stream = drain_landing_stream("None");
+    assert_eq!(
+        drain_hit("None", false, stream),
+        drain_hit("None", true, stream)
+    );
+}
+
+#[test]
+fn a_typed_drain_reports_its_attack_type() {
+    assert_eq!(
+        drain_def("Some(Thermal)").attack_type(),
+        Some(damage::DamageType::Thermal)
+    );
+    assert_eq!(drain_def("None").attack_type(), None);
+}
+
+#[test]
+fn a_routines_effect_label_names_its_type_and_untyped_is_unchanged() {
+    let game = typed_game();
+    let statuses = game.world.resource::<crate::statuses::StatusDb>();
+    let label =
+        |def: &crate::abilities::AbilityDef| crate::abilities::effect_label(def, 1, 1.0, statuses);
+    let damage = |ty: &str| -> crate::abilities::AbilityDef {
+        ron::from_str(&format!(
+            r#"(id: "test_hit", name: "Test Hit", description: "d",
+                target: OneEnemyGroupFront, cooldown: 1,
+                effect: Damage(power: 10, spread: 2, damage_type: {ty}))"#
+        ))
+        .unwrap()
+    };
+    let (plain, typed) = (label(&damage("None")), label(&damage("Some(Voltage)")));
+    assert!(plain.starts_with("Damage ") && !plain.contains("Voltage"));
+    assert_eq!(typed, format!("{plain} Voltage"));
+    let (plain, typed) = (
+        label(&drain_def("None")),
+        label(&drain_def("Some(Thermal)")),
+    );
+    let band = plain.split(',').next().unwrap();
+    assert_eq!(
+        typed,
+        plain.replacen(band, &format!("{band} Thermal"), 1),
+        "{plain} / {typed}"
+    );
+}

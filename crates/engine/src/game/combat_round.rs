@@ -1832,6 +1832,7 @@ impl Game {
                     power,
                     spread,
                     heal_fraction,
+                    damage_type,
                 } => {
                     let band = abilities::scaled_range(
                         battle::DamageRange::centred(*power, *spread),
@@ -1846,7 +1847,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
-                            damage_type: None,
+                            damage_type: *damage_type,
                         },
                     );
                     let dmg = outcome.damage_to_defender();

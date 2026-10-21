@@ -876,16 +876,10 @@ impl Game {
         crate::abilities::range_label(range)
     }
 
-    /// `damage_range_label` plus the damage type that goes with the band —
-    /// `"5–10 Thermal"`, or exactly the bare range when the band is untyped.
-    /// **The one place a band and its type are joined**, so the summary, the
-    /// inspect pages and the body rows cannot word it differently.
+    /// `damage::band_label`, the one join of a band and its type, as the
+    /// frontend reaches it.
     pub fn damage_label(&self, range: battle::DamageRange, ty: Option<DamageType>) -> String {
-        let band = self.damage_range_label(range);
-        match ty {
-            Some(ty) => format!("{band} {}", ty.name()),
-            None => band,
-        }
+        crate::damage::band_label(range, ty)
     }
 
     /// What one *worn* item is worth — `copy_bonus` at the level the copy

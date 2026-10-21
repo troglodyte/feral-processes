@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.28
+
+**Some routines now deal a damage type, and the routine page names it.** Interrupt Request deals Voltage; Broadcast Storm and Packet Shred deal Noise; the three Row Hammer routines deal Radiation; Null Cache deals Magnetic. A typed routine is cut by the target's resistance to that type and carries the type's side effect, the way a typed weapon already did. The routine page shows the type after the damage, as in "Damage 8–14 Voltage". A draining routine heals off the damage that got through, so a resisted drain heals less, and its log line says how much was stopped. Bus Fault stays untyped: as Voltage across the whole field it would have been a large hidden buff to anything casting it. Routine files can set `damage_type:` on a draining effect too. The balance curves did not move.
+
 ## 0.19.27
 
 **Programs now resist some damage types by nature, and the program page shows it.** Fourteen species resist the type they are built around. Most resist it by 20%, and Construct resists Voltage by 30%. The two bosses resist two types by 30% each: Overseer resists Thermal and Radiation, Wintermute resists Voltage and Magnetic. A species' resistance adds to its armour's before the 75% cap, so a 20% species wearing 30% plating reaches the 50% that stops that type's side effect. No species reaches 50% on its own. A program's page lists its resistances on a "Resists" row in its SPECIES box. While you emulate a species you take on its resistances too, shown on a "Resists" row of your own sheet. Species files can set `resist:` the way armour does. The balance curves did not move.

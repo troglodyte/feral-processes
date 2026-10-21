@@ -194,6 +194,10 @@ pub struct PlayerManifest {
     /// The class picked at creation, resolved live through `ClassDb` — see
     /// `Game::player_class_view`. `None` for a classless run.
     pub class: Option<PlayerClassView>,
+    /// The damage-type resistances borrowed from the species being emulated
+    /// (`SpeciesDef::resist`), positive only, in `DamageType::ALL` order.
+    /// Empty when not emulating: the player has no species of their own.
+    pub emulated_resistances: Vec<(crate::damage::DamageType, i32)>,
 }
 
 /// One worn item and the bonus it is *currently* granting.

@@ -142,6 +142,9 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
         stat("Perk points", "0")
     });
     growth.push(stat("Decompiler", p.decompiler.to_string()));
+    if !p.emulated_resistances.is_empty() {
+        growth.push(stat("Resists", resists_label(&p.emulated_resistances)));
+    }
     sections.push(Section::ledger(
         "GROWTH",
         LedgerColumn::Growth,

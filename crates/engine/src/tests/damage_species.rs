@@ -185,3 +185,28 @@ fn a_negative_resistance_is_not_listed() {
     };
     assert_eq!(res.resisted(), vec![(damage::DamageType::Voltage, 10)]);
 }
+
+#[test]
+fn the_player_manifest_lists_resistances_only_while_emulating() {
+    let mut game = husk_game();
+    let player = game.player_entity();
+    let borrowed = |game: &Game| {
+        let view = game.manifest(player).expect("a manifest");
+        let ManifestSubject::Player(p) = view.subject else {
+            panic!("the player's manifest");
+        };
+        p.emulated_resistances
+    };
+    assert!(borrowed(&game).is_empty());
+    game.world.entity_mut(player).insert(Emulation {
+        species: SpeciesId::from("husk"),
+        rounds_left: 3,
+    });
+    assert_eq!(
+        borrowed(&game),
+        vec![
+            (damage::DamageType::Thermal, 30),
+            (damage::DamageType::Noise, 30)
+        ]
+    );
+}

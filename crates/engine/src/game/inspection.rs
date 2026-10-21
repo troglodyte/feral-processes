@@ -2435,6 +2435,10 @@ impl Game {
                 cycle: self.current_tick(),
                 active_contracts: self.active_contracts().len(),
                 class: self.player_class_view(),
+                emulated_resistances: match self.kit_of(entity) {
+                    crate::game::kit::Kit::Emulated { def, .. } => def.resist.resisted(),
+                    crate::game::kit::Kit::Innate(_) | crate::game::kit::Kit::Unarmed => vec![],
+                },
             }),
         })
     }

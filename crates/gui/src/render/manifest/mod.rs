@@ -1827,6 +1827,12 @@ mod tests {
                 name: "Decompiler".to_string(),
                 bonuses: vec![("Drain".to_string(), 1.25), ("Damage".to_string(), 0.85)],
             }),
+            // Emulating Overseer, the widest shipped pair: the sheet at its
+            // fullest carries the GROWTH row emulation adds.
+            emulated_resistances: vec![
+                (feral_processes_engine::damage::DamageType::Thermal, 30),
+                (feral_processes_engine::damage::DamageType::Radiation, 30),
+            ],
         }
     }
 

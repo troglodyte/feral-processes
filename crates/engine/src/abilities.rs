@@ -1205,7 +1205,7 @@ impl AbilityDef {
     }
 
     /// The damage type of a `Damage` or `Drain`, `None` for anything else.
-    /// Unlike `attack_parts`, which reads `Damage` alone, because the type
+    /// It covers `Drain` where `attack_parts` does not because the type
     /// census reads every authored routine through it.
     pub(crate) fn attack_type(&self) -> Option<crate::damage::DamageType> {
         match &self.effect {

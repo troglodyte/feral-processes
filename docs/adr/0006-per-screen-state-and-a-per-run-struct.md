@@ -1,6 +1,14 @@
 # 0006 Per-screen state structs and a per-run struct on `App`
 
-Status: Proposed (2026-10-16)
+- Status: Superseded by [0013](0013-a-run-struct-on-app.md) and [0014](0014-per-screen-state-and-one-screen-table.md)
+- Decided by: Claude — proposed, never agreed
+- Date: 2026-10-16 (superseded 2026-10-21)
+- Pattern: —
+
+Superseded: this record held two decisions.
+Part (a), the `Run` struct, is now [0013](0013-a-run-struct-on-app.md).
+Part (b), per-screen state and one screen table, is now [0014](0014-per-screen-state-and-one-screen-table.md), restated beside `HubKind`, which landed after this was written.
+The text below is the original, with its 2026-10-16 line numbers.
 
 ## Context
 

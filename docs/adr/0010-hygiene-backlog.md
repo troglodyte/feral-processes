@@ -1,6 +1,15 @@
 # 0010 Hygiene backlog
 
-Status: Proposed (2026-10-16)
+- Status: Superseded by [backlog.md](backlog.md)
+- Decided by: Claude — proposed, never agreed
+- Date: 2026-10-16 (superseded 2026-10-21)
+- Pattern: —
+
+Superseded: a backlog is not a decision and gets no number.
+The items still open moved to [backlog.md](backlog.md).
+`deny_unknown_fields` became [0016](0016-shipped-assets-deny-unknown-fields.md) and dev flags became [0015](0015-engine-reads-no-environment.md).
+"Hub files become directories" landed in 0.19.16 for `tuning`, `components` and `views`.
+The text below is the original.
 
 Each item here is small and independent; do it when a hand is already in the file.
 Strike an item out when it lands, with the release.

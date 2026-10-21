@@ -1,30 +1,35 @@
 # 0003 Headless dev bins build without bevy
 
-Status: Proposed (2026-10-16)
+- Status: Rejected
+- Decided by: user, on Claude's proposal
+- Date: 2026-10-16 (rejected 2026-10-21)
+- Pattern: —
 
 ## Context
 
 `crates/launcher` depends on `feral-processes-gui` unconditionally, but only `src/main.rs` uses it.
-The other five bins — `arena`, `bench`, `tuner`, `savetool`, `train` — and the launcher's own tests are headless, yet each pays the ~3.5-minute cold bevy build in every fresh worktree.
-
-`.claude/rules/launcher-and-build.md` and the Cargo comment describe "three bins" and two shared modules; there are now six bins and eight modules (`bench/`, `tuner/`, `cem.rs`, `soak.rs`, `tactical_train.rs`, `dev_template.rs`, `paths.rs`, `scratch_assets.rs`).
+The other five bins — `arena`, `bench`, `tuner`, `savetool`, `train` — are headless, yet each pays the cold bevy build in a fresh worktree.
 
 ## Decision
 
-Move the headless bins and their modules to a `crates/devtools` crate that depends on engine and app-core only.
-`crates/launcher` keeps `main.rs` and the gui dependency.
-`paths.rs` goes with whichever crate owns `dirs`; the other must be handed its paths, which is the discipline the Cargo comment already states.
+Proposed: move the headless bins and their modules to a `crates/devtools` crate that depends on engine and app-core only.
 
-The alternative — an optional gui dependency with `required-features` on `main` — keeps one crate but makes `cargo run` need a feature flag, which breaks the documented command.
+Rejected, for three reasons:
+
+- The saving is small. `cargo test --workspace` is the gate and builds bevy anyway, so a worktree that runs the gate pays the cold build regardless.
+- The logic is already in the engine (`crates/engine/src/bench/`, `crates/engine/src/arena/`); the launcher bins are thin entry points.
+- A fifth crate adds a boundary to keep honest for no change in what can be tested.
+
+## Alternatives considered
+
+- An optional gui dependency with `required-features` on `main`. Makes `cargo run` need a feature flag, which breaks the documented command.
 
 ## Consequences
 
-A worktree that only runs arena or savetool never builds bevy.
-The rule file and the Cargo comment get rewritten to match the real bin count.
-Nothing in the launcher is engine logic, so no code moves down into the engine.
+The launcher keeps all six bins.
+`.claude/rules/launcher-and-build.md` still says "three bins"; that is stale and is in [backlog.md](backlog.md).
 
 ## Evidence
 
-- `crates/launcher/Cargo.toml` — gui dependency.
-- `crates/launcher/src/main.rs` — the only gui user.
-- `.claude/rules/launcher-and-build.md` — stale bin count.
+- `crates/launcher/Cargo.toml` — gui dependency, six `[[bin]]` targets.
+- `crates/engine/src/bench/`, `crates/engine/src/arena/` — where the logic lives.

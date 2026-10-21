@@ -1,25 +1,26 @@
 # 0012 Open questions from the review
 
-Status: Open (2026-10-16)
+- Status: Closed (answered by the user 2026-10-21)
+- Decided by: user
+- Date: 2026-10-16
+- Pattern: —
 
-Things the review found that need a decision from the user, not an ADR.
-Move each to its own record, or strike it out, once answered.
+Three questions the 2026-10-16 review could not settle without the user.
+This record predates the rule that question lists get no number; it is kept so links hold.
 
 ## Roster views show raw `atk`
 
-`PetInfo` (`crates/engine/src/game/party.rs:770`) and `CompanionInfo` (`party.rs:583`) fill `atk` from `stats.atk`.
-`PlayerStatus` (`party.rs:305`) and `PartySlotView` (`game/combat_round.rs:978`) fill it from `effective_atk`, which folds perks and gear.
-Either the roster is meant to show base stats and the battle view effective ones, or two of the four views are wrong.
-If the former, the field should be named for what it is in each view.
+`PetInfo` (filled by `Game::owned_pets`) and `CompanionInfo` (`Game::companion_info`) take `atk` from `stats.atk`.
+`PlayerStatus` and `PartySlotView` (`party_row`) take it from `Game::effective_atk`, which folds perks and gear.
+In `game/combat_round.rs`, `enemy_row` fills `EnemyGroupView::atk` from `stats.atk` too.
 
-## Does the executor hypothesis explain the suite-only flakes?
+**Answer:** effective atk everywhere.
+The raw `stats.atk` reads are a bug, tracked in [backlog.md](backlog.md).
 
-ADR 0001 shows the iteration command and the gate run different executors.
-Whether that is the cause of `posted-worker level-up`, `research underground`, `creation allowance` and `sharper-program mining` flaking only in the full suite is untested.
-The test is cheap: pin `ExecutorKind::SingleThreaded` under `--workspace` and run each thirty times.
+## Does the executor difference explain the suite-only flakes?
 
-## Should `deny_unknown_fields` apply to modded content?
+**Answer:** folded into [0001](0001-engine-test-executor-matches-the-gate.md), which settles it by reading each flaky test's code path, not by repeated runs.
 
-ADR 0010 proposes it for every asset kind.
-A stricter parser rejects a modder's typo instead of defaulting it, which is the moddability rule's intent, but it also rejects a file written for a newer schema by an older binary.
-The `#[serde(default)]` rule covers the other direction.
+## Should unknown fields in asset RON be rejected?
+
+**Answer:** yes, for shipped asset kinds — [0016](0016-shipped-assets-deny-unknown-fields.md).

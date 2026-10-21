@@ -75,6 +75,16 @@ FERAL_DEV_NO_SIEGES=1 cargo run                      # the siege clock never run
   target/debug/incremental`. Each worktree builds its own `target/`.
 - Releases are manual per platform: `docs/releasing.md`.
 
+## Decisions (ADRs)
+
+Architecture decisions live in `docs/adr/`. Before a structural choice, read
+the README's index and pattern index and the records they point to. An ADR
+comes first when a change: (1) puts content in data — a new `assets/<kind>/`
+or new fields on existing `.ron` files; (2) adds a pattern or abstraction not
+in the pattern index; (3) moves a crate or module boundary; or (4) bends an
+Agreed or Accepted record. Write it as Proposed and stop for the user's OK
+before code; never build on a Proposed record. Specs link the ADR.
+
 ## Content: data or code
 
 Moddability is not a goal. New content kinds default to Rust (enums,
@@ -85,7 +95,9 @@ sprites, sounds, effects). The large sets already in `assets/` (items,
 abilities, contracts, research, structures, memories, species) stay data. A
 kind holding one or two files may fold back into Rust when you are already
 changing it — not as a project of its own. `.claude/rules/content-schema.md`
-has the per-kind traps, loaded with `assets/**`.
+has the per-kind traps, loaded with `assets/**`. New fields on existing `.ron`
+files are this decision too and need an ADR. Reasoning:
+`docs/adr/0019-content-defaults-to-rust.md`.
 
 When a schema changes:
 

@@ -465,7 +465,7 @@ impl Game {
     /// **The one derivation behind that page**, for `Game::copy_bonus`'s
     /// reason: four screens once rebuilt the gear scaling chain by hand and
     /// all four dropped the affix at once. Every figure here is a call —
-    /// `copy_bonus` for the stats, `damage_range_label` for the band,
+    /// `copy_bonus` for the stats, `damage::band_label` for the band,
     /// `battle::hit_chance` for the odds, `routine_detail` for the grant.
     ///
     /// `wearer` is who the copy is measured *for*: the player, or the
@@ -628,7 +628,7 @@ impl Game {
     /// The damage band **leads**, because on a weapon it is the headline
     /// number — what the thing hits for is what two weapons are compared on,
     /// and ATK is the smaller flat term added on top of it. It goes through
-    /// `damage_range_label` rather than being formatted here, so a range
+    /// `damage::band_label` rather than being formatted here, so a range
     /// printed on any screen cannot disagree with a range printed on
     /// another.
     pub fn stat_summary(&self, mods: crate::items::EquipmentStats) -> String {
@@ -636,7 +636,7 @@ impl Game {
         if mods.damage != crate::battle::DamageRange::default() {
             parts.push(format!(
                 "{} DMG",
-                self.damage_label(mods.damage, mods.damage_type)
+                crate::damage::band_label(mods.damage, mods.damage_type)
             ));
         }
         for (value, name) in [

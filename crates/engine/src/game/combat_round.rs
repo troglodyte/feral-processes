@@ -1872,6 +1872,7 @@ impl Game {
                     // against an armoured target than a soft one.
                     let siphoned = (dmg as f32 * heal_fraction).round() as i32;
                     let restored = self.restore_hp(actor, siphoned);
+                    let note = damage::resisted_note(outcome.resisted());
                     // `heal_kind`, not `hit_kind`: the Integrity coming back
                     // is the half a plain `Attack` cannot also produce, and
                     // so the half the line is read for. It keeps the number
@@ -1881,7 +1882,7 @@ impl Game {
                         heal_kind,
                         outcome,
                         recipient,
-                        format!("{name} siphons {dmg} from {on}, restoring {restored}."),
+                        format!("{name} siphons {dmg} from {on}, restoring {restored}.{note}"),
                     );
                 }
                 AbilityEffect::Cloak { duration } => {

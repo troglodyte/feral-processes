@@ -1204,7 +1204,9 @@ impl AbilityDef {
         }
     }
 
-    /// The damage type of a damaging ability, `None` for anything else.
+    /// The damage type of a `Damage` or `Drain`, `None` for anything else.
+    /// Unlike `attack_parts`, which reads `Damage` alone, because the type
+    /// census reads every authored routine through it.
     pub(crate) fn attack_type(&self) -> Option<crate::damage::DamageType> {
         match &self.effect {
             AbilityEffect::Damage { damage_type, .. }
@@ -1966,9 +1968,14 @@ pub fn teleport_reach(level: u32) -> u32 {
 }
 
 /// A damage band as the player reads it — a single number when the band has
-/// no width, `min–max` otherwise. `Game::damage_range_label` is a call to
-/// this; the two must agree, since the same band is printed on a routine's
-/// inspect page and on the creation wizard's routine row.
+/// no width, `min–max` otherwise; `damage::band_label` adds the type. The one
+/// formatter, so a range printed on one screen cannot disagree with another:
+/// the gear page, a routine's inspect page and the creation wizard's row.
+///
+/// The scaling is the caller's (`Game::copy_bonus`, `scaled_range`) and is
+/// not repeated here. An en dash rather than a hyphen: the map's status
+/// column is measured in DejaVu Sans Mono where both are one cell, and the
+/// en dash reads as a range rather than as a minus sign in front of `max`.
 pub fn range_label(range: crate::battle::DamageRange) -> String {
     if range.max <= range.min {
         format!("{}", range.min)

@@ -53,8 +53,8 @@ pub struct ManifestView {
     pub atk: i32,
     /// **Percentage points** — see `components::Stats::mitigation`.
     pub mitigation: i32,
-    /// The damage band this combatant swings for, already formatted by
-    /// `Game::damage_range_label` — a worn weapon's if it has one, else its
+    /// The damage band this combatant swings for and its type, already
+    /// formatted by `damage::band_label` — a worn weapon's if it has one, else its
     /// first species move's, else the player's unarmed band.
     ///
     /// Formatted here rather than in a renderer for the reason `copy_name`

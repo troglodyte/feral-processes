@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.27
+
+**Programs now resist some damage types by nature, and the program page shows it.** Fourteen species resist the type they are built around. Most resist it by 20%, and Construct resists Voltage by 30%. The two bosses resist two types by 30% each: Overseer resists Thermal and Radiation, Wintermute resists Voltage and Magnetic. A species' resistance adds to its armour's before the 75% cap, so a 20% species wearing 30% plating reaches the 50% that stops that type's side effect. No species reaches 50% on its own. A program's page lists its resistances on a "Resists" row in its SPECIES box. While you emulate a species you take on its resistances too, shown on a "Resists" row of your own sheet. Species files can set `resist:` the way armour does. The balance curves did not move.
+
 ## 0.19.26
 
 **Voltage hits arc to a neighbour.** When a Voltage hit lands and the target survives it, half of the damage jumps to one of the target's allies. On a battle map that is an ally standing next to the target; in a group fight or a sortie it is the next member after the target in its group or party order. The arc cannot miss, it never jumps a second time, it never lands on a cloaked body, and the neighbour's own Voltage resistance reduces it. Armour that resists Voltage by 50% or more takes the hit but stops the arc. No shipped armour reaches 50% yet. A Voltage routine used in a sortie does not arc yet; only weapon and basic attacks do. The balance curves did not move.

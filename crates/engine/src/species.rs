@@ -257,6 +257,11 @@ pub struct SpeciesDef {
     /// zone multiplier or the individual roll every other stat takes,
     /// because a scaled percentage walks to immunity.
     pub base_mitigation: i32,
+    /// Natural resistance to each damage type, added to worn armour's before
+    /// the cap (`Game::type_resistances`). Read from the def at use, never
+    /// copied onto the body, so it is never scaled and never saved.
+    #[serde(default)]
+    pub resist: crate::damage::Resistances,
     /// 0.0 (trivial) .. 1.0 (very hard) to tame.
     pub taming_difficulty: f32,
     pub habitats: Vec<Biome>,

@@ -387,7 +387,7 @@ impl Game {
         if landed <= 0 || !self.creature_alive(defender) {
             return;
         }
-        let resist = damage::resist_against(self.gear_bonus(defender).resist, Some(ty));
+        let resist = damage::resist_against(self.type_resistances(defender), Some(ty));
         match damage::side_effect(ty, resist) {
             Some(damage::SideEffect::Arm { id, rounds, power }) => {
                 let id = StatusId::from(id);
@@ -695,6 +695,17 @@ impl Game {
         self.mitigate_with_resist(target, dmg, ty, None)
     }
 
+    /// Every damage-type resistance `entity` has: worn gear plus its kit's
+    /// species, summed and uncapped (`damage::resist_against` caps at use).
+    /// The one reader, so armour and species can never be capped apart.
+    pub(crate) fn type_resistances(&self, entity: Entity) -> damage::Resistances {
+        let species = match self.kit_of(entity) {
+            Kit::Innate(def) | Kit::Emulated { def, .. } => def.resist,
+            Kit::Unarmed => damage::Resistances::default(),
+        };
+        self.gear_bonus(entity).resist + species
+    }
+
     /// The one copy of the typed mitigation formula. `cut_resist` overrides
     /// the resistance the percentage cut uses; `None` reads it off the gear.
     /// Whether deflection is skipped always reads the target's real
@@ -706,12 +717,11 @@ impl Game {
         ty: Option<DamageType>,
         cut_resist: Option<i32>,
     ) -> i32 {
-        let gear = self.gear_bonus(target);
-        let resist = damage::resist_against(gear.resist, ty);
+        let resist = damage::resist_against(self.type_resistances(target), ty);
         let deflection = if ty.is_some_and(|t| damage::ignores_deflection(t, resist)) {
             0
         } else {
-            gear.deflection
+            self.gear_bonus(target).deflection
         };
         // Heat and its kin raise the blow before any cut. Zero skips the
         // arithmetic entirely so an unaffected body's numbers cannot move.

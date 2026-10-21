@@ -12,7 +12,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 ## Bugs
 
-- [ ] Roster `atk` is raw. The user decided effective atk everywhere ([0012](0012-open-questions-from-the-review.md)). `Game::owned_pets` (`PetInfo`) and `Game::companion_info` (`CompanionInfo`) in `game/party.rs`, and `enemy_row` (`EnemyGroupView`) in `game/combat_round.rs`, read `stats.atk`; they should call `Game::effective_atk`. Start with a failing test.
+- [ ] Roster `atk` is raw. The user decided effective atk everywhere ([0012](0012-open-questions-from-the-review.md)), enemy rows included (confirmed 2026-10-21). `Game::owned_pets` (`PetInfo`) and `Game::companion_info` (`CompanionInfo`) in `game/party.rs`, and `enemy_row` (`EnemyGroupView`) in `game/combat_round.rs`, read `stats.atk`; they should call `Game::effective_atk`. Start with a failing test.
 - [ ] Stale `watching`: `App::leave_run` and `App::install_game` (`app/lifecycle.rs`) never clear `watching`, so the camera can follow a recycled `Entity` in the next run. Write the failing reproducer first. The structural fix is [0013](0013-a-run-struct-on-app.md).
 
 ## Assets and tests

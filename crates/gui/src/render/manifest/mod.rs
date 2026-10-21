@@ -337,6 +337,12 @@ mod tests {
             base_speed,
             analysis,
             affinities: vec![],
+            // Two types, the most any shipped species resists: the widest
+            // value SPECIES' Resists row draws, and the row it adds.
+            resistances: vec![
+                (feral_processes_engine::damage::DamageType::Magnetic, 30),
+                (feral_processes_engine::damage::DamageType::Voltage, 30),
+            ],
             // The two boss species are the only shipped programs with no
             // class, and a boss cannot be tamed or posted — so a job row is
             // the ordinary case and this fixture is deliberately the one
@@ -438,10 +444,10 @@ mod tests {
         );
         assert_eq!(
             species.len(),
-            4,
+            5,
             "a non-boss species is SPECIES' real worst case (Habitats, \
-             Decompile difficulty, Decompile chance now, Growth) — it must \
-             land below MAX_SECTION_ROWS: {species:?}"
+             Decompile difficulty, Decompile chance now, Growth, Resists) — \
+             it must land below MAX_SECTION_ROWS: {species:?}"
         );
         assert!(
             work.iter().any(|l| l == "Work aptitude"),
@@ -451,6 +457,15 @@ mod tests {
             species.len() < MAX_SECTION_ROWS,
             "SPECIES has to come off its cap, or the next row added to it \
              vanishes into '+N more': {species:?}"
+        );
+    }
+
+    #[test]
+    fn the_resists_row_names_each_type_with_its_percent() {
+        use feral_processes_engine::damage::DamageType;
+        assert_eq!(
+            sections::resists_label(&[(DamageType::Magnetic, 30), (DamageType::Voltage, 20)]),
+            "Magnetic 30%, Voltage 20%"
         );
     }
 
@@ -1427,7 +1442,7 @@ mod tests {
                 ("MOVES", Fight, 1),
                 ("DEVELOPMENT", Growth, 3),
                 ("WORK", Duty, 5),
-                ("SPECIES", Duty, 4),
+                ("SPECIES", Duty, 5),
                 ("GEAR", Fight, 2),
                 ("ROUTINES", Fight, 1),
             ],

@@ -66,6 +66,15 @@ impl Resistances {
             DamageType::Radiation => self.radiation,
         }
     }
+    /// The types resisted (or made weaker to) at all, in `DamageType::ALL`
+    /// order, so a screen can omit the rest.
+    pub fn non_zero(self) -> Vec<(DamageType, i32)> {
+        DamageType::ALL
+            .into_iter()
+            .map(|t| (t, self.get(t)))
+            .filter(|&(_, pct)| pct != 0)
+            .collect()
+    }
     /// Every resistance multiplied by `n`: a stacked affix counts `n` times.
     pub fn times(self, n: i32) -> Resistances {
         Resistances {

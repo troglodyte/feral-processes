@@ -2584,6 +2584,7 @@ impl Game {
                     self.world.resource::<crate::attributes::AttributeDb>(),
                 ),
                 affinities: species.affinities.non_neutral(),
+                resistances: species.resist.non_zero(),
                 base_job: species.affinity_class(),
                 needs: self.need_rows(entity),
                 mood: self.manifest_mood(entity),

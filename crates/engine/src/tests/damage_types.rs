@@ -88,7 +88,17 @@ fn typed_game() -> Game {
         &[],
         &[],
     );
-    Game::new(4200, DifficultyMode::Forgiving, &dir).unwrap()
+    let mut game = Game::new(4200, DifficultyMode::Forgiving, &dir).unwrap();
+    // These tests measure armour against shipped targets; species resistance
+    // has its own (`tests/damage_species.rs`).
+    for def in game.species_defs() {
+        let plain = crate::species::SpeciesDef {
+            resist: damage::Resistances::default(),
+            ..def
+        };
+        game.world.resource_mut::<SpeciesDb>().insert(plain);
+    }
+    game
 }
 
 fn hp(game: &Game, e: Entity) -> i32 {

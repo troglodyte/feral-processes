@@ -152,3 +152,26 @@ fn an_emulating_player_borrows_the_species_resistance() {
     });
     assert_eq!(game.type_resistances(player).thermal, 30);
 }
+
+#[test]
+fn a_programs_manifest_lists_its_species_resistances_and_not_its_armour() {
+    let mut game = husk_game();
+    let husk = game.spawn_wild_creature("husk", 5, 5).unwrap();
+    equip_armor(&mut game, husk, "hum_plate");
+    let worm = game.spawn_wild_creature("worm", 5, 5).unwrap();
+    let resistances = |e| {
+        let view = game.manifest(e).expect("a manifest");
+        let ManifestSubject::Program(p) = view.subject else {
+            panic!("a program's manifest");
+        };
+        p.resistances
+    };
+    assert_eq!(
+        resistances(husk),
+        vec![
+            (damage::DamageType::Thermal, 30),
+            (damage::DamageType::Noise, 30)
+        ]
+    );
+    assert!(resistances(worm).is_empty());
+}

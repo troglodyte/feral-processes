@@ -1670,3 +1670,34 @@ fn a_routines_effect_label_names_its_type_and_untyped_is_unchanged() {
         "{plain} / {typed}"
     );
 }
+
+/// The authored routines that carry a damage type, and every other damaging
+/// routine stays untyped. Exhaustive both ways, so a type cannot be added or
+/// dropped by accident. `bus_fault` is untyped on purpose: as whole-field
+/// Voltage its arcs cost the player ~20 points of arena win rate, a retune.
+#[test]
+fn the_shipped_routines_carry_exactly_the_sorted_damage_types() {
+    use crate::damage::DamageType::*;
+    let expected = [
+        ("broadcast_storm", Noise),
+        ("interrupt_request", Voltage),
+        ("null_cache", Magnetic),
+        ("packet_shred", Noise),
+        ("row_hammer_everyone", Radiation),
+        ("row_hammer_group", Radiation),
+        ("row_hammer_single", Radiation),
+    ];
+    let game = Game::new(3302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut typed: Vec<_> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter_map(|def| def.attack_type().map(|ty| (def.id.clone(), ty)))
+        .collect();
+    typed.sort_by(|a, b| a.0.cmp(&b.0));
+    let expected: Vec<_> = expected
+        .iter()
+        .map(|(id, ty)| (id.to_string(), *ty))
+        .collect();
+    assert_eq!(typed, expected);
+}

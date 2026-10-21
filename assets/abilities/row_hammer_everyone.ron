@@ -9,7 +9,7 @@
     // Packet Shred Everyone be the gamble.
     description: "Damage 4–6 to every hostile program on the field, almost never missing",
     target: AllEnemies,
-    effect: Damage(power: 5, spread: 1),
+    effect: Damage(power: 5, spread: 1, damage_type: Some(Radiation)),
     cooldown: 4,
     accuracy: 8,
     power_cost: 15.0,

@@ -119,10 +119,12 @@ way deleting the Currency item does.
     //     with a warning.
     //
     //     Also optional: `damage_type: Some(Thermal)` (and `Magnetic`,
-    //     `Noise`, `Voltage`, `Radiation`). No shipped ability sets it yet;
-    //     a species move sets it through its basic-attack conversion, and an
-    //     authored ability that sets it deals typed damage, cut by the
-    //     target's resistance to that type.
+    //     `Noise`, `Voltage`, `Radiation`). Absent means untyped. A species
+    //     move sets it through its basic-attack conversion; an authored
+    //     ability that sets it deals typed damage, cut by the target's
+    //     resistance to that type, and carries the type's side effect. The
+    //     routine page names the type after the band. Leave it off a file
+    //     whose rider already does what the type's side effect would.
     //
     //   Heal(power: 8, spread: 2)
     //     Restores Integrity, capped at the recipient's maximum. `power` is
@@ -178,7 +180,9 @@ way deleting the Currency item does.
     //     the dealt figure rather than the authored power means an armoured
     //     target returns less, and a miss returns nothing — which is the
     //     intended shape. `heal_fraction` is clamped to 0.0-1.0 at load; a
-    //     non-finite one disqualifies the file.
+    //     non-finite one disqualifies the file. Takes an optional
+    //     `damage_type` exactly as `Damage` does; the heal is off the damage
+    //     left after resistance, so a resisted drain restores less.
     //
     //   Cleanse
     //     Clears each recipient's active status condition. No fields.

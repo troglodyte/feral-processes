@@ -4,7 +4,7 @@
     name: "Packet Shred Everyone",
     description: "Damage 19–31 to every hostile program on the field",
     target: AllEnemies,
-    effect: Damage(power: 25, spread: 6),
+    effect: Damage(power: 25, spread: 6, damage_type: Some(Noise)),
     cooldown: 4,
     accuracy: 2,
     power_cost: 15.0,

@@ -8,7 +8,7 @@
 ## Context
 
 `cargo run` builds debug, and the user plays from it.
-An unoptimized bevy, egui and wgpu stack is about 22 times slower per frame, which reads as an animation bug rather than a build setting, and no test catches it.
+An unoptimized bevy, egui and wgpu stack is about 25 times slower per frame (`docs/measurements/2026-08-19-debug-build-frame-cost.md`), which reads as an animation bug rather than a build setting, and no test catches it.
 
 ## Decision
 

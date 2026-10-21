@@ -23,7 +23,7 @@ Everything in `crates/gui/src/render/` draws through `paint::Painter`, a small s
 
 ## Consequences
 
-The macroquad-to-bevy swap touched five files and no drawing code.
+The macroquad-to-bevy swap touched five files and no drawing code (`docs/superpowers/reports/2026-07-27-renderer-graphics-assessment.md`).
 A new drawing need is a new `Painter` operation, argued in `.claude/rules/drawing-seam.md`, not a backend call in a screen.
 Layout can be made pure on top of this ([0009](0009-layout-separate-from-paint.md)).
 

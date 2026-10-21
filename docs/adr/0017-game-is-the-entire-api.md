@@ -26,7 +26,7 @@ The gui frontend is one bevy system, `frame`, holding the app state machine in a
 ## Consequences
 
 The engine can change its components freely; only `Game` methods and view types are a contract.
-`Game` is large (hundreds of methods), split by topic under `crates/engine/src/game/`.
+`Game` is large, split by topic under `crates/engine/src/game/`.
 Engine tests stay inside the crate (`src/tests/`), because an integration test binary would need the forbidden accessor ([0011](0011-restructurings-considered-and-rejected.md)).
 
 ## Evidence

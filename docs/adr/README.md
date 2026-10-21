@@ -18,7 +18,7 @@ Backlogs and question lists never get a number; open cleanups live in [backlog.m
 | Superseded | Replaced; links to the record that replaced it. |
 | Withdrawn | Not an architecture decision; its content moved to [backlog.md](backlog.md). |
 
-[0012](0012-open-questions-from-the-review.md) is marked Closed.
+[0012](0012-open-questions-from-the-review.md) is marked Closed, a status used by no other record.
 It predates the rule that question lists get no number and is kept so links to it hold.
 
 ## Record shape
@@ -26,12 +26,13 @@ It predates the rule that question lists get no number and is kept so links to i
 Every record opens with a header list:
 
 - `Status:` one of the statuses above.
-- `Decided by:` `user`, `user (CLAUDE.md)`, `Claude — proposed, awaiting the user`, or `user, on Claude's proposal`.
+- `Decided by:` `user`, `user (CLAUDE.md)`, `Claude — proposed, awaiting the user`, `Claude — proposed, never agreed` (superseded before the user ruled), or `user, on Claude's proposal`.
 - `Date:` when it was written or decided.
 - `Pattern:` the named design pattern it uses, or `—`.
 - `Depends on:` other records, when there are any.
 
 The body has five sections: Context, Decision, Alternatives considered, Consequences, Evidence.
+Records from the first review that are Withdrawn, Superseded, Closed, or a list of items (0002, 0006, 0010, 0011, 0012) keep their original shape.
 Context says what is true now and what it costs.
 Decision gives the shape of the change, not its code.
 Alternatives considered names the options turned down and why.
@@ -97,13 +98,13 @@ Do not duplicate between them; point instead.
 ## Pattern index
 
 The design patterns the codebase uses, where each is decided, and one place to see it.
-A pattern not listed here is new, and needs an ADR before code uses it.
+A pattern not listed here, or listed only as (Proposed), is not yet agreed: it needs an Agreed or Accepted ADR before code uses it.
 
 | Pattern | ADRs | Example in code |
 | --- | --- | --- |
 | Facade | [0017](0017-game-is-the-entire-api.md) | `Game` in `crates/engine/src/lib.rs` |
 | Adapter (port) | [0018](0018-only-paint-names-a-graphics-library.md) | `paint::Painter` in `crates/gui/src/paint.rs` |
-| Ports and adapters | [0004](0004-content-loads-once-as-a-value.md) | none yet (proposed `Content`) |
+| Ports and adapters (Proposed) | [0004](0004-content-loads-once-as-a-value.md) | none yet (proposed `Content`) |
 | Functional core, imperative shell | [0020](0020-functional-core-imperative-shell.md), [0009](0009-layout-separate-from-paint.md) | `spawning::roll_summon_tier`, `render::popup::popup_layout` |
 | Shared pure function ("mirrors must be a call") | [0008](0008-shared-derivations-as-world-functions.md), [0020](0020-functional-core-imperative-shell.md) | `power::ledger`, `battle::expected_damage` |
 | Plain structs owned in one place | [0021](0021-plain-rust-over-ecs-for-discrete-logic.md) | `tactical::TacticalBattle` |
@@ -112,8 +113,8 @@ A pattern not listed here is new, and needs an ADR before code uses it.
 | Strategy (one impl per variant) | [0024](0024-code-is-organized-by-domain.md), [0014](0014-per-screen-state-and-one-screen-table.md) | `app::hub::HubKind`, `App::handle_hub_nav` |
 | Module per domain | [0024](0024-code-is-organized-by-domain.md) | `crates/engine/src/tactical/`, `crates/engine/src/settlements/` |
 | Loader that skips and warns | [0016](0016-shipped-assets-deny-unknown-fields.md), [0019](0019-content-defaults-to-rust.md) | `SpeciesDb::load_dir` |
-| Command-query separation | [0005](0005-engine-queries-take-self-not-mut-self.md) | `World::try_query` in `Game` floor and farm reads |
-| Parameter object | [0015](0015-engine-reads-no-environment.md) | none yet (proposed `DevFlags`) |
-| Aggregate with one lifetime | [0013](0013-a-run-struct-on-app.md) | none yet (proposed `Run`) |
-| State (data travels with the mode) | [0014](0014-per-screen-state-and-one-screen-table.md) | `RigToolScreen`, `DepotFilterScreen` |
-| Navigation stack | [0007](0007-navigation-is-a-stack.md) | none yet |
+| Command-query separation (Proposed) | [0005](0005-engine-queries-take-self-not-mut-self.md) | `World::try_query` in `Game` floor and farm reads |
+| Parameter object (Proposed) | [0015](0015-engine-reads-no-environment.md) | none yet (proposed `DevFlags`) |
+| Aggregate with one lifetime (Proposed) | [0013](0013-a-run-struct-on-app.md) | none yet (proposed `Run`) |
+| State, data travels with the mode (Proposed) | [0014](0014-per-screen-state-and-one-screen-table.md) | `RigToolScreen`, `DepotFilterScreen` |
+| Navigation stack (Proposed) | [0007](0007-navigation-is-a-stack.md) | none yet |

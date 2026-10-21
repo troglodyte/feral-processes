@@ -1880,6 +1880,7 @@ fn heal_block_zeroes_a_drain_but_the_damage_still_lands() {
             power: 10,
             spread: 0,
             heal_fraction: 0.5,
+            damage_type: None,
         },
         crate::abilities::AbilityTarget::OneEnemyGroupFront,
     );

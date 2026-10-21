@@ -4,7 +4,7 @@
     name: "Packet Shred Group v2.0",
     description: "Damage 8–12 to every member of one group",
     target: WholeEnemyGroup,
-    effect: Damage(power: 10, spread: 2),
+    effect: Damage(power: 10, spread: 2, damage_type: Some(Noise)),
     cooldown: 3,
     accuracy: 4,
     power_cost: 11.0,

@@ -1832,6 +1832,7 @@ impl Game {
                     power,
                     spread,
                     heal_fraction,
+                    damage_type,
                 } => {
                     let band = abilities::scaled_range(
                         battle::DamageRange::centred(*power, *spread),
@@ -1846,7 +1847,7 @@ impl Game {
                             range: band,
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
-                            damage_type: None,
+                            damage_type: *damage_type,
                         },
                     );
                     let dmg = outcome.damage_to_defender();
@@ -1871,6 +1872,7 @@ impl Game {
                     // against an armoured target than a soft one.
                     let siphoned = (dmg as f32 * heal_fraction).round() as i32;
                     let restored = self.restore_hp(actor, siphoned);
+                    let note = damage::resisted_note(outcome.resisted());
                     // `heal_kind`, not `hit_kind`: the Integrity coming back
                     // is the half a plain `Attack` cannot also produce, and
                     // so the half the line is read for. It keeps the number
@@ -1880,7 +1882,7 @@ impl Game {
                         heal_kind,
                         outcome,
                         recipient,
-                        format!("{name} siphons {dmg} from {on}, restoring {restored}."),
+                        format!("{name} siphons {dmg} from {on}, restoring {restored}.{note}"),
                     );
                 }
                 AbilityEffect::Cloak { duration } => {

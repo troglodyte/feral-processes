@@ -454,9 +454,8 @@ pub enum AbilityEffect {
         spread: i32,
         #[serde(default)]
         status: Option<MoveEffect>,
-        /// The damage type this ability deals. Only a species move sets it
-        /// (through `basic_attack_ability`) until authored abilities gain
-        /// types.
+        /// The damage type this ability deals, from a species move (through
+        /// `basic_attack_ability`) or the authored file. `None` is untyped.
         #[serde(default)]
         damage_type: Option<crate::damage::DamageType>,
     },
@@ -502,6 +501,10 @@ pub enum AbilityEffect {
         /// there rather than at use, so a `heal_fraction: 5.0` mod is a
         /// bounded ability instead of a bounded surprise inside a formula.
         heal_fraction: f32,
+        /// As `Damage::damage_type`. The heal rides the damage dealt, so a
+        /// resisted drain restores less.
+        #[serde(default)]
+        damage_type: Option<crate::damage::DamageType>,
     },
     /// Clears each recipient's active status condition. Carries no fields.
     Cleanse,
@@ -1201,10 +1204,13 @@ impl AbilityDef {
         }
     }
 
-    /// The damage type of a direct-damage ability, `None` for anything else.
+    /// The damage type of a `Damage` or `Drain`, `None` for anything else.
+    /// It covers `Drain` where `attack_parts` does not because the type
+    /// census reads every authored routine through it.
     pub(crate) fn attack_type(&self) -> Option<crate::damage::DamageType> {
         match &self.effect {
-            AbilityEffect::Damage { damage_type, .. } => *damage_type,
+            AbilityEffect::Damage { damage_type, .. }
+            | AbilityEffect::Drain { damage_type, .. } => *damage_type,
             _ => None,
         }
     }
@@ -1798,14 +1804,14 @@ pub fn effect_label(
             power,
             spread,
             status,
-            ..
+            damage_type,
         } => {
             let band = scaled_range(
                 crate::battle::DamageRange::centred(*power, *spread),
                 level,
                 affinity,
             );
-            let mut line = format!("Damage {}", range_label(band));
+            let mut line = format!("Damage {}", crate::damage::band_label(band, *damage_type));
             // The rider's chance is a property of the move and is not
             // scaled by anything, so it prints as authored.
             if let Some(status) = status {
@@ -1847,6 +1853,7 @@ pub fn effect_label(
             power,
             spread,
             heal_fraction,
+            damage_type,
         } => {
             let band = scaled_range(
                 crate::battle::DamageRange::centred(*power, *spread),
@@ -1855,7 +1862,7 @@ pub fn effect_label(
             );
             format!(
                 "Damage {}, healing the invoker {:.0}% of it",
-                range_label(band),
+                crate::damage::band_label(band, *damage_type),
                 heal_fraction * 100.0
             )
         }
@@ -1961,9 +1968,14 @@ pub fn teleport_reach(level: u32) -> u32 {
 }
 
 /// A damage band as the player reads it — a single number when the band has
-/// no width, `min–max` otherwise. `Game::damage_range_label` is a call to
-/// this; the two must agree, since the same band is printed on a routine's
-/// inspect page and on the creation wizard's routine row.
+/// no width, `min–max` otherwise; `damage::band_label` adds the type. The one
+/// formatter, so a range printed on one screen cannot disagree with another:
+/// the gear page, a routine's inspect page and the creation wizard's row.
+///
+/// The scaling is the caller's (`Game::copy_bonus`, `scaled_range`) and is
+/// not repeated here. An en dash rather than a hyphen: the map's status
+/// column is measured in DejaVu Sans Mono where both are one cell, and the
+/// en dash reads as a range rather than as a minus sign in front of `max`.
 pub fn range_label(range: crate::battle::DamageRange) -> String {
     if range.max <= range.min {
         format!("{}", range.min)
@@ -2675,7 +2687,8 @@ mod tests {
             AbilityEffect::Drain {
                 power: 10,
                 spread: 0,
-                heal_fraction: 0.5
+                heal_fraction: 0.5,
+                damage_type: None,
             }
             .affinity_kind(),
             Some(AffinityKind::Drain)

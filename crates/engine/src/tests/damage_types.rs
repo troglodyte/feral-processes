@@ -338,13 +338,12 @@ fn a_sortie_swing_by_an_unarmed_body_wears_its_first_moves_type() {
 
 #[test]
 fn a_typed_band_names_its_type_and_an_untyped_one_is_unchanged() {
-    let game = typed_game();
     let band = battle::DamageRange { min: 5, max: 10 };
     assert_eq!(
-        game.damage_label(band, Some(damage::DamageType::Thermal)),
+        damage::band_label(band, Some(damage::DamageType::Thermal)),
         "5–10 Thermal"
     );
-    assert_eq!(game.damage_label(band, None), game.damage_range_label(band));
+    assert_eq!(damage::band_label(band, None), "5–10");
 }
 
 #[test]
@@ -615,14 +614,6 @@ fn landed(o: battle::AttackOutcome) -> i32 {
     o.damage_to_defender()
 }
 
-fn resisted_of(o: battle::AttackOutcome) -> Option<damage::Resisted> {
-    match o {
-        battle::AttackOutcome::Hit { resisted, .. }
-        | battle::AttackOutcome::Crit { resisted, .. } => resisted,
-        _ => None,
-    }
-}
-
 fn landing_swing_stream(ty: Option<damage::DamageType>) -> u64 {
     (0..512u64)
         .find(|&s| landed(typed_swing(ty, false, s)) >= 10)
@@ -635,24 +626,24 @@ fn a_typed_hit_into_matching_armour_reports_what_was_stopped() {
     let stream = landing_swing_stream(ty);
     let open = typed_swing(ty, false, stream);
     let cut = typed_swing(ty, true, stream);
-    let note = resisted_of(cut).expect("the cut was not reported");
+    let note = cut.resisted().expect("the cut was not reported");
     assert_eq!(note.ty, damage::DamageType::Thermal);
     assert!(note.amount > 0);
     assert_eq!(landed(open) - landed(cut), note.amount);
-    assert_eq!(resisted_of(open), None);
+    assert_eq!(open.resisted(), None);
 }
 
 #[test]
 fn an_untyped_hit_and_a_typed_hit_into_no_resistance_report_nothing() {
     let stream = landing_swing_stream(None);
     assert!(landed(typed_swing(None, true, stream)) > 0);
-    assert_eq!(resisted_of(typed_swing(None, true, stream)), None);
+    assert_eq!(typed_swing(None, true, stream).resisted(), None);
 
     // Voltage meets a plate that resists only Thermal.
     let ty = Some(damage::DamageType::Voltage);
     let stream = landing_swing_stream(ty);
     assert!(landed(typed_swing(ty, true, stream)) > 0);
-    assert_eq!(resisted_of(typed_swing(ty, true, stream)), None);
+    assert_eq!(typed_swing(ty, true, stream).resisted(), None);
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,13 +1005,14 @@ fn skipping_deflection_is_not_reported_as_resisted() {
     let plain = plated_swing(None, "defl_plate", stream);
     let mag = plated_swing(Some(Magnetic), "defl_plate", stream);
     assert_eq!(landed(mag), landed(plain) + DEFLECTION);
-    assert_eq!(resisted_of(mag), None);
+    assert_eq!(mag.resisted(), None);
     assert_eq!(
-        resisted_of(plated_swing(Some(Noise), "defl_plate", stream)),
+        plated_swing(Some(Noise), "defl_plate", stream).resisted(),
         None
     );
     // Resistance below the block threshold still reports only its own cut.
-    let cut = resisted_of(plated_swing(Some(Magnetic), "mag_defl_plate", stream))
+    let cut = plated_swing(Some(Magnetic), "mag_defl_plate", stream)
+        .resisted()
         .expect("the resisted cut is reported");
     assert_eq!(cut.ty, Magnetic);
     assert!(cut.amount > 0);
@@ -1036,7 +1028,7 @@ fn a_resisted_magnetic_hit_reports_only_the_type_cut() {
     // type cut removed.
     let uncut = landed(plated_swing(None, "defl_plate", stream));
     let real = plated_swing(Some(Magnetic), "mag_defl_plate", stream);
-    let cut = resisted_of(real).expect("the resisted cut is reported");
+    let cut = real.resisted().expect("the resisted cut is reported");
     assert_eq!(cut.amount, uncut - landed(real));
 }
 
@@ -1570,4 +1562,147 @@ fn a_voltage_hit_arcs_in_the_real_tactical_attack() {
         }
     }
     panic!("no swing landed");
+}
+
+// ---------------------------------------------------------------------------
+// Typed authored routines: a Drain carries its type, the label names it.
+
+fn drain_def(ty: &str) -> crate::abilities::AbilityDef {
+    ron::from_str(&format!(
+        r#"(id: "test_drain", name: "Test Drain", description: "d",
+            target: OneEnemyGroupFront, cooldown: 1,
+            effect: Drain(power: 20, heal_fraction: 0.5, damage_type: {ty}))"#
+    ))
+    .unwrap()
+}
+
+/// The Integrity a drain by the player takes off a target that does, or does
+/// not, wear `heat_plate`, and the Integrity the player got back.
+fn drain_hit(ty: &str, armoured: bool, stream: u64) -> (i32, i32) {
+    let (dealt, healed, _) = drain_run(ty, armoured, stream);
+    (dealt, healed)
+}
+
+/// `drain_hit` plus the log the drain left.
+fn drain_run(ty: &str, armoured: bool, stream: u64) -> (i32, i32, Vec<String>) {
+    let mut game = typed_game();
+    let player = game.player_entity();
+    let target = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    sturdy(&mut game, target);
+    if armoured {
+        equip_armor(&mut game, target, "heat_plate");
+    }
+    {
+        let mut s = game.world.get_mut::<Stats>(player).unwrap();
+        s.max_hp = 5000;
+        s.hp = 1;
+    }
+    insert_battle(&mut game, player, vec![target]);
+    reseed_rng(&mut game, stream);
+    let before = hp(&game, target);
+    game.use_ability(&drain_def(ty), player, "You", &[target]);
+    let log = log_texts(&game);
+    (before - hp(&game, target), hp(&game, player) - 1, log)
+}
+
+fn drain_landing_stream(ty: &str) -> u64 {
+    (0..512u64)
+        .find(|&s| drain_hit(ty, false, s).0 >= 10)
+        .expect("no stream in 0..512 landed the drain")
+}
+
+#[test]
+fn a_typed_drain_is_cut_by_resistance_and_heals_off_the_cut_figure() {
+    let stream = drain_landing_stream("Some(Thermal)");
+    let (open, _) = drain_hit("Some(Thermal)", false, stream);
+    let (cut, healed, log) = drain_run("Some(Thermal)", true, stream);
+    assert!(
+        cut < open,
+        "the drain dropped its type: {cut} against {open}"
+    );
+    assert_eq!(healed, (cut as f32 * 0.5).round() as i32);
+    let note = format!("({} {NOTE}", open - cut);
+    assert!(
+        log.iter()
+            .any(|l| l.contains("siphons") && l.contains(&note)),
+        "the siphon line hides the cut: {log:?}"
+    );
+}
+
+#[test]
+fn an_untyped_drain_ignores_typed_resistance() {
+    let stream = drain_landing_stream("None");
+    assert_eq!(
+        drain_hit("None", false, stream),
+        drain_hit("None", true, stream)
+    );
+}
+
+#[test]
+fn a_typed_drain_reports_its_attack_type() {
+    assert_eq!(
+        drain_def("Some(Thermal)").attack_type(),
+        Some(damage::DamageType::Thermal)
+    );
+    assert_eq!(drain_def("None").attack_type(), None);
+}
+
+#[test]
+fn a_routines_effect_label_names_its_type_and_untyped_is_unchanged() {
+    let game = typed_game();
+    let statuses = game.world.resource::<crate::statuses::StatusDb>();
+    let label =
+        |def: &crate::abilities::AbilityDef| crate::abilities::effect_label(def, 1, 1.0, statuses);
+    let damage = |ty: &str| -> crate::abilities::AbilityDef {
+        ron::from_str(&format!(
+            r#"(id: "test_hit", name: "Test Hit", description: "d",
+                target: OneEnemyGroupFront, cooldown: 1,
+                effect: Damage(power: 10, spread: 2, damage_type: {ty}))"#
+        ))
+        .unwrap()
+    };
+    let (plain, typed) = (label(&damage("None")), label(&damage("Some(Voltage)")));
+    assert!(plain.starts_with("Damage ") && !plain.contains("Voltage"));
+    assert_eq!(typed, format!("{plain} Voltage"));
+    let (plain, typed) = (
+        label(&drain_def("None")),
+        label(&drain_def("Some(Thermal)")),
+    );
+    let band = plain.split(',').next().unwrap();
+    assert_eq!(
+        typed,
+        plain.replacen(band, &format!("{band} Thermal"), 1),
+        "{plain} / {typed}"
+    );
+}
+
+/// The authored routines that carry a damage type, and every other damaging
+/// routine stays untyped. Exhaustive both ways, so a type cannot be added or
+/// dropped by accident. `bus_fault` is untyped on purpose: as whole-field
+/// Voltage its arcs cost the player ~20 points of arena win rate, a retune.
+#[test]
+fn the_shipped_routines_carry_exactly_the_sorted_damage_types() {
+    use crate::damage::DamageType::*;
+    let expected = [
+        ("broadcast_storm", Noise),
+        ("interrupt_request", Voltage),
+        ("null_cache", Magnetic),
+        ("packet_shred", Noise),
+        ("row_hammer_everyone", Radiation),
+        ("row_hammer_group", Radiation),
+        ("row_hammer_single", Radiation),
+    ];
+    let game = Game::new(3302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut typed: Vec<_> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter_map(|def| def.attack_type().map(|ty| (def.id.clone(), ty)))
+        .collect();
+    typed.sort_by(|a, b| a.0.cmp(&b.0));
+    let expected: Vec<_> = expected
+        .iter()
+        .map(|(id, ty)| (id.to_string(), *ty))
+        .collect();
+    assert_eq!(typed, expected);
 }

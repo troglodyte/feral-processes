@@ -3,7 +3,6 @@
 
 use std::collections::BTreeMap;
 
-use crate::damage::DamageType;
 use crate::tuning::{
     QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT,
 };
@@ -856,36 +855,6 @@ impl Game {
                 .fused_for_tier(copy.tier)
                 .for_rarity(copy.rarity),
         )
-    }
-
-    /// A damage band as the string every screen prints — `"4–9"`, or `"6"`
-    /// for a degenerate one.
-    ///
-    /// **One function, the way `Game::copy_name` is the one place a copy's
-    /// name is built.** A displayed range that disagrees with the damage
-    /// actually rolled is the hand-rolled-chain bug in a new place: sharing
-    /// the *formatter* was never enough on `copy_bonus`, four screens rebuilt
-    /// the scaling chain themselves and all four dropped the affix at once.
-    /// The scaling is `copy_bonus`'s and is not repeated here — this takes a
-    /// band that has already been through all three axes.
-    ///
-    /// An en dash rather than a hyphen: the map's status column is measured
-    /// in DejaVu Sans Mono where both are one cell, and the en dash reads as
-    /// a range rather than as a minus sign in front of `max`.
-    pub fn damage_range_label(&self, range: battle::DamageRange) -> String {
-        crate::abilities::range_label(range)
-    }
-
-    /// `damage_range_label` plus the damage type that goes with the band —
-    /// `"5–10 Thermal"`, or exactly the bare range when the band is untyped.
-    /// **The one place a band and its type are joined**, so the summary, the
-    /// inspect pages and the body rows cannot word it differently.
-    pub fn damage_label(&self, range: battle::DamageRange, ty: Option<DamageType>) -> String {
-        let band = self.damage_range_label(range);
-        match ty {
-            Some(ty) => format!("{band} {}", ty.name()),
-            None => band,
-        }
     }
 
     /// What one *worn* item is worth — `copy_bonus` at the level the copy

@@ -1437,7 +1437,7 @@ fn starter_rows_are_priced_through_the_class() {
         neutral_heal.effect,
         format!(
             "Restores {} Integrity",
-            game.damage_range_label(neutral_band)
+            crate::abilities::range_label(neutral_band)
         ),
         "with no class the row must still read the level-1, neutral-affinity band through \
          routine_effect_label — not the file's raw prose"
@@ -1467,14 +1467,17 @@ fn starter_rows_are_priced_through_the_class() {
         striker_heal.effect,
         format!(
             "Restores {} Integrity",
-            game.damage_range_label(striker_band)
+            crate::abilities::range_label(striker_band)
         ),
         "a Striker damps Heal to 0.8 — the row must price through that spread, not the \
          neutral one"
     );
     assert_eq!(
         medic_heal.effect,
-        format!("Restores {} Integrity", game.damage_range_label(medic_band)),
+        format!(
+            "Restores {} Integrity",
+            crate::abilities::range_label(medic_band)
+        ),
         "a Medic raises Heal to 1.3 — the row must price through that spread, not the \
          neutral one"
     );

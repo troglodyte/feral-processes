@@ -144,6 +144,17 @@ pub fn resisted_note(resisted: Option<Resisted>) -> String {
     }
 }
 
+/// A damage band plus its type — `"5–10 Thermal"`, or exactly
+/// `abilities::range_label` when untyped. **The one place a band and its type
+/// are joined**, so gear, bodies and routines cannot word it differently.
+pub fn band_label(range: crate::battle::DamageRange, ty: Option<DamageType>) -> String {
+    let band = crate::abilities::range_label(range);
+    match ty {
+        Some(ty) => format!("{band} {}", ty.name()),
+        None => band,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

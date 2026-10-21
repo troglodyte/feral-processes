@@ -502,10 +502,10 @@ impl Game {
     }
 
     /// What a body's swing reads as on a screen: its band and the type that
-    /// goes with it, through `damage_label`.
+    /// goes with it, through `damage::band_label`.
     pub(crate) fn natural_damage_label(&self, entity: Entity) -> String {
         let profile = self.natural_profile_of(entity);
-        self.damage_label(profile.range, profile.damage_type)
+        crate::damage::band_label(profile.range, profile.damage_type)
     }
 
     /// `natural_range_of` with the type that goes with the band: the first

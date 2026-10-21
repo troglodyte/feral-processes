@@ -254,6 +254,15 @@ impl AttackOutcome {
             AttackOutcome::Miss | AttackOutcome::Fumble(_) => 0,
         }
     }
+
+    /// What resistance stopped of a landed hit; `None` for anything that
+    /// did not land.
+    pub fn resisted(self) -> Option<crate::damage::Resisted> {
+        match self {
+            AttackOutcome::Hit { resisted, .. } | AttackOutcome::Crit { resisted, .. } => resisted,
+            AttackOutcome::Miss | AttackOutcome::Fumble(_) => None,
+        }
+    }
 }
 
 /// Resolves one creature-versus-creature attack.

@@ -67,14 +67,6 @@ fn landed(o: battle::AttackOutcome) -> i32 {
     o.damage_to_defender()
 }
 
-fn resisted_of(o: battle::AttackOutcome) -> Option<damage::Resisted> {
-    match o {
-        battle::AttackOutcome::Hit { resisted, .. }
-        | battle::AttackOutcome::Crit { resisted, .. } => resisted,
-        _ => None,
-    }
-}
-
 /// A stream on which the swing lands well on a worm, which resists nothing.
 fn landing_stream(ty: Option<damage::DamageType>) -> u64 {
     (0..512u64)
@@ -88,7 +80,7 @@ fn a_species_resistance_cuts_a_typed_hit_and_reports_it() {
     let stream = landing_stream(ty);
     let (open, ..) = swing_at("worm", None, ty, stream);
     let (cut, ..) = swing_at("husk", None, ty, stream);
-    let note = resisted_of(cut).expect("the species cut was not reported");
+    let note = cut.resisted().expect("the species cut was not reported");
     assert_eq!(note.ty, damage::DamageType::Thermal);
     assert!(note.amount > 0);
     assert!(landed(cut) < landed(open));
@@ -99,7 +91,7 @@ fn an_untyped_hit_ignores_a_species_resistance() {
     let stream = landing_stream(None);
     let (hit, ..) = swing_at("husk", None, None, stream);
     assert!(landed(hit) > 0);
-    assert_eq!(resisted_of(hit), None);
+    assert_eq!(hit.resisted(), None);
 }
 
 #[test]

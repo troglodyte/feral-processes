@@ -55,6 +55,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         base_hp: 40,
         base_atk: 4,
         base_mitigation: 2,
+        resist: Default::default(),
         taming_difficulty: 0.5,
         habitats: Vec::new(),
         base_speed: crate::tuning::DEFAULT_BASE_SPEED,

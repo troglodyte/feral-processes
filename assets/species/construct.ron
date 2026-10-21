@@ -7,6 +7,7 @@
     base_hp: 49,
     base_atk: 2,
     base_mitigation: 4,
+    resist: (voltage: 30),
     taming_difficulty: 0.35,
     habitats: [Backplane],
     base_speed: 6,

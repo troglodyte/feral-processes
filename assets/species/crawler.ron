@@ -6,6 +6,7 @@
     base_hp: 102,
     base_atk: 5,
     base_mitigation: 9,
+    resist: (radiation: 20),
     taming_difficulty: 0.5,
     growth_multiplier: 1.25,
     habitats: [Deadlock],

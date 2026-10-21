@@ -7,6 +7,7 @@
     base_hp: 132,
     base_atk: 12,
     base_mitigation: 5,
+    resist: (noise: 20),
     taming_difficulty: 0.5,
     growth_multiplier: 1.5,
     habitats: [],

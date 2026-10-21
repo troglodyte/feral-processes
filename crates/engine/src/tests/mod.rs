@@ -45,6 +45,7 @@ mod construction;
 mod contracts;
 mod crafting;
 mod creation;
+mod damage_species;
 mod damage_types;
 mod defences;
 mod depot_feed;

@@ -2435,6 +2435,10 @@ impl Game {
                 cycle: self.current_tick(),
                 active_contracts: self.active_contracts().len(),
                 class: self.player_class_view(),
+                emulated_resistances: match self.kit_of(entity) {
+                    crate::game::kit::Kit::Emulated { def, .. } => def.resist.resisted(),
+                    crate::game::kit::Kit::Innate(_) | crate::game::kit::Kit::Unarmed => vec![],
+                },
             }),
         })
     }
@@ -2584,6 +2588,7 @@ impl Game {
                     self.world.resource::<crate::attributes::AttributeDb>(),
                 ),
                 affinities: species.affinities.non_neutral(),
+                resistances: species.resist.resisted(),
                 base_job: species.affinity_class(),
                 needs: self.need_rows(entity),
                 mood: self.manifest_mood(entity),

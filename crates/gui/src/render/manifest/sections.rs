@@ -3,6 +3,7 @@
 
 use super::layout::*;
 use super::*;
+use feral_processes_engine::damage::DamageType;
 use feral_processes_engine::{RankedStat, RosterRow};
 
 pub(super) fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
@@ -141,6 +142,9 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
         stat("Perk points", "0")
     });
     growth.push(stat("Decompiler", p.decompiler.to_string()));
+    if !p.emulated_resistances.is_empty() {
+        growth.push(stat("Resists", resists_label(&p.emulated_resistances)));
+    }
     sections.push(Section::ledger(
         "GROWTH",
         LedgerColumn::Growth,
@@ -495,11 +499,23 @@ pub(super) fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &Pro
         ));
     }
     species.push(stat("Growth", format!("{:.2}x", p.growth_multiplier)));
+    if !p.resistances.is_empty() {
+        species.push(stat("Resists", resists_label(&p.resistances)));
+    }
     sections.push(Section::ledger(
         "SPECIES",
         LedgerColumn::Duty,
         section_rows(species),
     ));
+}
+
+/// "Voltage 30%, Magnetic 30%" — the SPECIES row's value.
+pub(in crate::render) fn resists_label(resistances: &[(DamageType, i32)]) -> String {
+    resistances
+        .iter()
+        .map(|(ty, pct)| format!("{} {pct}%", ty.name()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// What a class does when its program is posted to a structure, beside the

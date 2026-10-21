@@ -7,6 +7,7 @@
     base_hp: 80,
     base_atk: 12,
     base_mitigation: 3,
+    resist: (voltage: 20),
     taming_difficulty: 0.45,
     growth_multiplier: 1.25,
     habitats: [OpenGrid, NullSector],

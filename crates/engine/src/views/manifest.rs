@@ -194,6 +194,10 @@ pub struct PlayerManifest {
     /// The class picked at creation, resolved live through `ClassDb` — see
     /// `Game::player_class_view`. `None` for a classless run.
     pub class: Option<PlayerClassView>,
+    /// The damage-type resistances borrowed from the species being emulated
+    /// (`SpeciesDef::resist`), positive only, in `DamageType::ALL` order.
+    /// Empty when not emulating: the player has no species of their own.
+    pub emulated_resistances: Vec<(crate::damage::DamageType, i32)>,
 }
 
 /// One worn item and the bonus it is *currently* granting.
@@ -299,6 +303,10 @@ pub struct ProgramManifest {
     /// Empty for a species that declares nothing, so the screen omits the
     /// section entirely rather than drawing five rows of 1.00.
     pub affinities: Vec<(AffinityKind, f32)>,
+    /// The species' natural damage-type resistances (`SpeciesDef::resist`),
+    /// percent, positive only, in `DamageType::ALL` order. Armour is not in
+    /// it: this is what the program *is*, and gear shows on its own rows.
+    pub resistances: Vec<(crate::damage::DamageType, i32)>,
     /// The class this species reads as, which decides what it does when
     /// posted to a structure — extraction, guarding or repair, or nothing
     /// at all for the two classes with no base job.

@@ -51,6 +51,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `tuning::MAX_MITIGATION_PERCENT` (75), so a species authored at or
     // above that is immune before gear or a buff is counted. The shipped
     // roster spans 1 (Drone) to 17 (Wintermute).
+
+    // Optional; leave it out for none. Natural resistance to each damage
+    // type, in percent, spelled like armour's (`assets/items/README.md`).
+    // Added to worn armour's resistance before the 75% cap
+    // (`tuning::DAMAGE_RESIST_CAP`); never scaled by level or zone. At 50
+    // (`tuning::SIDE_EFFECT_BLOCK_THRESHOLD`) a type's side effect stops
+    // landing. Shipped species stay at 30 or below, so blocking a side
+    // effect always takes armour too — `no_shipped_species_blocks_a_side_
+    // effect_by_itself` holds that. An emulating player borrows it.
+    resist: (voltage: 20),
     taming_difficulty: 0.4,       // 0.0 (trivial) .. 1.0 (very hard) to compile/tame
     habitats: [OpenGrid, Backplane],
     // Biome options: DataVoid, Deadlock, NullSector, Backplane, OpenGrid, BlackIce, Platform

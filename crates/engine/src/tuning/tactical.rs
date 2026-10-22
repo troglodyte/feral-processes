@@ -237,9 +237,8 @@ pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 /// toughest body (an id with no row rolls on `default`).
 ///
 /// Columns are `PackTactic::ALL`'s order: `[Rush, Together, Hold,
-/// Formation, Flank]`. Integer
-/// weights, so a roll is `derive::index` over their sum and nothing in it is
-/// a float. `Rush` stays above zero in every row, which is what lets a roll
+/// Formation, Flank]`. Integer weights, so a roll is `derive::index` over
+/// their sum and nothing in it is a float. `Rush` stays above zero in every row, which is what lets a roll
 /// whose other tactics are all ineligible still answer.
 pub const PACK_TACTIC_ODDS: [(&str, [u32; 5]); 5] = [
     ("default", [2, 2, 2, 2, 2]),
@@ -303,8 +302,9 @@ pub const TACTICAL_HOLD_ROUNDS: u32 = 6;
 /// unrelated squad table.)
 pub const TACTICAL_FORMATION_DEPTH: i32 = 2;
 
-/// What a pack `Formation` charges a body per step between where it would
-/// stand and its slot in the line.
+/// What a pack `Formation` charges a body per step off its slot, on one axis
+/// per rank: a front-rank body for straying along the line, a back-rank body
+/// for standing ahead of its slot (`PackPlan::cell_terms` says why).
 ///
 /// Above `TACTICAL_FORMATION_BACK_CLOSING`, or a back-rank body's closing
 /// would pay its way past the line; at the default closing weight, so a

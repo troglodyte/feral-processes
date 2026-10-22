@@ -1020,6 +1020,28 @@ mod formation {
         assert_eq!(pack::check_transition(&mut game), None, "logged once");
     }
 
+    /// Facing west the line runs toward -y, so a squad two wide anchors a
+    /// row above the line's centre and the bodies either side of it land on
+    /// the rows next to the two it covers, not inside it.
+    #[test]
+    fn a_squad_in_a_line_running_against_its_footprint_leaves_no_gap_and_no_overlap() {
+        let (at, across) = ((5, 8), (0, -1));
+        let widths = [2u8, 1, 1];
+        let rows: Vec<i32> = pack::line_offsets(&widths)
+            .into_iter()
+            .zip(widths)
+            .flat_map(|(offset, w)| {
+                let anchor = pack::slot_anchor(at, across, offset, w);
+                (0..w as i32).map(move |dy| anchor.1 + dy)
+            })
+            .collect();
+        let mut sorted = rows.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![6, 7, 8, 9], "{rows:?}");
+        // Running with the footprint, the anchor is the start of the span.
+        assert_eq!(pack::slot_anchor(at, (0, 1), 2, 1), (5, 10));
+    }
+
     #[test]
     fn the_line_puts_the_first_body_in_the_middle_and_alternates_outward() {
         assert_eq!(pack::line_offsets(&[1]), vec![0]);
@@ -1062,12 +1084,51 @@ mod flank {
         assert_eq!(terms(&rush, pack[1], (8, 9)), 0.0, "Rush adds nothing");
     }
 
-    #[test]
-    fn a_second_attacker_takes_the_side_opposite_the_first() {
-        let (mut game, pack) = pincer((10, 10), PackTactic::Flank);
+    fn second_ends_at(tactic: PackTactic) -> (i32, i32) {
+        let (mut game, pack) = pincer((10, 10), tactic);
         assert!(wait_for_turn(&mut game, pack[1]));
         assert!(game.tactical_ai_turn_at(0.0));
-        assert_eq!(cell_of(&game, pack[1]), (8, 9));
+        cell_of(&game, pack[1])
+    }
+
+    #[test]
+    fn a_second_attacker_takes_the_side_opposite_the_first() {
+        assert_ne!(second_ends_at(PackTactic::Rush), (8, 9), "the control");
+        assert_eq!(second_ends_at(PackTactic::Flank), (8, 9));
+    }
+
+    /// Ten of a kind seat two 2x2 squads. One anchored at (9,7) covers
+    /// (9..=10, 7..=8): its middle is on the player's east side though its
+    /// anchor is north-east, so the pincer for the other is the block whose
+    /// middle is due west, anchored at (6,7) — north-west by anchors.
+    #[test]
+    fn a_squad_holds_the_side_its_middle_is_on() {
+        use crate::components::Squad;
+        let mut game = game();
+        tactical_fight(&mut game, 10, 10_000);
+        let squads: Vec<Entity> = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| game.world.get::<Squad>(e).is_some())
+                .collect()
+        };
+        let [east, other] = squads[..] else {
+            panic!("ten of a kind seat two squads: {squads:?}");
+        };
+        for &body in &[east, other] {
+            game.world.entity_mut(body).insert(Routines::default());
+        }
+        open_field(&mut game, &[]);
+        put(&mut game, east, (0, 13));
+        put(&mut game, other, (13, 13));
+        let player = game.player_entity();
+        put(&mut game, player, (8, 8));
+        put(&mut game, east, (9, 7));
+        game.set_pack_tactic(PackTactic::Flank);
+        assert_eq!(terms(&game, other, (6, 7)), TACTICAL_FLANK_PINCER, "west");
+        assert_eq!(terms(&game, other, (8, 9)), 0.0, "south");
     }
 
     /// Who `actor` would swing at between the player and a companion of

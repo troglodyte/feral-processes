@@ -6,10 +6,13 @@
 //! program far enough into the hole rounds on a colleague.
 
 use super::support::*;
-use crate::components::{Memories, MemorySubject, Position, Structure};
+use crate::components::{Fleeing, Memories, MemorySubject, Position, Structure, Task, TaskKind};
 use crate::needs::NeedId;
 use crate::structures::{StructureDb, StructureId};
-use crate::tuning::{BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, BOND_WITNESS_REACH};
+use crate::tuning::{
+    BASE_ESTABLISHED_STAFF, BASE_ESTABLISHED_STRUCTURES, BOND_WITNESS_REACH,
+    TANTRUM_FLEE_LINGER_TICKS, TANTRUM_FLEE_TILES,
+};
 use crate::*;
 
 fn coherence() -> NeedId {
@@ -940,9 +943,6 @@ fn grievance_names_each_rung_and_none_when_content() {
 // Bystanders walk clear of a fight
 // ---------------------------------------------------------------------------
 
-use crate::components::{Fleeing, Task, TaskKind};
-use crate::tuning::{TANTRUM_FLEE_LINGER_TICKS, TANTRUM_FLEE_TILES};
-
 /// Laid floor under the whole fixture and a walled room, interior
 /// `6..=8` x `-1..=1`, with its one door on the west wall.
 fn a_floored_base_with_a_walled_room(game: &mut Game) -> Vec<Entity> {
@@ -1099,4 +1099,23 @@ fn a_posted_worker_flees_keeps_its_post_and_walks_back() {
         (back.0 - 7).abs() + (back.1 + 1).abs() <= 2,
         "back at the post: {back:?}"
     );
+}
+
+#[test]
+fn a_fleeing_body_is_released_when_the_base_stops_being_established() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    place_at(&mut game, staff[0], 6, 0);
+    place_at(&mut game, staff[1], 8, 0);
+    place_at(&mut game, staff[2], 7, 1);
+    stage_a_brawl(&mut game, staff[0], staff[1], 50);
+    game.run_flight(&staff);
+    assert!(game.world.get::<Fleeing>(staff[2]).is_some());
+    // A staff member lost mid-brawl drops the base below the threshold.
+    let last = *staff.last().unwrap();
+    game.world.despawn(last);
+    assert!(!game.base_is_established());
+    let rest: Vec<Entity> = staff[..staff.len() - 1].to_vec();
+    game.run_flight(&rest);
+    assert!(game.world.get::<Fleeing>(staff[2]).is_none());
 }

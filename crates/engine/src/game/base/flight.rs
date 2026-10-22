@@ -18,7 +18,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::{Entity, With};
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
@@ -132,6 +132,14 @@ impl Game {
     /// `TANTRUM_FLEE_LINGER_TICKS` after the room goes quiet.
     pub(crate) fn run_flight(&mut self, staff: &[Entity]) {
         if !self.base_is_established() {
+            // Nothing else would ever release a marker once the gate shuts.
+            let marked: Vec<Entity> = {
+                let mut q = self.world.query_filtered::<Entity, With<Fleeing>>();
+                q.iter(&self.world).collect()
+            };
+            for e in marked {
+                self.world.entity_mut(e).remove::<Fleeing>();
+            }
             return;
         }
         let open = self.world.resource::<Brawls>().open.clone();

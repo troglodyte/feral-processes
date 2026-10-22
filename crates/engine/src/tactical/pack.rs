@@ -136,8 +136,18 @@ pub(crate) struct PackPlan {
 #[derive(Clone, Copy)]
 struct Slot {
     at: (i32, i32),
-    /// The unit step along the line, across the facing.
-    across: (i32, i32),
+    /// The unit step toward the enemy.
+    facing: (i32, i32),
+}
+
+impl Slot {
+    /// How far `cell` is from the slot along `step`, in steps: positive in
+    /// the step's direction. A diagonal unit step has squared length two.
+    fn along(&self, cell: (i32, i32), step: (i32, i32)) -> f32 {
+        let (dx, dy) = (cell.0 - self.at.0, cell.1 - self.at.1);
+        let norm = step.0.pow(2) + step.1.pow(2);
+        (dx * step.0 + dy * step.1) as f32 / norm as f32
+    }
 }
 
 enum Terms {
@@ -362,7 +372,7 @@ fn formation_slot(game: &Game, body: Entity) -> Option<Slot> {
     let offset = line_offsets(&widths)[i];
     Some(Slot {
         at: (at.0 + across.0 * offset, at.1 + across.1 * offset),
-        across,
+        facing,
     })
 }
 
@@ -470,21 +480,20 @@ impl PackPlan {
                 };
                 TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, targets) - charge
             }
-            // **The front rank is charged only for straying along the line.**
-            // Its slot is read from where the rank stands now, so a charge
-            // for the whole distance would price every step forward at what
-            // closing pays for it and the line would never advance. The back
-            // rank is held to its slot outright: that is what keeps it
-            // behind.
+            // **Both ranks are charged on one axis only**, because each slot
+            // is read from where the front rank stands now. The front rank
+            // pays for straying along the line: a charge for the whole
+            // distance would price every step forward at what closing pays,
+            // and the line would never advance. The back rank pays only for
+            // standing ahead of its slot: held to the slot outright, it
+            // stood out of its own range while the front fought and the
+            // pack lost most of its damage (the phase 2 measurement).
             Terms::Formation { slot, back } => slot.map_or(0.0, |slot| {
                 let off = if *back {
-                    reach::gap(&stands, &[slot.at]) as f32
+                    slot.along(cell, slot.facing).max(0.0)
                 } else {
-                    let (dx, dy) = (cell.0 - slot.at.0, cell.1 - slot.at.1);
-                    let along = dx * slot.across.0 + dy * slot.across.1;
-                    // A diagonal unit step has squared length two.
-                    let norm = slot.across.0.pow(2) + slot.across.1.pow(2);
-                    along.abs() as f32 / norm as f32
+                    let across = (-slot.facing.1, slot.facing.0);
+                    slot.along(cell, across).abs()
                 };
                 -TACTICAL_FORMATION_WEIGHT * off
             }),

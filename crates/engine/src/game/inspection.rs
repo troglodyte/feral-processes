@@ -2250,16 +2250,17 @@ impl Game {
         rows
     }
 
-    /// The selected destination, resolved against the live derivation, or
-    /// `None` when nothing is selected or the selection no longer exists.
+    /// The selected destination, resolved against the live derivation.
+    /// Home stands in when nothing is selected or the selection no longer
+    /// exists, so a party out in the field always has a way back; `None`
+    /// only off the surface or before there is a home.
     pub fn compass_bearing(&mut self) -> Option<CompassRow> {
-        let selected = self
-            .world
-            .resource::<crate::resources::CompassBearing>()
-            .0?;
-        self.compass_targets()
-            .into_iter()
-            .find(|r| r.target == selected)
+        let selected = self.world.resource::<crate::resources::CompassBearing>().0;
+        let mut rows = self.compass_targets();
+        let at = selected
+            .and_then(|s| rows.iter().position(|r| r.target == s))
+            .or_else(|| rows.iter().position(|r| r.target == CompassTarget::Home))?;
+        Some(rows.swap_remove(at))
     }
 
     /// Points the compass, or clears it with `None`.

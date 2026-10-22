@@ -7274,12 +7274,6 @@ mod compass_block_tests {
     use crate::paint::{painted_text, with_painter};
     use crate::text::ui_metrics;
 
-    /// Every arrow `Heading::arrow` can answer with. Nothing else the map
-    /// screen paints uses one, which is what makes them the marker this
-    /// module tests against — the block's words ("home", "13 tiles") all
-    /// collide with the log's own arrival lines.
-    const ARROWS: [char; 9] = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖', '●'];
-
     /// Points the app's compass at its first destination and draws the map.
     /// Returns the shapes and the arrow the block should be showing.
     fn shapes_with_compass(point: bool) -> (Vec<bevy_egui::egui::epaint::ClippedShape>, char) {
@@ -7326,7 +7320,7 @@ mod compass_block_tests {
     }
 
     #[test]
-    fn the_block_names_the_destination_and_is_absent_with_none_picked() {
+    fn the_block_names_the_destination_and_points_home_with_none_picked() {
         let (shapes, arrow) = shapes_with_compass(true);
         let with = painted_text(&shapes).join("");
         assert!(
@@ -7338,10 +7332,19 @@ mod compass_block_tests {
             "and the block carries the figure: {with:?}"
         );
 
+        let home = {
+            let mut app = playing_app();
+            let game = app.game.as_mut().expect("a game");
+            let rows = game.compass_targets();
+            let home = rows
+                .iter()
+                .find(|r| r.target == feral_processes_engine::settlements::CompassTarget::Home);
+            home.expect("a playing app has a home").arrow
+        };
         let without = painted_text(&shapes_with_compass(false).0).join("");
         assert!(
-            !without.chars().any(|c| ARROWS.contains(&c)),
-            "nothing is selected, so the corner is empty: {without:?}"
+            without.contains(home),
+            "nothing is selected, so the block points home ({home:?}): {without:?}"
         );
     }
 

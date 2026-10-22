@@ -163,9 +163,10 @@ fn a_selection_naming_a_link_that_no_longer_exists_is_dropped() {
     game.world.despawn(link);
 
     assert_eq!(
-        game.compass_bearing(),
-        None,
-        "the derivation drops a target that stopped existing — no cleanup hook"
+        game.compass_bearing().map(|r| r.target),
+        Some(CompassTarget::Home),
+        "the derivation drops a target that stopped existing — no cleanup \
+         hook — and the compass falls back to home"
     );
 }
 
@@ -327,5 +328,26 @@ fn an_outpost_bearing_resolves_survives_a_save_and_goes_none_when_it_is_lost() {
         .resource_mut::<crate::resources::Outposts>()
         .0
         .remove(&tile);
-    assert!(loaded.compass_bearing().is_none());
+    assert_eq!(
+        loaded.compass_bearing().map(|r| r.target),
+        Some(CompassTarget::Home)
+    );
+}
+
+#[test]
+fn with_nothing_picked_the_compass_points_home() {
+    let mut game = game();
+    assert_eq!(
+        game.compass_bearing().map(|r| r.target),
+        Some(CompassTarget::Home),
+        "a fresh run has picked nothing"
+    );
+
+    game.set_compass_bearing(Some(CompassTarget::Link((1, 1))));
+    game.set_compass_bearing(None);
+    assert_eq!(
+        game.compass_bearing().map(|r| r.target),
+        Some(CompassTarget::Home),
+        "and clearing the pick is pointing home again"
+    );
 }

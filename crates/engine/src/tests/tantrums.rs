@@ -1033,9 +1033,14 @@ fn a_fleeing_bystander_draws_no_rng() {
     reseed_rng(&mut game, 77);
     let mut control = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     reseed_rng(&mut control, 77);
+    let before = at(&game, staff[2]);
     for _ in 0..5 {
         game.run_flight(&staff);
     }
+    assert!(
+        game.world.get::<Fleeing>(staff[2]).is_some() && at(&game, staff[2]) != before,
+        "the bystander must actually have fled for this to measure anything"
+    );
     use rand::RngExt;
     let next = |g: &mut Game| -> u64 { g.world.resource_mut::<GameRng>().0.random() };
     assert_eq!(
@@ -1118,4 +1123,34 @@ fn a_fleeing_body_is_released_when_the_base_stops_being_established() {
     let rest: Vec<Entity> = staff[..staff.len() - 1].to_vec();
     game.run_flight(&rest);
     assert!(game.world.get::<Fleeing>(staff[2]).is_none());
+}
+
+#[test]
+fn an_idle_bystander_stays_put_once_clear_instead_of_wandering_back() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    let (a, v, watcher) = (staff[0], staff[1], staff[2]);
+    place_at(&mut game, a, 6, 0);
+    place_at(&mut game, v, 8, 0);
+    place_at(&mut game, watcher, 7, 1);
+    stage_a_brawl(&mut game, a, v, 100);
+    // Across two of the drift's beats, all inside the linger.
+    for i in 0..12 {
+        game.tick();
+        place_at(&mut game, a, 6, 0);
+        place_at(&mut game, v, 8, 0);
+        if i >= 5 {
+            let goal = game
+                .world
+                .get::<Fleeing>(watcher)
+                .expect("still lingering")
+                .goal;
+            assert_eq!(
+                at(&game, watcher),
+                goal,
+                "a fleeing idle body is not wandered"
+            );
+            assert!(!in_the_walled_room(&game, goal));
+        }
+    }
 }

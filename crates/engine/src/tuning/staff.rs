@@ -449,6 +449,11 @@ pub const TANTRUM_FLEE_TILES: i32 = 5;
 /// the posted ones are free to walk back to their stations. Unmeasured.
 pub const TANTRUM_FLEE_LINGER_TICKS: u64 = 10;
 
+// The linger starts the moment a body is clear of the fight's room, which can
+// be before the brawl closes. Outlasting the longest brawl is what keeps it
+// from lapsing and walking back into a fight still going.
+const _: () = assert!(TANTRUM_FLEE_LINGER_TICKS > TANTRUM_TICKS_MAX as u64);
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

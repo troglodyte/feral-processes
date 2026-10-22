@@ -104,7 +104,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `DEFEND_AGGRO_WEIGHT` weights a slot a battle map has none of, and the
   round-cadence buff leaves a body on the last rung bracing against nobody.
 - **`Game::swing_range` is the one door for how far a body swings, and its
-  three readers are calls rather than copies** — holding a weapon at all
+  readers are calls rather than copies** — holding a weapon at all
   replaces the species figure, and the range is a property of the body rather
   than of the move it rolls.
 - **A swing needs line of sight, checked unconditionally** because

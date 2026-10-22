@@ -2689,6 +2689,26 @@ fn a_worn_weapon_replaces_the_species_range() {
     assert_eq!(game.swing_range(shooter), 3);
 }
 
+/// The range number the board floats over a body is `Game::swing_range`'s
+/// own answer, armed and unarmed.
+#[test]
+fn a_bodys_view_carries_its_swing_range() {
+    let mut game = game();
+    let wild = tactical_fight(&mut game, 1, 200)[0];
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    let view = game.tactical_view().expect("the fight is open");
+    let range_of = |entity| {
+        view.bodies
+            .iter()
+            .find(|b| b.entity == entity)
+            .expect("the body is on the board")
+            .swing_range
+    };
+    assert_eq!(range_of(player), 3, "the worn router reaches three");
+    assert_eq!(range_of(wild), game.swing_range(wild));
+}
+
 /// Stands `player` and `other` on chosen cells inside an open fight.
 ///
 /// `move_to` rather than `place` — both are already seated by the time a

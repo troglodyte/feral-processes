@@ -477,10 +477,12 @@
   `seam:a-brace-on-a-board-is-the-group-models-and-only-the` for the argument.
 
 - **`Game::swing_range` is the one door for how far a body swings, and its
-  three readers are calls rather than copies.** All three hard-coded
+  readers are calls rather than copies.** The three rule readers hard-coded
   `TACTICAL_MELEE_RANGE` before it existed — `tactical_attack`'s gate,
-  `Intent::Swing`'s band and `swing_at_best_neighbour`'s target filter — and
-  **nothing fails to compile when one drifts**: a body whose band says two
+  `Intent::Swing`'s band and `swing_at_best_neighbour`'s target filter; the
+  fourth, `TacticalBody::swing_range`, is the number the board floats over
+  the acting and aimed bodies, so a drawn range cannot disagree with the
+  refused one — and **nothing fails to compile when one drifts**: a body whose band says two
   and whose filter says one walks into position and then passes its turn,
   which reads as the AI being stupid rather than as a bug. Three decisions
   under it. **Holding a weapon at all replaces the species figure**, and a

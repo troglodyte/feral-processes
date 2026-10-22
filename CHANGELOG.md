@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.32
+
+**While you mark out an Excavation or a Stockpile zone, the key bar at the bottom shows that mode's own keys, with the floor brush and farm-plot tool you're holding on their keys.** The brush and plot line used to float in the map's top-left corner under the base stock box, and the key bar kept showing the map's keys, which none of the other modes do. It now follows the battle map's aiming cursor: `↑↓←→ move · Space box · F brush: plain · P plot · Esc done`, and once a corner is down, Space and Esc read `finish box` and `drop corner`.
+
 ## 0.19.31
 
 **On a battle map, the body whose turn it is shows how far it can swing, as a yellow number above the top-right of its tile.** Range used to be something you learned only when a swing was refused, so stepping into reach (or staying out of an enemy's) was guesswork. The number is the range the swing actually uses: the held weapon's, or the program's own attack without one. While aiming, the body under the cursor shows its range too.

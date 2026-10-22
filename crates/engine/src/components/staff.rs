@@ -330,3 +330,21 @@ pub struct Siphoned {
 /// programs posted there.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PostedAt(pub (i32, i32));
+
+/// A base program walking clear of a tantrum, and where to.
+///
+/// **Purely visual, and it must never touch anything but the body's
+/// position**: a posted worker keeps its `Task` and its progress, and
+/// every per-tick walker (`haul_step_system`, the dig, build and farm
+/// crews, `drift_idle_staff`) skips a body carrying this, otherwise it
+/// would be pulled straight back to its post the next tick.
+///
+/// Not saved, `Brawls`' reason: the fight it answers is not saved either,
+/// and a reload costs a bystander nothing but the walk.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fleeing {
+    pub goal: (i32, i32),
+    /// The tick the marker clears on. `None` while a brawl is still open
+    /// beside the body; set once it closes.
+    pub until: Option<u64>,
+}

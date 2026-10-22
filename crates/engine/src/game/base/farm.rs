@@ -11,7 +11,9 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{CropGrowth, FarmJob, FarmPlot, FarmTile, Position, Task, TaskKind};
+use crate::components::{
+    CropGrowth, FarmJob, FarmPlot, FarmTile, Fleeing, Position, Task, TaskKind,
+};
 use crate::crops::{CropDb, CropId};
 use crate::game::base::hauling;
 use crate::items::FloorThing;
@@ -221,7 +223,9 @@ impl Game {
             return;
         }
         let mut tenders: Vec<(i32, i32, Entity)> = {
-            let mut query = self.world.query::<(Entity, &Task, &Position)>();
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Task, &Position), Without<Fleeing>>();
             query
                 .iter(&self.world)
                 .filter(|(_, task, _)| matches!(task.kind, TaskKind::Tend(_)))

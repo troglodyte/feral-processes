@@ -2662,3 +2662,36 @@ fn a_cut_off_miner_does_not_hold_the_assembler_back() {
         "the unreachable miner is dropped, so the assembler is worked"
     );
 }
+
+/// A builder walking clear of a tantrum keeps its post and is not walked
+/// back to the site by the build crew.
+#[test]
+fn the_build_crew_does_not_walk_a_fleeing_builder() {
+    let (mut game, node) = base_with_a_node(1133);
+    let body = builder(&mut game);
+    file_upgrade(&mut game, node).unwrap();
+    for _ in 0..200 {
+        if game
+            .world
+            .get::<Task>(body)
+            .is_some_and(|t| t.kind == TaskKind::Construct)
+        {
+            break;
+        }
+        game.tick();
+    }
+    assert!(game.world.get::<Task>(body).is_some(), "builder is posted");
+    let here = *game.world.get::<Position>(body).unwrap();
+    game.world
+        .entity_mut(body)
+        .insert(crate::components::Fleeing {
+            goal: (here.x, here.y),
+            until: None,
+        });
+
+    for _ in 0..5 {
+        game.run_build_crew();
+    }
+
+    assert_eq!(*game.world.get::<Position>(body).unwrap(), here);
+}

@@ -1018,14 +1018,7 @@ pub(super) fn draw_tactical_map(
     // player aiming at any corner of a 2x2 squad must see the same box
     // the swing will actually resolve against, not a quarter of it.
     if let Some(cell) = cursor {
-        let anchor = view
-            .bodies
-            .iter()
-            .find(|b| {
-                let f = b.footprint.max(1) as i32;
-                (b.cell.0..b.cell.0 + f).contains(&cell.0)
-                    && (b.cell.1..b.cell.1 + f).contains(&cell.1)
-            })
+        let anchor = body_at(view, cell)
             .map(|b| (b.cell, b.footprint.max(1) as f32))
             .unwrap_or((cell, 1.0));
         let (px, py) = tile_origin_px(
@@ -1064,7 +1057,66 @@ pub(super) fn draw_tactical_map(
             painter.rect_lines(px, py, cell_px - 1.0, cell_px - 1.0, 2.0, palette::EMPHASIS);
         }
     }
+    // How far the acting body and the aimed one swing, so the player can
+    // step into — or out of — reach. Last, so no bolt or mark covers it,
+    // and bounds-checked for the arrow's reason.
+    for body in ranged_bodies(view, cursor) {
+        let (px, py) = slid_px(fx, body);
+        if on_pane(px, py) {
+            let cell_px = tile_px * body.footprint.max(1) as f32;
+            draw_range_tag(painter, body.swing_range, px, py, cell_px, glyph_px);
+        }
+    }
     washes.into_iter().map(|(wash, _)| wash).collect()
+}
+
+/// The bodies that float their swing range: the acting one, and the one
+/// under the aim cursor when that is someone else.
+fn ranged_bodies(
+    view: &TacticalView,
+    cursor: Option<(i32, i32)>,
+) -> impl Iterator<Item = &TacticalBody> {
+    let acting = acting_body(view);
+    let aimed = cursor
+        .and_then(|cell| body_at(view, cell))
+        .filter(|b| acting.is_none_or(|a| a.entity != b.entity));
+    acting.into_iter().chain(aimed)
+}
+
+/// The body standing on `cell`, by any cell of its footprint —
+/// `Game::tactical_occupant`'s own rule.
+fn body_at(view: &TacticalView, cell: (i32, i32)) -> Option<&TacticalBody> {
+    view.bodies.iter().find(|b| {
+        let f = b.footprint.max(1) as i32;
+        (b.cell.0..b.cell.0 + f).contains(&cell.0) && (b.cell.1..b.cell.1 + f).contains(&cell.1)
+    })
+}
+
+/// A body's swing range, floated off the top-right corner of its footprint.
+///
+/// **Above the tile rather than in its corner**, the turn arrow's own
+/// reason: the cover sunrise owns the top-right corner inside the tile. The
+/// aim yellow because a range is a targeting fact, outlined in the bar
+/// trough's dark so it reads over any ground or sprite.
+fn draw_range_tag(painter: &Painter, range: u32, px: f32, py: f32, cell_px: f32, glyph_px: u16) {
+    let text = range.to_string();
+    let size = (glyph_px * 2 / 3).max(1);
+    let dims = painter.measure_map(&text, size);
+    let x = px + cell_px - dims.width / 2.0;
+    let y = py - TURN_ARROW_GAP;
+    for (dx, dy) in [
+        (-1.0, -1.0),
+        (0.0, -1.0),
+        (1.0, -1.0),
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (-1.0, 1.0),
+        (0.0, 1.0),
+        (1.0, 1.0),
+    ] {
+        painter.map(&text, x + dx, y + dy, size, palette::BAR_TROUGH);
+    }
+    painter.map(&text, x, y, size, palette::AIM);
 }
 
 /// The body whose turn it is — the one derivation of that, since the camera,
@@ -4528,6 +4580,92 @@ mod tests {
                 .iter()
                 .any(|(t, _)| t.starts_with("CHG"))
         );
+    }
+
+    /// Whether a run of `text` was painted in the aim yellow — the range
+    /// number's own ink, as against its dark outline.
+    fn painted_in_aim(drawn: &[(String, Color)], text: &str) -> bool {
+        drawn.iter().any(|(t, c)| {
+            t == text
+                && (c.r - palette::AIM.r).abs() < 0.01
+                && (c.g - palette::AIM.g).abs() < 0.01
+                && (c.b - palette::AIM.b).abs() < 0.01
+        })
+    }
+
+    /// The acting body floats its swing range; a body that is neither
+    /// acting nor aimed at does not.
+    #[test]
+    fn the_acting_body_floats_its_swing_range() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let acting = acting_body(&view).expect("someone acts").entity;
+        for b in &mut view.bodies {
+            b.swing_range = if b.entity == acting { 7 } else { 8 };
+        }
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            painted_in_aim(&crate::paint::painted_map_glyphs(&shapes), "7"),
+            "the acting body's range is missing"
+        );
+        assert!(
+            !painted_in_aim(&crate::paint::painted_map_glyphs(&shapes), "8"),
+            "a bystander floated its range"
+        );
+    }
+
+    /// The body under the aim cursor floats its range too, so the player
+    /// can read a hostile's reach before stepping into it.
+    #[test]
+    fn the_aimed_body_floats_its_swing_range() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let acting = acting_body(&view).expect("someone acts").entity;
+        let aimed = view
+            .bodies
+            .iter()
+            .find(|b| b.entity != acting)
+            .expect("a second body")
+            .cell;
+        for b in &mut view.bodies {
+            b.swing_range = if b.entity == acting { 7 } else { 8 };
+        }
+        let overlay = Overlay {
+            cursor: Some(aimed),
+            ..Overlay::default()
+        };
+        let mut fx = Fx::new();
+        let (_, shapes) =
+            with_painter(|p| draw_tactical_map(&view, &overlay, &mut fx, p, pane(), 32.0, 24));
+        assert!(
+            painted_in_aim(&crate::paint::painted_map_glyphs(&shapes), "7"),
+            "the acting body's range is missing"
+        );
+        assert!(
+            painted_in_aim(&crate::paint::painted_map_glyphs(&shapes), "8"),
+            "the aimed body's range is missing"
+        );
+    }
+
+    /// A finished board has nobody acting, so nothing floats a range.
+    #[test]
+    fn a_frozen_board_floats_no_range() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open").frozen();
+        for b in &mut view.bodies {
+            b.swing_range = 7;
+        }
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(!painted_in_aim(
+            &crate::paint::painted_map_glyphs(&shapes),
+            "7"
+        ));
     }
 
     /// A charger's bar offers the decision and nothing the engine refuses.

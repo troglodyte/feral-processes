@@ -111,6 +111,10 @@ pub struct TacticalBody {
     /// `Some((k, n))` while this body is winding up a charge: turns spent so
     /// far and turns to full power (`components::Charging`).
     pub charge: Option<(u32, u32)>,
+    /// How many cells this body's swing reaches — `Game::swing_range`'s own
+    /// answer, so the number the board floats over it is the range the
+    /// swing is refused against.
+    pub swing_range: u32,
 }
 
 /// The cells a charge has locked, for the board to wash as a danger zone.
@@ -660,6 +664,7 @@ impl Game {
                 .world
                 .get::<Charging>(entity)
                 .map(|c| (c.progress, c.rounds)),
+            swing_range: self.swing_range(entity),
         }
     }
 

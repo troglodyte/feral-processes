@@ -236,16 +236,16 @@ pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 /// The odds of each pack tactic, keyed by the behaviour id of the pack's
 /// toughest body (an id with no row rolls on `default`).
 ///
-/// Columns are `PackTactic::ALL`'s order: `[Rush, Together, Hold]`. Integer
-/// weights, so a roll is `derive::index` over their sum and nothing in it is
-/// a float. `Rush` stays above zero in every row, which is what lets a roll
+/// Columns are `PackTactic::ALL`'s order: `[Rush, Together, Hold,
+/// Formation, Flank]`. Integer weights, so a roll is `derive::index` over
+/// their sum and nothing in it is a float. `Rush` stays above zero in every row, which is what lets a roll
 /// whose other tactics are all ineligible still answer.
-pub const PACK_TACTIC_ODDS: [(&str, [u32; 3]); 5] = [
-    ("default", [2, 2, 2]),
-    ("brute", [5, 4, 1]),
-    ("hunter", [5, 2, 1]),
-    ("skirmisher", [2, 1, 6]),
-    ("cautious", [2, 1, 6]),
+pub const PACK_TACTIC_ODDS: [(&str, [u32; 5]); 5] = [
+    ("default", [2, 2, 2, 2, 2]),
+    ("brute", [5, 4, 1, 0, 1]),
+    ("hunter", [4, 1, 1, 1, 5]),
+    ("skirmisher", [2, 1, 5, 0, 4]),
+    ("cautious", [2, 1, 5, 4, 0]),
 ];
 
 /// Added to the fold the pack roll is drawn from, so it is independent of
@@ -296,6 +296,42 @@ pub const TACTICAL_HOLD_ALERT_RANGE: u32 = 4;
 /// How many rounds a hold waits before giving up. Without it a player who
 /// also waits stalls the fight for good.
 pub const TACTICAL_HOLD_ROUNDS: u32 = 6;
+
+/// How many cells behind the front rank's line a pack `Formation`'s back
+/// rank stands. (A pack formation is a tactic; `FORMATIONS` below is the
+/// unrelated squad table.)
+pub const TACTICAL_FORMATION_DEPTH: i32 = 2;
+
+/// What a pack `Formation` charges a body per step off its slot, on one axis
+/// per rank: a front-rank body for straying along the line, a back-rank body
+/// for standing ahead of its slot (`PackPlan::cell_terms` says why).
+///
+/// Above `TACTICAL_FORMATION_BACK_CLOSING`, or a back-rank body's closing
+/// would pay its way past the line; at the default closing weight, so a
+/// front-rank body still advances, dragging its slot with it as the line's
+/// centre moves.
+pub const TACTICAL_FORMATION_WEIGHT: f32 = 1.0;
+
+/// The multiplier on a back-rank body's closing term under `Formation`:
+/// below one, so it keeps behind the line rather than racing to its band.
+pub const TACTICAL_FORMATION_BACK_CLOSING: f32 = 0.25;
+
+/// What `Flank`'s focus adds to a swing at a body, per other packmate already
+/// within melee of it — on the policy's feature scale, where the default
+/// profile weighs a target's raw Integrity at one a point.
+pub const TACTICAL_FOCUS_BONUS: f32 = 2.0;
+
+/// The most packmates focus counts on one target, so a swarmed body is not
+/// worth more than every other consideration put together.
+pub const TACTICAL_FOCUS_CAP: u32 = 2;
+
+/// What `Flank` charges a cell per packmate already on the same side of the
+/// target (one of eight compass sectors), so attackers spread round it.
+pub const TACTICAL_FLANK_CROWD: f32 = 2.0;
+
+/// What `Flank` pays a cell on the side of the target opposite a packmate.
+/// Far below `TACTICAL_AI_REACH_SCORE`, so no body gives up a swing for it.
+pub const TACTICAL_FLANK_PINCER: f32 = 3.0;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Tactical squads

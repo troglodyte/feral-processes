@@ -182,6 +182,43 @@ The pack takes cover and waits.
   - The existing `walk_risk` provocation price still applies, so a flanker
     does not walk through the player's reach to get around them.
 
+### Phase 2 as built
+
+Built on branch `pack-tactics-2`. Where it differs from the text above, the
+code and this section win:
+
+- **Each rank is charged on one axis, not by its distance to the slot.**
+  Slots are read from where the front rank stands now, so a full-distance
+  charge priced every step forward at what closing pays and the line never
+  advanced. A front-rank body pays only for straying *along* the line. A
+  back-rank body pays only for standing *ahead* of its slot (one-sided):
+  held to the slot outright, the rootkits stood out of their own range while
+  the front fought.
+- **Formation is easier on the party than Rush, by decision.** Every setting
+  of depth, back closing and weight measured 7–12% Integrity lost against
+  Rush's 15% (11.85% as shipped), outside the 20% bar; keeping ranged bodies behind is what costs
+  the pack damage. The user chose to ship it as an easier tactic.
+  Measurement: `docs/measurements/2026-10-22-pack-tactics-phase-2.md`.
+- **Focus applies to swing candidates only.** A routine candidate in
+  `choose_hostile_intent` names no single body, so it gets no bonus.
+  `TACTICAL_FOCUS_CAP` caps the *count* of packmates, not the bonus.
+- **A flanker's target** is the body its profile would swing at from where
+  it stands, with focus counted (`rank_swing_targets_by`), chosen inside
+  `pack::plan` so the turn and the forecast agree.
+- **Rank is the swing alone.** A body is back rank when `swing_range` is
+  above melee; a ready routine does not count. Readiness flips with a
+  cooldown, which could break the line with its melee body standing, and the
+  roll runs before the battle is seated, so it answered differently.
+- **Geometry is footprint centres, one point per body.** Flank's sectors and
+  both formation centroids are measured from each body's middle, and a
+  squad's slot is anchored at the end its footprint grows from.
+- **A formation faces and engages enemies, not outsiders**: the bodies
+  `tactical_sides` makes targets, so a cloaked body or the Home is never the
+  line's front, and a packmate standing on a decoy is never an enemy.
+- **Odds rows:** default `[2,2,2,2,2]`, brute `[5,4,1,0,1]`, hunter
+  `[4,1,1,1,5]`, skirmisher `[2,1,5,0,4]`, cautious `[2,1,5,4,0]`
+  (`[Rush, Together, Hold, Formation, Flank]`).
+
 ## Messages
 
 All lines go to the battle log through the existing logging path

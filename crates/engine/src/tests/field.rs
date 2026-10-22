@@ -388,13 +388,25 @@ fn an_ally_picker_row_carries_the_targets_stats() {
 }
 
 /// The player is a target too, and carries no `Creature` — the stats have to
-/// come off `Stats`, which both sides have, rather than off anything only a
-/// program owns.
+/// come off what both sides have (`Stats`, and `effective_atk` for ATK),
+/// rather than off anything only a program owns.
 #[test]
 fn the_ally_pickers_player_row_carries_stats_too() {
     let mut game = game_with_the_field_routine_installed();
     let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Test Overclock".to_string(),
+            power: 13,
+            remaining: 5,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
     let stats = *game.world.get::<Stats>(player).unwrap();
+    assert_ne!(game.effective_atk(player), stats.atk);
 
     let targets = game.field_routine_targets(0);
     let row = targets

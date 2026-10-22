@@ -12,7 +12,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 - [ ] Stale `watching`: `App::leave_run` and `App::install_game` (`app/lifecycle.rs`) never clear `watching`, so the camera can follow a recycled `Entity` in the next run. Write the failing reproducer first. The structural fix is [0013](0013-a-run-struct-on-app.md).
 
-- [ ] Roster `mitigation` is raw beside the now-effective `atk`: `PetInfo`, `CompanionInfo`, `EnemyGroupView`, `ManifestView` and `FieldRoutineTargetView` read `stats.mitigation`; `Game::effective_mitigation` exists. [0012](0012-open-questions-from-the-review.md) decided atk only, so ask before doing it.
+- [ ] Roster `mitigation` is raw beside the now-effective `atk`: `PetInfo`, `CompanionInfo`, `EnemyGroupView`, a program's `ManifestView` and `FieldRoutineTargetView` read `stats.mitigation`; `Game::effective_mitigation` exists. [0012](0012-open-questions-from-the-review.md) decided atk only, so ask before doing it.
 
 ## Assets and tests
 

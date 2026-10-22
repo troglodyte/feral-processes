@@ -12,6 +12,8 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 - [ ] Stale `watching`: `App::leave_run` and `App::install_game` (`app/lifecycle.rs`) never clear `watching`, so the camera can follow a recycled `Entity` in the next run. Write the failing reproducer first. The structural fix is [0013](0013-a-run-struct-on-app.md).
 
+- [ ] Roster `mitigation` is raw beside the now-effective `atk`: `PetInfo`, `CompanionInfo`, `EnemyGroupView`, `ManifestView` and `FieldRoutineTargetView` read `stats.mitigation`; `Game::effective_mitigation` exists. [0012](0012-open-questions-from-the-review.md) decided atk only, so ask before doing it.
+
 ## Assets and tests
 
 - [ ] Implement [0016](0016-shipped-assets-deny-unknown-fields.md): `#[serde(deny_unknown_fields)]` on every shipped asset kind's def types.
@@ -42,7 +44,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 - [x] ~~Hub files become directories~~ — `tuning`, `components` and `views` split by domain in 0.19.16. app-core `lib.rs` and gui `render/mod.rs` follow `CLAUDE.md`'s "split when you're in it" rule instead.
 - [x] ~~Dependencies build with `debug = "line-tables-only"`~~ — unreleased.
 - [x] ~~The launcher rule counts six bins~~ — unreleased.
-- [x] ~~Roster, party and enemy rows quote `Game::effective_atk`~~ — unreleased.
+- [x] ~~Roster, party, enemy, manifest and ally-picker rows quote `Game::effective_atk`~~ — unreleased.
 - [x] ~~The shipped-assets test asserts `AssetDbs.warnings` is empty~~ — unreleased.
 - [x] ~~`SCRIM` is declared once, in `render/mod.rs`~~ — unreleased.
 - [x] ~~`docs/audit-gen.py` reads `tuning/`~~ — unreleased.

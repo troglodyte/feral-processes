@@ -771,6 +771,18 @@ fn companion_rows_quote_effective_attack() {
     assert_eq!(row.atk, effective);
 }
 
+/// A program's own manifest page agrees with its roster row.
+#[test]
+fn a_program_manifest_quotes_effective_attack() {
+    let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Atk, 13));
+    let effective = game.effective_atk(pet);
+    assert_ne!(effective, game.world.get::<Stats>(pet).unwrap().atk);
+
+    assert_eq!(game.manifest(pet).unwrap().atk, effective);
+}
+
 /// An enemy row quotes effective attack too, so a sap reads on the screen.
 #[test]
 fn enemy_rows_quote_effective_attack() {

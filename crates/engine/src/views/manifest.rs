@@ -48,8 +48,8 @@ pub struct ManifestView {
     pub xp: Option<(u32, u32)>,
     pub hp: i32,
     pub max_hp: i32,
-    /// The player's is `Game::effective_atk` (equipment folded in); a
-    /// program's is its raw `Stats`.
+    /// `Game::effective_atk`, for the player and a program alike, so the
+    /// page agrees with the roster row.
     pub atk: i32,
     /// **Percentage points** — see `components::Stats::mitigation`.
     pub mitigation: i32,

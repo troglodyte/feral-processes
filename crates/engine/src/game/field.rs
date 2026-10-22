@@ -148,11 +148,12 @@ impl Game {
         kind: Option<FieldBuffKind>,
     ) -> FieldRoutineTargetView {
         let holder = self.routine_holder_view(entity, name);
-        let (hp, max_hp, atk, mitigation, power) = self
+        let (hp, max_hp, mitigation, power) = self
             .world
             .get::<Stats>(entity)
-            .map(|s| (s.hp, s.max_hp, s.atk, s.mitigation, s.power()))
+            .map(|s| (s.hp, s.max_hp, s.mitigation, s.power()))
             .unwrap_or_default();
+        let atk = self.effective_atk(entity);
         FieldRoutineTargetView {
             entity: holder.entity,
             glyph: holder.glyph,

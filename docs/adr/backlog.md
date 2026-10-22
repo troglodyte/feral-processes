@@ -42,9 +42,9 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 ## Done
 
 - [x] ~~Hub files become directories~~ — `tuning`, `components` and `views` split by domain in 0.19.16. app-core `lib.rs` and gui `render/mod.rs` follow `CLAUDE.md`'s "split when you're in it" rule instead.
-- [x] ~~Dependencies build with `debug = "line-tables-only"`~~ — unreleased.
-- [x] ~~The launcher rule counts six bins~~ — unreleased.
-- [x] ~~Roster, party, enemy, manifest and ally-picker rows quote `Game::effective_atk`~~ — unreleased.
-- [x] ~~The shipped-assets test asserts `AssetDbs.warnings` is empty~~ — unreleased.
-- [x] ~~`SCRIM` is declared once, in `render/mod.rs`~~ — unreleased.
-- [x] ~~`docs/audit-gen.py` reads `tuning/`~~ — unreleased.
+- [x] ~~Dependencies build with `debug = "line-tables-only"`~~ — 0.19.29.
+- [x] ~~The launcher rule counts six bins~~ — 0.19.29.
+- [x] ~~Roster, party, enemy, manifest and ally-picker rows quote `Game::effective_atk`~~ — 0.19.29.
+- [x] ~~The shipped-assets test asserts `AssetDbs.warnings` is empty~~ — 0.19.29.
+- [x] ~~`SCRIM` is declared once, in `render/mod.rs`~~ — 0.19.29.
+- [x] ~~`docs/audit-gen.py` reads `tuning/`~~ — 0.19.29.

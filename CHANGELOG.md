@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.29
+
+**A program's attack reads the same on every screen, and it is the attack with its buffs in.** The roster, the party band, a program's own page, the ally picker for a field routine and the enemy rows in a fight all showed a program's bare attack, so an Overclock or a sap never showed up on any of them, while your own attack already included your gear and buffs. They now all show the attack with buffs, saps and emulation folded in. A status that cuts attack by a percentage, such as Throttled, still shows as its own tag beside the number rather than in it. Mitigation on those rows is still the bare figure.
+
 ## 0.19.28
 
 **Some routines now deal a damage type, and the routine page names it.** Interrupt Request deals Voltage; Broadcast Storm and Packet Shred deal Noise; the three Row Hammer routines deal Radiation; Null Cache deals Magnetic. A typed routine is cut by the target's resistance to that type and carries the type's side effect, the way a typed weapon already did. The routine page shows the type after the damage, as in "Damage 8–14 Voltage". A draining routine heals off the damage that got through, so a resisted drain heals less, and its log line says how much was stopped. Bus Fault stays untyped: as Voltage across the whole field it would have been a large hidden buff to anything casting it. Routine files can set `damage_type:` on a draining effect too. The balance curves did not move.

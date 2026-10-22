@@ -94,11 +94,8 @@ Reading and housekeeping:
   own turn
 - , — cycle the world's speed: x1, x2, x4
 - s — save
-- q — main menu, which confirms first
+- Esc — Game menu: gameplay, audio and graphics settings, and Save & quit
 - +/- — zoom
-- [/] — volume (they turn pages in the base report instead)
-- \ — visual effects
-- F3 — frame timings
 
 On the companions screen, < and > move the highlighted member along the battle line; the front slot
 draws the most fire. A routine slot takes an etched disk, never a routine you merely know — on the

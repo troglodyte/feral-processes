@@ -160,12 +160,6 @@ const SPECIAL_KEYS: &[KeyCode] = &[
     KeyCode::Tab,
 ];
 
-const DEFAULT_VOLUME: f32 = 0.2;
-const VOLUME_STEP: f32 = 0.1;
-/// How long a readout ("Volume: NN%", "Effects: off") stays on screen
-/// after the key that changed it, in seconds.
-const TOAST_SECONDS: f64 = 1.5;
-
 /// How far apart a primary press and release may land, in pixels, and still
 /// count as a click rather than a drag — `handle_map_pointer`'s own
 /// tolerance. The camera eases toward its target while a travel is live
@@ -197,13 +191,9 @@ const HOVER_OFFSET_PX: f32 = 16.0;
 struct Frontend {
     app: App,
     fx: Fx,
-    volume: f32,
-    toast: Option<String>,
-    toast_until: f64,
     key_repeat: KeyRepeat,
     text_gate: TextGate,
     last_mode: Mode,
-    perf_on: bool,
     perf: perf::PerfMeter,
     sprite_pointer: SpritePointer,
     map_pointer: MapPointer,
@@ -560,32 +550,8 @@ fn handle_wheel_zoom(app: &mut App, ctx: &egui::Context, acc: &mut f32) {
     }
 }
 
-/// Draws a brief centered readout, on top of whatever `render::draw` just
-/// drew — volume and effects are GUI-only concerns (`App` knows nothing
-/// about either), so they stay local to the frame system rather than being
-/// threaded through `render::draw`.
-fn draw_toast(text: &str, p: &Painter) {
-    let m = text::ui_metrics(p.screen_h());
-    let font_size = m.title();
-    let dims = p.measure_ui(text, font_size);
-    let x = (p.screen_w() - dims.width) / 2.0;
-    let y = m.pad + m.title() as f32;
-    // The box's margins were hand-tuned (14 horizontal, 10 above the text,
-    // 12 below the baseline) rather than symmetric, so they're reproduced
-    // as arithmetic on pad/inset/gap instead of one uniform padding value.
-    let margin_x = m.pad + m.inset - 2.0 * m.gap;
-    p.rect(
-        x - margin_x,
-        y - dims.height - m.inset,
-        dims.width + margin_x * 2.0,
-        dims.height + m.inset + m.gap * 2.0,
-        Color::new(0.06, 0.07, 0.10, 0.85),
-    );
-    p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
-}
-
 /// Draws the map's hover label: `lines` in a box beside the pointer, in
-/// `draw_toast`'s colours so the two read as the same kind of overlay.
+/// the perf readout's colours so the two read as the same kind of overlay.
 fn draw_hover(lines: &[String], cursor: egui::Pos2, p: &Painter) {
     let m = text::ui_metrics(p.screen_h());
     let size = m.small();
@@ -617,9 +583,8 @@ fn draw_hover(lines: &[String], cursor: egui::Pos2, p: &Painter) {
 /// Draws the frame-timing readout, on top of everything else.
 ///
 /// Bottom-right rather than anywhere along the top: the status bar claims a
-/// row off the top of the window and `draw_toast` is centred on that same
-/// row, so the top edge is the one place this cannot sit without hiding
-/// something the player asked to see.
+/// row off the top of the window, so the top edge is the one place this
+/// cannot sit without hiding something the player asked to see.
 ///
 /// The box is placed from the text's *measured* width, so it cannot run off
 /// the right edge the way an unmeasured row can — the trap the map's status
@@ -695,13 +660,9 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
         .insert_resource(Frontend {
             app,
             fx: Fx::new(),
-            volume: DEFAULT_VOLUME,
-            toast: None,
-            toast_until: 0.0,
             key_repeat: KeyRepeat::new(),
             text_gate: TextGate::new(),
             last_mode,
-            perf_on: false,
             perf: perf::PerfMeter::new(),
             sprite_pointer: SpritePointer::default(),
             map_pointer: MapPointer::default(),
@@ -833,9 +794,12 @@ fn sync_drone(
     sounds: Res<SoundBank>,
     mut drones: Query<(Entity, Option<&mut AudioSink>), With<AmbientDrone>>,
 ) {
-    let volume = Volume::Linear(frontend.volume * ambience::DRONE_MIX);
+    let volume = Volume::Linear(frontend.app.profile().volume() * ambience::DRONE_MIX);
     match (frontend.ambience.is_active(), drones.iter_mut().next()) {
-        (true, None) => sounds.spawn_drone(&mut commands, frontend.volume * ambience::DRONE_MIX),
+        (true, None) => sounds.spawn_drone(
+            &mut commands,
+            frontend.app.profile().volume() * ambience::DRONE_MIX,
+        ),
         (true, Some((_, Some(mut sink)))) if sink.volume() != volume => sink.set_volume(volume),
         (false, Some((entity, _))) => commands.entity(entity).despawn(),
         _ => {}
@@ -932,41 +896,13 @@ fn frame(
         let ctx = contexts.ctx_mut()?;
         handle_sprite_pointer(&mut fe.app, ctx, &painter, &mut fe.sprite_pointer);
     }
-    // The base report turns its pages on `[`/`]`, which reach the app as
-    // typed text above; volume there would move with every page, and the
-    // popups drawn over a hub screen sit in the same frame.
-    let volume_keys = fe.app.hub_at().is_none()
-        && feral_processes_app_core::base_popup_parent(fe.app.mode).is_none();
-    if volume_keys && input.keyboard.just_pressed(KeyCode::BracketLeft) {
-        fe.volume = (fe.volume - VOLUME_STEP).max(0.0);
-        fe.toast = Some(format!("Volume: {}%", (fe.volume * 100.0).round() as i32));
-        fe.toast_until = now + TOAST_SECONDS;
-    }
-    if volume_keys && input.keyboard.just_pressed(KeyCode::BracketRight) {
-        fe.volume = (fe.volume + VOLUME_STEP).min(1.0);
-        fe.toast = Some(format!("Volume: {}%", (fe.volume * 100.0).round() as i32));
-        fe.toast_until = now + TOAST_SECONDS;
-    }
-    // Backslash rather than a letter: letters reach the game as typed text
-    // above and would collide with its bindings.
-    if input.keyboard.just_pressed(KeyCode::Backslash) {
-        fe.fx.enabled = !fe.fx.enabled;
-        fe.toast = Some(format!(
-            "Effects: {}",
-            if fe.fx.enabled { "on" } else { "off" }
-        ));
-        fe.toast_until = now + TOAST_SECONDS;
-    }
-    // After the toggle, so the frame that turns effects off already holds
+    // The settings live in the profile, which the game menu writes; the
+    // frame only reads them.
+    fe.fx.enabled = fe.app.profile().effects;
+    // After the read, so the frame that turns effects off already holds
     // every sprite on its first cell.
     painter.set_anim_now(fe.fx.enabled.then_some(now));
-    // A function key rather than a letter for the same reason backslash is
-    // one, and one better: letters reach the game as typed text, and F3
-    // produces no text at all, so it cannot collide with a binding on any
-    // screen or any keyboard layout.
-    if input.keyboard.just_pressed(KeyCode::F3) {
-        fe.perf_on = !fe.perf_on;
-    }
+    let volume = fe.app.profile().volume();
 
     // Held rather than played here: `frame_cues` below has to be able to
     // drop one of them, and it cannot do that once the clip is in flight.
@@ -988,24 +924,24 @@ fn frame(
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
     for event in frame_cues(queued, &cues.effects, &cues.tactical_fx, in_base) {
-        sounds.play(&mut commands, event, fe.volume);
+        sounds.play(&mut commands, event, volume);
     }
     fe.fx.begin_frame(now, cues, in_battle);
     fe.fx.observe_log(last_log.as_ref());
     let round = fe.app.game.as_ref().and_then(|g| g.tactical_round());
     if fe.fx.observe_round(round) {
-        sounds.play(&mut commands, SoundEvent::RoundEnd, fe.volume);
+        sounds.play(&mut commands, SoundEvent::RoundEnd, volume);
     }
     // Not during a fight in the base: battle cues want the room to
     // themselves. Nor over a death in it, which keeps `base_pos` until the
     // game-over screen is dismissed.
     let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver;
     if let Some(blip) = fe.ambience.tick(now, ambient) {
-        sounds.play_blip(&mut commands, blip, fe.volume * ambience::BLIP_MIX);
+        sounds.play_blip(&mut commands, blip, volume * ambience::BLIP_MIX);
     }
 
     // Timed whether or not the readout is on: a meter fed only while it is
-    // visible reports the first second after F3 as a cold start every time.
+    // visible reports the first second after the overlay is switched on as a cold start every time.
     let started = std::time::Instant::now();
     render::draw(&mut fe.app, &mut fe.fx, &painter, reveal);
     // `draw_battle` takes them in a battle; this empties what a frame that
@@ -1031,14 +967,8 @@ fn frame(
         }
         handle_wheel_zoom(&mut fe.app, ctx, &mut fe.wheel_acc);
     }
-    if let Some(text) = &fe.toast
-        && now < fe.toast_until
-    {
-        draw_toast(text, &painter);
-    }
-    // Last, so nothing can be drawn over the figures — including the toast,
-    // which the volume keys can put on screen at any moment.
-    if fe.perf_on
+    // Last, so nothing can be drawn over the figures.
+    if fe.app.profile().perf_overlay
         && let Some(readout) = fe.perf.readout()
     {
         draw_perf(&readout.line(), &painter);
@@ -1947,7 +1877,7 @@ mod tests {
     /// can be wrong are being absent and being somewhere it hides something.
     ///
     /// The corner is the half worth pinning: the top of the window carries
-    /// the status bar and the volume toast, so a later edit moving these
+    /// the status bar, so a later edit moving these
     /// figures up there would cover a row the player asked to see, and
     /// nothing else in the suite would notice.
     #[test]

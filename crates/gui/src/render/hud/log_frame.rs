@@ -280,7 +280,7 @@ fn divider() -> Vec<Piece> {
 /// is why.** `the_keybar_fits_the_log_pane` measures what survives at the
 /// smallest supported window; the bar is near enough size-invariant, because
 /// `ui_metrics` ramps the face with the window. Under the handoff's own order
-/// `? help` and `q menu` fell past the cut, which strands every key this bar
+/// `? help` and `Esc menu` fell past the cut, which strands every key this bar
 /// had to drop. So the crossing pair and the three screens that hold the rest
 /// come first, and the answer to the spec's open question is **no**: there is
 /// no slack for `t trade` or `s save` at any supported size, and they stay cut
@@ -326,7 +326,7 @@ pub(in crate::render) fn keybar_segments(actions: Option<&[(String, String)]>) -
         keycap("i", "pack"),
         keycap("D", "downed"),
         keycap("?", "help"),
-        keycap("q", "menu"),
+        keycap("Esc", "menu"),
         divider(),
         keycap("a", "routine"),
         keycap("c", "collect"),
@@ -496,7 +496,13 @@ mod tests {
     /// of the verbs; and `?`, which is where every key this bar had to cut
     /// now lives. A bar that drops `?` strands the keys the four-line block
     /// used to name — and `hjkl` is one of those now.
-    const ESSENTIAL: [&str; 5] = ["< > ascend/descend", "b base", "i pack", "? help", "q menu"];
+    const ESSENTIAL: [&str; 5] = [
+        "< > ascend/descend",
+        "b base",
+        "i pack",
+        "? help",
+        "Esc menu",
+    ];
 
     fn entry(kind: MessageKind, source: MessageSource) -> LogEntry {
         LogEntry {

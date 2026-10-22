@@ -147,8 +147,8 @@ use inventory::{
 use machine_recipe::{draw_machine_recipe, draw_machine_recipe_confirm};
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
-    draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
-    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_escaped, draw_game_menu_page, draw_game_over, draw_load_game,
+    draw_main_menu, draw_quit_app_confirm, draw_save_action,
 };
 use mod_copy::{draw_mod_copy, draw_mod_pick_affix};
 use outposts::{draw_outpost_post, draw_outpost_visit};
@@ -644,9 +644,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
             draw_quit_app_confirm(app.menu_selected, refusal, painter, &m);
         }
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
-        Mode::GameplayOptions | Mode::AudioOptions | Mode::GraphicsOptions => {
-            draw_options(app, refusal, painter, &m)
-        }
+        Mode::GameplayOptions
+        | Mode::AudioOptions
+        | Mode::GraphicsOptions
+        | Mode::QuitRunConfirm => draw_game_menu_page(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
         // The sprite editor hangs off the wizard's Icon step as `App` state
@@ -1731,7 +1732,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }
         }
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
-        Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
     }
@@ -2596,7 +2596,7 @@ mod tests {
         let mut app = census_app();
         app.mode = Mode::GameplayOptions;
         let m = ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_game_menu_page(&app, None, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         assert!(
             drawn
@@ -2616,7 +2616,7 @@ mod tests {
         app.mode = Mode::GameplayOptions;
         let m = ui_metrics(720.0);
         let body = super::popup::popup_body_width(1280.0, PopupSize::Large, &m);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_game_menu_page(&app, None, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         crate::paint::with_painter(|p| {
             for line in &drawn {

@@ -2495,12 +2495,12 @@ pub(super) const FIELD_ONLY_ABILITY: &str = r#"(
 /// asserting that a `Run`-scoped routine held by a companion still lands on
 /// the player, not the companion.
 pub(super) const FIELD_ONLY_RUN_ABILITY: &str = r#"(
-    id: "test_field_trickle",
-    name: "Test Field Trickle",
+    id: "test_field_xp_boost",
+    name: "Test Field XP Boost",
     description: "d",
     target: WholeParty,
     power_cost: 4.0,
-    effect: FieldBuff(kind: Trickle, power: 3, duration: 15),
+    effect: FieldBuff(kind: XpBoost, power: 15),
 )"#;
 
 /// A `Creature`-scoped, `WholeParty`-targeted `FieldBuff` — for the test

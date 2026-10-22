@@ -400,11 +400,14 @@ impl FieldBuffKind {
     /// kinds land on whatever `AbilityTarget` names; `Run`-scoped kinds
     /// always land on the player, since they're pressure or economy
     /// knobs the whole run feels rather than a single combatant's stats.
+    /// `Trickle` is `Creature`-scoped because every companion holds its own
+    /// `PowerReserve`; landing it on the player alone would short a
+    /// `WholeParty` routine of everyone else it names.
     pub fn scope(self) -> FieldScope {
         use FieldBuffKind::*;
         match self {
-            Regen | Atk | Mitigation => FieldScope::Creature,
-            Trickle | CaptureBoost | XpBoost | EncounterDamp | DropBoost => FieldScope::Run,
+            Regen | Trickle | Atk | Mitigation => FieldScope::Creature,
+            CaptureBoost | XpBoost | EncounterDamp | DropBoost => FieldScope::Run,
         }
     }
 

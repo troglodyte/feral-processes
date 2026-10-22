@@ -462,10 +462,9 @@ impl Game {
     /// `Regen` is a heal, not damage, so it goes through `restore_hp`
     /// (which honours `HealBlock`) rather than `apply_damage` — that
     /// function is the only path that *lowers* HP, and routing a heal
-    /// through it would break that invariant. `Trickle` writes `PowerReserve`, which only
-    /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
-    /// exactly that reason) — a companion carrying one is not an error, the
-    /// write simply has nothing to land on.
+    /// through it would break that invariant. `Trickle` writes `PowerReserve`,
+    /// which the player and every companion hold; a body without one (a
+    /// summon) simply has nothing for the write to land on.
     ///
     /// `Regen` is gated on `creature_alive` first: `tick_field_buffs` runs
     /// on every `tick()`, including every battle round, and `Party`

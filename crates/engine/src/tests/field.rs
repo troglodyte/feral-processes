@@ -545,14 +545,14 @@ fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
         &[],
         &[],
         &[],
-        &[("test_field_trickle.ron", FIELD_ONLY_RUN_ABILITY)],
+        &[("test_field_xp_boost.ron", FIELD_ONLY_RUN_ABILITY)],
     );
     let mut game = Game::new(9102, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(companion)
-        .insert(Routines(vec!["test_field_trickle".to_string()]));
+        .insert(Routines(vec!["test_field_xp_boost".to_string()]));
 
     let routines = game.field_routines();
     let index = routines
@@ -575,7 +575,7 @@ fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
     );
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(active.len(), 1);
-    assert_eq!(active[0].kind, FieldBuffKind::Trickle);
+    assert_eq!(active[0].kind, FieldBuffKind::XpBoost);
 }
 
 #[test]
@@ -660,6 +660,45 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
         assert!(
             active[0].runs_until_rest(),
             "an authored duration would give the wide invocation a turn count"
+        );
+    }
+}
+
+/// `trickle_charge` is authored `WholeParty` and every companion holds its
+/// own reserve, so the drip has to reach them too — a `Run` scope used to
+/// land it on the player alone while the routine's name promised the party.
+#[test]
+fn the_shipped_trickle_charge_restores_every_party_members_power() {
+    let mut game = Game::new(9106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.extend([first, second]);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["trickle_charge".to_string()]));
+    for companion in [first, second] {
+        *game.world.get_mut::<PowerReserve>(companion).unwrap() =
+            PowerReserve::new(50.0, crate::components::POWER_MAX);
+    }
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.ability == "trickle_charge")
+        .expect("the routine is listed once installed");
+    game.run_field_routine(index, FieldRoutineTarget::None)
+        .expect("a WholeParty invocation needs no target");
+
+    for holder in [player, first, second] {
+        let active = &game.world.get::<FieldBuff>(holder).unwrap().active;
+        assert_eq!(active.len(), 1, "one buff per body");
+        assert_eq!(active[0].kind, FieldBuffKind::Trickle);
+    }
+    for companion in [first, second] {
+        assert!(
+            reserve_of(&game, companion) > 50.0,
+            "the invocation's own tick should already have dripped Power in"
         );
     }
 }

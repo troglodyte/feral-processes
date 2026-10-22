@@ -498,6 +498,7 @@ way deleting the Currency item does.
     //       anything enemy-facing is refused at load, since there is no
     //       mechanic to aim a field buff at a hostile):
     //         Regen        heals HP each turn
+    //         Trickle      restores Power each turn
     //         Atk          flat Attack bonus
     //         Mitigation   percentage points of damage reduction
     //
@@ -505,7 +506,6 @@ way deleting the Currency item does.
     //       the player regardless of who runs them, so any other target is
     //       a lie about where the buff actually goes, and is refused at
     //       load):
-    //         Trickle       restores Power each turn
     //         CaptureBoost  percent bonus to capture odds
     //         XpBoost       percent bonus to XP earned
     //         EncounterDamp percent reduction to wild encounter odds

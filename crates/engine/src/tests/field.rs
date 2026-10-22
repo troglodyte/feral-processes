@@ -354,13 +354,27 @@ fn game_with_the_field_routine_installed() -> Game {
 /// The picker's whole job is choosing a body for the buff, and every shipped
 /// `OneAlly` routine is about a stat: HP for Regen, ATK for Overclock, DEF
 /// and Mitigation for the other two. Without the numbers on the row, the
-/// only way to pick is to remember them.
+/// only way to pick is to remember them. ATK is the effective figure, so a
+/// body already overclocked reads as such beside its `running` column.
 #[test]
 fn an_ally_picker_row_carries_the_targets_stats() {
     let mut game = game_with_the_field_routine_installed();
     let member = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, member);
+    game.arm_field_buff(
+        member,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Test Overclock".to_string(),
+            power: 13,
+            remaining: 5,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
     let stats = *game.world.get::<Stats>(member).unwrap();
+    let effective = game.effective_atk(member);
+    assert_ne!(effective, stats.atk);
 
     let targets = game.field_routine_targets(0);
     let row = targets
@@ -369,18 +383,30 @@ fn an_ally_picker_row_carries_the_targets_stats() {
         .expect("the party member is offered");
 
     assert_eq!((row.hp, row.max_hp), (stats.hp, stats.max_hp));
-    assert_eq!((row.atk, row.mitigation), (stats.atk, stats.mitigation));
+    assert_eq!((row.atk, row.mitigation), (effective, stats.mitigation));
     assert_eq!(row.power, stats.power());
 }
 
 /// The player is a target too, and carries no `Creature` — the stats have to
-/// come off `Stats`, which both sides have, rather than off anything only a
-/// program owns.
+/// come off what both sides have (`Stats`, and `effective_atk` for ATK),
+/// rather than off anything only a program owns.
 #[test]
 fn the_ally_pickers_player_row_carries_stats_too() {
     let mut game = game_with_the_field_routine_installed();
     let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Test Overclock".to_string(),
+            power: 13,
+            remaining: 5,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
     let stats = *game.world.get::<Stats>(player).unwrap();
+    assert_ne!(game.effective_atk(player), stats.atk);
 
     let targets = game.field_routine_targets(0);
     let row = targets
@@ -389,7 +415,7 @@ fn the_ally_pickers_player_row_carries_stats_too() {
         .expect("the player is always offered");
 
     assert_eq!((row.hp, row.max_hp), (stats.hp, stats.max_hp));
-    assert_eq!(row.atk, stats.atk);
+    assert_eq!(row.atk, game.effective_atk(player));
 }
 
 /// `arm_field_buff` displaces a running `Routine` buff of the same kind, so

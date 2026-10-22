@@ -3851,7 +3851,7 @@ impl Game {
 
 /// Every asset database a `Game` needs, plus the per-file warnings the loads
 /// accumulated for the caller to push into the message log.
-struct AssetDbs {
+pub(crate) struct AssetDbs {
     abilities: AbilityDb,
     tools: ToolDb,
     classes: crate::classes::ClassDb,
@@ -3885,7 +3885,7 @@ struct AssetDbs {
     outposts: crate::outposts::OutpostDb,
     policy: crate::resources::EnemyPolicy,
     behaviours: crate::resources::Behaviours,
-    warnings: Vec<String>,
+    pub(crate) warnings: Vec<String>,
 }
 
 /// Loads every asset directory and refuses an item set that leaves any
@@ -3894,7 +3894,7 @@ struct AssetDbs {
 /// `.expect("validated at startup")`, so a door into the world that skipped
 /// this check would turn a modder's incomplete item set into a panic mid-play
 /// instead of a startup error.
-fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
+pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (mut abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
     // Absent-is-silent: an empty catalogue arms nothing. Loaded straight after
     // `abilities` and before anything derived from them (etched disks, basic

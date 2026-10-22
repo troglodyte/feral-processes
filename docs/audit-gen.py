@@ -150,7 +150,7 @@ def perks_fields(path):
     `effect` and `hook` are prose -- "a direct Stats write at purchase" is not
     in any file -- and are not checked. `const` is checked separately by
     `perk_constants_agree_with_tuning` below, because it is a *quotation* of
-    `tuning.rs` rather than a field of anything.
+    `tuning/` rather than a field of anything.
     """
     text = path.read_text()
     return {
@@ -160,22 +160,25 @@ def perks_fields(path):
 
 
 def perk_constants_agree_with_tuning(table):
-    """The `const` column quotes `tuning.rs` as `NAME = value`, so a retune
+    """The `const` column quotes `tuning/` as `NAME = value`, so a retune
     silently makes this page lie -- the exact failure that left abilities'
     cost column reading 0. Rows naming a constant without a value (the two
     affinity rates, which the page explains in prose instead) are checked for
     existence only."""
-    tuning = (ROOT / "crates" / "engine" / "src" / "tuning.rs").read_text()
+    tuning = "\n".join(
+        f.read_text()
+        for f in sorted((ROOT / "crates" / "engine" / "src" / "tuning").glob("*.rs"))
+    )
     problems = []
     for ident, row in sorted(table.items()):
         name, _, quoted = (x.strip() for x in row["const"].partition("="))
         m = re.search(rf"^pub const {re.escape(name)}\s*:\s*\w+\s*=\s*([^;]+);", tuning, re.M)
         if not m:
-            problems.append(f"{ident}.const: tuning.rs declares no {name}")
+            problems.append(f"{ident}.const: tuning/ declares no {name}")
         elif quoted and float(m.group(1)) != float(quoted):
             problems.append(
                 f"{ident}.const: table says {name} = {quoted}, "
-                f"tuning.rs says {m.group(1).strip()}"
+                f"tuning/ says {m.group(1).strip()}"
             )
     return problems
 

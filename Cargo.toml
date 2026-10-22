@@ -33,3 +33,7 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+# Full debuginfo on the dependency graph made the debug game binary 1.78GB and
+# `target/` hundreds of GB across worktrees. Line tables keep backtraces into
+# bevy, egui and wgpu readable at a fraction of the size (docs/adr/0002).
+debug = "line-tables-only"

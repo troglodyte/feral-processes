@@ -11,17 +11,14 @@
 use feral_processes_engine::progression::StatRow;
 use feral_processes_engine::{DuelComparison, LevelUpReport};
 
-use super::{BORDER, Metrics, PANEL_BG, TEXT, TEXT_DIM};
-use crate::paint::{Color, Painter, Rect};
+use super::{BORDER, Metrics, PANEL_BG, SCRIM, TEXT, TEXT_DIM};
+use crate::paint::{Painter, Rect};
 
 /// How much of the window the panel takes, each way. Narrower than
 /// `notify.rs`'s 0.75: that page centres a paragraph, this one is a fixed
 /// table of short rows that does not need the width.
 const PANEL_W_FRACTION: f32 = 0.5;
 const PANEL_H_FRACTION: f32 = 0.62;
-
-/// Drawn behind the panel, `notify.rs`'s own scrim.
-const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 
 const ESC_HINT: &str = "[Esc] Close";
 const PERKS_HINT: &str = "[P] Perks";

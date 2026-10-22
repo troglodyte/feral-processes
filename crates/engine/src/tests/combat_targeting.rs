@@ -751,3 +751,54 @@ fn a_group_that_falls_mid_round_neither_lends_nor_steals_a_turn() {
         }
     }
 }
+
+/// The roster and party rows quote the attack a companion actually swings
+/// with — a field buff is exactly the case where raw `Stats::atk` lies.
+#[test]
+fn companion_rows_quote_effective_attack() {
+    let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Atk, 13));
+    let effective = game.effective_atk(pet);
+    assert_ne!(effective, game.world.get::<Stats>(pet).unwrap().atk);
+
+    assert_eq!(game.companion_info(pet).unwrap().atk, effective);
+    let row = game
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity == pet)
+        .expect("the tamed program is on the roster");
+    assert_eq!(row.atk, effective);
+}
+
+/// A program's own manifest page agrees with its roster row.
+#[test]
+fn a_program_manifest_quotes_effective_attack() {
+    let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Atk, 13));
+    let effective = game.effective_atk(pet);
+    assert_ne!(effective, game.world.get::<Stats>(pet).unwrap().atk);
+
+    assert_eq!(game.manifest(pet).unwrap().atk, effective);
+}
+
+/// An enemy row quotes effective attack too, so a sap reads on the screen.
+#[test]
+fn enemy_rows_quote_effective_attack() {
+    let mut game = Game::new(99, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    game.arm_buff(
+        enemies[0],
+        ActiveBuff {
+            kind: BuffKind::Atk,
+            remaining: 3,
+            power: 7,
+        },
+    );
+    let effective = game.effective_atk(enemies[0]);
+    assert_ne!(effective, game.world.get::<Stats>(enemies[0]).unwrap().atk);
+
+    let (groups, _) = game.battle_rows().expect("a battle is open");
+    assert_eq!(groups[0].atk, effective);
+}

@@ -138,6 +138,9 @@ fn the_preview_starts_from_the_programs_own_base() {
     open_stats_tab(&mut app, program);
     app.handle_key(GameKey::Char('S'));
     let game = app.game.as_ref().unwrap();
+    // The manifest quotes effective attack and the preview starts from the
+    // base; they agree only because nothing here buffs the program, which is
+    // the case the preview's before-figure has to match.
     let live_atk = game.manifest(program).unwrap().atk;
     let atk_row = app
         .allocation_rows()

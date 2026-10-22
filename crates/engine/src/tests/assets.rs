@@ -204,19 +204,16 @@ fn every_shipped_asset_file_loads_without_a_warning() {
     // A malformed shipped asset is warn-and-skipped like a mod's would
     // be, so it costs the player content silently instead of failing the
     // build. This is the only thing that catches it — a serde attribute
-    // missing from `ItemId` once made every asset load fail this way.
-    let game = Game::new(901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-
-    let skipped: Vec<String> = game
-        .message_log(usize::MAX)
-        .into_iter()
-        .map(|e| e.text)
-        .filter(|text| text.contains("skipped invalid"))
-        .collect();
+    // missing from `ItemId` once made every asset load fail this way. The
+    // whole warning list, not log lines matching one phrase: a dropped rider
+    // or a dangling status id is worded differently and costs content too.
+    let warnings = crate::game::lifecycle::load_asset_dbs(&test_assets_dir())
+        .unwrap()
+        .warnings;
 
     assert!(
-        skipped.is_empty(),
-        "shipped assets must all parse: {skipped:#?}"
+        warnings.is_empty(),
+        "shipped assets must load without a warning: {warnings:#?}"
     );
 }
 

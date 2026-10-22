@@ -2524,7 +2524,7 @@ impl Game {
             xp: exp.map(|e| (e.xp, e.xp_to_next)),
             hp: stats.hp,
             max_hp: stats.max_hp,
-            atk: stats.atk,
+            atk: self.effective_atk(entity),
             mitigation: stats.mitigation,
             damage: self.natural_damage_label(entity),
             power: stats.power(),

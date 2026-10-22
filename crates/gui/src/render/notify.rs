@@ -9,8 +9,8 @@
 use feral_processes_engine::notifications::Notification;
 use feral_processes_engine::text;
 
-use super::{BORDER, Metrics, PANEL_BG, glyph_color};
-use crate::paint::{Color, Painter, Rect};
+use super::{BORDER, Metrics, PANEL_BG, SCRIM, glyph_color};
+use crate::paint::{Painter, Rect};
 
 /// Rows of the window's height the art is given, measured from the top of
 /// the block. The whole block is then centred vertically, so this is a
@@ -26,10 +26,6 @@ const PANEL_FRACTION: f32 = 0.75;
 /// measure is what makes a paragraph hard to read, and the panel is wider
 /// than a comfortable paragraph.
 const BODY_WIDTH_FRACTION: f32 = 0.84;
-
-/// Drawn behind the panel. Light enough that the run shows through around
-/// the notice, dark enough that the map does not compete with it.
-const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 
 const HINT: &str = "Enter or Esc to continue";
 

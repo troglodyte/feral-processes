@@ -44,11 +44,28 @@ pub fn power_drain_per_tick(multiplier: f32) -> f32 {
     HUNGER_DECAY_PER_TICK * multiplier
 }
 
+/// The net Power one tick moves the reserve by: `trickle` (flat, from
+/// `perks::power_trickle_per_tick`) less the drain. Positive refills.
+pub fn power_change_per_tick(multiplier: f32, trickle: f32) -> f32 {
+    trickle - power_drain_per_tick(multiplier)
+}
+
+/// Writes a net `change` to `reserve`: floored by `spend`, capped at `max` by
+/// `restore`, so the trickle refills to full and no further.
+pub fn apply_power_change(reserve: &mut PowerReserve, change: f32, max: f32) {
+    if change >= 0.0 {
+        reserve.restore(change, max);
+    } else {
+        reserve.spend(-change);
+    }
+}
+
 type NeedsTickRow = (
     &'static mut PowerReserve,
     &'static mut Stats,
     Option<&'static Perks>,
     Option<&'static crate::components::Implants>,
+    Option<&'static crate::components::Derived>,
 );
 
 pub fn needs_tick_system(
@@ -56,11 +73,14 @@ pub fn needs_tick_system(
     implant_db: Res<crate::implants::ImplantDb>,
     mut log: ResMut<MessageLog>,
 ) {
-    for (mut needs, mut stats, perks, implants) in &mut query {
+    for (mut needs, mut stats, perks, implants, derived) in &mut query {
         let load = implants.map_or(0, |held| crate::implants::load_of(held, &implant_db));
-        let hunger_multiplier = crate::implants::power_multiplier(perks, load);
+        let change = power_change_per_tick(
+            crate::implants::power_multiplier(perks, load),
+            crate::perks::power_trickle_per_tick(perks),
+        );
         let was_starving = needs.get() <= POWER_MIN;
-        needs.spend(power_drain_per_tick(hunger_multiplier));
+        apply_power_change(&mut needs, change, crate::components::max_power_of(derived));
         if needs.get() <= POWER_MIN {
             stats.hp -= 1;
             if !was_starving {
@@ -3240,6 +3260,28 @@ mod tests {
         // The floor covers the new term too: the best build the game can
         // roll on the quickest species must still cost a whole tick.
         assert_eq!(work_ticks_at_speed(1, 14, 1.0, SiteScales::built(1.32)), 1);
+    }
+
+    #[test]
+    fn one_trickle_rank_cancels_four_load() {
+        let upkeep = crate::implants::drain_factor(4) - 1.0;
+        let net = power_change_per_tick(upkeep, crate::tuning::LOW_POWER_MODE_TRICKLE_PER_LEVEL);
+        assert!(net.abs() < 1e-6, "{net}");
+    }
+
+    #[test]
+    fn a_trickle_refills_to_full_and_no_further() {
+        let max = crate::components::POWER_MAX;
+        let mut reserve = PowerReserve::new(max - 0.01, max);
+        apply_power_change(&mut reserve, 0.03, max);
+        assert_eq!(reserve.get(), max);
+    }
+
+    #[test]
+    fn a_net_drain_still_floors_at_the_minimum() {
+        let mut reserve = PowerReserve::new(0.05, crate::components::POWER_MAX);
+        apply_power_change(&mut reserve, -1.0, crate::components::POWER_MAX);
+        assert_eq!(reserve.get(), POWER_MIN);
     }
 
     #[test]

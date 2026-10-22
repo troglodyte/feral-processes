@@ -408,8 +408,8 @@ impl Game {
 /// The structure install and remove require.
 const SPLICE_RIG: &str = "splice_rig";
 
-/// Extra Power per tick `load` adds, before perks: the share of
-/// `HUNGER_DECAY_PER_TICK` that `drain_factor` multiplies in.
+/// Extra Power per tick `load` adds, which no perk reduces: the share of
+/// `HUNGER_DECAY_PER_TICK` that `drain_factor` adds on.
 fn upkeep_of(load: u32) -> f32 {
     HUNGER_DECAY_PER_TICK * IMPLANT_DRAIN_PER_LOAD * load as f32
 }

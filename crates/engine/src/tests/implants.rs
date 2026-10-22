@@ -267,7 +267,7 @@ fn power_after_a_wait(game: &mut Game) -> f32 {
 }
 
 #[test]
-fn upkeep_scales_with_load_and_low_power_mode_reduces_it_too() {
+fn upkeep_scales_with_load_and_outlives_the_base_drain() {
     let mut game = new_game();
     let bare = power_after_a_wait(&mut game);
     assert!(bare > 0.0);
@@ -280,9 +280,40 @@ fn upkeep_scales_with_load_and_low_power_mode_reduces_it_too() {
     );
 
     let player = game.player_entity();
-    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::LowPowerMode; 3];
-    let reduced = power_after_a_wait(&mut game);
-    assert!(reduced < loaded, "LowPowerMode must cut implant upkeep too");
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::LowPowerMode; 4];
+    let upkeep_only = power_after_a_wait(&mut game);
+    assert!(
+        (upkeep_only - bare * (crate::implants::drain_factor(7) - 1.0)).abs() < 1e-4,
+        "rank 4 cancels the base drain but not implant upkeep: {upkeep_only} vs {bare}"
+    );
+}
+
+/// Past rank 4 the trickle pays implant upkeep first, and Load can only
+/// slow the refill, never speed it.
+#[test]
+fn the_trickle_refills_to_full_and_load_only_slows_it() {
+    let mut game = new_game();
+    let player = game.player_entity();
+    let max = game.max_power(player);
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::LowPowerMode; 8];
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(max / 2.0);
+    let bare_gain = -power_after_a_wait(&mut game);
+    assert!(bare_gain > 0.0, "{bare_gain}");
+
+    install(&mut game, &["dermal_lattice", "overclock_spine"]);
+    let loaded_gain = -power_after_a_wait(&mut game);
+    assert!(loaded_gain < bare_gain, "{loaded_gain} vs {bare_gain}");
+
+    let top_up = max - game.world.get::<PowerReserve>(player).unwrap().get();
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .restore(top_up - 0.001, max);
+    game.wait();
+    assert_eq!(game.world.get::<PowerReserve>(player).unwrap().get(), max);
 }
 
 #[test]

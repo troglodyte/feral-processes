@@ -252,16 +252,24 @@ fn level(perks: Option<&crate::components::Perks>, perk: Perk) -> u32 {
 // The three `StatGain` perks are here too, in the only shape they can
 // take: they are applied once at purchase and never read again.
 
-/// The multiplier on Power (hunger) drain — `Perk::LowPowerMode`.
+/// The multiplier on the base Power (hunger) drain — `Perk::LowPowerMode`.
 ///
-/// **Floored at 0**, so enough levels stop hunger draining entirely. That
-/// is deliberate and unlike `trace_after_obfuscation` below: Power already
-/// has a structural answer in a Recharger Node, so a perk reaching the same
-/// place buys nothing the game did not already sell.
+/// **Floored at 0**, so a few levels stop the base drain entirely. That is
+/// deliberate and unlike `trace_after_obfuscation` below. The floor keeps
+/// refilling out of the multiplier: a negative one would scale with implant
+/// Load and make more Load refill faster. Levels past the floor buy
+/// `power_trickle_per_tick` instead.
 pub fn power_drain_multiplier(perks: Option<&crate::components::Perks>) -> f32 {
     (1.0 - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL
         * level(perks, Perk::LowPowerMode) as f32)
         .max(0.0)
+}
+
+/// Flat Power a tick that `Perk::LowPowerMode` levels past zero drain add.
+pub fn power_trickle_per_tick(perks: Option<&crate::components::Perks>) -> f32 {
+    let to_zero = (1.0 / crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL).ceil() as u32;
+    level(perks, Perk::LowPowerMode).saturating_sub(to_zero) as f32
+        * crate::tuning::LOW_POWER_MODE_TRICKLE_PER_LEVEL
 }
 
 /// `amount` of Trace after `Perk::Obfuscation`'s reduction, **floored at 1
@@ -902,20 +910,34 @@ mod tests {
         }
     }
 
-    /// Power is the one meter a perk may switch off entirely: a Recharger
-    /// Node already deletes it, so the perk reaching the same place sells
-    /// nothing new. Contrast `obfuscation_never_cancels_a_trace_rise`.
-    #[test]
-    fn low_power_mode_can_stop_hunger_draining_altogether() {
-        let maxed = Perks {
+    fn low_power(ranks: usize) -> Perks {
+        Perks {
             points: 0,
-            unlocked: vec![Perk::LowPowerMode; 500],
-        };
+            unlocked: vec![Perk::LowPowerMode; ranks],
+        }
+    }
+
+    /// Power is the one meter a perk may switch off entirely, and rank 4 is
+    /// where it does. Contrast `obfuscation_never_cancels_a_trace_rise`.
+    #[test]
+    fn low_power_mode_stops_the_base_drain_at_rank_four() {
+        assert!(power_drain_multiplier(Some(&low_power(3))) > 0.0);
+        assert_eq!(power_drain_multiplier(Some(&low_power(4))), 0.0);
         assert_eq!(
-            power_drain_multiplier(Some(&maxed)),
+            power_drain_multiplier(Some(&low_power(500))),
             0.0,
-            "the multiplier floors at 0 rather than going negative and refilling"
+            "the multiplier floors at 0; refilling is the trickle's job"
         );
+    }
+
+    #[test]
+    fn low_power_mode_trickles_only_past_zero_drain() {
+        assert_eq!(power_trickle_per_tick(None), 0.0);
+        assert_eq!(power_trickle_per_tick(Some(&low_power(4))), 0.0);
+        let one = power_trickle_per_tick(Some(&low_power(5)));
+        assert!((one - crate::tuning::LOW_POWER_MODE_TRICKLE_PER_LEVEL).abs() < 1e-6);
+        let two = power_trickle_per_tick(Some(&low_power(6)));
+        assert!((two - 2.0 * one).abs() < 1e-6);
     }
 
     /// Trace is the Stack's only escalation pressure, so descending always

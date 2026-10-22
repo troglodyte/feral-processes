@@ -1,6 +1,6 @@
 (
     id: LowPowerMode,
     name: "Low Power Mode",
-    description: "Throttle your own clock. Power drains 1 percentage point slower per level, and enough levels stop the drain entirely.",
+    description: "Throttle your own clock. Power drains a quarter slower per level, and four levels stop it. Each level past four charges Power a little every tick, enough to cover four Load of implants. Implants still cost Power until those extra levels pay for them.",
     cost: 2,
 )

@@ -34,7 +34,7 @@ the repo's `CLAUDE.md`.
 **Five of the twenty reach subsystems the rest never touch.** Obfuscation
 reduces what every Trace source adds while you are in the Stack, floored so a
 source always costs *something* — deliberately unlike Low Power Mode, which
-is allowed to stop hunger draining entirely, because Trace is the Stack's
+stops the base Power drain at four levels and refills Power past that, because Trace is the Stack's
 only escalation pressure. Process Pool adds roster slots through the same
 `pet_capacity` a Data Cache feeds, so what it buys survives losing the
 building. Teardown adds a flat amount to the units a tool pulls out of a downed

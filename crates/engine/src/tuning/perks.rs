@@ -83,9 +83,16 @@ pub const PHASE_KEY_GUARANTEE_KILLS: u32 = 3;
 /// fragments to upgrade with; it is not a substitute for upgrading.
 pub const KEEN_SCAVENGER_BONUS_PER_LEVEL: f64 = 0.01;
 
-/// `Perk::LowPowerMode`'s hunger-decay reduction, per level (the decay
-/// multiplier is `1.0 - this * level`, floored at 0.0).
-pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.01;
+/// `Perk::LowPowerMode`'s cut to the base Power drain, per level (the
+/// multiplier is `1.0 - this * level`, floored at 0.0), so rank 4 stops the
+/// base drain. Implant upkeep is outside it — see `implants::power_multiplier`.
+pub const LOW_POWER_MODE_REDUCTION_PER_LEVEL: f32 = 0.25;
+
+/// Flat Power a tick each `Perk::LowPowerMode` level past zero drain adds.
+/// One level cancels exactly 4 Load of implant upkeep
+/// (`HUNGER_DECAY_PER_TICK * IMPLANT_DRAIN_PER_LOAD * 4`), so the levels pay
+/// for implants before they refill anything.
+pub const LOW_POWER_MODE_TRICKLE_PER_LEVEL: f32 = 0.03;
 
 /// How much `Perk::ExploitFocus` shaves off `CAPTURE_HP_PENALTY` per level,
 /// floored at a penalty of 0.

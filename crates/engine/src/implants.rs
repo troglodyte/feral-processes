@@ -239,10 +239,12 @@ pub fn drain_factor(load: u32) -> f32 {
     1.0 + load as f32 * crate::tuning::IMPLANT_DRAIN_PER_LOAD
 }
 
-/// The whole multiplier on `HUNGER_DECAY_PER_TICK`: the perk reduction times
-/// the implant factor, so `LowPowerMode` reduces implant upkeep too.
+/// The whole multiplier on `HUNGER_DECAY_PER_TICK`: the perk-reduced base
+/// plus implant upkeep, which `LowPowerMode` does not reduce — Load keeps
+/// costing Power after the base drain is gone, and only the perk's trickle
+/// pays it off.
 pub fn power_multiplier(perks: Option<&crate::components::Perks>, load: u32) -> f32 {
-    crate::perks::power_drain_multiplier(perks) * drain_factor(load)
+    crate::perks::power_drain_multiplier(perks) + (drain_factor(load) - 1.0)
 }
 
 /// Chance a battle start arms a rejection status at `overload`: none at 0,
@@ -339,17 +341,18 @@ mod tests {
         assert!((drain_factor(4) - expected).abs() < 1e-6);
     }
 
+    /// The perk scales only the base drain: implant upkeep is added after
+    /// it, so Load still costs Power once the base drain is gone.
     #[test]
-    fn power_multiplier_is_the_perk_multiplier_times_the_factor() {
+    fn low_power_mode_does_not_touch_implant_upkeep() {
         let perks = crate::components::Perks {
             points: 0,
-            unlocked: vec![crate::perks::Perk::LowPowerMode; 10],
+            unlocked: vec![crate::perks::Perk::LowPowerMode; 4],
         };
         assert_eq!(power_multiplier(None, 0), 1.0);
-        let m = power_multiplier(Some(&perks), 6);
-        let expected = crate::perks::power_drain_multiplier(Some(&perks)) * drain_factor(6);
-        assert!((m - expected).abs() < 1e-6);
-        assert!(m < power_multiplier(None, 6), "LowPowerMode reduces upkeep");
+        assert!((power_multiplier(None, 6) - drain_factor(6)).abs() < 1e-6);
+        let upkeep_only = drain_factor(6) - 1.0;
+        assert!((power_multiplier(Some(&perks), 6) - upkeep_only).abs() < 1e-6);
     }
 
     #[test]

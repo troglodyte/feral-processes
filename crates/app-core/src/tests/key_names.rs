@@ -46,7 +46,7 @@ fn a_key_list_splits_on_whitespace() {
 /// what fails to compile when a variant is added; bump the count with it.
 #[test]
 fn every_named_variant_is_in_the_table() {
-    const NAMED_VARIANTS: usize = 16;
+    const NAMED_VARIANTS: usize = 18;
     let _exhaustive = |k: GameKey| match k {
         GameKey::Char(_) => (),
         GameKey::Up
@@ -64,7 +64,9 @@ fn every_named_variant_is_in_the_table() {
         | GameKey::Enter
         | GameKey::Esc
         | GameKey::Backspace
-        | GameKey::Tab => (),
+        | GameKey::Tab
+        | GameKey::PageUp
+        | GameKey::PageDown => (),
     };
     assert_eq!(GameKey::NAMED.len(), NAMED_VARIANTS);
     for (i, key) in GameKey::NAMED.into_iter().enumerate() {

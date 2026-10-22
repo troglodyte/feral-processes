@@ -48,7 +48,9 @@ impl App {
         };
         let (depot, rows) = (screen.depot, screen.view.rows.len());
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, rows),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, rows)
+            }
             // `+` lets the row in and `-` keeps it out — the transfer
             // page's keys beside it, since the hub spends the bare arrows.
             GameKey::Char('+' | '=') => self.set_selected_depot_filter(depot, true),

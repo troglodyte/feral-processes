@@ -391,6 +391,30 @@ mod pickers {
     }
 
     #[test]
+    fn page_keys_scroll_the_item_picker_a_page_at_a_time() {
+        let mut app = console_app(15);
+        let total = app.game.as_ref().unwrap().dev_plain_items().len();
+        let last = total.saturating_sub(DEV_PICKER_PAGE);
+        assert!(last > 0, "the picker only scrolls past a page");
+        open_item_picker(&mut app);
+
+        app.handle_key(GameKey::PageDown);
+        assert_eq!(app.menu_selected, DEV_PICKER_PAGE.min(last));
+        for _ in 0..total {
+            app.handle_key(GameKey::PageDown);
+        }
+        assert_eq!(app.menu_selected, last, "the last page stays full");
+
+        app.handle_key(GameKey::PageUp);
+        assert_eq!(app.menu_selected, last.saturating_sub(DEV_PICKER_PAGE));
+        for _ in 0..total {
+            app.handle_key(GameKey::PageUp);
+        }
+        assert_eq!(app.menu_selected, 0);
+        assert_eq!(app.mode, Mode::DevItemPicker);
+    }
+
+    #[test]
     fn the_zone_picker_lists_zones_ahead_and_a_pick_warps_and_closes() {
         let mut app = console_app(14);
         let targets = app.game.as_ref().unwrap().dev_warp_targets();

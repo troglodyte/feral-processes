@@ -335,7 +335,9 @@ impl App {
         match key {
             GameKey::Esc => self.leave_allocation(false),
             GameKey::Enter => self.commit_allocation(),
-            GameKey::Up | GameKey::Down => self.scroll(key, allocation.len()),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, allocation.len())
+            }
             _ => {
                 if let Some(f) = spend_adjustment(key) {
                     match allocation.spend_on_row(&mut self.allocation_spent, self.menu_selected, f)

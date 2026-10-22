@@ -283,7 +283,9 @@ impl App {
         }
         let candidates = self.sortie_squad_candidates();
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, candidates.len()),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, candidates.len())
+            }
             GameKey::Char('X') => {
                 if let Some(row) = candidates.get(self.menu_selected) {
                     match self.dispatch_squad.iter().position(|&e| e == row.entity) {
@@ -418,7 +420,9 @@ impl App {
         self.menu_selected = self.menu_selected.min(stock.len().saturating_sub(1));
 
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, stock.len()),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, stock.len())
+            }
             GameKey::Char('T') => self.route_standing = !self.route_standing,
             GameKey::Char('N') => self.route_cargo_amounts.iter_mut().for_each(|n| *n = 0),
             GameKey::Left => self.edit_route_cargo_row(&stock, |n, _| n.saturating_sub(1)),

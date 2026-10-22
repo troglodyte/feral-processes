@@ -678,7 +678,9 @@ impl App {
         match key {
             GameKey::Enter => self.try_advance_creation(),
             GameKey::Char('r') => self.reroll_the_kit(),
-            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, len)
+            }
             GameKey::Left => self.spend_on_item(|taken, _| taken.saturating_sub(1)),
             GameKey::Right => self.spend_on_item(|taken, max| (taken + 1).min(max)),
             GameKey::ShiftLeft => self.spend_on_item(|_, _| 0),
@@ -788,7 +790,9 @@ impl App {
         let len = self.creation_allocation().len();
         match key {
             GameKey::Enter => self.try_advance_creation(),
-            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, len)
+            }
             _ => {
                 if let Some(f) = spend_adjustment(key) {
                     self.spend_on_row(f);
@@ -825,7 +829,9 @@ impl App {
         let len = self.creation_rows().len();
         match key {
             GameKey::Enter => self.advance_creation(),
-            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, len)
+            }
             GameKey::Left => self.buy_perk_level(|taken, _| taken.saturating_sub(1)),
             GameKey::Right => self.buy_perk_level(|taken, max| (taken + 1).min(max)),
             GameKey::ShiftLeft => self.buy_perk_level(|_, _| 0),

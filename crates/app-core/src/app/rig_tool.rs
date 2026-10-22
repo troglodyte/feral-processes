@@ -55,7 +55,9 @@ impl App {
         };
         let (rig, rows) = (screen.rig, screen.view.candidates.len());
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, rows),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, rows)
+            }
             GameKey::Enter => self.fit_selected_rig_tool(rig),
             // Uppercase, because a lowercase letter picks a row everywhere
             // else in the game — and `selected_index` answers `None` for

@@ -74,6 +74,8 @@ pub fn key_alphabet() -> Vec<GameKey> {
         GameKey::Esc,
         GameKey::Backspace,
         GameKey::Tab,
+        GameKey::PageUp,
+        GameKey::PageDown,
     ];
     keys.extend((FIRST_PRINTABLE..=LAST_PRINTABLE).map(|c| GameKey::Char(c as char)));
     keys
@@ -104,6 +106,8 @@ fn every_variant_is_spoken_for(key: GameKey) {
         | GameKey::Esc
         | GameKey::Backspace
         | GameKey::Tab
+        | GameKey::PageUp
+        | GameKey::PageDown
         | GameKey::Char(_) => {}
     }
 }
@@ -262,7 +266,7 @@ mod tests {
         }
         assert_eq!(
             alphabet.len(),
-            16 + (LAST_PRINTABLE - FIRST_PRINTABLE + 1) as usize
+            18 + (LAST_PRINTABLE - FIRST_PRINTABLE + 1) as usize
         );
     }
 

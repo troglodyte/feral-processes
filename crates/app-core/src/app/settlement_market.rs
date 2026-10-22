@@ -123,7 +123,9 @@ impl App {
         self.menu_selected = self.menu_selected.min(total.saturating_sub(1));
 
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, total),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, total)
+            }
             GameKey::Enter => self.commit_settlement_market_basket(settlement_key, &view),
             GameKey::Char('N') => self.settlement_amounts.iter_mut().for_each(|n| *n = 0),
             GameKey::Char('A') => {

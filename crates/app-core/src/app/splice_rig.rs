@@ -74,7 +74,9 @@ impl App {
         }
         let rows = screen.rows();
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, rows),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, rows)
+            }
             GameKey::Enter => match self.selected_splice_row() {
                 Some(SpliceRow::Installed(id)) => self.remove_splice_implant(&id),
                 Some(SpliceRow::Installable(item)) => self.begin_splice_install(item),

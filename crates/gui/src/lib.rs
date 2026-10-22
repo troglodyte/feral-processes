@@ -65,6 +65,8 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
         KeyCode::Escape => Some(GameKey::Esc),
         KeyCode::Backspace => Some(GameKey::Backspace),
         KeyCode::Tab => Some(GameKey::Tab),
+        KeyCode::PageUp => Some(GameKey::PageUp),
+        KeyCode::PageDown => Some(GameKey::PageDown),
         _ => None,
     }
 }
@@ -83,7 +85,7 @@ fn types_text(key: KeyCode) -> bool {
 /// The numpad is here for the same reason the arrows are: a held key must
 /// keep walking. Two physical keys landing on one direction is deliberate —
 /// holding both at once is the player's own gesture, not a double-fire the
-/// list can prevent.
+/// list can prevent. PageUp/PageDown repeat too: paging is scrolling.
 const REPEATING_KEYS: &[KeyCode] = &[
     KeyCode::ArrowUp,
     KeyCode::ArrowDown,
@@ -97,6 +99,8 @@ const REPEATING_KEYS: &[KeyCode] = &[
     KeyCode::Numpad9,
     KeyCode::Numpad1,
     KeyCode::Numpad3,
+    KeyCode::PageUp,
+    KeyCode::PageDown,
 ];
 
 /// The modifier keys, polled rather than mapped. They are not in
@@ -2439,7 +2443,14 @@ mod tests {
         assert!(!REPEATING_KEYS.contains(&KeyCode::Tab));
     }
 
-    /// The repeating keys must cover the eight directions and nothing else.
+    #[test]
+    fn page_keys_map_to_the_page_game_keys() {
+        assert_eq!(map_special_key(KeyCode::PageUp), Some(GameKey::PageUp));
+        assert_eq!(map_special_key(KeyCode::PageDown), Some(GameKey::PageDown));
+    }
+
+    /// The repeating keys must cover the eight directions (plus the two
+    /// page keys).
     ///
     /// **Deliberately not a uniqueness check any more.** The arrows and the
     /// numpad's cross land on the same four `GameKey`s on purpose, so what

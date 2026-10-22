@@ -142,6 +142,16 @@ impl App {
                 self.menu_selected = (self.menu_selected + 1) % len;
                 None
             }
+            // Clamped, not wrapped: a held page key parks at the end it was
+            // paging toward instead of cycling the list.
+            GameKey::PageUp => {
+                self.menu_selected = self.menu_selected.saturating_sub(MENU_PAGE_ROWS);
+                None
+            }
+            GameKey::PageDown => {
+                self.menu_selected = (self.menu_selected + MENU_PAGE_ROWS).min(len - 1);
+                None
+            }
             GameKey::Enter => Some(self.menu_selected.min(len - 1)),
             _ => None,
         }

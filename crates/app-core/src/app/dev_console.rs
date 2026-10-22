@@ -383,7 +383,8 @@ impl App {
         self.menu_selected = self.dev_console_row;
     }
 
-    /// Up/Down scroll a picker whose rows outnumber its selectors.
+    /// Up/Down scroll a picker whose rows outnumber its selectors, and
+    /// PageUp/PageDown by a whole page.
     /// `menu_selected` is the scroll offset, clamped so the last page stays
     /// full. Returns whether the key was a scroll.
     pub(crate) fn scroll_dev_picker(&mut self, key: GameKey, len: usize) -> bool {
@@ -391,6 +392,12 @@ impl App {
         match key {
             GameKey::Up => self.menu_selected = self.menu_selected.saturating_sub(1),
             GameKey::Down => self.menu_selected = (self.menu_selected + 1).min(last),
+            GameKey::PageUp => {
+                self.menu_selected = self.menu_selected.saturating_sub(DEV_PICKER_PAGE)
+            }
+            GameKey::PageDown => {
+                self.menu_selected = (self.menu_selected + DEV_PICKER_PAGE).min(last)
+            }
             _ => return false,
         }
         true

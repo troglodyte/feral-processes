@@ -76,7 +76,9 @@ impl App {
                     self.menu_selected = idx;
                 }
             }
-            GameKey::Up | GameKey::Down => self.scroll(key, crew_len),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, crew_len)
+            }
             // `[P]` opens the staff picker. Not gated here on there being
             // any staff to post — an empty picker still tells the player
             // why, and `Game::post_to_outpost` refuses in its own words if
@@ -133,7 +135,9 @@ impl App {
                     Err(e) => self.refuse(e),
                 }
             }
-            GameKey::Up | GameKey::Down => self.scroll(key, candidates.len()),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, candidates.len())
+            }
             _ => {}
         }
     }

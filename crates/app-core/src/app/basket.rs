@@ -163,7 +163,9 @@ impl App {
         match key {
             GameKey::Esc => self.leave_basket(),
             GameKey::Enter => self.commit_transfer(),
-            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, len)
+            }
             // Uppercase for the two screen actions, matching the reserved
             // uppercase convention. Nothing here picks a row by letter, so
             // the reservation costs these screens nothing — but it is what

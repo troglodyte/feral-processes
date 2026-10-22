@@ -89,7 +89,9 @@ impl App {
             .as_ref()
             .map_or(0, |s| s.view.rows.len());
         match key {
-            GameKey::Up | GameKey::Down => self.scroll(key, rows),
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
+                self.scroll(key, rows)
+            }
             GameKey::Enter => self.pick_machine_recipe(machine),
             key => {
                 if let Some(idx) = self.selected_index(key, rows) {

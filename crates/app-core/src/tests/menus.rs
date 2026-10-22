@@ -534,3 +534,25 @@ fn up_and_down_scroll_a_page_without_changing_which_page_is_open() {
     assert_eq!(app.help_stack, open, "Enter does nothing on a document");
     assert_eq!(app.mode, Mode::HelpPage);
 }
+
+/// PageUp/PageDown jump `MENU_PAGE_ROWS` at a time and stop at the ends
+/// rather than wrapping: a held key that wrapped would cycle the list
+/// forever instead of parking on the row the player was paging toward.
+#[test]
+fn page_keys_jump_a_page_and_stop_at_the_ends() {
+    let mut app = test_app(921);
+    let len = MENU_PAGE_ROWS * 2 + 3;
+    app.menu_selected = 0;
+
+    assert_eq!(app.selected_index(GameKey::PageDown, len), None);
+    assert_eq!(app.menu_selected, MENU_PAGE_ROWS);
+    app.selected_index(GameKey::PageDown, len);
+    app.selected_index(GameKey::PageDown, len);
+    assert_eq!(app.menu_selected, len - 1, "PageDown parks on the last row");
+
+    app.selected_index(GameKey::PageUp, len);
+    assert_eq!(app.menu_selected, len - 1 - MENU_PAGE_ROWS);
+    app.selected_index(GameKey::PageUp, len);
+    app.selected_index(GameKey::PageUp, len);
+    assert_eq!(app.menu_selected, 0, "PageUp parks on the first row");
+}

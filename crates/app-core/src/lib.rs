@@ -152,6 +152,12 @@ pub const MENU_SCAN_RADIUS: i32 = 40;
 /// switches to letters.
 const DIGIT_ROWS: usize = 9;
 
+/// How far PageUp/PageDown move a menu's highlight. A fixed step rather
+/// than the popup's own height: app-core never learns how many rows the
+/// renderer fits, and ten is under what the smallest popup shows, so a page
+/// never skips a row the player didn't see go past.
+pub const MENU_PAGE_ROWS: usize = 10;
+
 /// The key that picks menu row `index` (0-based), and the label a renderer
 /// must print for it: `1`-`9` for the first nine rows, then `a`, `b`, `c`
 /// and so on. Several menus run past nine rows — a dozen research nodes,
@@ -959,12 +965,16 @@ pub enum GameKey {
     /// between two panels would flicker for as long as the key was held, so
     /// nothing repeats it the way the four directions repeat.
     Tab,
+    /// Move a menu's highlight `MENU_PAGE_ROWS` at a time. They repeat
+    /// while held, like Up/Down, since paging is scrolling.
+    PageUp,
+    PageDown,
 }
 
 impl GameKey {
     /// Every variant but `Char`, spelled by its `Debug` name — the one
     /// table the parser reads, so a name and its variant cannot drift.
-    pub const NAMED: [GameKey; 16] = [
+    pub const NAMED: [GameKey; 18] = [
         GameKey::Up,
         GameKey::Down,
         GameKey::Left,
@@ -981,6 +991,8 @@ impl GameKey {
         GameKey::Esc,
         GameKey::Backspace,
         GameKey::Tab,
+        GameKey::PageUp,
+        GameKey::PageDown,
     ];
 
     /// A whitespace-separated key list, as the launcher's `--keys` takes

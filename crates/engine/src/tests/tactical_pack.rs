@@ -133,7 +133,7 @@ mod roll {
         let mut game = game();
         let pack = tactical_fight(&mut game, count, 100);
         // Melee and routine-free, so a formation's ranks are whatever a test
-        // makes them: a ready ranged routine puts a body in the back rank.
+        // makes them by species.
         for &body in &pack {
             game.world.entity_mut(body).insert(Routines::default());
         }
@@ -999,6 +999,26 @@ mod formation {
     }
 
     #[test]
+    fn a_ready_routine_that_reaches_past_melee_does_not_pull_a_melee_body_out_of_the_line() {
+        // A second melee body, so the line stands whichever rank the first
+        // lands in: with the front empty the pack plays Rush, which also
+        // closes at one.
+        let mut game = game();
+        let pack = stand(&mut game, 3, (14, 8), &[(3, 8), (3, 9), (1, 8)]);
+        melee(&mut game, &pack[..2]);
+        game.world.get_mut::<Creature>(pack[2]).unwrap().species = "glitch".into();
+        game.set_pack_tactic(PackTactic::Formation);
+        only_routine(&mut game, pack[0], "heap_corruption");
+        let ready = game.ready_routines(pack[0]);
+        assert!(
+            ready.iter().any(|d| game.routine_tactical_range(d).max > 1),
+            "fixture: no ranged routine is ready"
+        );
+        assert_eq!(pack::plan(&game, pack[0], 1.0).closing_scale(), 1.0);
+        assert_eq!(tactic_of(&game), PackTactic::Formation);
+    }
+
+    #[test]
     fn the_back_rank_closes_at_a_fraction_and_the_front_at_full() {
         use crate::tuning::TACTICAL_FORMATION_BACK_CLOSING;
         let (game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
@@ -1169,6 +1189,31 @@ mod flank {
         } else {
             "player"
         }
+    }
+
+    /// A hallucinating body fights only the decoy it sees; a packmate that
+    /// happens to stand on that cell is not an enemy to focus on.
+    #[test]
+    fn a_packmate_on_a_decoy_is_not_an_enemy() {
+        use crate::components::{GlyphColor, Tampered};
+        use crate::tactical::Decoy;
+        let mut game = game();
+        let pack = stand(&mut game, 3, (14, 14), &[(8, 7), (8, 8), (4, 4)]);
+        melee(&mut game, &pack);
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .place_decoy(Decoy {
+                cell: (8, 7),
+                owner_hostile: false,
+                glyph: '@',
+                color: GlyphColor::Cyan,
+                of_player: true,
+            });
+        let mut tampered = Tampered::default();
+        tampered.apply(TamperKind::Hallucinating { decoys: 1 }, 3, false);
+        game.world.entity_mut(pack[2]).insert(tampered);
+        game.set_pack_tactic(PackTactic::Flank);
+        assert_eq!(pack::plan(&game, pack[2], 1.0).focus(pack[0]), 0.0);
     }
 
     #[test]

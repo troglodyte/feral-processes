@@ -261,13 +261,19 @@ fn back_rank(game: &Game, body: Entity) -> bool {
 /// The bodies `body` fights, in reading order: `tactical_sides`' targets, so
 /// a cloaked body and a structure that cannot be hurt are never faced or
 /// counted, exactly as they are never swung at.
+///
+/// **Only bodies of the other side.** A hallucinating body's one target is
+/// its decoy's cell, and nothing keeps a packmate from standing on it: read
+/// as an enemy, that packmate would be faced, focused on and flanked.
 fn enemies(game: &Game, body: Entity) -> Vec<Entity> {
     let battle = game.world.resource::<TacticalBattle>();
+    let ours = game.acts_for_hostiles(body);
     let mut cells = game.tactical_sides(body).targets;
     cells.sort_by_key(|&(x, y)| (y, x));
     cells
         .into_iter()
         .filter_map(|cell| battle.occupant(cell))
+        .filter(|&other| game.acts_for_hostiles(other) != ours)
         .collect()
 }
 
@@ -397,7 +403,12 @@ fn formation_slot(game: &Game, body: Entity, enemies: &[Entity]) -> Option<Slot>
 /// from its anchor toward +x and +y: where the line runs the other way on an
 /// axis, the anchor is the far end of that span, or a squad facing west
 /// would sit on the slot of the body beside it.
-pub(crate) fn slot_anchor(at: (i32, i32), across: (i32, i32), offset: i32, width: u8) -> (i32, i32) {
+pub(crate) fn slot_anchor(
+    at: (i32, i32),
+    across: (i32, i32),
+    offset: i32,
+    width: u8,
+) -> (i32, i32) {
     let last = offset + width as i32 - 1;
     let along = |step: i32| step * if step < 0 { last } else { offset };
     (at.0 + along(across.0), at.1 + along(across.1))
@@ -517,8 +528,7 @@ impl PackPlan {
                 -TACTICAL_FORMATION_WEIGHT * off
             }),
             Terms::Flank { target, .. } => target.as_ref().map_or(0.0, |(at, held)| {
-                let Some(mine) = mean(&stands).and_then(|c| sector(c.0 - at.0, c.1 - at.1))
-                else {
+                let Some(mine) = mean(&stands).and_then(|c| sector(c.0 - at.0, c.1 - at.1)) else {
                     return 0.0;
                 };
                 let crowd = held.iter().filter(|&&s| s == mine).count() as f32;

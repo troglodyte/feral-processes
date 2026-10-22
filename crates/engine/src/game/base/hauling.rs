@@ -12,7 +12,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
-use crate::components::{FloorItem, SetDownLoad};
+use crate::components::{Fleeing, FloorItem, SetDownLoad};
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::floor::take_floor_unit;
 use crate::game::base::work_orders;
@@ -1119,7 +1119,7 @@ fn pickup_errand(
 }
 
 pub(crate) fn haul_step_system(
-    mut workers: Query<Hauler, (With<Tamed>, Without<Structure>)>,
+    mut workers: Query<Hauler, (With<Tamed>, Without<Structure>, Without<Fleeing>)>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
     departure: HaulDeparture,
     defs: HaulLookups,

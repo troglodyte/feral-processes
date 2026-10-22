@@ -838,7 +838,10 @@ impl Game {
         // whose swings land in a different order between runs would make the
         // same base save differently.
         let mut diggers: Vec<(i32, i32, Entity)> = {
-            let mut query = self.world.query::<(Entity, &Task, &Position)>();
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Task, &Position), Without<crate::components::Fleeing>>(
+                );
             query
                 .iter(&self.world)
                 .filter(|(_, task, _)| task.kind == TaskKind::Excavate)

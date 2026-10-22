@@ -1078,6 +1078,7 @@ impl Game {
         // `admit_the_badly_hurt` below, through the one writer that already
         // owns the decision to take a body off the line.
         self.run_tantrums(&staff);
+        self.run_flight(&staff);
         // The third gate on this line, and it sits with the other two for
         // their reason: a body that breaks off for repairs this tick must
         // not also be handed a job this tick. It inserts `Downed`, which
@@ -2630,7 +2631,9 @@ impl Game {
             twice
         };
         for (index, &worker) in staff.iter().enumerate() {
-            if self.world.get::<Task>(worker).is_some() {
+            if self.world.get::<Task>(worker).is_some()
+                || self.world.get::<components::Fleeing>(worker).is_some()
+            {
                 continue;
             }
             // A downed body is the only one `is_on_shift` ever frees while it

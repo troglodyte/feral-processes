@@ -935,3 +935,169 @@ fn grievance_names_each_rung_and_none_when_content() {
         assert_eq!(game.grievance(who), Some(name));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Bystanders walk clear of a fight
+// ---------------------------------------------------------------------------
+
+use crate::components::{Fleeing, Task, TaskKind};
+use crate::tuning::{TANTRUM_FLEE_LINGER_TICKS, TANTRUM_FLEE_TILES};
+
+/// Laid floor under the whole fixture and a walled room, interior
+/// `6..=8` x `-1..=1`, with its one door on the west wall.
+fn a_floored_base_with_a_walled_room(game: &mut Game) -> Vec<Entity> {
+    let staff = an_established_base(game, BASE_ESTABLISHED_STAFF.max(4));
+    lay_floor_box(game, (-14, -8), (16, 8));
+    for i in -2..=2 {
+        for (x, y) in [(5 + 4, i), (5 + i + 2, -2), (5 + i + 2, 2), (5, i)] {
+            let kind = if (x, y) == (5, 0) { "door" } else { "wall" };
+            spawn_structure_at(game, kind, x, y);
+        }
+    }
+    staff
+}
+
+fn at(game: &Game, who: Entity) -> (i32, i32) {
+    let p = game.world.get::<Position>(who).unwrap();
+    (p.x, p.y)
+}
+
+fn in_the_walled_room(game: &Game, cell: (i32, i32)) -> bool {
+    let rooms = crate::rooms::of_world(&game.world);
+    rooms
+        .room_at(cell.0, cell.1)
+        .is_some_and(|r| r.cells.contains(&(7, 0)))
+}
+
+fn close_every_brawl(game: &mut Game) {
+    game.world.resource_mut::<Brawls>().open.clear();
+}
+
+#[test]
+fn a_bystander_in_the_fights_room_walks_out_of_it() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    let (a, v, watcher, elsewhere) = (staff[0], staff[1], staff[2], staff[3]);
+    place_at(&mut game, a, 6, 0);
+    place_at(&mut game, v, 8, 0);
+    place_at(&mut game, watcher, 7, 1);
+    place_at(&mut game, elsewhere, -8, 4);
+    assert!(in_the_walled_room(&game, (7, 1)), "the fixture is a room");
+    stage_a_brawl(&mut game, a, v, 50);
+    for _ in 0..12 {
+        game.run_flight(&staff);
+    }
+    assert!(
+        !in_the_walled_room(&game, at(&game, watcher)),
+        "{:?}",
+        at(&game, watcher)
+    );
+    assert!(game.world.get::<Fleeing>(watcher).is_some());
+    assert_eq!(at(&game, elsewhere), (-8, 4), "another room does not flee");
+    assert!(game.world.get::<Fleeing>(elsewhere).is_none());
+    assert_eq!((at(&game, a), at(&game, v)), ((6, 0), (8, 0)));
+}
+
+#[test]
+fn the_marker_clears_after_the_linger() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    place_at(&mut game, staff[0], 6, 0);
+    place_at(&mut game, staff[1], 8, 0);
+    place_at(&mut game, staff[2], 7, 1);
+    stage_a_brawl(&mut game, staff[0], staff[1], 50);
+    game.run_flight(&staff);
+    close_every_brawl(&mut game);
+    game.run_flight(&staff);
+    assert!(
+        game.world.get::<Fleeing>(staff[2]).is_some(),
+        "still lingering"
+    );
+    for _ in 0..TANTRUM_FLEE_LINGER_TICKS + 1 {
+        game.world
+            .resource_mut::<crate::resources::GameClock>()
+            .tick += 1;
+        game.run_flight(&staff);
+    }
+    assert!(game.world.get::<Fleeing>(staff[2]).is_none());
+}
+
+#[test]
+fn a_fleeing_bystander_draws_no_rng() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    place_at(&mut game, staff[0], 6, 0);
+    place_at(&mut game, staff[1], 8, 0);
+    place_at(&mut game, staff[2], 7, 1);
+    stage_a_brawl(&mut game, staff[0], staff[1], 50);
+    reseed_rng(&mut game, 77);
+    let mut control = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    reseed_rng(&mut control, 77);
+    for _ in 0..5 {
+        game.run_flight(&staff);
+    }
+    use rand::RngExt;
+    let next = |g: &mut Game| -> u64 { g.world.resource_mut::<GameRng>().0.random() };
+    assert_eq!(
+        next(&mut game),
+        next(&mut control),
+        "flight consumed the stream"
+    );
+}
+
+#[test]
+fn a_bystander_in_the_commons_keeps_its_distance() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    place_at(&mut game, staff[0], -6, 0);
+    place_at(&mut game, staff[1], -4, 0);
+    place_at(&mut game, staff[2], -5, 1);
+    stage_a_brawl(&mut game, staff[0], staff[1], 50);
+    for _ in 0..20 {
+        game.run_flight(&staff);
+    }
+    let p = at(&game, staff[2]);
+    let d = (p.0 - -4).abs().max((p.1 - 0).abs());
+    assert!(d >= TANTRUM_FLEE_TILES, "{p:?}");
+}
+
+#[test]
+fn a_posted_worker_flees_keeps_its_post_and_walks_back() {
+    let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_floored_base_with_a_walled_room(&mut game);
+    let (a, v, worker) = (staff[0], staff[1], staff[2]);
+    let node = spawn_machine_at(&mut game, "extractor", 7, -1);
+    place_at(&mut game, a, 6, 1);
+    place_at(&mut game, v, 8, 1);
+    place_at(&mut game, worker, 7, 0);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: node,
+        progress: 17,
+        required: 1_000_000,
+    });
+    stage_a_brawl(&mut game, a, v, 100);
+    for _ in 0..12 {
+        game.run_flight(&staff);
+        game.tick();
+        // The brawl is staged by hand; keep it open and the fighters put.
+        place_at(&mut game, a, 6, 1);
+        place_at(&mut game, v, 8, 1);
+    }
+    let away = at(&game, worker);
+    assert!(!in_the_walled_room(&game, away), "{away:?}");
+    let task = game.world.get::<Task>(worker).expect("still posted");
+    assert_eq!(task.target, node);
+    assert_eq!(task.progress, 17, "no progress while away");
+    close_every_brawl(&mut game);
+    for _ in 0..(TANTRUM_FLEE_LINGER_TICKS + 40) {
+        game.tick();
+    }
+    assert!(game.world.get::<Fleeing>(worker).is_none());
+    assert!(game.world.get::<Task>(worker).is_some());
+    let back = at(&game, worker);
+    assert!(
+        (back.0 - 7).abs() + (back.1 + 1).abs() <= 2,
+        "back at the post: {back:?}"
+    );
+}

@@ -23,6 +23,7 @@ pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod duties;
 pub(crate) mod farm;
+pub(crate) mod flight;
 pub(crate) mod floor;
 pub(crate) mod floor_hands;
 pub(crate) mod hauling;

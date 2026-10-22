@@ -439,6 +439,16 @@ pub const TANTRUM_DAMAGE_FRACTION: f32 = 0.25;
 /// badly-run base would brawl on every roll. Unmeasured.
 pub const TANTRUM_COOLDOWN_TICKS: u64 = 400;
 
+/// How far from a brawl a bystander puts itself when it has no door to leave
+/// by — the commons, or a room with no way out. Chebyshev tiles from the
+/// victim. Purely for the look of the thing: nobody is ever hurt by
+/// standing close. Unmeasured.
+pub const TANTRUM_FLEE_TILES: i32 = 5;
+
+/// How long bystanders hold their distance after the fight closes, before
+/// the posted ones are free to walk back to their stations. Unmeasured.
+pub const TANTRUM_FLEE_LINGER_TICKS: u64 = 10;
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

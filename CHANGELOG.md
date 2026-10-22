@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.33
+
+**Out in the field, the compass points home until you pick a destination.** It used to stay blank until you chose somewhere from the destination list, and it went blank again when you cleared it or when the place you'd picked was gone (a collapsed Stack entrance, a lost outpost). In all those cases it now points to your home base, and `X` in the destination list reads "point it home".
+
 ## 0.19.32
 
 **While you mark out an Excavation or a Stockpile zone, the key bar at the bottom shows that mode's own keys, with the floor brush and farm-plot tool you're holding on their keys.** The brush and plot line used to float in the map's top-left corner under the base stock box, and the key bar kept showing the map's keys, which none of the other modes do. It now follows the battle map's aiming cursor: `↑↓←→ move · Space box · F brush: plain · P plot · Esc done`, and once a corner is down, Space and Esc read `finish box` and `drop corner`.

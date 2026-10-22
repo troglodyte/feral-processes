@@ -976,6 +976,17 @@ mod formation {
     }
 
     #[test]
+    fn a_ready_buff_that_reaches_past_melee_does_not_pull_a_body_out_of_the_line() {
+        let (mut game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
+        only_routine(&mut game, pack[0], "overclock_array");
+        assert!(
+            !game.ready_routines(pack[0]).is_empty(),
+            "the buff is not ready"
+        );
+        assert_eq!(pack::plan(&game, pack[0], 1.0).closing_scale(), 1.0);
+    }
+
+    #[test]
     fn the_back_rank_closes_at_a_fraction_and_the_front_at_full() {
         use crate::tuning::TACTICAL_FORMATION_BACK_CLOSING;
         let (game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);

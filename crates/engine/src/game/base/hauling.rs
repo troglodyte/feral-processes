@@ -813,6 +813,9 @@ pub struct HaulLookups<'w> {
 /// `type_complexity` reason.
 type Bystander = (Entity, &'static Position, &'static Tamed);
 
+/// A posted body that is fleeing: `Hauler` skips it, but its cell is held.
+type FleeingPosted = (Entity, &'static Position, &'static Task, &'static Tamed);
+
 /// And which bodies those are. `Without<Task>` is load-bearing twice over:
 /// it is what proves this query disjoint from `Hauler`'s `&mut Position` to
 /// bevy, and it is the half of the body set `haul_step_system`'s own query
@@ -833,6 +836,10 @@ pub struct HaulGround<'w, 's> {
     /// `Hauler`'s `&mut Position` to bevy — the two halves of the body set
     /// are split by exactly that filter and by nothing else.
     idle: Query<'w, 's, Bystander, NotPosted>,
+    /// The posted half `Hauler` cannot see while a body is walking clear of
+    /// a tantrum (`Without<Fleeing>`): still a body on a cell, so still a
+    /// wall. `With<Fleeing>` is what proves it disjoint from `Hauler`.
+    fleeing_posted: Query<'w, 's, FleeingPosted, (With<Fleeing>, Without<Structure>)>,
     roles: crate::game::party::Roles<'w, 's>,
     /// Loads on the floor, for `Errand::Pickup`. `Without<Tamed>` keeps its
     /// `&Position` disjoint from `Hauler`'s `&mut`.
@@ -1134,6 +1141,7 @@ pub(crate) fn haul_step_system(
     let HaulGround {
         grid,
         idle,
+        fleeing_posted,
         roles,
         piles,
     } = ground;
@@ -1180,6 +1188,17 @@ pub(crate) fn haul_step_system(
                         crate::game::party::walks_the_base(roles.of(*entity, tamed.owner), None)
                     })
                     .map(|(_, p, _)| *p),
+            )
+            .chain(
+                fleeing_posted
+                    .iter()
+                    .filter(|(entity, _, task, tamed)| {
+                        crate::game::party::walks_the_base(
+                            roles.of(*entity, tamed.owner),
+                            Some(task.kind),
+                        )
+                    })
+                    .map(|(_, p, ..)| *p),
             ),
     );
     // What bounds the Dijkstra field a walker rebuilds each tick: how far

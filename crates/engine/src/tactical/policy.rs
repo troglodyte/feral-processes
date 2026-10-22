@@ -14,7 +14,7 @@ use crate::battle;
 use crate::behaviours::BehaviourDef;
 use crate::components::{Hostile, Stats};
 use crate::tactical::ai::Intent;
-use crate::tactical::{TacticalBattle, footprint_cells_at, reach};
+use crate::tactical::{TacticalBattle, footprint_cells_at, pack, reach};
 use crate::tuning::{
     TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_COVER_TIEBREAK, TACTICAL_AI_COVER_WEIGHT,
     TACTICAL_AI_CROWDING_WEIGHT, TACTICAL_AI_REACH_SCORE, TACTICAL_AI_REACTION_WEIGHT,
@@ -203,10 +203,24 @@ impl Game {
         from: (i32, i32),
         reachable: &[Entity],
     ) -> Option<Entity> {
+        let plan = pack::plan(self, actor, self.cell_weights_of(actor).closing);
+        self.rank_swing_targets_by(actor, from, reachable, |t| plan.focus(t))
+    }
+
+    /// `rank_swing_targets` with `bonus` added to each target's score: the
+    /// pack's focus, passed in because `pack::plan` itself asks which target
+    /// a flanker means and so cannot be built from inside the ranking.
+    pub(crate) fn rank_swing_targets_by(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        reachable: &[Entity],
+        bonus: impl Fn(Entity) -> f32,
+    ) -> Option<Entity> {
         let w = TacticalWeights::of(self.behaviour_of(actor));
         let scores: Vec<f32> = reachable
             .iter()
-            .map(|&t| score(&w, &self.swing_features(actor, from, t)))
+            .map(|&t| score(&w, &self.swing_features(actor, from, t)) + bonus(t))
             .collect();
         reachable.get(first_best(&scores)).copied()
     }
@@ -245,9 +259,10 @@ impl Game {
             .filter_map(|&cell| battle.occupant(cell).map(|e| (cell.1, cell.0, e)))
             .collect();
         enemies.sort_by_key(|&(y, x, _)| (y, x));
+        let plan = pack::plan(self, actor, self.cell_weights_of(actor).closing);
         let mut scores: Vec<f32> = enemies
             .iter()
-            .map(|&(_, _, e)| score(&w, &self.swing_features(actor, from, e)))
+            .map(|&(_, _, e)| score(&w, &self.swing_features(actor, from, e)) + plan.focus(e))
             .collect();
         let swings = scores.len();
         scores.extend(routines.iter().map(|def| {

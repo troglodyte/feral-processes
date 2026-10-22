@@ -49,7 +49,7 @@ fn every_shipped_profile_forecasts_the_action_its_turn_takes_under_every_tactic(
     let (db, _) = BehaviourDb::load_dir(&test_assets_dir().join("behaviours")).unwrap();
     let ids: Vec<String> = db.ids().map(str::to_string).collect();
     assert!(!ids.is_empty());
-    for tactic in [PackTactic::Rush, PackTactic::Together, PackTactic::Hold] {
+    for tactic in PackTactic::ALL {
         for id in &ids {
             for routine in [None, Some("acid_wash")] {
                 let mut game = game();
@@ -109,10 +109,35 @@ mod roll {
         }
     }
 
+    /// Plays `body` as a species that swings beyond melee, which puts it in
+    /// a formation's back rank.
+    fn ranged(game: &mut Game, body: Entity) {
+        game.world
+            .get_mut::<crate::components::Creature>(body)
+            .unwrap()
+            .species = "glitch".into();
+        assert!(game.swing_range(body) > 1, "glitch is not ranged");
+    }
+
+    /// Rolls on the `default` row, which gives every tactic weight: the
+    /// fixture's own species leads on a row that may give one none.
+    fn default_profile(game: &mut Game) {
+        game.world
+            .resource_mut::<crate::resources::Behaviours>()
+            .0
+            .set_override(Some("default".into()));
+    }
+
     /// A game with `count` hostiles seated, to roll for.
     fn pack_of(count: usize) -> (Game, Vec<Entity>) {
         let mut game = game();
         let pack = tactical_fight(&mut game, count, 100);
+        // Melee and routine-free, so a formation's ranks are whatever a test
+        // makes them: a ready ranged routine puts a body in the back rank.
+        for &body in &pack {
+            game.world.entity_mut(body).insert(Routines::default());
+        }
+        super::field::melee(&mut game, &pack);
         (game, pack)
     }
 
@@ -130,11 +155,13 @@ mod roll {
 
     #[test]
     fn the_roll_spans_every_tactic_across_specs() {
-        let (game, pack) = pack_of(3);
+        let (mut game, pack) = pack_of(3);
+        ranged(&mut game, pack[2]);
+        default_profile(&mut game);
         let seen: std::collections::HashSet<PackTactic> = (0..400)
             .map(|tick| pack::roll(spec(tick), &pack, &game))
             .collect();
-        for tactic in [PackTactic::Rush, PackTactic::Together, PackTactic::Hold] {
+        for tactic in PackTactic::ALL {
             assert!(seen.contains(&tactic), "{tactic:?} was never rolled");
         }
     }
@@ -194,14 +221,19 @@ mod roll {
         assert_ne!(pack::roll_seed(s), saltless);
     }
 
-    /// Frequencies of each tactic over many ticks for a pack of `species`.
-    fn frequencies(species: &str, profile: Option<&str>) -> [f32; 3] {
+    /// Frequencies of each tactic over many ticks for a pack of `species`,
+    /// its last body played as a ranged one when `mixed` so that `Formation`
+    /// is eligible.
+    fn frequencies(species: &str, profile: Option<&str>, mixed: bool) -> [f32; 5] {
         let (mut game, pack) = pack_of(3);
         for &body in &pack {
             game.world
                 .get_mut::<crate::components::Creature>(body)
                 .unwrap()
                 .species = species.to_string();
+        }
+        if mixed {
+            ranged(&mut game, pack[2]);
         }
         if let Some(id) = profile {
             game.world
@@ -210,7 +242,7 @@ mod roll {
                 .set_override(Some(id.to_string()));
         }
         let n = 3000;
-        let mut counts = [0u32; 3];
+        let mut counts = [0u32; 5];
         for tick in 0..n {
             let at = PackTactic::ALL
                 .iter()
@@ -223,9 +255,13 @@ mod roll {
 
     #[test]
     fn a_brute_led_pack_follows_the_brute_row_and_not_the_default_one() {
-        let brute = frequencies("rootkit", None);
-        let default = frequencies("construct", Some("default"));
-        let total = |row: [u32; 3]| row.iter().sum::<u32>() as f32;
+        // The brute row gives `Formation` nothing, so its all-melee pack loses
+        // no weight to eligibility; the default pack is mixed for the same
+        // reason.
+        assert_eq!(pack::odds_row("brute")[3], 0);
+        let brute = frequencies("rootkit", None, false);
+        let default = frequencies("construct", Some("default"), true);
+        let total = |row: [u32; 5]| row.iter().sum::<u32>() as f32;
         for (i, (&got, &weight)) in brute.iter().zip(&pack::odds_row("brute")).enumerate() {
             let want = weight as f32 / total(pack::odds_row("brute"));
             assert!((got - want).abs() < 0.05, "column {i}: {got} vs {want}");
@@ -241,15 +277,38 @@ mod roll {
     }
 
     #[test]
-    fn a_lone_body_is_never_rolled_together() {
-        let (game, pack) = pack_of(1);
+    fn a_lone_body_is_never_rolled_a_tactic_that_needs_a_pack() {
+        let (mut game, pack) = pack_of(1);
+        ranged(&mut game, pack[0]);
         for tick in 0..400 {
-            assert_ne!(
-                pack::roll(spec(tick), &pack, &game),
-                PackTactic::Together,
-                "tick {tick}"
+            let rolled = pack::roll(spec(tick), &pack, &game);
+            assert!(
+                matches!(rolled, PackTactic::Rush | PackTactic::Hold),
+                "tick {tick}: {rolled:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_pack_without_both_ranks_is_never_rolled_formation() {
+        let (mut melee_only, pack) = pack_of(3);
+        default_profile(&mut melee_only);
+        let (mut ranged_only, ranged_pack) = pack_of(3);
+        for &body in &ranged_pack {
+            ranged(&mut ranged_only, body);
+        }
+        default_profile(&mut ranged_only);
+        let (mut mixed, mixed_pack) = pack_of(3);
+        ranged(&mut mixed, mixed_pack[2]);
+        default_profile(&mut mixed);
+        let formations = |game: &Game, pack: &[Entity]| {
+            (0..400)
+                .filter(|&tick| pack::roll(spec(tick), pack, game) == PackTactic::Formation)
+                .count()
+        };
+        assert_eq!(formations(&melee_only, &pack), 0, "no back rank");
+        assert_eq!(formations(&ranged_only, &ranged_pack), 0, "no front rank");
+        assert!(formations(&mixed, &mixed_pack) > 0, "the control");
     }
 
     #[test]
@@ -272,8 +331,9 @@ mod roll {
     #[test]
     fn rush_has_no_opening_line_and_the_rest_do() {
         assert_eq!(pack::opening_line(PackTactic::Rush), None);
-        assert!(pack::opening_line(PackTactic::Together).is_some());
-        assert!(pack::opening_line(PackTactic::Hold).is_some());
+        for tactic in &PackTactic::ALL[1..] {
+            assert!(pack::opening_line(*tactic).is_some(), "{tactic:?}");
+        }
     }
 
     #[test]
@@ -307,7 +367,7 @@ mod arena_override {
 
     #[test]
     fn a_scenario_tactic_is_seated_and_announced() {
-        for forced in [PackTactic::Together, PackTactic::Hold] {
+        for forced in [PackTactic::Together, PackTactic::Hold, PackTactic::Flank] {
             let (tactic, log) = staged_tactic(&format!("tactic: Some({forced:?})"), 5);
             assert_eq!(tactic, forced);
             let line = pack::opening_line(forced).unwrap();
@@ -748,6 +808,11 @@ mod rush_and_forecast {
         let mut game = game();
         let pack = stand(&mut game, cells.len(), (14, 8), cells);
         melee(&mut game, &pack);
+        if tactic == PackTactic::Formation {
+            // A back rank, or the line has nobody to stand behind it.
+            let last = *pack.last().unwrap();
+            game.world.get_mut::<Creature>(last).unwrap().species = "glitch".into();
+        }
         if cover {
             game.world.resource_mut::<TacticalBattle>().board.put(
                 6,
@@ -783,6 +848,8 @@ mod rush_and_forecast {
                 (PackTactic::Rush, vec![(2, 8), (1, 9)], false),
                 (PackTactic::Together, vec![(3, 8), (0, 8)], false),
                 (PackTactic::Hold, vec![(4, 8), (3, 9)], true),
+                (PackTactic::Formation, vec![(4, 8), (2, 8)], false),
+                (PackTactic::Flank, vec![(10, 5), (13, 8)], false),
             ] {
                 let (from, predicted, took) = forecast_and_turn(tactic, id, &cells, cover);
                 assert_eq!(predicted, took, "{tactic:?}, profile {id:?}");
@@ -792,7 +859,7 @@ mod rush_and_forecast {
             }
         }
         // Without this the loop could pass with every body standing still.
-        for tactic in [PackTactic::Rush, PackTactic::Together, PackTactic::Hold] {
+        for tactic in PackTactic::ALL {
             assert!(moved.contains(&tactic), "{tactic:?} never moved a body");
         }
     }
@@ -834,5 +901,184 @@ mod rush_and_forecast {
                 "outran the pack at closing {closing}"
             );
         }
+    }
+}
+
+mod formation {
+    use super::field::*;
+    use super::*;
+    use crate::components::Creature;
+
+    const BREAKS: &str = "The line breaks!";
+
+    /// A melee body and a ranged one, stood on `cells` in that order, with the
+    /// player at `player_at`.
+    fn line_pair(
+        player_at: (i32, i32),
+        cells: &[(i32, i32)],
+        tactic: PackTactic,
+    ) -> (Game, Vec<Entity>) {
+        let mut game = game();
+        let pack = stand(&mut game, 2, player_at, cells);
+        melee(&mut game, &pack[..1]);
+        game.world.get_mut::<Creature>(pack[1]).unwrap().species = "glitch".into();
+        assert!(game.swing_range(pack[1]) > 1, "glitch is not ranged");
+        game.set_pack_tactic(tactic);
+        (game, pack)
+    }
+
+    fn take_turn(game: &mut Game, body: Entity) {
+        assert!(wait_for_turn(game, body));
+        assert!(game.tactical_ai_turn_at(0.0));
+    }
+
+    /// The ranged body's x less the melee body's after each has taken two
+    /// turns, the ranged one first: positive is ahead of the line.
+    fn ranged_lead(tactic: PackTactic) -> i32 {
+        let (mut game, pack) = line_pair((15, 8), &[(3, 8), (5, 8)], tactic);
+        for _ in 0..2 {
+            take_turn(&mut game, pack[1]);
+            take_turn(&mut game, pack[0]);
+        }
+        cell_of(&game, pack[1]).0 - cell_of(&game, pack[0]).0
+    }
+
+    #[test]
+    fn a_ranged_body_stays_behind_its_melee_packmate_while_both_advance() {
+        assert!(
+            ranged_lead(PackTactic::Rush) > 0,
+            "the control did not lead"
+        );
+        assert!(
+            ranged_lead(PackTactic::Formation) < 0,
+            "the back rank stood ahead of the line"
+        );
+    }
+
+    #[test]
+    fn the_line_still_advances() {
+        let (mut game, pack) = line_pair((15, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
+        let start = cell_of(&game, pack[0]);
+        take_turn(&mut game, pack[0]);
+        assert!(cell_of(&game, pack[0]).0 > start.0, "the front rank held");
+    }
+
+    #[test]
+    fn a_front_rank_body_next_to_the_player_leaves_its_slot() {
+        let far_cell = (0, 0);
+        let terms = |player_at| {
+            let (game, pack) = line_pair(player_at, &[(7, 8), (2, 8)], PackTactic::Formation);
+            let board = &game.world.resource::<TacticalBattle>().board;
+            pack::plan(&game, pack[0], 1.0).cell_terms(board, far_cell)
+        };
+        assert!(terms((14, 8)) < 0.0, "the control: a slot pulls");
+        assert_eq!(terms((8, 8)), 0.0, "a body in the fight kept its slot");
+    }
+
+    #[test]
+    fn the_pack_switches_to_rush_when_the_front_rank_is_gone() {
+        let (mut game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
+        assert_eq!(pack::check_transition(&mut game), None, "the line stands");
+        assert_eq!(tactic_of(&game), PackTactic::Formation);
+        game.world.resource_mut::<TacticalBattle>().remove(pack[0]);
+        assert_eq!(pack::check_transition(&mut game), Some(BREAKS));
+        assert_eq!(tactic_of(&game), PackTactic::Rush);
+        assert_eq!(pack::check_transition(&mut game), None, "logged once");
+    }
+
+    #[test]
+    fn the_line_puts_the_first_body_in_the_middle_and_alternates_outward() {
+        assert_eq!(pack::line_offsets(&[1]), vec![0]);
+        assert_eq!(pack::line_offsets(&[1, 1, 1]), vec![0, 1, -1]);
+        assert_eq!(pack::line_offsets(&[1, 1, 1, 1]), vec![0, 1, -1, 2]);
+        // A squad two cells wide takes two cells of the line.
+        assert_eq!(pack::line_offsets(&[2, 1, 1]), vec![0, 2, -1]);
+    }
+}
+
+mod flank {
+    use super::field::*;
+    use super::*;
+    use crate::components::Stats;
+    use crate::tuning::{TACTICAL_FLANK_CROWD, TACTICAL_FLANK_PINCER};
+
+    /// The player at (8,8), the first attacker already on its north side at
+    /// (8,7), and the second parked at `second`.
+    fn pincer(second: (i32, i32), tactic: PackTactic) -> (Game, Vec<Entity>) {
+        let mut game = game();
+        let pack = stand(&mut game, 2, (8, 8), &[(8, 7), second]);
+        melee(&mut game, &pack);
+        game.set_pack_tactic(tactic);
+        (game, pack)
+    }
+
+    fn terms(game: &Game, body: Entity, cell: (i32, i32)) -> f32 {
+        let board = &game.world.resource::<TacticalBattle>().board;
+        pack::plan(game, body, 1.0).cell_terms(board, cell)
+    }
+
+    #[test]
+    fn the_cell_opposite_a_packmate_pays_and_its_own_side_is_charged() {
+        let (game, pack) = pincer((12, 12), PackTactic::Flank);
+        let second = pack[1];
+        assert_eq!(terms(&game, second, (9, 9)), 0.0, "south-east: neither");
+        assert_eq!(terms(&game, second, (8, 9)), TACTICAL_FLANK_PINCER, "south");
+        assert_eq!(terms(&game, second, (8, 5)), -TACTICAL_FLANK_CROWD, "north");
+        let (rush, pack) = pincer((12, 12), PackTactic::Rush);
+        assert_eq!(terms(&rush, pack[1], (8, 9)), 0.0, "Rush adds nothing");
+    }
+
+    #[test]
+    fn a_second_attacker_takes_the_side_opposite_the_first() {
+        let (mut game, pack) = pincer((10, 10), PackTactic::Flank);
+        assert!(wait_for_turn(&mut game, pack[1]));
+        assert!(game.tactical_ai_turn_at(0.0));
+        assert_eq!(cell_of(&game, pack[1]), (8, 9));
+    }
+
+    /// Who `actor` would swing at between the player and a companion of
+    /// nearly the same Integrity, with a packmate already beside the
+    /// companion.
+    fn focus_pick(tactic: PackTactic) -> &'static str {
+        use super::super::support::{enlist, spawn_tamed};
+        let mut game = game();
+        let companion = spawn_tamed(&mut game, 100, 3);
+        enlist(&mut game, companion);
+        let pack = tactical_fight(&mut game, 2, 100);
+        for &body in &pack {
+            game.world.entity_mut(body).insert(Routines::default());
+        }
+        open_field(&mut game, &[]);
+        let player = game.player_entity();
+        for (i, &body) in pack.iter().chain([&player, &companion]).enumerate() {
+            put(&mut game, body, (i as i32, 15));
+        }
+        put(&mut game, player, (6, 4));
+        put(&mut game, companion, (3, 4));
+        put(&mut game, pack[1], (2, 4));
+        put(&mut game, pack[0], (4, 6));
+        // The default profile takes the body with fewer Integrity, the player,
+        // by one point.
+        game.world.get_mut::<Stats>(player).unwrap().hp = 75;
+        let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 76;
+        game.world
+            .resource_mut::<Behaviours>()
+            .0
+            .set_override(Some("default".into()));
+        game.set_pack_tactic(tactic);
+        let picked = game.rank_swing_targets(pack[0], (4, 6), &[player, companion]);
+        if picked == Some(companion) {
+            "companion"
+        } else {
+            "player"
+        }
+    }
+
+    #[test]
+    fn focus_picks_the_target_a_packmate_is_already_on() {
+        assert_eq!(focus_pick(PackTactic::Rush), "player", "the control");
+        assert_eq!(focus_pick(PackTactic::Flank), "companion");
     }
 }

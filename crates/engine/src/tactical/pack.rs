@@ -21,8 +21,10 @@ use crate::tactical::map::{BattleSpec, Board};
 use crate::tactical::reach::{self, line_of_sight};
 use crate::tuning::{
     PACK_ROLL_SALT, PACK_TACTIC_ODDS, TACTICAL_COHESION_FACTOR, TACTICAL_COHESION_SLACK,
+    TACTICAL_FLANK_CROWD, TACTICAL_FLANK_PINCER, TACTICAL_FOCUS_BONUS, TACTICAL_FOCUS_CAP,
+    TACTICAL_FORMATION_BACK_CLOSING, TACTICAL_FORMATION_DEPTH, TACTICAL_FORMATION_WEIGHT,
     TACTICAL_HOLD_ALERT_RANGE, TACTICAL_HOLD_COVER_BONUS, TACTICAL_HOLD_ROUNDS,
-    TACTICAL_HOLD_SIGHT_CHARGE,
+    TACTICAL_HOLD_SIGHT_CHARGE, TACTICAL_MELEE_RANGE,
 };
 
 /// What the hostile side is doing as a pack.
@@ -37,19 +39,33 @@ pub enum PackTactic {
     Together,
     /// Take cover and wait until sighted, hit, or out of patience.
     Hold,
+    /// A line of the melee bodies advancing across the way to the enemy,
+    /// the ranged ones behind it, until the front rank is gone.
+    Formation,
+    /// Swing at what a packmate is already on, from the side it is not.
+    Flank,
 }
 
 impl PackTactic {
     /// Every tactic, in the column order of `tuning::PACK_TACTIC_ODDS`.
-    pub const ALL: [PackTactic; 3] = [PackTactic::Rush, PackTactic::Together, PackTactic::Hold];
+    pub const ALL: [PackTactic; 5] = [
+        PackTactic::Rush,
+        PackTactic::Together,
+        PackTactic::Hold,
+        PackTactic::Formation,
+        PackTactic::Flank,
+    ];
 
-    /// Whether a pack of `members` bodies can play this at all. Checked
-    /// before the draw, so an ineligible tactic has weight zero rather than
-    /// being rerolled.
-    fn eligible(self, members: usize) -> bool {
+    /// Whether `members` can play this at all. Checked before the draw, so
+    /// an ineligible tactic has weight zero rather than being rerolled.
+    fn eligible(self, game: &Game, members: &[Entity]) -> bool {
         match self {
             PackTactic::Rush | PackTactic::Hold => true,
-            PackTactic::Together => members >= 2,
+            PackTactic::Together | PackTactic::Flank => members.len() >= 2,
+            PackTactic::Formation => {
+                let back = members.iter().filter(|&&m| back_rank(game, m)).count();
+                back > 0 && back < members.len()
+            }
         }
     }
 }
@@ -111,13 +127,45 @@ pub(crate) fn members(game: &Game) -> Vec<Entity> {
 /// One path for the turn and the forecast: both build it through `plan`, so
 /// both plan under the tactic this turn will actually play.
 pub(crate) struct PackPlan {
-    tactic: PackTactic,
-    /// The mean of the packmates, one point per mate (a squad is one body).
-    mates: Option<(i32, i32)>,
-    targets: Vec<(i32, i32)>,
     footprint: u8,
-    /// `TACTICAL_COHESION_FACTOR` times the body's own closing weight.
-    cohesion: f32,
+    terms: Terms,
+}
+
+/// What each tactic's terms read, gathered once by `plan`.
+/// A body's place in a formation.
+#[derive(Clone, Copy)]
+struct Slot {
+    at: (i32, i32),
+    /// The unit step along the line, across the facing.
+    across: (i32, i32),
+}
+
+enum Terms {
+    Rush,
+    Together {
+        /// The mean of the packmates, one point per mate (a squad is one
+        /// body).
+        mates: Option<(i32, i32)>,
+        /// `TACTICAL_COHESION_FACTOR` times the body's own closing weight.
+        cohesion: f32,
+    },
+    Hold {
+        targets: Vec<(i32, i32)>,
+    },
+    Formation {
+        back: bool,
+        /// `None` for a front-rank body already in the fight, which has left
+        /// the line, and for a pack with nobody to face.
+        slot: Option<Slot>,
+    },
+    Flank {
+        /// Every enemy body and how many packmates are within melee of it,
+        /// already capped.
+        focus: Vec<(Entity, u32)>,
+        /// The body this one means to swing at, and the sector each packmate
+        /// within melee of it holds.
+        target: Option<((i32, i32), Vec<u8>)>,
+    },
 }
 
 /// `body`'s plan under the pack's tactic, `closing` being its profile's closing
@@ -130,75 +178,324 @@ pub(crate) fn plan(game: &Game, body: Entity, closing: f32) -> PackPlan {
     } else {
         PackTactic::Rush
     };
-    let mut plan = PackPlan {
-        tactic,
-        mates: None,
-        targets: Vec::new(),
-        footprint: battle.footprint_of(body),
-        cohesion: closing * TACTICAL_COHESION_FACTOR,
-    };
-    match tactic {
-        PackTactic::Rush => {}
+    let terms = match tactic {
+        PackTactic::Rush => Terms::Rush,
         PackTactic::Together => {
             let points: Vec<(f32, f32)> = members(game)
                 .into_iter()
                 .filter(|&mate| mate != body)
-                .filter_map(|mate| {
-                    let cells = battle.cells_of(mate);
-                    let n = cells.len() as f32;
-                    (n > 0.0).then(|| {
-                        (
-                            cells.iter().map(|c| c.0 as f32).sum::<f32>() / n,
-                            cells.iter().map(|c| c.1 as f32).sum::<f32>() / n,
-                        )
-                    })
-                })
+                .filter_map(|mate| mean(&battle.cells_of(mate)))
                 .collect();
-            if !points.is_empty() {
-                let n = points.len() as f32;
-                plan.mates = Some((
-                    (points.iter().map(|p| p.0).sum::<f32>() / n).round() as i32,
-                    (points.iter().map(|p| p.1).sum::<f32>() / n).round() as i32,
-                ));
+            Terms::Together {
+                mates: mean_of(&points).map(round),
+                cohesion: closing * TACTICAL_COHESION_FACTOR,
             }
         }
-        PackTactic::Hold => plan.targets = game.tactical_sides(body).targets,
+        PackTactic::Hold => Terms::Hold {
+            targets: game.tactical_sides(body).targets,
+        },
+        PackTactic::Formation => {
+            let back = back_rank(game, body);
+            let engaged = !back && beside_an_outsider(game, body);
+            Terms::Formation {
+                back,
+                slot: if engaged {
+                    None
+                } else {
+                    formation_slot(game, body)
+                },
+            }
+        }
+        PackTactic::Flank => flank_terms(game, body),
+    };
+    PackPlan {
+        footprint: battle.footprint_of(body),
+        terms,
     }
-    plan
+}
+
+/// The mean of `cells`; `None` for no cells.
+fn mean(cells: &[(i32, i32)]) -> Option<(f32, f32)> {
+    let points: Vec<(f32, f32)> = cells.iter().map(|c| (c.0 as f32, c.1 as f32)).collect();
+    mean_of(&points)
+}
+
+fn mean_of(points: &[(f32, f32)]) -> Option<(f32, f32)> {
+    let n = points.len() as f32;
+    (n > 0.0).then(|| {
+        (
+            points.iter().map(|p| p.0).sum::<f32>() / n,
+            points.iter().map(|p| p.1).sum::<f32>() / n,
+        )
+    })
+}
+
+fn round(point: (f32, f32)) -> (i32, i32) {
+    (point.0.round() as i32, point.1.round() as i32)
+}
+
+/// The mean of `cells`, rounded to a cell.
+fn centre(cells: &[(i32, i32)]) -> Option<(i32, i32)> {
+    mean(cells).map(round)
+}
+
+/// Whether `body` belongs in a formation's back rank: it can hit something
+/// from beyond melee, by its swing or by a ready routine.
+///
+/// Derived each turn and never stored, so a body whose routine comes off
+/// cooldown can change rank, and the roll's eligibility asks the same thing.
+fn back_rank(game: &Game, body: Entity) -> bool {
+    game.swing_range(body) > TACTICAL_MELEE_RANGE
+        || game
+            .ready_routines(body)
+            .iter()
+            .any(|def| game.routine_tactical_range(def).max > TACTICAL_MELEE_RANGE)
+}
+
+/// Every body on the board that is not in the pack.
+fn outsiders(game: &Game) -> Vec<Entity> {
+    let pack = members(game);
+    game.world
+        .resource::<TacticalBattle>()
+        .bodies()
+        .map(|(body, _)| body)
+        .filter(|body| !pack.contains(body))
+        .collect()
+}
+
+/// Whether a body outside the pack is within melee of `body`.
+fn beside_an_outsider(game: &Game, body: Entity) -> bool {
+    let battle = game.world.resource::<TacticalBattle>();
+    let ours = battle.cells_of(body);
+    outsiders(game)
+        .into_iter()
+        .any(|other| reach::gap(&ours, &battle.cells_of(other)) <= TACTICAL_MELEE_RANGE)
+}
+
+/// The compass sector, 0 (east) to 7 counter-clockwise in board terms, that
+/// the step `(dx, dy)` points into; `None` for no step at all.
+fn sector(dx: i32, dy: i32) -> Option<u8> {
+    if dx == 0 && dy == 0 {
+        return None;
+    }
+    let turns = (dy as f32).atan2(dx as f32) / std::f32::consts::FRAC_PI_4;
+    Some((turns.round() as i32).rem_euclid(8) as u8)
+}
+
+/// The unit step pointing into compass `sector`.
+fn sector_step(sector: u8) -> (i32, i32) {
+    const STEPS: [(i32, i32); 8] = [
+        (1, 0),
+        (1, 1),
+        (0, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+    ];
+    STEPS[sector as usize % 8]
+}
+
+/// Where along a line each body stands, in the order given (the first is the
+/// toughest): the first in the middle, then alternating outward, each taking
+/// as many cells as it is wide.
+pub(crate) fn line_offsets(widths: &[u8]) -> Vec<i32> {
+    let Some(&first) = widths.first() else {
+        return Vec::new();
+    };
+    let mut offsets = vec![0];
+    let mut right = first as i32;
+    let mut left = 0;
+    for (i, &w) in widths.iter().enumerate().skip(1) {
+        if i % 2 == 1 {
+            offsets.push(right);
+            right += w as i32;
+        } else {
+            left -= w as i32;
+            offsets.push(left);
+        }
+    }
+    offsets
+}
+
+/// The cell `body` holds in the pack's formation, a pure function of where
+/// the pack stands and what each member can reach.
+///
+/// The line faces from the pack's centre toward the nearest outsider,
+/// snapped to a compass point; the front rank stands across it centred on its
+/// own centre, the back rank `TACTICAL_FORMATION_DEPTH` behind. Each rank is
+/// ordered toughest first, ties to initiative order.
+fn formation_slot(game: &Game, body: Entity) -> Option<Slot> {
+    let battle = game.world.resource::<TacticalBattle>();
+    let order = battle.initiative();
+    let mut pack = members(game);
+    pack.sort_by_key(|m| order.iter().position(|o| o == m).unwrap_or(usize::MAX));
+    let cells_of = |members: &[Entity]| -> Vec<(i32, i32)> {
+        members.iter().flat_map(|&m| battle.cells_of(m)).collect()
+    };
+    let middle = centre(&cells_of(&pack))?;
+    let facing_to = outsiders(game)
+        .into_iter()
+        .flat_map(|o| battle.cells_of(o))
+        .min_by_key(|&c| (reach::distance(middle, c), c.1, c.0))?;
+    let facing = sector_step(sector(facing_to.0 - middle.0, facing_to.1 - middle.1)?);
+    let across = (-facing.1, facing.0);
+    let max_hp = |m: Entity| game.world.get::<Stats>(m).map_or(0, |s| s.max_hp);
+    let back = back_rank(game, body);
+    let (backs, front): (Vec<Entity>, Vec<Entity>) =
+        pack.iter().partition(|&&m| back_rank(game, m));
+    let mut rank = if back { backs } else { front.clone() };
+    // Stable, so equal toughness keeps initiative order.
+    rank.sort_by_key(|&m| std::cmp::Reverse(max_hp(m)));
+    let line = centre(&cells_of(&front))?;
+    let at = if back {
+        (
+            line.0 - facing.0 * TACTICAL_FORMATION_DEPTH,
+            line.1 - facing.1 * TACTICAL_FORMATION_DEPTH,
+        )
+    } else {
+        line
+    };
+    let widths: Vec<u8> = rank.iter().map(|&m| battle.footprint_of(m)).collect();
+    let i = rank.iter().position(|&m| m == body)?;
+    let offset = line_offsets(&widths)[i];
+    Some(Slot {
+        at: (at.0 + across.0 * offset, at.1 + across.1 * offset),
+        across,
+    })
+}
+
+/// How many other packmates stand within melee of each enemy body of
+/// `body`'s, capped at `TACTICAL_FOCUS_CAP`.
+fn focus_counts(game: &Game, body: Entity, enemies: &[Entity]) -> Vec<(Entity, u32)> {
+    let battle = game.world.resource::<TacticalBattle>();
+    let mates: Vec<Vec<(i32, i32)>> = members(game)
+        .into_iter()
+        .filter(|&mate| mate != body)
+        .map(|mate| battle.cells_of(mate))
+        .collect();
+    enemies
+        .iter()
+        .map(|&enemy| {
+            let theirs = battle.cells_of(enemy);
+            let near = mates
+                .iter()
+                .filter(|cells| reach::gap(cells, &theirs) <= TACTICAL_MELEE_RANGE)
+                .count() as u32;
+            (enemy, near.min(TACTICAL_FOCUS_CAP))
+        })
+        .collect()
+}
+
+/// `Flank`'s terms for `body`: focus on every enemy, and the target it would
+/// swing at from where it stands with that focus counted, with the sectors
+/// its packmates already hold around it.
+fn flank_terms(game: &Game, body: Entity) -> Terms {
+    let battle = game.world.resource::<TacticalBattle>();
+    let mut enemies: Vec<((i32, i32), Entity)> = game
+        .tactical_sides(body)
+        .targets
+        .iter()
+        .filter_map(|&cell| battle.occupant(cell).map(|e| (cell, e)))
+        .collect();
+    enemies.sort_by_key(|&(cell, _)| (cell.1, cell.0));
+    enemies.dedup_by_key(|&mut (_, e)| e);
+    let bodies: Vec<Entity> = enemies.iter().map(|&(_, e)| e).collect();
+    let focus = focus_counts(game, body, &bodies);
+    let target = battle.cell_of(body).and_then(|from| {
+        let worth = |t: Entity| focus_bonus(&focus, t);
+        let target = game.rank_swing_targets_by(body, from, &bodies, worth)?;
+        let at = battle.cell_of(target)?;
+        let theirs = battle.cells_of(target);
+        let held = members(game)
+            .into_iter()
+            .filter(|&mate| mate != body)
+            .filter(|&mate| reach::gap(&battle.cells_of(mate), &theirs) <= TACTICAL_MELEE_RANGE)
+            .filter_map(|mate| battle.cell_of(mate))
+            .filter_map(|cell| sector(cell.0 - at.0, cell.1 - at.1))
+            .collect();
+        Some((at, held))
+    });
+    Terms::Flank { focus, target }
+}
+
+fn focus_bonus(focus: &[(Entity, u32)], target: Entity) -> f32 {
+    focus
+        .iter()
+        .find(|&&(e, _)| e == target)
+        .map_or(0.0, |&(_, n)| TACTICAL_FOCUS_BONUS * n as f32)
 }
 
 impl PackPlan {
     /// The multiplier on the body's closing term.
     pub(crate) fn closing_scale(&self) -> f32 {
-        match self.tactic {
-            PackTactic::Rush | PackTactic::Together => 1.0,
-            PackTactic::Hold => 0.0,
+        match self.terms {
+            Terms::Rush | Terms::Together { .. } | Terms::Flank { .. } => 1.0,
+            Terms::Formation { back: false, .. } => 1.0,
+            Terms::Formation { back: true, .. } => TACTICAL_FORMATION_BACK_CLOSING,
+            Terms::Hold { .. } => 0.0,
+        }
+    }
+
+    /// What a swing at `target` is worth on top of the profile's own score:
+    /// `Flank`'s focus, and nothing under any other tactic.
+    pub(crate) fn focus(&self, target: Entity) -> f32 {
+        match &self.terms {
+            Terms::Flank { focus, .. } => focus_bonus(focus, target),
+            _ => 0.0,
         }
     }
 
     /// What standing at `cell` adds to its worth under the tactic.
     pub(crate) fn cell_terms(&self, board: &crate::tactical::map::Board, cell: (i32, i32)) -> f32 {
         let stands = crate::tactical::footprint_cells_at(cell, self.footprint);
-        match self.tactic {
-            PackTactic::Rush => 0.0,
+        match &self.terms {
+            Terms::Rush => 0.0,
             // The slack-rope pull toward the packmates: free within
             // `TACTICAL_COHESION_SLACK` of them, a linear charge beyond.
-            PackTactic::Together => self.mates.map_or(0.0, |centroid| {
+            Terms::Together { mates, cohesion } => mates.map_or(0.0, |centroid| {
                 let d = reach::gap(&stands, &[centroid]);
-                -self.cohesion * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
+                -cohesion * d.saturating_sub(TACTICAL_COHESION_SLACK) as f32
             }),
             // Cover-seeking must agree with the trigger: a cell the party
             // would see from is charged past anything cover pays, so the walk
             // to shelter never ends where the hold would then break.
-            PackTactic::Hold => {
-                let seen = self.targets.iter().any(|&t| in_view(board, &stands, &[t]));
+            Terms::Hold { targets } => {
+                let seen = targets.iter().any(|&t| in_view(board, &stands, &[t]));
                 let charge = if seen {
                     TACTICAL_HOLD_SIGHT_CHARGE
                 } else {
                     0.0
                 };
-                TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, &self.targets) - charge
+                TACTICAL_HOLD_COVER_BONUS * cover_share(board, &stands, targets) - charge
             }
+            // **The front rank is charged only for straying along the line.**
+            // Its slot is read from where the rank stands now, so a charge
+            // for the whole distance would price every step forward at what
+            // closing pays for it and the line would never advance. The back
+            // rank is held to its slot outright: that is what keeps it
+            // behind.
+            Terms::Formation { slot, back } => slot.map_or(0.0, |slot| {
+                let off = if *back {
+                    reach::gap(&stands, &[slot.at]) as f32
+                } else {
+                    let (dx, dy) = (cell.0 - slot.at.0, cell.1 - slot.at.1);
+                    let along = dx * slot.across.0 + dy * slot.across.1;
+                    // A diagonal unit step has squared length two.
+                    let norm = slot.across.0.pow(2) + slot.across.1.pow(2);
+                    along.abs() as f32 / norm as f32
+                };
+                -TACTICAL_FORMATION_WEIGHT * off
+            }),
+            Terms::Flank { target, .. } => target.as_ref().map_or(0.0, |(at, held)| {
+                let Some(mine) = sector(cell.0 - at.0, cell.1 - at.1) else {
+                    return 0.0;
+                };
+                let crowd = held.iter().filter(|&&s| s == mine).count() as f32;
+                let pincer = held.contains(&((mine + 4) % 8));
+                -TACTICAL_FLANK_CROWD * crowd + if pincer { TACTICAL_FLANK_PINCER } else { 0.0 }
+            }),
         }
     }
 }
@@ -210,10 +507,22 @@ impl PackPlan {
 /// write) and the turn that follows it plan under the same tactic.
 fn effective(game: &Game) -> PackTactic {
     let state = &game.world.resource::<TacticalBattle>().pack;
-    if state.tactic == PackTactic::Hold && hold_should_break(game) {
+    if breaking(game, state.tactic).is_some() {
         PackTactic::Rush
     } else {
         state.tactic
+    }
+}
+
+/// The line to log if `tactic` has a reason to end now: a hold sighted, hit
+/// or out of patience, or a formation with no front rank left.
+fn breaking(game: &Game, tactic: PackTactic) -> Option<&'static str> {
+    match tactic {
+        PackTactic::Hold if hold_should_break(game) => Some("The pack breaks cover!"),
+        PackTactic::Formation if members(game).iter().all(|&m| back_rank(game, m)) => {
+            Some("The line breaks!")
+        }
+        _ => None,
     }
 }
 
@@ -258,18 +567,17 @@ fn sighted(game: &Game, pack: &[Entity]) -> bool {
         })
 }
 
-/// Ends the hold if it has a reason to, returning the line to log.
+/// Ends a hold or a formation if it has a reason to, returning the line to
+/// log.
 ///
 /// Called at the start of every hostile beat, before the intent is chosen.
-/// The first trigger to fire ends the hold for the whole pack, and a pack no
-/// longer holding answers `None`.
+/// The first trigger to fire ends the tactic for the whole pack, and a pack
+/// already playing `Rush` answers `None`.
 pub(crate) fn check_transition(game: &mut Game) -> Option<&'static str> {
     let battle = game.world.get_resource::<TacticalBattle>()?;
-    if battle.pack.tactic != PackTactic::Hold || !hold_should_break(game) {
-        return None;
-    }
+    let line = breaking(game, battle.pack.tactic)?;
     game.set_pack_tactic(PackTactic::Rush);
-    Some("The pack breaks cover!")
+    Some(line)
 }
 
 /// The fold the roll is drawn from: `spec`'s own words and a salt, so it is
@@ -288,7 +596,7 @@ pub(crate) fn roll_seed(spec: BattleSpec) -> u64 {
 }
 
 /// The odds row for behaviour `id`, falling back to `default`'s.
-pub(crate) fn odds_row(id: &str) -> [u32; 3] {
+pub(crate) fn odds_row(id: &str) -> [u32; 5] {
     let row = |wanted: &str| {
         PACK_TACTIC_ODDS
             .iter()
@@ -331,7 +639,7 @@ pub fn roll(spec: BattleSpec, members: &[Entity], game: &Game) -> PackTactic {
         .iter()
         .zip(odds)
         .map(|(tactic, weight)| {
-            if tactic.eligible(members.len()) {
+            if tactic.eligible(game, members) {
                 weight
             } else {
                 0
@@ -360,5 +668,7 @@ pub(crate) fn opening_line(tactic: PackTactic) -> Option<&'static str> {
         PackTactic::Rush => None,
         PackTactic::Together => Some("The pack advances together."),
         PackTactic::Hold => Some("The pack spreads out behind cover, waiting."),
+        PackTactic::Formation => Some("The pack forms a line, ranged programs behind."),
+        PackTactic::Flank => Some("The pack fans out to surround you."),
     }
 }

@@ -94,6 +94,8 @@ Do not duplicate between them; point instead.
 | [0024](0024-code-is-organized-by-domain.md) | Code is organized by domain | Accepted (standing) | user (CLAUDE.md) | Module per domain; Strategy |
 | [0025](0025-the-debug-build-is-playable.md) | The debug build is playable | Accepted (standing) | user (CLAUDE.md) | — |
 | [0026](0026-no-ci-manual-releases.md) | No CI; releases are manual per platform | Accepted (standing) | user (CLAUDE.md) | — |
+| [0027](0027-refusals-are-typed-per-feature.md) | Refusals are typed per feature | Proposed | Claude — proposed, awaiting the user | Refusal enum |
+| [0028](0028-announcements-fire-on-a-crossing.md) | Announcements fire on a crossing | Proposed | Claude — proposed, awaiting the user | Edge trigger |
 
 ## Pattern index
 
@@ -118,3 +120,5 @@ A pattern not listed here, or listed only as (Proposed), is not yet agreed: it n
 | Aggregate with one lifetime (Proposed) | [0013](0013-a-run-struct-on-app.md) | none yet (proposed `Run`) |
 | State, data travels with the mode (Proposed) | [0014](0014-per-screen-state-and-one-screen-table.md) | `RigToolScreen`, `DepotFilterScreen` |
 | Navigation stack (Proposed) | [0007](0007-navigation-is-a-stack.md) | none yet |
+| Refusal enum (Proposed) | [0027](0027-refusals-are-typed-per-feature.md) | `SortieRefusal`, `ContractRefusal` |
+| Edge trigger (Proposed) | [0028](0028-announcements-fire-on-a-crossing.md) | `Outpost::announced` (latch form) |

@@ -369,10 +369,9 @@ fn f_is_inert_with_no_floor_catalogue_loaded() {
         app.excavate_brush, None,
         "an empty FloorDb must leave the brush untouched"
     );
-    assert_eq!(
-        app.excavate_brush_label(),
-        None,
-        "an empty FloorDb must offer no header line at all"
+    assert!(
+        !bar_keys(&app).contains(&"F".to_string()),
+        "an empty FloorDb must not advertise [F]"
     );
 }
 
@@ -450,32 +449,74 @@ fn committing_with_a_finish_brush_marks_the_already_laid_floor_under_it() {
     );
 }
 
-/// `excavate_brush_label` names each brush state and is absent entirely
-/// with no finish content loaded.
+fn bar_keys(app: &App) -> Vec<String> {
+    app.plan_keybar()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect()
+}
+
+fn bar_label(app: &App, key: &str) -> Option<String> {
+    app.plan_keybar()?
+        .into_iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, l)| l)
+}
+
+/// The plan's keys take over the key bar, the tactical aim cursor's
+/// convention, and the brush in hand rides on `[F]`'s own label.
 #[test]
-fn excavate_brush_label_names_every_state() {
+fn the_plan_keybar_names_every_brush_state() {
     let mut app = app_at_the_frontier(4310);
+    assert_eq!(app.plan_keybar(), None, "the playing map keeps its own bar");
     app.handle_key(GameKey::Char('m'));
-    assert_eq!(
-        app.excavate_brush_label().as_deref(),
-        Some("Brush: plain [F] \u{b7} plot [P]")
-    );
+    assert_eq!(bar_keys(&app), ["↑↓←→", "Space", "F", "P", "Esc"]);
+    assert_eq!(bar_label(&app, "F").as_deref(), Some("brush: plain"));
 
     pick_brush(
         &mut app,
         Some(FinishOrder::Apply(FloorId::from("cobalt_carpet"))),
     );
     assert_eq!(
-        app.excavate_brush_label().as_deref(),
-        Some("Brush: Cobalt Carpet [F] \u{b7} plot [P]")
+        bar_label(&app, "F").as_deref(),
+        Some("brush: Cobalt Carpet")
     );
     pick_brush(&mut app, Some(FinishOrder::Strip));
-    assert_eq!(
-        app.excavate_brush_label().as_deref(),
-        Some("Brush: strip [F] \u{b7} plot [P]")
-    );
+    assert_eq!(bar_label(&app, "F").as_deref(), Some("brush: strip"));
 
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.plan_keybar(),
+        None,
+        "leaving the plan hands the bar back"
+    );
+}
+
+/// Space and Esc mean something else once a corner is down, and the bar
+/// says so.
+#[test]
+fn the_plan_keybar_follows_the_anchor() {
+    let mut app = app_at_the_frontier(4312);
+    app.handle_key(GameKey::Char('m'));
+    assert_eq!(bar_label(&app, "Space").as_deref(), Some("box"));
+    assert_eq!(bar_label(&app, "Esc").as_deref(), Some("done"));
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(bar_label(&app, "Space").as_deref(), Some("finish box"));
+    assert_eq!(bar_label(&app, "Esc").as_deref(), Some("drop corner"));
+}
+
+#[test]
+fn the_stockpile_keybar_offers_no_brush_or_plot() {
+    let mut app = app_at_the_frontier(4313);
+    app.handle_key(GameKey::Char('z'));
+    assert_eq!(app.mode, Mode::Stockpile);
+    assert_eq!(bar_keys(&app), ["↑↓←→", "Space", "Esc"]);
+}
+
+#[test]
+fn the_plan_keybar_drops_f_with_no_floor_catalogue() {
     let (mut empty, _assets) = app_without_floors(4311);
     empty.handle_key(GameKey::Char('m'));
-    assert_eq!(empty.excavate_brush_label(), None);
+    assert!(!bar_keys(&empty).contains(&"F".to_string()));
 }

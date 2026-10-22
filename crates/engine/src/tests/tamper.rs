@@ -131,10 +131,10 @@ fn a_tamper_routine_never_runs_on_the_map() {
 /// the ability's own (todo #101 moved these off `model_inspection`, which no
 /// longer teaches anything, into one node per routine).
 ///
-/// Tactical fights sit behind `profile.tactical_battles`, which is off until
-/// a player turns it on. `Game::battle_special_options` filters a
-/// tactical-only routine out of the group model's picker, so to a player who
-/// never enabled the toggle these five are simply absent with no explanation
+/// Tactical fights sit behind `profile.tactical_battles`, which a player can
+/// turn off. `Game::battle_special_options` filters a tactical-only routine
+/// out of the group model's picker, so to a player who turned the toggle off
+/// these five are simply absent with no explanation
 /// — and `ability_unavailable`'s `"battle map only"` string has no caller
 /// that reaches a screen. The description is the only place they are told,
 /// which is why this is a census and not a convention.

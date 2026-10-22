@@ -2594,7 +2594,7 @@ mod tests {
         assert!(
             drawn
                 .iter()
-                .any(|t| t.contains("Tactical surface battles") && t.contains("Off")),
+                .any(|t| t.contains("Tactical surface battles") && t.contains("On")),
             "the toggle row did not draw its value: {drawn:#?}"
         );
     }

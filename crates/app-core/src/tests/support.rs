@@ -217,6 +217,9 @@ pub(crate) fn test_app(seed: u32) -> App {
             "feral_processes_appcore_test_{seed}_telemetry.jsonl"
         )),
     );
+    // A fresh profile fights on the battle map; most tests here drive the
+    // group model, and a tactical test turns it back on itself.
+    app.profile.tactical_battles = false;
     app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
     // A new run queues the onboarding chain's first briefing, which would
     // otherwise take the screen the moment any test reached `Playing` — the

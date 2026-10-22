@@ -1,7 +1,7 @@
 //! The tactical battle model: a disposable grid a surface fight is fought
 //! on.
 //!
-//! Opt-in, off by default, and the second of the game's two combat models —
+//! On by default for a new player, and the second of the game's two combat models —
 //! see
 //! `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`.
 //! `Game::start_battle` is the router that chooses between the two models,

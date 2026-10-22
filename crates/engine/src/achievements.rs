@@ -246,7 +246,11 @@ pub struct Profile {
     /// run. A plain `bool` for `seen_notifications`' reason — `load` discards
     /// the *whole* profile on a parse failure, so nothing here may become
     /// unparseable by a later build.
-    #[serde(default)]
+    ///
+    /// On for a player who has never chosen — an absent field and an absent
+    /// file alike, see `new_player` — and off in `Profile::default()`, which
+    /// is the engine's empty resource before `install_profile`, not a player.
+    #[serde(default = "tactical_battles_default")]
     pub tactical_battles: bool,
     /// Every run's banked score, summed — see `score` and
     /// `Game::bank_run_score`. Only ever grows; the next character creation
@@ -256,7 +260,20 @@ pub struct Profile {
     pub lifetime_score: u64,
 }
 
+fn tactical_battles_default() -> bool {
+    true
+}
+
 impl Profile {
+    /// The profile of a player with nothing on disk: nothing earned, and
+    /// every option at the value a player who has never opened Options gets.
+    pub fn new_player() -> Self {
+        Self {
+            tactical_battles: tactical_battles_default(),
+            ..Self::default()
+        }
+    }
+
     pub fn contains(&self, id: &AchievementId) -> bool {
         self.earned.iter().any(|e| &e.id == id)
     }
@@ -300,10 +317,12 @@ impl Profile {
     pub fn load(path: &Path) -> (Self, Option<String>) {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Self::default(), None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return (Self::new_player(), None);
+            }
             Err(e) => {
                 return (
-                    Self::default(),
+                    Self::new_player(),
                     Some(format!(
                         "could not read {path:?}: {e}; starting from an empty profile"
                     )),
@@ -313,7 +332,7 @@ impl Profile {
         match ron::from_str::<Profile>(&text) {
             Ok(profile) => (profile, None),
             Err(e) => (
-                Self::default(),
+                Self::new_player(),
                 Some(format!(
                     "could not parse {path:?}: {e}; starting from an empty profile. The file has \
                      not been overwritten — fix it or delete it."
@@ -748,11 +767,19 @@ mod tests {
 
         assert_eq!(warning, None, "an older profile must not warn: {warning:?}");
         assert_eq!(profile.earned.len(), 1, "the achievement was discarded");
-        assert!(
-            !profile.tactical_battles,
-            "an absent toggle must read as off"
-        );
+        assert!(profile.tactical_battles, "an absent toggle must read as on");
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_first_run_fights_on_the_battle_map() {
+        let path = temp_profile("options_first_run");
+        let _ = std::fs::remove_file(&path);
+
+        let (profile, warning) = Profile::load(&path);
+
+        assert_eq!(warning, None);
+        assert!(profile.tactical_battles, "a new player must start on");
     }
 
     #[test]

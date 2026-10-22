@@ -1,8 +1,8 @@
 # Battle maps
 
 A fight on the surface can open on a map instead of the usual intrusion
-screen. Turn it on with Tactical surface battles in Options; it is off until
-you do. Fights underground and fights with a nest guardian keep the
+screen. It is on unless you turn Tactical surface battles off in Options.
+Fights underground and fights with a nest guardian keep the
 [intrusion](intrusions) screen either way.
 
 The board is drawn where the world map was, and a strip inside it names the

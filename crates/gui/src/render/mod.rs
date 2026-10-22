@@ -182,6 +182,9 @@ use transfer::draw_transfer;
 /// mistake for a painted dark pixel.
 const SCREEN_BG: Color = Color::new(0.02, 0.02, 0.03, 1.0);
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
+/// Drawn behind a full-screen notice's panel. Light enough that the run shows
+/// through around the notice, dark enough that the map does not compete with it.
+const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
 const BORDER: Color = Color::new(0.25, 0.65, 0.65, 1.0);
 const TEXT: Color = Color::new(0.92, 0.92, 0.92, 1.0);
 const TEXT_DIM: Color = Color::new(0.6, 0.6, 0.65, 1.0);

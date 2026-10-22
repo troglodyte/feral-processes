@@ -14,10 +14,8 @@ use feral_processes_engine::PerkReport;
 use feral_processes_engine::text;
 
 use super::level_up::{duel_heading, duel_lines, duel_moved, panel_rect, stat_line};
-use super::{BORDER, Metrics, PANEL_BG, TEXT, TEXT_DIM};
-use crate::paint::{Color, Painter, Rect};
-
-const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
+use super::{BORDER, Metrics, PANEL_BG, SCRIM, TEXT, TEXT_DIM};
+use crate::paint::{Painter, Rect};
 
 const HINT: &str = "[Enter] Back to perks";
 

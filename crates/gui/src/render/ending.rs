@@ -13,10 +13,8 @@ use feral_processes_engine::text;
 
 use super::notify::{body_columns, panel_rect};
 use super::popup::*;
-use super::{BORDER, CYAN, Metrics, PANEL_BG, TEXT, TEXT_DIM};
-use crate::paint::{Color, Painter, Rect};
-
-const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
+use super::{BORDER, CYAN, Metrics, PANEL_BG, SCRIM, TEXT, TEXT_DIM};
+use crate::paint::{Painter, Rect};
 
 /// How wide the prose runs inside the panel, `notify`'s measure.
 const BODY_WIDTH_FRACTION: f32 = 0.84;

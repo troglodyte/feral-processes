@@ -6,19 +6,15 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 ## Build
 
-- [ ] Add `debug = false` or `debug = "line-tables-only"` to `[profile.dev.package."*"]` in the root `Cargo.toml`. Leave `[profile.dev]` alone. From [0002](0002-no-debuginfo-for-dependencies.md).
-- [ ] `.claude/rules/launcher-and-build.md` says the launcher's `[lib]` serves "three bins"; there are six. From [0003](0003-headless-dev-bins-without-bevy.md).
 - [ ] Workspace manifest: `rand`, `ron` and `serde` are declared in two or three crates; move them to `[workspace.dependencies]`. Consider `[workspace.lints]`, `rust-version` and `rust-toolchain.toml`. From [0010](0010-hygiene-backlog.md).
 
 ## Bugs
 
-- [ ] Roster `atk` is raw. The user decided effective atk everywhere ([0012](0012-open-questions-from-the-review.md)), enemy rows included (confirmed 2026-10-21). `Game::owned_pets` (`PetInfo`) and `Game::companion_info` (`CompanionInfo`) in `game/party.rs`, and `enemy_row` (`EnemyGroupView`) in `game/combat_round.rs`, read `stats.atk`; they should call `Game::effective_atk`. Start with a failing test.
 - [ ] Stale `watching`: `App::leave_run` and `App::install_game` (`app/lifecycle.rs`) never clear `watching`, so the camera can follow a recycled `Entity` in the next run. Write the failing reproducer first. The structural fix is [0013](0013-a-run-struct-on-app.md).
 
 ## Assets and tests
 
 - [ ] Implement [0016](0016-shipped-assets-deny-unknown-fields.md): `#[serde(deny_unknown_fields)]` on every shipped asset kind's def types.
-- [ ] `every_shipped_asset_file_loads_without_a_warning` (`tests/assets.rs`) matches only the substring "skipped invalid"; other warning shapes pass it. Assert `AssetDbs.warnings` is empty instead. From [0004](0004-content-loads-once-as-a-value.md).
 
 ## Engine
 
@@ -28,7 +24,6 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 ## app-core and gui
 
-- [ ] `SCRIM` is declared four times (`render/notify.rs`, `level_up.rs`, `perk_bought.rs`, `ending.rs`). From [0009](0009-layout-separate-from-paint.md).
 - [ ] `render/settlement_market.rs` copies caravan's `cell` closure; make it a call. From [0009](0009-layout-separate-from-paint.md).
 - [ ] Replace `use super::*` in `render/` with explicit imports when a file is touched. From [0009](0009-layout-separate-from-paint.md).
 - [ ] `.claude/rules/drawing-seam.md` still says `render/` is ~3,000 lines with fifteen operations; it is tens of thousands, and `Painter` has more. From [0009](0009-layout-separate-from-paint.md).
@@ -39,10 +34,15 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 ## Docs
 
-- [ ] `docs/audit-gen.py` crashes: it reads `crates/engine/src/tuning.rs`, which became `tuning/` in 0.19.16. From [0010](0010-hygiene-backlog.md).
 - [ ] The generated reference pages under `docs/` drift from the shipped assets; generating them from the real `*Db` in Rust would remove the second RON parser. From [0010](0010-hygiene-backlog.md).
 - [ ] Add a check that every repo path and `paths:` glob cited in rules, skills and code comments resolves. From [0010](0010-hygiene-backlog.md).
 
 ## Done
 
 - [x] ~~Hub files become directories~~ — `tuning`, `components` and `views` split by domain in 0.19.16. app-core `lib.rs` and gui `render/mod.rs` follow `CLAUDE.md`'s "split when you're in it" rule instead.
+- [x] ~~Dependencies build with `debug = "line-tables-only"`~~ — unreleased.
+- [x] ~~The launcher rule counts six bins~~ — unreleased.
+- [x] ~~Roster, party and enemy rows quote `Game::effective_atk`~~ — unreleased.
+- [x] ~~The shipped-assets test asserts `AssetDbs.warnings` is empty~~ — unreleased.
+- [x] ~~`SCRIM` is declared once, in `render/mod.rs`~~ — unreleased.
+- [x] ~~`docs/audit-gen.py` reads `tuning/`~~ — unreleased.

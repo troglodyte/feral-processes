@@ -14,8 +14,8 @@ paths:
   keeps a bare `cargo run` unambiguous (`default-members` would also narrow a
   bare `cargo test`). `arena` also resolves `dev-saves/` template names, and
   `dev_template` is the launcher's.
-- The launcher's `[lib]` exists only so its three bins share `dev_template`
-  and it is unit-tested once. No game logic lives there.
+- The launcher's `[lib]` exists only so its six bins share `dev_template`
+  and the dev-tool modules, each unit-tested once. No game logic lives there.
 - **`[profile.dev]` in the root `Cargo.toml` is what makes a debug build
   playable** (deps at `opt-level = 3`, workspace crates at `1`). Deleting it
   is a ~22x frame-cost regression no test catches and that reads as an

@@ -4,7 +4,7 @@
 `party_turns: AutoPlay`) `Flank` is within the bar against `Rush` (win rate
 100.0% against 99.0%, party Integrity lost 15.8% against 15.4%). `Formation`
 is not, and no setting of its three knobs brings it there: the party loses
-11.1% as shipped, and every variant measured lost 6.7–11.1%, against a bar
+11.85% as shipped, and every variant measured lost 6.7–11.9%, against a bar
 of at least 12.3%. Holding the ranged bodies behind the melee ones is what
 costs the pack: with every Formation term zeroed it matches Rush exactly,
 and the back-rank charge alone accounts for nearly all of the gap. The user
@@ -32,12 +32,13 @@ New measurements. The Rush rows replicate phase 1's on a later build
 (`arena-numbers-compare-within-one-build-only`).
 
 `tactical-mixed-pack.ron`, as shipped (depth 2, back closing 0.25, weight
-1.0, back rank charged one-sided):
+1.0, back rank charged one-sided, rank by swing alone, geometry from
+footprint centres):
 
 | Tactic | Reps | Win rate | HP lost | Mean rounds |
 |---|---|---|---|---|
 | Rush | 200 | 99.0% | 15.38% | 13.71 |
-| Formation | 200 | 100.0% | 11.09% | 10.11 |
+| Formation | 200 | 100.0% | 11.85% | 10.34 |
 | Flank | 200 | 100.0% | 15.83% | 12.34 |
 
 `tactical-full-group.ron` (a walkover, so an upper bound only):
@@ -47,8 +48,10 @@ New measurements. The Rush rows replicate phase 1's on a later build
 | Rush | 200 | 100.0% | 1.27% | 4.89 |
 | Flank | 200 | 100.0% | 1.75% | 4.92 |
 
-Formation variants on the mixed pack, 200 reps each. "Two-sided" is the
-first build, where the back rank was charged its whole distance to the slot;
+Formation variants on the mixed pack, 200 reps each, on the builds before
+the rank and centre-geometry change (which moved the shipped row from
+11.09% to 11.85%; Rush and Flank did not move). "Two-sided" is the first
+build, where the back rank was charged its whole distance to the slot;
 "one-sided" charges only for standing ahead of it.
 
 | Back-rank charge | Depth | Back closing | Weight | HP lost | Mean rounds |

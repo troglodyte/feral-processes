@@ -976,6 +976,17 @@ mod formation {
     }
 
     #[test]
+    fn the_back_rank_closes_at_a_fraction_and_the_front_at_full() {
+        use crate::tuning::TACTICAL_FORMATION_BACK_CLOSING;
+        let (game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
+        assert_eq!(pack::plan(&game, pack[0], 1.0).closing_scale(), 1.0);
+        assert_eq!(
+            pack::plan(&game, pack[1], 1.0).closing_scale(),
+            TACTICAL_FORMATION_BACK_CLOSING
+        );
+    }
+
+    #[test]
     fn the_pack_switches_to_rush_when_the_front_rank_is_gone() {
         let (mut game, pack) = line_pair((14, 8), &[(3, 8), (1, 8)], PackTactic::Formation);
         assert_eq!(pack::check_transition(&mut game), None, "the line stands");

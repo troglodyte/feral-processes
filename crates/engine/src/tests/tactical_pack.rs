@@ -975,6 +975,29 @@ mod formation {
         assert_eq!(terms((8, 8)), 0.0, "a body in the fight kept its slot");
     }
 
+    /// The line faces east from (6,8), so the back rank's slot is
+    /// `TACTICAL_FORMATION_DEPTH` west of it, and nothing is said about
+    /// standing farther back still: the body is free to stay in its own range.
+    #[test]
+    fn the_back_rank_is_charged_for_standing_ahead_of_its_slot_and_not_behind_it() {
+        use crate::tuning::{TACTICAL_FORMATION_DEPTH, TACTICAL_FORMATION_WEIGHT};
+        let (game, pack) = line_pair((14, 8), &[(6, 8), (0, 8)], PackTactic::Formation);
+        let board = &game.world.resource::<TacticalBattle>().board;
+        let plan = pack::plan(&game, pack[1], 1.0);
+        let slot_x = 6 - TACTICAL_FORMATION_DEPTH;
+        assert_eq!(plan.cell_terms(board, (slot_x - 2, 8)), 0.0, "behind");
+        assert_eq!(
+            plan.cell_terms(board, (slot_x, 3)),
+            0.0,
+            "level, off to one side"
+        );
+        assert_eq!(
+            plan.cell_terms(board, (slot_x + 1, 8)),
+            -TACTICAL_FORMATION_WEIGHT,
+            "a step ahead"
+        );
+    }
+
     #[test]
     fn the_back_rank_closes_at_a_fraction_and_the_front_at_full() {
         use crate::tuning::TACTICAL_FORMATION_BACK_CLOSING;

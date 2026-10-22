@@ -411,6 +411,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   the variant name is the save, and `has_downed_tools` reads `>=`.
 - **`EffectKind::Brawl` draws identically to `Hit` and exists only to carry
   sound**, at most one cue a frame.
+- **Every per-tick base walker skips a `Fleeing` body, and fleeing never
+  unposts it**, so a bystander walks clear of a tantrum keeping its `Task`
+  and progress.
 - **A Forgiving death benches a program and `Game::bench_or_dissolve` is the
   one door**, `dissolve_tamed_program`'s own argument one level up: the
   `DifficultyMode` branch is written once, not at each of the two death

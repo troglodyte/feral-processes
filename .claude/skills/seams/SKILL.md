@@ -52,7 +52,7 @@ Three tiers, and which one you want depends on what you are doing:
 | the base: labour scheduling & postings (assignment, wander, squeeze-past) | `references/base-labour.md` | 17 |
 | the base: production chains, machines, hauling, depots & the transfer screen | `references/base-production.md` | 42 |
 | the base: digging, rock & the base grid | `references/base-digging.md` | 17 |
-| the base: needs, morale, tantrums, repair bays, pins & research | `references/base-needs.md` | 31 |
+| the base: needs, morale, tantrums, repair bays, pins & research | `references/base-needs.md` | 32 |
 | the base: instrumentation (the production ledger, base output) | `references/base-instrumentation.md` | 6 |
 | combat: kit, Power, routines & abilities | `references/combat-kit.md` | 15 |
 | combat: attack resolution, mitigation, XP, levels, talents & the cap | `references/combat-progression.md` | 24 |

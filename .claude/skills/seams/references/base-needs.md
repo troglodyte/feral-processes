@@ -282,6 +282,18 @@
   as a GC Entropy Sweep and put it in `retain_outcomes_since_battle`'s
   keep-list.
 
+- **Every per-tick base walker skips a `Fleeing` body** —
+  `haul_step_system`, the dig, build and farm crews, and `drift_idle_staff`.
+  A posted body has no stored path: its walker steps it toward its post every
+  tick, so one walker without `Without<Fleeing>` drags a bystander straight
+  back into the tantrum and the flight reads as nothing, with no compile
+  error. Fleeing never unposts (the diff would reset `progress` and drop the
+  load). `haul_step_system` builds its own `blocked` set, so its
+  `fleeing_posted` query is what keeps a hauler off a fleer's cell.
+  `run_flight` strips every marker below `base_is_established`, since no
+  walker checks that gate. The linger outlasting a brawl is a compile-time
+  assert in `tuning/staff.rs`.
+
 - **A Forgiving death benches a program and `Game::bench_or_dissolve` is the
   one door**, `dissolve_tamed_program`'s own argument one level up: the
   `DifficultyMode` branch is written once, not at each of the two death sites

@@ -5,9 +5,10 @@ use super::support::test_app;
 use crate::{GameKey, Hub, Mode, OptionKey, OptionKind};
 use feral_processes_engine::achievements::Profile;
 
+/// Leaves the run's `game` in place, as `leave_arena` does: where the menu
+/// was opened from must not be read off whether a game happens to exist.
 fn open_from_main_menu(seed: u32) -> crate::App {
     let mut app = test_app(seed);
-    app.game = None;
     app.mode = Mode::MainMenu;
     app.handle_key(GameKey::Char('o'));
     app
@@ -84,7 +85,8 @@ fn q_on_the_map_does_nothing() {
 
 #[test]
 fn a_run_has_four_pages_and_every_one_is_found_by_hub_for() {
-    let app = test_app(9014);
+    let mut app = test_app(9014);
+    app.handle_key(GameKey::Esc);
     let kind = Hub::GameMenu.kind();
     assert_eq!(kind.pages(&app).len(), 4);
     for (i, mode) in [
@@ -101,8 +103,7 @@ fn a_run_has_four_pages_and_every_one_is_found_by_hub_for() {
             Some((Hub::GameMenu, i))
         );
     }
-    let mut menu_only = test_app(9015);
-    menu_only.game = None;
+    let menu_only = open_from_main_menu(9015);
     assert_eq!(kind.pages(&menu_only).len(), 3);
     assert_eq!(menu_only.hub_for(Mode::QuitRunConfirm), None);
 }

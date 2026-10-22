@@ -2872,6 +2872,9 @@ pub struct App {
     hub_last: [Option<Mode>; Hub::ALL.len()],
     /// Whether the Save & quit page is asking "quit without saving?".
     quit_unsaved_pending: bool,
+    /// Whether the open game menu was reached from a run (Esc on the map)
+    /// rather than the main menu. See `App::open_game_menu`.
+    game_menu_in_run: bool,
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.
     pub structure_hub: Option<StructureHub>,

@@ -69,6 +69,7 @@ impl App {
             menu_origin: None,
             hub_last: [None; Hub::ALL.len()],
             quit_unsaved_pending: false,
+            game_menu_in_run: false,
             structure_hub: None,
             command_return_row: None,
             dev_console_row: 0,

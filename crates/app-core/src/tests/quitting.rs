@@ -66,6 +66,20 @@ fn quitting_without_saving_needs_the_confirm() {
     assert!(app.game.is_some(), "the run lives while the question is up");
 }
 
+/// The keybar follows the question: digits pick a row until the yes/no is
+/// up, and then only y/n answer.
+#[test]
+fn the_keybar_names_y_and_n_while_the_confirm_is_up() {
+    let mut app = test_app(703);
+    on_save_page(&mut app);
+    let keys = |app: &App| Hub::GameMenu.kind().extra_keys(app);
+    assert_eq!(keys(&app), vec![("1-3", "pick")]);
+
+    app.handle_key(GameKey::Char('3'));
+
+    assert_eq!(keys(&app), vec![("y", "quit"), ("n", "stay")]);
+}
+
 #[test]
 fn declining_the_confirm_stays_in_the_menu_with_the_run() {
     for decline in [GameKey::Esc, GameKey::Char('n'), GameKey::Enter] {

@@ -340,7 +340,6 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             vec![keycap("↑/↓", "select"), keycap("Enter", "toggle")]
         }
         Mode::AudioOptions => vec![keycap("↑/↓", "select"), keycap("←/→", "volume")],
-        Mode::QuitRunConfirm => vec![keycap("1-3", "pick")],
         _ => Vec::new(),
     }
 }

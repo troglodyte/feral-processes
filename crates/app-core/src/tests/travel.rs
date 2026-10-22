@@ -166,6 +166,28 @@ fn a_travel_ends_on_a_key() {
     assert_eq!(app.walk, None, "waiting did not end the pending travel");
 }
 
+/// Esc spends its press cancelling a pending travel: only an Esc with
+/// nothing else to do opens the game menu.
+#[test]
+fn esc_during_a_travel_cancels_it_and_stays_on_the_map() {
+    let mut app = test_app(2711);
+    clear_the_area_around_player(&mut app);
+    let start = player_pos(&app);
+    app.travel_to(start.0 + 5, start.1);
+    assert!(app.walk.is_some(), "test premise: a travel is pending");
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.walk, None);
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the Esc that cancels must not open the menu"
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::GameplayOptions);
+}
+
 /// A route that doesn't exist ends the travel with the status line the
 /// player reads, rather than being retried forever.
 #[test]

@@ -160,6 +160,10 @@ impl App {
         // asking for anything but that (task C).
         if !is_move_key(key) && !is_clock_key(key) && self.walk.is_some() {
             self.walk = None;
+            // Cancelling was this Esc's job; the menu waits for the next.
+            if key == GameKey::Esc {
+                return;
+            }
         }
         match key {
             // The inventory `i` and the base hub `b`. Seventeen keys used
@@ -415,7 +419,7 @@ impl App {
             // Only a bare Esc gets here: releasing a watched camera already
             // consumed its press above.
             GameKey::Esc => {
-                self.open_hub(Hub::GameMenu);
+                self.open_game_menu(true);
                 return;
             }
             GameKey::Char('?') => {

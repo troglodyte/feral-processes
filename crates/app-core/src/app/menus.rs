@@ -44,7 +44,7 @@ impl App {
             }
             Some('o') => {
                 self.status_line = None;
-                self.open_hub(Hub::GameMenu);
+                self.open_game_menu(false);
             }
             Some('r') => self.open_arena(),
             Some('d') => self.open_sprite_forge(),

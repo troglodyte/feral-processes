@@ -39,7 +39,7 @@ impl HubKind for GameMenu {
     /// The Save & quit page exists only while there is a run to save.
     fn pages(&self, app: &App) -> Vec<&'static HubPage> {
         let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS];
-        if app.game.is_some() {
+        if app.game_menu_in_run {
             pages.push(&SAVE_AND_QUIT);
         }
         pages
@@ -51,11 +51,19 @@ impl HubKind for GameMenu {
         false
     }
 
-    /// Back to wherever the menu was opened from: a live run means the map.
-    /// Every route to the main menu drops the run (`leave_run`,
-    /// `handle_game_over_key`), so `game` says where the player came from.
+    /// The Save & quit page's keys change while its yes/no is up, which a
+    /// per-mode keybar cannot see.
+    fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
+        match (app.mode, app.hub_on_rail, app.quit_unsaved_pending) {
+            (Mode::QuitRunConfirm, false, true) => vec![("y", "quit"), ("n", "stay")],
+            (Mode::QuitRunConfirm, false, false) => vec![("1-3", "pick")],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Back to wherever the menu was opened from.
     fn leave(&self, app: &mut App) {
-        app.mode = if app.game.is_some() {
+        app.mode = if app.game_menu_in_run {
             Mode::Playing
         } else {
             Mode::MainMenu
@@ -64,6 +72,15 @@ impl HubKind for GameMenu {
 }
 
 impl App {
+    /// Opens the menu, remembering whether a run is behind it. Recorded here
+    /// rather than read off `game`, because `leave_arena` returns to the main
+    /// menu with the arena's game still in place — a Save page there would
+    /// write the arena fight over the player's real save.
+    pub(crate) fn open_game_menu(&mut self, in_run: bool) {
+        self.game_menu_in_run = in_run;
+        self.open_hub(Hub::GameMenu);
+    }
+
     /// Whether the Save & quit page is asking "quit without saving?".
     pub fn quit_unsaved_pending(&self) -> bool {
         self.quit_unsaved_pending
@@ -92,11 +109,12 @@ impl App {
                     self.profile.perf_overlay,
                 ),
             ],
-            _ => vec![toggle(
+            Mode::GameplayOptions => vec![toggle(
                 OptionKey::TacticalBattles,
                 "Tactical surface battles",
                 self.profile.tactical_battles,
             )],
+            _ => Vec::new(),
         }
     }
 
@@ -125,13 +143,14 @@ impl App {
     }
 
     /// Flips one toggle.
-    pub fn toggle_option(&mut self, key: OptionKey) {
+    fn toggle_option(&mut self, key: OptionKey) {
         match key {
             OptionKey::TacticalBattles => {
                 self.profile.tactical_battles = !self.profile.tactical_battles;
             }
             OptionKey::Effects => self.profile.effects = !self.profile.effects,
             OptionKey::PerfOverlay => self.profile.perf_overlay = !self.profile.perf_overlay,
+            // A Level row: `handle_options_key` sends Enter on it nowhere.
             OptionKey::Volume => return,
         }
         self.commit_settings();

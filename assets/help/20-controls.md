@@ -134,7 +134,7 @@ In an intrusion:
 - Up/Down — scroll the narration, on the results page too
 
 On a [battle map](battle-maps), which surface fights use if you turn them on
-in Options, the keys are different: arrows or the numpad step the acting
+in the Game menu (Esc), the keys are different: arrows or the numpad step the acting
 body, a attacks, d defends, s runs a routine, U uses an item, V drops an active emulation,
 E ends the turn, A hands your side over to fight on its own, and R resolves the fight.
 

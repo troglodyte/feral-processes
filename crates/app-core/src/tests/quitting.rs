@@ -42,52 +42,71 @@ fn app_with_a_save_slot(name: &str) -> App {
     app
 }
 
-/// The whole point of the screen: `q` must not be the keypress that throws the
-/// run away. It used to clear `App::game` outright, so one mistyped key cost
-/// every tick since the last autosave with nothing asked and nothing said.
-#[test]
-fn q_in_a_run_asks_before_abandoning_it() {
-    let mut app = test_app(701);
-
-    app.handle_key(GameKey::Char('q'));
-
-    assert_eq!(app.mode, Mode::QuitRunConfirm);
-    assert!(
-        app.game.is_some(),
-        "the run has to still be there while the question is on screen"
-    );
+/// Opens the menu on the Save & quit page with the cursor on its first row.
+fn on_save_page(app: &mut App) {
+    app.handle_key(GameKey::Esc);
+    while app.mode != Mode::QuitRunConfirm {
+        app.handle_key(GameKey::Char(']'));
+    }
+    app.handle_key(GameKey::Enter);
+    app.menu_selected = 0;
 }
 
-/// Both ways of saying no put the player back where they were, with the run
-/// intact — Esc because that is what Esc does everywhere else, and `n`
-/// because the row is on screen offering it.
+/// The whole point of the page: no single key throws the run away. `q` on
+/// the map is retired, and the menu's quit row asks again.
 #[test]
-fn declining_the_quit_confirm_returns_to_the_run() {
-    for decline in [GameKey::Esc, GameKey::Char('n')] {
+fn quitting_without_saving_needs_the_confirm() {
+    let mut app = test_app(701);
+    on_save_page(&mut app);
+
+    app.handle_key(GameKey::Char('3'));
+
+    assert_eq!(app.mode, Mode::QuitRunConfirm);
+    assert!(app.quit_unsaved_pending());
+    assert!(app.game.is_some(), "the run lives while the question is up");
+}
+
+#[test]
+fn declining_the_confirm_stays_in_the_menu_with_the_run() {
+    for decline in [GameKey::Esc, GameKey::Char('n'), GameKey::Enter] {
         let mut app = test_app(702);
-        app.handle_key(GameKey::Char('q'));
-        assert_eq!(app.mode, Mode::QuitRunConfirm);
+        on_save_page(&mut app);
+        app.handle_key(GameKey::Char('3'));
 
         app.handle_key(decline);
 
-        assert_eq!(
-            app.mode,
-            Mode::Playing,
-            "{decline:?} should cancel the quit"
-        );
-        assert!(app.game.is_some(), "{decline:?} must not drop the run");
+        assert_eq!(app.mode, Mode::QuitRunConfirm, "{decline:?}");
+        assert!(!app.quit_unsaved_pending(), "{decline:?}");
+        assert!(!app.hub_on_rail, "{decline:?} left the page");
+        assert!(app.game.is_some());
     }
 }
 
 #[test]
-fn quitting_without_saving_drops_the_run_and_returns_to_the_menu() {
+fn confirming_drops_the_run_and_returns_to_the_menu() {
     let mut app = test_app(703);
-    app.handle_key(GameKey::Char('q'));
+    on_save_page(&mut app);
+    app.handle_key(GameKey::Char('3'));
 
-    app.handle_key(GameKey::Char('q'));
+    app.handle_key(GameKey::Char('y'));
 
     assert_eq!(app.mode, Mode::MainMenu);
     assert!(app.game.is_none(), "quitting should release the run");
+    assert!(!app.quit_unsaved_pending());
+}
+
+/// Save keeps the player in the menu, with the run.
+#[test]
+fn save_writes_and_stays() {
+    let mut app = app_with_a_save_slot("saveonly");
+    app.handle_key(GameKey::Char('.'));
+    on_save_page(&mut app);
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::QuitRunConfirm);
+    assert!(app.game.is_some());
+    assert_eq!(app.list_saves().len(), 1);
 }
 
 /// Save-and-quit has to actually write before it leaves, or it is just the
@@ -108,9 +127,8 @@ fn save_and_quit_writes_the_run_before_leaving() {
          tell a real save-and-quit from a skipped one"
     );
 
-    app.handle_key(GameKey::Char('q'));
-    assert_eq!(app.mode, Mode::QuitRunConfirm);
-    app.handle_key(GameKey::Char('s'));
+    on_save_page(&mut app);
+    app.handle_key(GameKey::Char('2'));
 
     assert_eq!(
         app.mode,
@@ -133,9 +151,9 @@ fn save_and_quit_writes_the_run_before_leaving() {
     );
 }
 
-/// A save that fails holds the player on the confirm rather than leaving
+/// A save that fails holds the player on the page rather than leaving
 /// anyway. Leaving would discard the run right after being asked to preserve
-/// it, which is worse than the unconfirmed `q` this screen replaced.
+/// it.
 #[test]
 fn a_failed_save_does_not_quit() {
     let mut app = app_with_a_save_slot("failedsave");
@@ -149,8 +167,8 @@ fn a_failed_save_does_not_quit() {
     std::fs::write(&blocker, b"not a directory").unwrap();
     app.current_save_path = Some(blocker.join("save.bin"));
 
-    app.handle_key(GameKey::Char('q'));
-    app.handle_key(GameKey::Char('s'));
+    on_save_page(&mut app);
+    app.handle_key(GameKey::Char('2'));
 
     assert_eq!(
         app.mode,
@@ -203,23 +221,11 @@ fn declining_the_app_quit_confirm_returns_to_the_main_menu() {
     }
 }
 
-/// Both confirms are reachable by arrow keys and Enter as well as by their
-/// letters, the same as every other menu — `selected_index` is what provides
-/// that, and it only works if the option list is the one being indexed.
+/// The app-quit confirm is reachable by arrow keys and Enter as well as by
+/// its letters, the same as every other menu.
 #[test]
-fn both_quit_confirms_take_arrows_and_enter() {
+fn the_app_quit_confirm_takes_arrows_and_enter() {
     let mut app = test_app(706);
-    app.handle_key(GameKey::Char('q'));
-    // Row 2 is "Keep playing".
-    app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Enter);
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "arrowing to Keep playing and pressing Enter should cancel"
-    );
-
     app.game = None;
     app.mode = Mode::MainMenu;
     app.handle_key(GameKey::Char('q'));

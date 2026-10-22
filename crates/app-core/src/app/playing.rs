@@ -412,8 +412,10 @@ impl App {
                 self.save_game();
                 return;
             }
-            GameKey::Char('q') => {
-                self.mode = Mode::QuitRunConfirm;
+            // Only a bare Esc gets here: releasing a watched camera already
+            // consumed its press above.
+            GameKey::Esc => {
+                self.open_hub(Hub::GameMenu);
                 return;
             }
             GameKey::Char('?') => {

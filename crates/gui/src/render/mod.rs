@@ -644,7 +644,9 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
             draw_quit_app_confirm(app.menu_selected, refusal, painter, &m);
         }
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
-        Mode::Options => draw_options(app, refusal, painter, &m),
+        Mode::GameplayOptions | Mode::AudioOptions | Mode::GraphicsOptions => {
+            draw_options(app, refusal, painter, &m)
+        }
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
         // The sprite editor hangs off the wizard's Icon step as `App` state
@@ -1799,7 +1801,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 158] = [
+    const ALL_MODES: [Mode; 160] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1939,7 +1941,9 @@ mod tests {
         Mode::DigOrders,
         Mode::FloorOrders,
         Mode::Achievements,
-        Mode::Options,
+        Mode::GameplayOptions,
+        Mode::AudioOptions,
+        Mode::GraphicsOptions,
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
@@ -2590,7 +2594,7 @@ mod tests {
     #[test]
     fn the_options_screen_draws_its_toggle() {
         let mut app = census_app();
-        app.mode = Mode::Options;
+        app.mode = Mode::GameplayOptions;
         let m = ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
@@ -2609,7 +2613,7 @@ mod tests {
     #[test]
     fn no_options_row_overflows_the_popup_body_at_1280x720() {
         let mut app = census_app();
-        app.mode = Mode::Options;
+        app.mode = Mode::GameplayOptions;
         let m = ui_metrics(720.0);
         let body = super::popup::popup_body_width(1280.0, PopupSize::Large, &m);
         let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));

@@ -56,7 +56,7 @@ fn esc_dismisses_one_and_the_last_returns_to_the_map() {
         &mut app,
         feral_processes_engine::notifications::NotificationKind::ContractClosed,
     );
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::Notification);
     let first = app.pending_notification.clone().expect("one on screen");
 
@@ -81,7 +81,7 @@ fn only_esc_or_enter_dismisses_a_notification() {
         &mut app,
         feral_processes_engine::notifications::NotificationKind::Breach,
     );
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::Notification);
     let shown = app.pending_notification.clone().expect("one on screen");
 
@@ -157,7 +157,7 @@ fn enter_dismisses_a_notification() {
         &mut app,
         feral_processes_engine::notifications::NotificationKind::Breach,
     );
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::Notification);
 
     app.handle_key(GameKey::Enter);

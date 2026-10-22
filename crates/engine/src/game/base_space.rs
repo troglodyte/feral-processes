@@ -16,6 +16,7 @@
 //! frames down, and `Game::require_surface` has to be asked first.
 
 use crate::base_grid::BaseGrid;
+use crate::components::Fleeing;
 use crate::resources::Locale;
 use crate::*;
 
@@ -840,8 +841,7 @@ impl Game {
         let mut diggers: Vec<(i32, i32, Entity)> = {
             let mut query = self
                 .world
-                .query_filtered::<(Entity, &Task, &Position), Without<crate::components::Fleeing>>(
-                );
+                .query_filtered::<(Entity, &Task, &Position), Without<Fleeing>>();
             query
                 .iter(&self.world)
                 .filter(|(_, task, _)| task.kind == TaskKind::Excavate)

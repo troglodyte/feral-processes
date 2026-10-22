@@ -18,11 +18,11 @@
 //! nor `task_progress_system` can touch it — each resolves its target
 //! through a query a build site cannot answer.
 
-use bevy_ecs::prelude::{Entity, With};
+use bevy_ecs::prelude::{Entity, With, Without};
 
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    BuildGoal, BuildSite, Carrying, Inventory, Position, ResourceNode, Stock, Structure,
+    BuildGoal, BuildSite, Carrying, Fleeing, Inventory, Position, ResourceNode, Stock, Structure,
     StructureTier, Task, TaskKind,
 };
 use crate::game::base::{hauling, stock};
@@ -109,8 +109,7 @@ impl Game {
         let mut builders: Vec<(i32, i32, Entity)> = {
             let mut query = self
                 .world
-                .query_filtered::<(Entity, &Task, &Position), bevy_ecs::prelude::Without<crate::components::Fleeing>>(
-                );
+                .query_filtered::<(Entity, &Task, &Position), Without<Fleeing>>();
             query
                 .iter(&self.world)
                 .filter(|(_, task, _)| task.kind == TaskKind::Construct)

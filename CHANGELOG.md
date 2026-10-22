@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.34
+
+**When one of your base staff throws a tantrum, everyone else in the room gets out of the way.** Bystanders used to carry on working or wandering right beside the fight. Now they walk to the nearest floor outside the room, or in the open commons at least five tiles from the one being hit, wait there a moment after the fight ends, and then go back to what they were doing. Staff working a machine keep their job and pick up where they left off, though an extractor, farm plot or dig pauses while its worker is away.
+
 ## 0.19.33
 
 **Out in the field, the compass points home until you pick a destination.** It used to stay blank until you chose somewhere from the destination list, and it went blank again when you cleared it or when the place you'd picked was gone (a collapsed Stack entrance, a lost outpost). In all those cases it now points to your home base, and `X` in the destination list reads "point it home".

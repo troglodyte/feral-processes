@@ -8,6 +8,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::settlements::CompassTarget;
 
 #[test]
 fn l_opens_the_history_and_esc_returns_to_the_map() {
@@ -327,17 +328,28 @@ fn enter_points_the_compass_at_the_highlighted_row() {
 }
 
 #[test]
-fn uppercase_x_clears_the_selection() {
+fn uppercase_x_clears_the_selection_back_to_home() {
     let mut app = test_app(123);
     app.handle_key(GameKey::Char('u'));
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
-    assert!(app.game.as_mut().unwrap().compass_bearing().is_some());
+    let picked = app
+        .game
+        .as_mut()
+        .unwrap()
+        .compass_bearing()
+        .map(|r| r.target);
+    assert!(picked.is_some_and(|t| t != CompassTarget::Home));
 
     app.handle_key(GameKey::Char('X'));
 
     assert_eq!(
-        app.game.as_mut().unwrap().compass_bearing(),
-        None,
+        app.game
+            .as_mut()
+            .unwrap()
+            .compass_bearing()
+            .map(|r| r.target),
+        Some(CompassTarget::Home),
         "uppercase, because lowercase letters are row selectors"
     );
     assert_eq!(app.mode, Mode::Compass, "clearing is not a way out");

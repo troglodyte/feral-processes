@@ -2420,16 +2420,17 @@ pub struct KnownSettlement {
     pub visited: bool,
 }
 
-/// Where the compass is pointing, or `None` when nothing is selected.
+/// Where the player pointed the compass, or `None` when nothing is selected
+/// — which `Game::compass_bearing` reads as home.
 ///
-/// Serialized behind `#[serde(default)]`, so an older save loads with the
-/// compass blank — which is where a new run starts anyway. No
+/// Serialized behind `#[serde(default)]`, so an older save loads pointing
+/// home — which is where a new run starts anyway. No
 /// `SAVE_FORMAT_VERSION` bump.
 ///
 /// A target that stops existing needs no cleanup hook: a selection that is
 /// not among `Game::compass_targets`' rows — a link `Game::collapse_stack`
 /// took the way out with — is simply dropped by the derivation, and the
-/// strip goes blank.
+/// compass falls back to home.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct CompassBearing(pub Option<crate::settlements::CompassTarget>);
 

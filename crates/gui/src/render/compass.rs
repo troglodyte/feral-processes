@@ -86,7 +86,7 @@ pub(super) fn draw_compass(
          still a heading and a distance away.",
     ));
     rows.push(text_row(
-        "Up/Down to scroll, Enter to point the compass, X to clear it, Esc to close.",
+        "Up/Down to scroll, Enter to point the compass, X to point it home, Esc to close.",
     ));
     draw_popup("Compass", PopupSize::Large, &rows, refusal, painter, m);
 }

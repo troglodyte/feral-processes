@@ -257,13 +257,14 @@ impl App {
     }
 
     /// The destination picker. Scrolls like the history; Enter points the
-    /// compass at the highlighted row and `X` clears it.
+    /// compass at the highlighted row and `X` clears it, which points it
+    /// home.
     ///
     /// The row list is `Game::compass_targets` and nothing else — the same
     /// call the strip on the zone map reads, so the two cannot disagree
     /// about where a town is. A selection is never validated here either:
     /// the derivation drops a target that stopped existing, so a link the
-    /// party collapsed goes blank on its own.
+    /// party collapsed falls back to home on its own.
     pub(crate) fn handle_compass_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();

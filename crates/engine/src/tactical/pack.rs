@@ -240,20 +240,16 @@ fn centre(cells: &[(i32, i32)]) -> Option<(i32, i32)> {
 }
 
 /// Whether `body` belongs in a formation's back rank: it can hit something
-/// from beyond melee, by its swing or by a ready routine aimed at the other
-/// side.
+/// from beyond melee, by its swing or by a ready routine.
 ///
 /// Derived each turn and never stored, so a body whose routine comes off
 /// cooldown can change rank, and the roll's eligibility asks the same thing.
-/// An ally-facing routine does not count: a sentinel's buffs reach past
-/// melee, and counting them pulled it out of the line whenever one was
-/// ready, which left the front rank empty more often than not.
 fn back_rank(game: &Game, body: Entity) -> bool {
     game.swing_range(body) > TACTICAL_MELEE_RANGE
-        || game.ready_routines(body).iter().any(|def| {
-            !def.target.is_ally_facing()
-                && game.routine_tactical_range(def).max > TACTICAL_MELEE_RANGE
-        })
+        || game
+            .ready_routines(body)
+            .iter()
+            .any(|def| game.routine_tactical_range(def).max > TACTICAL_MELEE_RANGE)
 }
 
 /// Every body on the board that is not in the pack.

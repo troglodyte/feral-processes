@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.35
+
+**A pack on a battle map can now form a line or fan out to surround you.** Under Formation, its melee programs advance abreast with the ranged ones behind them until the melee ones are gone ("The line breaks!"); under Flank, programs gang up on whatever a packmate is already hitting and come at it from the other side. Hunter-led packs flank most often and cautious-led packs form lines; a Formation pack is somewhat easier to beat than one that rushes.
+
 ## 0.19.34
 
 **When one of your base staff throws a tantrum, everyone else in the room gets out of the way.** Bystanders used to carry on working or wandering right beside the fight. Now they walk to the nearest floor outside the room, or in the open commons at least five tiles from the one being hit, wait there a moment after the fight ends, and then go back to what they were doing. Staff working a machine keep their job and pick up where they left off, though an extractor, farm plot or dig pauses while its worker is away.

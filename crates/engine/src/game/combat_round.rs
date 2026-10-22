@@ -968,7 +968,7 @@ impl Game {
             front_hp: stats.hp,
             front_max_hp: stats.max_hp,
             front_rarity: self.rarity_of(front),
-            atk: stats.atk,
+            atk: self.effective_atk(front),
             mitigation: stats.mitigation,
             is_boss,
             engaged,

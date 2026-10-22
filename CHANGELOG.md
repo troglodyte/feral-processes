@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.31
+
+**On a battle map, the body whose turn it is shows how far it can swing, as a yellow number above the top-right of its tile.** Range used to be something you learned only when a swing was refused, so stepping into reach (or staying out of an enemy's) was guesswork. The number is the range the swing actually uses: the held weapon's, or the program's own attack without one. While aiming, the body under the cursor shows its range too.
+
 ## 0.19.30
 
 **Esc on the map opens a Game menu that holds every setting, plus saving and quitting.** Options used to be reachable only from the main menu, and volume, visual effects and the frame-timings overlay were bare keys (`[`, `]`, `\`, `F3`) that reset every launch. The menu has Gameplay, Audio, Graphics and Save & quit pages, every setting is remembered between launches, and tactical surface battles can now be switched mid-run. Those keys and `q` on the map are retired; `[s]` still saves, `[o]` on the main menu opens the same menu, and quitting without saving asks first.

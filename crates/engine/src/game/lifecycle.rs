@@ -3733,6 +3733,16 @@ impl Game {
         self.world.insert_resource(profile);
     }
 
+    /// Changes the running game's tactical-battles setting, so the next
+    /// surface fight of this run uses it. `install_profile` hands the engine
+    /// its copy once per run; without this a mid-run toggle would wait for
+    /// the next one.
+    pub fn set_tactical_battles(&mut self, on: bool) {
+        self.world
+            .resource_mut::<crate::achievements::Profile>()
+            .tactical_battles = on;
+    }
+
     /// Pays out the installed profile: stat points, Perk Points and a
     /// starting program, once each, in the order the rungs were earned.
     ///

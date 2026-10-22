@@ -68,6 +68,8 @@ impl App {
             pending_post_structure: None,
             menu_origin: None,
             hub_last: [None; Hub::ALL.len()],
+            quit_unsaved_pending: false,
+            game_menu_in_run: false,
             structure_hub: None,
             command_return_row: None,
             dev_console_row: 0,
@@ -315,7 +317,8 @@ impl App {
             Ok(mut game) => {
                 // Re-read rather than trusting the copy loaded at startup:
                 // an earlier run this session will have written to it.
-                let (profile, warning) = Profile::load(&self.profile_path);
+                let (mut profile, warning) = Profile::load(&self.profile_path);
+                profile.keep_settings_from(&self.profile);
                 self.profile = profile;
                 // The wizard's own write to the cross-run profile.
                 //
@@ -367,7 +370,8 @@ impl App {
     pub fn load_game(&mut self, path: PathBuf) {
         match Game::load(&path, &self.assets_dir) {
             Ok(mut game) => {
-                let (profile, warning) = Profile::load(&self.profile_path);
+                let (mut profile, warning) = Profile::load(&self.profile_path);
+                profile.keep_settings_from(&self.profile);
                 self.profile = profile;
                 game.install_profile(self.profile.clone());
                 // `grant_profile_rewards` is deliberately NOT called here,
@@ -389,7 +393,7 @@ impl App {
     }
 
     /// Writes the run to its slot, reporting whether it landed. The bool is
-    /// there for `Mode::QuitRunConfirm`'s save-and-quit, which must not throw
+    /// there for the Save & quit page, which must not throw
     /// the run away on the strength of a save that failed.
     pub(crate) fn save_game(&mut self) -> bool {
         let Some(path) = &self.current_save_path else {
@@ -412,38 +416,11 @@ impl App {
 
     /// Drops the run and returns to the main menu. The one path out of
     /// `Mode::Playing` that discards state, so it is only ever reached
-    /// through `Mode::QuitRunConfirm`.
-    fn leave_run(&mut self) {
+    /// through the game menu's Save & quit page.
+    pub(crate) fn leave_run(&mut self) {
         self.game = None;
         self.status_line = None;
         self.mode = Mode::MainMenu;
-    }
-
-    pub(crate) fn handle_quit_run_confirm_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.mode = Mode::Playing;
-            return;
-        }
-        let options = ['s', 'q', 'n'];
-        let idx = self
-            .selected_index(key, options.len())
-            .or_else(|| match key {
-                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-                _ => None,
-            });
-        let picked = idx.map(|i| options[i]);
-        // A failed save holds the player here with the error still on screen
-        // rather than leaving anyway. Quitting after being asked to save
-        // first, and dropping the run regardless, is the one outcome this
-        // screen exists to prevent.
-        if picked == Some('s') && !self.save_game() {
-            return;
-        }
-        match picked {
-            Some('s') | Some('q') => self.leave_run(),
-            Some('n') => self.mode = Mode::Playing,
-            _ => {}
-        }
     }
 
     pub(crate) fn handle_quit_app_confirm_key(&mut self, key: GameKey) {
@@ -689,7 +666,11 @@ impl App {
         if !game.take_pending_profile_writes() {
             return;
         }
-        self.profile = game.profile().clone();
+        // The engine's copy knows what was earned but not a volume changed
+        // since it was installed.
+        let mut fresh = game.profile().clone();
+        fresh.keep_settings_from(&self.profile);
+        self.profile = fresh;
         if let Err(e) = self.profile.save(&self.profile_path) {
             self.status_line = Some(format!("Could not write profile: {e}"));
         }

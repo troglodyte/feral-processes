@@ -336,6 +336,10 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             keycap("Enter", "transfer"),
         ],
         Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],
+        Mode::GameplayOptions | Mode::GraphicsOptions => {
+            vec![keycap("↑/↓", "select"), keycap("Enter", "toggle")]
+        }
+        Mode::AudioOptions => vec![keycap("↑/↓", "select"), keycap("←/→", "volume")],
         _ => Vec::new(),
     }
 }

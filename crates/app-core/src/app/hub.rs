@@ -78,16 +78,18 @@ pub enum Hub {
     Base,
     Inventory,
     Structure,
+    GameMenu,
 }
 
 impl Hub {
-    pub const ALL: [Hub; 3] = [Hub::Base, Hub::Inventory, Hub::Structure];
+    pub const ALL: [Hub; 4] = [Hub::Base, Hub::Inventory, Hub::Structure, Hub::GameMenu];
 
     pub fn kind(self) -> &'static dyn HubKind {
         match self {
             Hub::Base => &super::base_report::BaseReport,
             Hub::Inventory => &super::inventory_hub::InventoryHub,
             Hub::Structure => &super::structure_hub::StructureHubKind,
+            Hub::GameMenu => &super::game_menu::GameMenu,
         }
     }
 
@@ -209,10 +211,16 @@ impl App {
             GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => true,
             // A question the page is asking is answered by it, not
             // abandoned.
-            GameKey::Esc => self
-                .splice_rig
-                .as_ref()
-                .is_some_and(|s| s.confirm.is_some()),
+            GameKey::Esc => {
+                self.splice_rig
+                    .as_ref()
+                    .is_some_and(|s| s.confirm.is_some())
+                    || self.quit_unsaved_pending
+            }
+            // A level row spends Left and Right on the level; a toggle's
+            // Left still goes to the rail.
+            GameKey::Left if self.quit_unsaved_pending => true,
+            GameKey::Left | GameKey::Right if self.on_level_row() => true,
             // The duty table spends Left and Right on its column cursor, so
             // it only leaves off its first and last columns.
             GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,

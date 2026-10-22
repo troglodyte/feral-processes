@@ -371,7 +371,7 @@ pub enum SwapChoice {
     Unequip,
 }
 
-/// One line of the options screen. Built here and never restated in the
+/// One line of a game-menu settings page. Built here and never restated in the
 /// renderer, `views::AchievementRow`'s reason: the same list bounds the
 /// scroll and draws the rows, so the highlight cannot land on a row nothing
 /// paints.
@@ -382,14 +382,26 @@ pub struct OptionRow {
     /// Already rendered — `"On"` / `"Off"` — so the renderer holds no
     /// opinion about how a setting reads.
     pub value: String,
+    /// How the row is driven: Enter flips a toggle, Left/Right step a level.
+    pub kind: OptionKind,
+}
+
+/// How a settings row is changed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OptionKind {
+    Toggle,
+    Level,
 }
 
 /// Which setting a row is. An enum rather than the row's index so
-/// `App::toggle_option` is an exhaustive match and a second option added
-/// without a toggle arm fails to compile.
+/// `App::toggle_option` is an exhaustive match and a setting added without
+/// an arm fails to compile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionKey {
     TacticalBattles,
+    Volume,
+    Effects,
+    PerfOverlay,
 }
 
 /// One row of the manual's index.
@@ -2289,16 +2301,18 @@ pub enum Mode {
     /// group menu: the profile is the one thing here that outlives a run, so
     /// it belongs beside New Game rather than inside one.
     Achievements,
-    /// The settings screen, opened with `[O]` from the main menu. Rows come
-    /// from `App::option_rows`; Enter toggles the highlighted one and writes
-    /// `profile.ron` on the spot.
-    ///
-    /// **Main menu only, deliberately.** An option here is read off the
-    /// `Profile` resource the engine is handed once per run by
-    /// `install_profile`, so a mid-run change would not reach the running
-    /// game — a switch that appears to do nothing is worse than one the
-    /// player has to leave the run to reach.
-    Options,
+    /// The game menu's gameplay page (`Hub::GameMenu`), opened with Esc on
+    /// the map or `[O]` on the main menu. Rows come from
+    /// `App::option_rows`; Enter flips the highlighted toggle and writes
+    /// `profile.ron` on the spot. A mid-run change is pushed into the
+    /// running game (`Game::set_tactical_battles`).
+    GameplayOptions,
+    /// The game menu's audio page: the volume level, stepped with
+    /// Left/Right.
+    AudioOptions,
+    /// The game menu's graphics page: visual effects and the frame-timings
+    /// overlay.
+    GraphicsOptions,
     Help,
     /// One page of the manual. A **document**, not a menu: Up/Down scroll the
     /// prose and Enter does nothing, because selection-driven scrolling keeps
@@ -2356,11 +2370,11 @@ pub enum Mode {
     /// returns.
     AllocateStats,
     GameOver,
-    /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
-    /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
-    /// leaving without one silently drops however many ticks have passed
-    /// since — and remembering to press `s` first is not something a
-    /// confirmation should require of the player.
+    /// The game menu's Save & quit page, present only while a run is live:
+    /// save (stay), save and quit, or quit without saving, which asks once
+    /// more (`App::quit_unsaved_pending`). Autosave only fires every
+    /// `AUTOSAVE_INTERVAL_TICKS`, so leaving without a save silently drops
+    /// however many ticks have passed since.
     QuitRunConfirm,
     /// Confirming `q` from `Mode::MainMenu`, which ends the process. Nothing
     /// is in memory to lose here; the key simply sits between `n` and `l`.
@@ -2450,7 +2464,9 @@ impl Mode {
             | Mode::TacticalResult
             | Mode::MainMenu
             | Mode::Achievements
-            | Mode::Options
+            | Mode::GameplayOptions
+            | Mode::AudioOptions
+            | Mode::GraphicsOptions
             | Mode::CreateCharacter
             | Mode::LoadGame
             | Mode::SaveAction
@@ -2854,6 +2870,11 @@ pub struct App {
     /// off. `None` until a hub has been opened, which lands on its first
     /// page.
     hub_last: [Option<Mode>; Hub::ALL.len()],
+    /// Whether the Save & quit page is asking "quit without saving?".
+    quit_unsaved_pending: bool,
+    /// Whether the open game menu was reached from a run (Esc on the map)
+    /// rather than the main menu. See `App::open_game_menu`.
+    game_menu_in_run: bool,
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.
     pub structure_hub: Option<StructureHub>,

@@ -77,8 +77,8 @@ impl SoundBank {
         }
     }
 
-    /// `volume` is the caller's current master volume (see the `[`/`]`
-    /// controls in `frame`), applied as-is with no further scaling — each wav
+    /// `volume` is the caller's current master volume (`Profile::volume`, set from
+    /// the game menu), applied as-is with no further scaling — each wav
     /// was synthesized at a level already balanced against the others, so
     /// there's no separate per-sound mix to fold in.
     ///

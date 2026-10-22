@@ -44,7 +44,7 @@ impl App {
             }
             Some('o') => {
                 self.status_line = None;
-                self.mode = Mode::Options;
+                self.open_game_menu(false);
             }
             Some('r') => self.open_arena(),
             Some('d') => self.open_sprite_forge(),
@@ -63,48 +63,6 @@ impl App {
         }
         let rows = self.achievement_rows().len();
         self.scroll(key, rows);
-    }
-
-    /// Esc goes back to the main menu rather than through `close_screen`,
-    /// `handle_achievements_key`'s reason: this screen is reachable without
-    /// a run, so there is no map behind it to return to.
-    pub(crate) fn handle_options_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.mode = Mode::MainMenu;
-            return;
-        }
-        let rows = self.option_rows();
-        if key == GameKey::Enter {
-            if let Some(row) = rows.get(self.menu_selected) {
-                self.toggle_option(row.key);
-            }
-            return;
-        }
-        self.scroll(key, rows.len());
-    }
-
-    pub fn option_rows(&self) -> Vec<OptionRow> {
-        vec![OptionRow {
-            key: OptionKey::TacticalBattles,
-            label: "Tactical surface battles".to_string(),
-            value: on_off(self.profile.tactical_battles),
-        }]
-    }
-
-    /// Flips one setting and writes `profile.ron` at once — the icon write's
-    /// rule (`app/lifecycle.rs`), for the same reason: nothing downstream of
-    /// this screen is going to save it, and a setting that silently forgets
-    /// itself on quit is indistinguishable from one that does not work. A
-    /// failed write costs the setting and nothing else.
-    pub fn toggle_option(&mut self, key: OptionKey) {
-        match key {
-            OptionKey::TacticalBattles => {
-                self.profile.tactical_battles = !self.profile.tactical_battles;
-            }
-        }
-        if let Err(e) = self.profile.save(&self.profile_path) {
-            self.status_line = Some(format!("Could not write profile: {e}"));
-        }
     }
 
     pub(crate) fn handle_load_game_key(&mut self, key: GameKey) {
@@ -412,8 +370,4 @@ impl App {
         self.status_line = None;
         self.mode = Mode::MainMenu;
     }
-}
-
-fn on_off(value: bool) -> String {
-    if value { "On" } else { "Off" }.to_string()
 }

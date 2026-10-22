@@ -266,7 +266,7 @@ fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
 /// Esc out of a group menu itself is a plain exit, not another level up.
 #[test]
 fn esc_from_a_group_menu_returns_to_the_map() {
-    for key in ['b', 'p'] {
+    for key in ['b', 'i'] {
         let mut app = test_app(4011);
         app.handle_key(GameKey::Char(key));
         app.handle_key(GameKey::Esc);

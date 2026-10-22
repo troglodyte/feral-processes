@@ -1,7 +1,7 @@
 //! Transient visual feedback: raid flashes on the map, hit feedback in
 //! battle, damaged-structure tinting, and the log pane's raid flash.
 //!
-//! `App` knows nothing about any of this — like the volume control, it's
+//! `App` knows nothing about any of this — it's
 //! GUI-local state owned by the game loop and threaded into `render::draw`.
 //! The one thing it does consume from the engine is `Game::take_effects`,
 //! which reports raid outcomes a renderer can't otherwise observe (a raid

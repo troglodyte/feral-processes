@@ -224,7 +224,9 @@ fn abandoning_a_run_banks_nothing() {
     let mut app = app_beside_the_exit_seeded(5604, 0x3FF);
     assert!(card_total(&mut app) > 0);
     app.mode = Mode::QuitRunConfirm;
-    app.handle_key(GameKey::Char('q'));
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Char('y'));
     assert_eq!(app.mode, Mode::MainMenu);
     assert_eq!(banked(&app), 0);
     assert_eq!(app.profile().lifetime_score, 0);

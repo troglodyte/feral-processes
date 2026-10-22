@@ -4,6 +4,7 @@
 use super::popup::*;
 use super::score;
 use super::*;
+use feral_processes_app_core::OptionKind;
 use feral_processes_engine::score::ScoreCard;
 
 pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
@@ -47,32 +48,86 @@ fn main_menu_options(has_saves: bool, arena: bool, sprite_forge: bool) -> Vec<St
     options
 }
 
-/// The settings screen. Rows come from `App::option_rows`, which is also
-/// what app-core scrolls, so the highlight cannot land on a row this never
-/// draws — `draw_achievements`' rule.
+/// A settings page of the game menu hub. Rows come from `App::option_rows`,
+/// which is also what app-core scrolls, so the highlight cannot land on a row
+/// this never draws — `draw_achievements`' rule. A level shows its arrows so
+/// the player sees Left/Right drive it.
 ///
 /// The description is **hand-wrapped into short lines**, not one long
 /// sentence: `wrapped_row_lines` breaks tag segments and nothing else, so a
 /// prose row wider than the body is simply drawn off the edge.
-pub(super) fn draw_options(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
+pub(super) fn options_page_rows(app: &App) -> Vec<Row> {
     let mut rows = vec![text_row("")];
     for (i, row) in app.option_rows().iter().enumerate() {
+        let value = match row.kind {
+            OptionKind::Toggle => row.value.clone(),
+            OptionKind::Level => format!("\u{25c0} {} \u{25b6}", row.value),
+        };
         rows.push(item_row(
-            format!("{}: {}", row.label, row.value),
+            format!("{}: {value}", row.label),
             i == app.menu_selected,
         ));
     }
-    rows.push(text_row(""));
-    rows.push(text_row(
-        "Surface packs and town patrols fight on a generated grid,",
-    ));
-    rows.push(text_row(
-        "one body at a time. Nests, lairs, Entropy Sweeps and the",
-    ));
-    rows.push(text_row("Stack keep the abstract model."));
-    rows.push(text_row(""));
-    rows.push(text_row("Enter toggles, Esc to close."));
-    draw_popup("Options", PopupSize::Large, &rows, refusal, painter, m);
+    if app.mode == Mode::GameplayOptions {
+        rows.push(text_row(""));
+        rows.push(text_row(
+            "Surface packs and town patrols fight on a generated grid,",
+        ));
+        rows.push(text_row(
+            "one body at a time. Nests, lairs, Entropy Sweeps and the",
+        ));
+        rows.push(text_row("Stack keep the abstract model."));
+    }
+    rows
+}
+
+/// The Save & quit page. Spells out what leaving costs rather than asking a
+/// bare "are you sure?" — the answer depends on how long ago the last
+/// autosave was, which is not something the player can see.
+pub(super) fn save_and_quit_rows(app: &App) -> Vec<Row> {
+    let selected = app.menu_selected;
+    if app.quit_unsaved_pending() {
+        return vec![
+            text_row(""),
+            text_row("Quit without saving?"),
+            text_row("Progress since the last autosave is lost."),
+            text_row(""),
+            item_row("[Y] Yes, quit".to_string(), selected == 0),
+            item_row("[N] No, keep playing".to_string(), selected == 1),
+        ];
+    }
+    vec![
+        text_row(""),
+        item_row("[1] Save".to_string(), selected == 0),
+        item_row("[2] Save and quit to the menu".to_string(), selected == 1),
+        item_row("[3] Quit without saving".to_string(), selected == 2),
+    ]
+}
+
+/// Draws the current game-menu page inside the hub frame.
+pub(super) fn draw_game_menu_page(
+    app: &App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(frame) = base_report::HubFrame::of(app, app.mode) else {
+        return;
+    };
+    let rows = if app.mode == Mode::QuitRunConfirm {
+        save_and_quit_rows(app)
+    } else {
+        options_page_rows(app)
+    };
+    base_report::draw_hub_page(
+        &frame,
+        app.mode,
+        &rows,
+        app.hub_on_rail,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// Every authored rung, earned or not — the point is showing what is left.
@@ -212,28 +267,6 @@ pub(super) fn draw_escaped(app: &mut App, refusal: Option<&str>, painter: &Paint
     rows.push(text_row(""));
     rows.push(text_row("Enter or Esc to keep playing"));
     draw_popup("Escaped", PopupSize::Large, &rows, refusal, painter, m);
-}
-
-/// Confirms abandoning the run. Spells out what leaving costs rather than
-/// asking a bare "are you sure?" — the answer depends on how long ago the
-/// last autosave was, which is not something the player can see.
-pub(super) fn draw_quit_run_confirm(
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = vec![
-        text_row("Leave this run?"),
-        text_row(""),
-        item_row("[S] Save and quit to the menu".to_string(), selected == 0),
-        item_row("[Q] Quit without saving".to_string(), selected == 1),
-        item_row("[N] Keep playing".to_string(), selected == 2),
-        text_row(""),
-        text_row("Quitting without saving drops progress since the last autosave."),
-        text_row("Esc to cancel; Up/Down + Enter also work"),
-    ];
-    draw_popup("Quit to Menu", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Confirms ending the process from the main menu. No run is loaded, so

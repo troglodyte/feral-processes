@@ -147,8 +147,8 @@ use inventory::{
 use machine_recipe::{draw_machine_recipe, draw_machine_recipe_confirm};
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
 use meta::{
-    draw_achievements, draw_escaped, draw_game_over, draw_load_game, draw_main_menu, draw_options,
-    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_escaped, draw_game_menu_page, draw_game_over, draw_load_game,
+    draw_main_menu, draw_quit_app_confirm, draw_save_action,
 };
 use mod_copy::{draw_mod_copy, draw_mod_pick_affix};
 use outposts::{draw_outpost_post, draw_outpost_visit};
@@ -644,7 +644,10 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
             draw_quit_app_confirm(app.menu_selected, refusal, painter, &m);
         }
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
-        Mode::Options => draw_options(app, refusal, painter, &m),
+        Mode::GameplayOptions
+        | Mode::AudioOptions
+        | Mode::GraphicsOptions
+        | Mode::QuitRunConfirm => draw_game_menu_page(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
         // The sprite editor hangs off the wizard's Icon step as `App` state
@@ -1729,7 +1732,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }
         }
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
-        Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
     }
@@ -1799,7 +1801,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 158] = [
+    const ALL_MODES: [Mode; 160] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1939,7 +1941,9 @@ mod tests {
         Mode::DigOrders,
         Mode::FloorOrders,
         Mode::Achievements,
-        Mode::Options,
+        Mode::GameplayOptions,
+        Mode::AudioOptions,
+        Mode::GraphicsOptions,
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
@@ -2025,6 +2029,23 @@ mod tests {
                 }
             }
         }
+        // The game menu remembers whether it was opened from a run, and only
+        // then has a Save & quit page; open and close it once from the map so
+        // that page exists for the censuses that set the mode directly.
+        // A fresh run can hold something an Esc dismisses first.
+        for _ in 0..4 {
+            if app.mode == Mode::GameplayOptions {
+                break;
+            }
+            app.handle_key(feral_processes_app_core::GameKey::Esc);
+        }
+        assert_eq!(
+            app.mode,
+            Mode::GameplayOptions,
+            "Esc never reached the game menu"
+        );
+        app.handle_key(feral_processes_app_core::GameKey::Esc);
+        assert_eq!(app.mode, Mode::Playing, "census app must start on the map");
         app
     }
 
@@ -2590,9 +2611,9 @@ mod tests {
     #[test]
     fn the_options_screen_draws_its_toggle() {
         let mut app = census_app();
-        app.mode = Mode::Options;
+        app.mode = Mode::GameplayOptions;
         let m = ui_metrics(900.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_game_menu_page(&app, None, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         assert!(
             drawn
@@ -2602,25 +2623,49 @@ mod tests {
         );
     }
 
-    /// The width census. `wrapped_row_lines` wraps only tag segments, so a
-    /// prose line too long for the body draws off the popup's edge in
-    /// silence — the failure this screen's hand-wrapped description exists
-    /// to avoid.
+    /// The width census: every game-menu page's rows, the Save & quit
+    /// confirm included, against the hub content rect they draw into at the
+    /// smallest window. A row too long draws past the frame in silence.
     #[test]
-    fn no_options_row_overflows_the_popup_body_at_1280x720() {
-        let mut app = census_app();
-        app.mode = Mode::Options;
+    fn no_game_menu_row_overflows_the_hub_content_at_1280x720() {
         let m = ui_metrics(720.0);
-        let body = super::popup::popup_body_width(1280.0, PopupSize::Large, &m);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
-        let drawn = crate::paint::painted_text(&shapes);
+        let mut pages: Vec<(Mode, bool)> = [
+            Mode::GameplayOptions,
+            Mode::AudioOptions,
+            Mode::GraphicsOptions,
+            Mode::QuitRunConfirm,
+        ]
+        .into_iter()
+        .map(|mode| (mode, false))
+        .collect();
+        pages.push((Mode::QuitRunConfirm, true));
         crate::paint::with_painter(|p| {
-            for line in &drawn {
-                let width = p.measure_ui_advance(format!("  {line}"), m.font_size);
-                assert!(
-                    width <= body,
-                    "an options row draws {width}px into a {body}px body: {line:?}"
-                );
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let content = base_report::content_rect_at(1280.0, 720.0, char_w, &m);
+            for (mode, pending) in pages {
+                let mut app = census_app();
+                app.mode = mode;
+                if pending {
+                    app.handle_key(feral_processes_app_core::GameKey::Char('3'));
+                }
+                let rows = if mode == Mode::QuitRunConfirm {
+                    meta::save_and_quit_rows(&app)
+                } else {
+                    meta::options_page_rows(&app)
+                };
+                assert!(!rows.is_empty(), "{mode:?} drew no rows");
+                for row in &rows {
+                    let text = match row {
+                        Row::Text(t) | Row::TextColored(t, _) => t,
+                        Row::Item { text, .. } => text,
+                    };
+                    let width = p.measure_ui_advance(text, m.font_size);
+                    assert!(
+                        width <= content.w,
+                        "{mode:?} draws {width}px into {}px: {text:?}",
+                        content.w
+                    );
+                }
             }
         });
     }

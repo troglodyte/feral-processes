@@ -266,7 +266,9 @@ impl App {
             _ if hub_took_it => {}
             Mode::MainMenu => self.handle_main_menu_key(key),
             Mode::Achievements => self.handle_achievements_key(key),
-            Mode::Options => self.handle_options_key(key),
+            Mode::GameplayOptions | Mode::AudioOptions | Mode::GraphicsOptions => {
+                self.handle_options_key(key)
+            }
             Mode::LoadGame => self.handle_load_game_key(key),
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::CreateCharacter => self.handle_creation_key(key),
@@ -461,6 +463,9 @@ impl App {
         // refresh: the one writer of `perk_previews` is here.
         if self.mode != mode_before && self.mode == Mode::Perks {
             self.refresh_perk_previews();
+        }
+        if self.mode != Mode::QuitRunConfirm {
+            self.quit_unsaved_pending = false;
         }
         // A hub that remembers is reopened where the player last was.
         if let Some((hub, ..)) = self.hub_at()

@@ -405,3 +405,14 @@ fn a_starting_program_arrives_holding_a_full_reserve() {
         "the program a profile hands you must arrive able to run"
     );
 }
+
+#[test]
+fn setting_tactical_battles_mid_run_reaches_the_running_profile() {
+    let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.install_profile(Profile::new_player());
+
+    game.set_tactical_battles(false);
+    assert!(!game.profile().tactical_battles);
+    game.set_tactical_battles(true);
+    assert!(game.profile().tactical_battles);
+}

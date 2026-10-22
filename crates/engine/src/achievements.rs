@@ -258,9 +258,28 @@ pub struct Profile {
     /// reason: `load` discards the whole profile on a parse failure.
     #[serde(default)]
     pub lifetime_score: u64,
+    /// Master volume in percent, stepped by 10 on the Game menu's Audio
+    /// page. An integer so repeated steps cannot drift off the grid; read it
+    /// through `volume`, which clamps a hand-edited file.
+    #[serde(default = "volume_percent_default")]
+    pub volume_percent: u8,
+    /// Whether the renderer draws visual effects.
+    #[serde(default = "effects_default")]
+    pub effects: bool,
+    /// Whether the renderer shows its frame-timings overlay.
+    #[serde(default)]
+    pub perf_overlay: bool,
 }
 
 fn tactical_battles_default() -> bool {
+    true
+}
+
+fn volume_percent_default() -> u8 {
+    20
+}
+
+fn effects_default() -> bool {
     true
 }
 
@@ -270,8 +289,26 @@ impl Profile {
     pub fn new_player() -> Self {
         Self {
             tactical_battles: tactical_battles_default(),
+            volume_percent: volume_percent_default(),
+            effects: effects_default(),
             ..Self::default()
         }
+    }
+
+    /// Master volume as a 0.0–1.0 gain.
+    pub fn volume(&self) -> f32 {
+        f32::from(self.volume_percent.min(100)) / 100.0
+    }
+
+    /// Copies the player's settings from `other`, leaving everything earned
+    /// alone. Every place app-core replaces its profile with a re-read of
+    /// `profile.ron` calls this, so a setting changed in memory — even one
+    /// whose write failed — is never reverted by the reload.
+    pub fn keep_settings_from(&mut self, other: &Profile) {
+        self.tactical_battles = other.tactical_battles;
+        self.volume_percent = other.volume_percent;
+        self.effects = other.effects;
+        self.perf_overlay = other.perf_overlay;
     }
 
     pub fn contains(&self, id: &AchievementId) -> bool {
@@ -802,5 +839,81 @@ mod tests {
             "the toggle did not survive the write"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_profile_without_the_settings_fields_loads_their_defaults() {
+        let path = temp_profile("settings_absent");
+        std::fs::write(
+            &path,
+            "(earned:[(id:\"first_kill\",first_tick:12)],tactical_battles:false)",
+        )
+        .unwrap();
+
+        let (profile, warning) = Profile::load(&path);
+
+        assert_eq!(warning, None, "an older profile must not warn: {warning:?}");
+        assert_eq!(profile.earned.len(), 1, "the achievement was discarded");
+        assert_eq!(profile.volume_percent, 20);
+        assert!(profile.effects, "absent effects must read as on");
+        assert!(!profile.perf_overlay, "absent overlay must read as off");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn non_default_settings_survive_a_profile_round_trip() {
+        let path = temp_profile("settings_round_trip");
+        let profile = Profile {
+            volume_percent: 70,
+            effects: false,
+            perf_overlay: true,
+            ..Profile::new_player()
+        };
+        profile.save(&path).unwrap();
+
+        let (read_back, warning) = Profile::load(&path);
+
+        assert_eq!(warning, None, "{warning:?}");
+        assert_eq!(read_back.volume_percent, 70);
+        assert!(!read_back.effects);
+        assert!(read_back.perf_overlay);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_new_player_hears_the_default_volume() {
+        assert_eq!(Profile::new_player().volume(), 0.2);
+        let loud = Profile {
+            volume_percent: 250,
+            ..Profile::new_player()
+        };
+        assert_eq!(loud.volume(), 1.0, "a hand-edited volume must clamp");
+    }
+
+    #[test]
+    fn keep_settings_from_copies_the_settings_and_nothing_earned() {
+        let mut reloaded = Profile::new_player();
+        reloaded.record(Earned {
+            id: AchievementId("first_kill".into()),
+            first_tick: 3,
+            permadeath: false,
+        });
+        let in_memory = Profile {
+            tactical_battles: false,
+            volume_percent: 50,
+            effects: false,
+            perf_overlay: true,
+            lifetime_score: 999,
+            ..Profile::new_player()
+        };
+
+        reloaded.keep_settings_from(&in_memory);
+
+        assert!(!reloaded.tactical_battles);
+        assert_eq!(reloaded.volume_percent, 50);
+        assert!(!reloaded.effects);
+        assert!(reloaded.perf_overlay);
+        assert_eq!(reloaded.earned.len(), 1, "earned must not be touched");
+        assert_eq!(reloaded.lifetime_score, 0, "score is not a setting");
     }
 }

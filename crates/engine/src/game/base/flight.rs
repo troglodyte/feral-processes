@@ -233,32 +233,13 @@ impl Game {
             });
         }
 
-        // The rest of the roster holds its cell: a body that is not fleeing
-        // is not a goal.
-        let held: HashSet<Cell> = self
-            .base_bodies()
-            .into_iter()
-            .map(|(_, p)| (p.x, p.y))
-            .collect();
-        let mut input = FlightInput {
+        // No body's cell is ever a goal: `rigid` makes every other body a wall,
+        // so none is in any bystander's `reach` to begin with.
+        let input = FlightInput {
             rooms: shapes,
             bystanders,
             taken,
         };
-        let fleeing_now: HashSet<u64> = input.bystanders.iter().map(|b| b.key).collect();
-        for e in staff {
-            if fleeing_now.contains(&e.to_bits()) {
-                continue;
-            }
-            if let Some(p) = self.world.get::<Position>(*e) {
-                input.taken.insert((p.x, p.y));
-            }
-        }
-        input.taken.extend(held.iter().copied().filter(|c| {
-            // A fleer's own start cell is held by it; it is its to keep.
-            !input.bystanders.iter().any(|b| b.reach.get(c) == Some(&0))
-        }));
-
         let goals = decide_flight(&input);
         let goal_of: HashMap<u64, Cell> = goals.iter().copied().collect();
 

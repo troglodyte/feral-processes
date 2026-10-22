@@ -1057,7 +1057,7 @@ fn a_bystander_in_the_commons_keeps_its_distance() {
         game.run_flight(&staff);
     }
     let p = at(&game, staff[2]);
-    let d = (p.0 - -4).abs().max((p.1 - 0).abs());
+    let d = (p.0 + 4).abs().max(p.1.abs());
     assert!(d >= TANTRUM_FLEE_TILES, "{p:?}");
 }
 
@@ -1078,7 +1078,6 @@ fn a_posted_worker_flees_keeps_its_post_and_walks_back() {
     });
     stage_a_brawl(&mut game, a, v, 100);
     for _ in 0..12 {
-        game.run_flight(&staff);
         game.tick();
         // The brawl is staged by hand; keep it open and the fighters put.
         place_at(&mut game, a, 6, 1);

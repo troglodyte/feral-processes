@@ -778,6 +778,10 @@ type Hauler = (
     &'static Tamed,
 );
 
+/// The bodies this system walks: posted, and not walking clear of a tantrum
+/// (`components::Fleeing`), which would otherwise be pulled straight back.
+type HaulWalkers = (With<Tamed>, Without<Structure>, Without<Fleeing>);
+
 type HaulStructure = (
     Entity,
     &'static Position,
@@ -1119,7 +1123,7 @@ fn pickup_errand(
 }
 
 pub(crate) fn haul_step_system(
-    mut workers: Query<Hauler, (With<Tamed>, Without<Structure>, Without<Fleeing>)>,
+    mut workers: Query<Hauler, HaulWalkers>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
     departure: HaulDeparture,
     defs: HaulLookups,

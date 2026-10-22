@@ -197,36 +197,50 @@ impl App {
         }
     }
 
-    /// What the header shows for the current brush — `None` when there is
-    /// no finish content loaded at all, so a base with an empty
-    /// `assets/floors/` draws exactly today's screen.
-    pub fn excavate_brush_label(&self) -> Option<String> {
-        if self.excavate_plot {
-            return Some("Tool: farm plot [P]".to_string());
-        }
-        let game = self.game.as_ref()?;
-        let defs = game.floor_defs();
-        // `[P]` is advertised whenever it works, so a player with crops
-        // loaded can find the tool before ever pressing it.
-        let plot_hint = (!game.crop_defs().is_empty()).then_some("plot [P]");
-        let brush = (!defs.is_empty()).then(|| match &self.excavate_brush {
-            None => "Brush: plain [F]".to_string(),
-            Some(FinishOrder::Apply(id)) => {
-                let name = defs
-                    .iter()
-                    .find(|d| &d.id == id)
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(id.as_str());
-                format!("Brush: {name} [F]")
+    /// The key bar while a box cursor is on the map, in place of the
+    /// playing map's own — the tactical aim cursor's convention, so a mode
+    /// that takes the arrows away says what they do now. `None` outside the
+    /// two box modes and the brush picker over them.
+    ///
+    /// The tool in hand rides on its own key's label rather than a header
+    /// of its own. `[F]` and `[P]` appear only where they work, the keys'
+    /// own "inert with nothing loaded" rule.
+    pub fn plan_keybar(&self) -> Option<Vec<(String, String)>> {
+        let excavating = match self.mode {
+            Mode::Excavate | Mode::ExcavateBrush => true,
+            Mode::Stockpile => false,
+            _ => return None,
+        };
+        let row = |k: &str, l: String| (k.to_string(), l);
+        let (space, esc) = match self.excavate_anchor {
+            Some(_) => ("finish box", "drop corner"),
+            None => ("box", "done"),
+        };
+        let mut rows = vec![row("↑↓←→", "move".into()), row("Space", space.into())];
+        if excavating && let Some(game) = &self.game {
+            let defs = game.floor_defs();
+            if !defs.is_empty() {
+                let brush = match &self.excavate_brush {
+                    None => "plain",
+                    Some(FinishOrder::Apply(id)) => defs
+                        .iter()
+                        .find(|d| &d.id == id)
+                        .map_or(id.as_str(), |d| d.name.as_str()),
+                    Some(FinishOrder::Strip) => "strip",
+                };
+                rows.push(row("F", format!("brush: {brush}")));
             }
-            Some(FinishOrder::Strip) => "Brush: strip [F]".to_string(),
-        });
-        match (brush, plot_hint) {
-            (Some(b), Some(h)) => Some(format!("{b} \u{b7} {h}")),
-            (Some(b), None) => Some(b),
-            (None, Some(h)) => Some(h.to_string()),
-            (None, None) => None,
+            if !game.crop_defs().is_empty() {
+                let plot = if self.excavate_plot {
+                    "plot (on)"
+                } else {
+                    "plot"
+                };
+                rows.push(row("P", plot.into()));
+            }
         }
+        rows.push(row("Esc", esc.into()));
+        Some(rows)
     }
 
     /// The recipe picker's rows, every loaded crop in id order — the one

@@ -25,6 +25,13 @@ fn mark_a_plot(app: &mut App) {
     app.handle_key(GameKey::Esc);
 }
 
+fn plot_label(app: &App) -> Option<String> {
+    app.plan_keybar()?
+        .into_iter()
+        .find(|(k, _)| k == "P")
+        .map(|(_, l)| l)
+}
+
 fn tiles(app: &App) -> Vec<feral_processes_engine::views::FarmTileView> {
     app.game.as_ref().unwrap().farm_tiles()
 }
@@ -35,20 +42,14 @@ fn p_toggles_the_plot_tool_and_a_box_marks_a_plot() {
     let marks_before = app.game.as_ref().unwrap().marked_cells();
     app.handle_key(GameKey::Char('m'));
     app.handle_key(GameKey::Char('P'));
-    assert_eq!(
-        app.excavate_brush_label().as_deref(),
-        Some("Tool: farm plot [P]")
-    );
+    assert_eq!(plot_label(&app).as_deref(), Some("plot (on)"));
     for k in ['h', ' ', 'h', ' '] {
         app.handle_key(GameKey::Char(k));
     }
     assert!(!tiles(&app).is_empty());
     assert_eq!(app.game.as_ref().unwrap().marked_cells(), marks_before);
     app.handle_key(GameKey::Char('P'));
-    assert_ne!(
-        app.excavate_brush_label().as_deref(),
-        Some("Tool: farm plot [P]")
-    );
+    assert_eq!(plot_label(&app).as_deref(), Some("plot"));
 }
 
 #[test]
@@ -165,8 +166,7 @@ fn reopening_the_plan_starts_with_the_plot_tool_off() {
 fn the_header_advertises_the_plot_tool_before_it_is_picked() {
     let mut app = app_at_the_frontier(6009);
     app.handle_key(GameKey::Char('m'));
-    let label = app.excavate_brush_label().unwrap();
-    assert!(label.ends_with("plot [P]"), "{label}");
+    assert_eq!(plot_label(&app).as_deref(), Some("plot"));
 }
 
 #[test]

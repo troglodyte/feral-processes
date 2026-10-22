@@ -77,8 +77,6 @@ const STOCKPILE_FILL: Color = Color::new(
     hud::palette::STOCKPILE.b,
     0.18,
 );
-/// The header `Mode::Stockpile` shows where the brush label otherwise sits.
-const STOCKPILE_HEADER: &str = "Stockpile zone — Space marks a box, Esc leaves";
 
 /// How strongly an Alt-held room tint covers the ground. Low enough that the
 /// floor finish and the biome pattern still read through it.
@@ -108,11 +106,6 @@ fn room_row_cols(cells: &[(i32, i32)], at: (i32, i32)) -> i32 {
 fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
     text_w <= cols as f32 * tile_px
 }
-
-/// The excavate brush's header line, in from the map pane's own corner —
-/// not the window's, which is what a literal `0.0` would draw under.
-const EXCAVATE_LABEL_INSET: f32 = 4.0;
-const EXCAVATE_LABEL_SIZE: u16 = 14;
 
 /// What a floor item draws as: an item in its own glyph, in the amber of
 /// cargo; a downed program in the gray `x` the battle map gives a fallen
@@ -307,15 +300,9 @@ pub(super) fn draw_playing_base(
     // is only ever set on `Mode::Playing`, and any key that leaves the map
     // ends it.
     let travel = app.travel_goal();
-    // Gated on the mode rather than left to `excavate_brush_label`'s own
-    // `None`, `plan`'s reason: a brush left over from the last visit must
-    // not draw a header on the ordinary playing map.
-    let excavate_label = if app.mode == Mode::Stockpile {
-        Some(STOCKPILE_HEADER.to_string())
-    } else {
-        app.excavate_brush_label()
-            .filter(|_| matches!(app.mode, Mode::Excavate | Mode::ExcavateBrush))
-    };
+    // The box cursor's own keys, `plan`'s rule: `None` outside the two box
+    // modes, so the map keeps its bar the rest of the time.
+    let plan_actions = app.plan_keybar();
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the
@@ -537,7 +524,7 @@ pub(super) fn draw_playing_base(
         // **In this branch alone**, after the frame so it sits over the map:
         // the Stack's frame map owns this corner underground, and a
         // tactical board is the fight.
-        let stock_rect = hud::stock_block::draw_stock_block(
+        hud::stock_block::draw_stock_block(
             regions.map_pane,
             research.as_ref(),
             &stock_rows,
@@ -545,19 +532,6 @@ pub(super) fn draw_playing_base(
             painter,
             m,
         );
-        // **After the frame and the stock block, both of which claim this
-        // same corner** — drawing the label first, as the marks pass used
-        // to, put it under whichever of the two also landed there. The
-        // label's own gate is base space, `base_pos.is_some()`'s reason.
-        if game.base_pos().is_some() {
-            draw_excavate_label(
-                regions.map_pane,
-                excavate_label.as_deref(),
-                stock_rect,
-                painter,
-                m,
-            );
-        }
     }
     // **After the frame, so it sits over the map rather than under it**, and
     // outside the branch because it is the same block in both — though
@@ -660,7 +634,7 @@ pub(super) fn draw_playing_base(
             vitals: &vitals,
             refusal: status_line.as_deref(),
             border: fx.log_border(hud::palette::PANE_BORDER),
-            actions: tactical_actions.as_deref(),
+            actions: tactical_actions.as_deref().or(plan_actions.as_deref()),
         },
         painter,
         m,
@@ -1860,43 +1834,6 @@ fn draw_unconfigured_mark(painter: &Painter, px: f32, py: f32, tile_px: f32) {
     );
 }
 
-/// The brush's own header, in the map pane's top-left corner — the same
-/// corner the frame's THREAT strip and the stock block both claim first.
-/// **Call after both**, and pass the stock block's own returned rect: the
-/// label lands below it when one was drawn, or below the frame's strip
-/// quad (`strip_inset`) when the corner is otherwise empty. Drawn
-/// unconditionally on `label` rather than gated on a plan being previewed:
-/// the brush is set and read independently of that.
-///
-/// The origin is always derived from `pane` and the block it sits under,
-/// never a literal offset — a literal draws under one or the other of them
-/// the moment either is present, which is what shipped this needing a
-/// fix.
-fn draw_excavate_label(
-    pane: Rect,
-    label: Option<&str>,
-    stock_rect: Option<Rect>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(label) = label else { return };
-    let top = match stock_rect {
-        Some(rect) => rect.y + rect.h,
-        None => pane.y + hud::layout::strip_inset(m),
-    };
-    // `painter.ui` takes a baseline, not a top — `compass_block`'s own
-    // `size * 0.8` conversion, so `top` reads as the ink's actual top edge
-    // rather than landing `EXCAVATE_LABEL_SIZE` short of it.
-    let baseline = top + EXCAVATE_LABEL_SIZE as f32 * 0.8;
-    painter.ui(
-        label,
-        pane.x + EXCAVATE_LABEL_INSET,
-        baseline,
-        EXCAVATE_LABEL_SIZE,
-        TEXT,
-    );
-}
-
 /// A plot tile's outline: quiet, so a field reads as ground set aside and
 /// not as a plan or a wall.
 const PLOT_EDGE: Color = Color::new(0.20, 0.42, 0.22, 1.0);
@@ -2109,7 +2046,7 @@ mod tests {
     use crate::paint::SpriteTable;
     use crate::paint::{
         painted_images, painted_rect_fill_count, painted_rect_stroke_count, painted_text,
-        painted_text_boxes, with_painter, with_sprites,
+        with_painter, with_sprites,
     };
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
@@ -5826,80 +5763,6 @@ mod tests {
             }]),
             0,
             "a mark off the pane is culled, meter and all"
-        );
-    }
-
-    /// The brush's header: drawn when the label is `Some`, absent when it is
-    /// `None` — `App::excavate_brush_label`'s own contract, an empty
-    /// `FloorDb` included, reached one layer down from where `App` decides
-    /// it.
-    #[test]
-    fn the_excavate_header_draws_the_label_only_when_some() {
-        let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
-        let m = ui_metrics(900.0);
-        let draw =
-            |label: Option<&str>| with_painter(|p| draw_excavate_label(pane, label, None, p, &m)).1;
-
-        let shapes = draw(Some("Brush: Cobalt Carpet [F]"));
-        assert!(
-            painted_text(&shapes).contains(&"Brush: Cobalt Carpet [F]".to_string()),
-            "a Some label must be drawn"
-        );
-
-        let shapes = draw(None);
-        assert!(
-            painted_text(&shapes).is_empty(),
-            "a None label must draw nothing at all: {:?}",
-            painted_text(&shapes)
-        );
-    }
-
-    /// **The label sits under the frame's THREAT strip and the stock block,
-    /// not through either of them.** Both draw into the map pane's
-    /// top-left corner before the label does — `the_block_clears_the_
-    /// threat_readout_it_sits_beneath`'s trap, one door further down the
-    /// stack: a label drawn at a literal offset from the pane lands under
-    /// whichever of the two is present.
-    #[test]
-    fn the_excavate_label_clears_the_frame_and_the_stock_block() {
-        let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
-        let m = ui_metrics(900.0);
-        let label = "Brush: Cobalt Carpet [F]";
-
-        // No stock block drawn this frame: the label must still clear the
-        // THREAT strip's own quad.
-        let (_, shapes) = with_painter(|p| draw_excavate_label(pane, Some(label), None, p, &m));
-        let boxes = painted_text_boxes(&shapes);
-        let (_, _, rect) = boxes
-            .iter()
-            .find(|(_, t, _)| t == label)
-            .expect("the label was drawn");
-        assert!(
-            rect.y >= pane.y + hud::layout::strip_inset(&m) - 0.001,
-            "the label at {} draws under the THREAT strip's quad reaching {}",
-            rect.y,
-            pane.y + hud::layout::strip_inset(&m)
-        );
-
-        // A stock block is drawn this frame: the label must start below it.
-        let stock_rect = Rect::new(
-            pane.x + m.inset,
-            pane.y + hud::layout::strip_inset(&m),
-            200.0,
-            80.0,
-        );
-        let (_, shapes) =
-            with_painter(|p| draw_excavate_label(pane, Some(label), Some(stock_rect), p, &m));
-        let boxes = painted_text_boxes(&shapes);
-        let (_, _, rect) = boxes
-            .iter()
-            .find(|(_, t, _)| t == label)
-            .expect("the label was drawn");
-        assert!(
-            rect.y >= stock_rect.y + stock_rect.h - 0.001,
-            "the label at {} draws over the stock block reaching {}",
-            rect.y,
-            stock_rect.y + stock_rect.h
         );
     }
 

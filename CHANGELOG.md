@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.30
+
+**Esc on the map opens a Game menu that holds every setting, plus saving and quitting.** Options used to be reachable only from the main menu, and volume, visual effects and the frame-timings overlay were bare keys (`[`, `]`, `\`, `F3`) that reset every launch. The menu has Gameplay, Audio, Graphics and Save & quit pages, every setting is remembered between launches, and tactical surface battles can now be switched mid-run. Those keys and `q` on the map are retired; `[s]` still saves, `[o]` on the main menu opens the same menu, and quitting without saving asks first.
+
+**Low Power Mode at rank 4 stops the base Power drain, and each rank past it trickles Power back.** Each rank cuts the drain by a quarter, and every rank past 4 adds a small flat charge. Implants still cost Power at rank 4, and one trickle rank cancels four Load.
+
 ## 0.19.29
 
 **A program's attack reads the same on every screen, and it is the attack with its buffs in.** The roster, the party band, a program's own page, the ally picker for a field routine and the enemy rows in a fight all showed a program's bare attack, so an Overclock or a sap never showed up on any of them, while your own attack already included your gear and buffs. They now all show the attack with buffs, saps and emulation folded in. A status that cuts attack by a percentage, such as Throttled, still shows as its own tag beside the number rather than in it. Mitigation on those rows is still the bare figure.

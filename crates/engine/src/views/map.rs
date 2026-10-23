@@ -257,9 +257,10 @@ pub struct EntityView {
     /// outline are about the machine, so its bar is too. The upgrade's own
     /// figure is on the examine page.
     pub job_progress: Option<f32>,
-    /// How full this Depot is, or `None` for anything that is not one — see
-    /// `DepotFill`.
-    pub depot_fill: Option<DepotFill>,
+    /// How full this Depot or Quarantine Rack is, or `None` for anything
+    /// else — see
+    /// `ShelfFill`.
+    pub shelf_fill: Option<ShelfFill>,
     /// The build request this entity *is*, or `None` for everything that is
     /// not one — see `views::BuildOrderRow`.
     ///

@@ -1,14 +1,16 @@
 use super::*;
 
-/// What a Depot holds against what it can hold — its own `Stock::output`
-/// total and `Stock::capacity`, carried as counts rather than a fraction so
-/// "full" is an integer comparison and never a float landing at 0.9999.
+/// What a shelf holds against what it can hold — a Depot's own
+/// `Stock::output` total against `Stock::capacity`, or a Quarantine Rack's
+/// `Racked` programs against `Game::rack_slots` — carried as counts rather
+/// than a fraction so "full" is an integer comparison and never a float
+/// landing at 0.9999.
 ///
-/// Depots only: a machine's output buffer filling is already
+/// Depots and Racks only: a machine's output buffer filling is already
 /// `MachineStatus::Clogged` on the outline, and a bar beside it would say
 /// the same thing twice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DepotFill {
+pub struct ShelfFill {
     pub held: u32,
     pub capacity: u32,
 }

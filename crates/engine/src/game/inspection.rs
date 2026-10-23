@@ -1487,14 +1487,21 @@ impl Game {
                     _ if !is_structure => build.as_ref().map(|row| row.percent() as f32 / 100.0),
                     _ => None,
                 };
-                let depot_fill = self
-                    .is_depot(entity)
-                    .then(|| self.world.get::<Stock>(entity))
-                    .flatten()
-                    .map(|s| DepotFill {
-                        held: s.output_used(),
-                        capacity: s.capacity,
-                    });
+                let shelf_fill =
+                    if let Some(racked) = self.world.get::<crate::components::Racked>(entity) {
+                        Some(ShelfFill {
+                            held: racked.0.len() as u32,
+                            capacity: self.rack_slots(entity),
+                        })
+                    } else {
+                        self.is_depot(entity)
+                            .then(|| self.world.get::<Stock>(entity))
+                            .flatten()
+                            .map(|s| ShelfFill {
+                                held: s.output_used(),
+                                capacity: s.capacity,
+                            })
+                    };
                 EntityView {
                     unconfigured: self.placed(entity).is_some_and(|p| p.is_unconfigured()),
                     entity,
@@ -1540,7 +1547,7 @@ impl Game {
                     rarity: self.rarity_of(entity),
                     machine_status,
                     job_progress,
-                    depot_fill,
+                    shelf_fill,
                     build,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                     unseen_routine: self.unseen_routine(entity),

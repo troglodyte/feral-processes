@@ -339,7 +339,8 @@ fn legend() -> Vec<String> {
         "       green Warm, yellow Allied".to_string(),
         "Cyan line: a route.  Red line: preyed on.".to_string(),
         "Gold box: compass target.  Esc closes.".to_string(),
-        "Arrows pan  Tab picks  C compass  P centre".to_string(),
+        "Arrows pan  Tab: list/map  Click picks".to_string(),
+        "C compass  P centre".to_string(),
     ]
 }
 

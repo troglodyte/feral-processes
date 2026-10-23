@@ -93,6 +93,18 @@ fn tab_again_returns_arrows_to_panning() {
 }
 
 #[test]
+fn clicking_a_list_row_lights_it_even_when_the_map_had_focus() {
+    let mut app = open(921);
+    assert!(!app.world_map_list_focused);
+    app.pick_world_map_row(1);
+    assert_eq!(app.menu_selected, 1);
+    assert!(
+        app.world_map_list_focused,
+        "the row drawn lit is the row clicked"
+    );
+}
+
+#[test]
 fn reopening_the_map_starts_on_the_map() {
     let mut app = open(920);
     app.handle_key(GameKey::Tab);

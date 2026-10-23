@@ -87,10 +87,12 @@ impl App {
 
     /// A click on the side list. An index past the list is ignored: the gui
     /// sizes its rows off the same list, but a stale frame must not be able
-    /// to select nothing.
+    /// to select nothing. It also hands the list focus, since the list only
+    /// draws a highlight while it has it.
     pub fn pick_world_map_row(&mut self, index: usize) {
         if index < self.world_map_marks().len() {
             self.menu_selected = index;
+            self.world_map_list_focused = true;
         }
     }
 

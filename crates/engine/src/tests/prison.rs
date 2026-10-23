@@ -12,6 +12,7 @@ use crate::structures::StructureDb;
 use crate::tuning::JAIL_BREAKDOWN_SCALE;
 use crate::tuning::{JAIL_BASE_POTENCY, JAIL_MAX_ATTEMPTS, ROSTER_HARD_CAP};
 use crate::*;
+use rand::SeedableRng;
 
 const CELL: &str = "holding_cell";
 /// A shipped species whose `taming_difficulty` is dead centre.
@@ -509,10 +510,13 @@ fn a_warded_empty_cell_draws_nothing_from_the_rng() {
     let next = |with_cell: bool| -> u64 {
         let mut game = Game::new(7304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
+        // `spawn_machine_at` lays the starting pocket, which moves the
+        // stream; lay it in both runs so only the cell and its post differ.
+        game.lay_starting_pocket();
+        stand_ample_grid_supply(&mut game);
+        let warden = spawn_tamed(&mut game, 10, 3);
         if with_cell {
             let cell = spawn_machine_at(&mut game, CELL, ANCHOR.0, ANCHOR.1);
-            stand_ample_grid_supply(&mut game);
-            let warden = spawn_tamed(&mut game, 10, 3);
             game.world.entity_mut(warden).insert(Task {
                 kind: TaskKind::GatherResource,
                 target: cell,
@@ -879,15 +883,22 @@ fn output_total(game: &Game, cell: Entity) -> u32 {
 
 #[test]
 fn a_breakdown_is_priced_from_the_carried_record_not_the_level_one_body() {
+    // The tool is drawn at random and a low-yield one can pay the same
+    // single unit at either level, so one seed proves nothing: total the
+    // same draws over many seeds.
     let paid = |level: u32| -> u32 {
-        let (mut game, cell, body) = a_warded_cell(7301);
-        game.world.get_mut::<Jailed>(body).unwrap().record = Some(DownedProgram {
-            level,
-            ..record(MID_SPECIES, Rarity::Ordinary)
-        });
-        game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
-        game.settle_jail_attempt(cell, body, false);
-        output_total(&game, cell)
+        (1..=16u64)
+            .map(|seed| {
+                let (mut game, cell, body) = a_warded_cell(seed);
+                game.world.get_mut::<Jailed>(body).unwrap().record = Some(DownedProgram {
+                    level,
+                    ..record(MID_SPECIES, Rarity::Ordinary)
+                });
+                game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
+                game.settle_jail_attempt(cell, body, false);
+                output_total(&game, cell)
+            })
+            .sum()
     };
     assert!(paid(60) > paid(1), "a higher-level kill pays more");
 }
@@ -991,11 +1002,21 @@ fn a_breakdown_with_no_room_clogs_the_cell_on_the_beat_it_defers() {
         j.attempts = JAIL_MAX_ATTEMPTS - 1;
         j.progress = ATTEMPT_TICKS - 1;
     }
+    // Reseed until the coming roll misses: the test is about the deferred
+    // breakdown, not about the odds.
+    let odds = game.jail_odds(body).unwrap();
+    let seed = (0u64..)
+        .find(|&seed| {
+            let mut probe = rand::rngs::StdRng::seed_from_u64(seed);
+            rand::RngExt::random::<f32>(&mut probe) >= odds
+        })
+        .unwrap();
+    game.world.resource_mut::<GameRng>().0 = rand::rngs::StdRng::seed_from_u64(seed);
     game.run_holding_cells();
     assert_eq!(
         game.cell_prisoner(cell),
         Some(body),
-        "the seed must fail the last roll, or this tests nothing"
+        "the last roll misses, so the program breaks down and is deferred"
     );
     assert_eq!(
         game.world.get::<MachineStatus>(cell),

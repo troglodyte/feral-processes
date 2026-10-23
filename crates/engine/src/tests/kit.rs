@@ -1467,13 +1467,22 @@ mod emulation_tests {
         assert!(wait_for_turn(&mut game, player));
         let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
         let drain = ambient_hunger_drain(&game, player);
+        let round = |game: &Game| {
+            game.world
+                .resource::<crate::tactical::TacticalBattle>()
+                .round
+        };
+        let round_before = round(&game);
 
         assert!(game.tactical_revert());
 
+        // The drain is the round upkeep's, which runs only if ending this turn
+        // wraps the round — i.e. only if initiative put the player last.
+        let rounds_ticked = (round(&game) - round_before) as f32;
         assert!(game.world.get::<Emulation>(player).is_none());
         assert_eq!(
             game.world.get::<PowerReserve>(player).unwrap().get(),
-            power_before - drain,
+            power_before - drain * rounds_ticked,
             "tactical_revert must cost no Power beyond the round's ordinary hunger drain"
         );
         assert!(

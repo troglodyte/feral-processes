@@ -4,6 +4,7 @@ use super::marks::*;
 use super::outposts::draw_outpost_marks;
 use super::stack::draw_stack;
 use super::terrain::*;
+use super::wildlife::draw_wildlife;
 use super::*;
 use feral_processes_engine::TravelGoal;
 use feral_processes_engine::views::DigMark;
@@ -1695,6 +1696,50 @@ fn draw_surface_map(
             glyph_px,
             pane,
             |tile| outpost_occupants.get(&tile).copied(),
+        );
+    }
+    // After every tile, so a speck drifting across a tile boundary is not
+    // cut by the next tile's ground. Kept off any tile something stands on
+    // instead of under it, since the tile loop drew ground and glyph
+    // together and there is no layer between them to slip into.
+    if outdoors {
+        let occupied: std::collections::HashSet<(i32, i32)> =
+            entities.iter().map(|e| e.pos).collect();
+        let specks = fx.wildlife(
+            (center.0 - hw, center.1 - hh),
+            (center.0 + hw, center.1 + hh),
+        );
+        draw_wildlife(
+            painter,
+            &specks,
+            |world| {
+                let rx = usize::try_from(world.0 - center.0 + hw).ok()?;
+                let ry = usize::try_from(world.1 - center.1 + hh).ok()?;
+                let tile = tiles.get(ry)?.get(rx)?;
+                (tile.walkable && sights[ry][rx] == Sight::InSight && !occupied.contains(&world))
+                    .then(|| biome_tint(tile.biome))
+            },
+            |world| {
+                tile_origin_px(
+                    world,
+                    center,
+                    (half_w, half_h),
+                    (off_x, off_y),
+                    tile_px,
+                    pane,
+                )
+            },
+            |x, y| {
+                vignette(
+                    x - (pane.x + pane.w / 2.0),
+                    y - (pane.y + pane.h / 2.0),
+                    pane.w / 2.0,
+                    pane.h / 2.0,
+                    floor,
+                )
+            },
+            tile_px,
+            pane,
         );
     }
     // After every tile so debris lands on top of the base rather than under

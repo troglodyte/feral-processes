@@ -484,7 +484,11 @@ pub const REST_AMBUSH_CHANCE: f64 = 0.15;
 /// was simply the integral of where the player had stood. Measured on a real
 /// save: 65 hostiles in one box around a base that had been worked at, 7 in
 /// the entire map beyond 40 tiles. Both numbers are the same bug.
-pub const WILD_LOCAL_DENSITY_TARGET: usize = 12;
+///
+/// Halved from 12: the field read as crowded, groups overshoot the
+/// target, and the ambient specks drawn by the renderer now carry the sense of
+/// life that sheer headcount used to.
+pub const WILD_LOCAL_DENSITY_TARGET: usize = 6;
 
 /// The wild population one chunk of the world holds — see
 /// `Game::populate_chunk`. Terrain arrives a `world::CHUNK_SIZE` square at a

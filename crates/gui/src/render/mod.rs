@@ -104,6 +104,7 @@ mod test_support;
 mod tools;
 mod trade;
 mod transfer;
+mod wildlife;
 
 use arena::{
     draw_arena_builder, draw_arena_load, draw_arena_pick, draw_arena_result, draw_arena_save,

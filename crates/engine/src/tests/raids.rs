@@ -2662,8 +2662,17 @@ fn the_raid_clock_survives_a_save_and_a_load() {
     let mut game = Game::new(707, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     set_zone(&mut game, 2);
     spawn_min_raid_staff(&mut game);
-    for _ in 0..2000 {
+    // Stop at the warning: running a fixed count lets the drawn interval
+    // decide whether the sweep has already fired and reset the clock.
+    for _ in 0..10_000 {
         game.raid_check();
+        if game
+            .world
+            .resource::<crate::resources::RaidPressure>()
+            .warned
+        {
+            break;
+        }
     }
     let before = *game.world.resource::<crate::resources::RaidPressure>();
     assert!(before.level > 0, "the fixture must have built pressure");

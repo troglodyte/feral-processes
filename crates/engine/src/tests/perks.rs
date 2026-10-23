@@ -531,14 +531,35 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// than of the seed. Derived from the live curve so a retune of either
 /// constant cannot quietly leave the tests below rolling.
 ///
-/// `base_int` is whoever will actually be working the node, and it has to be
-/// a parameter rather than the baseline: the roll it is capping now includes
-/// the worker's own aptitude, so deriving against the player while a *dull*
-/// program does the job under-buys and leaves cycles fizzling. The player
-/// working the node passes 0, being the baseline by
-/// definition; a posted program passes its own species'.
-fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i32) {
-    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int, 0.0, 0.0, 0.0))
+/// `worker` is whoever will actually be working the node, and the cap has to
+/// be derived against *them* rather than the baseline: the roll it is capping
+/// includes the worker's own aptitude, morale and need strain, so deriving
+/// against the player while a dull or unhappy program does the job
+/// under-buys and leaves cycles fizzling. The player working the node passes
+/// `None`, being the baseline by definition.
+///
+/// A posted program's Analysis is read off the program itself
+/// (`species::analysis_of`, as the cycle does), not off its species: each
+/// body rolls its own attributes at spawn, so the species figure is only the
+/// centre of what it actually gets.
+fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, worker: Option<Entity>) {
+    let (base_int, morale, strain) = worker.map_or((0, 0.0, 0.0), |w| {
+        let db = game.attribute_db();
+        let species = game.world.get::<Creature>(w).unwrap().species.clone();
+        let def = game.species_defs().into_iter().find(|d| d.id == species);
+        let analysis = crate::species::analysis_of(
+            game.world.get::<crate::components::Attributes>(w),
+            def.as_ref(),
+            &db,
+        );
+        (
+            analysis - db.analysis_base(),
+            game.morale(w),
+            game.need_strain(w),
+        )
+    });
+    let levels = ((1.0
+        - crate::systems::mining_success_chance(1, 0, base_int, morale, strain, 0.0))
         / KEEN_SCAVENGER_BONUS_PER_LEVEL)
         .ceil() as usize;
     let player = game.player_entity();
@@ -585,7 +606,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
         "a fresh node has to roll at all for the perk to be measurable against it"
     );
 
-    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, 0);
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, None);
     keep_the_sweep_off(&mut game, node);
 
     game.work_structure(node)
@@ -696,13 +717,7 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
-    // Read off the species actually posted rather than assumed: `spawn_tamed`
-    // picks whichever species declares no abilities, and what that resolves
-    // to is not this test's business — only that the cap is derived against
-    // the aptitude doing the work.
-    let worker_int =
-        generic_species().analysis(&game.attribute_db()) - game.attribute_db().analysis_base();
-    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, worker_int);
+    buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, Some(worker));
     keep_the_sweep_off(&mut game, node);
 
     for _ in 0..60 {

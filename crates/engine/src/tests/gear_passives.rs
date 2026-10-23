@@ -416,12 +416,24 @@ fn a_companions_worn_grant_fires() {
 fn a_fired_grant_does_not_fire_again_next_round() {
     let dir = assets_with_granting_gear("cooldown");
 
-    let mut game = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_grant_module");
-    });
+    // A proc rolls to hit, so the stream is chosen such that the first round's
+    // does fire; the claim is about the round after it, which no stream can
+    // rescue — a held cooldown deals nothing on any seed.
+    let first = std::cell::Cell::new(0);
+    let mut game = first_rng_seed_where(
+        |seed| {
+            let mut game = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
+                let player = g.player_entity();
+                wear(g, player, "test_grant_module");
+            });
+            reseed_rng(&mut game, seed);
+            first.set(damage_in_one_defended_round(&mut game));
+            game
+        },
+        |_| first.get() > 0,
+    );
 
-    let first = damage_in_one_defended_round(&mut game);
+    let first = first.get();
     let second = damage_in_one_defended_round(&mut game);
     assert!(first > 0, "the fixture never fired: {first}");
     assert_eq!(

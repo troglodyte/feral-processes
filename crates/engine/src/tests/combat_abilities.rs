@@ -1514,6 +1514,9 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
             .push(Perk::DamageAffinity);
     }
 
+    // A miss deals 0, which is outside any band; this test is about the band,
+    // not the hit roll.
+    force_the_next_attack_to_land(&mut game);
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
     game.use_ability(
         &ability(&game, "kernel_panic"),
@@ -1892,6 +1895,9 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
         .id();
     let kernel_panic = ability(&game, "kernel_panic");
 
+    // A miss deals 0, which is outside any band; this test is about the band,
+    // not the hit roll.
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&kernel_panic, striker, "Test Striker", &[target]);
 
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
@@ -1991,6 +1997,9 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
         .id();
     let siphon_cycles = ability(&game, "siphon_cycles");
 
+    // A miss deals 0, which is outside any band; this test is about the band,
+    // not the hit roll.
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&siphon_cycles, drainer, "Test Drainer", &[target]);
 
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;

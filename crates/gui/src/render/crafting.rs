@@ -1,13 +1,16 @@
 //! The recipe picker and its quantity prompt, and `Mode::Compiling`'s bar.
 
 use super::bars::*;
+use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
+use feral_processes_app_core::craft_visible;
 use feral_processes_engine::HandCraftProgress;
 use feral_processes_engine::tuning::{QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT};
 
 pub(super) fn draw_craft_menu(
     game: &mut Game,
+    filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -16,10 +19,19 @@ pub(super) fn draw_craft_menu(
     let status = game.player_status();
     let recipes = game.craft_recipes();
     let mut rows = vec![
-        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(
+            "Type to filter; Esc to cancel (clears a filter first); Up/Down + Enter also work",
+        ),
         text_row(""),
     ];
-    for (i, recipe) in recipes.iter().enumerate() {
+    rows.extend(filter_line(filter));
+    // Positions in the filtered list, resolved by the handler through the
+    // same call.
+    let visible = craft_visible(game, filter);
+    if visible.is_empty() && !filter.is_empty() {
+        rows.push(no_match_row(filter));
+    }
+    for (i, recipe) in visible.iter().map(|&src| &recipes[src]).enumerate() {
         let (lead, tag, power, lines) = craft_rows(game, recipe, &status.inventory);
         let mut lines = lines.into_iter();
         let head = lines.next().expect("craft_rows always emits the head line");

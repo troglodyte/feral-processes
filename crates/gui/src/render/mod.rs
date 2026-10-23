@@ -1305,9 +1305,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
         Mode::FarmRecipe => draw_farm_recipe(&farm_recipe, selected, refusal, painter, m),
-        Mode::PutDown => draw_put_down(&put_down, selected, refusal, painter, m),
+        Mode::PutDown => draw_put_down(&put_down, &list_filter, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
-        Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
+        Mode::Craft => draw_craft_menu(game, &list_filter, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
             app.pending_craft.clone(),
@@ -1527,7 +1527,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::TacticalResult => {
             tactical::draw_tactical_result(&game.battle_outcomes(), refusal, painter, m)
         }
-        Mode::TacticalItem => tactical::draw_tactical_items(game, selected, refusal, painter, m),
+        Mode::TacticalItem => {
+            tactical::draw_tactical_items(game, &list_filter, selected, refusal, painter, m)
+        }
         Mode::TacticalRoutine => tactical::draw_tactical_routines(
             &game.tactical_routine_options(),
             selected,

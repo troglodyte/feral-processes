@@ -2697,21 +2697,6 @@ fn every_shipped_help_page_parses_and_every_link_resolves() {
     );
 }
 
-/// A further-reading row is followed by typing its label's shortcut, and
-/// `App::menu_shortcut` runs out of digits at nine.
-#[test]
-fn no_shipped_help_page_carries_more_than_nine_links() {
-    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
-    for page in db.pages() {
-        assert!(
-            page.links.len() <= 9,
-            "{} carries {} links; a tenth has no shortcut to type",
-            page.id,
-            page.links.len()
-        );
-    }
-}
-
 /// The game's word for using a routine is **run** (or *invoke*); the thing
 /// you did is an **invocation**. "Cast" and "spell" are the fantasy words
 /// this setting does not use, and player-facing text may never carry them.

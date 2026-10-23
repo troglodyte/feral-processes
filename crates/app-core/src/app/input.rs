@@ -102,8 +102,8 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
 }
 
 /// The row a typed digit or lowercase letter names, if the list has one:
-/// `menu_shortcut`'s labels read back. The classic battle screen's resolver
-/// is its only caller outside `selected_index`.
+/// `menu_shortcut`'s labels read back. `battle_row`, the classic battle
+/// screen's resolver, is its only caller.
 pub(crate) fn shortcut_row(c: char, len: usize) -> Option<usize> {
     if let Some(d) = c.to_digit(10) {
         // Rows are labelled from `1` (see `menu_shortcut`), so `0`
@@ -167,11 +167,6 @@ impl App {
     /// left to the caller, whose way back differs. One door for every
     /// confirm, so they cannot disagree about what Enter means.
     pub(crate) fn yes_no(&mut self, key: GameKey) -> Option<bool> {
-        // A confirm answers to `y`/`n` and Enter alone; a digit is a stray
-        // key here, never an answer.
-        if matches!(key, GameKey::Char(c) if c.is_ascii_digit()) {
-            return None;
-        }
         let options = ['y', 'n'];
         self.selected_index(key, options.len())
             .or_else(|| match key {

@@ -10,7 +10,6 @@ impl App {
     /// here, and every other key is the shared highlight + Enter.
     pub(crate) fn battle_row(&mut self, key: GameKey, len: usize) -> Option<usize> {
         if let GameKey::Char(c) = key
-            && len > 0
             && let Some(row) = shortcut_row(c, len)
         {
             return Some(row);

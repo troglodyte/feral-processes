@@ -162,8 +162,8 @@ pub const MENU_PAGE_ROWS: usize = 10;
 /// no label.
 ///
 /// Rows past the 35th run out of letters and return `'-'`, which no key
-/// produces — they're reachable by Up/Down + Enter only, and the label says
-/// so rather than advertising a key that does nothing.
+/// produces — they're reachable by Up/Down + Enter only, and the label
+/// shows `-` rather than advertising a key that does nothing.
 pub fn menu_shortcut(index: usize) -> char {
     if index < DIGIT_ROWS {
         return char::from_digit(index as u32 + 1, 10).expect("a row under 9 is always a digit");
@@ -404,9 +404,8 @@ pub struct HelpIndexRow {
     pub title: String,
 }
 
-/// One further-reading row on a page, followed by typing its `shortcut`.
+/// One further-reading row on a page, followed from the links' focus.
 pub struct HelpLinkRow {
-    pub shortcut: char,
     pub label: String,
 }
 
@@ -2315,7 +2314,7 @@ pub enum Mode {
     /// the *selected* row visible — so a menu-idiom page with its further
     /// reading at the bottom would open scrolled to the end of the text, and
     /// one with the links at the top would put long prose out of reach.
-    /// Links are followed by typing their label's shortcut instead.
+    /// Tab moves focus to the further-reading links (`help_links_focused`).
     HelpPage,
     /// A notification, taking the whole window until Esc dismisses it.
     ///
@@ -3415,6 +3414,12 @@ pub struct App {
     /// Whether `Mode::WorldMap`'s arrows drive the place list rather than
     /// pan the grid. Tab flips it; `open_world_map` clears it. Not saved.
     pub world_map_list_focused: bool,
+    /// Whether `Mode::HelpPage`'s Up/Down move `help_link_selected` through
+    /// the further-reading links rather than scroll the prose. Tab flips it;
+    /// every page change clears it. Not saved.
+    pub help_links_focused: bool,
+    /// The highlighted further-reading link while they have focus.
+    pub help_link_selected: usize,
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
     /// census stay as they are. Opens on the graph.

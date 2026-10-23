@@ -492,7 +492,7 @@ fn picking_a_topic_opens_that_page() {
 /// underneath it, which is the whole of what makes "three links deep and
 /// back" work.
 #[test]
-fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
+fn a_followed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     let mut app = test_app(932);
     app.handle_key(GameKey::Char('?'));
     pick_row(&mut app, 0);
@@ -503,13 +503,16 @@ fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
         "the fixture page carries no links, so this proves nothing"
     );
 
-    app.handle_key(GameKey::Char(link[0].shortcut));
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
     assert_eq!(
         app.mode,
         Mode::HelpPage,
         "a link opens another page, not another screen"
     );
     assert_eq!(app.help_stack.len(), 2);
+    assert!(!app.help_links_focused, "the new page opens scrolling");
     assert_eq!(app.help_stack[0], first, "the page beneath is still there");
     assert_ne!(app.help_stack[1], first);
 
@@ -524,6 +527,98 @@ fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Help, "the last level lands on the index");
     assert!(app.help_stack.is_empty());
+}
+
+/// Tab, Down, Enter reaches the *second* link (Down moves off the first),
+/// so the highlight is proved to move and not merely to default.
+#[test]
+fn tab_down_enter_follows_the_second_link() {
+    let mut app = test_app(935);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let page = app.current_help_page_id();
+    let target = app
+        .help_link_target(1)
+        .expect("the fixture page has two links");
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.help_stack, vec![page, target]);
+}
+
+#[test]
+fn enter_follows_the_first_link_when_the_links_are_focused() {
+    let mut app = test_app(936);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let page = app.current_help_page_id();
+    let target = app.help_link_target(0).unwrap();
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.help_stack, vec![page, target]);
+}
+
+#[test]
+fn a_digit_does_not_follow_a_help_link() {
+    let mut app = test_app(937);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let open = app.help_stack.clone();
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.help_stack, open);
+}
+
+#[test]
+fn tab_back_restores_scrolling() {
+    let mut app = test_app(938);
+    app.handle_key(GameKey::Char('?'));
+    let idx = app
+        .help_index_rows()
+        .iter()
+        .position(|r| r.title == "Controls")
+        .unwrap();
+    pick_row(&mut app, idx);
+    app.handle_key(GameKey::Tab);
+    assert!(app.help_links_focused);
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        app.menu_selected, 0,
+        "Down moves the link highlight, not the scroll"
+    );
+    app.handle_key(GameKey::Tab);
+    assert!(!app.help_links_focused);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+}
+
+/// A page with no links has nothing to focus, so the keys must not panic
+/// or leave the player stuck in a focus with no rows.
+#[test]
+fn a_page_with_no_links_survives_tab_and_arrows() {
+    let mut app = test_app(939);
+    let dir = std::env::temp_dir().join(format!("feral-help-nolinks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("10-lone.md"),
+        "# Lone page\n\nNothing links out of here.\n",
+    )
+    .unwrap();
+    let (db, warnings) = feral_processes_engine::help::HelpDb::load_dir(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    app.help_db = db;
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    assert!(app.help_page_view().unwrap().links.is_empty());
+    let open = app.help_stack.clone();
+    for k in [GameKey::Tab, GameKey::Up, GameKey::Down, GameKey::Enter] {
+        app.handle_key(k);
+    }
+    assert_eq!(app.help_stack, open);
+    assert!(!app.help_links_focused);
+    assert_eq!(app.mode, Mode::HelpPage);
 }
 
 #[test]

@@ -58,8 +58,8 @@ sentence.
 
 A link whose target is not a real page is **dropped from the list** and
 reported as a load warning. The prose still reads as written; only the menu
-row goes. A page carries at most nine links, because a further-reading row
-is followed by typing its shortcut.
+row goes. The reader reaches the links with Tab and follows one with Enter,
+so a page may carry as many as it needs.
 
 ## What gets a page skipped
 

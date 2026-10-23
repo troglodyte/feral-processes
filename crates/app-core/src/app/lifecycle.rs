@@ -175,6 +175,8 @@ impl App {
             work_column: 0,
             world_map_center: (0, 0),
             world_map_list_focused: false,
+            help_links_focused: false,
+            help_link_selected: 0,
             research_graph_view: true,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),

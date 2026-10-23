@@ -139,6 +139,7 @@ in the Game menu (Esc), the keys are different: arrows or the numpad step the ac
 body, a attacks, d defends, s runs a routine, U uses an item, V drops an active emulation,
 E ends the turn, A hands your side over to fight on its own, and R resolves the fight.
 
-This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
-screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
+This screen is the manual now, not a card: Up and Down scroll a page, Tab moves to its further-reading
+links (Up and Down pick one, Enter reads it, Tab goes back to scrolling), and Esc backs out of it a
+page at a time, like every other screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
 [intrusions](intrusions), [your base](your-base), and [the Stack](the-stack).

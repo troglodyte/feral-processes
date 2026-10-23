@@ -127,7 +127,7 @@ pub(crate) fn override_biome_stretch_east(
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
-    // `warp_to_zone` queues an achievement ("First Breach") that only
+    // `warp_to_zone` queues an achievement ("First Escalation") that only
     // resolves onto `Notifications` from inside a *tick* — a plain
     // `take_notification` drain here, before anything has ticked, sees
     // nothing. Left alone it takes `Mode::Playing` on the caller's own

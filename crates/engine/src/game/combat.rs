@@ -1053,7 +1053,7 @@ impl Game {
                     self.is_boss_creature(front) || self.is_lair_guardian(front)
                 })
             {
-                return Err("That program's ICE is beyond decompiling.".to_string());
+                return Err("That program's defences are beyond decompiling.".to_string());
             }
             // Final review F9: an Emulate `Special` needs a chosen image the
             // player has actually learned before anything is spent —
@@ -1534,7 +1534,7 @@ impl Game {
     /// nothing to resolve against a battle recipient, and that is the
     /// existing `AbilityEffect::field_only` rather than a fourth spelling of
     /// its three variants. `Decompile` is excluded because a free capture
-    /// roll on every attack would spend an ICE Breaker the player never
+    /// roll on every attack would spend a Breach Kit the player never
     /// authorised, undercutting taming as something earned by fighting — and
     /// it is resolved by group index rather than by recipient, so it would
     /// not survive the `use_ability` path anyway.

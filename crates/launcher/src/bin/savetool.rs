@@ -36,7 +36,7 @@ const USAGE: &str = "\
 usage:
   savetool dump <save.bin> [out.ron]   read a save out as editable RON
   savetool pack <in.ron> <save.bin>    write edited RON back as a save
-  savetool warp <save.bin> <zone>      breach the save forward to <zone>
+  savetool warp <save.bin> <zone>      escalate the save forward to <zone>
   savetool template                    list the saves in dev-saves/
   savetool template <name> [out.bin]   generate one as a playable save
   savetool capture <save.bin> <name>   record a save into dev-saves/";

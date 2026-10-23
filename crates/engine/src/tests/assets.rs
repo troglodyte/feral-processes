@@ -480,7 +480,7 @@ fn the_broker_is_the_one_structure_the_first_of_which_is_free() {
 /// see: a `work.produces` structure makes its item out of nothing on a
 /// timer, so the item's *value* is a Credit-per-tick rate. A flat-payout
 /// printer (8 ticks) would out-earn an Extractor nearly fourfold if
-/// ICE Breakers were priced at their 3-Fragment recipe. Anything a base can
+/// Breach Kits were priced at their 3-Fragment recipe. Anything a base can
 /// print sits at the floor price; worth comes from what you can't print.
 #[test]
 fn every_base_produced_item_sits_at_the_floor_price() {
@@ -1263,7 +1263,7 @@ fn the_flip_to_power_cost_carried_the_authored_numbers_over_unchanged() {
         ("wild_jump", 20.0),
         ("trickle_charge", 25.0),
         ("deadlock", 6.0),
-        // Taming is really paid for in the ICE Breaker the call spends. The
+        // Taming is really paid for in the Breach Kit the call spends. The
         // token is here because `decompile` is the one routine with no
         // cooldown, so a reserve is all that ever refuses it.
         ("decompile", 1.0),

@@ -144,7 +144,7 @@ impl Game {
     ///
     /// An item can legitimately appear twice with different makers — Power
     /// Cell is an Extractor's whole output and is also bench-craftable
-    /// from fragments, and ICE Breaker the same with the Compiler. A root
+    /// from fragments, and Breach Kit the same with the Compiler. A root
     /// step reports the structure; an expanded dependency reports the item's
     /// own `requires_structure`. Both are true, and the screen shows the one
     /// that matters where it stands.

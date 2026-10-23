@@ -1309,11 +1309,11 @@ impl Game {
             return Err(format!("{} is already fully upgraded.", def.name));
         }
         // Checked after the permanent ceiling, so a maxed-out structure in a
-        // shallow zone reads as finished rather than as waiting on a breach
+        // shallow zone reads as finished rather than as waiting on an escalation
         // it would never benefit from.
         if tier >= self.upgrade_ceiling(upgrade) {
             return Err(format!(
-                "{} can't go past Mk{tier} until you breach to zone {}.",
+                "{} can't go past Mk{tier} until you escalate to zone {}.",
                 def.name,
                 tier + 1
             ));

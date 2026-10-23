@@ -4,7 +4,7 @@ Your base is not on the map. It is its own space, entered through a permanent gr
 onto that tile and press < to phase up into it, and walk back to the door cell inside and press >
 to come back down. Until you found a base the anchor waits on the tile your run began on; deploying
 your Home settles it on the ground you are standing on instead, and after that it cannot be
-destroyed or moved. It travels with you across a breach, so the base you built in zone 1 is the
+destroyed or moved. It travels with you across an escalation, so the base you built in zone 1 is the
 base you walk into in zone 6, exactly as you left it.
 
 Until you deploy a Home the anchor is dark and there is nothing on the other side. Deploying one
@@ -158,7 +158,7 @@ The rest of what a base does:
   Inventory page. Stand beside it and press c: the Depots come in from wherever they stand, both to
   take from and to put into. Machines still have to be walked to.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
-  structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick Upgrade a
+  structure stopped at its ceiling in zone 1 starts moving again after an escalation. Pick Upgrade a
   structure on the Build page of the base report (b) and then point at the machine: it has to be the tile right beside you, north,
   south, east or west. An upgrade is a request like any other build: nothing is charged when you ask
   for it, your crew fetches the parts out of the base and works on the spot, and the machine keeps
@@ -166,7 +166,7 @@ The rest of what a base does:
   back whatever has been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. Sweeps start in the second sector: the base you raise in sector 1 is
-  never swept, so the first one you lose ground to is one you had a breach to prepare for. A Shield
+  never swept, so the first one you lose ground to is one you had an escalation to prepare for. A Shield
   soaks damage off every sweep against everything you own, a Patch Node recompiles damage across the
   whole base, and a program posted to the structure that gets hit defends it with its own
   Mitigation.

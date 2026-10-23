@@ -842,7 +842,7 @@ impl Game {
             .insert_resource(crate::resources::PopulatedChunks::default());
 
         self.log(format!(
-            "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
+            "You escalate through the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
 
         self.clear_local_wild();
@@ -868,7 +868,7 @@ impl Game {
         let current = self.world.resource::<ZoneLevel>().0;
         if zone <= current {
             return Err(format!(
-                "already in zone {current}; a breach only runs forward, so zone {zone} is unreachable"
+                "already in zone {current}; an escalation only runs forward, so zone {zone} is unreachable"
             ));
         }
         // The keys of the zones left behind, so a warped save is one the

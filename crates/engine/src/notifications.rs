@@ -387,7 +387,7 @@ impl NotificationKind {
                 repeat: Repeat::OnceEver,
             },
             NotificationKind::Breach => NotificationDef {
-                title: "Breach",
+                title: "Escalation",
                 body: "The portal holds long enough. A new sector resolves around you — new \
                        ground, new species, a harder floor and a higher ceiling.\n\nYour base \
                        travels with you.",
@@ -461,7 +461,7 @@ impl NotificationKind {
                 title: "Ceiling Reached",
                 body: "Level {level} is as far as sector {zone} goes. Kills still pay: the XP \
                        banks and converts straight into Perk Points, so your build keeps \
-                       moving.\n\nBreaching is what raises the ceiling. A new sector lifts the \
+                       moving.\n\nEscalating is what raises the ceiling. A new sector lifts the \
                        cap, tiers up what your structures can become, and may open research \
                        that is closed to you here.",
                 sprite: None,

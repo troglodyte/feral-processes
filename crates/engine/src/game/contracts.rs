@@ -1129,7 +1129,7 @@ impl Game {
             ),
 
             Objective::Breach { .. } => Some(
-                "Breach from a Zone Portal at your base. A breach spends Portal \
+                "Escalate through a Zone Portal at your base. An escalation spends Portal \
                  Fragments, which only bosses under the ground drop."
                     .to_string(),
             ),
@@ -1242,7 +1242,7 @@ impl Game {
                 format!("Deliver {count} {}", self.item_name(item))
             }
             Objective::Descend { depth } => format!("Stand {depth} frames down a Stack"),
-            Objective::Breach { zone } => format!("Breach to sector {zone}"),
+            Objective::Breach { zone } => format!("Escalate to sector {zone}"),
             Objective::Standing { band } => {
                 format!("Reach {} terms with a town", band.label())
             }

@@ -22,8 +22,8 @@ Where power comes from:
 
 When a run stalls, it is usually one of four things.
 
-- Nothing to fight that is worth XP. Push further out, or breach — a zone up is where the
-  challenge, and the payout, went. See [zones and breaching](zones).
+- Nothing to fight that is worth XP. Push further out, or escalate — a zone up is where the
+  challenge, and the payout, went. See [zones and escalation](zones).
 - No Portal Fragments. They come out of [the Stack](the-stack) alone. Find a link on the surface,
   go down, and beat a lair guardian.
 - No materials. Your base is the answer to that, not your feet. A production chain that runs while

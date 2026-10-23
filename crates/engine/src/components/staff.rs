@@ -5,7 +5,7 @@ pub struct WanderAi {
     pub cooldown: u32,
 }
 
-/// Player-only skill at cracking a program's ICE — raises decompile odds
+/// Player-only skill at breaching a program's defences — raises decompile odds
 /// independent of the target's HP or species difficulty, and grows on
 /// player level-up (see `award_player_xp`). Creatures never attempt a
 /// decompile themselves, so this never appears on them.

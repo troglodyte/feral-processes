@@ -1012,8 +1012,8 @@ fn decompile_greys_with_a_reason_rather_than_refunding_the_round() {
 
 /// Regression for I1: `ability_unavailable` greys Decompile per slot
 /// (`taming_catalyst().is_none()`), but the catalyst it checks is a
-/// round-wide pool, not one reserved per planner. With exactly one ICE
-/// Breaker held, both the player and a companion can plan Decompile in the
+/// round-wide pool, not one reserved per planner. With exactly one Breach
+/// Kit held, both the player and a companion can plan Decompile in the
 /// same round — the first to resolve spends the only copy, and the second
 /// used to hit an `expect` instead of a refusal.
 #[test]

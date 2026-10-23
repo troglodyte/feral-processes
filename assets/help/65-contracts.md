@@ -24,7 +24,7 @@ counts what is in your pack once you are standing in the right place.
 When you are in the right place with the right cargo, the base tab on the info column says so
 without you having to open anything.
 
-Everything else settles itself wherever you happen to be. Kills, descents, breaches, builds and the
+Everything else settles itself wherever you happen to be. Kills, descents, escalations, builds and the
 rest are counted as they happen; only a delivery needs you at a counter.
 
 ## Whose job it is

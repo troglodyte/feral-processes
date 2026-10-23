@@ -6,7 +6,7 @@ go, from anywhere, at any time.
 
 A perk is bought over and over. Each purchase stacks another level on the last and costs exactly
 what the first one did, so a perk you like is a place to keep putting points rather than a box to
-tick once. Nothing refunds, and nothing is lost on a breach.
+tick once. Nothing refunds, and nothing is lost on an escalation.
 
 There are twenty-one, and they fall into five jobs.
 

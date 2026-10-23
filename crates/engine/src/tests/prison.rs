@@ -555,7 +555,7 @@ fn the_odds_rise_with_every_failed_attempt_and_are_worth_the_wait() {
     let breaker = items
         .get("ice_breaker")
         .and_then(|d| d.taming_potency)
-        .expect("the shipped ICE Breaker has a potency");
+        .expect("the shipped Breach Kit has a potency");
     assert!(
         JAIL_BASE_POTENCY >= breaker,
         "a cell is never worse than the catalyst it saves"

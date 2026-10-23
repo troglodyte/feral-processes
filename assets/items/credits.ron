@@ -2,6 +2,6 @@
     id: "credits",
     name: "Credits",
     glyph: Some('.'),
-    description: "What a trader pays and charges. Minted by no one else, and the only cache that survives a breach.",
+    description: "What a trader pays and charges. Minted by no one else, and the only cache that survives an escalation.",
     role: Some(TradeCurrency),
 )

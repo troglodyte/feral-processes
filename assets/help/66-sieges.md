@@ -51,4 +51,4 @@ Raiders from a settlement you have wronged come half as often as a sweep. They t
 your banked build currency rather than breaking anything, and every point of raid defence you have,
 from a Shield or a Turret, cuts that share. Raids on an outpost work differently; see [outposts](outposts).
 
-Read on: [your base](your-base), [battle maps](battle-maps), and [before you breach](before-you-breach).
+Read on: [your base](your-base), [battle maps](battle-maps), and [before you escalate](before-you-escalate).

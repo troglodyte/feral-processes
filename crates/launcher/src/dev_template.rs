@@ -742,7 +742,7 @@ mod tests {
 
     /// `bench-economy` exists to be measured, so the bar is flow that does not
     /// stop: under standing orders the Patch Routine printer's line, the Bytecode Block factory's line and the
-    /// Ice Breaker printer must all keep delivering into the Depots for a long stretch,
+    /// Breach Kit printer must all keep delivering into the Depots for a long stretch,
     /// which is what `chains` cannot do (full Depots, a stranded hauler, no
     /// amenity). The 1500 ticks are well past the first batch, so a layout that
     /// only makes its starting stock would fall short of the counts.

@@ -174,7 +174,7 @@ impl Game {
         }
 
         // One line per completed program, unlike the assembler, which logs
-        // no per-unit line. An ICE Breaker is a known constant output; a
+        // no per-unit line. A Breach Kit is a known constant output; a
         // program's yield is unique, unrepeatable information the player has
         // no other record of.
         let label = self.downed_program_label(&entry.program);

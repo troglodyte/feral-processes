@@ -1078,7 +1078,7 @@ mod tests {
     fn an_items_tag_is_derived_from_its_name_and_overridable() {
         let (db, warnings) = load_fixture(&[
             ("cf.ron", r#"(id: "cf", name: "Core Fragment")"#),
-            ("bip.ron", r#"(id: "bip", name: "Black ICE Pick")"#),
+            ("bip.ron", r#"(id: "bip", name: "Black Ice Pick")"#),
             ("cr.ron", r#"(id: "cr", name: "Credits")"#),
             ("x.ron", r#"(id: "x", name: "x")"#),
             (

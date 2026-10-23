@@ -35,4 +35,4 @@ never rolls one at all. A hit costs it some integrity, steals a share of its sto
 crew member; enough hits without a repair and it goes dark, sending every crew member still posted
 there home and halting it until R brings it back.
 
-Read on: [your base](your-base), [supplies](supplies), and [zones and breaching](zones).
+Read on: [your base](your-base), [supplies](supplies), and [zones and escalation](zones).

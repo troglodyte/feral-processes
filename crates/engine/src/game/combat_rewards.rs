@@ -1406,7 +1406,7 @@ impl Game {
         }
         self.log_kind(
             MessageKind::Outcome,
-            "ICE breached! The program now runs under your control.",
+            "Breach complete! The program now runs under your control.",
         );
         self.award_player_xp(player, earned);
         // The other way a program leaves a fight and does not come back.
@@ -1480,7 +1480,7 @@ impl Game {
             } else {
                 " Its defences are as frayed as they will get."
             };
-            let verdict = format!("The program's ICE holds — decompile failed!{fraying}");
+            let verdict = format!("The program's defences hold — decompile failed!{fraying}");
             // `Info`, so the prune drops the run of them; the copy held for
             // `settle_rewards` is what reaches the summary. See
             // `BattleRewards::decompile_verdict`.
@@ -1559,7 +1559,7 @@ impl Game {
         self.seat_derived(lead);
         self.log_kind(
             MessageKind::Outcome,
-            "ICE breached! The program now runs under your control.",
+            "Breach complete! The program now runs under your control.",
         );
         self.award_player_xp(player, earned);
 

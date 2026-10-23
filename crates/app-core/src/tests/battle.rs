@@ -655,7 +655,7 @@ fn an_unavailable_routine_is_refused_instead_of_opening_the_target_picker() {
     let idx = options
         .iter()
         .position(|o| o.unavailable.is_some())
-        .expect("with no ICE Breakers the player's Decompile row should be greyed");
+        .expect("with no Breach Kits the player's Decompile row should be greyed");
 
     app.mode = Mode::BattleSpecial;
     app.pending_battle_action = Some(ActionKind::Special);

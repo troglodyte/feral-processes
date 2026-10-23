@@ -621,7 +621,7 @@ impl AdoptBlock {
     /// `Game::ability_unavailable`'s battle-row fragments.
     pub(crate) fn refusal(self) -> &'static str {
         match self {
-            Self::NoCatalyst => "You need an ICE Breaker to adopt a process.",
+            Self::NoCatalyst => "You need a Breach Kit to adopt a process.",
             Self::RosterFull => "Your roster is full.",
         }
     }

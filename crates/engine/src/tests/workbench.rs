@@ -116,7 +116,7 @@ fn a_research_node_names_the_machine_recipes_it_gates() {
         .find(|d| d.id == "automation")
         .unwrap();
     let text = game.research_unlocks(&def).unwrap_or_default();
-    assert!(text.contains("Printer: ICE Breaker"), "{text}");
+    assert!(text.contains("Printer: Breach Kit"), "{text}");
 }
 
 #[test]

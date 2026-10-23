@@ -144,7 +144,7 @@ pub(super) fn held_output_rect(px: f32, py: f32, tile_px: f32) -> Rect {
 
 /// The held-output dot, in the hue the cell already wears. Alpha 1.0, no
 /// bob and no blink: it is a fact about contents, not an event. Gated in
-/// here so a test holds both halves, `draw_depot_fill`'s shape.
+/// here so a test holds both halves, `draw_shelf_fill`'s shape.
 pub(super) fn draw_held_output(
     painter: &Painter,
     holds: bool,
@@ -477,14 +477,14 @@ fn draw_bar(painter: &Painter, bar: Rect, done: f32, grows: Grows, color: Color,
 }
 
 /// A Depot turns yellow once this share of its room or less is left.
-const DEPOT_NEAR_FULL_PERCENT: u32 = 10;
+const SHELF_NEAR_FULL_PERCENT: u32 = 10;
 
-/// Where a Depot's fill bar sits — the progress bar's thickness and inset
+/// Where a shelf's fill bar sits — the progress bar's thickness and inset
 /// stood upright along the right edge, filling upward like a tank. The top
 /// edge is where a structure's damage reads, so a level drawn there competed
 /// with it; the bottom edge stays the job bar's, which a Depot being
 /// upgraded still needs, so the gauge stops an inset above that bar's top.
-pub(super) fn depot_fill_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+pub(super) fn shelf_fill_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     let size = tile_px - 1.0;
     let top = py + PROGRESS_BAR_INSET;
     let bottom = progress_bar_rect(px, py, tile_px).y - PROGRESS_BAR_INSET;
@@ -496,26 +496,26 @@ pub(super) fn depot_fill_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     )
 }
 
-/// The `[GRID]` readout's three roles over a Depot's room: `OFFLINE` when
-/// full, `ATTENTION` with `DEPOT_NEAR_FULL_PERCENT` or less left, `HEALTHY`
+/// The `[GRID]` readout's three roles over a shelf's room: `OFFLINE` when
+/// full, `ATTENTION` with `SHELF_NEAR_FULL_PERCENT` or less left, `HEALTHY`
 /// otherwise. Integer arithmetic, so a Depot at exactly a tenth is yellow.
-pub(super) fn depot_fill_color(fill: DepotFill) -> Color {
+pub(super) fn shelf_fill_color(fill: ShelfFill) -> Color {
     let room = fill.capacity.saturating_sub(fill.held);
     if room == 0 {
         hud::palette::OFFLINE
-    } else if room * 100 <= fill.capacity * DEPOT_NEAR_FULL_PERCENT {
+    } else if room * 100 <= fill.capacity * SHELF_NEAR_FULL_PERCENT {
         hud::palette::ATTENTION
     } else {
         hud::palette::HEALTHY
     }
 }
 
-/// How full a Depot is, or nothing for any other cell — see
-/// `EntityView::depot_fill`. An empty Depot still draws its track, so the
+/// How full a Depot or Rack is, or nothing for any other cell — see
+/// `EntityView::shelf_fill`. An empty shelf still draws its track, so the
 /// tile says *this level can be read* before there is anything in it.
-pub(super) fn draw_depot_fill(
+pub(super) fn draw_shelf_fill(
     painter: &Painter,
-    fill: Option<DepotFill>,
+    fill: Option<ShelfFill>,
     px: f32,
     py: f32,
     tile_px: f32,
@@ -531,10 +531,10 @@ pub(super) fn draw_depot_fill(
     };
     draw_bar(
         painter,
-        depot_fill_rect(px, py, tile_px),
+        shelf_fill_rect(px, py, tile_px),
         done,
         Grows::Up,
-        depot_fill_color(fill),
+        shelf_fill_color(fill),
         vig,
     );
 }

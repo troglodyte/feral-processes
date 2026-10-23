@@ -2898,11 +2898,49 @@ fn a_depot_reports_how_full_it_is_and_a_machine_does_not() {
             .into_iter()
             .find(|v| v.entity == e)
             .expect("the structure is standing")
-            .depot_fill
+            .shelf_fill
     };
     assert_eq!(
         fill(&mut game, depot),
-        Some(DepotFill { held: 7, capacity })
+        Some(ShelfFill { held: 7, capacity })
     );
     assert_eq!(fill(&mut game, node), None);
+}
+
+/// A Quarantine Rack is a shelf too: its view carries the programs racked
+/// against `Game::rack_slots`, so the map can draw the Depot's bar on it.
+#[test]
+fn a_quarantine_rack_reports_how_full_it_is() {
+    let mut game = Game::new(1415, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    place_now(&mut game, "quarantine_rack", 1, 0).unwrap();
+    let rack = game
+        .structure_report()
+        .iter()
+        .find(|s| s.kind == "quarantine_rack")
+        .unwrap()
+        .entity;
+    let downed = crate::items::DownedProgram {
+        species: "scrapper".to_string(),
+        level: 1,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    game.world
+        .get_mut::<crate::components::Racked>(rack)
+        .unwrap()
+        .0 = vec![downed; 3];
+    let capacity = game.rack_slots(rack);
+    assert!(capacity > 3);
+
+    let fill = game
+        .view_entities(40, 40)
+        .into_iter()
+        .find(|v| v.entity == rack)
+        .expect("the rack is standing")
+        .shelf_fill;
+    assert_eq!(fill, Some(ShelfFill { held: 3, capacity }));
 }

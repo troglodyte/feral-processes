@@ -1552,12 +1552,12 @@ fn draw_surface_map(
             if let Some((done, color)) = cell_bar(structure, building, staff) {
                 draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
             }
-            // How full a Depot is, up the right edge — after the outline for
+            // How full a Depot or Rack is, up the right edge — after the outline for
             // the progress bar's reason, since the shield pulse draws a wall
-            // along that edge too. See `draw_depot_fill`.
-            draw_depot_fill(
+            // along that edge too. See `draw_shelf_fill`.
+            draw_shelf_fill(
                 painter,
-                structure.and_then(|ev| ev.depot_fill),
+                structure.and_then(|ev| ev.shelf_fill),
                 px,
                 py,
                 tile_px,
@@ -2170,7 +2170,7 @@ mod tests {
             serviced: false,
             build: None,
             job_progress: None,
-            depot_fill: None,
+            shelf_fill: None,
             output_stranded: false,
             holds_output: false,
             hp_fraction: None,
@@ -5434,7 +5434,7 @@ mod tests {
     #[test]
     fn a_depots_bar_stands_on_the_right_edge_above_the_progress_bar() {
         for tile_px in [CELL, CELL * 2.0, CELL * 3.0] {
-            let side = depot_fill_rect(0.0, 0.0, tile_px);
+            let side = shelf_fill_rect(0.0, 0.0, tile_px);
             let bottom = progress_bar_rect(0.0, 0.0, tile_px);
             assert_eq!(side.w, bottom.h, "same thickness as the job bar");
             assert_eq!(side.y, bottom.x, "same inset from the top edge");
@@ -5453,14 +5453,14 @@ mod tests {
     /// on the status bar and the map.
     #[test]
     fn a_depots_bar_turns_yellow_with_a_tenth_left_and_red_when_full() {
-        let at = |held| depot_fill_color(DepotFill { held, capacity: 50 });
+        let at = |held| shelf_fill_color(ShelfFill { held, capacity: 50 });
         assert_eq!(at(0), hud::palette::HEALTHY);
         assert_eq!(at(44), hud::palette::HEALTHY, "six left is over a tenth");
         assert_eq!(at(45), hud::palette::ATTENTION, "five left is a tenth");
         assert_eq!(at(49), hud::palette::ATTENTION);
         assert_eq!(at(50), hud::palette::OFFLINE);
         assert_eq!(
-            depot_fill_color(DepotFill {
+            shelf_fill_color(ShelfFill {
                 held: 0,
                 capacity: 0
             }),
@@ -5475,9 +5475,9 @@ mod tests {
     fn a_depots_bar_fills_in_proportion_and_an_empty_one_keeps_its_track() {
         let heights = |held| {
             let (_, shapes) = with_painter(|p| {
-                draw_depot_fill(
+                draw_shelf_fill(
                     p,
-                    Some(DepotFill { held, capacity: 50 }),
+                    Some(ShelfFill { held, capacity: 50 }),
                     0.0,
                     0.0,
                     CELL,
@@ -5494,7 +5494,7 @@ mod tests {
             r.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("no NaN heights"));
             r
         };
-        let track = depot_fill_rect(0.0, 0.0, CELL);
+        let track = shelf_fill_rect(0.0, 0.0, CELL);
         let whole = (track.y, track.h);
         assert_eq!(heights(0), vec![whole]);
         assert_eq!(heights(50), vec![whole, whole]);
@@ -5504,7 +5504,7 @@ mod tests {
             (half[0].0 + half[0].1 - (track.y + track.h)).abs() < 0.01,
             "the fill rises from the bottom of its track: {half:?}"
         );
-        let (_, none) = with_painter(|p| draw_depot_fill(p, None, 0.0, 0.0, CELL, 1.0));
+        let (_, none) = with_painter(|p| draw_shelf_fill(p, None, 0.0, 0.0, CELL, 1.0));
         assert!(none.is_empty(), "not a Depot, no bar");
     }
 
@@ -5584,7 +5584,7 @@ mod tests {
                 );
             }
             for (name, other) in [
-                ("depot fill", depot_fill_rect(px, py, tile_px)),
+                ("depot fill", shelf_fill_rect(px, py, tile_px)),
                 ("progress bar", progress_bar_rect(px, py, tile_px)),
                 ("nemesis", nemesis),
             ] {

@@ -4063,3 +4063,10 @@ pub(crate) fn app_beside_a_machine(seed: u32, kind: &str, recipe: Option<&str>) 
     app.mode = Mode::Playing;
     app
 }
+
+/// Types `text` one key at a time, the way a player fills a list filter.
+pub(crate) fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+}

@@ -258,6 +258,7 @@ impl App {
         };
         let carried = self.status_line.clone();
         let mode_before = self.mode;
+        let row_before = self.menu_selected;
         let hub_took_it = self.handle_hub_nav(key);
         match self.mode {
             _ if hub_took_it => {}
@@ -439,6 +440,9 @@ impl App {
                 None
             };
             self.menu_selected = parked.unwrap_or_else(|| self.opening_row());
+        }
+        if self.mode != mode_before {
+            self.retain_filters(mode_before, row_before);
         }
         // Entering the board by any door is reading it — `N`, `b` onto the
         // last page, a page turn or the Overview — so the rail's `!` and the

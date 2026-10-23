@@ -36,6 +36,7 @@ mod inventory_hub;
 mod key_names;
 mod keys;
 mod level_up;
+mod list_filter;
 mod log_filter;
 mod machine_recipe;
 mod menus;

@@ -172,6 +172,7 @@ impl App {
             walk: None,
             drag_ticks_owed: 0,
             menu_selected: 0,
+            list_filters: Vec::new(),
             work_column: 0,
             world_map_center: (0, 0),
             world_map_list_focused: false,

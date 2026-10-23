@@ -19,6 +19,7 @@ pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
+pub use app::dev_item_picker::dev_item_visible;
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
@@ -27,6 +28,7 @@ pub use app::inventory_hub::INVENTORY_PAGES;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::level_up::LevelUpOrigin;
+pub use app::list_filter::filter_matches;
 pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
@@ -3401,6 +3403,8 @@ pub struct App {
     /// also takes a typed row label (`App::battle_row`). Reset to 0 every
     /// time a menu mode is entered.
     pub menu_selected: usize,
+    /// Typed list filters, innermost last (see `app::list_filter`).
+    pub(crate) list_filters: Vec<app::list_filter::ListFilter>,
     /// The column half of `Mode::BaseStaff`'s cursor — `menu_selected` is
     /// the row half, shared with every other menu. A second field rather
     /// than widening `menu_selected` into a pair, since only this one

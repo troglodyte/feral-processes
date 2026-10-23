@@ -26,7 +26,7 @@ fn y_opens_the_put_down_picker_and_a_row_puts_it_down() {
     let rows = app.put_down_rows();
     assert!(!rows.is_empty());
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing, "{:?}", app.status_line);
     assert_eq!(floor_count(&app), 1);
 }
@@ -72,7 +72,7 @@ fn y_with_an_empty_pack_refuses() {
 fn o_picks_up_underfoot() {
     let mut app = app_in_the_base(6104);
     app.handle_key(GameKey::Char('y'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(floor_count(&app), 1);
     app.handle_key(GameKey::Char('o'));
     assert_eq!(floor_count(&app), 0);

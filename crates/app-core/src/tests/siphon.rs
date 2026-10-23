@@ -50,7 +50,7 @@ fn c_at_an_empty_siphon_opens_the_picker_and_a_pick_holds_the_program() {
 
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_mut().unwrap();
@@ -72,7 +72,7 @@ fn c_at_an_occupied_siphon_offers_release_and_confirming_releases() {
 
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     let game = app.game.as_mut().unwrap();
@@ -109,7 +109,7 @@ fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
 
     // Walked away while the screen was open.
     stand_in_base_at(&mut app, 40, 40);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.siphon.is_none());

@@ -151,7 +151,7 @@ fn an_out_of_range_row_is_ignored_on_an_empty_store() {
     open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::DownedPrograms, "the list page holds");
     assert!(
@@ -168,7 +168,7 @@ fn picking_a_row_opens_the_tool_page_and_esc_backs_out_to_the_list() {
     app.handle_key(GameKey::Char('D'));
     assert_eq!(app.mode, Mode::DownedPrograms);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         app.pending_downed_program_index,
@@ -196,7 +196,7 @@ fn picking_a_tool_extracts_the_program_and_returns_to_the_list() {
         app_holding_downed_programs(9005, vec![program("scrapper", 70, Rarity::Gold, 20)]);
     open_hub_screen(&mut app, Mode::Inventory);
     app.handle_key(GameKey::Char('D'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.pending_downed_program_index, Some(0));
     let game = app.game.as_ref().unwrap();
     assert_eq!(
@@ -208,7 +208,7 @@ fn picking_a_tool_extracts_the_program_and_returns_to_the_list() {
         "test premise: exactly the starter tool is installed"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         app.mode,
@@ -261,7 +261,7 @@ fn the_screen_is_the_players_own_hands_and_a_row_pays_the_pack() {
         "`Q` is unbound on the list page, and must not pick a row there"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.pending_downed_program_index, Some(0));
     app.handle_key(GameKey::Char('L'));
     assert_eq!(
@@ -283,12 +283,12 @@ fn the_screen_is_the_players_own_hands_and_a_row_pays_the_pack() {
             .sum()
     };
     let before = carried(&app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         app.game.as_mut().unwrap().downed_program_rows().len(),
         2,
-        "the digit row should spend exactly the one program it is on"
+        "the picked row should spend exactly the one program it is on"
     );
     assert!(
         carried(&app) > before,

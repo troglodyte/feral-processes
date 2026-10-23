@@ -7,7 +7,7 @@ fn the_routines_page_opens_the_routine_target_picker_and_esc_backs_all_the_way_o
     let mut app = test_app(61);
     open_via_menu(&mut app, 'p', "Install a routine");
     assert_eq!(app.mode, Mode::RoutineTarget);
-    app.handle_key(GameKey::Char('1')); // "You"
+    pick_row(&mut app, 0); // "You"
     assert_eq!(app.mode, Mode::Routines);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineTarget);
@@ -26,8 +26,8 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
     // (which leaves slot 2 empty and has nothing to clear).
     let mut app = app_with_player_routines(62, &["decompile", "sandbox"], 100.0);
     open_via_menu(&mut app, 'p', "Install a routine");
-    app.handle_key(GameKey::Char('1')); // You
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 0); // You
+    pick_row(&mut app, 1);
     assert_eq!(app.mode, Mode::Routines, "uninstalling stays on the panel");
     let game = app.game.as_mut().unwrap();
     // `routine_holders()[0]` is the player by construction (see
@@ -39,7 +39,7 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
         "sandbox should have been popped out"
     );
 
-    app.handle_key(GameKey::Char('2')); // now an empty slot
+    pick_row(&mut app, 1); // now an empty slot
     assert_eq!(app.mode, Mode::RoutineInstall);
 }
 
@@ -50,8 +50,8 @@ fn picking_a_filled_slot_uninstalls_and_picking_an_empty_one_opens_the_install_l
 fn picking_the_decompile_slot_refuses_and_leaves_it_installed() {
     let mut app = test_app(63);
     open_via_menu(&mut app, 'p', "Install a routine");
-    app.handle_key(GameKey::Char('1')); // You
-    app.handle_key(GameKey::Char('1')); // slot 1 — decompile
+    pick_row(&mut app, 0); // You
+    pick_row(&mut app, 0); // slot 1 — decompile
 
     assert_eq!(app.mode, Mode::Routines, "the refusal stays on the panel");
     let refusal = app
@@ -81,7 +81,7 @@ fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
     // nothing at all, so any two ordinary routines will do.
     let mut app = app_owning_a_program_and_an_extractor(64, &[FALLBACK_ABILITY_ID, "sandbox"]);
     open_via_menu(&mut app, 'p', "Extract a routine");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::ExtractPick);
     let offered = {
         let program = app.pending_extract_program.unwrap();
@@ -90,7 +90,7 @@ fn extracting_from_a_program_with_two_routines_salvages_the_picked_one() {
     assert_eq!(offered.len(), 2, "both routines should be on offer");
 
     let before = app.game.as_mut().unwrap().owned_pets().len();
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
     assert_eq!(app.mode, Mode::ExtractConfirm);
     app.handle_key(GameKey::Char('y'));
     assert_eq!(
@@ -110,9 +110,9 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
     let mut app = app_owning_a_program_and_an_extractor(63, &[FALLBACK_ABILITY_ID]);
     open_via_menu(&mut app, 'p', "Extract a routine");
     assert_eq!(app.mode, Mode::Extract);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::ExtractPick);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::ExtractConfirm);
 
     let before = app.game.as_mut().unwrap().owned_pets().len();
@@ -138,8 +138,8 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
     assert_eq!(app.mode, Mode::Playing);
 
     open_via_menu(&mut app, 'p', "Extract a routine");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('y'));
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(
@@ -181,8 +181,8 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
     let mut app = test_app(66);
     teach_player_routines(&mut app, &["sandbox"]);
     open_via_menu(&mut app, 'p', "Install a routine");
-    app.handle_key(GameKey::Char('1')); // You
-    app.handle_key(GameKey::Char('2')); // the slot a level-1 player has free
+    pick_row(&mut app, 0); // You
+    pick_row(&mut app, 1); // the slot a level-1 player has free
     assert_eq!(app.mode, Mode::RoutineInstall);
     app.handle_key(GameKey::Char('e'));
     assert_eq!(app.mode, Mode::RoutineEtch);
@@ -203,8 +203,8 @@ fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
 fn on_the_extract_confirm(seed: u32) -> App {
     let mut app = app_owning_a_program_and_an_extractor(seed, &[FALLBACK_ABILITY_ID]);
     open_via_menu(&mut app, 'p', "Extract a routine");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::ExtractConfirm);
     app
 }

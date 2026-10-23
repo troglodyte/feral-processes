@@ -11,8 +11,8 @@ use feral_processes_engine::abilities::FALLBACK_ABILITY_ID;
 fn pick_row_picks_from_a_non_zero_opening_row() {
     let mut app = app_owning_a_program_and_an_extractor(9101, &[FALLBACK_ABILITY_ID]);
     open_via_menu(&mut app, 'p', "Extract a routine");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::ExtractConfirm);
     assert_eq!(
         app.menu_selected, 1,
@@ -490,7 +490,7 @@ fn picking_a_topic_opens_that_page() {
     let mut app = test_app(931);
     app.handle_key(GameKey::Char('?'));
     let first = app.help_index_rows()[0].title.clone();
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::HelpPage);
     assert_eq!(app.help_stack.len(), 1);
     let view = app.help_page_view().expect("a page is open");
@@ -505,7 +505,7 @@ fn picking_a_topic_opens_that_page() {
 fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     let mut app = test_app(932);
     app.handle_key(GameKey::Char('?'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     let first = app.help_stack[0].clone();
     let link = app.help_page_view().unwrap().links;
     assert!(
@@ -540,7 +540,7 @@ fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
 fn esc_on_the_index_closes_the_manual_and_clears_the_trail() {
     let mut app = test_app(933);
     app.handle_key(GameKey::Char('?'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.mode = Mode::Help;
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -559,7 +559,7 @@ fn up_and_down_scroll_a_page_without_changing_which_page_is_open() {
         .iter()
         .position(|r| r.title == "Controls")
         .expect("the controls page ships");
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    pick_row(&mut app, idx);
     let open = app.help_stack.clone();
     assert!(app.help_page_view().unwrap().prose.len() > 1);
 

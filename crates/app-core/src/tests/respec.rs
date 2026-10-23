@@ -21,7 +21,7 @@ fn app_on_the_talent_ladder(seed: u32) -> App {
     let mut app =
         app_owning_a_program_and_an_extractor_with_cargo(seed, &[], &[("privilege_ring", 3)]);
     open_via_menu(&mut app, 'p', "Develop a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::DevelopProgram);
     app
 }

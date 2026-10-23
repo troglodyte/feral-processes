@@ -50,7 +50,7 @@ fn a_broker_in_range_shows_the_row() {
 fn a_contract_in_hand_shows_the_row_underground() {
     let mut app = app_at_a_contract_broker(3103, false);
     open_command(&mut app, "Contracts");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert!(
         !app.game.as_ref().unwrap().active_contracts().is_empty(),
         "the fixture needs a contract in hand: {:?}",
@@ -103,7 +103,7 @@ fn taking_an_offer_away_from_the_base_says_where_to_go() {
         "the offers are still on screen out here"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert!(app.game.as_ref().unwrap().active_contracts().is_empty());
     let said = app.status_line.clone().expect("a refusal is reported");
     assert!(
@@ -144,7 +144,7 @@ fn picking_an_offer_accepts_it_and_the_screen_stays_open() {
     let offered = app.game.as_mut().unwrap().contract_board().unwrap();
     assert!(!offered.is_empty());
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::Contracts,
@@ -218,7 +218,7 @@ fn giving_back_an_onboarding_mission_is_refused_with_a_sentence() {
 fn abandoning_the_highlighted_contract_drops_it() {
     let mut app = app_at_a_contract_broker(3107, false);
     open_command(&mut app, "Contracts");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.game.as_ref().unwrap().active_contracts().len(), 1);
 
     // The active section leads the list, so row 0 is the contract just taken.

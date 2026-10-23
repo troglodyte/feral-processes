@@ -113,7 +113,7 @@ fn a_worn_weapon_is_refitted_from_its_slot_screen_and_keeps_its_level() {
 
     open_hub_screen(&mut app, Mode::Inventory);
     app.menu_selected = 0;
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::EquipSwap);
     app.handle_key(GameKey::Char('R'));
     assert_eq!(app.mode, Mode::RefitCopy, "{:?}", app.status_line);

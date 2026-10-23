@@ -188,7 +188,7 @@ fn inspect_on_a_programs_slot_row_reads_what_that_program_wears() {
     // Put the weapon on the program, so the slot row has something in it.
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::EquipSwap);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::CompanionEquip);
 
     app.handle_key(GameKey::Char('I'));

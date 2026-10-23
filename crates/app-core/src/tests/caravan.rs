@@ -230,7 +230,7 @@ fn a_trader_that_rolls_away_closes_the_screen() {
     for _ in 0..(feral_processes_engine::tuning::CARAVAN_STAY_TICKS + 50) {
         app.game.as_mut().unwrap().wait();
     }
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     // Long enough for the base to be swept at least once, which fires the
     // raid tutorial over whatever the screen had settled on.
     dismiss_notifications(&mut app);

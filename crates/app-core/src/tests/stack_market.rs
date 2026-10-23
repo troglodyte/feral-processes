@@ -139,7 +139,7 @@ fn no_routine_rung_asks_who_it_is_for() {
         let mut app = app_at_a_market(5_000);
         app.handle_key(GameKey::Char('t'));
         let row = row_of_scope(&mut app, scope);
-        app.handle_key(GameKey::Char(menu_shortcut(row)));
+        pick_row(&mut app, row);
         assert_eq!(
             app.mode,
             Mode::StackMarket,
@@ -163,7 +163,7 @@ fn buying_a_rung_banks_the_disks_and_returns_to_the_shelf() {
         other => panic!("row {row} is {other:?}, not a routine"),
     };
 
-    app.handle_key(GameKey::Char(menu_shortcut(row)));
+    pick_row(&mut app, row);
 
     assert_eq!(app.mode, Mode::StackMarket);
     let game = app.game.as_ref().unwrap();
@@ -185,7 +185,7 @@ fn buying_a_rung_banks_the_disks_and_returns_to_the_shelf() {
 fn a_market_screen_with_no_stall_under_it_drops_back_to_the_map() {
     let mut app = app_underground(3131);
     app.mode = Mode::StackMarket;
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -226,7 +226,7 @@ fn a_cargo_row_sells_one_on_a_pick_and_the_stack_on_shift() {
         .iter()
         .position(|row| row.copy.item.as_str() == ids::CORE_FRAGMENT)
         .expect("salvage is sellable");
-    app.handle_key(GameKey::Char(menu_shortcut(offers + row)));
+    pick_row(&mut app, offers + row);
     assert_eq!(held(&mut app), stock - 1, "a pick sold more than one unit");
 
     // `S` acts on the highlighted row, so put the highlight on it first.

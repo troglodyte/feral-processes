@@ -65,7 +65,7 @@ fn a_refused_selection_lands_on_the_status_line() {
     let mut app = test_app(502);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert!(
         matches!(app.mode, Mode::Research),
         "the menu stays open so the player can pick another"
@@ -85,7 +85,7 @@ fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
     let mut app = app_in_base_with_a_research_node(503);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     let taken = active_project(&app).expect("the first row is takeable from a stocked base");
 
     app.handle_key(GameKey::Char('a'));
@@ -108,7 +108,7 @@ fn enter_selects_the_highlighted_node() {
     open_command(&mut app, "Research");
     to_the_list(&mut app);
     let from_list = {
-        app.handle_key(GameKey::Char('1'));
+        pick_row(&mut app, 0);
         let taken = active_project(&app).expect("the list's row key takes a project on");
         app.handle_key(GameKey::Char('A'));
         taken
@@ -132,7 +132,7 @@ fn a_refused_research_node_is_written_to_the_log_too() {
     let mut app = test_app(502);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let banner = app.status_line.clone().expect("a refusal was reported");
     let logged = app
@@ -328,7 +328,7 @@ fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
         "Symlink is an always-visible root at zone 1: {ids:?}"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         active_routine_project(&app).as_deref(),
         Some(ids[0].as_str()),
@@ -435,7 +435,7 @@ mod dev_unlock {
     fn u_in_the_list_unlocks_the_active_project() {
         let mut app = open_research(604, true);
         to_the_list(&mut app);
-        app.handle_key(GameKey::Char('1'));
+        pick_row(&mut app, 0);
         let taken = active_project(&app).expect("the first row is takeable");
 
         app.handle_key(GameKey::Char('U'));

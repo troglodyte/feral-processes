@@ -75,11 +75,11 @@ fn installing_past_the_cap_asks_first_and_y_commits() {
     let mut app = app_beside_a_splice_rig_carrying(9304, &[(LATTICE, 1), (LEDGER, 1)]);
     open_structure_page(&mut app);
     // Rows are sorted by item id: the ledger, then the lattice.
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
     app.handle_key(GameKey::Char('I'));
     assert_eq!(view(&app).load, 3, "the lattice went in under the cap");
 
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
     app.handle_key(GameKey::Char('I'));
 
     assert!(app.splice_rig.as_ref().unwrap().confirm.is_some());
@@ -98,9 +98,9 @@ fn installing_past_the_cap_asks_first_and_y_commits() {
 fn declining_the_overload_confirm_changes_nothing() {
     let mut app = app_beside_a_splice_rig_carrying(9305, &[(LATTICE, 1), (LEDGER, 1)]);
     open_structure_page(&mut app);
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
     app.handle_key(GameKey::Char('I'));
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
     app.handle_key(GameKey::Char('I'));
     assert!(app.splice_rig.as_ref().unwrap().confirm.is_some());
 
@@ -123,7 +123,7 @@ fn r_removes_for_fragments_and_a_short_pack_surfaces_the_refusal() {
     app.handle_key(GameKey::Char('I'));
     assert_eq!(view(&app).installed.len(), 1);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('R'));
 
     assert_eq!(view(&app).installed.len(), 1, "no fragments, no removal");
@@ -138,7 +138,7 @@ fn r_with_fragments_returns_the_item() {
     app.handle_key(GameKey::Char('I'));
     assert_eq!(view(&app).installed.len(), 1);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('R'));
 
     assert!(view(&app).installed.is_empty());

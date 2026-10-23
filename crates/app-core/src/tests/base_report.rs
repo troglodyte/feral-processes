@@ -280,7 +280,7 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
     let mut app = app_inside_a_small_base(30020, false);
     open_hub_screen(&mut app, Mode::WorkOrders);
     let last = app.work_order_rows().len() - 1;
-    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    pick_row(&mut app, last);
     assert_eq!(app.mode, Mode::WorkOrderPick);
 
     for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
@@ -292,7 +292,7 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
         );
     }
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::WorkOrderQuantity);
     for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
         app.handle_key(key);
@@ -371,7 +371,7 @@ fn work_orders_refuse_edits_outside_base_space() {
     open_hub_screen(&mut app, Mode::WorkOrders);
     let last = app.work_order_rows().len() - 1;
 
-    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    pick_row(&mut app, last);
 
     assert_eq!(app.mode, Mode::WorkOrders, "the picker must not open");
     assert_eq!(
@@ -825,7 +825,7 @@ fn esc_from_a_command_returns_to_its_row_and_a_page_turn_forgets_it() {
         .position(|r| r.label == "Demolish a structure")
         .unwrap();
     assert!(demolish > 0);
-    app.handle_key(GameKey::Char(menu_shortcut(demolish)));
+    pick_row(&mut app, demolish);
     assert_eq!(app.mode, Mode::Remove);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseBuild);

@@ -69,7 +69,7 @@ fn taking_an_offer_files_it_under_the_town_that_posted_it() {
     assert!(!offers.is_empty(), "the town posted nothing to take");
     let id = offers[0].id.clone();
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let (held_after, _) = app.settlement_board_sections();
     assert_eq!(held_after.len(), held_before.len() + 1);

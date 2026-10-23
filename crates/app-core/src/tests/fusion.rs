@@ -21,14 +21,14 @@ fn the_fuse_picker_offers_owned_programs_parked_far_from_the_player() {
     open_via_menu(&mut app, 'p', "Fuse two programs");
     assert_eq!(app.mode, Mode::Fuse, "'f' should open the fuse picker");
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::FuseSecond,
         "picking a distant program should advance to the second page"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::FuseName,

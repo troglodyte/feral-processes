@@ -59,7 +59,7 @@ fn quitting_without_saving_needs_the_confirm() {
     let mut app = test_app(701);
     on_save_page(&mut app);
 
-    app.handle_key(GameKey::Char('3'));
+    pick_row(&mut app, 2);
 
     assert_eq!(app.mode, Mode::QuitRunConfirm);
     assert!(app.quit_unsaved_pending());
@@ -75,7 +75,7 @@ fn the_keybar_names_y_and_n_while_the_confirm_is_up() {
     let keys = |app: &App| Hub::GameMenu.kind().extra_keys(app);
     assert_eq!(keys(&app), vec![("1-3", "pick")]);
 
-    app.handle_key(GameKey::Char('3'));
+    pick_row(&mut app, 2);
 
     assert_eq!(keys(&app), vec![("y", "quit"), ("n", "stay")]);
 }
@@ -85,7 +85,7 @@ fn declining_the_confirm_stays_in_the_menu_with_the_run() {
     for decline in [GameKey::Esc, GameKey::Char('n'), GameKey::Enter] {
         let mut app = test_app(702);
         on_save_page(&mut app);
-        app.handle_key(GameKey::Char('3'));
+        pick_row(&mut app, 2);
 
         app.handle_key(decline);
 
@@ -100,7 +100,7 @@ fn declining_the_confirm_stays_in_the_menu_with_the_run() {
 fn confirming_drops_the_run_and_returns_to_the_menu() {
     let mut app = test_app(703);
     on_save_page(&mut app);
-    app.handle_key(GameKey::Char('3'));
+    pick_row(&mut app, 2);
 
     app.handle_key(GameKey::Char('y'));
 
@@ -116,7 +116,7 @@ fn save_writes_and_stays() {
     app.handle_key(GameKey::Char('.'));
     on_save_page(&mut app);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::QuitRunConfirm);
     assert!(app.game.is_some());
@@ -142,7 +142,7 @@ fn save_and_quit_writes_the_run_before_leaving() {
     );
 
     on_save_page(&mut app);
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
 
     assert_eq!(
         app.mode,
@@ -155,7 +155,7 @@ fn save_and_quit_writes_the_run_before_leaving() {
     assert_eq!(saves.len(), 1, "the run should have left exactly one save");
     app.mode = Mode::MainMenu;
     app.handle_key(GameKey::Char('l'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('l'));
     assert_eq!(app.mode, Mode::Playing, "the written save should load back");
     assert_eq!(
@@ -182,7 +182,7 @@ fn a_failed_save_does_not_quit() {
     app.current_save_path = Some(blocker.join("save.bin"));
 
     on_save_page(&mut app);
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
 
     assert_eq!(
         app.mode,

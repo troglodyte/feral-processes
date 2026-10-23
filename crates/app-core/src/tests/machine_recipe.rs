@@ -55,7 +55,7 @@ fn picking_a_row_on_an_unset_machine_sets_it_without_asking() {
         .item
         .clone();
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::MachineRecipe);
     assert_eq!(recipe_of(&app), Some(first));
@@ -163,7 +163,7 @@ fn the_screen_closes_when_the_machine_is_demolished() {
         .remove_structure(machine)
         .unwrap();
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.machine_recipe.is_none());

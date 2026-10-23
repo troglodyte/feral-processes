@@ -74,7 +74,7 @@ fn c_beside_a_plot_opens_the_recipe_picker_and_a_row_sows_it() {
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     let before = tick(&app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_plot.is_none());
     assert_eq!(
@@ -146,7 +146,7 @@ fn a_brush_pick_turns_the_plot_tool_off() {
     app.handle_key(GameKey::Char('P'));
     assert!(app.excavate_plot);
     app.handle_key(GameKey::Char('F'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Excavate);
     assert!(!app.excavate_plot);
 }

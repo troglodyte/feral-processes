@@ -6,6 +6,8 @@
 //! applies to cannot disagree. Later screens extend `is_filter_home` and
 //! `filter_lives`; nothing else here is per-screen.
 
+use crate::app::dev_item_picker::dev_item_visible;
+use crate::app::inventory::{INVENTORY_SLOT_ROWS, inventory_visible};
 use crate::{App, GameKey, Mode};
 
 /// One screen's filter. `row` is the highlight to restore when the player
@@ -31,7 +33,10 @@ pub fn filter_matches<'a>(names: impl IntoIterator<Item = &'a str>, filter: &str
 
 /// The screens that take typed filter text.
 fn is_filter_home(mode: Mode) -> bool {
-    matches!(mode, Mode::DevItemPicker)
+    matches!(
+        mode,
+        Mode::DevItemPicker | Mode::Inventory | Mode::EquipSwap
+    )
 }
 
 /// Whether a filter homed on `home` is still wanted once the mode is `now`:
@@ -39,6 +44,26 @@ fn is_filter_home(mode: Mode) -> bool {
 /// adds its screens' round trips here. Anything else forgets the filter.
 pub(crate) fn filter_lives(home: Mode, now: Mode) -> bool {
     home == now
+        || matches!(
+            (home, now),
+            // Every screen the pack opens on a row and returns from. `Trade`
+            // is the picker `[S]` shows when several posts are in range, and
+            // `TradeAction` the list a sale can land on.
+            (
+                Mode::Inventory,
+                Mode::InventoryItemAction
+                    | Mode::EraseQuantity
+                    | Mode::TradeQuantity
+                    | Mode::ModCopy
+                    | Mode::RefitCopy
+                    | Mode::TrapDirection
+                    | Mode::ItemDescribe
+                    | Mode::EquipSwap
+                    | Mode::Trade
+                    | Mode::TradeAction
+                    | Mode::TradeProgramConfirm
+            ) | (Mode::EquipSwap, Mode::RefitCopy | Mode::ItemDescribe)
+        )
 }
 
 impl App {
@@ -95,7 +120,30 @@ impl App {
 
     /// Where the highlight lands when the filter changes.
     fn first_match_row(&self) -> usize {
-        0
+        match (self.mode, &self.game) {
+            // The three slot rows are pinned above the items.
+            (Mode::Inventory, Some(game)) => {
+                if inventory_visible(game, self.filter_text()).is_empty() {
+                    0
+                } else {
+                    INVENTORY_SLOT_ROWS
+                }
+            }
+            _ => 0,
+        }
+    }
+
+    /// How many rows the filtered list of the current home has, so a
+    /// restored highlight can't land past its end.
+    fn filtered_len(&self) -> Option<usize> {
+        let game = self.game.as_ref()?;
+        match self.mode {
+            Mode::Inventory => {
+                Some(INVENTORY_SLOT_ROWS + inventory_visible(game, self.filter_text()).len())
+            }
+            Mode::DevItemPicker => Some(dev_item_visible(game, self.filter_text()).len()),
+            _ => None,
+        }
     }
 
     /// Mode-change bookkeeping for `handle_key`: park the highlight of a home
@@ -113,7 +161,11 @@ impl App {
         let now = self.mode;
         self.list_filters.retain(|f| filter_lives(f.home, now));
         if let Some(f) = self.list_filters.iter().rev().find(|f| f.home == now) {
-            self.menu_selected = f.row;
+            let row = f.row;
+            self.menu_selected = match self.filtered_len() {
+                Some(len) => row.min(len.saturating_sub(1)),
+                None => row,
+            };
         }
     }
 }

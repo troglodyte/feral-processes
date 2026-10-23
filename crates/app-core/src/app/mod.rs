@@ -30,7 +30,7 @@ mod hover;
 pub(crate) mod hub;
 pub(crate) mod input;
 mod inspection;
-mod inventory;
+pub(crate) mod inventory;
 pub(crate) mod inventory_hub;
 pub(crate) mod level_up;
 mod lifecycle;

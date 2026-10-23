@@ -38,13 +38,13 @@ fn pressing_uppercase_d_opens_the_downed_programs_screen_from_the_pack() {
 /// Lowercase `d` opens nothing and picks nothing: the downed store is
 /// `D`, because `d` is demolish on the map, and a list no longer reads
 /// letters as rows. On a pack with a tenth item, where the old scheme would
-/// have opened the item action for `d`, the screen simply stays put.
+/// have opened the item action for `d`, the screen simply stays put — the
+/// letter goes to the pack's type-to-filter.
 #[test]
 fn lowercase_d_does_nothing_in_the_pack() {
     let mut app = app_on_inventory_with_many_items(9001);
     open_hub_screen(&mut app, Mode::Inventory);
     assert_eq!(app.mode, Mode::Inventory);
-    let row = app.menu_selected;
 
     app.handle_key(GameKey::Char('d'));
 
@@ -53,7 +53,7 @@ fn lowercase_d_does_nothing_in_the_pack() {
         Mode::Inventory,
         "lowercase d must neither open the downed programs screen nor pick a row"
     );
-    assert_eq!(app.menu_selected, row);
+    assert_eq!(app.filter_text(), "d", "the letter is filter text");
     assert_eq!(app.pending_inventory_item, None);
 }
 

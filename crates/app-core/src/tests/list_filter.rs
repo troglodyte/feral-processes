@@ -132,20 +132,15 @@ fn leaving_the_picker_forgets_the_filter() {
 }
 
 /// The hub claims Esc for a filter before it moves focus to the rail, and a
-/// page turn is leaving the screen. No hub page filters yet, so the entry is
-/// planted directly on the Items page.
+/// page turn is leaving the screen. The Items page is the hub screen that
+/// filters.
 mod hub {
     use super::*;
-    use crate::app::list_filter::ListFilter;
 
     fn planted(seed: u32) -> App {
         let mut app = test_app(seed);
         open_hub_screen(&mut app, Mode::Inventory);
-        app.list_filters.push(ListFilter {
-            home: Mode::Inventory,
-            text: "x".into(),
-            row: 0,
-        });
+        type_text(&mut app, "x");
         app
     }
 
@@ -175,3 +170,5 @@ mod hub {
         assert_eq!(app.filter_text(), "");
     }
 }
+
+mod inventory;

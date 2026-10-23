@@ -24,6 +24,7 @@ pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::hub::{Hub, HubKind, HubPage, hub_of};
+pub use app::inventory::{equip_swap_visible, inventory_visible};
 pub use app::inventory_hub::INVENTORY_PAGES;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.

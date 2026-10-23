@@ -14,7 +14,7 @@
 //! `Game` that runs the same body the game runs, so what the console puts on
 //! screen is evidence about the game rather than about the console.
 
-use crate::{App, DIGIT_ROWS, GameKey, Mode, menu_shortcut};
+use crate::{App, GameKey, Mode};
 use std::ffi::OsStr;
 
 /// Opens the console from the map. Backtick, by console convention, and it
@@ -25,13 +25,6 @@ pub const DEV_CONSOLE_KEY: char = '`';
 /// — spawns, production, needs decay — visibly move, small enough that a
 /// press is not a fast-forward past the thing you were watching for.
 pub const DEV_CONSOLE_TICKS: u32 = 25;
-
-/// Rows a dev picker shows at once: the nine digits then `a`-`o`, which is
-/// what the popup holds at the smallest window (720px: 25 body rows, one of
-/// them the hint). Not all 35 selectors, because a page the popup has to
-/// scroll hides the rows its last selectors name. Past a page, Up/Down
-/// scroll.
-pub const DEV_PICKER_PAGE: usize = DIGIT_ROWS + 15;
 
 /// What a row does when it is fired.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -381,44 +374,5 @@ impl App {
     pub(crate) fn close_dev_picker(&mut self) {
         self.close_screen();
         self.menu_selected = self.dev_console_row;
-    }
-
-    /// Up/Down scroll a picker whose rows outnumber its selectors, and
-    /// PageUp/PageDown by a whole page.
-    /// `menu_selected` is the scroll offset, clamped so the last page stays
-    /// full. Returns whether the key was a scroll.
-    pub(crate) fn scroll_dev_picker(&mut self, key: GameKey, len: usize) -> bool {
-        let last = len.saturating_sub(DEV_PICKER_PAGE);
-        match key {
-            GameKey::Up => self.menu_selected = self.menu_selected.saturating_sub(1),
-            GameKey::Down => self.menu_selected = (self.menu_selected + 1).min(last),
-            GameKey::PageUp => {
-                self.menu_selected = self.menu_selected.saturating_sub(DEV_PICKER_PAGE)
-            }
-            GameKey::PageDown => {
-                self.menu_selected = (self.menu_selected + DEV_PICKER_PAGE).min(last)
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    /// The absolute row a selector key names on the current page of a
-    /// picker `len` rows long.
-    pub(crate) fn dev_picker_pick(&self, key: GameKey, len: usize) -> Option<usize> {
-        let GameKey::Char(c) = key else { return None };
-        let slot = (0..DEV_PICKER_PAGE).find(|&i| menu_shortcut(i) == c)?;
-        let idx = self.menu_selected + slot;
-        (idx < len).then_some(idx)
-    }
-
-    /// The visible page of a picker: each row with its selector.
-    pub(crate) fn dev_picker_page<T: Clone>(&self, rows: &[T]) -> Vec<(char, T)> {
-        rows.iter()
-            .skip(self.menu_selected)
-            .take(DEV_PICKER_PAGE)
-            .enumerate()
-            .map(|(i, row)| (menu_shortcut(i), row.clone()))
-            .collect()
     }
 }

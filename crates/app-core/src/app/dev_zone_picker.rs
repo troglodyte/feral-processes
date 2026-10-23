@@ -6,12 +6,13 @@
 use crate::{App, GameKey, Mode};
 
 impl App {
-    /// The visible page: (selector, zone number).
-    pub fn dev_zone_rows(&self) -> Vec<(char, u32)> {
-        let Some(game) = self.game.as_ref() else {
-            return Vec::new();
-        };
-        self.dev_picker_page(&game.dev_warp_targets())
+    /// Every row: the zone number. The popup windows itself around
+    /// `menu_selected`.
+    pub fn dev_zone_rows(&self) -> Vec<u32> {
+        self.game
+            .as_ref()
+            .map(|g| g.dev_warp_targets())
+            .unwrap_or_default()
     }
 
     pub(crate) fn handle_dev_zone_picker_key(&mut self, key: GameKey) {
@@ -22,10 +23,7 @@ impl App {
         let Some(zones) = self.game.as_ref().map(|g| g.dev_warp_targets()) else {
             return;
         };
-        if self.scroll_dev_picker(key, zones.len()) {
-            return;
-        }
-        let Some(idx) = self.dev_picker_pick(key, zones.len()) else {
+        let Some(idx) = self.selected_index(key, zones.len()) else {
             return;
         };
         let Some(game) = self.game.as_mut() else {

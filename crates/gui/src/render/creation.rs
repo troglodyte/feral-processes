@@ -607,7 +607,7 @@ pub(in crate::render) mod tests {
         match step {
             CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
             CreationStep::Profile => app.handle_key(GameKey::Enter),
-            CreationStep::Class => app.handle_key(GameKey::Char('1')),
+            CreationStep::Class => app.handle_key(GameKey::Enter),
             CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
 
             // **The Icon step is walked by drawing, not by `[n]`.** Every
@@ -1192,7 +1192,7 @@ pub(in crate::render) mod tests {
         }
         // A preset rather than `walk_past`, which now draws — the note's
         // absence is exactly what the preset half of the Icon step buys.
-        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Enter);
         assert_eq!(app.creation_step(), CreationStep::Colour);
         assert!(app.creation_choice().icon.is_none());
 

@@ -1263,10 +1263,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     match app.mode {
         Mode::DevConsole => draw_dev_console(&dev_row_labels, selected, refusal, painter, m),
         Mode::DevItemPicker => {
-            dev_pickers::draw_dev_item_picker(&dev_item_rows, refusal, painter, m)
+            dev_pickers::draw_dev_item_picker(&dev_item_rows, selected, refusal, painter, m)
         }
         Mode::DevZonePicker => {
-            dev_pickers::draw_dev_zone_picker(&dev_zone_rows, refusal, painter, m)
+            dev_pickers::draw_dev_zone_picker(&dev_zone_rows, selected, refusal, painter, m)
         }
         Mode::Build => draw_build_menu(game, build_category, selected, refusal, painter, m),
         Mode::BuildDirection => {
@@ -2008,7 +2008,7 @@ mod tests {
                     app.handle_key(feral_processes_app_core::GameKey::Enter)
                 }
                 feral_processes_app_core::CreationStep::Class => {
-                    app.handle_key(feral_processes_app_core::GameKey::Char('1'))
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
                 }
                 feral_processes_app_core::CreationStep::Kit
                 | feral_processes_app_core::CreationStep::Points => {

@@ -303,8 +303,8 @@ fn the_companion_row_adopts_one_or_says_why_not() {
     }
 }
 
-/// The two dev pickers: the item picker (rows from `Game::dev_plain_items`,
-/// scrolled by `menu_selected`) and the zone picker (`dev_warp_targets`).
+/// The two dev pickers: the item picker (rows from `Game::dev_plain_items`)
+/// and the zone picker (`dev_warp_targets`), both highlight + Enter.
 mod pickers {
     use super::*;
 
@@ -329,7 +329,7 @@ mod pickers {
         let (id, _, held) = app.game.as_ref().unwrap().dev_plain_items()[0].clone();
         open_item_picker(&mut app);
 
-        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Enter);
 
         assert_eq!(app.mode, Mode::DevItemPicker);
         let now = app
@@ -344,74 +344,77 @@ mod pickers {
         assert_eq!(now, held + 10);
         assert!(app.status_line.is_some());
         let rows = app.dev_item_rows();
-        assert_eq!(rows[0].2, held + 10, "the row's count follows the gift");
+        assert_eq!(rows[0].1, held + 10, "the row's count follows the gift");
     }
 
-    #[test]
-    fn scrolling_exposes_the_rows_past_the_last_selector() {
-        let mut app = console_app(13);
-        let total = app.game.as_ref().unwrap().dev_plain_items().len();
-        assert!(
-            total > DEV_PICKER_PAGE,
-            "the picker only scrolls past a page"
-        );
-        open_item_picker(&mut app);
-        assert_eq!(app.dev_item_rows().len(), DEV_PICKER_PAGE);
-        let last_selector = menu_shortcut(DEV_PICKER_PAGE - 1);
-        assert_eq!(app.dev_item_rows().last().unwrap().0, last_selector);
-
-        for _ in 0..total {
-            app.handle_key(GameKey::Down);
-        }
-
-        let rows = app.dev_item_rows();
-        let last = app.game.as_ref().unwrap().dev_plain_items()[total - 1].clone();
-        assert_eq!(
-            rows.last().unwrap().1,
-            last.1,
-            "the list's end is reachable"
-        );
-        assert_eq!(rows.len(), DEV_PICKER_PAGE);
-
-        app.handle_key(GameKey::Char(last_selector));
-        let gave = app
-            .game
+    fn held_of(app: &App, id: &ItemId) -> u32 {
+        app.game
             .as_ref()
             .unwrap()
             .dev_plain_items()
             .into_iter()
-            .find(|(i, _, _)| *i == last.0)
+            .find(|(i, _, _)| i == id)
             .unwrap()
-            .2;
-        assert_eq!(
-            gave,
-            last.2 + 10,
-            "a selector picks within the visible page"
-        );
+            .2
     }
 
     #[test]
-    fn page_keys_scroll_the_item_picker_a_page_at_a_time() {
-        let mut app = console_app(15);
-        let total = app.game.as_ref().unwrap().dev_plain_items().len();
-        let last = total.saturating_sub(DEV_PICKER_PAGE);
-        assert!(last > 0, "the picker only scrolls past a page");
+    fn give_item_enter_gives_the_highlighted_item() {
+        let mut app = console_app(13);
+        let items = app.game.as_ref().unwrap().dev_plain_items();
+        assert!(items.len() > 30, "needs a deep list");
+        let (id, _, held) = items[30].clone();
         open_item_picker(&mut app);
 
-        app.handle_key(GameKey::PageDown);
-        assert_eq!(app.menu_selected, DEV_PICKER_PAGE.min(last));
-        for _ in 0..total {
+        for _ in 0..30 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+
+        assert_eq!(held_of(&app, &id), held + 10);
+    }
+
+    #[test]
+    fn give_item_up_from_the_top_wraps_to_the_last_item() {
+        let mut app = console_app(17);
+        let items = app.game.as_ref().unwrap().dev_plain_items();
+        let (id, _, held) = items.last().unwrap().clone();
+        open_item_picker(&mut app);
+        assert_eq!(app.menu_selected, 0);
+
+        app.handle_key(GameKey::Up);
+        app.handle_key(GameKey::Enter);
+
+        assert_eq!(held_of(&app, &id), held + 10);
+    }
+
+    #[test]
+    fn highlight_reaches_the_last_item() {
+        let mut app = console_app(18);
+        let total = app.game.as_ref().unwrap().dev_plain_items().len();
+        open_item_picker(&mut app);
+        assert_eq!(app.dev_item_rows().len(), total, "every row is offered");
+
+        for _ in 0..total + 5 {
             app.handle_key(GameKey::PageDown);
         }
-        assert_eq!(app.menu_selected, last, "the last page stays full");
 
-        app.handle_key(GameKey::PageUp);
-        assert_eq!(app.menu_selected, last.saturating_sub(DEV_PICKER_PAGE));
-        for _ in 0..total {
-            app.handle_key(GameKey::PageUp);
-        }
-        assert_eq!(app.menu_selected, 0);
+        assert_eq!(app.menu_selected, total - 1);
         assert_eq!(app.mode, Mode::DevItemPicker);
+    }
+
+    #[test]
+    fn digits_and_letters_give_nothing_in_the_item_picker() {
+        let mut app = console_app(19);
+        let before = app.game.as_ref().unwrap().dev_plain_items();
+        open_item_picker(&mut app);
+
+        for c in ['1', '9', 'a', 'z'] {
+            app.handle_key(GameKey::Char(c));
+        }
+
+        assert_eq!(app.game.as_ref().unwrap().dev_plain_items(), before);
+        assert_eq!(app.menu_selected, 0);
     }
 
     #[test]
@@ -420,9 +423,9 @@ mod pickers {
         let targets = app.game.as_ref().unwrap().dev_warp_targets();
         fire_row(&mut app, DevAction::WarpZone);
         assert_eq!(app.mode, Mode::DevZonePicker);
-        assert_eq!(app.dev_zone_rows()[0].1, targets[0]);
+        assert_eq!(app.dev_zone_rows()[0], targets[0]);
 
-        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Enter);
 
         assert_ne!(app.mode, Mode::DevZonePicker, "a pick closes the picker");
         assert_eq!(
@@ -439,7 +442,7 @@ mod pickers {
         app.enable_dev_console_for_test();
         app.mode = Mode::DevZonePicker;
 
-        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Enter);
 
         assert_eq!(app.mode, Mode::DevZonePicker);
         assert!(app.status_line.as_deref().unwrap().contains("battle"));
@@ -454,9 +457,9 @@ mod pickers {
     }
 }
 
-/// A picker's `menu_selected` is its scroll offset, so the keypad's own row
-/// has to be parked across the side trip or Esc lands on whatever offset the
-/// picker had scrolled to.
+/// A picker's `menu_selected` is its own highlight, so the keypad's own row
+/// has to be parked across the side trip or Esc lands on whatever row the
+/// picker had highlighted.
 #[test]
 fn esc_from_a_picker_keeps_the_keypads_highlighted_row() {
     for action in [DevAction::GiveItem, DevAction::WarpZone] {

@@ -1,8 +1,8 @@
 //! `Mode::DevItemPicker` — the dev keypad's `Give item` screen.
 //!
 //! Rows are `Game::dev_plain_items`, so app-core never filters `ItemDb`
-//! itself. There are far more items than selectors, so `menu_selected` is a
-//! scroll offset and a selector names a row on the visible page.
+//! itself. `menu_selected` is the highlighted row, as in every list; Enter
+//! gives the highlighted item.
 
 use crate::{App, GameKey};
 
@@ -10,19 +10,15 @@ use crate::{App, GameKey};
 const DEV_GIVE_QTY: u32 = 10;
 
 impl App {
-    /// The visible page: (selector, item name, held count).
-    pub fn dev_item_rows(&self) -> Vec<(char, String, u32)> {
+    /// Every row: (item name, held count). The popup windows itself around
+    /// `menu_selected`.
+    pub fn dev_item_rows(&self) -> Vec<(String, u32)> {
         let Some(game) = self.game.as_ref() else {
             return Vec::new();
         };
-        let rows: Vec<(String, u32)> = game
-            .dev_plain_items()
+        game.dev_plain_items()
             .into_iter()
             .map(|(_, name, held)| (name, held))
-            .collect();
-        self.dev_picker_page(&rows)
-            .into_iter()
-            .map(|(sel, (name, held))| (sel, name, held))
             .collect()
     }
 
@@ -34,10 +30,7 @@ impl App {
         let Some(items) = self.game.as_ref().map(|g| g.dev_plain_items()) else {
             return;
         };
-        if self.scroll_dev_picker(key, items.len()) {
-            return;
-        }
-        let Some(idx) = self.dev_picker_pick(key, items.len()) else {
+        let Some(idx) = self.selected_index(key, items.len()) else {
             return;
         };
         let Some(game) = self.game.as_mut() else {

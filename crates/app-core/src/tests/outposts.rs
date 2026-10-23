@@ -144,11 +144,11 @@ fn a_down_then_u_recalls_the_highlighted_crew_member() {
 #[test]
 fn outpost_post_posts_the_highlighted_candidate_on_enter() {
     let mut app = test_app(977);
-    place_outpost_with_a_staff_program_east_of_player(&mut app);
+    place_outpost_with_staff_programs_east_of_player(&mut app, 2);
     walk(&mut app, GameKey::Right);
     app.handle_key(GameKey::Char('P'));
     let candidates = app.outpost_post_candidates();
-    assert!(!candidates.is_empty());
+    assert_eq!(candidates.len(), 2);
     let last = candidates.len() - 1;
     highlight_row(&mut app, last);
     let name = candidates[last].name.clone();

@@ -42,7 +42,7 @@ pub(super) fn draw_stack_market(
     }
 
     let mut idx = 0;
-    if view.offers.is_empty() {
+    if !filtering && view.offers.is_empty() {
         rows.push(text_row("(the shelf is bare)"));
     }
     for &src in &vis.offers {
@@ -72,7 +72,7 @@ pub(super) fn draw_stack_market(
             TEXT,
         ));
     }
-    if view.sells.is_empty() {
+    if !filtering && view.sells.is_empty() {
         rows.push(text_row("(nothing they want)"));
     }
     for &src in &vis.sells {

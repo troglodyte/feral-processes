@@ -81,13 +81,12 @@ impl TradeVisible {
 /// What the player can sell a trader: the pack minus the trade currency,
 /// which is what no trader buys. Shared by the handler and the visible set so
 /// the two number the same rows.
-pub fn trade_sellable(game: &Game) -> Vec<GearCopy> {
+pub fn trade_sellable(game: &Game) -> Vec<feral_processes_engine::InventoryRow> {
     let currency = game.trade_currency();
     game.player_status()
         .inventory
-        .iter()
-        .map(|row| row.copy.clone())
-        .filter(|copy| copy.item != currency)
+        .into_iter()
+        .filter(|row| row.copy.item != currency)
         .collect()
 }
 
@@ -99,7 +98,7 @@ pub fn trade_visible(game: &mut Game, structure: Entity, filter: &str) -> TradeV
     };
     let sell_names: Vec<String> = trade_sellable(game)
         .iter()
-        .map(|copy| game.copy_name(copy))
+        .map(|row| game.copy_name(&row.copy))
         .collect();
     let buy_names: Vec<String> = trade
         .buy
@@ -170,7 +169,7 @@ impl App {
         // one list the renderer and this handler both number their sell
         // rows from, so a different exclusion would sell the line above or
         // below the one the player is looking at.
-        let sell_rows: Vec<GearCopy> = trade_sellable(game);
+        let sell_rows = trade_sellable(game);
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
         // Empty until the player sells this trader something, so the screen
         // is unchanged at a trader they have never sold to.
@@ -192,7 +191,7 @@ impl App {
         if key == GameKey::Char('I') {
             let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             let copy = match row {
-                Some(TradeRow::Sell(i)) => Some(sell_rows[i].clone()),
+                Some(TradeRow::Sell(i)) => Some(sell_rows[i].copy.clone()),
                 Some(TradeRow::Buy(i)) => Some(GearCopy::plain(buy_items[i].clone())),
                 Some(TradeRow::BuyBack(i)) => Some(buybacks[i].copy.clone()),
                 Some(TradeRow::Program(_)) | None => None,
@@ -208,7 +207,7 @@ impl App {
             let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             match row {
                 Some(TradeRow::Sell(i)) if selling => {
-                    let copy = sell_rows[i].clone();
+                    let copy = sell_rows[i].copy.clone();
                     self.execute_trade(structure, TradeChoice::Sell(copy), 1)
                 }
                 Some(TradeRow::Buy(i)) if !selling => {
@@ -241,7 +240,7 @@ impl App {
 
         if let Some(idx) = self.selected_index(key, total) {
             let choice = match vis.resolve(idx) {
-                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_rows[i].clone()),
+                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_rows[i].copy.clone()),
                 Some(TradeRow::Buy(i)) => TradeChoice::Buy(buy_items[i].clone()),
                 Some(TradeRow::BuyBack(i)) => TradeChoice::BuyBack(buybacks[i].copy.clone()),
                 Some(TradeRow::Program(i)) => {

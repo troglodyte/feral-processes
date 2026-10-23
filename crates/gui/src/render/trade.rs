@@ -76,20 +76,16 @@ pub(super) fn draw_trade_action_menu(
     if filtering && vis.total() == 0 {
         rows.push(no_match_row(filter));
     }
-    let sellable: Vec<_> = inventory
-        .iter()
-        .filter(|row| row.copy.item != currency)
-        .collect();
-    debug_assert_eq!(sellable.len(), trade_sellable(game).len());
+    let sellable = trade_sellable(game);
     if !filtering || !vis.sells.is_empty() {
         rows.push(Row::TextColored("Sell (from inventory):".to_string(), TEXT));
     }
-    if sellable.is_empty() {
+    if !filtering && sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
     }
     let mut idx = 0;
     for &src in &vis.sells {
-        let row = sellable[src];
+        let row = &sellable[src];
         // Same tag the inventory shows, so what you're about to part with
         // reads identically on both screens — fusion tier included, since
         // that's exactly what you'd want to check before selling. A fused

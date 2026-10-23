@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.39
+
+**The ICE Breaker is now the Breach Kit, and moving to the next zone is now called escalating.** Few players knew what "ICE" meant. Taming a program is now a breach: a Decompile or an adopt spends a Breach Kit, a capture reports "Breach complete!", and a failed one says the program's defences hold. The Black ICE Pick is now the Breach Pick, and no other gear text mentions ICE. Going through the Zone Portal used to be called a breach too, so that word now belongs to taming and the portal trip is an escalation: "Escalate to sector 4", the "First Escalation" achievement, and the help page "Before you escalate". Saves are unaffected.
+
 ## 0.19.38
 
 **The key bar under the map now changes with what you are doing and where you are.** While the camera follows a program it shows the keys that step and stop watching, and while you are walking somewhere it shows how to stop and the pause and speed keys. In base space `n` reads `mine (on)` while mining is switched on. Out on the open grid it no longer offers mining or trade, which only refuse there. In the Stack it drops collect and mining, which do nothing underground, and shows `g` for the frame map and `o` to adopt. On a Stack market `t trade` comes first, so it is never cut off the end of the bar.

@@ -1593,7 +1593,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
+        Mode::StackMarket => draw_stack_market(game, &list_filter, selected, refusal, painter, m),
         Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
         Mode::Dispatch => draw_dispatch(
             dispatch_sections
@@ -1620,6 +1620,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::TradeAction => draw_trade_action_menu(
             game,
             app.pending_trade_structure,
+            &list_filter,
             selected,
             refusal,
             painter,

@@ -1,7 +1,9 @@
 //! The trading post: stock, prices, and the program-sale confirmation.
 
+use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
+use feral_processes_app_core::{trade_sellable, trade_visible};
 
 pub(super) fn draw_trade_menu(
     game: &mut Game,
@@ -35,6 +37,7 @@ pub(super) fn draw_trade_menu(
 pub(super) fn draw_trade_action_menu(
     game: &mut Game,
     structure: Option<Entity>,
+    filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -63,19 +66,30 @@ pub(super) fn draw_trade_action_menu(
     // One line, not two with a spacer: everything above the first
     // `Row::Item` is pinned header (see `draw_popup`), so it costs the
     // scrollable list its height.
-    let mut rows = vec![
-        text_row(format!("You have: {purse} {money}")),
-        Row::TextColored("Sell (from inventory):".to_string(), TEXT),
-    ];
+    let mut rows = vec![text_row(format!("You have: {purse} {money}"))];
+    rows.extend(filter_line(filter));
+    // The handler resolves a highlight through the same call, so `idx`
+    // below counts visible rows and a section with none of them is skipped
+    // rather than drawn bare.
+    let vis = trade_visible(game, structure, filter);
+    let filtering = !filter.is_empty();
+    if filtering && vis.total() == 0 {
+        rows.push(no_match_row(filter));
+    }
     let sellable: Vec<_> = inventory
         .iter()
         .filter(|row| row.copy.item != currency)
         .collect();
+    debug_assert_eq!(sellable.len(), trade_sellable(game).len());
+    if !filtering || !vis.sells.is_empty() {
+        rows.push(Row::TextColored("Sell (from inventory):".to_string(), TEXT));
+    }
     if sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
     }
     let mut idx = 0;
-    for row in &sellable {
+    for &src in &vis.sells {
+        let row = sellable[src];
         // Same tag the inventory shows, so what you're about to part with
         // reads identically on both screens — fusion tier included, since
         // that's exactly what you'd want to check before selling. A fused
@@ -103,9 +117,12 @@ pub(super) fn draw_trade_action_menu(
         }
         idx += 1;
     }
-    rows.push(text_row(""));
-    rows.push(Row::TextColored("Buy:".to_string(), TEXT));
-    for (item, cost) in &trade.buy {
+    if !filtering || !vis.buys.is_empty() {
+        rows.push(text_row(""));
+        rows.push(Row::TextColored("Buy:".to_string(), TEXT));
+    }
+    for &src in &vis.buys {
+        let (item, cost) = &trade.buy[src];
         // Fusion tier 0: stock is unfused, so the tag shows what you'd get
         // buying it, not what some copy in your buffer happens to be.
         let tag = equip_preview_tag(game, &GearCopy::plain(item.clone()), status.zone);
@@ -134,10 +151,11 @@ pub(super) fn draw_trade_action_menu(
     // Omitted until they sell something here, so the screen is unchanged at
     // a trader they have never sold to.
     let buybacks = game.buyback_options(structure);
-    if !buybacks.is_empty() {
+    if !vis.buybacks.is_empty() {
         rows.push(text_row(""));
         rows.push(Row::TextColored("Buy back (your sales):".to_string(), TEXT));
-        for row in &buybacks {
+        for &src in &vis.buybacks {
+            let row = &buybacks[src];
             let tag = equip_preview_tag(game, &row.copy, status.zone);
             rows.push(with_tag(
                 item_row(
@@ -164,13 +182,14 @@ pub(super) fn draw_trade_action_menu(
     // `TradeDef::program_sell_divisor`. Omitted entirely otherwise, rather
     // than shown empty, so an items-only trader's screen is unchanged.
     let programs = game.program_sale_options(structure);
-    if !programs.is_empty() {
+    if !vis.programs.is_empty() {
         rows.push(text_row(""));
         rows.push(Row::TextColored(
             "Sell programs (permanent):".to_string(),
             TEXT,
         ));
-        for program in &programs {
+        for &src in &vis.programs {
+            let program = &programs[src];
             rows.push(tier_row(
                 format!(
                     "Sell {} Lv{} — power {} → {} {money}{}{}",
@@ -190,7 +209,7 @@ pub(super) fn draw_trade_action_menu(
     }
     rows.push(text_row(""));
     rows.push(text_row(
-        "[S] sell one, [B] buy one — no quantity page; Esc to cancel; Up/Down + Enter also work",
+        "[S] sell one, [B] buy one — no quantity page; type to filter; Esc to cancel (clears a filter first); Up/Down + Enter also work",
     ));
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",

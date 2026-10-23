@@ -40,10 +40,12 @@ pub use app::sprite_editor::{
     SpriteEditorView, SubjectTint, WIZARD_BUTTONS,
 };
 pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
+pub use app::stack_market::{MarketVisible, market_visible};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::structure_hub::{StructureHub, structure_page};
 pub use app::tactical::prop_readout;
 pub use app::telemetry::append_records;
+pub use app::trade::{TradeVisible, trade_sellable, trade_visible};
 pub use feral_processes_engine::ProgramRole;
 
 /// One row of the transfer picker: an item, or a whole downed program.

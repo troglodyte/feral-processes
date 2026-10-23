@@ -8,6 +8,8 @@
 
 use crate::app::dev_item_picker::dev_item_visible;
 use crate::app::inventory::{INVENTORY_SLOT_ROWS, inventory_visible};
+use crate::app::stack_market::market_visible;
+use crate::app::trade::trade_visible;
 use crate::{App, GameKey, Mode};
 
 /// One screen's filter. `row` is the highlight to restore when the player
@@ -35,7 +37,11 @@ pub fn filter_matches<'a>(names: impl IntoIterator<Item = &'a str>, filter: &str
 fn is_filter_home(mode: Mode) -> bool {
     matches!(
         mode,
-        Mode::DevItemPicker | Mode::Inventory | Mode::EquipSwap
+        Mode::DevItemPicker
+            | Mode::Inventory
+            | Mode::EquipSwap
+            | Mode::TradeAction
+            | Mode::StackMarket
     )
 }
 
@@ -63,6 +69,11 @@ pub(crate) fn filter_lives(home: Mode, now: Mode) -> bool {
                     | Mode::TradeAction
                     | Mode::TradeProgramConfirm
             ) | (Mode::EquipSwap, Mode::RefitCopy | Mode::ItemDescribe)
+                | (
+                    Mode::TradeAction,
+                    Mode::TradeQuantity | Mode::TradeProgramConfirm | Mode::ItemDescribe
+                )
+                | (Mode::StackMarket, Mode::ItemDescribe)
         )
 }
 
@@ -135,13 +146,18 @@ impl App {
 
     /// How many rows the filtered list of the current home has, so a
     /// restored highlight can't land past its end.
-    fn filtered_len(&self) -> Option<usize> {
-        let game = self.game.as_ref()?;
+    fn filtered_len(&mut self) -> Option<usize> {
+        let filter = self.filter_text().to_owned();
+        let structure = self.pending_trade_structure;
+        let game = self.game.as_mut()?;
         match self.mode {
-            Mode::Inventory => {
-                Some(INVENTORY_SLOT_ROWS + inventory_visible(game, self.filter_text()).len())
+            Mode::TradeAction => Some(trade_visible(game, structure?, &filter).total()),
+            Mode::StackMarket => {
+                let view = game.stack_market()?;
+                Some(market_visible(&view, &filter).total())
             }
-            Mode::DevItemPicker => Some(dev_item_visible(game, self.filter_text()).len()),
+            Mode::Inventory => Some(INVENTORY_SLOT_ROWS + inventory_visible(game, &filter).len()),
+            Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
             _ => None,
         }
     }

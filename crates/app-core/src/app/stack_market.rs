@@ -7,6 +7,7 @@
 //! things for sale are not items. What they *do* share is the engine call
 //! that decides a price, which is where sharing belongs.
 
+use crate::app::list_filter::filter_matches;
 use crate::*;
 
 /// Which section of the market screen a picked row lands in, and its index
@@ -36,6 +37,41 @@ pub(crate) fn market_row(idx: usize, offers: usize, sells: usize) -> Option<Mark
     (idx - offers < sells).then(|| MarketRow::Sell(idx - offers))
 }
 
+/// Source indices into the market's two sections that the filter leaves.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct MarketVisible {
+    pub offers: Vec<usize>,
+    pub sells: Vec<usize>,
+}
+
+impl MarketVisible {
+    pub fn total(&self) -> usize {
+        self.offers.len() + self.sells.len()
+    }
+
+    /// The section and *view* index a highlight position lands on; an offer
+    /// still has to go through `view.offers[i].index` to reach its shelf slot.
+    fn resolve(&self, pos: usize) -> Option<MarketRow> {
+        Some(
+            match market_row(pos, self.offers.len(), self.sells.len())? {
+                MarketRow::Offer(k) => MarketRow::Offer(self.offers[k]),
+                MarketRow::Sell(k) => MarketRow::Sell(self.sells[k]),
+            },
+        )
+    }
+}
+
+/// The rows of `view` that `filter` leaves, by displayed name.
+pub fn market_visible(
+    view: &feral_processes_engine::StackMarketView,
+    filter: &str,
+) -> MarketVisible {
+    MarketVisible {
+        offers: filter_matches(view.offers.iter().map(|o| o.name.as_str()), filter),
+        sells: filter_matches(view.sells.iter().map(|r| r.name.as_str()), filter),
+    }
+}
+
 impl App {
     /// Buys a row, or sells one stack of cargo a unit at a time.
     ///
@@ -46,6 +82,9 @@ impl App {
     /// the plain one because a Stack trader has no buyback: emptying a stack
     /// by accident here cannot be undone by buying it back.
     pub(crate) fn handle_stack_market_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;
@@ -55,14 +94,11 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        let total = view.offers.len() + view.sells.len();
+        let vis = market_visible(&view, self.filter_text());
+        let total = vis.total();
 
         if key == GameKey::Char('S') {
-            let row = market_row(
-                self.menu_selected.min(total.saturating_sub(1)),
-                view.offers.len(),
-                view.sells.len(),
-            );
+            let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             match row {
                 Some(MarketRow::Sell(i)) => {
                     let row = &view.sells[i];
@@ -77,11 +113,7 @@ impl App {
         // Only the sell rows name gear — an offer is a routine disk or a
         // program, and its own `detail` line already carries what it is.
         if key == GameKey::Char('I') {
-            let row = market_row(
-                self.menu_selected.min(total.saturating_sub(1)),
-                view.offers.len(),
-                view.sells.len(),
-            );
+            let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             if let Some(MarketRow::Sell(i)) = row {
                 let copy = view.sells[i].copy.clone();
                 self.open_gear_inspect(copy, None, Mode::StackMarket);
@@ -92,7 +124,7 @@ impl App {
         let Some(idx) = self.selected_index(key, total) else {
             return;
         };
-        match market_row(idx, view.offers.len(), view.sells.len()) {
+        match vis.resolve(idx) {
             Some(MarketRow::Offer(i)) => {
                 // No target picker on any row any more: every routine row
                 // sells disks into cargo, and who runs them is a question

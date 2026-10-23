@@ -52,10 +52,6 @@ impl App {
         };
         let crew_len = self.outpost_report().map(|r| r.crew.len()).unwrap_or(0);
         match key {
-            // Uppercase (I2): `OUTPOST_CREW_CAP` is 6, rows a-f, so
-            // lowercase `c` is a real crew row here and the generic
-            // lowercase arm below must be the one that handles it.
-            //
             // Opens the transfer picker, take side only — the outpost's
             // own door onto `Mode::Transfer` (design correction 11).
             GameKey::Char('C') => {
@@ -66,15 +62,6 @@ impl App {
                     return;
                 }
                 self.open_transfer(rows, Vec::new(), None, 0, TransferSource::Outpost(tile));
-            }
-            // Lowercase selects a crew row — the outpost screen's own
-            // convention (design spec §9), reserved for row selection
-            // everywhere else in the game.
-            GameKey::Char(c) if c.is_ascii_lowercase() => {
-                let idx = (c as u8 - b'a') as usize;
-                if idx < crew_len {
-                    self.menu_selected = idx;
-                }
             }
             GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
                 self.scroll(key, crew_len)
@@ -120,9 +107,11 @@ impl App {
         };
         let candidates = self.outpost_post_candidates();
         match key {
-            GameKey::Char(c) if c.is_ascii_lowercase() => {
-                let idx = (c as u8 - b'a') as usize;
-                let Some(row) = candidates.get(idx) else {
+            GameKey::Enter => {
+                let Some(row) = self
+                    .selected_index(key, candidates.len())
+                    .and_then(|i| candidates.get(i))
+                else {
                     return;
                 };
                 let entity = row.entity;

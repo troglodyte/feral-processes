@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.38
+
+**The key bar under the map now changes with what you are doing and where you are.** While the camera follows a program it shows the keys that step and stop watching, and while you are walking somewhere it shows how to stop and the pause and speed keys. In base space `n` reads `mine (on)` while mining is switched on. Out on the open grid it no longer offers mining or trade, which only refuse there. In the Stack it drops collect and mining, which do nothing underground, and shows `g` for the frame map and `o` to adopt. On a Stack market `t trade` comes first, so it is never cut off the end of the bar.
+
 ## 0.19.37
 
 **Type to filter an item list.** On your Items page, Equip swap, a trade, a Stack market, the compile list, Put down and the battle item list, typing lowercase letters, digits or space narrows the list to rows whose name contains that text. Backspace takes a character off, and Esc clears the filter before it does anything else. The filter stays while you open an item's actions, inspect it or pick a quantity, and comes back with the same row highlighted.

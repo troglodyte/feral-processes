@@ -1,6 +1,6 @@
 # Type to filter a list
 
-**Status:** Proposed design, 2026-10-23.
+**Status:** Shipped in 0.19.37, 2026-10-23.
 
 Builder check run; its questions are answered below.
 

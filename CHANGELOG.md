@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.40
+
+**Small swarms of drifting specks now move across the map, and the field holds about half as many wild programs.** A swarm fades in on open ground you can see, hangs around, drifts a few tiles as a group and fades out again. It is decoration only: you can't target it or bump into it, and turning effects off hides it. Fewer wild programs now spawn in any area, so the map reads as less crowded and each fight is a choice rather than a wall. Saves are unaffected. Ground you have already explored keeps the programs it has, and the lower count applies as areas restock.
+
 ## 0.19.39
 
 **The ICE Breaker is now the Breach Kit, and moving to the next zone is now called escalating.** Few players knew what "ICE" meant. Taming a program is now a breach: a Decompile or an adopt spends a Breach Kit, a capture reports "Breach complete!", and a failed one says the program's defences hold. The Black ICE Pick is now the Breach Pick, and no other gear text mentions ICE. Going through the Zone Portal used to be called a breach too, so that word now belongs to taming and the portal trip is an escalation: "Escalate to sector 4", the "First Escalation" achievement, and the help page "Before you escalate". Saves are unaffected.

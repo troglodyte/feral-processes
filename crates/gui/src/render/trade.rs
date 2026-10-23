@@ -25,14 +25,7 @@ pub(super) fn draw_trade_menu(
             .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
             .unwrap_or_default();
         rows.push(item_row(
-            format!(
-                "[{}] {} at ({}, {}){}",
-                menu_shortcut(i),
-                s.label,
-                s.pos.0,
-                s.pos.1,
-                durability
-            ),
+            format!("{} at ({}, {}){}", s.label, s.pos.0, s.pos.1, durability),
             i == selected,
         ));
     }
@@ -100,7 +93,7 @@ pub(super) fn draw_trade_action_menu(
                 row.copy.tier,
                 row.copy.rarity,
             ),
-            row_lead(menu_shortcut(idx), Some(row.qty)),
+            row_lead(Some(row.qty)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),
@@ -121,7 +114,7 @@ pub(super) fn draw_trade_action_menu(
                 format!("Buy {}{} ({cost} {money} each)", game.item_name(item), tag),
                 idx == selected,
             ),
-            row_lead(menu_shortcut(idx), None),
+            row_lead(None),
             game.item_category(item).short_label(),
             // Stock, not a copy: nothing has been compiled yet, so there is
             // no quality to read and the column draws as it always did.
@@ -154,7 +147,7 @@ pub(super) fn draw_trade_action_menu(
                     ),
                     idx == selected,
                 ),
-                row_lead(menu_shortcut(idx), Some(row.qty)),
+                row_lead(Some(row.qty)),
                 game.item_category(&row.copy.item).short_label(),
                 Some(row.copy.quality),
                 PowerCell::of_copy(game, &row.copy),
@@ -180,8 +173,7 @@ pub(super) fn draw_trade_action_menu(
         for program in &programs {
             rows.push(tier_row(
                 format!(
-                    "[{}] Sell {} Lv{} — power {} → {} {money}{}{}",
-                    menu_shortcut(idx),
+                    "Sell {} Lv{} — power {} → {} {money}{}{}",
                     program.name,
                     program.level,
                     program.power,

@@ -3,8 +3,8 @@
 
 use super::*;
 
-/// One line of a popup's body. `Item` rows are the numbered/lettered
-/// options a menu key press resolves to (see `App::selected_index`);
+/// One line of a popup's body. `Item` rows are the options a menu's
+/// highlight and Enter resolve to (see `App::selected_index`);
 /// `Text` rows are just informational.
 #[derive(Clone)]
 pub(super) enum Row {
@@ -50,8 +50,8 @@ pub(super) enum Row {
 /// and are decided once.
 #[derive(Clone)]
 pub(super) struct ItemTag {
-    /// The row's text *up to* the column: its shortcut, and the quantity
-    /// where the screen prints one.
+    /// The row's text *up to* the column: the quantity where the screen
+    /// prints one.
     ///
     /// It lives on the tag rather than in `text` because the tag sits inside
     /// the label — what precedes it is what places it. Recording an offset
@@ -201,17 +201,17 @@ pub(super) fn with_suffix(row: Row, text: impl Into<String>) -> Row {
     }
 }
 
-/// What precedes a tag column on a row that names an item: the row's
-/// shortcut, and the quantity where the screen prints one.
+/// What precedes a tag column on a row that names an item: the quantity
+/// where the screen prints one.
 ///
 /// One definition rather than six, for `qty_column`'s reason — the six
 /// screens that draw a tag have no reason to disagree about the columns in
 /// front of it, and a lead that is one space out puts the tag half a
 /// character off the column it is supposed to form.
-pub(super) fn row_lead(shortcut: char, qty: Option<u32>) -> String {
+pub(super) fn row_lead(qty: Option<u32>) -> String {
     match qty {
-        Some(qty) => format!("[{shortcut}] {} ", qty_column(qty)),
-        None => format!("[{shortcut}] "),
+        Some(qty) => format!("{} ", qty_column(qty)),
+        None => String::new(),
     }
 }
 
@@ -1124,9 +1124,9 @@ fn status_wrap_columns(size: PopupSize) -> usize {
 }
 
 /// What a continuation line is indented by: the glyph slot `with_icon`
-/// reserves inside the row above, plus the width of its `[x] ` shortcut, so
-/// the detail sits under the row's name rather than under its icon.
-const ROW_CONTINUATION_INDENT: &str = "       ";
+/// reserves inside the row above, so the detail sits under the row's name
+/// rather than under its icon.
+const ROW_CONTINUATION_INDENT: &str = ICON_SLOT;
 
 /// A menu row's trailing detail, wrapped and indented onto its own lines
 /// under the row it belongs to — the shape `draw_craft_menu` gives a recipe
@@ -1134,7 +1134,7 @@ const ROW_CONTINUATION_INDENT: &str = "       ";
 /// routines.
 ///
 /// One definition rather than one per screen because the indent is a fact
-/// about `with_icon`'s glyph slot and `menu_shortcut`'s bracket, which every
+/// about `with_icon`'s glyph slot, which every
 /// caller shares, and because the wrap is what keeps a row inside the popup:
 /// `draw_row` clamps a row vertically and nothing clamps it horizontally.
 ///
@@ -1154,11 +1154,20 @@ pub(super) fn continuation_lines_within(text: &str, columns: usize) -> Vec<Strin
 }
 
 /// What an authored description is indented by under the entry it belongs
-/// to. Four columns rather than `ROW_CONTINUATION_INDENT`'s seven: that
-/// indent is a fact about `with_icon`'s glyph slot, and none of the pickers
-/// that print a description carry an icon — four is `menu_shortcut`'s
-/// `[x] ` alone, which is what puts the prose under the entry's name.
-pub(super) const DESCRIPTION_INDENT: &str = "    ";
+/// to. None: a row's name starts right after the two-column highlight
+/// prefix that every `Row::Item` carries, and so does the description's
+/// first character. It is not `ROW_CONTINUATION_INDENT`, which is the icon
+/// slot — none of the pickers that print a description carry an icon.
+/// Description rows are recognised by `is_description_row`, not by this
+/// indent.
+pub(super) const DESCRIPTION_INDENT: &str = "";
+
+/// Whether `row` came out of `description_rows`: an unselected `Item` in the
+/// dim prose colour.
+#[cfg(test)]
+pub(super) fn is_description_row(row: &Row) -> bool {
+    matches!(row, Row::Item { color, selected: false, .. } if *color == TEXT_DIM)
+}
 
 /// One entry's authored description, wrapped to the popup and indented under
 /// the row it belongs to — the perk and research pickers' shape, and the
@@ -1253,6 +1262,18 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A row's name starts after the highlight prefix and, with an icon, the
+    /// icon slot; prose under it must start in that same column.
+    #[test]
+    fn detail_and_description_start_under_the_row_name() {
+        let lines = continuation_lines("detail");
+        assert_eq!(lines[0], format!("{ICON_SLOT}detail"));
+        let Some(Row::Item { text, .. }) = description_rows("prose").next() else {
+            panic!("a description is an item row");
+        };
+        assert_eq!(text, "prose", "no icon, so no indent past the prefix");
+    }
 
     #[test]
     fn a_head_over_the_budget_continues_on_an_indented_line_and_one_under_does_not() {
@@ -1433,38 +1454,37 @@ mod tests {
     /// so this is the assertion that says the screens did not move.
     #[test]
     fn a_lifted_tag_row_reads_exactly_as_the_hand_formatted_one_did() {
-        // `"[{}] {} {}  Sell {} ..."` — a trader's shelf, the inventory list
+        // `"{} {}  Sell {} ..."` — a trader's shelf, the inventory list
         // and the Stack market.
         assert_eq!(
             tagged_text(
-                &row_lead('a', Some(3)),
+                &row_lead(Some(3)),
                 "WEP",
                 PowerCell::Rated(54),
                 "Sell Arc Lance"
             ),
             format!(
-                "[{}] {} {}  {:>4}  {}",
-                'a',
+                "{} {}  {:>4}  {}",
                 qty_column(3),
                 "WEP",
                 54,
                 "Sell Arc Lance"
             ),
         );
-        // `"[{}] {}  Buy {} ..."` — a trader's stock, and the Compile screen,
+        // `"{}  Buy {} ..."` — a trader's stock, and the Compile screen,
         // neither of which prints a count.
         assert_eq!(
             tagged_text(
-                &row_lead('a', None),
+                &row_lead(None),
                 "MOD",
                 PowerCell::Rated(397),
                 "Buy Watchdog Tap"
             ),
-            format!("[{}] {}  {:>4}  {}", 'a', "MOD", 397, "Buy Watchdog Tap"),
+            format!("{}  {:>4}  {}", "MOD", 397, "Buy Watchdog Tap"),
         );
         // A four-digit stack grows the row rather than losing a digit, which
         // is `qty_column`'s call, not this one's.
-        assert!(row_lead('a', Some(1234)).len() > row_lead('a', Some(3)).len());
+        assert!(row_lead(Some(1234)).len() > row_lead(Some(3)).len());
     }
 
     /// The pieces `draw_row` paints and the string it measures are the same
@@ -1509,7 +1529,7 @@ mod tests {
         let cell = |power| {
             let Row::Item { text, tag, .. } = with_tag(
                 item_row("Arc Lance", false),
-                row_lead('a', None),
+                row_lead(None),
                 "WEP",
                 None,
                 power,
@@ -1555,7 +1575,7 @@ mod tests {
         assert_eq!(widths, vec![POWER_COLUMN_WIDTH; 5]);
 
         let offset = |name: &str, power| {
-            let row = tagged_text(&row_lead('a', Some(3)), "WEP", power, name);
+            let row = tagged_text(&row_lead(Some(3)), "WEP", power, name);
             row.find(name).expect("the name is in the row it names")
         };
         assert_eq!(
@@ -1879,27 +1899,6 @@ mod tests {
                     }
                 }
             }
-        }
-    }
-
-    /// A full dev picker page must be on screen at once at every window
-    /// height, or its last selectors name rows the popup scrolled out of
-    /// sight.
-    #[test]
-    fn a_full_dev_item_page_is_inside_the_visible_window() {
-        let page: Vec<(char, String, u32)> = (0..feral_processes_app_core::DEV_PICKER_PAGE)
-            .map(|i| (menu_shortcut(i), format!("Item {i}"), 10))
-            .collect();
-        let rows = super::super::dev_pickers::item_picker_rows(&page);
-        for window_h in WINDOW_HEIGHTS {
-            let m = ui_metrics(window_h);
-            let l = popup_layout(window_h, 0.85, &rows, 0, &m);
-            assert!(
-                l.offset + l.capacity >= l.body.len(),
-                "at {window_h}px only {} of {} rows fit",
-                l.capacity,
-                l.body.len()
-            );
         }
     }
 

@@ -125,8 +125,7 @@ impl App {
     /// Stands the highlighted program in the party, or stands it down if it
     /// is already there. Bound to an uppercase key for the reason `W`, `N`
     /// and `E` are: uppercase reaches app-core as a distinct key, so it can
-    /// never collide with `menu_shortcut`'s digits-then-lowercase scheme
-    /// however large the roster grows.
+    /// never be set off by a stray lowercase letter.
     ///
     /// Standing down is never refused; joining is, once the party is full,
     /// and that refusal is the one thing on this screen with something to
@@ -199,16 +198,12 @@ impl App {
     /// Opens the naming page for the highlighted program, seeded with the
     /// name it already carries so a small correction isn't a retype.
     ///
-    /// Handled before `selected_index` for the same reason `W` is, and
-    /// bound to an uppercase key so it can never collide with
-    /// `menu_shortcut`'s digits-then-lowercase scheme. Unlike `W`, this one
+    /// Bound to an uppercase key for the reason `W` is. Unlike `W`, this one
     /// is advertised in the roster's help text.
     /// Opens the highlighted program's three equipment slots.
     ///
-    /// Handled before `selected_index` and bound to an uppercase key for the
-    /// reason `toggle_wield` gives: uppercase reaches app-core as a distinct
-    /// key, so it can never collide with `menu_shortcut`'s
-    /// digits-then-lowercase scheme however large the roster grows.
+    /// Bound to an uppercase key for the reason `toggle_wield` gives:
+    /// uppercase reaches app-core as a distinct key.
     fn open_companion_equip(&mut self) {
         let row = self.menu_selected;
         let Some(game) = &mut self.game else { return };
@@ -347,9 +342,7 @@ impl App {
     ///
     /// Handled before `selected_index` the way `<` and `>` are, and bound to
     /// an uppercase key on purpose: uppercase reaches app-core as a distinct
-    /// key and is already used that way elsewhere, so it can never collide
-    /// with `menu_shortcut`'s digits-then-lowercase scheme however large the
-    /// roster grows.
+    /// key and is already used that way elsewhere.
     ///
     /// **Nothing on the screen names this key.** That omission is the whole
     /// feature — see `render::party`'s `ROSTER_KEYS`, which a gui test
@@ -477,7 +470,7 @@ impl App {
             self.mode = Mode::RespecTalentsConfirm;
             return;
         }
-        // The ladder's numbered rows are the next untaken tier's choices —
+        // The ladder's pickable rows are the next untaken tier's choices —
         // the same rows the screen draws — so the row the player is looking at
         // and the row this buys cannot disagree. Whether they can *afford* one
         // is deliberately not asked here: `take_talent` refuses and says where

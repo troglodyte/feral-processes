@@ -375,17 +375,16 @@ fn f_is_inert_with_no_floor_catalogue_loaded() {
     );
 }
 
-/// A row's printed shortcut picks exactly that row — past the ninth, a
-/// letter.
+/// The highlight reaches a row past the ninth, which no digit ever named.
 #[test]
-fn a_rows_shortcut_picks_that_row() {
+fn the_highlight_picks_a_row_past_the_ninth() {
     let mut app = app_at_the_frontier(4315);
     app.handle_key(GameKey::Char('m'));
     app.handle_key(GameKey::Char('F'));
     let rows = app.excavate_brush_rows();
-    assert!(rows.len() > 9, "the shipped catalogue reaches the letters");
+    assert!(rows.len() > 9, "the shipped catalogue is a long list");
     let last = rows.len() - 1;
-    app.handle_key(GameKey::Char(crate::menu_shortcut(last)));
+    pick_row(&mut app, last);
     assert_eq!(app.mode, Mode::Excavate);
     assert_eq!(app.excavate_brush, rows[last].brush);
 }

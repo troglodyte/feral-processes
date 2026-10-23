@@ -101,37 +101,40 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
     )
 }
 
+/// The row a typed digit or lowercase letter names, if the list has one:
+/// `menu_shortcut`'s labels read back. `battle_row`, the classic battle
+/// screen's resolver, is its only caller.
+pub(crate) fn shortcut_row(c: char, len: usize) -> Option<usize> {
+    if let Some(d) = c.to_digit(10) {
+        // Rows are labelled from `1` (see `menu_shortcut`), so `0`
+        // labels nothing and must fall out here. Subtracting through
+        // `checked_sub` rather than guarding with `d >= 1` is what
+        // keeps that structural: `then_some` takes its argument by
+        // value, so a guard leaves `0usize - 1` still evaluated.
+        return (d as usize).checked_sub(1).filter(|&idx| idx < len);
+    }
+    // Lowercase only. Uppercase is reserved for screen actions —
+    // `S`/`B` quick-trade a single unit off the highlighted row —
+    // and a shifted letter that also picked a row would fire both
+    // on one keypress, on a screen where one of them spends money.
+    if !c.is_ascii_lowercase() {
+        return None;
+    }
+    let idx = DIGIT_ROWS + (c as usize - 'a' as usize);
+    (idx < len).then_some(idx)
+}
+
 impl App {
-    /// Shared Up/Down/Enter handling layered on top of every menu's direct
-    /// row shortcuts — this doesn't replace them, it's just another way to
-    /// pick the same row. `len` is how many selectable rows the menu
-    /// currently has. A typed shortcut (see `menu_shortcut`) resolves
-    /// immediately to that 0-based index; Up/Down instead move
-    /// `menu_selected` (wrapping) and return `None`; Enter resolves to
-    /// whatever `menu_selected` currently highlights. Any other key, or an
-    /// empty menu, returns `None`.
+    /// Shared list handling: `len` is how many selectable rows the menu
+    /// currently has. Up/Down move `menu_selected` (wrapping),
+    /// PageUp/PageDown move it a page (clamped), and all return `None`;
+    /// Enter resolves to whatever `menu_selected` highlights. Any other key,
+    /// digits and letters included, or an empty menu, returns `None`. The
+    /// classic battle screen's `battle_row` is the one place a typed digit
+    /// picks a row.
     pub(crate) fn selected_index(&mut self, key: GameKey, len: usize) -> Option<usize> {
         if len == 0 {
             return None;
-        }
-        if let GameKey::Char(c) = key {
-            if let Some(d) = c.to_digit(10) {
-                // Rows are labelled from `1` (see `menu_shortcut`), so `0`
-                // labels nothing and must fall out here. Subtracting through
-                // `checked_sub` rather than guarding with `d >= 1` is what
-                // keeps that structural: `then_some` takes its argument by
-                // value, so a guard leaves `0usize - 1` still evaluated.
-                return (d as usize).checked_sub(1).filter(|&idx| idx < len);
-            }
-            // Lowercase only. Uppercase is reserved for screen actions —
-            // `S`/`B` quick-trade a single unit off the highlighted row —
-            // and a shifted letter that also picked a row would fire both
-            // on one keypress, on a screen where one of them spends money.
-            if !c.is_ascii_lowercase() {
-                return None;
-            }
-            let idx = DIGIT_ROWS + (c as usize - 'a' as usize);
-            return (idx < len).then_some(idx);
         }
         match key {
             GameKey::Up => {
@@ -164,12 +167,6 @@ impl App {
     /// left to the caller, whose way back differs. One door for every
     /// confirm, so they cannot disagree about what Enter means.
     pub(crate) fn yes_no(&mut self, key: GameKey) -> Option<bool> {
-        // Digits pick rows everywhere else, but a confirm labels its rows
-        // `[y]`/`[n]`, and the menus that lead into one are picked by digit:
-        // a repeated `1` would otherwise answer Yes unseen.
-        if matches!(key, GameKey::Char(c) if c.is_ascii_digit()) {
-            return None;
-        }
         let options = ['y', 'n'];
         self.selected_index(key, options.len())
             .or_else(|| match key {

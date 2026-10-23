@@ -35,9 +35,7 @@ const HEADINGS: [&str; 3] = ["item", "you", "container"];
 /// One row per item: the name, then the two figures, laid out as a table
 /// under a header naming each column.
 ///
-/// **No shortcut lead.** Every other list opens its rows with `[1] `, but a
-/// digit here is a quantity — advertising a key that sets an amount instead
-/// of picking a row would be a menu that lies about its own keys.
+/// **No row picking.** A digit here is a quantity, not a row.
 ///
 /// **The whole row is one padded string, and the suffix column is
 /// deliberately unused.** A suffix is placed by `suffix_x`, one `m.inset` —

@@ -54,12 +54,8 @@ pub(super) fn dispatch_hub_rows(
     for site in sites {
         rows.push(item_row(
             format!(
-                "[{}] {} — risk +{}, {} fights, {} ticks",
-                menu_shortcut(idx),
-                site.name,
-                site.risk,
-                site.battles,
-                site.ticks
+                "{} — risk +{}, {} fights, {} ticks",
+                site.name, site.risk, site.battles, site.ticks
             ),
             idx == selected,
         ));
@@ -77,12 +73,7 @@ pub(super) fn dispatch_hub_rows(
             None => "outpost".to_string(),
         };
         rows.push(item_row(
-            format!(
-                "[{}] {} — {tag}, {} ticks",
-                menu_shortcut(idx),
-                dest.name,
-                dest.ticks
-            ),
+            format!("{} — {tag}, {} ticks", dest.name, dest.ticks),
             idx == selected,
         ));
         idx += 1;
@@ -185,7 +176,7 @@ pub(super) fn sortie_squad_rows(
     for (idx, candidate) in candidates.iter().enumerate() {
         let mark = if candidate.picked { 'x' } else { ' ' };
         rows.push(item_row(
-            format!("[{}] [{mark}] {}", menu_shortcut(idx), candidate.name),
+            format!("[{mark}] {}", candidate.name),
             idx == selected,
         ));
     }
@@ -259,11 +250,7 @@ pub(super) fn route_cargo_rows(basket: &RouteCargoBasket, selected: usize) -> Ve
     for (idx, row) in basket.stock.iter().enumerate() {
         let (amount, ceiling) = basket.cells.get(idx).copied().unwrap_or((0, 0));
         rows.push(item_row(
-            format!(
-                "[{}] {} ({amount} of {ceiling})",
-                menu_shortcut(idx),
-                row.name
-            ),
+            format!("{} ({amount} of {ceiling})", row.name),
             idx == selected,
         ));
     }

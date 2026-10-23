@@ -1,6 +1,6 @@
 # Controls
 
-Every numbered menu takes Up/Down and Enter as well as typing a row's own number or letter. Esc
+Every menu is a list you move through with Up/Down and pick with Enter (the battle screen also labels its rows with a number or letter you can type). Esc
 backs out one level, and finishing a job returns you to the map. A menu lists only what you can
 actually do from where you stand, so a row you cannot see leads to an empty screen rather than a
 refusal.
@@ -24,7 +24,7 @@ Your menus and stores:
   the left: Overview, then four command pages, then the report pages below. Build holds deploy,
   work a structure yourself, upgrade and demolish. Research holds research, routine and affix
   research, study a program and hold a program. Trade holds contracts, caravan and dispatch.
-  Compile holds compile an item and recipes. Pick a row by its number or with Enter.
+  Compile holds compile an item and recipes. Pick a row with Up/Down and Enter.
   The rest of the rail is Staff, Production, Stock, Work orders, Staffing, Build orders and
   Alerts, each a page of the report beside it. One highlight moves through both: Up and Down
   walk the rail, Right (or Enter) steps onto the page's rows, and Right again walks on through
@@ -82,8 +82,9 @@ Reading and housekeeping:
   heading and distance. Enter points the compass at the highlighted place, and the zone map keeps
   that heading in view; X clears it. It reads the zone surface only, and costs no time.
 - g — on the zone surface, the world map: every region you have walked, with the towns, outposts,
-  Stack links, nests and routes you know of. The arrows pan it; 1-9 then a-z, or a click on the map
-  or the list, pick a place (click a shared spot again for the next place on it), C points the
+  Stack links, nests and routes you know of. The arrows pan it; Tab switches them to the place list, where
+  Up and Down pick a place, and back again. A click on the map or the list picks a place too
+  (click a shared spot again for the next place on it). C points the
   compass at the picked place (a nest is not a destination), P puts the view back on you, and Esc
   closes it. A town's tint shows how it regards you, and its arrow shows
   whether its trade is rising, holding or falling. It costs no time. In the Stack, g is that
@@ -138,6 +139,7 @@ in the Game menu (Esc), the keys are different: arrows or the numpad step the ac
 body, a attacks, d defends, s runs a routine, U uses an item, V drops an active emulation,
 E ends the turn, A hands your side over to fight on its own, and R resolves the fight.
 
-This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
-screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
+This screen is the manual now, not a card: Up and Down scroll a page, Tab moves to its further-reading
+links (Up and Down pick one, Enter reads it, Tab goes back to scrolling), and Esc backs out of it a
+page at a time, like every other screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
 [intrusions](intrusions), [your base](your-base), and [the Stack](the-stack).

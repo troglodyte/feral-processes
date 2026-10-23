@@ -64,7 +64,7 @@ fn a_resting_program_is_refused_with_the_engines_reason() {
         .iter()
         .position(|p| p.entity == app_first_resting(&mut app))
         .unwrap();
-    app.handle_key(GameKey::Char(menu_shortcut(resting)));
+    pick_row(&mut app, resting);
     assert_eq!(app.mode, Mode::Breed, "a resting program is not picked");
     assert_eq!(app.status_line.as_deref(), Some("ready later"));
     assert_eq!(app.pending_breed_first, None);
@@ -84,9 +84,9 @@ fn esc_backs_out_one_page_at_a_time_and_spends_nothing() {
     let mut app = app_with_a_breeding_bay(8105, 1, false);
     open_the_bay_sheet(&mut app);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::BreedSecond);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::BreedConfirm);
 
     app.handle_key(GameKey::Esc);
@@ -106,8 +106,8 @@ fn confirming_breeds_and_consumes_the_seed() {
     let mut app = app_with_a_breeding_bay(8106, 1, false);
     let bay = open_the_bay_sheet(&mut app);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.status_line, None);
     assert_eq!(app.mode, Mode::Playing);
@@ -122,8 +122,8 @@ fn a_missing_seed_is_refused_on_the_confirm_page() {
     let mut app = app_with_a_breeding_bay(8107, 0, false);
     open_the_bay_sheet(&mut app);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::BreedConfirm);
     assert_eq!(app.status_line.as_deref(), Some("no breeding seed"));
@@ -134,8 +134,8 @@ fn a_full_bay_offers_no_breeding() {
     let mut app = app_with_a_breeding_bay(8108, 2, false);
     let bay = open_the_bay_sheet(&mut app);
     app.handle_key(GameKey::Char('B'));
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
     app.pending_structure_manifest = Some(bay);
     app.mode = Mode::StructureManifest;

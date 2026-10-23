@@ -28,12 +28,11 @@ fn body_rows(rows: &[PutDownOption], selected: usize) -> Vec<Row> {
         text_row("Pick what to set on the floor. Esc to go back."),
         text_row(""),
     ];
-    body.extend(rows.iter().enumerate().map(|(i, row)| {
-        item_row(
-            format!("[{}] {}", menu_shortcut(i), row.label),
-            i == selected,
-        )
-    }));
+    body.extend(
+        rows.iter()
+            .enumerate()
+            .map(|(i, row)| item_row(row.label.to_string(), i == selected)),
+    );
     body
 }
 
@@ -67,8 +66,8 @@ mod tests {
         assert_eq!(
             texts,
             vec![
-                "[1] Core Fragment x2".to_string(),
-                "[2] The level 3 Scrapper".to_string()
+                "Core Fragment x2".to_string(),
+                "The level 3 Scrapper".to_string()
             ]
         );
     }

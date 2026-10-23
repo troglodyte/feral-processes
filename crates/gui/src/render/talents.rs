@@ -28,12 +28,8 @@ pub(super) fn draw_develop(
         rows.push(with_icon(
             tier_row(
                 format!(
-                    "[{}] {} Lv{}  rings {}/{}",
-                    menu_shortcut(i),
-                    p.name,
-                    p.level,
-                    p.ring,
-                    KERNEL_RING_MAX
+                    "{} Lv{}  rings {}/{}",
+                    p.name, p.level, p.ring, KERNEL_RING_MAX
                 ),
                 i == selected,
                 p.fusions,
@@ -118,9 +114,9 @@ pub(super) fn draw_develop_program(
         ));
     }
     // The ladder, tier by tier, so what has been bought and what is still out
-    // of reach read as one shape. The numbered rows are exactly the ones
+    // of reach read as one shape. The pickable rows are exactly the ones
     // `handle_develop_program_key` offers.
-    let mut shortcut = 0;
+    let mut pick = 0;
     let mut tier_shown = 0;
     for option in &options {
         if option.tier != tier_shown {
@@ -133,21 +129,18 @@ pub(super) fn draw_develop_program(
                 option.name, option.description
             )));
         } else if tier_is_next(&options, option.tier) {
-            // Numbered even when the point is not there yet, because the row
-            // still resolves to a key and `take_talent` is what says no —
-            // greying it out silently would leave the player pressing a
-            // number and reading nothing.
+            // Pickable even when the point is not there yet, because the row
+            // still resolves to a pick and `take_talent` is what says no —
+            // greying it out silently would leave the player pressing Enter
+            // and reading nothing.
             let row = item_row(
                 format!(
-                    "  [{}] {} ({}) — {}",
-                    menu_shortcut(shortcut),
-                    option.name,
-                    option.tag,
-                    option.description
+                    "  {} ({}) — {}",
+                    option.name, option.tag, option.description
                 ),
-                shortcut == selected,
+                pick == selected,
             );
-            shortcut += 1;
+            pick += 1;
             rows.push(row);
         } else {
             rows.push(text_row(format!("  - {} ({})", option.name, option.tag)));
@@ -157,8 +150,8 @@ pub(super) fn draw_develop_program(
 }
 
 /// Whether `tier` is the one a point would be spent in next — the first with
-/// nothing taken in it. The same rule `handle_develop_program_key` numbers its
-/// rows by, so the shortcut a row shows is the shortcut that buys it.
+/// nothing taken in it. The same rule `handle_develop_program_key` counts its
+/// rows by, so the row highlighted is the row that buys.
 fn tier_is_next(options: &[TalentOption], tier: u32) -> bool {
     options
         .iter()

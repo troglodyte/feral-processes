@@ -195,7 +195,7 @@ fn the_menu_manifest_esc_lands_on_programs_in_page() {
 fn the_roster_manifest_esc_lands_on_the_same_row_in_page() {
     let mut app = app_owning_distant_programs(31012, 2);
     open_companions(&mut app);
-    press(&mut app, &[GameKey::Right, GameKey::Char('2')]);
+    press(&mut app, &[GameKey::Right, GameKey::Down, GameKey::Enter]);
     assert_in_page(&app, Mode::Companion);
     assert_eq!(app.menu_selected, 1);
     app.handle_key(GameKey::Char('M'));
@@ -214,7 +214,7 @@ fn equip_memories_and_rename_return_to_the_roster_page() {
     ] {
         let mut app = app_owning_distant_programs(31013, 2);
         open_companions(&mut app);
-        press(&mut app, &[GameKey::Right, GameKey::Char('2')]);
+        press(&mut app, &[GameKey::Right, GameKey::Down, GameKey::Enter]);
         app.handle_key(GameKey::Char(key));
         assert_eq!(app.mode, screen, "{key}");
         app.handle_key(GameKey::Esc);
@@ -289,7 +289,12 @@ fn the_etch_detour_has_two_esc_paths() {
     open_via_menu(&mut app, 'p', "Install a routine");
     press(
         &mut app,
-        &[GameKey::Char('1'), GameKey::Char('2'), GameKey::Char('e')],
+        &[
+            GameKey::Enter,
+            GameKey::Down,
+            GameKey::Enter,
+            GameKey::Char('e'),
+        ],
     );
     assert_eq!(app.mode, Mode::RoutineEtch);
     app.handle_key(GameKey::Esc);

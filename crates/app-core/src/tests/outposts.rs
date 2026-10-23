@@ -82,11 +82,11 @@ fn examining_an_outpost_opens_the_same_page() {
     assert_eq!(app.pending_outpost, Some(tile));
 }
 
-/// `[P]` opens the staff picker, and a letter posts the highlighted
+/// `[P]` opens the staff picker, and Enter posts the highlighted
 /// candidate — driven entirely by keypress, `Mode::SortieSquad`'s own
 /// candidate list one screen over.
 #[test]
-fn p_then_a_letter_posts_a_staff_program_and_returns_to_the_visit_page() {
+fn p_then_enter_posts_a_staff_program_and_returns_to_the_visit_page() {
     let mut app = test_app(974);
     place_outpost_with_a_staff_program_east_of_player(&mut app);
     walk(&mut app, GameKey::Right);
@@ -96,7 +96,7 @@ fn p_then_a_letter_posts_a_staff_program_and_returns_to_the_visit_page() {
     assert_eq!(app.mode, Mode::OutpostPost);
     assert_eq!(app.outpost_post_candidates().len(), 1);
 
-    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Enter);
 
     assert_eq!(app.mode, Mode::OutpostVisit);
     assert_eq!(
@@ -120,25 +120,63 @@ fn esc_from_the_post_picker_posts_nobody() {
     assert_eq!(app.outpost_report().unwrap().crew.len(), 0);
 }
 
-/// `[U]` recalls the crew row a lowercase letter selected — the screen's
-/// own two-step convention (design spec §9): select, then act.
+/// `[U]` recalls the highlighted crew row: arrows select, then act.
 #[test]
-fn a_letter_then_u_recalls_the_selected_crew_member() {
+fn a_down_then_u_recalls_the_highlighted_crew_member() {
     let mut app = test_app(976);
-    place_outpost_with_a_staff_program_east_of_player(&mut app);
+    place_outpost_with_crew_and_stock(&mut app, 2, &[]);
     walk(&mut app, GameKey::Right);
-    app.handle_key(GameKey::Char('P'));
-    app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.outpost_report().unwrap().crew.len(), 1);
+    let before = app.outpost_report().unwrap().crew;
+    assert_eq!(before.len(), 2);
 
-    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Char('U'));
 
+    let after = app.outpost_report().unwrap().crew;
+    assert_eq!(after.len(), 1);
     assert_eq!(
-        app.outpost_report().unwrap().crew.len(),
-        0,
-        "U must recall the row the letter selected"
+        after[0].name, before[0].name,
+        "U must recall row 1, the highlighted one, and keep row 0"
     );
+}
+
+/// The post picker posts the highlighted candidate on Enter, not the first.
+#[test]
+fn outpost_post_posts_the_highlighted_candidate_on_enter() {
+    let mut app = test_app(977);
+    place_outpost_with_staff_programs_east_of_player(&mut app, 2);
+    walk(&mut app, GameKey::Right);
+    app.handle_key(GameKey::Char('P'));
+    let candidates = app.outpost_post_candidates();
+    assert_eq!(candidates.len(), 2);
+    let last = candidates.len() - 1;
+    highlight_row(&mut app, last);
+    let name = candidates[last].name.clone();
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::OutpostVisit);
+    let crew = app.outpost_report().unwrap().crew;
+    assert_eq!(crew.len(), 1);
+    assert_eq!(crew[0].name, name);
+}
+
+/// Lowercase letters pick nothing on either outpost screen.
+#[test]
+fn outpost_letters_do_nothing() {
+    let mut app = test_app(978);
+    place_outpost_with_crew_and_stock(&mut app, 3, &[]);
+    walk(&mut app, GameKey::Right);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.menu_selected, 0);
+    assert_eq!(app.mode, Mode::OutpostVisit);
+
+    app.handle_key(GameKey::Char('P'));
+    assert_eq!(app.mode, Mode::OutpostPost);
+    let crew = app.outpost_report().unwrap().crew.len();
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(app.mode, Mode::OutpostPost);
+    assert_eq!(app.outpost_report().unwrap().crew.len(), crew);
 }
 
 /// `[R]` refuses at full integrity — there is nothing to repair, and
@@ -233,11 +271,10 @@ fn esc_from_the_outposts_transfer_picker_returns_to_the_visit_page() {
     assert_eq!(app.mode, Mode::OutpostVisit);
 }
 
-/// `c` selects the third crew row and `C` opens transfer — the two must not
-/// collide (I2). `OUTPOST_CREW_CAP` is 6, rows a-f, so three crew puts a
-/// selectable row at `c`.
+/// `C` opens transfer and lowercase `c` does nothing, so the highlight
+/// stays where it was.
 #[test]
-fn lowercase_c_selects_a_crew_row_and_uppercase_c_opens_transfer() {
+fn lowercase_c_does_nothing_and_uppercase_c_opens_transfer() {
     let mut app = test_app(981);
     place_outpost_with_crew_and_stock(&mut app, 3, &[("raw_trace", 4)]);
     walk(&mut app, GameKey::Right);
@@ -245,10 +282,7 @@ fn lowercase_c_selects_a_crew_row_and_uppercase_c_opens_transfer() {
     assert_eq!(app.outpost_report().unwrap().crew.len(), 3);
 
     app.handle_key(GameKey::Char('c'));
-    assert_eq!(
-        app.menu_selected, 2,
-        "lowercase c must select the third crew row, not open transfer"
-    );
+    assert_eq!(app.menu_selected, 0);
     assert_eq!(app.mode, Mode::OutpostVisit);
 
     app.handle_key(GameKey::Char('C'));

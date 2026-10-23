@@ -1,75 +1,120 @@
-//! Row shortcuts and menu navigation.
+//! Menu navigation and the manual.
 
 use super::support::*;
 use crate::*;
 use feral_processes_engine::ManifestSubject;
+use feral_processes_engine::abilities::FALLBACK_ABILITY_ID;
 
-/// The invariant every menu renderer leans on: the key a row advertises
-/// is the key that picks it. Twelve research nodes and ten deployable
-/// structures both run past the nine rows a digit can address, and rows
-/// beyond that used to be unreachable by shortcut entirely.
+/// An irreversible confirm opens on its No row, so a pick of row 0 has to
+/// walk off the opening row rather than assume the highlight starts at 0.
 #[test]
-fn every_row_shortcut_selects_the_row_it_labels() {
-    let mut app = test_app(920);
-    let len = 35;
-    for idx in 0..len {
-        let shortcut = menu_shortcut(idx);
-        assert_eq!(
-            app.selected_index(GameKey::Char(shortcut), len),
-            Some(idx),
-            "row {idx} is labelled [{shortcut}] but that key picks something else"
-        );
-    }
-}
-
-#[test]
-fn row_shortcuts_run_digits_first_then_letters() {
-    assert_eq!(menu_shortcut(0), '1');
-    assert_eq!(menu_shortcut(8), '9');
-    assert_eq!(menu_shortcut(9), 'a');
-    assert_eq!(menu_shortcut(11), 'c');
-    assert_eq!(menu_shortcut(34), 'z');
+fn pick_row_picks_from_a_non_zero_opening_row() {
+    let mut app = app_owning_a_program_and_an_extractor(9101, &[FALLBACK_ABILITY_ID]);
+    open_via_menu(&mut app, 'p', "Extract a routine");
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::ExtractConfirm);
     assert_eq!(
-        menu_shortcut(35),
-        '-',
-        "past 'z' a row should advertise no key rather than a dead one"
+        app.menu_selected, 1,
+        "test premise: the confirm opens on No"
+    );
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        before - 1,
+        "row 0 is Yes, so the program is extracted"
     );
 }
 
-/// The main-menu, save, difficulty and demolish-confirm handlers all
-/// map letters to their own actions through `.or_else`, which only
-/// works while `selected_index` leaves letters alone. They're short
-/// menus, so the letter rows never come into play — but nothing else
-/// enforces that, so lock it in.
 #[test]
-fn letters_pick_no_row_in_a_menu_shorter_than_ten_rows() {
-    let mut app = test_app(921);
-    for len in 1..=DIGIT_ROWS {
-        for c in ['a', 'l', 'n', 'q', 'x', 'y', 'f', 'm', 'p'] {
-            assert_eq!(
-                app.selected_index(GameKey::Char(c), len),
-                None,
-                "[{c}] must stay free for a {len}-row menu's own shortcuts"
-            );
-        }
+fn pick_row_reaches_row_twelve() {
+    let mut app = app_on_inventory_with_many_items(9102);
+    open_hub_screen(&mut app, Mode::Inventory);
+    assert!(
+        app.game.as_ref().unwrap().player_status().inventory.len() >= 13,
+        "test premise: a thirteen-row list"
+    );
+    highlight_row(&mut app, 12);
+    assert_eq!(app.menu_selected, 12);
+}
+
+/// Lists are highlight + Enter. A digit or a lowercase letter names no row,
+/// so nothing a player types as a mnemonic can also pick one: the keys are
+/// free for the screens that bind them, and for a later type-to-filter.
+///
+/// The twelve-row menu is long enough to reach past the nine digits into the
+/// letters, which is where the old scheme kept going.
+#[test]
+fn digits_and_lowercase_letters_pick_no_row() {
+    let mut app = test_app(920);
+    let len = 35;
+    app.menu_selected = 3;
+    for c in ('0'..='9').chain('a'..='z') {
+        assert_eq!(
+            app.selected_index(GameKey::Char(c), len),
+            None,
+            "[{c}] must not pick a row"
+        );
+        assert_eq!(app.menu_selected, 3, "[{c}] must not move the highlight");
     }
 }
 
-/// No row ever advertises `[0]` — `menu_shortcut` starts at `1` — so the key
-/// is only ever a mis-hit. It still has to be *ignored*: `then_some` takes its
-/// argument by value, so a `d - 1` written inside one is computed whether or
-/// not the guard holds, and `0usize - 1` is a panic that takes the whole
-/// renderer down from any menu on the screen.
+/// Through a real screen, not only the resolver: a long list, every digit
+/// pressed, and neither the mode nor the highlight moves. Letters are not
+/// pressed here because the inventory binds many of them as mnemonics.
 #[test]
-fn zero_picks_no_row_rather_than_underflowing() {
-    let mut app = test_app(922);
-    for len in [1, 5, DIGIT_ROWS, 35] {
-        assert_eq!(
-            app.selected_index(GameKey::Char('0'), len),
-            None,
-            "[0] labels no row in a {len}-row menu"
-        );
+fn digits_leave_a_long_screen_where_it_was() {
+    let mut app = app_on_inventory_with_many_items(9103);
+    open_hub_screen(&mut app, Mode::Inventory);
+    assert!(app.game.as_ref().unwrap().player_status().inventory.len() >= 12);
+    highlight_row(&mut app, 2);
+    for c in '0'..='9' {
+        app.handle_key(GameKey::Char(c));
+        assert_eq!(app.mode, Mode::Inventory, "[{c}] left the screen");
+        assert_eq!(app.menu_selected, 2, "[{c}] moved the highlight");
     }
+}
+
+/// Word letters are not row selectors and keep working: the main menu's own
+/// letters and the routine installer's `e`. (Alerts `x`/`d`, the sprite
+/// picker's `t`, the kernel ring's `r` and the wizard's `n` are pinned where
+/// those screens' own tests live.) A letter that is no screen's mnemonic does
+/// nothing at all, where it used to pick a row.
+#[test]
+fn mnemonic_letters_still_act() {
+    let mut app = test_app(923);
+    app.game = None;
+    for (key, mode) in [
+        ('a', Mode::Achievements),
+        ('o', Mode::GameplayOptions),
+        ('q', Mode::QuitAppConfirm),
+    ] {
+        app.mode = Mode::MainMenu;
+        app.menu_selected = 0;
+        app.handle_key(GameKey::Char(key));
+        assert_eq!(app.mode, mode, "main menu [{key}]");
+    }
+    app.mode = Mode::MainMenu;
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Char('z'));
+    assert_eq!(app.mode, Mode::MainMenu, "[z] is no main-menu key");
+    assert_eq!(app.menu_selected, 0);
+
+    let mut app = test_app(924);
+    teach_player_routines(&mut app, &["sandbox"]);
+    open_via_menu(&mut app, 'p', "Install a routine");
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 1);
+    assert_eq!(app.mode, Mode::RoutineInstall);
+    let row = app.menu_selected;
+    app.handle_key(GameKey::Char('z'));
+    assert_eq!(app.mode, Mode::RoutineInstall, "[z] is no installer key");
+    assert_eq!(app.menu_selected, row);
+    app.handle_key(GameKey::Char('e'));
+    assert_eq!(app.mode, Mode::RoutineEtch, "installer [e]");
 }
 
 #[test]
@@ -188,30 +233,34 @@ fn up_and_down_page_the_subjects_as_left_and_right_do() {
 }
 
 #[test]
-fn a_digit_or_lowercase_letter_jumps_to_that_subject_and_keeps_the_face() {
+fn a_digit_or_letter_does_not_jump_the_manifest() {
     let mut app = app_owning_distant_programs(7502, 2);
     let subjects = app.manifest_subjects();
     open_via_menu(&mut app, 'p', "Read a manifest");
-    app.handle_key(GameKey::Char('3'));
-    assert_eq!(app.pending_manifest, Some(subjects[2]));
-    app.handle_key(GameKey::Char('1'));
     assert_eq!(app.pending_manifest, Some(subjects[0]));
+    for c in ('0'..='9').chain('a'..='z') {
+        app.handle_key(GameKey::Char(c));
+        assert_eq!(app.pending_manifest, Some(subjects[0]), "[{c}] jumped");
+        assert_eq!(app.mode, Mode::Manifest, "[{c}] left the sheet");
+    }
+}
 
-    // A program's Social face, then a jump to another program keeps it...
-    app.handle_key(GameKey::Char('2'));
+/// Paging keeps a program's Social face, and a page onto you, who have no
+/// Social face, falls back to Stats.
+#[test]
+fn paging_keeps_the_face_and_falls_back_on_you() {
+    let mut app = app_owning_distant_programs(7504, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Tab);
     assert_eq!(app.manifest_tab, ManifestTab::Social);
-    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Right);
     assert_eq!(app.pending_manifest, Some(subjects[2]));
     assert_eq!(app.manifest_tab, ManifestTab::Social);
-    // ...and a jump to you, who have no Social face, falls back to Stats.
-    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
-
-    // Letters label rows from the tenth; this roster has three.
-    app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.pending_manifest, Some(subjects[0]), "no row a");
-    assert_eq!(app.mode, Mode::Manifest);
 }
 
 #[test]
@@ -410,28 +459,6 @@ fn any_key_leaves_the_structure_sheet_and_forgets_its_subject() {
     assert!(app.pending_structure_manifest.is_none());
 }
 
-/// Uppercase is reserved for actions, so the trade screens can bind `S`
-/// and `B` to sell-one and buy-one without shadowing the rows those
-/// letters label. Lowercase keeps picking rows exactly as it did.
-#[test]
-fn uppercase_letters_pick_no_row() {
-    let mut app = test_app(922);
-    let len = 35;
-    for (lower, idx) in [('a', 9), ('b', 10), ('s', 27), ('z', 34)] {
-        assert_eq!(
-            app.selected_index(GameKey::Char(lower), len),
-            Some(idx),
-            "lowercase [{lower}] must still pick row {idx}"
-        );
-        assert_eq!(
-            app.selected_index(GameKey::Char(lower.to_ascii_uppercase()), len),
-            None,
-            "uppercase [{}] must be free for an action",
-            lower.to_ascii_uppercase()
-        );
-    }
-}
-
 /// The manual's index is an ordinary menu and a page is a document — the
 /// split the whole screen is built on, so these walk it end to end.
 #[test]
@@ -453,7 +480,7 @@ fn picking_a_topic_opens_that_page() {
     let mut app = test_app(931);
     app.handle_key(GameKey::Char('?'));
     let first = app.help_index_rows()[0].title.clone();
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::HelpPage);
     assert_eq!(app.help_stack.len(), 1);
     let view = app.help_page_view().expect("a page is open");
@@ -465,10 +492,10 @@ fn picking_a_topic_opens_that_page() {
 /// underneath it, which is the whole of what makes "three links deep and
 /// back" work.
 #[test]
-fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
+fn a_followed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     let mut app = test_app(932);
     app.handle_key(GameKey::Char('?'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     let first = app.help_stack[0].clone();
     let link = app.help_page_view().unwrap().links;
     assert!(
@@ -476,13 +503,16 @@ fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
         "the fixture page carries no links, so this proves nothing"
     );
 
-    app.handle_key(GameKey::Char(link[0].shortcut));
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
     assert_eq!(
         app.mode,
         Mode::HelpPage,
         "a link opens another page, not another screen"
     );
     assert_eq!(app.help_stack.len(), 2);
+    assert!(!app.help_links_focused, "the new page opens scrolling");
     assert_eq!(app.help_stack[0], first, "the page beneath is still there");
     assert_ne!(app.help_stack[1], first);
 
@@ -499,11 +529,103 @@ fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     assert!(app.help_stack.is_empty());
 }
 
+/// Tab, Down, Enter reaches the *second* link (Down moves off the first),
+/// so the highlight is proved to move and not merely to default.
+#[test]
+fn tab_down_enter_follows_the_second_link() {
+    let mut app = test_app(935);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let page = app.current_help_page_id();
+    let target = app
+        .help_link_target(1)
+        .expect("the fixture page has two links");
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.help_stack, vec![page, target]);
+}
+
+#[test]
+fn enter_follows_the_first_link_when_the_links_are_focused() {
+    let mut app = test_app(936);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let page = app.current_help_page_id();
+    let target = app.help_link_target(0).unwrap();
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.help_stack, vec![page, target]);
+}
+
+#[test]
+fn a_digit_does_not_follow_a_help_link() {
+    let mut app = test_app(937);
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    let open = app.help_stack.clone();
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.help_stack, open);
+}
+
+#[test]
+fn tab_back_restores_scrolling() {
+    let mut app = test_app(938);
+    app.handle_key(GameKey::Char('?'));
+    let idx = app
+        .help_index_rows()
+        .iter()
+        .position(|r| r.title == "Controls")
+        .unwrap();
+    pick_row(&mut app, idx);
+    app.handle_key(GameKey::Tab);
+    assert!(app.help_links_focused);
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        app.menu_selected, 0,
+        "Down moves the link highlight, not the scroll"
+    );
+    app.handle_key(GameKey::Tab);
+    assert!(!app.help_links_focused);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+}
+
+/// A page with no links has nothing to focus, so the keys must not panic
+/// or leave the player stuck in a focus with no rows.
+#[test]
+fn a_page_with_no_links_survives_tab_and_arrows() {
+    let mut app = test_app(939);
+    let dir = std::env::temp_dir().join(format!("feral-help-nolinks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("10-lone.md"),
+        "# Lone page\n\nNothing links out of here.\n",
+    )
+    .unwrap();
+    let (db, warnings) = feral_processes_engine::help::HelpDb::load_dir(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    app.help_db = db;
+    app.handle_key(GameKey::Char('?'));
+    pick_row(&mut app, 0);
+    assert!(app.help_page_view().unwrap().links.is_empty());
+    let open = app.help_stack.clone();
+    for k in [GameKey::Tab, GameKey::Up, GameKey::Down, GameKey::Enter] {
+        app.handle_key(k);
+    }
+    assert_eq!(app.help_stack, open);
+    assert!(!app.help_links_focused);
+    assert_eq!(app.mode, Mode::HelpPage);
+}
+
 #[test]
 fn esc_on_the_index_closes_the_manual_and_clears_the_trail() {
     let mut app = test_app(933);
     app.handle_key(GameKey::Char('?'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.mode = Mode::Help;
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -522,7 +644,7 @@ fn up_and_down_scroll_a_page_without_changing_which_page_is_open() {
         .iter()
         .position(|r| r.title == "Controls")
         .expect("the controls page ships");
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    pick_row(&mut app, idx);
     let open = app.help_stack.clone();
     assert!(app.help_page_view().unwrap().prose.len() > 1);
 

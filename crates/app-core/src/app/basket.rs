@@ -166,10 +166,8 @@ impl App {
             GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown => {
                 self.scroll(key, len)
             }
-            // Uppercase for the two screen actions, matching the reserved
-            // uppercase convention. Nothing here picks a row by letter, so
-            // the reservation costs these screens nothing — but it is what
-            // makes uppercase read as "acts" everywhere else.
+            // Uppercase for the two screen actions: uppercase reads as
+            // "acts" throughout the game.
             //
             // `[A]` writes the take ceiling over **every** row, clearing a
             // give the player had set on a row with nothing on the shelf.

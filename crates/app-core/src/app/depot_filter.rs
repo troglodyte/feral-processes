@@ -55,8 +55,8 @@ impl App {
             // page's keys beside it, since the hub spends the bare arrows.
             GameKey::Char('+' | '=') => self.set_selected_depot_filter(depot, true),
             GameKey::Char('-') => self.set_selected_depot_filter(depot, false),
-            // Uppercase, because a lowercase letter picks a row everywhere
-            // else in the game.
+            // Uppercase: whole-list actions, set apart from the single-row
+            // `+`/`-` above.
             GameKey::Char('A') => self.set_whole_depot_filter(depot, true),
             GameKey::Char('D') => self.set_whole_depot_filter(depot, false),
             _ => {}

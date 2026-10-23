@@ -38,12 +38,7 @@ pub(super) fn draw_stack_market(
         // Priced rows the player cannot afford stay listed and stay dim: a
         // shelf you have to come back for is a reason to go deeper, where a
         // hidden row is a shelf that looks smaller than it is.
-        let label = format!(
-            "[{}] {}  ({} {money})",
-            menu_shortcut(idx),
-            offer.name,
-            offer.price
-        );
+        let label = format!("{}  ({} {money})", offer.name, offer.price);
         rows.push(if offer.affordable {
             item_row(label, idx == selected)
         } else {
@@ -74,7 +69,7 @@ pub(super) fn draw_stack_market(
                 row.copy.tier,
                 row.copy.rarity,
             ),
-            row_lead(menu_shortcut(idx), Some(row.qty)),
+            row_lead(Some(row.qty)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),

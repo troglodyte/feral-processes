@@ -5,22 +5,19 @@ use feral_processes_engine::StatOwner;
 use feral_processes_engine::{GraphDir, ResearchState, ResearchTree};
 
 impl App {
-    /// Picks a numbered perk to unlock; stays open so multiple can be
+    /// Unlocks the highlighted perk; stays open so multiple can be
     /// unlocked in one visit if there are enough Perk Points.
     pub(crate) fn handle_perks_key(&mut self, key: GameKey) {
         // Through `perk_defs` rather than `Perk::all()` so the numbering the
         // player types against is the one the picker drew — a perk whose
         // `.ron` file is missing isn't listed and can't be bought by index.
-        // Uppercase, and checked before `selected_index`: lowercase letters
-        // are row labels past the digits (`DIGIT_ROWS + (c - 'a')`) and this
-        // picker has eighteen rows, so a lowercase key would pick a perk
-        // *and* open the wipe on one keypress.
+        // Uppercase, so a stray lowercase `x` can never open a wipe of
+        // eighteen rows' worth of spent perks.
         if key == GameKey::Char('X') {
             self.mode = Mode::RespecPerksConfirm;
             return;
         }
-        // Uppercase for the same reason as `X`: this picker's rows run past
-        // `s` in the label alphabet.
+        // Uppercase for the same reason as `X`.
         if key == GameKey::Char('S') {
             self.open_stat_allocation(StatOwner::Player, AllocationOrigin::Perks);
             return;
@@ -86,7 +83,7 @@ impl App {
         }
     }
 
-    /// Picks a numbered research node to unlock; stays open so several can
+    /// Unlocks the highlighted research node; stays open so several can
     /// be taken in one visit. Shared by `Mode::Research` and
     /// `Mode::RoutineResearch` — one handler taking the tree rather than a
     /// copied one, since the two screens differ only in which tree
@@ -96,17 +93,13 @@ impl App {
             self.close_screen();
             return;
         }
-        // Checked before `selected_index`, for the reason `handle_perks_key`
-        // checks its own `X` first: uppercase is not a row selector today,
-        // but putting the check after would be a live hazard the day
-        // somebody widens `selected_index`.
+        // Uppercase, as `handle_perks_key`'s `X` is: a destructive or
+        // mode-flipping key stays off the lowercase space.
         if key == GameKey::Char('G') {
             self.research_graph_view = !self.research_graph_view;
             return;
         }
-        // Uppercase, and checked here beside `G` for its reason: lowercase
-        // letters are row selectors past the digits, so a lowercase `a` would
-        // both pick a row and abandon the project on one keypress.
+        // Uppercase, so a stray lowercase `a` cannot abandon a project.
         if key == GameKey::Char('A') {
             let Some(game) = &mut self.game else { return };
             let outcome = game.abandon_research();

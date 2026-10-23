@@ -283,17 +283,17 @@ fn p_stands_the_highlighted_member_down_and_puts_it_back() {
 }
 
 /// The whole of TODO 14: every action on this screen acts on the highlight,
-/// so a row shortcut only moves it. Before this change a stray digit stood a
-/// party member down on the spot.
+/// so moving the highlight only moves it. Before this change a stray digit
+/// stood a party member down on the spot.
 #[test]
-fn a_row_shortcut_only_moves_the_highlight() {
+fn moving_the_highlight_changes_nobodys_party_membership() {
     let mut app = app_with_companions_in_the_party(781, 2);
     let before = roster(&mut app);
     open_via_menu(&mut app, 'p', "Companions");
 
-    app.handle_key(GameKey::Char('2'));
+    highlight_row(&mut app, 1);
 
-    assert_eq!(app.menu_selected, 1, "the digit picks the row");
+    assert_eq!(app.menu_selected, 1, "the highlight moved");
     assert!(
         in_party(&mut app, before[0]) && in_party(&mut app, before[1]),
         "and changes nothing about who is standing in the party"
@@ -368,7 +368,7 @@ fn picking_a_slot_opens_the_picker_for_the_program_and_esc_returns_to_its_slots(
     open_roster(&mut app);
     app.handle_key(GameKey::Char('E'));
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::EquipSwap);
     assert_eq!(app.pending_swap_slot, Some(EquipmentSlot::Weapon));
@@ -397,9 +397,9 @@ fn choosing_a_row_equips_the_program_and_not_the_player() {
     let companion_atk_before = companion_atk(&mut app);
     open_roster(&mut app);
     app.handle_key(GameKey::Char('E'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         companion_atk(&mut app),
@@ -466,7 +466,7 @@ fn a_slot_with_nothing_to_fit_it_reports_that_instead_of_an_empty_picker() {
     app.handle_key(GameKey::Char('E'));
 
     // Row 2 is Armor, and the only gear in cargo is a weapon.
-    app.handle_key(GameKey::Char('2'));
+    pick_row(&mut app, 1);
 
     assert_eq!(
         app.mode,

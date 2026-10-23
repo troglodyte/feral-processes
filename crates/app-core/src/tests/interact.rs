@@ -34,7 +34,7 @@ fn c_beside_one_awaiting_site_opens_the_picker_and_commits() {
         app.pending_build,
         Some(PendingBuild::Rebuild { .. })
     ));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(site_count(&mut app), 0, "the program was committed");
     assert!(app.pending_build.is_none());

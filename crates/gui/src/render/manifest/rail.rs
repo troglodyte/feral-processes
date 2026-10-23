@@ -3,7 +3,6 @@
 
 use super::layout::{RailGeom, rail_window};
 use super::*;
-use feral_processes_app_core::menu_shortcut;
 use feral_processes_engine::RosterRow;
 
 /// One drawn line of the rail, before the window cuts it.
@@ -85,9 +84,7 @@ pub(super) fn draw_rail(
     for row in &rows[w.start..w.end] {
         let top = rail.rows.y + slot as f32 * rail.row_h;
         match *row {
-            RailRow::Subject(i) => {
-                draw_subject(rail, &roster[i], i, i == selected, top, painter, m)
-            }
+            RailRow::Subject(i) => draw_subject(rail, &roster[i], i == selected, top, painter, m),
             RailRow::PartyRule => draw_party_rule(rail, top, char_w, painter, m),
         }
         slot += 1;
@@ -105,7 +102,6 @@ fn baseline(top: f32, rail: &RailGeom) -> f32 {
 fn draw_subject(
     rail: &RailGeom,
     row: &RosterRow,
-    index: usize,
     selected: bool,
     top: f32,
     painter: &Painter,
@@ -143,14 +139,7 @@ fn draw_subject(
     if selected {
         painter.ui("▸", x(0), base, m.font_size, hud::palette::PANE_TITLE);
     }
-    painter.ui(
-        menu_shortcut(index).to_string(),
-        x(1),
-        base,
-        m.font_size,
-        hud::palette::EMPHASIS,
-    );
-    painter.map(&glyph, x(3), base, m.font_size, glyph_color(row.color));
+    painter.map(&glyph, x(2), base, m.font_size, glyph_color(row.color));
 
     let level = format!("Lv {}", row.level);
     let level_col = LEVEL_END_COL - level.chars().count();

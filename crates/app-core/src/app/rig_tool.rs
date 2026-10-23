@@ -59,10 +59,6 @@ impl App {
                 self.scroll(key, rows)
             }
             GameKey::Enter => self.fit_selected_rig_tool(rig),
-            // Uppercase, because a lowercase letter picks a row everywhere
-            // else in the game — and `selected_index` answers `None` for
-            // anything that is not lowercase or a digit, so this cannot
-            // also pick a row.
             GameKey::Char('R') => {
                 let outcome = self.game.as_mut().map(|g| g.remove_rig_tool(rig));
                 if let Some(outcome) = outcome {

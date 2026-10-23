@@ -108,7 +108,7 @@ fn every_route_into_the_perks_menu_fills_the_previews() {
     // The purchase page's return.
     let mut app = app_holding_points(9607, 0, 20);
     open_via_menu(&mut app, 'p', "Perks");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::PerkBought, "{:?}", app.status_line);
     app.perk_previews.clear();
     app.handle_key(GameKey::Enter);
@@ -142,7 +142,7 @@ fn a_perk_key_opens_the_purchase_page_and_enter_returns_with_the_highlight() {
 fn a_refused_buy_stays_on_the_menu() {
     let mut app = app_holding_points(9609, 0, 0);
     open_via_menu(&mut app, 'p', "Perks");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Perks);
     assert!(app.pending_perk_report.is_none());
     assert!(app.status_line.is_some(), "the refusal must say why");

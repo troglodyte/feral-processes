@@ -67,10 +67,7 @@ fn draw_id_list(
         body.push(text_row("Nothing to choose from."));
     }
     for (i, row) in rows.iter().enumerate() {
-        body.push(item_row(
-            format!("[{}] {row}", menu_shortcut(i)),
-            i == selected,
-        ));
+        body.push(item_row(row.to_string(), i == selected));
     }
     body.push(text_row(""));
     body.push(text_row("Enter to choose, Esc to go back."));

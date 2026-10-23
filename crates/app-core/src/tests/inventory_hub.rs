@@ -188,7 +188,7 @@ fn esc_in_a_downed_drill_down_goes_back_to_the_list_not_the_rail() {
     };
     let mut app = app_holding_downed_programs(9507, vec![program]);
     app.handle_key(GameKey::Char('D'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.pending_downed_program_index, Some(0));
 
     app.handle_key(GameKey::Esc);

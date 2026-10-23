@@ -373,7 +373,7 @@ fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
     let mut app = app_wearing_weapon(910, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
     open_hub_screen(&mut app, Mode::Inventory);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::EquipSwap);
     assert_eq!(app.pending_swap_slot, Some(EquipmentSlot::Weapon));
@@ -393,7 +393,7 @@ fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
 fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
     let mut app = app_wearing_weapon(911, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
     open_hub_screen(&mut app, Mode::Inventory);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let rows = equip_swap_rows(
         app.game.as_ref().unwrap(),
@@ -404,7 +404,7 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
         .iter()
         .position(|r| r.choice == SwapChoice::Equip(gear(&ItemId::from("kinetic_edge"), 0)))
         .expect("the spare weapon should be offered");
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    pick_row(&mut app, idx);
 
     let status = app.game.as_ref().unwrap().player_status();
     assert_eq!(
@@ -426,7 +426,7 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
 fn the_unequip_row_empties_the_slot() {
     let mut app = app_wearing_weapon(912, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
     open_hub_screen(&mut app, Mode::Inventory);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let rows = equip_swap_rows(
         app.game.as_ref().unwrap(),
@@ -437,7 +437,7 @@ fn the_unequip_row_empties_the_slot() {
         .iter()
         .position(|r| r.choice == SwapChoice::Unequip)
         .expect("an occupied slot must offer to be emptied");
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    pick_row(&mut app, idx);
 
     let status = app.game.as_ref().unwrap().player_status();
     assert!(status.weapon.is_none());
@@ -561,7 +561,7 @@ fn an_empty_slot_with_nothing_to_fill_it_stays_on_the_inventory() {
     let mut app = app_wearing_weapon(916, None, &[("core_fragment", 4)], 1);
     open_hub_screen(&mut app, Mode::Inventory);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         app.mode,
@@ -578,7 +578,7 @@ fn an_empty_slot_with_nothing_to_fill_it_stays_on_the_inventory() {
 fn esc_returns_from_the_swap_list_to_the_inventory() {
     let mut app = app_wearing_weapon(917, Some(("overclock_core", 1)), &[("kinetic_edge", 1)], 1);
     open_hub_screen(&mut app, Mode::Inventory);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     app.handle_key(GameKey::Esc);
 

@@ -77,15 +77,15 @@ fn body_rows(screen: &MachineRecipeScreen, selected: usize) -> Vec<Row> {
         return body;
     }
     for (i, row) in view.rows.iter().enumerate() {
-        body.push(item_row(row_text(i, row), i == selected));
+        body.push(item_row(row_text(row), i == selected));
     }
     body
 }
 
 /// One recipe's row, a function of its own so the width census measures the
 /// text the screen draws and not a copy of it.
-fn row_text(index: usize, row: &MachineRecipeRow) -> String {
-    let mut text = format!("[{}] {}", menu_shortcut(index), row.name);
+fn row_text(row: &MachineRecipeRow) -> String {
+    let mut text = row.name.clone();
     if !row.inputs.is_empty() {
         let inputs: Vec<String> = row
             .inputs
@@ -159,13 +159,11 @@ mod tests {
             rows.iter().any(|r| r.item.as_str() == "hardened_shell"),
             "the census must reach hardened_shell"
         );
-        let (index, widest) = rows
+        let widest = rows
             .iter()
-            .enumerate()
-            .map(|(i, r)| (i % 9, r))
-            .max_by_key(|(i, r)| row_text(*i, r).chars().count())
+            .max_by_key(|r| row_text(r).chars().count())
             .expect("the shipped assets define craftables");
-        let text = row_text(index, widest);
+        let text = row_text(widest);
         crate::render::base_report::assert_rows_fit(
             &[item_row(text.clone(), false)],
             "recipe page",
@@ -193,15 +191,12 @@ mod tests {
             pace: RecipePace::Steady,
             current: false,
         };
-        assert_eq!(
-            row_text(0, &row),
-            "[1] Bytecode Block  4 Core Fragment  steady"
-        );
+        assert_eq!(row_text(&row), "Bytecode Block  4 Core Fragment  steady");
         let current = MachineRecipeRow {
             current: true,
             ..row
         };
-        assert!(row_text(0, &current).ends_with(CURRENT_MARK));
+        assert!(row_text(&current).ends_with(CURRENT_MARK));
     }
 
     #[test]

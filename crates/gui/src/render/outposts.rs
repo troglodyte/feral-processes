@@ -194,12 +194,8 @@ pub(super) fn outpost_page_rows(report: &OutpostReport, selected: usize) -> Vec<
         rows.push(text_row("  Nobody is posted here."));
     }
     for (i, member) in report.crew.iter().enumerate() {
-        let letter = (b'a' + i as u8) as char;
         rows.push(item_row(
-            format!(
-                "{letter}  {}  {}  lv {}",
-                member.name, member.species, member.level
-            ),
+            format!("{}  {}  lv {}", member.name, member.species, member.level),
             i == selected,
         ));
     }
@@ -219,8 +215,8 @@ pub(super) fn outpost_page_rows(report: &OutpostReport, selected: usize) -> Vec<
     rows
 }
 
-/// `Mode::OutpostPost`'s staff picker — every base-staff program, a letter
-/// posts one. `App::outpost_post_candidates`'s rows are already resolved
+/// `Mode::OutpostPost`'s staff picker — every base-staff program, Enter
+/// posts the highlighted one. `App::outpost_post_candidates`'s rows are already resolved
 /// display names, `SortieSquadRow`'s own shape one field narrower.
 pub(super) fn draw_outpost_post(
     candidates: &[feral_processes_app_core::OutpostPostRow],
@@ -234,8 +230,7 @@ pub(super) fn draw_outpost_post(
         rows.push(text_row("Nobody on staff is free to post."));
     }
     for (i, row) in candidates.iter().enumerate() {
-        let letter = (b'a' + i as u8) as char;
-        rows.push(item_row(format!("{letter}  {}", row.name), i == selected));
+        rows.push(item_row(row.name.clone(), i == selected));
     }
     draw_popup("Post", PopupSize::Large, &rows, refusal, painter, m);
 }

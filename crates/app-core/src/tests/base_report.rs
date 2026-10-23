@@ -115,7 +115,7 @@ fn a_digit_on_alerts_stays_on_alerts() {
     assert_eq!(app.mode, Mode::Alerts);
     assert_eq!(
         app.menu_selected, 1,
-        "the highlight is Down's, not the digit's page jump"
+        "the highlight is Down's; a digit does nothing"
     );
 }
 
@@ -198,16 +198,18 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     assert_eq!(app.mode, Mode::Alerts);
 }
 
-/// The nav layer must let a digit through to the screen under it — Alerts
-/// discards its row pick, so only a screen that acts on one can catch a nav
-/// that swallows digits.
+/// A digit names no overview row: the page is left by Enter on the
+/// highlight, so a stray number neither jumps nor moves it.
 #[test]
-fn a_digit_on_the_overview_reaches_its_handler() {
+fn a_digit_on_the_overview_picks_no_row() {
     let mut app = test_app(30014);
     app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Char(menu_shortcut(BASE_REPORT_PAGES.len() - 2)));
-    assert_eq!(app.mode, Mode::Alerts);
+    let (mode, row) = (app.mode, app.menu_selected);
+    for c in '0'..='9' {
+        app.handle_key(GameKey::Char(c));
+        assert_eq!((app.mode, app.menu_selected), (mode, row), "[{c}]");
+    }
 }
 
 #[test]
@@ -280,7 +282,7 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
     let mut app = app_inside_a_small_base(30020, false);
     open_hub_screen(&mut app, Mode::WorkOrders);
     let last = app.work_order_rows().len() - 1;
-    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    pick_row(&mut app, last);
     assert_eq!(app.mode, Mode::WorkOrderPick);
 
     for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
@@ -292,7 +294,7 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
         );
     }
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::WorkOrderQuantity);
     for key in [GameKey::Char('['), GameKey::Char(']'), GameKey::Tab] {
         app.handle_key(key);
@@ -371,7 +373,7 @@ fn work_orders_refuse_edits_outside_base_space() {
     open_hub_screen(&mut app, Mode::WorkOrders);
     let last = app.work_order_rows().len() - 1;
 
-    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    pick_row(&mut app, last);
 
     assert_eq!(app.mode, Mode::WorkOrders, "the picker must not open");
     assert_eq!(
@@ -825,7 +827,7 @@ fn esc_from_a_command_returns_to_its_row_and_a_page_turn_forgets_it() {
         .position(|r| r.label == "Demolish a structure")
         .unwrap();
     assert!(demolish > 0);
-    app.handle_key(GameKey::Char(menu_shortcut(demolish)));
+    pick_row(&mut app, demolish);
     assert_eq!(app.mode, Mode::Remove);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseBuild);

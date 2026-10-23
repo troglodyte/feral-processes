@@ -225,7 +225,7 @@ fn abandoning_a_run_banks_nothing() {
     assert!(card_total(&mut app) > 0);
     app.mode = Mode::QuitRunConfirm;
     app.hub_on_rail = false;
-    app.handle_key(GameKey::Char('3'));
+    pick_row(&mut app, 2);
     app.handle_key(GameKey::Char('y'));
     assert_eq!(app.mode, Mode::MainMenu);
     assert_eq!(banked(&app), 0);

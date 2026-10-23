@@ -18,14 +18,7 @@ pub(super) fn draw_routine_target(
     for (i, h) in holders.iter().enumerate() {
         rows.push(with_icon(
             item_row(
-                format!(
-                    "[{}] {} Lv{} - {}/{} slots",
-                    menu_shortcut(i),
-                    h.name,
-                    h.level,
-                    h.filled,
-                    h.slots
-                ),
+                format!("{} Lv{} - {}/{} slots", h.name, h.level, h.filled, h.slots),
                 i == selected,
             ),
             h.glyph,
@@ -62,10 +55,7 @@ pub(super) fn routine_slot_rows(slots: &[RoutineSlotView], selected: usize) -> V
         // disks — that mark means "you get one of these", and this means
         // "this row is not a choice".
         let tag = if s.fixed { "  (fixed)" } else { "" };
-        rows.push(item_row(
-            format!("[{}] {}{}", menu_shortcut(i), s.name, tag),
-            i == selected,
-        ));
+        rows.push(item_row(format!("{}{}", s.name, tag), i == selected));
         if !s.description.is_empty() {
             rows.push(description_row(&s.description));
         }
@@ -108,7 +98,7 @@ pub(super) fn routine_install_rows(
         // again for a blank, and this one cannot be etched at all.
         let tag = if d.exclusive { "  ★ exclusive" } else { "" };
         rows.push(item_row(
-            format!("[{}] {} ×{}{}", menu_shortcut(i), d.name, d.qty, tag),
+            format!("{} ×{}{}", d.name, d.qty, tag),
             i == selected,
         ));
         rows.push(description_row(&d.description));
@@ -161,7 +151,7 @@ pub(super) fn routine_etch_rows(
     }
     for (i, r) in known.iter().enumerate() {
         rows.push(annotated_item_row(
-            format!("[{}] {}", menu_shortcut(i), r.name),
+            r.name.to_string(),
             (r.held > 0).then(|| format!("×{} held", r.held)),
             i == selected,
             TEXT,
@@ -182,7 +172,7 @@ pub(super) fn draw_routine_etch(
     draw_popup("Etch Disk", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// One extraction candidate's lines: the row its shortcut selects, then the
+/// One extraction candidate's lines: the row the highlight lands on, then the
 /// routines the program is carrying underneath.
 ///
 /// Extraction destroys the program for exactly one of those routines, and
@@ -200,11 +190,7 @@ pub(super) fn draw_routine_etch(
 /// without a window — see `the_widest_shipped_routine_kit_fits_the_extract_picker`.
 /// The program's row is always present, so a caller may take it
 /// unconditionally.
-fn extract_candidate_rows(
-    num: char,
-    p: &PetInfo,
-    routines: &[ExtractableRoutineView],
-) -> Vec<String> {
+fn extract_candidate_rows(p: &PetInfo, routines: &[ExtractableRoutineView]) -> Vec<String> {
     let kit: Vec<String> = routines
         .iter()
         .map(|r| {
@@ -212,14 +198,9 @@ fn extract_candidate_rows(
             format!("{}{known}", r.name)
         })
         .collect();
-    std::iter::once(format!(
-        "[{num}] {} Lv{}{}",
-        p.name,
-        p.level,
-        fusion_tag(p.fusions)
-    ))
-    .chain(continuation_lines(&kit.join(", ")))
-    .collect()
+    std::iter::once(format!("{} Lv{}{}", p.name, p.level, fusion_tag(p.fusions)))
+        .chain(continuation_lines(&kit.join(", ")))
+        .collect()
 }
 
 /// Pushes one candidate's rows: the selectable program row, then its
@@ -229,11 +210,10 @@ fn extract_candidate_rows(
 fn push_extract_candidate(
     rows: &mut Vec<Row>,
     routines: &[ExtractableRoutineView],
-    i: usize,
     p: &PetInfo,
     selected: bool,
 ) {
-    let mut lines = extract_candidate_rows(menu_shortcut(i), p, routines).into_iter();
+    let mut lines = extract_candidate_rows(p, routines).into_iter();
     let head = lines
         .next()
         .expect("extract_candidate_rows always emits the program's row");
@@ -263,7 +243,7 @@ pub(super) fn draw_extract(
     }
     for (i, p) in programs.iter().enumerate() {
         let routines = game.extractable_routines(p.entity);
-        push_extract_candidate(&mut rows, &routines, i, p, i == selected);
+        push_extract_candidate(&mut rows, &routines, p, i == selected);
     }
     draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -272,10 +252,7 @@ pub(super) fn extract_pick_rows(offered: &[ExtractableRoutineView], selected: us
     let mut rows = vec![text_row("Learn which routine? The rest are lost with it.")];
     for (i, a) in offered.iter().enumerate() {
         let known = if a.known { " (already known)" } else { "" };
-        rows.push(item_row(
-            format!("[{}] {}{known}", menu_shortcut(i), a.name),
-            i == selected,
-        ));
+        rows.push(item_row(format!("{}{known}", a.name), i == selected));
         rows.push(description_row(&a.description));
     }
     rows
@@ -354,7 +331,6 @@ mod tests {
     #[test]
     fn an_extract_candidate_names_its_routines_and_marks_the_known_ones() {
         let lines = extract_candidate_rows(
-            'a',
             &test_pet("Kestrel", "w|a|m"),
             &[offered("Sandbox", false), offered("Patch Routine", true)],
         );
@@ -378,7 +354,7 @@ mod tests {
     /// empty one that reads as a rendering fault.
     #[test]
     fn an_extract_candidate_with_no_routines_gets_no_line() {
-        let lines = extract_candidate_rows('a', &test_pet("Kestrel", "w|a|m"), &[]);
+        let lines = extract_candidate_rows(&test_pet("Kestrel", "w|a|m"), &[]);
         assert_eq!(lines.len(), 1, "{lines:?}");
     }
 
@@ -408,7 +384,7 @@ mod tests {
             names.len()
         );
         let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n, true)).collect();
-        let lines = extract_candidate_rows('a', &test_pet("Kestrel", "w|a|m"), &kit);
+        let lines = extract_candidate_rows(&test_pet("Kestrel", "w|a|m"), &kit);
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // 0.88 is `PopupSize::Large`'s width fraction, against the

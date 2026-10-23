@@ -9,8 +9,8 @@ use feral_processes_engine::{BreedPreview, BreedSpeciesPreview, IncubationView, 
 
 /// One parent row. A program that cannot breed right now says why in the
 /// engine's own words and is drawn dim by the caller.
-fn parent_label(num: char, p: &PetInfo, refusal: Option<&str>) -> String {
-    let base = format!("[{num}] {} Lv{}  PWR {}", p.name, p.level, p.power);
+fn parent_label(p: &PetInfo, refusal: Option<&str>) -> String {
+    let base = format!("{} Lv{}  PWR {}", p.name, p.level, p.power);
     match refusal {
         Some(reason) => format!("{base} - {reason}"),
         None => base,
@@ -20,7 +20,7 @@ fn parent_label(num: char, p: &PetInfo, refusal: Option<&str>) -> String {
 fn push_parent_rows(rows: &mut Vec<Row>, game: &Game, candidates: &[&PetInfo], selected: usize) {
     for (i, p) in candidates.iter().enumerate() {
         let refusal = game.breed_refusal(p.entity).map(|r| r.reason());
-        let label = parent_label(menu_shortcut(i), p, refusal);
+        let label = parent_label(p, refusal);
         let row = if refusal.is_some() {
             colored_item_row(label, i == selected, TEXT_DIM)
         } else {
@@ -220,7 +220,7 @@ mod tests {
         let mut p = test_pet(&"W".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN), "");
         p.level = 99;
         p.power = 99_999;
-        let label = parent_label('z', &p, Some(BreedRefusal::Busy.reason()));
+        let label = parent_label(&p, Some(BreedRefusal::Busy.reason()));
         // The icon and the highlight prefix are drawn ahead of the text.
         assert_fits(&[format!("      {label}")], PopupSize::Large);
     }
@@ -230,7 +230,7 @@ mod tests {
         let p = test_pet("Kestrel", "");
         let rows: Vec<String> = ALL_REFUSALS
             .iter()
-            .map(|r| parent_label('a', &p, Some(r.reason())))
+            .map(|r| parent_label(&p, Some(r.reason())))
             .collect();
         assert_fits(&rows, PopupSize::Large);
     }

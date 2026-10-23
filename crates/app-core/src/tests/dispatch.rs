@@ -204,7 +204,7 @@ fn a_hidden_row_cannot_be_reached_by_its_table_position() {
         "the table lists Contracts first, and it is hidden here"
     );
     open_hub_screen(&mut app, Mode::BaseTrade);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Dispatch);
 }
 

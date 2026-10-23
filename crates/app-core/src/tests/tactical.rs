@@ -2,7 +2,8 @@
 //! paces the wild side.
 
 use super::support::{
-    app_with_companions_in_the_party, install_player_routines, learn_image, test_app, walk,
+    app_with_companions_in_the_party, install_player_routines, learn_image, pick_row, test_app,
+    walk,
 };
 use crate::{
     App, GameKey, Mode, PointerButton, SoundEvent, TACTICAL_HANDOVER_SECONDS,
@@ -745,9 +746,9 @@ fn esc_from_the_tactical_image_picker_returns_to_the_routine_list_spending_nothi
     );
 }
 
-/// A digit (`emulation_options()` has one row here — `1`, not a letter,
-/// `DIGIT_ROWS`' own reason) both selects the image and commits it through
-/// `Game::tactical_emulate`, which has no separate confirm step.
+/// Picking the row (`emulation_options()` has one here) both selects the
+/// image and commits it through `Game::tactical_emulate`, which has no
+/// separate confirm step.
 #[test]
 fn a_row_in_the_tactical_image_picker_invokes_it() {
     use feral_processes_engine::battle::SpecialTargeting;
@@ -761,7 +762,7 @@ fn a_row_in_the_tactical_image_picker_invokes_it() {
     app.mode = Mode::TacticalEmulate;
     app.pending_tactical_emulate = Some(options[idx].index);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::TacticalBattle);
     assert_eq!(app.pending_tactical_emulate, None);
@@ -824,7 +825,7 @@ fn v_drops_the_image() {
         .expect("the fixture installed Emulate");
     app.mode = Mode::TacticalEmulate;
     app.pending_tactical_emulate = Some(options[idx].index);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::TacticalBattle,
@@ -1269,7 +1270,7 @@ fn a_taken_over_companion_plays_without_a_key() {
         Mode::TacticalRoutine,
         "the player's only routine did not open the picker"
     );
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::TacticalAim,
@@ -1351,7 +1352,7 @@ fn u_then_a_row_spends_one_action_and_one_cell() {
 
     app.handle_key(GameKey::Char('U'));
     assert_eq!(app.mode, Mode::TacticalItem);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(held(&app, &target), before - 1, "[U] spent the wrong count");
     assert_ne!(
@@ -1406,7 +1407,7 @@ fn a_refused_item_spends_nothing_and_leaves_the_mode_sane() {
         "fixture: defending should have handed the turn to the wild side"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         held(&app, &target),
@@ -1432,9 +1433,8 @@ fn a_refused_item_spends_nothing_and_leaves_the_mode_sane() {
 mod teleport {
     use super::*;
 
-    /// Row one of the routine picker. Rows 1..9 are the digits and letters
-    /// start at `DIGIT_ROWS`, so `'a'` names nothing on a one-row list.
-    const PICK: GameKey = GameKey::Char('1');
+    /// Row one of the routine picker, which opens on it.
+    const PICK: GameKey = GameKey::Enter;
 
     fn relocating_app() -> App {
         for seed in 0..200u32 {

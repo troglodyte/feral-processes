@@ -30,8 +30,7 @@ pub(super) fn tools_rows(game: &Game, selected: usize) -> Vec<Row> {
             None => "not forged".to_string(),
         };
         let label = format!(
-            "[{}] {}  T{}  {}  {status}",
-            menu_shortcut(i),
+            "{}  T{}  {}  {status}",
             row.name,
             row.tier,
             row.category.as_str()

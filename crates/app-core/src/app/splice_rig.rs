@@ -1,9 +1,8 @@
 //! The Splice Rig's screen: build an implant into the player, or cut one out.
 //!
 //! A page of the structure hub (`app/structure_hub.rs`) on a Splice Rig. One list, the installed implants
-//! first and then the implant items in the pack, so a single lowercase
-//! selector picks either; the verbs are uppercase (`[I]` install, `[R]`
-//! remove) because a lowercase letter picks a row everywhere else.
+//! first and then the implant items in the pack, so a single highlight
+//! covers either; the verbs are uppercase (`[I]` install, `[R]` remove).
 //!
 //! Splicing past the Load cap is allowed — rejection is its price — so that
 //! install asks first, as a state of this screen rather than a `Mode` of its

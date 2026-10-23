@@ -38,9 +38,9 @@ pub(super) fn perks_menu_rows(
         text_row(preview),
         text_row(""),
     ];
-    // The shortcut a player types is an index into the *flattened* list,
-    // which is what `App::handle_perks_key` resolves against `perk_defs` —
-    // so it runs across the headings rather than restarting under each.
+    // `i` indexes the *flattened* list, which is what
+    // `App::handle_perks_key` resolves against `perk_defs` — so it runs
+    // across the headings rather than restarting under each.
     let mut i = 0;
     for (name, defs) in groups {
         rows.extend(heading_rows(name, i > 0));
@@ -52,13 +52,7 @@ pub(super) fn perks_menu_rows(
                 String::new()
             };
             rows.push(item_row(
-                format!(
-                    "[{}] {} - {} Perk Points{}",
-                    menu_shortcut(i),
-                    def.name,
-                    def.cost,
-                    tag
-                ),
+                format!("{} - {} Perk Points{}", def.name, def.cost, tag),
                 i == selected,
             ));
             rows.extend(description_rows(&def.description));
@@ -399,17 +393,16 @@ pub(super) fn research_menu_rows(
     let mut rows = vec![
         Row::TextColored(research_header(active), CYAN),
         text_row(if dev_unlock {
-            "Pick a row's key to work it. A to abandon. U to unlock. G for the tree. Esc to close"
+            "Enter works the highlighted row. A to abandon. U to unlock. G for the tree. Esc to close"
         } else {
-            "Pick a row's key to work it. A to abandon. G for the tree. Esc to close"
+            "Enter works the highlighted row. A to abandon. G for the tree. Esc to close"
         }),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
         let tag = state_tag(&node.state);
         let label = format!(
-            "[{}] {}{} - {}{tag}",
-            menu_shortcut(i),
+            "{}{} - {}{tag}",
             flag(node),
             node.name,
             price_tag(node, currency)
@@ -625,15 +618,14 @@ mod tests {
         };
 
         assert!(
-            label(node(ResearchState::Active, Some("Build a Lathe.")))
-                .starts_with("[1] ! Automation")
+            label(node(ResearchState::Active, Some("Build a Lathe."))).starts_with("! Automation")
         );
         assert!(
             label(node(ResearchState::Available, Some("Build a Lathe.")))
-                .starts_with("[1] ! Automation")
+                .starts_with("! Automation")
         );
-        assert!(label(node(ResearchState::Active, None)).starts_with("[1] Automation"));
-        assert!(label(node(ResearchState::Available, None)).starts_with("[1] Automation"));
+        assert!(label(node(ResearchState::Active, None)).starts_with("Automation"));
+        assert!(label(node(ResearchState::Available, None)).starts_with("Automation"));
     }
 
     /// The other half of the same ask, at the other end of the node: what it
@@ -842,11 +834,11 @@ mod tests {
     }
 
     /// The two halves of what grouping the picker had to get right, against
-    /// the shipped layout: every section is headed, and the shortcut a
-    /// player types runs *across* the headings rather than restarting under
-    /// each one. The second is what `App::handle_perks_key` resolves — it
-    /// indexes `perk_defs`, the flattened list — so a per-section counter
-    /// would draw `[a]` three times and buy the wrong perk twice.
+    /// the shipped layout: every section is headed, and the highlight
+    /// runs *across* the headings rather than restarting under each one. The
+    /// second is what `App::handle_perks_key` resolves — it indexes
+    /// `perk_defs`, the flattened list — so a per-section counter would
+    /// light three rows at once and buy the wrong perk twice.
     #[test]
     fn the_perk_picker_heads_each_section_and_numbers_across_them() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
@@ -871,27 +863,22 @@ mod tests {
         // description lines are the rows this test says nothing about.
         let drawn: Vec<String> = rows
             .iter()
+            .filter(|r| !is_description_row(r))
             .filter_map(|r| match r {
                 Row::Item { text, .. } if !text.is_empty() => Some(text.clone()),
                 _ => None,
             })
-            .filter(|t| !t.starts_with(DESCRIPTION_INDENT))
             .collect();
 
         let mut expected = Vec::new();
         for (name, defs) in &groups {
             expected.push(name.clone());
             for def in defs {
-                let i = flat
-                    .iter()
-                    .position(|d| d.id == def.id)
-                    .expect("every section's perk is in the flattened list");
-                expected.push(format!(
-                    "[{}] {} - {} Perk Points",
-                    menu_shortcut(i),
-                    def.name,
-                    def.cost
-                ));
+                assert!(
+                    flat.iter().any(|d| d.id == def.id),
+                    "every section's perk is in the flattened list"
+                );
+                expected.push(format!("{} - {} Perk Points", def.name, def.cost));
             }
         }
         assert_eq!(drawn, expected);

@@ -155,8 +155,7 @@ fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     assert_eq!(app.mode, Mode::Caravan);
 
     // Editing a row must not take the player anywhere. Walked to with the
-    // arrows rather than typed: a shelf is deeper than `menu_shortcut`'s 35
-    // labels, so the sell rows below it have no key of their own.
+    // arrows: the sell rows sit below the whole shelf.
     let offers = app
         .game
         .as_mut()
@@ -230,7 +229,7 @@ fn a_trader_that_rolls_away_closes_the_screen() {
     for _ in 0..(feral_processes_engine::tuning::CARAVAN_STAY_TICKS + 50) {
         app.game.as_mut().unwrap().wait();
     }
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     // Long enough for the base to be swept at least once, which fires the
     // raid tutorial over whatever the screen had settled on.
     dismiss_notifications(&mut app);

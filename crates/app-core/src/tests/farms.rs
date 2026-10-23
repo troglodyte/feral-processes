@@ -74,7 +74,7 @@ fn c_beside_a_plot_opens_the_recipe_picker_and_a_row_sows_it() {
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     let before = tick(&app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_plot.is_none());
     assert_eq!(
@@ -104,9 +104,7 @@ fn the_picker_opens_on_the_current_recipe() {
     let rows = app.farm_recipe_rows();
     assert!(!rows.is_empty());
     let last = rows.len() - 1;
-    // Rows 1-9 are the digits; the picker is far shorter than that.
-    assert!(last < 9);
-    app.handle_key(GameKey::Char(char::from(b'1' + last as u8)));
+    pick_row(&mut app, last);
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     assert_eq!(app.farm_recipe_row(), last);
@@ -146,7 +144,7 @@ fn a_brush_pick_turns_the_plot_tool_off() {
     app.handle_key(GameKey::Char('P'));
     assert!(app.excavate_plot);
     app.handle_key(GameKey::Char('F'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Excavate);
     assert!(!app.excavate_plot);
 }

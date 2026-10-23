@@ -16,7 +16,7 @@ fn the_programs_page_opens_the_develop_picker_and_esc_backs_all_the_way_out() {
     open_via_menu(&mut app, 'p', "Develop a program");
     assert_eq!(app.mode, Mode::Develop);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::DevelopProgram);
     assert!(app.pending_develop_target.is_some());
 
@@ -62,7 +62,7 @@ fn the_develop_row_is_hidden_with_no_programs_to_develop() {
 fn opening_a_ring_from_the_screen_spends_the_rings_and_holds_the_page() {
     let mut app = app_ready_to_develop(81);
     open_via_menu(&mut app, 'p', "Develop a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     let target = app.pending_develop_target.unwrap();
 
     app.handle_key(GameKey::Char('r'));
@@ -83,7 +83,7 @@ fn opening_a_ring_from_the_screen_spends_the_rings_and_holds_the_page() {
 fn a_refused_ring_lands_in_the_status_line_and_the_page_holds() {
     let mut app = app_owning_a_program_and_an_extractor_with_cargo(82, &[], &[]);
     open_via_menu(&mut app, 'p', "Develop a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     app.handle_key(GameKey::Char('r'));
 
@@ -99,7 +99,7 @@ fn a_refused_ring_lands_in_the_status_line_and_the_page_holds() {
 fn app_ready_to_spend(seed: u32) -> App {
     let mut app = app_owning_a_developed_program(seed, TALENT_START_LEVEL + 2, 1);
     open_via_menu(&mut app, 'p', "Develop a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app
 }
 
@@ -121,7 +121,7 @@ fn picking_a_takeable_node_buys_it() {
     let offered = takeable(&mut app, target);
     assert_eq!(offered.len(), 2, "tier 1 offers a decision");
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let game = app.game.as_mut().unwrap();
     assert_eq!(
@@ -140,14 +140,14 @@ fn picking_a_takeable_node_buys_it() {
 fn picking_a_node_with_no_points_lands_in_the_status_line_and_holds_the_page() {
     let mut app = app_owning_a_developed_program(84, TALENT_START_LEVEL, 1);
     open_via_menu(&mut app, 'p', "Develop a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     let target = app.pending_develop_target.unwrap();
     assert!(
         takeable(&mut app, target).is_empty(),
         "test premise: a capped program has earned nothing to spend"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::DevelopProgram, "the page holds");
     assert!(
@@ -170,7 +170,7 @@ fn the_ring_and_the_ladder_are_reachable_from_the_same_page() {
     assert_eq!(app.mode, Mode::DevelopProgram);
     assert_eq!(app.game.as_mut().unwrap().owned_pets()[0].ring, 2);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::DevelopProgram);
     assert_eq!(app.game.as_mut().unwrap().owned_pets()[0].talents, 1);
     assert!(

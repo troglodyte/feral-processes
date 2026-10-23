@@ -435,18 +435,18 @@ pub(super) fn wears_drawing(
 /// One row of the image picker (`Mode::BattleEmulate`/
 /// `Mode::TacticalEmulate`, todo #100 Task 6), shared so the group model's
 /// `draw_battle_emulate_menu` and the battle map's `draw_tactical_emulate`
-/// cannot drift on it — `menu_shortcut(i)`, not a bare `i + 1`, since
-/// `App::selected_index` only takes digits `1`-`9` for rows `0`-`8` and
-/// hands the alphabet to letters past that (`DIGIT_ROWS`), and
-/// `Game::emulation_options()` is unbounded.
-pub(super) fn emulation_row_label(i: usize, option: &EmulationOption) -> String {
-    format!(
-        "[{}] {} — ATK {} MIT {}",
-        menu_shortcut(i),
-        option.name,
-        option.atk,
-        option.mitigation
-    )
+/// cannot drift on it. `labelled` is the battle screen's `menu_shortcut(i)`
+/// prefix; the tactical board picks by highlight alone and prints none.
+pub(super) fn emulation_row_label(i: usize, option: &EmulationOption, labelled: bool) -> String {
+    let body = format!(
+        "{} — ATK {} MIT {}",
+        option.name, option.atk, option.mitigation
+    );
+    if labelled {
+        format!("[{}] {body}", menu_shortcut(i))
+    } else {
+        body
+    }
 }
 
 /// Pulls `color` toward its own grey, for drawing something that's present
@@ -764,9 +764,14 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 .and_then(|g| g.compass_bearing())
                 .map(|r| r.target);
             match view {
-                Some(view) => {
-                    world_map::draw_world_map(&view, app.menu_selected, pointing, painter, &m)
-                }
+                Some(view) => world_map::draw_world_map(
+                    &view,
+                    app.menu_selected,
+                    app.world_map_list_focused,
+                    pointing,
+                    painter,
+                    &m,
+                ),
                 None => {
                     draw_playing_base(app, fx, None, painter, &m, reveal);
                     draw_mode_overlay(app, None, painter, &m);
@@ -1258,10 +1263,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     match app.mode {
         Mode::DevConsole => draw_dev_console(&dev_row_labels, selected, refusal, painter, m),
         Mode::DevItemPicker => {
-            dev_pickers::draw_dev_item_picker(&dev_item_rows, refusal, painter, m)
+            dev_pickers::draw_dev_item_picker(&dev_item_rows, selected, refusal, painter, m)
         }
         Mode::DevZonePicker => {
-            dev_pickers::draw_dev_zone_picker(&dev_zone_rows, refusal, painter, m)
+            dev_pickers::draw_dev_zone_picker(&dev_zone_rows, selected, refusal, painter, m)
         }
         Mode::Build => draw_build_menu(game, build_category, selected, refusal, painter, m),
         Mode::BuildDirection => {
@@ -1800,6 +1805,80 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
 mod tests {
     use super::*;
 
+    #[test]
+    fn emulation_rows_are_labelled_on_the_battle_screen_only() {
+        let option = EmulationOption {
+            species: "x".into(),
+            name: "Kestrel".to_string(),
+            glyph: 'k',
+            atk: 8,
+            mitigation: 5,
+        };
+        assert_eq!(
+            emulation_row_label(0, &option, true),
+            "[1] Kestrel — ATK 8 MIT 5"
+        );
+        assert_eq!(
+            emulation_row_label(0, &option, false),
+            "Kestrel — ATK 8 MIT 5"
+        );
+    }
+
+    /// Whether `src` calls `emulation_row_label` with `labelled` = `true`:
+    /// the text between the call's parentheses ends in a literal `true`.
+    fn labelled_emulation_call(src: &str) -> bool {
+        src.match_indices("emulation_row_label(").any(|(at, m)| {
+            let args = &src[at + m.len()..];
+            let mut depth = 1;
+            let end = args
+                .find(|c| {
+                    match c {
+                        '(' => depth += 1,
+                        ')' => depth -= 1,
+                        _ => {}
+                    }
+                    depth == 0
+                })
+                .unwrap_or(args.len());
+            args[..end]
+                .trim_end()
+                .trim_end_matches(',')
+                .ends_with("true")
+        })
+    }
+
+    /// Only the classic battle screen labels its rows. Skipped by full path
+    /// (`render/battle.rs` and `render/mod.rs`, which defines the helper), so
+    /// a `battle.rs` or `mod.rs` that grows in a subdirectory is still
+    /// checked.
+    #[test]
+    fn no_list_renderer_outside_battle_names_menu_shortcut() {
+        fn walk(dir: &std::path::Path, skip: &[std::path::PathBuf], hits: &mut Vec<String>) {
+            for entry in std::fs::read_dir(dir).expect("render dir reads") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    walk(&path, skip, hits);
+                    continue;
+                }
+                if skip.contains(&path) || path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&path).expect("source reads");
+                if src.contains("menu_shortcut(")
+                    || src.contains("map(menu_shortcut)")
+                    || labelled_emulation_call(&src)
+                {
+                    hits.push(path.display().to_string());
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/render");
+        let skip = [root.join("battle.rs"), root.join("mod.rs")];
+        let mut hits = Vec::new();
+        walk(&root, &skip, &mut hits);
+        assert!(hits.is_empty(), "labelled rows outside battle: {hits:?}");
+    }
+
     /// Every `Mode`, as the status-line census below drives them.
     const ALL_MODES: [Mode; 160] = [
         Mode::Dossier,
@@ -2003,7 +2082,7 @@ mod tests {
                     app.handle_key(feral_processes_app_core::GameKey::Enter)
                 }
                 feral_processes_app_core::CreationStep::Class => {
-                    app.handle_key(feral_processes_app_core::GameKey::Char('1'))
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
                 }
                 feral_processes_app_core::CreationStep::Kit
                 | feral_processes_app_core::CreationStep::Points => {
@@ -2151,7 +2230,7 @@ mod tests {
         let mut app = census_app();
         let mut fx = Fx::new();
         app.mode = Mode::Research;
-        // The list's popup: the graph draws no numbered rows.
+        // The list's popup: the graph draws no highlighted rows.
         app.research_graph_view = false;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
         let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
@@ -2162,8 +2241,8 @@ mod tests {
         let refusal = at(CENSUS_REFUSAL).expect("the popup drew the refusal");
         let first_row = drawn
             .iter()
-            .position(|t| t.starts_with("  ["))
-            .expect("the popup drew a numbered option");
+            .position(|t| t.starts_with("> "))
+            .expect("the popup drew a highlighted option");
 
         assert!(title < refusal, "the refusal was drawn above the title");
         assert!(

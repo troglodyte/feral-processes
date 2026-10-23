@@ -49,7 +49,7 @@ fn open_compile_of(app: &mut App, item: &str) {
         .iter()
         .position(|r| r.result == ItemId::from(item))
         .unwrap_or_else(|| panic!("{item} should be compilable in this fixture"));
-    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    pick_row(app, idx);
     assert_eq!(app.mode, Mode::CraftQuantity, "a recipe should be pending");
 }
 
@@ -57,7 +57,7 @@ fn open_compile_of(app: &mut App, item: &str) {
 /// quantity page with something pending.
 fn open_quantity_page(app: &mut App) {
     open_command(app, "Compile an item");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(app, 0);
     assert_eq!(app.mode, Mode::CraftQuantity, "a recipe should be pending");
 }
 

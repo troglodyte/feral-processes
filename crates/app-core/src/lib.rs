@@ -18,9 +18,7 @@ pub use app::building::{
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
-pub use app::dev_console::{
-    DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DEV_PICKER_PAGE, DevAction, DevConsoleRow,
-};
+pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::group_menu::GroupMenuRow;
@@ -148,8 +146,8 @@ pub const WORLD_MAP_VIEW_RADIUS: i32 = 12;
 /// visible viewport size.
 pub const MENU_SCAN_RADIUS: i32 = 40;
 
-/// How many menu rows the digits `1`-`9` can address before `menu_shortcut`
-/// switches to letters.
+/// How many classic-battle rows the digits `1`-`9` can address before
+/// `menu_shortcut` switches to letters.
 const DIGIT_ROWS: usize = 9;
 
 /// How far PageUp/PageDown move a menu's highlight. A fixed step rather
@@ -158,17 +156,14 @@ const DIGIT_ROWS: usize = 9;
 /// never skips a row the player didn't see go past.
 pub const MENU_PAGE_ROWS: usize = 10;
 
-/// The key that picks menu row `index` (0-based), and the label a renderer
-/// must print for it: `1`-`9` for the first nine rows, then `a`, `b`, `c`
-/// and so on. Several menus run past nine rows — a dozen research nodes,
-/// ten deployable structures, an inventory of any size — and a single digit
-/// can't address those, so they'd otherwise be reachable only by Up/Down +
-/// Enter. Menus that bind letters to their own actions all fit inside nine
-/// rows, so the two never overlap.
+/// The key that picks classic-battle row `index` (0-based), and the label
+/// the battle screen prints for it: `1`-`9` for the first nine rows, then
+/// `a`, `b`, `c` and so on. Every other list is highlight + Enter and prints
+/// no label.
 ///
 /// Rows past the 35th run out of letters and return `'-'`, which no key
-/// produces — they're reachable by Up/Down + Enter only, and the label says
-/// so rather than advertising a key that does nothing.
+/// produces — they're reachable by Up/Down + Enter only, and the label
+/// shows `-` rather than advertising a key that does nothing.
 pub fn menu_shortcut(index: usize) -> char {
     if index < DIGIT_ROWS {
         return char::from_digit(index as u32 + 1, 10).expect("a row under 9 is always a digit");
@@ -180,7 +175,7 @@ pub fn menu_shortcut(index: usize) -> char {
 }
 
 /// The actions offered for `item` on the `Mode::InventoryItemAction` page,
-/// in display order, as (shortcut key, label) pairs. Both renderers draw
+/// in display order, as (key, label) pairs. Both renderers draw
 /// from this and `App::handle_inventory_item_action_key` dispatches from
 /// it, so the rows shown and the keys accepted can't drift apart.
 ///
@@ -409,9 +404,8 @@ pub struct HelpIndexRow {
     pub title: String,
 }
 
-/// One further-reading row on a page, followed by typing its `shortcut`.
+/// One further-reading row on a page, followed from the links' focus.
 pub struct HelpLinkRow {
-    pub shortcut: char,
     pub label: String,
 }
 
@@ -1321,7 +1315,7 @@ pub enum CreationStep {
     ///
     /// **Icon and colour are two steps, not one screen with two lists.**
     /// They shipped as one `Look` step, whose eleven rows were five icons
-    /// and six swatches under one cursor and one shortcut sequence — the
+    /// and six swatches under one cursor — the
     /// only screen in the wizard where a row's *kind* changed partway down
     /// the list, so what Enter did depended on how far the cursor had
     /// walked. One list per step is the idiom every other step already
@@ -1561,10 +1555,11 @@ pub enum Mode {
     /// once — the shelf and the pack are two ends of one row, not two
     /// screens with a mirrored key table.
     ///
-    /// **This screen cannot use `App::selected_index`.** There a digit picks
-    /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
-    /// through `App::scroll`, so it still drives `menu_selected` and the
-    /// popup's window still follows it — the page scrolls for free.
+    /// **This screen cannot use `App::selected_index`**, because Enter is
+    /// not a pick here and a digit is a quantity. The cursor moves on
+    /// Up/Down alone, through `App::scroll`, so it still drives
+    /// `menu_selected` and the popup's window still follows it — the page
+    /// scrolls for free.
     /// A fight on a battle map — the second combat model, opt-in through
     /// `Mode::Options` and off by default.
     ///
@@ -2184,9 +2179,7 @@ pub enum Mode {
     /// Opening it calls `Game::mark_alerts_read`, so the status bar's badge
     /// clears the instant the screen is seen rather than waiting on a
     /// dismiss. `x`/`d` dismiss the highlighted row, matched **before**
-    /// `App::selected_index` — lowercase letters are row selectors on every
-    /// other list, and an alert's own text must not double as a shortcut for
-    /// it.
+    /// `App::selected_index`, so the dismiss keys never reach the list.
     Alerts,
     /// The message log in full, scrolled with Up/Down — the map's pane shows
     /// only its last few lines. Read-only, and bounded by what the engine
@@ -2206,10 +2199,11 @@ pub enum Mode {
     /// screen with rows.
     Compass,
     /// The surface at chunk scale: the fog, the places in it and the routes
-    /// between them, from `App::world_map`. Arrows pan, a lowercase letter
-    /// or digit picks a row of the side list (`App::world_map_marks`),
-    /// uppercase `C` points the compass at it and `P` re-centres on the
-    /// party. Esc closes.
+    /// between them, from `App::world_map`. Arrows pan until Tab moves them
+    /// to the side list (`App::world_map_marks`), where Up/Down pick a row
+    /// and Tab hands them back; uppercase `C` points the compass at the
+    /// picked row under either focus and `P` re-centres on the party. Esc
+    /// closes.
     ///
     /// Opened by `g` on the surface; underground the same key opens
     /// `FrameMap`. The pan centre is `App::world_map_center`, because
@@ -2319,7 +2313,7 @@ pub enum Mode {
     /// the *selected* row visible — so a menu-idiom page with its further
     /// reading at the bottom would open scrolled to the end of the text, and
     /// one with the links at the top would put long prose out of reach.
-    /// Links are followed by typing their label's shortcut instead.
+    /// Tab moves focus to the further-reading links (`help_links_focused`).
     HelpPage,
     /// A notification, taking the whole window until Esc dismisses it.
     ///
@@ -3402,10 +3396,10 @@ pub struct App {
     /// Not saved, `walk`'s own reason, and cleared everywhere `walk` is
     /// cleared for the same one.
     drag_ticks_owed: u32,
-    /// Which row is highlighted on the current numbered/lettered menu, for
-    /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
-    /// of, not instead of, typing a row's own number/letter directly.
-    /// Reset to 0 every time a menu mode is entered.
+    /// Which row is highlighted on the current menu, for Up/Down-plus-Enter
+    /// navigation (see `App::selected_index`); the classic battle screen
+    /// also takes a typed row label (`App::battle_row`). Reset to 0 every
+    /// time a menu mode is entered.
     pub menu_selected: usize,
     /// The column half of `Mode::BaseStaff`'s cursor — `menu_selected` is
     /// the row half, shared with every other menu. A second field rather
@@ -3416,6 +3410,15 @@ pub struct App {
     /// The chunk at the middle of `Mode::WorldMap`'s grid. Set to the
     /// party's chunk on opening and moved by the arrows; not saved.
     pub world_map_center: (i32, i32),
+    /// Whether `Mode::WorldMap`'s arrows drive the place list rather than
+    /// pan the grid. Tab flips it; `open_world_map` clears it. Not saved.
+    pub world_map_list_focused: bool,
+    /// Whether `Mode::HelpPage`'s Up/Down move `help_link_selected` through
+    /// the further-reading links rather than scroll the prose. Tab flips it;
+    /// every page change clears it. Not saved.
+    pub help_links_focused: bool,
+    /// The highlighted further-reading link while they have focus.
+    pub help_link_selected: usize,
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
     /// census stay as they are. Opens on the graph.

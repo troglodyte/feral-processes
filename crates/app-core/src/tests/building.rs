@@ -456,7 +456,7 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
         .iter()
         .position(|r| r.kind == StaffAction::StandingWork)
         .expect("an Extractor can be kept running");
-    app.handle_key(GameKey::Char(menu_shortcut(toggle)));
+    pick_row(&mut app, toggle);
 
     assert_eq!(app.mode, Mode::StructureAssign, "still on the toggles");
     assert!(
@@ -890,10 +890,8 @@ fn an_away_row_is_editable() {
     assert!(!app.base_staff_table().rows[0].cells[0]);
 }
 
-/// Lowercase letters are row selectors everywhere else in the app, but this
-/// screen's only keys are arrows, `Space`, `<`/`>` and `A` — a lowercase `a`
-/// must not fall through to a shortcut that toggles the column its upper-case
-/// twin does.
+/// This screen's only keys are arrows, `Space`, `<`/`>` and `A` — a lowercase
+/// `a` must not toggle the column its upper-case twin does.
 #[test]
 fn lowercase_a_does_nothing() {
     let mut app = app_owning_distant_programs(765, 1);
@@ -1001,9 +999,9 @@ fn open_order_quantity_page(app: &mut App) {
     assert_eq!(app.mode, Mode::WorkOrders);
     // The trailing row is the one that queues another order.
     let last = app.work_order_rows().len() - 1;
-    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    pick_row(app, last);
     assert_eq!(app.mode, Mode::WorkOrderPick);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(app, 0);
     assert_eq!(app.mode, Mode::WorkOrderQuantity);
 }
 
@@ -1047,7 +1045,7 @@ fn the_standing_flag_does_not_outlive_its_order() {
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::WorkOrderPick, "Esc backs into the picker");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::WorkOrderQuantity);
     assert!(!app.standing_order, "and a fresh order opens as a batch");
@@ -1123,24 +1121,21 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// fixture has already founded one — picking it again would hit the
 /// "already deployed" refusal on the old direct path rather than the
 /// picker this task adds. Row 1, `extractor`, is the first structure that
-/// actually costs a program, and `selected_index` labels rows `1`-`9`
-/// before it starts spending letters (`DIGIT_ROWS`), so row 1 is key `'2'`,
-/// not `'b'`.
+/// actually costs a program.
 fn deploy_second_structure(app: &mut App) {
     app.mode = Mode::Build;
     // Row 2 is the first category after the Home; its row 1 is the first
     // structure past the Home in `StructureDb::all` order.
-    app.handle_key(GameKey::Char('2'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(app, 1);
+    pick_row(app, 0);
     app.handle_key(GameKey::Right);
 }
 
 /// Opens the build menu and picks the row for `id`, leaving the app on
 /// `Mode::BuildDirection`.
 ///
-/// Down-and-Enter rather than a row shortcut, because a row's shortcut *is*
-/// its position and every structure dropped into `assets/structures/`
-/// renumbers whatever sorts after it.
+/// Found by id rather than by a fixed row index, because every structure
+/// dropped into `assets/structures/` renumbers whatever sorts after it.
 fn choose_build_row(app: &mut App, id: &str) {
     open_command(app, "Deploy a structure");
     let menu = app.build_menu().expect("a running game");
@@ -1232,7 +1227,7 @@ fn choosing_a_direction_asks_which_program_to_spend() {
 fn picking_a_program_files_the_order() {
     let mut app = app_in_base_with_programs(871, 2);
     deploy_second_structure(&mut app);
-    app.handle_key(GameKey::Char('1')); // first program
+    pick_row(&mut app, 0); // first program
     assert_eq!(app.mode, Mode::Playing);
     assert!(
         app.game
@@ -1313,7 +1308,7 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
     let mut app = app_in_base_with_programs(874, 3);
     deploy_second_structure(&mut app);
     assert_eq!(app.mode, Mode::BuildProgram);
-    app.handle_key(GameKey::Char('1')); // files the order, spends one
+    pick_row(&mut app, 0); // files the order, spends one
     assert_eq!(app.mode, Mode::Playing);
     assert!(
         app.game
@@ -1330,7 +1325,7 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
         Mode::BuildProgram,
         "precondition: the picker is up, so the refusal below is one the confirm raised"
     );
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -1541,7 +1536,7 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
     tame_program_at_zone(&mut app, 2);
 
     open_upgrade_picker(&mut app);
-    app.handle_key(GameKey::Char('1')); // files the upgrade order, spends one
+    pick_row(&mut app, 0); // files the upgrade order, spends one
     // The filed order's own tick pops a notification on this fixture, which
     // would otherwise take the screen and leave every assertion below
     // reading `Mode::Notification` for a reason this test never named.
@@ -1555,7 +1550,7 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
         "precondition: the picker is up"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -1620,13 +1615,13 @@ fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
         "precondition: the picker is up"
     );
 
-    app.handle_key(GameKey::Char('2')); // a row past the true candidate count
+    app.handle_key(GameKey::Down);
     assert_eq!(
-        app.mode,
-        Mode::BuildProgram,
+        app.menu_selected, 0,
         "only one program is deep enough for a Mk2 — a second row must not exist, \
-         so a second key press has nothing to select and confirms nothing"
+         so Down wraps back onto the one row"
     );
+    assert_eq!(app.mode, Mode::BuildProgram);
 }
 
 /// `pending_build_kind` answers with the machine standing there, not with a
@@ -1652,7 +1647,7 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
     );
 }
 
-/// The handler indexes the *sorted* list gui draws, so the shortcut spends
+/// The handler indexes the *sorted* list gui draws, so the pick spends
 /// the program on the row the player actually read.
 ///
 /// The roster is staged so `owned_pets`' order and `build_candidates`' order
@@ -1699,7 +1694,7 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
     );
 
     open_upgrade_picker(&mut app);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     let survivors: Vec<_> = app
         .game
@@ -1725,7 +1720,7 @@ fn picking_a_program_in_the_study_screen_pins_it() {
 
     open_command(&mut app, "Study a program");
     assert_eq!(app.mode, Mode::PinSubject);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(
@@ -1765,7 +1760,7 @@ fn the_study_screen_unpins_the_current_subject_through_its_one_row() {
 
     open_command(&mut app, "Study a program");
     assert_eq!(app.mode, Mode::PinSubject);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(
@@ -1835,7 +1830,7 @@ fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
         .iter()
         .position(|r| r.kind == StaffAction::StandingWork)
         .expect("a line can be kept running");
-    app.handle_key(GameKey::Char(menu_shortcut(toggle)));
+    pick_row(&mut app, toggle);
 
     let game = app.game.as_mut().unwrap();
     let members = game.line_reports().remove(0).members;
@@ -1895,7 +1890,7 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
             BuildRow::Structure(_) => None,
         })
         .expect("a fresh run has a category");
-    app.handle_key(GameKey::Char(menu_shortcut(row)));
+    pick_row(&mut app, row);
     assert_eq!(app.mode, Mode::Build);
     assert_eq!(app.build_category, Some(category));
     assert_eq!(app.menu_selected, 0, "the submenu opens at its top");
@@ -1926,8 +1921,8 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
         app.build_category, None,
         "the menu reopens on its categories"
     );
-    app.handle_key(GameKey::Char(menu_shortcut(row)));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, row);
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::BuildDirection);
     let BuildRow::Structure(i) = inner.rows[0] else {
         unreachable!()
@@ -1955,7 +1950,7 @@ fn picking_a_record_in_the_hold_screen_jails_it_and_spends_a_protocol() {
 
     open_command(&mut app, "Hold a program");
     assert_eq!(app.mode, Mode::PinPrisoner);
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert_eq!(app.status_line, None, "a pin is not a refusal");
@@ -1981,7 +1976,7 @@ fn the_hold_screen_refuses_with_the_blockers_text_and_spends_nothing() {
     let pets = app.game.as_ref().unwrap().pet_count();
 
     open_command(&mut app, "Hold a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(
         app.status_line.as_deref(),

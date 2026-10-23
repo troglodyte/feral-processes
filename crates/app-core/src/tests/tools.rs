@@ -83,12 +83,11 @@ fn the_tools_page_has_a_row_in_a_fresh_game() {
     assert!(!app.game.as_ref().unwrap().tool_rows().is_empty());
 }
 
-/// An out-of-range digit does nothing — `selected_index`'s own floor,
-/// re-asserted here because the row count is read fresh from the engine on
-/// every keypress rather than cached (`handle_downed_programs_key`'s own
-/// reason).
+/// Down on a one-row list wraps back onto it, re-asserted here because the
+/// row count is read fresh from the engine on every keypress rather than
+/// cached (`handle_downed_programs_key`'s own reason).
 #[test]
-fn an_out_of_range_row_is_ignored() {
+fn down_past_the_last_row_wraps_onto_it() {
     let mut app = test_app(9402);
     let len = app.game.as_ref().unwrap().tool_rows().len();
     assert_eq!(
@@ -97,7 +96,7 @@ fn an_out_of_range_row_is_ignored() {
     );
     open_hub_screen(&mut app, Mode::Tools);
 
-    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Down);
 
     assert_eq!(app.mode, Mode::Tools, "the screen holds");
     assert_eq!(

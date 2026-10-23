@@ -247,7 +247,7 @@ fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     let mut app = test_app(4010);
     stand_in_base(&mut app);
     open_command(&mut app, "Deploy a structure");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::BuildDirection);
     app.handle_key(GameKey::Char('l'));
     assert_eq!(app.mode, Mode::Playing, "placing ends on the map");

@@ -83,8 +83,8 @@ fn deny_all_and_allow_all_write_every_row() {
     assert!(screen.view.rows.iter().all(|r| r.allowed));
 }
 
-/// Lowercase picks a row everywhere else in the game, so the two screen
-/// actions must be deaf to it.
+/// The two screen actions are uppercase; their lowercase twins must be
+/// deaf.
 #[test]
 fn the_lowercase_keys_do_nothing() {
     let mut app = filter_screen(3303, 1);

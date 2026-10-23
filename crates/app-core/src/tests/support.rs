@@ -474,12 +474,10 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
 }
 
 /// An app on `Mode::Inventory` with at least ten distinct cargo rows, so
-/// the fourth letter row (`DIGIT_ROWS` + 3 — lowercase `d`) resolves to a
-/// real row rather than `selected_index` falling out on an out-of-range
-/// index regardless of what key was pressed. A test asserting only that
-/// lowercase `d` leaves the mode unchanged on a short inventory would pass
-/// against several wrong implementations — this fixture is what makes it
-/// actually exercise the row-selector branch.
+/// a stray lowercase `d` has a real row under the highlight to act on
+/// rather than falling out on an empty list regardless of what key was
+/// pressed. A test asserting only that `d` leaves the mode unchanged on a
+/// short inventory would pass against several wrong implementations.
 pub(crate) fn app_on_inventory_with_many_items(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
@@ -1047,6 +1045,15 @@ pub(crate) fn give_player_items(app: &mut App, items: &[(&str, u32)]) {
 /// here needs the program's `Entity`, since the picker is walked with
 /// letters the way a player would.
 pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -> (i32, i32) {
+    place_outpost_with_staff_programs_east_of_player(app, 1)
+}
+
+/// `n` unposted staff programs and an outpost east of the player — more
+/// than one so a picker's highlight can differ from its first row.
+pub(crate) fn place_outpost_with_staff_programs_east_of_player(
+    app: &mut App,
+    n: i32,
+) -> (i32, i32) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("outpost_staff", 0);
     let game = app.game.as_mut().unwrap();
@@ -1075,80 +1082,83 @@ pub(crate) fn place_outpost_with_a_staff_program_east_of_player(app: &mut App) -
         stale_ticks: 0,
         cycle_progress: 0,
     });
-    data.creatures.push(CreatureSave {
-        sortie_index: None,
-        boss: false,
-        species,
-        position: (px + 50, py),
-        hp: 10,
-        max_hp: 10,
-        atk: 3,
-        mitigation: 2,
-        tamed: true,
-        power: 100.0,
-        level: 1,
-        xp: 0,
-        xp_to_next: 10,
-        cronjob: None,
-        party_slot: None,
-        wielded: false,
-        zone: 1,
-        custom_name: None,
-        hp_roll: 1.0,
-        atk_roll: 1.0,
-        def_roll: 1.0,
-        growth_roll: 1.0,
-        assembly_roll: 1.0,
-        extraction_roll: 1.0,
-        fusions: 0,
-        refactors: 0,
-        purchased_tiers: 0,
-        ring: 0,
-        talents: Vec::new(),
-        bought_stats: Default::default(),
-        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
-        field_buffs: Vec::new(),
-        nest_position: None,
-        patrol_position: None,
-        study_station: None,
-        outpost: None,
-        siphon: None,
-        jailed: None,
-        pursuing: false,
-        carrying: None,
-        carrying_program: None,
-        tidying: None,
-        clearing: false,
-        rarity: Default::default(),
-        nemesis_grudges: 0,
-        nemesis_muster_ticks: 0,
-        nemesis_home: None,
-        nemesis_band: None,
-        equipment: Vec::new(),
-        program_id: 1,
-        disposition: None,
-        disgruntled: None,
-        disgruntled_stranded: false,
-        memories: Vec::new(),
-        conversations: Vec::new(),
-        needs: Default::default(),
-        attributes: Default::default(),
-        off_shift: None,
-        staff: false,
-        downed: false,
-        siege_cell: None,
-        siege_order: None,
-        besieger: false,
-        stolen_from: None,
-        off_duties: Vec::new(),
-        staff_rank: None,
-        drop_trooper: false,
-        base: tamed_base(10, 3, 2),
-        stat_points: 0,
-        hold_points: false,
-        generation: 0,
-        breed_ready_at: 0,
-    });
+    for offset in 0..n {
+        data.creatures.push(CreatureSave {
+            sortie_index: None,
+            boss: false,
+            species: species.clone(),
+            position: (px + 50 + offset, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            mitigation: 2,
+            tamed: true,
+            power: 100.0,
+            level: 1,
+            xp: 0,
+            xp_to_next: 10,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            ring: 0,
+            talents: Vec::new(),
+            bought_stats: Default::default(),
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
+            nest_position: None,
+            patrol_position: None,
+            study_station: None,
+            outpost: None,
+            siphon: None,
+            jailed: None,
+            pursuing: false,
+            carrying: None,
+            carrying_program: None,
+            tidying: None,
+            clearing: false,
+            rarity: Default::default(),
+            nemesis_grudges: 0,
+            nemesis_muster_ticks: 0,
+            nemesis_home: None,
+            nemesis_band: None,
+            equipment: Vec::new(),
+            program_id: 1 + offset as u32,
+            disposition: None,
+            disgruntled: None,
+            disgruntled_stranded: false,
+            memories: Vec::new(),
+            conversations: Vec::new(),
+            needs: Default::default(),
+            attributes: Default::default(),
+            off_shift: None,
+            staff: false,
+            downed: false,
+            siege_cell: None,
+            siege_order: None,
+            besieger: false,
+            stolen_from: None,
+            off_duties: Vec::new(),
+            staff_rank: None,
+            drop_trooper: false,
+            base: tamed_base(10, 3, 2),
+            stat_points: 0,
+            hold_points: false,
+            generation: 0,
+            breed_ready_at: 0,
+        });
+    }
+
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -2798,11 +2808,34 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
         offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
         if let Some(idx) = rows.iter().position(|r| r.label == label) {
             open_hub_screen(app, page);
-            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            pick_row(app, idx);
             return;
         }
     }
     panic!("{label:?} is not offered right now; pages: {offered:?}");
+}
+
+/// Moves the highlight to `row` the way a player does, with Up or Down from
+/// wherever the screen opened it. Wrapping makes any row reachable, and the
+/// cap catches a `row` the list does not have rather than looping.
+pub(crate) fn highlight_row(app: &mut App, row: usize) {
+    for _ in 0..row + 64 {
+        match app.menu_selected.cmp(&row) {
+            std::cmp::Ordering::Equal => return,
+            std::cmp::Ordering::Less => app.handle_key(GameKey::Down),
+            std::cmp::Ordering::Greater => app.handle_key(GameKey::Up),
+        }
+    }
+    panic!(
+        "row {row} is unreachable; highlight is on {}",
+        app.menu_selected
+    );
+}
+
+/// Highlights `row` and presses Enter.
+pub(crate) fn pick_row(app: &mut App, row: usize) {
+    highlight_row(app, row);
+    app.handle_key(GameKey::Enter);
 }
 
 /// The four command pages, in rail order.
@@ -2832,7 +2865,7 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
         offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
         if let Some(idx) = rows.iter().position(|r| r.label == label) {
             open_hub_screen(app, page);
-            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            pick_row(app, idx);
             return;
         }
     }

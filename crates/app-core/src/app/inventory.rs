@@ -41,9 +41,9 @@ impl App {
         );
     }
 
-    /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and open
-    /// `Mode::EquipSwap` for that slot; unequipped inventory items start at
-    /// 4 and open `Mode::InventoryItemAction` for the selected item.
+    /// The first three rows are the equipped slots
+    /// (Weapon/Armor/Module) and open `Mode::EquipSwap` for that slot;
+    /// unequipped inventory items follow and open `Mode::InventoryItemAction` for the selected item.
     pub(crate) fn handle_inventory_key(&mut self, key: GameKey) {
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
@@ -64,9 +64,7 @@ impl App {
         }
 
         // Fuses every matching pair in cargo for one turn, rather than the
-        // action page's `[U]` per stack. Uppercase for the reason `S` is:
-        // `selected_index` reserves shifted letters for screen actions, so
-        // this cannot also pick a row.
+        // action page's `[U]` per stack.
         if key == GameKey::Char('U') {
             if let Some(game) = &mut self.game {
                 match game.fuse_all_items() {
@@ -81,9 +79,7 @@ impl App {
         }
 
         // Reads the highlighted row rather than picking one, so it works on
-        // a worn slot and a cargo stack alike. Uppercase for `S`'s reason:
-        // `selected_index` reserves shifted letters for screen actions, so
-        // this cannot also pick a row.
+        // a worn slot and a cargo stack alike.
         if key == GameKey::Char('I') {
             match self.menu_selected {
                 idx @ 0..=2 => self.inspect_worn(None, EquipmentSlot::ALL[idx], Mode::Inventory),
@@ -96,11 +92,8 @@ impl App {
             return;
         }
 
-        // The store, not the pack: `D`, not `d`, for `S`'s reason —
-        // `selected_index` reserves shifted letters for screen actions, so
-        // a lowercase binding here would both open this screen and pick a
-        // row on the very keypress that opened it. The same key on the map
-        // lands on the same page, in it, so Esc means the same from both.
+        // The store, not the pack. The same key on the map lands on the
+        // same page, in it, so Esc means the same from both.
         // The cursor is already in the page here, so it needs no moving.
         if key == GameKey::Char('D') {
             self.mode = Mode::DownedPrograms;

@@ -325,8 +325,7 @@ impl App {
 
     /// The keys that move the sheet along the rail, shared by the manifest
     /// and the dossier so the two cannot disagree about them. ↑/↓ and ←/→
-    /// page; a digit or lowercase letter jumps to that row of
-    /// `manifest_subjects`.
+    /// page.
     ///
     /// The arrows are matched here and never reach `selected_index`, which
     /// would also move `menu_selected` — the roster's parked row.
@@ -334,12 +333,6 @@ impl App {
         match key {
             GameKey::Left | GameKey::Up => self.page_manifest(-1),
             GameKey::Right | GameKey::Down => self.page_manifest(1),
-            GameKey::Char(_) => {
-                let len = self.manifest_subjects().len();
-                if let Some(idx) = self.selected_index(key, len) {
-                    self.jump_manifest(idx);
-                }
-            }
             _ => {}
         }
     }
@@ -353,18 +346,6 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.show_manifest_subject(subjects[next]);
-    }
-
-    /// Puts the sheet on rail row `idx`. A wild program draws no rail, so a
-    /// row key on one does nothing.
-    pub(crate) fn jump_manifest(&mut self, idx: usize) {
-        let subjects = self.manifest_subjects();
-        if self.manifest_rail_position(&subjects).is_none() {
-            return;
-        }
-        if let Some(&subject) = subjects.get(idx) {
-            self.show_manifest_subject(subject);
-        }
     }
 
     fn manifest_rail_position(&self, subjects: &[Entity]) -> Option<usize> {

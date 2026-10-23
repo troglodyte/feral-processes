@@ -1,5 +1,6 @@
 //! Save listing, loading and deletion.
 
+use super::support::pick_row;
 use crate::*;
 
 use feral_processes_engine::save;
@@ -54,7 +55,7 @@ fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         app.mode == Mode::LoadGame,
         "'l' should open the load list once a save exists"
     );
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert!(
         app.mode == Mode::SaveAction,
         "picking a save should open the load/delete choice"
@@ -70,7 +71,7 @@ fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
     app.game = None;
     app.mode = Mode::MainMenu;
     app.handle_key(GameKey::Char('l'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('x'));
     assert!(
         app.list_saves().is_empty(),
@@ -137,7 +138,7 @@ fn a_flatlined_permadeath_run_cannot_be_reloaded_from_the_load_list() {
     app.handle_key(GameKey::Char(' '));
     assert_eq!(app.mode, Mode::MainMenu);
     app.handle_key(GameKey::Char('l'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Char('l'));
     assert_ne!(app.mode, Mode::Playing, "a dead run does not reopen");
     assert!(

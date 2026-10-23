@@ -167,8 +167,7 @@ fn p_opens_perks_and_esc_from_there_returns_to_playing() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// A lowercase `p` is a no-op — lowercase letters are row selectors on
-/// every other menu, and this page has no rows for one to select.
+/// A lowercase `p` is a no-op — the page takes the uppercase key.
 #[test]
 fn a_lowercase_p_does_nothing() {
     let mut app = app_about_to_level(9504);

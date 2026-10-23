@@ -55,7 +55,7 @@ fn picking_a_row_on_an_unset_machine_sets_it_without_asking() {
         .item
         .clone();
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::MachineRecipe);
     assert_eq!(recipe_of(&app), Some(first));
@@ -74,9 +74,8 @@ fn picking_a_row_on_a_set_machine_asks_first() {
         .iter()
         .position(|r| !r.current)
         .unwrap();
-    let key = char::from_digit(other as u32 + 1, 10).unwrap();
 
-    app.handle_key(GameKey::Char(key));
+    pick_row(&mut app, other);
 
     assert_eq!(app.mode, Mode::MachineRecipeConfirm);
     assert_eq!(recipe_of(&app), Some(ItemId::from("bytecode_block")));
@@ -107,9 +106,7 @@ fn declining_the_confirm_leaves_the_recipe() {
         .iter()
         .position(|r| !r.current)
         .unwrap();
-    app.handle_key(GameKey::Char(
-        char::from_digit(other as u32 + 1, 10).unwrap(),
-    ));
+    pick_row(&mut app, other);
     assert_eq!(app.mode, Mode::MachineRecipeConfirm);
 
     app.handle_key(GameKey::Char('n'));
@@ -163,7 +160,7 @@ fn the_screen_closes_when_the_machine_is_demolished() {
         .remove_structure(machine)
         .unwrap();
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.machine_recipe.is_none());

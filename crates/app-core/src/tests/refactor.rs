@@ -18,7 +18,7 @@ fn the_programs_page_opens_the_refactor_picker_and_esc_backs_all_the_way_out() {
     open_via_menu(&mut app, 'p', "Refactor a program");
     assert_eq!(app.mode, Mode::Refactor);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::RefactorItem);
 
     app.handle_key(GameKey::Esc);
@@ -44,7 +44,7 @@ fn the_programs_page_opens_the_refactor_picker_and_esc_backs_all_the_way_out() {
 fn spending_the_highlighted_upgrade_does_not_leave_the_highlight_on_another_one() {
     let mut app = app_ready_to_refactor(71);
     open_via_menu(&mut app, 'p', "Refactor a program");
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     // Row 2 of the id-sorted pair is `inline_cache`; `bounds_check` is row 1.
     app.handle_key(GameKey::Down);
@@ -86,8 +86,8 @@ fn spending_the_last_upgrade_leaves_the_flow_rather_than_the_page() {
     let mut app =
         app_owning_a_program_and_an_extractor_with_cargo(72, &[], &[("buffer_extension", 1)]);
     open_via_menu(&mut app, 'p', "Refactor a program");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
 
     assert_ne!(
         app.mode,
@@ -110,8 +110,8 @@ fn a_refused_refactor_reports_why_and_spends_nothing() {
     let mut app =
         app_owning_a_program_and_an_extractor_with_cargo(73, &[], &[("recompile_kernel", 1)]);
     open_via_menu(&mut app, 'p', "Refactor a program");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
 
     assert!(
         app.status_line.is_some(),

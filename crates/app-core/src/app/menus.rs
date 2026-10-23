@@ -111,9 +111,8 @@ impl App {
         }
     }
 
-    /// The manual's index — an ordinary numbered menu, so more than nine
-    /// topics is already solved by `menu_shortcut`. Esc closes back to
-    /// wherever `?` was pressed.
+    /// The manual's index — an ordinary menu. Esc closes back to wherever
+    /// `?` was pressed.
     ///
     /// `?` no longer closes on any key. The screen is navigable now, and a
     /// screen you walk through must not vanish under the keys you walk it
@@ -132,43 +131,66 @@ impl App {
             return;
         };
         self.help_stack.push(page.id.clone());
+        self.reset_help_page_cursor();
         self.mode = Mode::HelpPage;
     }
 
     /// One page — a document, not a menu. Up/Down scroll it and Enter does
-    /// nothing; a further-reading row is followed by typing its shortcut,
-    /// and Esc pops one level of the reading trail.
+    /// nothing until Tab moves focus to the further-reading links, where
+    /// Up/Down highlight a link and Enter follows it. Tab again returns to
+    /// scrolling, and Esc pops one level of the reading trail.
     pub(crate) fn handle_help_page_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.help_stack.pop();
             if self.help_stack.is_empty() {
                 self.mode = Mode::Help;
             }
-            // The scroll *is* `menu_selected` here, and moving between two
-            // pages is not a mode change, so nothing else would reset it.
-            self.menu_selected = 0;
+            self.reset_help_page_cursor();
             return;
         }
         let Some(view) = self.help_page_view() else {
             return;
         };
-        // A link row is addressed by position, not by its label: the label
-        // is prose an author wrote in the middle of a sentence, and only the
-        // page's own `links` list knows what it points at.
-        if let GameKey::Char(c) = key
-            && let Some(idx) = view.links.iter().position(|l| l.shortcut == c)
-        {
-            let target = self
-                .current_help_page()
-                .and_then(|p| p.links.get(idx))
-                .map(|l| l.target.clone());
-            if let Some(target) = target {
-                self.help_stack.push(target);
-                self.menu_selected = 0;
+        match key {
+            GameKey::Tab if !view.links.is_empty() => {
+                self.help_links_focused = !self.help_links_focused;
             }
-            return;
+            GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown
+                if self.help_links_focused =>
+            {
+                let selected = self.menu_selected;
+                self.menu_selected = self.help_link_selected;
+                self.scroll(key, view.links.len());
+                self.help_link_selected = self.menu_selected;
+                self.menu_selected = selected;
+            }
+            GameKey::Enter if self.help_links_focused => {
+                if let Some(target) = self.help_link_target(self.help_link_selected) {
+                    self.help_stack.push(target);
+                    self.reset_help_page_cursor();
+                }
+            }
+            _ if self.help_links_focused => {}
+            _ => self.scroll(key, view.prose.len()),
         }
-        self.scroll(key, view.prose.len());
+    }
+
+    /// The scroll *is* `menu_selected` here, and moving between two pages
+    /// is not a mode change, so nothing else would reset it or the focus.
+    fn reset_help_page_cursor(&mut self) {
+        self.menu_selected = 0;
+        self.help_links_focused = false;
+        self.help_link_selected = 0;
+    }
+
+    /// The page id link `idx` of the open page points at.
+    pub(crate) fn help_link_target(&self, idx: usize) -> Option<String> {
+        Some(self.current_help_page()?.links.get(idx)?.target.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_help_page_id(&self) -> String {
+        self.help_stack.last().cloned().expect("a page is open")
     }
 
     /// The index's rows, in the db's own `(order, id)` order.
@@ -191,9 +213,7 @@ impl App {
             links: page
                 .links
                 .iter()
-                .enumerate()
-                .map(|(i, link)| HelpLinkRow {
-                    shortcut: menu_shortcut(i),
+                .map(|link| HelpLinkRow {
                     label: link.label.clone(),
                 })
                 .collect(),
@@ -230,12 +250,8 @@ impl App {
 
     /// The alert board (`Mode::Alerts`, opened with `N`).
     ///
-    /// `x`/`d` are matched **before** `App::selected_index`, so they dismiss
-    /// the highlighted row rather than acting as the row shortcut lowercase
-    /// letters are everywhere else — the design spec's own test is that they
-    /// dismiss row `menu_selected` names, not whatever row their letter
-    /// would resolve to. Everything else — Up/Down, digits, other letters —
-    /// goes through `selected_index` like an ordinary menu.
+    /// `x`/`d` dismiss the highlighted row, the one `menu_selected` names.
+    /// Everything else goes through `selected_index` like an ordinary menu.
     pub(crate) fn handle_alerts_key(&mut self, key: GameKey) {
         if matches!(key, GameKey::Char('x') | GameKey::Char('d')) {
             let Some(game) = self.game.as_mut() else {

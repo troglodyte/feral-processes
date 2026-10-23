@@ -95,7 +95,7 @@ fn contract_rows(
 /// there are any.
 ///
 /// Drawn through `description_rows`, so it wraps at the same column and wears
-/// the same `DESCRIPTION_INDENT` the description census filters on: a hint too
+/// the same `is_description_row` shape the description census filters on: a hint too
 /// long for the body fails that census rather than running off the right edge.
 /// The arrow is the whole of what separates it from the flavour text above,
 /// deliberately - `color` on this screen already means "onboarding mission",
@@ -117,7 +117,7 @@ fn hint_rows(contract: &ContractRow) -> Vec<Row> {
 /// about an unrelated key. The abandon hint now leads its own line.
 fn contract_footer() -> [&'static str; 2] {
     [
-        "Pick a number to take an offer, or to hand over a held contract's cargo.",
+        "Enter takes the highlighted offer, or hands over a held contract's cargo.",
         "[A] gives back the highlighted contract.        Esc to close.",
     ]
 }
@@ -137,11 +137,8 @@ pub(super) fn contract_line(
     };
     let mut row = item_row(
         format!(
-            "[{}] {} - {}{progress} - pays {}",
-            menu_shortcut(idx),
-            contract.name,
-            contract.objective_line,
-            contract.reward_line
+            "{} - {}{progress} - pays {}",
+            contract.name, contract.objective_line, contract.reward_line
         ),
         idx == selected,
     );
@@ -323,7 +320,7 @@ mod tests {
 
     /// **No shipped contract's description overflows the popup either.**
     ///
-    /// The row census below measures the `[n] Name - objective - pays` line
+    /// The row census below measures the `Name - objective - pays` line
     /// and has never looked at the paragraph under it — which is how eleven
     /// onboarding missions, whose descriptions are several times longer than
     /// any other contract's, shipped against a green suite.
@@ -337,8 +334,9 @@ mod tests {
         let catalogue = game.contract_catalogue();
         let widest = contract_rows(&catalogue, &[], BrokerReach::AtBroker, usize::MAX)
             .into_iter()
+            .filter(is_description_row)
             .filter_map(|row| match row {
-                Row::Item { text, .. } if text.starts_with(DESCRIPTION_INDENT) => Some(text),
+                Row::Item { text, .. } => Some(text),
                 _ => None,
             })
             .max_by_key(|line| line.chars().count())

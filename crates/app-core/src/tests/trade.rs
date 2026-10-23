@@ -9,7 +9,7 @@ use crate::*;
 /// its only nearby trader.
 fn open_the_trading_post(app: &mut App) {
     app.mode = Mode::Trade;
-    app.handle_key(GameKey::Char('1'));
+    pick_row(app, 0);
     assert_eq!(app.mode, Mode::TradeAction);
 }
 
@@ -84,7 +84,7 @@ fn selling_an_item_lands_back_on_the_traders_list() {
     let mut app = app_at_a_trading_post(920, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
     open_the_trading_post(&mut app);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::TradeQuantity);
     app.handle_key(GameKey::Enter);
 
@@ -106,7 +106,7 @@ fn a_completed_sale_puts_the_highlight_back_on_the_first_row() {
     open_the_trading_post(&mut app);
     app.menu_selected = 3;
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
 
     assert_eq!(app.menu_selected, 0);
@@ -121,7 +121,7 @@ fn the_sell_list_hides_credits_and_offers_the_salvage() {
     let mut app = app_at_a_trading_post(922, &[(ids::CREDITS, 4), (ids::CORE_FRAGMENT, 5)]);
     open_the_trading_post(&mut app);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::TradeQuantity);
     assert!(
@@ -452,7 +452,7 @@ fn the_sell_list_hides_a_banked_item() {
     );
     open_the_trading_post(&mut app);
 
-    app.handle_key(GameKey::Char('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.mode, Mode::TradeQuantity);
     assert!(

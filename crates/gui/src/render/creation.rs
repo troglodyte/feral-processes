@@ -5,7 +5,7 @@
 //! one bordered box, one `Row` list — so the wizard's chrome, refusal
 //! placement and keyboard highlight are the game's existing menu idiom and
 //! not a second one invented for onboarding. What is specific to this
-//! screen is `build_row` (numbering, and the Icon/Colour steps' per-row
+//! screen is `build_row` (the Icon/Colour steps' per-row
 //! icon) and those two steps' and the Summary's preview cell, painted
 //! separately after the popup through `draw_look_preview`.
 //!
@@ -116,7 +116,7 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         .iter()
         .enumerate()
         .flat_map(|(i, row)| {
-            let mut out = vec![build_row(step, row, i, selected == i)];
+            let mut out = vec![build_row(row, selected == i)];
             // An attribute whose effects overflow continues on indented rows.
             if let Some(lines) = points::attribute_lines(row, Some(CREATION_STAT_POINTS)) {
                 out.extend(
@@ -179,22 +179,10 @@ fn points_bonus_note(stat_points: u32) -> Option<String> {
         .then(|| format!("+{stat_points} stat points from past runs, paid after creation"))
 }
 
-/// One `CreationRow` as a drawable menu row: numbered with its shortcut on
-/// every step but the three where the cursor is a highlight rather than a
-/// pick (`Mode::Transfer`'s rule — a digit is a quantity there, never a row
-/// shortcut), and carrying an icon on the Icon and Colour steps' own row
-/// kinds.
-fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
-    let text = row_line(row);
-    let label = match step {
-        CreationStep::Profile
-        | CreationStep::Kit
-        | CreationStep::Points
-        | CreationStep::Perks
-        | CreationStep::Name
-        | CreationStep::Summary => text,
-        _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
-    };
+/// One `CreationRow` as a drawable menu row, carrying an icon on the Icon
+/// and Colour steps' own row kinds.
+fn build_row(row: &CreationRow, selected: bool) -> Row {
+    let label = row_line(row);
     // The one Summary row that is a picture: drawn in the swatch the run
     // will actually wear, so the last screen before the run starts shows
     // the look rather than spelling it.
@@ -350,7 +338,7 @@ fn plain_footer(step: CreationStep) -> &'static str {
 
 /// Where the preview cell sits inside `popup`'s box: tucked into the
 /// top-right corner, clear of the row list under it. The row labels this
-/// screen ever draws (`[3] Colour 4`, `Class ...`, a Summary line) are
+/// screen ever draws (`Colour 4`, `Class ...`, a Summary line) are
 /// short enough at `PopupSize::Large`'s width to leave that corner clear;
 /// `every_creation_step_draws_a_refusal_exactly_once` and the row census
 /// draw the real rows and would show a collision if one ever reached it.
@@ -445,18 +433,8 @@ pub(in crate::render) mod tests {
     /// row on this step makes.
     #[test]
     fn the_drawn_icon_row_carries_a_preview_that_differs_by_state() {
-        let drawn = build_row(
-            CreationStep::Icon,
-            &CreationRow::DrawnIcon { drawn: true },
-            5,
-            false,
-        );
-        let undrawn = build_row(
-            CreationStep::Icon,
-            &CreationRow::DrawnIcon { drawn: false },
-            5,
-            false,
-        );
+        let drawn = build_row(&CreationRow::DrawnIcon { drawn: true }, false);
+        let undrawn = build_row(&CreationRow::DrawnIcon { drawn: false }, false);
         let icon_of = |row: Row| match row {
             Row::Item { icon, .. } => icon,
             _ => None,
@@ -607,7 +585,7 @@ pub(in crate::render) mod tests {
         match step {
             CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
             CreationStep::Profile => app.handle_key(GameKey::Enter),
-            CreationStep::Class => app.handle_key(GameKey::Char('1')),
+            CreationStep::Class => app.handle_key(GameKey::Enter),
             CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
 
             // **The Icon step is walked by drawing, not by `[n]`.** Every
@@ -1192,7 +1170,7 @@ pub(in crate::render) mod tests {
         }
         // A preset rather than `walk_past`, which now draws — the note's
         // absence is exactly what the preset half of the Icon step buys.
-        app.handle_key(GameKey::Char('1'));
+        app.handle_key(GameKey::Enter);
         assert_eq!(app.creation_step(), CreationStep::Colour);
         assert!(app.creation_choice().icon.is_none());
 

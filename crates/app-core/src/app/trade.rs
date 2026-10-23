@@ -112,9 +112,8 @@ impl App {
 
         // One unit off the highlighted row, no quantity page — a visit is
         // normally a run of trades, so the four-screen round trip is paid
-        // per item. Uppercase because `selected_index` reserves it: a key
-        // that both moved the selection and spent money would be a bug
-        // waiting for a full pack.
+        // per item. Uppercase so a stray lowercase letter never spends
+        // money.
         // Every shelf but the program one names an item, so `[I]` answers
         // on three of the four sections. A buy row names an id rather than a
         // copy the player owns — a trader's stock is plain, which is what

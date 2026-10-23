@@ -4401,13 +4401,10 @@ fn game_at_a_market() -> Game {
 
 /// A tamed program with a routine slot free to write into.
 ///
-/// Levelled deliberately, and that is the fixture's whole reason to exist:
-/// `COMPANION_ROUTINE_SLOT_BASE` is 0 with a floor of 1, so a level-1
-/// program has exactly one slot — and `install_innate_routines` has already
-/// filled it with the `priority_boost` fallback every species that grants
-/// nothing gets. A market row bought for a fresh program is therefore
-/// *correctly* refused, which reads as a broken purchase rather than as a
-/// full program if the fixture doesn't say so out loud.
+/// Levelled so the purchase has room whatever the species' innate kit and
+/// the `priority_boost` fallback took at level 1 — a full program
+/// *correctly* refuses a market row, which reads as a broken purchase if the
+/// fixture doesn't say so out loud.
 fn spawn_holder(game: &mut Game) -> Entity {
     let entity = spawn_tamed(game, 20, 4);
     set_level(game, entity, 4);

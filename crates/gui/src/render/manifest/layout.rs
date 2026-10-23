@@ -101,7 +101,7 @@ pub(in crate::render) const MAX_AFFINITY_ROWS: usize = 2;
 /// at the owner's explicit call. A separate constant rather than lowering
 /// `MAX_SECTION_ROWS` itself: at 6 rows the ROUTINES box already spends its
 /// last line on a "+N more" note for a kit near
-/// `COMPANION_ROUTINE_SLOT_CAP`, and lowering the shared cap would take that
+/// `ROUTINE_SLOT_CAP`, and lowering the shared cap would take that
 /// from every box — nothing shipped has more than 2 moves, so this trims
 /// nothing that exists today, only a mod.
 ///

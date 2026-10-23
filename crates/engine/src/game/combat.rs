@@ -1132,35 +1132,44 @@ impl Game {
         }
     }
 
-    /// How many routines `entity` can hold right now. The player and a
-    /// companion grow slots at different rates on purpose — see
-    /// `tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL`.
-    ///
-    /// A companion's `talents::TalentNode::RoutineSlot` nodes are added here,
-    /// in the companion arm only: the player is not a companion and must not
-    /// read a companion tree. `abilities::companion_routine_slots` stays a
-    /// pure function of level, because several tests and `balance_sim` read it
-    /// as one.
+    /// How many routines `entity` can hold right now: one level curve for
+    /// everyone, `abilities::level_routine_slots`, plus what sets this body
+    /// apart. The player's class and implants; a companion's species class,
+    /// rarity and quality, and the `talents::TalentNode::RoutineSlot` nodes
+    /// it bought — in the companion arm only, since the player is not a
+    /// companion and must not read a companion tree.
     pub fn routine_slots(&self, entity: Entity) -> usize {
         let level = self
             .world
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
-        if entity == self.player_entity() {
-            // Added past `player_routine_slots`' own clamp and not
-            // re-clamped, exactly as the companion arm below adds
-            // `talent_routine_slots` past `COMPANION_ROUTINE_SLOT_CAP`: the
-            // cap bounds the level curve, not the total.
-            abilities::player_routine_slots(level)
-                + crate::classes::routine_slot_bonus(self.player_class())
+        let bonus = if entity == self.player_entity() {
+            crate::classes::routine_slot_bonus(self.player_class())
                 + self.implant_hook_total(|h| match h {
                     crate::implants::ImplantHook::RoutineSlots(n) => Some(*n as i32),
                     _ => None,
-                }) as usize
+                })
         } else {
-            abilities::companion_routine_slots(level) + self.talent_routine_slots(entity)
-        }
+            let class = self
+                .world
+                .get::<Creature>(entity)
+                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+                .and_then(|def| def.affinity_class());
+            let rarity = self
+                .world
+                .get::<Rarity>(entity)
+                .copied()
+                .unwrap_or_default();
+            let potential = self
+                .world
+                .get::<Potential>(entity)
+                .copied()
+                .unwrap_or(Potential::NEUTRAL);
+            abilities::companion_routine_slot_bonus(class, rarity, &potential)
+                + self.talent_routine_slots(entity) as i32
+        };
+        abilities::routine_slot_total(level, bonus)
     }
 
     /// Every ability `entity`'s talents grant. Folded into the `declared` list

@@ -2588,14 +2588,9 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
     (game, medic)
 }
 
-/// A species granting *two* abilities at one level, which is the only shape
-/// that can still run a companion out of routine slots.
-///
-/// `COMPANION_ROUTINE_SLOT_PER_LEVEL` is 1, so an ordinary level-up brings a
-/// slot along with whatever it unlocks and the two never contend — no
-/// shipped species can reach the eviction branch any more. A mod can, by
-/// unlocking two routines on the same rung, and that branch is still live
-/// code with a log line of its own.
+/// A species granting *two* abilities at one level, so an unlock is certain
+/// to run a companion out of routine slots whatever its bonuses — the
+/// eviction branch, which has a log line of its own.
 pub(super) const CONTENDING_UNLOCK_SPECIES: &str = r#"(
     id: "test_crowded",
     name: "Test Crowded",

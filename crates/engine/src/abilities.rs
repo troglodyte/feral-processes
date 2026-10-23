@@ -20,44 +20,42 @@ pub const FALLBACK_ABILITY_ID: &str = "priority_boost";
 /// else. Validated at startup the same way `FALLBACK_ABILITY_ID` is.
 pub const DECOMPILE_ABILITY_ID: &str = "decompile";
 
-/// Slots at `level`, from one constant set: `base` plus
-/// `tuning::ROUTINE_SLOTS_PER_STEP` for every `per_level` levels reached,
-/// clamped to `cap`. Both routine wrappers below
-/// call this so the companion and player curves cannot drift into two
-/// different shapes — only their constants differ.
-///
-/// The floor of 1 is load-bearing: `COMPANION_ROUTINE_SLOT_BASE` is 0, so a
-/// level-1 companion would otherwise have nowhere to put the kit its species
-/// grants it at level 1.
-fn routine_slots(level: u32, base: u32, per_level: u32, cap: u32) -> usize {
-    (base + crate::tuning::ROUTINE_SLOTS_PER_STEP * (level / per_level)).clamp(1, cap) as usize
+/// Slots the level curve grants at `level`: `tuning::ROUTINE_SLOT_BASE`
+/// plus `tuning::ROUTINE_SLOTS_PER_STEP` for every `ROUTINE_SLOT_PER_LEVEL`
+/// levels reached, clamped to `ROUTINE_SLOT_CAP`. One curve for the player
+/// and every companion; what sets a body apart is the bonus
+/// `routine_slot_total` adds past it.
+pub fn level_routine_slots(level: u32) -> usize {
+    let t = crate::tuning::ROUTINE_SLOTS_PER_STEP * (level / crate::tuning::ROUTINE_SLOT_PER_LEVEL);
+    (crate::tuning::ROUTINE_SLOT_BASE + t).min(crate::tuning::ROUTINE_SLOT_CAP) as usize
 }
 
-/// How many routines a companion at `level` can hold — see
-/// `tuning::COMPANION_ROUTINE_SLOT_BASE` and friends.
-pub fn companion_routine_slots(level: u32) -> usize {
-    routine_slots(
-        level,
-        crate::tuning::COMPANION_ROUTINE_SLOT_BASE,
-        crate::tuning::COMPANION_ROUTINE_SLOT_PER_LEVEL,
-        crate::tuning::COMPANION_ROUTINE_SLOT_CAP,
-    )
+/// The level curve plus `bonus`, added past the curve's cap and floored at
+/// `ROUTINE_SLOT_BASE` — a penalty bites only once the curve has grown, so a
+/// new Bastion player still has the slot beside `decompile` its starter
+/// routine lands in, and a level-1 program the room for its innate kit.
+pub fn routine_slot_total(level: u32, bonus: i32) -> usize {
+    (level_routine_slots(level) as i32 + bonus).max(crate::tuning::ROUTINE_SLOT_BASE as i32)
+        as usize
 }
 
-/// How many routines the player at `level` can hold — see
-/// `tuning::PLAYER_ROUTINE_SLOT_BASE` and friends.
-pub fn player_routine_slots(level: u32) -> usize {
-    routine_slots(
-        level,
-        crate::tuning::PLAYER_ROUTINE_SLOT_BASE,
-        crate::tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL,
-        crate::tuning::PLAYER_ROUTINE_SLOT_CAP,
-    )
+/// What a companion's own nature adds to the curve: its species' class,
+/// one slot per `Rarity` tier above Ordinary, and its quality rung. Talents
+/// are added by `Game::routine_slots` beside this, since they are bought
+/// rather than born with.
+pub fn companion_routine_slot_bonus(
+    class: Option<crate::species::AffinityClass>,
+    rarity: crate::components::Rarity,
+    potential: &crate::components::Potential,
+) -> i32 {
+    let rarity = rarity.rank() * crate::tuning::RARITY_ROUTINE_SLOTS_PER_TIER;
+    let quality = crate::tuning::QUALITY_ROUTINE_SLOT_BONUS[potential.quality_rung()];
+    crate::classes::affinity_routine_slot_bonus(class) + (rarity + quality) as i32
 }
 
 /// `level`'s multiplier at `per_level`, clamped at
 /// `tuning::ABILITY_SCALE_LEVEL_CAP` because the player has no level
-/// ceiling; see `player_routine_slots`, which clamps for the same reason.
+/// ceiling; see `level_routine_slots`, which clamps for the same reason.
 fn level_scale(level: u32, per_level: f32) -> f32 {
     let level = level.min(crate::tuning::ABILITY_SCALE_LEVEL_CAP);
     1.0 + level as f32 * per_level
@@ -1762,7 +1760,7 @@ impl AbilityDb {
 /// player knows — see `assets/abilities/README.md`'s "The starter set".
 /// The install itself is `Game::write_routine`, the same door
 /// `Game::install_disk` uses: no ownership check, no disk spent, just a
-/// write into the next free slot. `PLAYER_ROUTINE_SLOT_BASE` is 2 and
+/// write into the next free slot. `ROUTINE_SLOT_BASE` is 2 and
 /// `decompile` already occupies one slot at this point in
 /// `apply_character_choice`'s order (stats, identity, kit, *then*
 /// routine), so this always has exactly one slot to land in and never
@@ -2449,45 +2447,69 @@ mod tests {
     }
 
     #[test]
-    fn companion_slots_grow_two_per_level_up_to_the_cap() {
-        // `ROUTINE_SLOTS_PER_STEP` slots a level against `TALENT_START_LEVEL`
-        // of 6: the ceiling still arrives at level 6, with twice the kit
-        // waiting there.
-        let expected = [(1, 2), (2, 4), (3, 6), (4, 8), (5, 10), (6, 12)];
+    fn slots_grow_two_per_three_levels_up_to_the_cap() {
+        let expected = [(1, 2), (2, 2), (3, 4), (5, 4), (6, 6), (14, 10), (15, 12)];
         for (level, slots) in expected {
-            assert_eq!(
-                companion_routine_slots(level),
-                slots,
-                "companion level {level}"
-            );
+            assert_eq!(level_routine_slots(level), slots, "level {level}");
         }
         assert_eq!(
-            companion_routine_slots(50),
-            crate::tuning::COMPANION_ROUTINE_SLOT_CAP as usize,
-            "past the cap a companion stops gaining slots"
+            level_routine_slots(9_999),
+            crate::tuning::ROUTINE_SLOT_CAP as usize,
+            "the player has no level cap, so only this clamp bounds the curve"
         );
     }
 
     #[test]
-    fn player_slots_grow_two_per_five_levels_and_one_is_free_from_the_start() {
+    fn a_companion_s_rarity_quality_and_class_each_add_slots() {
+        use crate::components::{Potential, Rarity};
+        use crate::species::AffinityClass;
+        let plain = companion_routine_slot_bonus(None, Rarity::Ordinary, &Potential::NEUTRAL);
         assert_eq!(
-            player_routine_slots(1),
-            2,
-            "decompile holds one of the two a new game opens with"
+            plain, 0,
+            "an ordinary, average, classless program adds nothing"
         );
-        assert_eq!(player_routine_slots(4), 2, "no second grant before 5");
+        for (tier, rarity) in Rarity::ALL.into_iter().enumerate() {
+            assert_eq!(
+                companion_routine_slot_bonus(None, rarity, &Potential::NEUTRAL),
+                tier as i32,
+                "{rarity:?} adds one slot per tier above Ordinary"
+            );
+        }
+        let excellent = Potential {
+            hp_roll: crate::tuning::MAX_INDIVIDUAL_ROLL,
+            atk_roll: crate::tuning::MAX_INDIVIDUAL_ROLL,
+            def_roll: crate::tuning::MAX_INDIVIDUAL_ROLL,
+            growth_roll: crate::tuning::MAX_INDIVIDUAL_ROLL,
+            ..Potential::NEUTRAL
+        };
         assert_eq!(
-            player_routine_slots(5),
-            4,
-            "the first grant is a pair, like every one after it"
+            companion_routine_slot_bonus(None, Rarity::Ordinary, &excellent),
+            2
         );
-        assert_eq!(player_routine_slots(24), 10);
-        assert_eq!(player_routine_slots(25), 12);
         assert_eq!(
-            player_routine_slots(9_999),
-            crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
-            "the player has no level cap, so only this clamp bounds their slots"
+            companion_routine_slot_bonus(Some(AffinityClass::Saboteur), Rarity::Gold, &excellent),
+            2 + 2 + 2,
+            "the three sources add"
         );
+        assert_eq!(
+            companion_routine_slot_bonus(
+                Some(AffinityClass::Bastion),
+                Rarity::Ordinary,
+                &Potential::NEUTRAL
+            ),
+            -1
+        );
+    }
+
+    #[test]
+    fn a_penalty_never_dips_below_the_starting_slots() {
+        assert_eq!(
+            routine_slot_total(1, -1),
+            crate::tuning::ROUTINE_SLOT_BASE as usize,
+            "a level-1 Bastion keeps the slot beside decompile"
+        );
+        assert_eq!(routine_slot_total(3, -1), 3, "the penalty bites once grown");
+        assert_eq!(routine_slot_total(15, 3), 15, "bonuses stand past the cap");
     }
 
     #[test]

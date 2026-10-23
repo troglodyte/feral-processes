@@ -274,28 +274,39 @@ pub fn capture_boost_pct(class: Option<PlayerClass>) -> i32 {
 }
 
 /// Routine slots this class adds on top of the level curve, added by
-/// `Game::routine_slots` at its player arm.
+/// `Game::routine_slots` at its player arm. A combat class reads the table a
+/// companion of that class reads; of the three player-only classes, only the
+/// Invoker is named for a deeper kit.
 ///
-/// **Added after `player_routine_slots`' own clamp and not re-clamped**,
-/// which is exactly what the companion arm beside it already does with
-/// `talent_routine_slots`: `PLAYER_ROUTINE_SLOT_CAP` bounds the *level
-/// curve*, not the total. Threading this into `player_routine_slots` before
-/// that clamp instead would converge to nothing at the cap — the one thing
-/// an Invoker is named for, gone in the late run — and would cost that
-/// function the purity `balance_sim` and several tests read it as.
-pub fn routine_slot_bonus(class: Option<PlayerClass>) -> usize {
+/// **Added past `ROUTINE_SLOT_CAP` and not re-clamped**, as every slot bonus
+/// is: the cap bounds the *level curve*, not the total. Threaded in before
+/// that clamp it would converge to nothing at the cap — the one thing an
+/// Invoker is named for, gone in the late run.
+pub fn routine_slot_bonus(class: Option<PlayerClass>) -> i32 {
     match class {
-        Some(PlayerClass::Invoker) => crate::tuning::CLASS_ROUTINE_SLOT_BONUS,
+        Some(PlayerClass::Invoker) => crate::tuning::CLASS_ROUTINE_SLOT_BONUS as i32,
+        Some(PlayerClass::Decompiler | PlayerClass::Fabricator) | None => 0,
         Some(
-            PlayerClass::Striker
+            c @ (PlayerClass::Striker
             | PlayerClass::Bastion
             | PlayerClass::Medic
             | PlayerClass::Saboteur
-            | PlayerClass::Leech
-            | PlayerClass::Decompiler
-            | PlayerClass::Fabricator,
-        )
-        | None => 0,
+            | PlayerClass::Leech),
+        ) => affinity_routine_slot_bonus(c.as_affinity_class()),
+    }
+}
+
+/// Routine slots a body of combat class `class` adds to the level curve —
+/// a companion's species class and the player's chosen class alike. `None`
+/// (a boss, a two-axis mod species) adds nothing.
+pub fn affinity_routine_slot_bonus(class: Option<AffinityClass>) -> i32 {
+    match class {
+        Some(AffinityClass::Striker) => crate::tuning::STRIKER_ROUTINE_SLOT_BONUS,
+        Some(AffinityClass::Bastion) => crate::tuning::BASTION_ROUTINE_SLOT_BONUS,
+        Some(AffinityClass::Medic) => crate::tuning::MEDIC_ROUTINE_SLOT_BONUS,
+        Some(AffinityClass::Saboteur) => crate::tuning::SABOTEUR_ROUTINE_SLOT_BONUS,
+        Some(AffinityClass::Leech) => crate::tuning::LEECH_ROUTINE_SLOT_BONUS,
+        None => 0,
     }
 }
 

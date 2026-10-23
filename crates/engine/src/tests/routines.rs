@@ -170,10 +170,9 @@ fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_f
         routines.iter().any(|r| r == "cascade_overflow"),
         "reaching the unlock must never lose it: {routines:?}"
     );
-    // The fallback survives beside it now, and that is the slot rate rather
-    // than a change of heart about placeholders: a level-up brings a slot
-    // (`COMPANION_ROUTINE_SLOT_PER_LEVEL` is 1), so the unlock has somewhere
-    // to land and has nothing to displace. The eviction branch it used to
+    // The fallback survives beside it, and that is the slot count rather
+    // than a change of heart about placeholders: the unlock has a free slot
+    // to land in and has nothing to displace. The eviction branch it used to
     // exercise is covered by `evicting_a_manually_installed_priority_boost_
     // is_logged`, against a species that unlocks two routines at once.
     assert_eq!(
@@ -248,30 +247,55 @@ fn evicting_a_manually_installed_priority_boost_is_logged() {
     );
 }
 
+/// The curve itself is pinned in `abilities.rs`; this shows the player and
+/// a plain companion are both read off it, and that a companion's rarity,
+/// quality and species class reach `Game::routine_slots`.
 #[test]
-fn game_routine_slots_dispatches_to_the_companion_or_player_curve_by_entity() {
-    // The actual number-per-level curves are pinned in `abilities.rs`'
-    // `companion_slots_grow_one_per_two_levels_up_to_the_cap` and
-    // `player_slots_grow_one_per_ten_levels_so_the_first_free_one_lands_at_10`;
-    // this only needs to show `Game::routine_slots` asks the right one of the
-    // two depending on which entity it's asked about.
+fn game_routine_slots_reads_one_curve_plus_the_companion_s_bonuses() {
+    use crate::components::{Potential, Rarity};
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let pet = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, pet, 6);
     set_level(&mut game, player, 6);
-    assert_eq!(
-        game.routine_slots(pet),
-        crate::abilities::companion_routine_slots(6),
-    );
+    // Pinned so the species' own class cannot add or take a slot here.
+    let classless = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .all()
+        .find(|d| d.affinity_class().is_none() && !d.is_boss)
+        .expect("a classless species ships")
+        .id
+        .clone();
+    game.world.get_mut::<Creature>(pet).unwrap().species = classless;
+    game.world
+        .entity_mut(pet)
+        .insert((Rarity::Ordinary, Potential::NEUTRAL));
     assert_eq!(
         game.routine_slots(player),
-        crate::abilities::player_routine_slots(6),
+        crate::abilities::level_routine_slots(6)
     );
-    assert_ne!(
-        crate::abilities::companion_routine_slots(6),
-        crate::abilities::player_routine_slots(6),
-        "the two curves must actually differ for this test to mean anything"
+    assert_eq!(game.routine_slots(pet), game.routine_slots(player));
+
+    game.world.entity_mut(pet).insert(Rarity::Gold);
+    assert_eq!(
+        game.routine_slots(pet),
+        game.routine_slots(player) + 2,
+        "Gold is two tiers above Ordinary"
+    );
+
+    let saboteur = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .all()
+        .find(|d| d.affinity_class() == Some(crate::species::AffinityClass::Saboteur))
+        .expect("a Saboteur species ships")
+        .id
+        .clone();
+    game.world.get_mut::<Creature>(pet).unwrap().species = saboteur;
+    assert_eq!(
+        game.routine_slots(pet),
+        game.routine_slots(player) + 2 + crate::tuning::SABOTEUR_ROUTINE_SLOT_BONUS as usize,
     );
 }
 
@@ -813,7 +837,7 @@ fn a_new_game_starts_with_decompile_installed_in_the_players_first_slot() {
     let slots = game.routine_view(game.player_entity());
     assert_eq!(
         slots.len(),
-        crate::abilities::player_routine_slots(1),
+        crate::abilities::level_routine_slots(1),
         "the view is one row per slot the level buys"
     );
     assert_eq!(
@@ -1344,7 +1368,7 @@ fn a_starter_routine_is_known_and_installed() {
     );
 }
 
-/// `PLAYER_ROUTINE_SLOT_BASE` is 2 specifically so a starter has somewhere
+/// `ROUTINE_SLOT_BASE` is 2 specifically so a starter has somewhere
 /// to land without evicting `decompile` — the ability the player always
 /// starts able to capture programs with. Both must be held at once.
 #[test]
@@ -1368,7 +1392,7 @@ fn a_starter_routine_does_not_displace_decompile() {
 }
 
 /// `CharacterChoice::default()`'s `routine: None` is today's game — no
-/// second routine, the slot `PLAYER_ROUTINE_SLOT_BASE` leaves free stays
+/// second routine, the slot `ROUTINE_SLOT_BASE` leaves free stays
 /// free, and nothing is known at all.
 #[test]
 fn no_starter_choice_leaves_the_slot_empty() {

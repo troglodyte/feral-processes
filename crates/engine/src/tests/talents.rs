@@ -270,7 +270,7 @@ fn a_routine_slot_talent_gives_a_companion_one_more_slot() {
 }
 
 /// The player is not a companion and must not read a companion tree — its
-/// slots come from `PLAYER_ROUTINE_SLOT_PER_LEVEL` and nothing else.
+/// slots come from the level curve, its class and its implants, never a tree.
 #[test]
 fn a_slot_talent_on_the_player_changes_nothing() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

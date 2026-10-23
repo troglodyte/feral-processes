@@ -318,8 +318,7 @@ pub const CLASS_DECOMPILE_BOOST_PCT: i32 = 15;
 /// curve, through `classes::routine_slot_bonus`.
 ///
 /// Doubles a level-1 player's two slots and still stands at the cap, since
-/// it is added past `PLAYER_ROUTINE_SLOT_CAP` the way `talent_routine_slots`
-/// already adds past the companion cap.
+/// it is added past `ROUTINE_SLOT_CAP` like every other slot bonus.
 pub const CLASS_ROUTINE_SLOT_BONUS: usize = 2;
 
 /// What a `PlayerClass::Fabricator` scales every work cycle's length by,

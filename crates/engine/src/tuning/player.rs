@@ -125,8 +125,7 @@ pub const CREATION_SHELF_ROWS: usize = 26;
 /// denominated in entity level (`PERK_POINTS_PER_LEVEL`,
 /// the two `ABILITY_*_SCALE_PER_LEVEL` rates)
 /// and the reciprocal of every constant denominated in *levels per*
-/// something (`PLAYER_ROUTINE_SLOT_PER_LEVEL`,
-/// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `TALENT_START_LEVEL`,
+/// something (`ROUTINE_SLOT_PER_LEVEL`, `TALENT_START_LEVEL`,
 /// `WORK_XP_LEVEL_CAP`). Half as many level-ups, each worth twice as much,
 /// paid for by `XP_PER_LEVEL_STEP`'s matching `K^2` — so the *power* curve
 /// is where it was and only its grain changed. A level-up is meant to be an

@@ -377,7 +377,7 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         let mut names: Vec<String> = db.all().map(|d| d.name.clone()).collect();
         names.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
-        names.truncate(feral_processes_engine::tuning::COMPANION_ROUTINE_SLOT_CAP as usize);
+        names.truncate(feral_processes_engine::tuning::ROUTINE_SLOT_CAP as usize);
         assert!(
             names.len() > 1,
             "the census found {} routines, so it is measuring nothing",

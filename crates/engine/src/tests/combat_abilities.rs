@@ -139,11 +139,10 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             PowerReserve::default(),
         ))
         .id();
-    // Routine slots are level-gated (see `abilities::companion_routine_slots`):
-    // a level-1 companion has exactly one, so a level-1 sweeper would only
-    // ever install `cascade_overflow` and the other two tests below it would
-    // have nothing at their index. Level 6 is the lowest level worth three
-    // slots, which is exactly what all three declared abilities need to land.
+    // Routine slots are level-gated (see `abilities::level_routine_slots`):
+    // a level-1 companion has two, so a level-1 sweeper could not hold all
+    // three declared abilities and a test below would have nothing at its
+    // index. Level 6 is worth six, room for all three to land.
     game.world.get_mut::<Experience>(sweeper).unwrap().level = 6;
     game.install_innate_routines(sweeper);
     enlist(&mut game, sweeper);
@@ -588,7 +587,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
-    // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
+    // installs, and `ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
     give_disks(&mut game, 2);
     fit_routine(&mut game, player, "priority_boost");
@@ -707,7 +706,7 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
-    // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
+    // installs, and `ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
     give_disks(&mut game, 2);
     fit_routine(&mut game, player, "priority_boost");

@@ -210,38 +210,40 @@ pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
 /// step rate keeps every slot landing on the level it always did.
 pub const ROUTINE_SLOTS_PER_STEP: u32 = 2;
 
-/// Slots a companion has at level 1 before any per-level growth, then
-/// `ROUTINE_SLOTS_PER_STEP` more for every `COMPANION_ROUTINE_SLOT_PER_LEVEL`
-/// levels. The floor of 1 in `abilities::companion_routine_slots` is what
-/// keeps a level-1 program from having nowhere to hold its innate kit.
-pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
+/// Slots the player and every companion have at level 1. Two, and
+/// `decompile` occupies one of the player's — a new game pre-installs that
+/// ability, so the player starts with one free slot.
+pub const ROUTINE_SLOT_BASE: u32 = 2;
 
-/// Levels a companion needs per grant of `ROUTINE_SLOTS_PER_STEP` slots.
-/// Halved by `HP_PER_LEVEL`'s `K = 2` alongside `TALENT_START_LEVEL`, so a
-/// companion still reaches its ceiling at the level it always did.
-pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 1;
+/// Levels per grant of `ROUTINE_SLOTS_PER_STEP` slots, the player and
+/// companions alike. Was 5 for the player and 1 for a companion; one curve
+/// between the two means a program's kit and the player's grow at the same
+/// pace, and what sets them apart is class, rarity and quality instead.
+pub const ROUTINE_SLOT_PER_LEVEL: u32 = 3;
 
-/// Most routines a companion can hold at once, still reached at level 6 —
-/// `ROUTINE_SLOTS_PER_STEP` doubled the kit without moving the level it
-/// tops out at.
-pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 12;
+/// Most routines the level curve grants, reached at level 15. The player
+/// has no level ceiling (`progression::add_xp` takes `None`), so this clamp
+/// is what bounds the curve. Class, rarity, quality, talents and implants
+/// are added past it, so it bounds the curve and not the total.
+pub const ROUTINE_SLOT_CAP: u32 = 12;
 
-/// Slots the player has at level 1. Two, and `decompile` occupies one — a new
-/// game pre-installs that ability, so the player starts with one free slot
-/// rather than having to reach `PLAYER_ROUTINE_SLOT_PER_LEVEL` for it.
-pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 2;
+/// Slots a body of each combat class adds to the level curve — a species'
+/// derived class for a companion, the chosen class for the player, through
+/// `classes::affinity_routine_slot_bonus`. The kit-driven roles carry more;
+/// a Bastion, whose job is standing in the way, carries one fewer.
+pub const STRIKER_ROUTINE_SLOT_BONUS: i32 = 0;
+pub const BASTION_ROUTINE_SLOT_BONUS: i32 = -1;
+pub const MEDIC_ROUTINE_SLOT_BONUS: i32 = 1;
+pub const SABOTEUR_ROUTINE_SLOT_BONUS: i32 = 2;
+pub const LEECH_ROUTINE_SLOT_BONUS: i32 = 1;
 
-/// Levels the player needs per additional routine slot. Deliberately far
-/// slower than a companion's: researched routines are meant to be a choice
-/// between programs, not a second kit the player accumulates for free.
-/// Halved by `HP_PER_LEVEL`'s `K = 2`, so a slot still costs the same
-/// progress it used to rather than twice as much.
-pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 5;
+/// Slots a companion gains per `Rarity` tier above Ordinary, so a
+/// Prismatic program carries four more than an ordinary one.
+pub const RARITY_ROUTINE_SLOTS_PER_TIER: u32 = 1;
 
-/// Most routines the player can hold at once, still reached at level 25. The
-/// player has no level ceiling (`progression::add_xp` takes `None`), so this
-/// clamp is the only thing bounding their slots.
-pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 12;
+/// Slots a companion gains at each rung of `Potential::quality_rung`,
+/// Poor first — Above Average one, Excellent two, nothing below.
+pub const QUALITY_ROUTINE_SLOT_BONUS: [u32; 5] = [0, 0, 0, 1, 2];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Wild routines and ability scaling

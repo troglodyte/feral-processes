@@ -342,8 +342,33 @@ fn the_decompiler_bonus_does_not_dilute_as_the_stat_grows() {
     );
 }
 
+/// A combat class the player picks reads the same slot table a companion
+/// of that class does.
+#[test]
+fn a_player_s_combat_class_moves_their_slots_like_a_companion_s() {
+    // Past level 1, where `routine_slot_total`'s floor would hide a penalty.
+    let at_6 = |class| {
+        let mut game = game_as(9103, class);
+        let p = game.player_entity();
+        crate::arena::set_level(&mut game, p, 6);
+        game
+    };
+    let striker = at_6(PlayerClass::Striker);
+    let saboteur = at_6(PlayerClass::Saboteur);
+    let bastion = at_6(PlayerClass::Bastion);
+    let base = striker.routine_slots(striker.player_entity()) as i32;
+    assert_eq!(
+        saboteur.routine_slots(saboteur.player_entity()) as i32,
+        base + crate::tuning::SABOTEUR_ROUTINE_SLOT_BONUS
+    );
+    assert_eq!(
+        bastion.routine_slots(bastion.player_entity()) as i32,
+        base + crate::tuning::BASTION_ROUTINE_SLOT_BONUS
+    );
+}
+
 /// The Invoker's whole claim, at level 1 and again at the level the curve
-/// caps out — the bonus is added past `PLAYER_ROUTINE_SLOT_CAP` on purpose,
+/// caps out — the bonus is added past `ROUTINE_SLOT_CAP` on purpose,
 /// so it must still stand there.
 #[test]
 fn an_invoker_carries_more_routine_slots_at_every_level_including_the_cap() {

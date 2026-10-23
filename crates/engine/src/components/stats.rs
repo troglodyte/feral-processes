@@ -290,7 +290,7 @@ impl Potential {
     /// A coarse, human-readable tier for `quality_percent` — shown next to
     /// a creature in the pets and inspect screens.
     pub fn quality_label(&self) -> &'static str {
-        Self::roll_label((self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0)
+        Self::QUALITY_LABELS[self.quality_rung()]
     }
 
     /// The rung one individual roll sits on, over the same five-name ladder
@@ -299,15 +299,30 @@ impl Potential {
     /// `quality_percent` uses. One ladder, so a build roll and an overall
     /// tier can never disagree about what "Excellent" means.
     pub fn roll_label(roll: f32) -> &'static str {
+        Self::QUALITY_LABELS[Self::roll_rung(roll)]
+    }
+
+    /// The five names `roll_label` speaks, worst first.
+    const QUALITY_LABELS: [&'static str; 5] = [
+        "Poor",
+        "Below Average",
+        "Average",
+        "Above Average",
+        "Excellent",
+    ];
+
+    /// Which of the five `QUALITY_LABELS` rungs `roll` sits on, Poor at 0.
+    fn roll_rung(roll: f32) -> usize {
         let pct =
             (roll - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
-        match pct.round().max(0.0) as u32 {
-            0..=19 => "Poor",
-            20..=39 => "Below Average",
-            40..=59 => "Average",
-            60..=79 => "Above Average",
-            _ => "Excellent",
-        }
+        (pct.round().max(0.0) as usize / 20).min(Self::QUALITY_LABELS.len() - 1)
+    }
+
+    /// The rung `quality_label` names, as an index — what
+    /// `abilities::companion_routine_slot_bonus` reads, so a slot bonus and
+    /// the label on the pets screen cannot disagree about "Excellent".
+    pub fn quality_rung(&self) -> usize {
+        Self::roll_rung((self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0)
     }
 
     /// Averages two parents' rolls into one — used when fusing two

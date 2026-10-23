@@ -340,7 +340,7 @@ pub const STRUCTURE_REMOVAL_REFUND_PERCENT: u32 = 30;
 /// later phase) is a read-only row list with no scroll, so this doubles as
 /// a layout constraint the way `BASE_OUTPUT_MAX_ROWS` is: it must fit at
 /// 1280x720 alongside that screen's own chrome, which a later phase's test
-/// asserts by mutation. Ten rather than matching `PLAYER_ROUTINE_SLOT_CAP`
+/// asserts by mutation. Ten rather than matching `ROUTINE_SLOT_CAP`
 /// (12): a downed-program row carries a species name, level, rarity and
 /// boss tag — wider than a routine slot's single name — against the same
 /// vertical budget, so it is set a step under that established fit rather

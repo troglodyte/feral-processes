@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.37
+
+**Type to filter an item list.** On your Items page, Equip swap, a trade, a Stack market, the compile list, Put down and the battle item list, typing lowercase letters, digits or space narrows the list to rows whose name contains that text. Backspace takes a character off, and Esc clears the filter before it does anything else. The filter stays while you open an item's actions, inspect it or pick a quantity, and comes back with the same row highlighted.
+
 ## 0.19.36
 
 **Lists are now picked with the arrow keys and Enter, and rows no longer carry `[1]`/`[a]` labels.** Before, every list numbered its rows and a lowercase letter could pick row ten onward, so a screen's own letter keys had to dodge the row labels. Now the highlight is the only way to pick, and letters only do what their screen says. The classic battle screen still numbers its rows. On the world map the arrows pan and Tab switches to the place list; on a help page Tab moves to the further-reading links.

@@ -156,7 +156,7 @@ pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'stat
 /// holds them to it.
 pub(crate) fn orphan_blocked_suffix(block: AdoptBlock) -> &'static str {
     match block {
-        AdoptBlock::NoCatalyst => "  [o] adopt \u{2014} no ICE Breaker",
+        AdoptBlock::NoCatalyst => "  [o] adopt \u{2014} no Breach Kit",
         AdoptBlock::RosterFull => "  [o] adopt \u{2014} roster full",
     }
 }

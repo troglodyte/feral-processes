@@ -658,7 +658,7 @@ impl Game {
             })
     }
 
-    /// "Printer: ICE Breaker" for each machine recipe this node gates.
+    /// "Printer: Breach Kit" for each machine recipe this node gates.
     fn machine_recipes_gated_by(&self, node: &str) -> Vec<String> {
         self.world
             .resource::<StructureDb>()

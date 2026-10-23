@@ -226,7 +226,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // set, this item is a taming catalyst: a decompile attempt spends one
     // of it and it contributes this much to the taming roll — higher is
     // stronger. No item id is privileged here; a catalyst you drop in works
-    // exactly like the shipped ICE Breaker does.
+    // exactly like the shipped Breach Kit does.
     //
     // Carrying several catalysts is fine. Each attempt resolves to the one
     // in inventory with the *highest* `taming_potency` and spends one of
@@ -294,8 +294,8 @@ any non-finite `taming_potency`, `consume.power`, or
     // quantity) pairs the player must have in inventory to craft one unit.
     //
     // `requires_structure` is optional and defaults to none. Without it the
-    // recipe is always available ("starter"), like the Power Cell and ICE
-    // Breaker, anywhere including the field. Naming a structure id instead
+    // recipe is always available ("starter"), like the Power Cell and Breach
+    // Kit, anywhere including the field. Naming a structure id instead
     // gates the recipe on the player standing orthogonally beside one of
     // those in base space — it only appears in the compile menu while the
     // bench is touched, and the touched bench's tier sets the quality

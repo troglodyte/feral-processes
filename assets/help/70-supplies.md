@@ -2,7 +2,7 @@
 
 Three things are worth never leaving home without, and only one of them is optional.
 
-- ICE Breakers. Without a taming catalyst in your pack a decompile is refused outright, so the
+- Breach Kits. Without a taming catalyst in your pack a decompile is refused outright, so the
   number you carry is the number of programs you can come home with. Three Core Fragments compiles
   one, an iso Market sells them, and caches in the Stack drop them.
 - Power Cells. 25 Power each, drained with e. Power drains every tick whatever you are doing, your
@@ -23,7 +23,7 @@ your level, and what it costs.
 
 A few things about a copy of gear are worth knowing before you throw one away.
 
-- Gear locks in the level and zone it was equipped at. The same item equipped after a breach is
+- Gear locks in the level and zone it was equipped at. The same item equipped after an escalation is
   stronger than the one you have been wearing since, so re-equipping what you already have is free
   progress every time you cross.
 - Two copies of the same piece fuse into one a tier higher, three tiers deep at most, and each tier
@@ -39,7 +39,7 @@ A few things about a copy of gear are worth knowing before you throw one away.
 - Fuse from the piece you want to keep. The spare is chosen for you, best first, and whichever half
   you were wearing, the result goes straight back on — a fusion never leaves the slot empty.
 
-A breach destroys nothing you carry.
+An escalation destroys nothing you carry.
 
 - Credits come with you, and they are the only thing a trader deals in. A research project's
   progress comes too. So do materials, including the zone material your next tier of gear is built
@@ -51,7 +51,7 @@ An iso Market takes anything at a Credit a unit, sells back at double, and buys
 programs at a tenth of their power. That last one is the sink to remember for a roster full of
 duplicates you were never going to develop.
 
-Research Deception and you can set an Assembler to Honeypots, or compile them by hand at a Workbench, out of ICE Breakers.
+Research Deception and you can set an Assembler to Honeypots, or compile them by hand at a Workbench, out of Breach Kits.
 A honeypot is a decoy you leave on the ground, and it is the one way to take a program without
 fighting it.
 
@@ -65,9 +65,9 @@ fighting it.
   anything better than Optimized however deep you are, the body comes out in worse condition than a
   fight would have left it, and it never hands over the routine that program was running. It is a
   trade of time for safety, and you pay for the safety.
-- They survive a breach, so a field left out in one sector is still working in the next. d and a
+- They survive an escalation, so a field left out in one sector is still working in the next. d and a
   direction breaks one down where it stands, and hands nothing back — a full one loses what it was
   holding.
 
-Read on: [zones and breaching](zones), [your base](your-base), [taking a program apart](extraction),
+Read on: [zones and escalation](zones), [your base](your-base), [taking a program apart](extraction),
 [the Stack](the-stack), and [outposts](outposts).

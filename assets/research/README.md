@@ -255,7 +255,7 @@ whenever any affix node exists; the screen itself stays empty until the
   researched, makes its product out of nothing on a timer and so counts as a
   source; an assembling machine's recipe does not, because it runs its
   product's own `craftable.cost` and is already covered by that recipe.
-- The ICE Breaker and Power Cell recipes are always available and are not
+- The Breach Kit and Power Cell recipes are always available and are not
   defined here.
 - **A discoverable node must be reachable from the visible tree.** Its
   prerequisites must bottom out in nodes that are visible from turn one or

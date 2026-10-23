@@ -649,7 +649,7 @@ mod tests {
         let rows = report(&db, &profile);
         let row = rows
             .iter()
-            .find(|r| r.name == "First Breach")
+            .find(|r| r.name == "First Escalation")
             .expect("the shipped ladder has this rung");
         let summary = row.earned.as_ref().expect("it was earned");
         assert_eq!(summary.tick, 812);

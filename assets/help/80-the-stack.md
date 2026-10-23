@@ -1,7 +1,7 @@
 # The Stack
 
 The Stack is underneath the sector, and it is where Portal Fragments come from. Nothing on the
-surface pays them, so a run that never goes down never breaches. It is also the only place in the
+surface pays them, so a run that never goes down never escalates. It is also the only place in the
 game where Power is genuinely scarce, and that is the whole character of the place.
 
 Three links open onto it per zone, drawn as a magenta > on the map, and they are deliberately few
@@ -51,4 +51,4 @@ A guardian in zones 1 through 10 can also drop that zone's Phase Key, which the 
 Two warnings. A guardian cannot be decompiled, whatever you spend on it. And a Recharger Node cannot
 reach you down here, so the Power you carry in is the Power you have.
 
-Read on: [zones and breaching](zones), [supplies](supplies), and [routines](routines).
+Read on: [zones and escalation](zones), [supplies](supplies), and [routines](routines).

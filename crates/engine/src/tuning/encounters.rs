@@ -296,7 +296,7 @@ pub const DIFFICULTY_TOUGH_MAX: f64 = 1.6;
 /// Multiplicative rather than added on top, because `Decompiler` skill has no
 /// ceiling (+1 per player level forever, +1..=4 from each of fifteen gear
 /// items) while the base it applies to
-/// cannot exceed 0.33 — the ICE Breaker's `taming_potency` of 0.4 is the
+/// cannot exceed 0.33 — the Breach Kit's `taming_potency` of 0.4 is the
 /// strongest catalyst that ships. As a flat addend, skill 40 was worth +0.80
 /// and pinned every attempt to `CAPTURE_CHANCE_MAX` regardless of species,
 /// leaving `taming_difficulty` and weakening the target both meaningless.
@@ -375,7 +375,7 @@ pub const CAPTURE_OUTCLASSED_MULT_FLOOR: f32 = 0.6;
 /// and how many attempts stop counting.
 ///
 /// The counter is battle-scoped (`BattleState::decompile_attempts`), so this
-/// is "you are wearing this program's ICE down", not a run-wide pity meter —
+/// is "you are wearing this program's defences down", not a run-wide pity meter —
 /// walking away and coming back meets it fresh. The cap is what keeps it
 /// from becoming one: at 5 x 10 points the most persistence can buy is
 /// 1.5x, so a stubborn species stays a gamble however many catalysts get
@@ -392,7 +392,7 @@ pub const DECOMPILE_ATTEMPT_BONUS_CAP: u32 = 5;
 ///
 /// These are safety rails, not balance levers — in particular the maximum is
 /// unreachable with the content that ships and shouldn't be reached for when
-/// tuning. The only catalyst is the ICE Breaker at `taming_potency` 0.4, so
+/// tuning. The only catalyst is the Breach Kit at `taming_potency` 0.4, so
 /// the best base the formula can produce is a fully-drained Drone at
 /// `0.4 * 0.9 * 0.91 = 0.328`; clearing 0.95 would need a 2.9x multiplier
 /// over it. The three that stack are skill (1.76x at a realistic `Decompiler`
@@ -413,7 +413,7 @@ pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
 pub const JAIL_MAX_ATTEMPTS: u32 = 5;
 
 /// The `item_potency` of every decompile roll against a prisoner, so no
-/// catalyst is spent. Above the ICE Breaker's 0.4 on purpose: at 0.4 a
+/// catalyst is spent. Above the Breach Kit's 0.4 on purpose: at 0.4 a
 /// full-Integrity, even-match prisoner of a mid-difficulty species (0.5) is
 /// taken on 11.6% of the first roll and only about 53% of the time across
 /// `JAIL_MAX_ATTEMPTS` rolls (each failure adds 10% of the base, up to

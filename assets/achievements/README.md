@@ -57,7 +57,7 @@ there is no in-game reset.
 
 | Written as | Earned when |
 |---|---|
-| `ZoneReached(4)` | the run has breached to sector 4 or deeper |
+| `ZoneReached(4)` | the run has escalated to sector 4 or deeper |
 | `StackDepthReached(3)` | the party stands in a Stack frame 3 or more levels down |
 | `CyclesSurvived(500)` | the run's clock reaches 500 cycles |
 | `BossDefeated(None)` | any boss program dies |

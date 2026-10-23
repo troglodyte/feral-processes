@@ -3726,7 +3726,7 @@ fn an_objective_line_asks_in_the_games_own_vocabulary() {
             .expect("both contracts are in hand")
     };
 
-    assert_eq!(line("breach"), "Breach to sector 3");
+    assert_eq!(line("breach"), "Escalate to sector 3");
     assert_eq!(line("hold"), "Carry 4 Core Fragment at once");
 }
 
@@ -3806,7 +3806,7 @@ fn holding_says_there_is_nothing_to_hand_in() {
     );
 }
 
-/// **A breach names the door it goes through.** "Breach to sector 3" is the
+/// **An escalation names the door it goes through.** "Escalate to sector 3" is the
 /// gesture; the Zone Portal and the Portal Fragments it spends are what the
 /// player has to go and get, and nothing else on the screen says so.
 #[test]

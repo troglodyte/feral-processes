@@ -2,7 +2,7 @@
     id: "core_fragment",
     name: "Core Fragment",
     glyph: Some('.'),
-    description: "The Basin's raw salvage. Every build cost and most recipes. It crosses a breach with you.",
+    description: "The Basin's raw salvage. Every build cost and most recipes. It crosses an escalation with you.",
     value: Some(1),
     role: Some(Currency),
 )

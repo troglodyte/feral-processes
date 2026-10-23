@@ -1,4 +1,4 @@
-# Before you breach
+# Before you escalate
 
 There is no way back through a portal, so the question of whether you are ready for the next zone is
 worth asking before you build one rather than after you step through. What changes on the far side
@@ -39,7 +39,7 @@ arrive rather than something you set up after. One of them waits behind zone 3 i
 A base is also something you defend from zone 2 on. Wild programs lay siege to it, so leave it
 staffed and with defences before you step. See [sieges](sieges).
 
-A breach takes nothing from you. Your pack, your currencies, your base and your research all cross
+An escalation takes nothing from you. Your pack, your currencies, your base and your research all cross
 with you, so there is nothing to spend or sell first. One thing is worth checking before you
 step:
 
@@ -47,4 +47,4 @@ step:
   rises with the zone: 6 in zone 1, 12 in zone 2, then 11 more each zone. A program at the cap
   stops gaining levels until you cross, the same as you do.
 
-Read on: [zones and breaching](zones), [intrusions](intrusions), and [the Stack](the-stack).
+Read on: [zones and escalation](zones), [intrusions](intrusions), and [the Stack](the-stack).

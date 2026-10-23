@@ -78,7 +78,7 @@ fn the_queue_is_first_in_first_out_and_carries_finished_text() {
     assert_eq!(first.title, "Contract Closed");
     assert!(!first.body.is_empty());
     let second = game.take_notification().expect("two queued");
-    assert_eq!(second.title, "Breach");
+    assert_eq!(second.title, "Escalation");
     assert!(game.take_notification().is_none());
 }
 
@@ -421,7 +421,7 @@ fn draining_the_profile_channel_clears_both_halves() {
 /// A new run opens on its onboarding briefing and **nothing else**. Worth
 /// pinning because `enter_next_zone` fires the breach milestone from its
 /// first line, and anything that later routes world setup through it would
-/// greet every player with "Breach" before they had moved.
+/// greet every player with "Escalation" before they had moved.
 ///
 /// The briefing itself is deliberate: `Game::new` hands out the chain's
 /// first mission, and a mission handed out is a mission explained.

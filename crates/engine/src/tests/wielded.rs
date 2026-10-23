@@ -365,7 +365,7 @@ fn no_wieldable_routine_is_field_only_decompile_or_tactical_only() {
         );
         assert!(
             !matches!(def.effect, AbilityEffect::Decompile),
-            "{} would spend an ICE Breaker the player never authorised",
+            "{} would spend a Breach Kit the player never authorised",
             def.id
         );
         assert!(

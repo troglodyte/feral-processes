@@ -2,7 +2,7 @@
 
 You are a process loose in the Phase-Manifold Basin, and everything else running out here would rather you were
 not. A run is one long push outward: fight what you meet, take what it drops, build a base that
-works while you walk, and breach into the next zone once you can afford the way through.
+works while you walk, and escalate into the next zone once you can afford the way through.
 
 On the map the world keeps moving by itself, and space pauses it. Menus and fights hold it still, and
 while it is paused each thing you do takes its own turn, so reading a screen costs you nothing.
@@ -16,7 +16,7 @@ Two meters on the left panel decide how long a run lasts.
   you take Integrity damage each turn until you find some. Drain a Power Cell to top it up,
   recharge to fill it outright, or stand in a base with a Recharger Node and it refills on its own.
 
-Every hostile program is wrapped in ICE. You break it with an ICE Breaker, a catalyst spent on a
+Every hostile program is guarded by defences. You breach them with a Breach Kit, a catalyst spent on a
 decompile — the special that turns a beaten program into one of yours instead of finishing it off.
 Your Decompiler stat multiplies those odds, and a program is far easier to crack once it is nearly
 down. A program you compile joins your roster: it fights beside you, or it works your base while
@@ -32,7 +32,7 @@ that platform — out in the field a recharge burns a Power Outlet and can be in
 where everything you build has to stand. After that the run is yours.
 
 Read on: [the controls](controls), [what a fight is](intrusions), [zones and
-breaching](zones), [getting stronger](getting-stronger), and [your base](your-base).
+escalation](zones), [getting stronger](getting-stronger), and [your base](your-base).
 
 The Basin has its own word for most things an old-school RPG already has a name for. The second
 word, in parentheses, is the one it stands in for.
@@ -46,11 +46,11 @@ word, in parentheses, is the one it stands in for.
 - Routine (special ability) — an ability sitting in a slot.
 - Perk (talent) — a permanent upgrade bought with the points each level gives you.
 - Intrusion (combat encounter) — a fight.
-- Decompile (tame) — turn a beaten program into one of yours. ICE is what resists it, and an ICE
-  Breaker (taming item) is what it costs.
+- Decompile (tame) — turn a beaten program into one of yours. A program's defences are what resist it, and a Breach
+  Kit (taming item) is what it costs.
 - Roster (party) — the programs you hold.
 - Manifest (character sheet) — one program's stats and kit.
-- Zone (level) — one overworld map. Breaching (taking the stairs down) is the one-way step to the
+- Zone (level) — one overworld map. Escalation (taking the stairs down) is the one-way step to the
   next, and Portal Fragments are its price.
 - The Stack (dungeon) — what lies underneath a zone. A frame is one dungeon floor, a cache is a
   treasure chest, and the lair is the boss room.

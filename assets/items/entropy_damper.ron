@@ -2,7 +2,7 @@
     id: "entropy_damper",
     name: "Entropy Damper",
     glyph: Some(':'),
-    description: "Standard module. Steadies you while you work an ICE wall open.",
+    description: "Standard module. Steadies you while you work a program's defences open.",
     value: Some(15),
     equipment: Some((Module, (decompiler: 2, mitigation: 3))),
     craftable: Some((cost: [("logic_wafer", 2), ("charge_coil", 3)], requires_structure: Some("workbench"), research: Some("weapon_bench"))),

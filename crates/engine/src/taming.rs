@@ -86,7 +86,7 @@ fn outclassed_multiplier(threat_ratio: f32) -> f32 {
     1.0 - (1.0 - CAPTURE_OUTCLASSED_MULT_FLOOR) * ramp
 }
 
-/// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
+/// Breach odds: weaker (lower `hp_fraction`) and easier-compiled
 /// species are more likely to be decompiled, and stronger breakers help. A
 /// more practiced player (`player.skill`) *multiplies* whatever those three
 /// are worth rather than adding to it, so neither the species' own

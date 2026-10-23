@@ -356,7 +356,7 @@ fn a_new_game_starts_with_two_power_outlets() {
     assert_eq!(
         held, 2,
         "the bounded-income opening softener is two outlets, beside the \
-         3 ICE Breakers / 3 Power Cells / 5 Core Fragments"
+         3 Breach Kits / 3 Power Cells / 5 Core Fragments"
     );
 }
 
@@ -1411,7 +1411,7 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     let player = game.player_entity();
     *game.world.get_mut::<PowerReserve>(player).unwrap() =
         PowerReserve::new(50.0, crate::components::POWER_MAX);
-    // Drain all four starting stacks (see `Game::new`: Ice Breaker, Power
+    // Drain all four starting stacks (see `Game::new`: Breach Kit, Power
     // Cell, Core Fragment, Power Outlet) and rebuild the inventory with the
     // non-power item (Core Fragment) added *first*, so it's ahead of
     // the Power Cell in `Inventory::items`. This pins selection to the

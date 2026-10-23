@@ -589,7 +589,7 @@ way deleting the Currency item does.
     //
     // So a battle ability leaving *both* at 0 is completely unthrottled, and
     // a handful deliberately do: `decompile` is free on both axes because it
-    // already spends an ICE Breaker per attempt, and the entry tier of a few
+    // already spends a Breach Kit per attempt, and the entry tier of a few
     // families is free on Power so the opening move of a fight is always
     // available. Everything else pays on at least one axis, and most of the
     // shipped set pays on both.

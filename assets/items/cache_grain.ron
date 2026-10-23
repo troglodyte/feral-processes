@@ -2,6 +2,6 @@
     id: "cache_grain",
     name: "Cache Grain",
     glyph: Some('*'),
-    description: "Coherent memory lifted a line at a time out of a sector's cache fabric. What everything past the first breach is built from — advanced structures, deeper upgrades, and the gear a zone-gated blueprint compiles.",
+    description: "Coherent memory lifted a line at a time out of a sector's cache fabric. What everything past the first escalation is built from — advanced structures, deeper upgrades, and the gear a zone-gated blueprint compiles.",
     value: Some(1),
 )

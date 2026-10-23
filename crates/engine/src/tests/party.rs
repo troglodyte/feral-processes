@@ -61,7 +61,7 @@ fn destroying_a_data_cache_shrinks_the_pet_capacity_back() {
 #[test]
 fn inventory_used_counts_cargo_but_not_research_data() {
     let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Starting inventory is 3 ICE Breaker + 3 Power Cell + 5 Core Fragment
+    // Starting inventory is 3 Breach Kit + 3 Power Cell + 5 Core Fragment
     // + 2 Power Outlet.
     assert_eq!(game.inventory_used(), 13);
 

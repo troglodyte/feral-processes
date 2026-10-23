@@ -4108,7 +4108,7 @@ fn an_orphan_you_cannot_pay_for_says_so_underfoot() {
     set_inventory(&mut game, &[]);
     let blocked = game.stack_view().unwrap().standing_on.unwrap();
     assert!(
-        blocked.ends_with("  [o] adopt \u{2014} no ICE Breaker"),
+        blocked.ends_with("  [o] adopt \u{2014} no Breach Kit"),
         "with an empty pack the row still promised a free adoption: {blocked:?}"
     );
     assert!(
@@ -4244,7 +4244,7 @@ fn adopting_without_a_catalyst_is_refused_before_anything_is_spawned() {
 
     let err = game.adopt_orphan().unwrap_err();
     assert_eq!(
-        err, "You need an ICE Breaker to adopt a process.",
+        err, "You need a Breach Kit to adopt a process.",
         "the refusal lands alone on the status line and has to read as a sentence"
     );
     assert_eq!(game.pet_count(), before, "a refused adoption still spawned");

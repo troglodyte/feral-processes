@@ -39,10 +39,10 @@ fn held(app: &App, item: &str) -> u32 {
         .map_or(0, |r| r.qty)
 }
 
-/// "ice" leaves ICE Breaker in two sections: the sell row (source 2 of the
+/// "breach" leaves Breach Kit in two sections: the sell row (source 2 of the
 /// pack) and the buy row (source 1 of the shelf), which unfiltered are
 /// neither the first row nor next to each other.
-const FILTER: &str = "ice";
+const FILTER: &str = "breach";
 
 fn filtered(seed: u32) -> App {
     let mut app = trade_app(seed);

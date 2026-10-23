@@ -69,7 +69,7 @@ fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() 
 #[test]
 fn decompile_spends_the_highest_potency_catalyst_held_not_the_shipped_one() {
     // The mod case `taming_potency` exists for: a dropped-in catalyst
-    // stronger than the shipped ICE Breaker must be the one resolved
+    // stronger than the shipped Breach Kit must be the one resolved
     // and consumed, with no Rust change.
     let dir = modded_assets_dir(
         "strong_catalyst",
@@ -339,7 +339,7 @@ fn the_shipped_ice_breaker_still_tames_for_a_player_holding_only_it() {
             .unwrap()
             .count(&ItemId::from(ids::ICE_BREAKER)),
         50 - attempts,
-        "one ICE Breaker per attempt, same as before"
+        "one Breach Kit per attempt, same as before"
     );
 }
 
@@ -433,7 +433,7 @@ fn a_boss_is_refused_as_a_decompile_target() {
         )
         .expect_err("a boss must be refused as a decompile target");
     assert!(
-        err.to_lowercase().contains("ice"),
+        err.to_lowercase().contains("defences"),
         "the refusal should say why, got {err:?}"
     );
 }
@@ -473,7 +473,7 @@ fn a_lairs_guardian_is_refused_as_a_decompile_target() {
         )
         .expect_err("a lair guardian must be refused as a decompile target");
     assert!(
-        err.to_lowercase().contains("ice"),
+        err.to_lowercase().contains("defences"),
         "the refusal should say why, got {err:?}"
     );
 }
@@ -685,7 +685,7 @@ fn a_capture_leaves_no_refusal_on_the_summary() {
 fn ice_holds_lines(game: &Game) -> Vec<String> {
     game.battle_log()
         .into_iter()
-        .filter(|line| line.text.contains("ICE holds"))
+        .filter(|line| line.text.contains("defences hold"))
         .map(|line| line.text)
         .collect()
 }
@@ -757,7 +757,7 @@ fn attempts_against_one_group_do_not_help_against_another() {
 }
 
 /// The counter lives on `BattleState`, so walking away from a fight throws
-/// it out — this is "you are wearing its ICE down", not a run-wide pity
+/// it out — this is "you are wearing its defences down", not a run-wide pity
 /// meter that a player could bank against a later target.
 #[test]
 fn the_attempt_counter_does_not_survive_the_battle() {
@@ -775,7 +775,7 @@ fn the_attempt_counter_does_not_survive_the_battle() {
     assert_eq!(
         quoted_odds(&game, 0),
         fresh,
-        "re-engaging the same program must meet it with its ICE intact"
+        "re-engaging the same program must meet it with its defences intact"
     );
 }
 

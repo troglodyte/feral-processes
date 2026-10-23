@@ -182,7 +182,7 @@ fn every_compilable_item_either_has_a_blurb_or_declares_nothing_blurb_worthy() {
         // (`game/catalog.rs`) actually reads — read directly off the def
         // rather than through `ItemDef::category`, which checks a different
         // set (`routine`, `equipment`, `consume`, `role`) and is why this
-        // guard used to silently drop the ICE Breaker: it sets only
+        // guard used to silently drop the Breach Kit: it sets only
         // `taming_potency`, which `category` never looks at, so it fell
         // through to `Material` and got skipped even though `item_blurb`
         // has "taming catalyst" to say about it. The outlet is the one

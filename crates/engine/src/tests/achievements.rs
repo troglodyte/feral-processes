@@ -237,7 +237,7 @@ fn an_earned_line_survives_the_end_of_a_battle() {
     assert!(!game.has_active_battle(), "the fight should be over");
     let log = game.message_log(100);
     assert!(
-        log.iter().any(|l| l.text.contains("First Breach")),
+        log.iter().any(|l| l.text.contains("First Escalation")),
         "the earned line should have survived the end of the battle, got {:?}",
         log.iter().map(|l| &l.text).collect::<Vec<_>>()
     );

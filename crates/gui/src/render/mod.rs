@@ -764,9 +764,14 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
                 .and_then(|g| g.compass_bearing())
                 .map(|r| r.target);
             match view {
-                Some(view) => {
-                    world_map::draw_world_map(&view, app.menu_selected, pointing, painter, &m)
-                }
+                Some(view) => world_map::draw_world_map(
+                    &view,
+                    app.menu_selected,
+                    app.world_map_list_focused,
+                    pointing,
+                    painter,
+                    &m,
+                ),
                 None => {
                     draw_playing_base(app, fx, None, painter, &m, reveal);
                     draw_mode_overlay(app, None, painter, &m);

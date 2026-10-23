@@ -1,5 +1,5 @@
-//! `Mode::WorldMap`: pan with the arrows, pick a row with a letter or a
-//! click, `C` to steer the compass, `P` to come back, Esc to close.
+//! `Mode::WorldMap`: pan with the arrows, Tab to the place list where the
+//! arrows pick, or click, `C` to steer the compass, `P` to come back, Esc to close.
 
 use super::support::*;
 use crate::*;
@@ -53,15 +53,126 @@ fn esc_returns_to_playing() {
 }
 
 #[test]
-fn letters_pick_no_place_and_arrows_do_not_either() {
+fn world_map_opens_with_map_focus_and_arrows_pan() {
     let mut app = open(913);
+    assert!(!app.world_map_list_focused);
     assert!(app.world_map_marks().len() >= 2, "home and a town at least");
-    for c in ['2', '1', 'a', 'b'] {
-        app.handle_key(GameKey::Char(c));
-        assert_eq!(app.menu_selected, 0, "[{c}] picked a place");
-    }
+    let home = app.world_map_center;
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 0, "Down pans, it does not move the row");
+    assert_eq!(app.world_map_center, (home.0, home.1 + 1));
+}
+
+#[test]
+fn tab_moves_focus_to_the_list_where_up_down_move_the_highlight_and_the_centre_stays() {
+    let mut app = open(918);
+    assert!(app.world_map_marks().len() >= 2);
+    let home = app.world_map_center;
+    app.handle_key(GameKey::Tab);
+    assert!(app.world_map_list_focused);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+    app.handle_key(GameKey::Up);
+    app.handle_key(GameKey::Up);
+    let last = app.world_map_marks().len() - 1;
+    assert_eq!(app.menu_selected, last, "wraps");
+    assert_eq!(app.world_map_center, home);
+    assert_eq!(app.mode, Mode::WorldMap);
+}
+
+#[test]
+fn tab_again_returns_arrows_to_panning() {
+    let mut app = open(919);
+    let home = app.world_map_center;
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Tab);
+    assert!(!app.world_map_list_focused);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.world_map_center, (home.0 + 1, home.1));
+    assert_eq!(app.menu_selected, 0);
+}
+
+#[test]
+fn reopening_the_map_starts_on_the_map() {
+    let mut app = open(920);
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('g'));
+    assert!(!app.world_map_list_focused);
+}
+
+#[test]
+fn c_points_at_the_highlighted_place_under_either_focus() {
+    for focused in [false, true] {
+        let mut app = open(921);
+        let marks = app.world_map_marks();
+        let (idx, target) = marks
+            .iter()
+            .enumerate()
+            .find_map(|(i, m)| m.target.map(|t| (i, t)))
+            .expect("a mark with a target");
+        app.menu_selected = idx;
+        if focused {
+            app.handle_key(GameKey::Tab);
+        }
+        app.handle_key(GameKey::Char('C'));
+        assert_eq!(
+            app.game
+                .as_mut()
+                .unwrap()
+                .compass_bearing()
+                .map(|r| r.target),
+            Some(target),
+            "focused={focused}"
+        );
+    }
+}
+
+#[test]
+fn letters_pick_no_place() {
+    let mut app = open(913);
+    for focused in [false, true] {
+        if focused {
+            app.handle_key(GameKey::Tab);
+        }
+        for c in ['2', '1', 'a', 'b'] {
+            app.handle_key(GameKey::Char(c));
+            assert_eq!(app.menu_selected, 0, "[{c}] picked a place");
+        }
+    }
+}
+
+#[test]
+fn enter_is_inert_on_the_map() {
+    let mut app = open(922);
+    let home = app.world_map_center;
+    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::WorldMap);
+    assert_eq!(app.menu_selected, 1);
+    assert_eq!(app.world_map_center, home);
+}
+
+#[test]
+fn an_empty_list_survives_tab_up_down_enter_c() {
+    let mut app = open(923);
+    // Panned far past anything walked: nothing is in view, so the list is empty.
+    app.world_map_center = (10_000, 10_000);
+    assert!(app.world_map_marks().is_empty());
+    let home = app.world_map_center;
+    app.handle_key(GameKey::Tab);
+    for k in [
+        GameKey::Up,
+        GameKey::Down,
+        GameKey::Enter,
+        GameKey::Char('C'),
+    ] {
+        app.handle_key(k);
+    }
+    assert_eq!(app.world_map_center, home);
+    assert_eq!(app.menu_selected, 0);
+    assert_eq!(app.mode, Mode::WorldMap);
 }
 
 #[test]

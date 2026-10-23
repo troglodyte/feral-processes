@@ -2203,10 +2203,11 @@ pub enum Mode {
     /// screen with rows.
     Compass,
     /// The surface at chunk scale: the fog, the places in it and the routes
-    /// between them, from `App::world_map`. Arrows pan, a lowercase letter
-    /// or digit picks a row of the side list (`App::world_map_marks`),
-    /// uppercase `C` points the compass at it and `P` re-centres on the
-    /// party. Esc closes.
+    /// between them, from `App::world_map`. Arrows pan until Tab moves them
+    /// to the side list (`App::world_map_marks`), where Up/Down pick a row
+    /// and Tab hands them back; uppercase `C` points the compass at the
+    /// picked row under either focus and `P` re-centres on the party. Esc
+    /// closes.
     ///
     /// Opened by `g` on the surface; underground the same key opens
     /// `FrameMap`. The pan centre is `App::world_map_center`, because
@@ -3413,6 +3414,9 @@ pub struct App {
     /// The chunk at the middle of `Mode::WorldMap`'s grid. Set to the
     /// party's chunk on opening and moved by the arrows; not saved.
     pub world_map_center: (i32, i32),
+    /// Whether `Mode::WorldMap`'s arrows drive the place list rather than
+    /// pan the grid. Tab flips it; `open_world_map` clears it. Not saved.
+    pub world_map_list_focused: bool,
     /// Whether the research screen is drawing the graph rather than the
     /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
     /// census stay as they are. Opens on the graph.

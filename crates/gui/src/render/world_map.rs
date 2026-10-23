@@ -5,11 +5,10 @@
 //! placement and nothing else, so what a town's tint means is the engine's
 //! standing band and not a second reading of it. The grid is north-up; the
 //! side list is `App::world_map_marks`, the same list the key handler
-//! indexes, so a row letter here is the mark it selects there.
+//! indexes, so a row here is the mark it selects there.
 
 use super::*;
 use crate::paint::Face;
-use feral_processes_app_core::menu_shortcut;
 use feral_processes_engine::outposts::Trend;
 use feral_processes_engine::settlements::growth::TownTrend;
 use feral_processes_engine::settlements::{CompassTarget, SettlementKind, Standing};
@@ -164,9 +163,9 @@ fn detail_lines(mark: &WorldMapMark) -> Vec<String> {
     lines
 }
 
-/// One side-list row: the key that selects it, then what it is.
-fn list_row(index: usize, mark: &WorldMapMark) -> String {
-    format!("[{}] {}", menu_shortcut(index), mark.label)
+/// One side-list row: what the place is.
+fn list_row(mark: &WorldMapMark) -> &str {
+    &mark.label
 }
 
 /// The window of list rows that fits `capacity`, kept around `selected`.
@@ -340,7 +339,7 @@ fn legend() -> Vec<String> {
         "       green Warm, yellow Allied".to_string(),
         "Cyan line: a route.  Red line: preyed on.".to_string(),
         "Gold box: compass target.  Esc closes.".to_string(),
-        "Arrows pan  a-z/1-9/click pick  C compass  P centre".to_string(),
+        "Arrows pan  Tab picks  C compass  P centre".to_string(),
     ]
 }
 
@@ -451,6 +450,7 @@ pub(crate) fn world_map_hit(
 pub(super) fn draw_world_map(
     view: &WorldMapView,
     selected: usize,
+    list_focused: bool,
     pointing: Option<CompassTarget>,
     painter: &Painter,
     m: &Metrics,
@@ -460,10 +460,11 @@ pub(super) fn draw_world_map(
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "WORLD MAP   centre {},{}   {} places in view",
+        "WORLD MAP   centre {},{}   {} places in view   arrows: {}",
         view.center.0,
         view.center.1,
         view.marks.len(),
+        if list_focused { "LIST" } else { "MAP" },
     );
     painter.ui(
         &heading,
@@ -487,10 +488,12 @@ pub(super) fn draw_world_map(
         list.push(("No places known yet. Walk to find some.".into(), TEXT_DIM));
     }
     for i in c.list.clone() {
-        let on = i == selected;
+        // The highlight shows only while the arrows drive the list, so a
+        // lit row always means "Up/Down move this".
+        let on = list_focused && i == selected;
         let prefix = if on { "> " } else { "  " };
         list.push((
-            format!("{prefix}{}", list_row(i, &view.marks[i])),
+            format!("{prefix}{}", list_row(&view.marks[i])),
             if on { TEXT } else { TEXT_DIM },
         ));
     }
@@ -679,12 +682,30 @@ mod tests {
         let v = view(WORLD_MAP_VIEW_RADIUS);
         let (_, shapes) = crate::paint::with_painter(|p| {
             let m = ui_metrics(p.screen_h());
-            draw_world_map(&v, 0, None, p, &m);
+            draw_world_map(&v, 0, false, None, p, &m);
         });
         let drawn = crate::paint::painted_text(&shapes);
         assert!(drawn.iter().any(|t| t.contains("WORLD MAP")));
         assert!(drawn.iter().any(|t| t.contains("Lowport")));
         assert!(drawn.iter().any(|t| t.contains("Esc close")));
+    }
+
+    /// The row highlight and the header's focus cue follow the focus flag.
+    #[test]
+    fn the_list_highlight_shows_only_while_the_list_has_focus() {
+        let v = view(WORLD_MAP_VIEW_RADIUS);
+        let drawn = |focused| {
+            let (_, shapes) = crate::paint::with_painter(|p| {
+                let m = ui_metrics(p.screen_h());
+                draw_world_map(&v, 0, focused, None, p, &m);
+            });
+            crate::paint::painted_text(&shapes)
+        };
+        let (on, off) = (drawn(true), drawn(false));
+        assert!(on.iter().any(|t| t.contains("arrows: LIST")));
+        assert!(off.iter().any(|t| t.contains("arrows: MAP")));
+        assert!(on.iter().any(|t| t.starts_with("> ")));
+        assert!(!off.iter().any(|t| t.starts_with("> ")));
     }
 
     /// The widest legend line and the widest detail line must fit the column
@@ -723,7 +744,7 @@ mod tests {
             let mut lines = legend();
             for m_ in &marks {
                 lines.extend(detail_lines(m_));
-                lines.push(format!("> {}", list_row(35, m_)));
+                lines.push(format!("> {}", list_row(m_)));
             }
             let widest = lines
                 .iter()

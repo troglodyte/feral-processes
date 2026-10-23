@@ -863,11 +863,11 @@ mod tests {
         // description lines are the rows this test says nothing about.
         let drawn: Vec<String> = rows
             .iter()
+            .filter(|r| !is_description_row(r))
             .filter_map(|r| match r {
                 Row::Item { text, .. } if !text.is_empty() => Some(text.clone()),
                 _ => None,
             })
-            .filter(|t| !t.starts_with(DESCRIPTION_INDENT))
             .collect();
 
         let mut expected = Vec::new();

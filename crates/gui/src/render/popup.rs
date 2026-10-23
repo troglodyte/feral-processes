@@ -1124,9 +1124,9 @@ fn status_wrap_columns(size: PopupSize) -> usize {
 }
 
 /// What a continuation line is indented by: the glyph slot `with_icon`
-/// reserves inside the row above, plus the width of its `[x] ` shortcut, so
-/// the detail sits under the row's name rather than under its icon.
-const ROW_CONTINUATION_INDENT: &str = "       ";
+/// reserves inside the row above, so the detail sits under the row's name
+/// rather than under its icon.
+const ROW_CONTINUATION_INDENT: &str = ICON_SLOT;
 
 /// A menu row's trailing detail, wrapped and indented onto its own lines
 /// under the row it belongs to — the shape `draw_craft_menu` gives a recipe
@@ -1154,11 +1154,20 @@ pub(super) fn continuation_lines_within(text: &str, columns: usize) -> Vec<Strin
 }
 
 /// What an authored description is indented by under the entry it belongs
-/// to. Four columns rather than `ROW_CONTINUATION_INDENT`'s seven: that
-/// indent is a fact about `with_icon`'s glyph slot, and none of the pickers
-/// that print a description carry an icon — four is `menu_shortcut`'s
-/// `[x] ` alone, which is what puts the prose under the entry's name.
-pub(super) const DESCRIPTION_INDENT: &str = "    ";
+/// to. None: a row's name starts right after the two-column highlight
+/// prefix that every `Row::Item` carries, and so does the description's
+/// first character. It is not `ROW_CONTINUATION_INDENT`, which is the icon
+/// slot — none of the pickers that print a description carry an icon.
+/// Description rows are recognised by `is_description_row`, not by this
+/// indent.
+pub(super) const DESCRIPTION_INDENT: &str = "";
+
+/// Whether `row` came out of `description_rows`: an unselected `Item` in the
+/// dim prose colour.
+#[cfg(test)]
+pub(super) fn is_description_row(row: &Row) -> bool {
+    matches!(row, Row::Item { color, selected: false, .. } if *color == TEXT_DIM)
+}
 
 /// One entry's authored description, wrapped to the popup and indented under
 /// the row it belongs to — the perk and research pickers' shape, and the
@@ -1253,6 +1262,18 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A row's name starts after the highlight prefix and, with an icon, the
+    /// icon slot; prose under it must start in that same column.
+    #[test]
+    fn detail_and_description_start_under_the_row_name() {
+        let lines = continuation_lines("detail");
+        assert_eq!(lines[0], format!("{ICON_SLOT}detail"));
+        let Some(Row::Item { text, .. }) = description_rows("prose").next() else {
+            panic!("a description is an item row");
+        };
+        assert_eq!(text, "prose", "no icon, so no indent past the prefix");
+    }
 
     #[test]
     fn a_head_over_the_budget_continues_on_an_indented_line_and_one_under_does_not() {

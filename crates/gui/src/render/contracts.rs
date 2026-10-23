@@ -95,7 +95,7 @@ fn contract_rows(
 /// there are any.
 ///
 /// Drawn through `description_rows`, so it wraps at the same column and wears
-/// the same `DESCRIPTION_INDENT` the description census filters on: a hint too
+/// the same `is_description_row` shape the description census filters on: a hint too
 /// long for the body fails that census rather than running off the right edge.
 /// The arrow is the whole of what separates it from the flavour text above,
 /// deliberately - `color` on this screen already means "onboarding mission",
@@ -334,8 +334,9 @@ mod tests {
         let catalogue = game.contract_catalogue();
         let widest = contract_rows(&catalogue, &[], BrokerReach::AtBroker, usize::MAX)
             .into_iter()
+            .filter(is_description_row)
             .filter_map(|row| match row {
-                Row::Item { text, .. } if text.starts_with(DESCRIPTION_INDENT) => Some(text),
+                Row::Item { text, .. } => Some(text),
                 _ => None,
             })
             .max_by_key(|line| line.chars().count())

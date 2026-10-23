@@ -101,6 +101,29 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
     )
 }
 
+/// The row a typed digit or lowercase letter names, if the list has one:
+/// `menu_shortcut`'s labels read back. The classic battle screen's resolver
+/// is its only caller outside `selected_index`.
+pub(crate) fn shortcut_row(c: char, len: usize) -> Option<usize> {
+    if let Some(d) = c.to_digit(10) {
+        // Rows are labelled from `1` (see `menu_shortcut`), so `0`
+        // labels nothing and must fall out here. Subtracting through
+        // `checked_sub` rather than guarding with `d >= 1` is what
+        // keeps that structural: `then_some` takes its argument by
+        // value, so a guard leaves `0usize - 1` still evaluated.
+        return (d as usize).checked_sub(1).filter(|&idx| idx < len);
+    }
+    // Lowercase only. Uppercase is reserved for screen actions —
+    // `S`/`B` quick-trade a single unit off the highlighted row —
+    // and a shifted letter that also picked a row would fire both
+    // on one keypress, on a screen where one of them spends money.
+    if !c.is_ascii_lowercase() {
+        return None;
+    }
+    let idx = DIGIT_ROWS + (c as usize - 'a' as usize);
+    (idx < len).then_some(idx)
+}
+
 impl App {
     /// Shared Up/Down/Enter handling layered on top of every menu's direct
     /// row shortcuts — this doesn't replace them, it's just another way to
@@ -115,23 +138,7 @@ impl App {
             return None;
         }
         if let GameKey::Char(c) = key {
-            if let Some(d) = c.to_digit(10) {
-                // Rows are labelled from `1` (see `menu_shortcut`), so `0`
-                // labels nothing and must fall out here. Subtracting through
-                // `checked_sub` rather than guarding with `d >= 1` is what
-                // keeps that structural: `then_some` takes its argument by
-                // value, so a guard leaves `0usize - 1` still evaluated.
-                return (d as usize).checked_sub(1).filter(|&idx| idx < len);
-            }
-            // Lowercase only. Uppercase is reserved for screen actions —
-            // `S`/`B` quick-trade a single unit off the highlighted row —
-            // and a shifted letter that also picked a row would fire both
-            // on one keypress, on a screen where one of them spends money.
-            if !c.is_ascii_lowercase() {
-                return None;
-            }
-            let idx = DIGIT_ROWS + (c as usize - 'a' as usize);
-            return (idx < len).then_some(idx);
+            return shortcut_row(c, len);
         }
         match key {
             GameKey::Up => {

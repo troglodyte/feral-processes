@@ -1,9 +1,23 @@
 //! The intrusion screens: the action roster and the pickers layered over
 //! it, from a key press to a committed `BattleAction`.
 
+use crate::app::input::shortcut_row;
 use crate::*;
 
 impl App {
+    /// The classic battle screen's row picker: its lists still show
+    /// `menu_shortcut` labels, so a digit or lowercase letter names a row
+    /// here, and every other key is the shared highlight + Enter.
+    pub(crate) fn battle_row(&mut self, key: GameKey, len: usize) -> Option<usize> {
+        if let GameKey::Char(c) = key
+            && len > 0
+            && let Some(row) = shortcut_row(c, len)
+        {
+            return Some(row);
+        }
+        self.selected_index(key, len)
+    }
+
     /// Shared tail of every battle-turn key handler: queues an immediate cue
     /// for the action just taken — `None` for a plain swing, which now earns
     /// its cue from `App::advance_reveal` as its own narration line scrolls
@@ -300,7 +314,7 @@ impl App {
                 let idx = (c.to_ascii_lowercase() as u8 - b'a') as usize;
                 (idx < group_count).then_some(idx)
             }
-            other => self.selected_index(other, group_count),
+            other => self.battle_row(other, group_count),
         };
         let Some(group) = picked else { return };
         // Checked before `active_slot`: a party-wide fill plans every open
@@ -376,7 +390,7 @@ impl App {
             return;
         };
         let options = game.battle_special_options(slot);
-        let Some(idx) = self.selected_index(key, options.len()) else {
+        let Some(idx) = self.battle_row(key, options.len()) else {
             return;
         };
         let chosen = &options[idx];
@@ -448,7 +462,7 @@ impl App {
             return;
         };
         let allies = game.battle_ally_options();
-        let Some(idx) = self.selected_index(key, allies.len()) else {
+        let Some(idx) = self.battle_row(key, allies.len()) else {
             return;
         };
         let Some(kind) = self.pending_battle_action else {
@@ -489,7 +503,7 @@ impl App {
             return;
         };
         let options = game.emulation_options();
-        let Some(idx) = self.selected_index(key, options.len()) else {
+        let Some(idx) = self.battle_row(key, options.len()) else {
             return;
         };
         let Some(ability) = self.pending_special_ability else {
@@ -539,7 +553,7 @@ impl App {
             return;
         }
 
-        let Some(idx) = self.selected_index(key, items.len()) else {
+        let Some(idx) = self.battle_row(key, items.len()) else {
             return;
         };
         let Some(kind) = self.pending_battle_action else {

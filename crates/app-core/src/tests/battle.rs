@@ -802,6 +802,96 @@ fn a_lowercase_letter_invokes_the_image_it_names() {
     );
 }
 
+/// The classic battle screen keeps its row labels, so every picker on it
+/// still takes a digit or letter for a row. This pins that across the removal
+/// of the same keys from `selected_index`, and is the mutation check for
+/// `App::battle_row`.
+#[test]
+fn battle_pickers_take_digits_and_letters() {
+    // Special: the digit names the same row the picker labels.
+    let mut app = battling_app();
+    let options = app.game.as_ref().unwrap().battle_special_options(0);
+    let idx = options
+        .iter()
+        .position(|o| o.unavailable.is_none() && o.index != 0)
+        .or_else(|| options.iter().position(|o| o.unavailable.is_none()))
+        .expect("an installed routine is on offer");
+    app.mode = Mode::BattleSpecial;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    assert_eq!(
+        app.pending_special_ability,
+        Some(options[idx].index),
+        "the special picker takes its row's digit"
+    );
+
+    // Ally: a digit commits and leaves the picker.
+    let mut app = battling_app();
+    app.mode = Mode::BattleAlly;
+    app.pending_battle_action = Some(ActionKind::Special);
+    app.pending_special_ability = Some(0);
+    app.handle_key(GameKey::Char('1'));
+    assert_ne!(app.mode, Mode::BattleAlly, "the ally picker takes a digit");
+
+    // Item: `2` picks row 1 when the kit has one, else `1` picks row 0.
+    let mut app = battling_app();
+    let items = app.game.as_ref().unwrap().battle_usable_items();
+    let row = usize::from(items.len() > 1);
+    let target = items[row].clone();
+    let held = |app: &App| -> u32 {
+        app.game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .find(|r| r.copy.item == target)
+            .map(|r| r.qty)
+            .unwrap_or(0)
+    };
+    let before = held(&app);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(app.mode, Mode::BattleItem);
+    app.handle_key(GameKey::Char(menu_shortcut(row)));
+    assert_eq!(held(&app), before - 1, "the item picker takes a digit");
+
+    // Target: group letters and digits both name a group.
+    for key in ['a', '1'] {
+        let mut app = battling_app();
+        app.handle_key(GameKey::Char('a'));
+        assert_eq!(app.mode, Mode::BattleTarget);
+        app.handle_key(GameKey::Char(key));
+        assert_ne!(app.mode, Mode::BattleTarget, "[{key}] picks group 0");
+    }
+
+    // Emulate: a digit and a letter row, with enough images for both.
+    for (key, row) in [('2', 1), ('a', 9)] {
+        let mut app = battling_app_with_full_image_library();
+        let options = app.game.as_ref().unwrap().battle_special_options(0);
+        let ability = options
+            .iter()
+            .position(|o| o.name == "Emulate")
+            .expect("the fixture installed Emulate");
+        app.mode = Mode::BattleEmulate;
+        app.pending_battle_action = Some(ActionKind::Special);
+        app.pending_special_ability = Some(ability);
+        let chosen = app.game.as_ref().unwrap().emulation_options()[row]
+            .species
+            .clone();
+        app.handle_key(GameKey::Char(key));
+        let name = app.game.as_ref().unwrap().species_name(&chosen).to_string();
+        assert!(
+            app.game
+                .as_ref()
+                .unwrap()
+                .message_history(20)
+                .iter()
+                .any(|line| line.text.contains(&name)),
+            "[{key}] must invoke the image on row {row} ({name})"
+        );
+    }
+}
+
 /// Esc from the image picker returns to the ability picker, spending
 /// nothing — `esc_from_the_ally_picker_steps_back_to_the_ability_picker`'s
 /// own shape.

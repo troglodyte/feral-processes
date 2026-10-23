@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.42
+
+**A Quarantine Rack now shows how full it is on the map, with the same bar a Depot has.** Before, the only way to see whether a rack had room was to open it. Now a bar up the right edge of the rack fills as programs are racked, turns yellow when it is nearly full and red when it is full, and counts the extra slots from an upgrade. Saves are unaffected.
+
 ## 0.19.41
 
 **You and your programs now gain routine slots at the same pace, and a better program carries more.** Everyone starts with 2 slots and gains 2 more every 3 levels, up to 12 at level 15. Before, a program was full at level 6 while you waited until level 25. Class now moves that number: Saboteurs carry 2 extra, Medics and Leeches 1, and Bastions 1 fewer from level 3 on. This applies to your chosen class and to a program's own class alike. A program also gains 1 slot for each rarity tier above Ordinary, and 1 or 2 for Above Average or Excellent quality. Saves are unaffected. A program that now has fewer slots than routines keeps the extras installed, but only the ones that fit are used.

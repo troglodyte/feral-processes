@@ -4,8 +4,10 @@ use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::views::{PhaseKeysView, RoutineDetailView};
 
 use super::field::cap_entries;
+use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
+use feral_processes_app_core::{equip_swap_visible, inventory_visible};
 
 pub(super) fn draw_erase_quantity(
     game: &mut Game,
@@ -56,7 +58,7 @@ pub(super) fn draw_erase_quantity(
 
 /// The Items page: the level line, the three equipment slots, then the cargo
 /// stacks. Its keys live on the hub's keybar, not in a footer here.
-pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
+pub(super) fn items_rows(game: &mut Game, selected: usize, filter: &str) -> Vec<Row> {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(
@@ -111,10 +113,17 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
             status.inventory_used
         )),
     ];
+    rows.extend(filter_line(filter));
+    // Positions in the filtered list, not pack indices: `selected` is a
+    // highlight over the rows the handler resolves through the same call.
+    let visible = inventory_visible(game, filter);
     if status.inventory.is_empty() {
         rows.push(text_row("(empty)"));
+    } else if visible.is_empty() {
+        rows.push(no_match_row(filter));
     }
-    for (i, row) in status.inventory.iter().enumerate() {
+    for (i, &src) in visible.iter().enumerate() {
+        let row = &status.inventory[src];
         let (lead, tag, power, lines) = inventory_row_lines(game, &row.copy, row.qty, status.zone);
         let mut lines = lines.into_iter();
         let head = lines
@@ -430,6 +439,14 @@ fn worn_heading_lines(
     }
 }
 
+/// What the replacement picker is for: the slot, whose gear it is
+/// (`None` for the player's), and what was typed to filter it.
+pub(super) struct SwapPicker<'a> {
+    pub(super) slot: Option<EquipmentSlot>,
+    pub(super) target: Option<Entity>,
+    pub(super) filter: &'a str,
+}
+
 /// The replacement picker for one equipment slot.
 ///
 /// Rows come from `equip_swap_rows` — the same call the key handler
@@ -438,13 +455,17 @@ fn worn_heading_lines(
 /// columns need to be readable.
 pub(super) fn draw_equip_swap(
     game: &mut Game,
-    slot: Option<EquipmentSlot>,
-    target: Option<Entity>,
+    picker: SwapPicker<'_>,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
+    let SwapPicker {
+        slot,
+        target,
+        filter,
+    } = picker;
     let Some(slot) = slot else {
         draw_popup(
             "Gear",
@@ -464,7 +485,18 @@ pub(super) fn draw_equip_swap(
         .map(|line| Row::TextColored(line, CYAN))
         .collect();
     rows.push(text_row(""));
-    for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
+    rows.extend(filter_line(filter));
+    let swaps = equip_swap_rows(game, wearer, slot);
+    let visible = equip_swap_visible(&swaps, filter);
+    // Unequip is pinned, so "no rows" means no gear matched.
+    if visible
+        .iter()
+        .all(|&src| matches!(swaps[src].choice, SwapChoice::Unequip))
+        && !filter.is_empty()
+    {
+        rows.push(no_match_row(filter));
+    }
+    for (i, row) in visible.iter().map(|&src| &swaps[src]).enumerate() {
         // Wrapped, not joined: the name column alone runs 57 cells, and six
         // stat axes plus their six deltas do not fit the same line — so both
         // trailing columns are tags and shed onto a continuation when they
@@ -489,7 +521,9 @@ pub(super) fn draw_equip_swap(
     if target.is_none() && wearing {
         rows.push(text_row("[R] refit what you are wearing, at a Refit Bench"));
     }
-    rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
+    rows.push(text_row(
+        "Esc to go back (clears a typed filter first); Up/Down + Enter also work; type to filter",
+    ));
     draw_popup(
         &format!("Replace {}", slot.label()),
         PopupSize::Large,

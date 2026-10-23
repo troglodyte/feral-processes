@@ -313,6 +313,7 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
         Mode::Structures => vec![keycap("↑/↓", "select"), keycap("Enter", "staff")],
         Mode::Inventory => vec![
             keycap("↑/↓", "select"),
+            keycap("a-z", "filter"),
             keycap("S", "sell"),
             keycap("U", "fuse all"),
             keycap("I", "inspect"),

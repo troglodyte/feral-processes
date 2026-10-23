@@ -41,6 +41,8 @@ pub(super) struct AppScreens<'a> {
     pub(super) command_counts: &'a [(usize, usize)],
     /// `App::perk_previews`, one per perk, for the Perks page.
     pub(super) perk_previews: &'a [Option<PerkPreview>],
+    /// What was typed to filter the current screen's list, or `""`.
+    pub(super) list_filter: &'a str,
 }
 
 /// Where a mode sits in its hub and what the frame says about it, taken off
@@ -197,7 +199,7 @@ fn screen_rows(
         },
         Mode::Structures => building::structures_rows(game, selected),
         Mode::Alerts => alerts::alert_rows(&game.alerts(), selected),
-        Mode::Inventory => inventory::items_rows(game, selected),
+        Mode::Inventory => inventory::items_rows(game, selected, app_screens.list_filter),
         Mode::PhaseKeys => inventory::phase_key_rows(&game.phase_keys(), selected),
         Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
         Mode::Tools => tools::tools_rows(game, selected),

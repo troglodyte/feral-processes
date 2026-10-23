@@ -39,7 +39,7 @@
 //! tag is the source, with the two kinds that are genuinely their own news —
 //! a pickup and a sweep — picked out of it. See `channel_tag`.
 
-use feral_processes_app_core::LogFilter;
+use feral_processes_app_core::{KeyGroup, LogFilter};
 use feral_processes_engine::text::wrap;
 use feral_processes_engine::{LogEntry, MessageKind, MessageSource, PlayerStatus};
 
@@ -84,15 +84,16 @@ pub(in crate::render) struct LogPane<'a> {
     pub refusal: Option<&'a str>,
     /// The pane's border, dimmed or lit by the frame effects layer.
     pub border: Color,
-    /// What the body acting on a battle map may do, replacing the map's own
-    /// keys for as long as a tactical fight is open.
+    /// The bottom border's keys, in groups a divider separates: the map's own
+    /// bar (`App::map_keybar`), or what the body acting on a battle map may
+    /// do for as long as a tactical fight is open.
     ///
     /// **A content swap and not a second strip.** The keybar already rides
     /// this pane's bottom border and already degrades through `fitting`, so
     /// a fight's action list costs no layout at all — where a bar of its own
     /// would have to buy height from the map, and buying it only during a
     /// fight re-lays the whole tile grid the moment one opens.
-    pub actions: Option<&'a [(String, String)]>,
+    pub keybar: &'a [KeyGroup],
 }
 
 /// Which channel a line belongs to, as the gutter says it.
@@ -268,75 +269,19 @@ fn divider() -> Vec<Piece> {
     vec![("│".to_string(), palette::KEYBAR_DIVIDER, false)]
 }
 
-/// The keybar's segments in priority order — the caller takes the longest
-/// prefix that fits, so what is last here is what goes first.
-///
-/// This replaces a four-line block that named eighteen keys. What is not here
-/// is in the manual (`?`), which is the discoverable home for it, and `f` and
-/// `L` moved to the filter strip on the opposite border rather than being
-/// dropped.
-///
-/// **The order is priority, not the handoff's reading order, and the census
-/// is why.** `the_keybar_fits_the_log_pane` measures what survives at the
-/// smallest supported window; the bar is near enough size-invariant, because
-/// `ui_metrics` ramps the face with the window. Under the handoff's own order
-/// `? help` and `Esc menu` fell past the cut, which strands every key this bar
-/// had to drop. So the crossing pair and the three screens that hold the rest
-/// come first, and the answer to the spec's open question is **no**: there is
-/// no slack for `t trade` or `s save` at any supported size, and they stay cut
-/// exactly as the handoff had them.
-///
-/// **`D downed` sits with the screens rather than with the verbs**, and it
-/// is what moved the cut: the bar was already full, so a key was going to
-/// drop whatever position this took — `x examine` at 1280x720, `e drain` at
-/// 1920x1080. It is grouped with `b`/`i` because it is a store screen and
-/// not a field action — `D` opens the same page from the map and from the
-/// pack (`App::handle_downed_programs_key`) — and because a segment placed
-/// below the cut is a segment nobody sees.
-///
-/// **`hjkl move` and `. wait` are deliberately not here.** Arrow keys walk as
-/// well as `hjkl` does, so movement is the one verb a player finds without
-/// being told, and `.` does nothing in base space at all
-/// (`App::handle_playing_key`). The row they cost was spent on `<>` instead:
-/// that pair is the only crossing in the game with no glyph on the map
-/// leading to it — the Stack's link wears a `>` on its own cell, and base
-/// space's way out is a Home that looks like every other structure.
-///
-/// **One label for all three locales**, which is why it reads
-/// `ascend/descend` rather than naming the base: `<` is up and `>` is down
-/// whether the party is stepping onto their base or into a stack, and the
-/// keys carry that direction before they carry a role.
-///
-/// `TAB` (expand/collapse this pane, see `App::log_expanded`) is not a
-/// segment here for the same reason: at 60.5px of slack left over at
-/// 1280x720 it is already narrower than what the next-lowest-priority key
-/// (`e drain`) needs, and this bar has no room to spend on advertising a key
-/// nothing else on the census requires. `?` is still where it is discovered.
-pub(in crate::render) fn keybar_segments(actions: Option<&[(String, String)]>) -> Vec<Vec<Piece>> {
-    if let Some(actions) = actions {
-        return actions
-            .iter()
-            .map(|(key, label)| keycap(key, label))
-            .collect();
+/// The keybar's segments, a divider between groups. What the groups say
+/// and why they come in that order is `feral_processes_app_core::
+/// locale_keybar`'s; this only draws them, and the caller takes the longest
+/// prefix that fits.
+pub(in crate::render) fn keybar_segments(groups: &[KeyGroup]) -> Vec<Vec<Piece>> {
+    let mut segments = Vec::new();
+    for (i, group) in groups.iter().enumerate() {
+        if i > 0 {
+            segments.push(divider());
+        }
+        segments.extend(group.iter().map(|(key, label)| keycap(key, label)));
     }
-    vec![
-        keycap("< >", "ascend/descend"),
-        divider(),
-        keycap("b", "base"),
-        keycap("i", "pack"),
-        keycap("D", "downed"),
-        keycap("?", "help"),
-        keycap("Esc", "menu"),
-        divider(),
-        keycap("a", "routine"),
-        keycap("c", "collect"),
-        keycap("n", "mine"),
-        keycap("x", "examine"),
-        keycap("e", "drain"),
-        keycap("r", "recharge"),
-        keycap("t", "trade"),
-        keycap("s", "save"),
-    ]
+    segments
 }
 
 /// How many characters of message fit between the gutter and the pane's
@@ -475,7 +420,7 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     let avail = pane.w - m.inset * 2.0;
     let vitals = fitting(&vitals_segments(log.vitals), avail, painter, m);
     draw_pieces(pane, Mount::TopLeft, &vitals, painter, m);
-    let taken = fitting(&keybar_segments(log.actions), avail, painter, m);
+    let taken = fitting(&keybar_segments(log.keybar), avail, painter, m);
     draw_pieces(pane, Mount::BottomLeft, &taken, painter, m);
 }
 
@@ -485,7 +430,13 @@ mod tests {
     use crate::paint::{painted_text, with_painter};
     use crate::render::hud::layout;
     use crate::text::ui_metrics;
+    use feral_processes_app_core::{MapLocale, locale_keybar};
     use feral_processes_engine::{DifficultyMode, Game};
+
+    /// The map's bar as base space draws it, for the tests that only need a
+    /// bar on the border.
+    static BASE_BAR: std::sync::LazyLock<Vec<KeyGroup>> =
+        std::sync::LazyLock::new(|| locale_keybar(MapLocale::Base, false));
 
     /// The smallest window the design is stated against.
     const SMALLEST: (f32, f32) = (1280.0, 720.0);
@@ -547,7 +498,7 @@ mod tests {
             vitals,
             refusal,
             border: palette::PANE_BORDER,
-            actions: None,
+            keybar: &BASE_BAR,
         }
     }
 
@@ -700,27 +651,43 @@ mod tests {
     /// supported window, which is the only size where the answer is in doubt.
     #[test]
     fn the_keybar_fits_the_log_pane() {
-        for (w, h) in [SMALLEST, (1920.0, 1080.0)] {
+        let locales = [
+            MapLocale::Base,
+            MapLocale::OpenGrid,
+            MapLocale::Stack { market: false },
+            MapLocale::Stack { market: true },
+        ];
+        for (locale, (w, h)) in locales
+            .into_iter()
+            .flat_map(|l| [(l, SMALLEST), (l, (1920.0, 1080.0))])
+        {
             let m = ui_metrics(h);
+            let bar = locale_keybar(locale, true);
             with_painter(|p| {
                 let char_w = p.measure_ui_advance("M", m.font_size);
                 let pane = layout::regions(w, h, char_w, &m, false).log_pane;
                 let avail = pane.w - m.inset * 2.0;
-                let taken = fitting(&keybar_segments(None), avail, p, &m);
+                let taken = fitting(&keybar_segments(&bar), avail, p, &m);
                 let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
                 let slack = avail - p.measure_ui_advance(&drawn, m.small());
 
-                println!("keybar at {w}x{h}: {drawn:?}  slack {slack:.1}px");
+                println!("{locale:?} keybar at {w}x{h}: {drawn:?}  slack {slack:.1}px");
                 for key in ESSENTIAL {
                     assert!(
                         drawn.contains(key),
-                        "the keybar dropped {key:?} at {w}x{h} — slack {slack:.1}px. \
-                         Reorder `keybar_segments`, do not widen the pane."
+                        "the {locale:?} keybar dropped {key:?} at {w}x{h} — slack {slack:.1}px. \
+                         Reorder `locale_keybar`, do not widen the pane."
+                    );
+                }
+                if locale == (MapLocale::Stack { market: true }) {
+                    assert!(
+                        drawn.contains("t trade"),
+                        "a stall's trade is cut: {drawn:?}"
                     );
                 }
                 assert!(
                     slack >= 0.0,
-                    "the keybar overhangs its pane by {slack:.1}px"
+                    "the {locale:?} keybar overhangs its pane by {slack:.1}px"
                 );
             });
         }

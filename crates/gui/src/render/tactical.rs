@@ -3769,7 +3769,9 @@ mod tests {
                     let char_w = p.measure_ui_advance("M", m.font_size);
                     let pane = layout::regions(w, h, char_w, &m, false).log_pane;
                     let avail = pane.w - m.inset * 2.0;
-                    let segments = crate::render::hud::log_frame::keybar_segments(Some(&actions));
+                    let segments = crate::render::hud::log_frame::keybar_segments(
+                        std::slice::from_ref(&actions),
+                    );
                     let taken = fitting(&segments, avail, p, &m);
                     let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
                     let slack = avail - p.measure_ui_advance(&drawn, m.small());

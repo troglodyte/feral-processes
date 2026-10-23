@@ -36,6 +36,7 @@ pub(crate) mod level_up;
 mod lifecycle;
 pub(crate) mod list_filter;
 pub mod machine_recipe;
+pub mod map_keybar;
 mod menus;
 mod mod_copy;
 pub(crate) mod outposts;

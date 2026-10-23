@@ -33,6 +33,7 @@ pub use app::inventory_hub::INVENTORY_PAGES;
 pub use app::level_up::LevelUpOrigin;
 pub use app::list_filter::filter_matches;
 pub use app::machine_recipe::MachineRecipeScreen;
+pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::splice_rig::SpliceRigScreen;

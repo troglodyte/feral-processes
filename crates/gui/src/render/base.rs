@@ -300,9 +300,6 @@ pub(super) fn draw_playing_base(
     // is only ever set on `Mode::Playing`, and any key that leaves the map
     // ends it.
     let travel = app.travel_goal();
-    // The box cursor's own keys, `plan`'s rule: `None` outside the two box
-    // modes, so the map keeps its bar the rest of the time.
-    let plan_actions = app.plan_keybar();
     // Before the `game` borrow, like `plan` and `log_filter` above — and
     // this one is a *read that releases*: `App::watch_center` drops
     // `App::watching` the moment the engine stops answering, which is the
@@ -310,6 +307,9 @@ pub(super) fn draw_playing_base(
     // the party, or the party left base space".
     let watch = app.watch_center();
     let watching = app.watching;
+    // After `watch_center`, which is what releases a camera that stopped
+    // answering: the bar reads `watching` as it stands.
+    let map_keybar = app.map_keybar();
     // Before the `game` borrow, `plan`'s rule. The preview is a **call**
     // into the geometry that resolves the routine, never a second
     // derivation, so a drawn blast and a delivered one cannot differ.
@@ -378,6 +378,8 @@ pub(super) fn draw_playing_base(
         .filter(|_| !finished_fight)
         .and_then(|g| g.tactical_view())
         .map(|v| tactical::keybar_rows(mode, &v, tactical_auto, tactical_cursor));
+    // A fight's bar replaces the map's whole, as one group.
+    let keybar = tactical_actions.map_or(map_keybar, |actions| vec![actions]);
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
@@ -634,7 +636,7 @@ pub(super) fn draw_playing_base(
             vitals: &vitals,
             refusal: status_line.as_deref(),
             border: fx.log_border(hud::palette::PANE_BORDER),
-            actions: tactical_actions.as_deref().or(plan_actions.as_deref()),
+            keybar: &keybar,
         },
         painter,
         m,

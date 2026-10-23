@@ -3,6 +3,43 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::ManifestSubject;
+use feral_processes_engine::abilities::FALLBACK_ABILITY_ID;
+
+/// An irreversible confirm opens on its No row, so a pick of row 0 has to
+/// walk off the opening row rather than assume the highlight starts at 0.
+#[test]
+fn pick_row_picks_from_a_non_zero_opening_row() {
+    let mut app = app_owning_a_program_and_an_extractor(9101, &[FALLBACK_ABILITY_ID]);
+    open_via_menu(&mut app, 'p', "Extract a routine");
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::ExtractConfirm);
+    assert_eq!(
+        app.menu_selected, 1,
+        "test premise: the confirm opens on No"
+    );
+    let before = app.game.as_mut().unwrap().owned_pets().len();
+
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        before - 1,
+        "row 0 is Yes, so the program is extracted"
+    );
+}
+
+#[test]
+fn pick_row_reaches_row_twelve() {
+    let mut app = app_on_inventory_with_many_items(9102);
+    open_hub_screen(&mut app, Mode::Inventory);
+    assert!(
+        app.game.as_ref().unwrap().player_status().inventory.len() >= 13,
+        "test premise: a thirteen-row list"
+    );
+    highlight_row(&mut app, 12);
+    assert_eq!(app.menu_selected, 12);
+}
 
 /// The invariant every menu renderer leans on: the key a row advertises
 /// is the key that picks it. Twelve research nodes and ten deployable

@@ -2798,11 +2798,34 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
         offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
         if let Some(idx) = rows.iter().position(|r| r.label == label) {
             open_hub_screen(app, page);
-            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            pick_row(app, idx);
             return;
         }
     }
     panic!("{label:?} is not offered right now; pages: {offered:?}");
+}
+
+/// Moves the highlight to `row` the way a player does, with Up or Down from
+/// wherever the screen opened it. Wrapping makes any row reachable, and the
+/// cap catches a `row` the list does not have rather than looping.
+pub(crate) fn highlight_row(app: &mut App, row: usize) {
+    for _ in 0..row + 64 {
+        match app.menu_selected.cmp(&row) {
+            std::cmp::Ordering::Equal => return,
+            std::cmp::Ordering::Less => app.handle_key(GameKey::Down),
+            std::cmp::Ordering::Greater => app.handle_key(GameKey::Up),
+        }
+    }
+    panic!(
+        "row {row} is unreachable; highlight is on {}",
+        app.menu_selected
+    );
+}
+
+/// Highlights `row` and presses Enter.
+pub(crate) fn pick_row(app: &mut App, row: usize) {
+    highlight_row(app, row);
+    app.handle_key(GameKey::Enter);
 }
 
 /// The four command pages, in rail order.
@@ -2832,7 +2855,7 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
         offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
         if let Some(idx) = rows.iter().position(|r| r.label == label) {
             open_hub_screen(app, page);
-            app.handle_key(GameKey::Char(menu_shortcut(idx)));
+            pick_row(app, idx);
             return;
         }
     }

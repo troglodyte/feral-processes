@@ -149,6 +149,7 @@ mod hub {
         let mut app = planted(51);
         app.handle_key(GameKey::Esc);
         assert!(!app.hub_on_rail);
+        assert_eq!(app.filter_text(), "");
     }
 
     #[test]

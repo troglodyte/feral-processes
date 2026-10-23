@@ -8,8 +8,10 @@
 
 use crate::app::crafting::craft_visible;
 use crate::app::dev_item_picker::dev_item_visible;
+use crate::app::floor_hands::put_down_visible;
 use crate::app::inventory::{INVENTORY_SLOT_ROWS, inventory_visible};
 use crate::app::stack_market::market_visible;
+use crate::app::tactical::tactical_items_visible;
 use crate::app::trade::trade_visible;
 use crate::{App, GameKey, Mode};
 
@@ -52,6 +54,11 @@ fn is_filter_home(mode: Mode) -> bool {
 /// Whether a filter homed on `home` is still wanted once the mode is `now`:
 /// on the home itself, or on a sub-screen the player returns from. Each phase
 /// adds its screens' round trips here. Anything else forgets the filter.
+///
+/// A separate table from `keeps_highlight` on purpose: that one says which
+/// transitions leave the highlight alone for every menu, this one says which
+/// screens hand a filtered list back, and a sub-screen can do either without
+/// the other (a screen that resets the highlight still returns to a filter).
 pub(crate) fn filter_lives(home: Mode, now: Mode) -> bool {
     home == now
         || matches!(
@@ -164,7 +171,22 @@ impl App {
             Mode::Inventory => Some(INVENTORY_SLOT_ROWS + inventory_visible(game, &filter).len()),
             Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
             Mode::Craft => Some(craft_visible(game, &filter).len()),
+            Mode::PutDown => Some(put_down_visible(&game.put_down_options(), &filter).len()),
+            Mode::TacticalItem => Some(tactical_items_visible(game, &filter).len()),
             _ => None,
+        }
+    }
+
+    /// A row can vanish under a filtered highlight (a whole stack sold, a
+    /// last unit gone), which no mode change reports; pull the highlight
+    /// back onto the list so Enter and the sell keys never act on a row
+    /// that is not lit.
+    pub(crate) fn clamp_filtered_highlight(&mut self) {
+        if !is_filter_home(self.mode) || !self.filter_applied() {
+            return;
+        }
+        if let Some(len) = self.filtered_len() {
+            self.menu_selected = self.menu_selected.min(len.saturating_sub(1));
         }
     }
 

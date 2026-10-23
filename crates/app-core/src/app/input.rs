@@ -443,6 +443,8 @@ impl App {
         }
         if self.mode != mode_before {
             self.retain_filters(mode_before, row_before);
+        } else {
+            self.clamp_filtered_highlight();
         }
         // Entering the board by any door is reading it — `N`, `b` onto the
         // last page, a page turn or the Overview — so the rail's `!` and the

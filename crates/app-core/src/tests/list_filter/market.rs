@@ -114,3 +114,26 @@ fn esc_clears_the_filter_then_walks_on() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
+
+#[test]
+fn the_highlight_stays_on_a_row_after_the_last_match_is_sold() {
+    let mut app = open(0);
+    let v = view(&mut app);
+    let last = v.sells.last().unwrap().clone();
+    // One letter, so several rows match and the vanished one is not the
+    // only row left to clamp onto.
+    type_text(&mut app, &typeable(&last.name)[..1]);
+    let vis = market_visible(&view(&mut app), app.filter_text());
+    assert!(vis.total() >= 2 && vis.sells.contains(&(v.sells.len() - 1)));
+    app.menu_selected = vis.total() - 1;
+
+    app.handle_key(GameKey::Char('S'));
+
+    let vis = market_visible(&view(&mut app), app.filter_text());
+    assert!(
+        app.menu_selected < vis.total().max(1),
+        "highlight {} past {} rows",
+        app.menu_selected,
+        vis.total()
+    );
+}

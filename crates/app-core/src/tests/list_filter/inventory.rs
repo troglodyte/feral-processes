@@ -263,3 +263,23 @@ fn the_pack_filter_survives_a_filtered_picker() {
     assert_eq!(app.filter_text(), "plating");
     assert_eq!(app.menu_selected, 1, "the slot row it was opened from");
 }
+
+#[test]
+fn quick_selling_the_last_unit_keeps_the_highlight_on_a_row() {
+    let mut app = pack_app(1106);
+    let name = pack(&app)
+        .into_iter()
+        .find(|r| r.0.item.as_str() == ids::ICE_BREAKER)
+        .unwrap()
+        .2
+        .to_lowercase();
+    type_text(&mut app, &name);
+    assert_eq!(matching(&app, &name).len(), 1, "a single-row filter");
+    assert_eq!(app.menu_selected, 3);
+
+    app.handle_key(GameKey::Char('S'));
+
+    assert_eq!(app.mode, Mode::Inventory);
+    assert!(matching(&app, &name).is_empty(), "the row is gone");
+    assert!(app.menu_selected < 3, "highlight {}", app.menu_selected);
+}

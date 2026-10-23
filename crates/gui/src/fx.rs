@@ -573,10 +573,9 @@ fn cloud_shade(world: (i32, i32), now: f64) -> f32 {
     1.0 - CLOUD_DEPTH * cover
 }
 
-/// The usual cubic ease between two edges, clamped outside them. Local
-/// because this is the only thing in the module that needs one — the bobs
-/// and pulses are all trigonometric and the flashes are all linear.
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+/// The usual cubic ease between two edges, clamped outside them. Shared
+/// with `wildlife`, whose fades and drifts ease the same way.
+pub(crate) fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -1215,6 +1214,17 @@ impl Fx {
             cloud_shade(world, self.now)
         } else {
             1.0
+        }
+    }
+
+    /// The ambient specks over the tiles `min..=max` this frame — see
+    /// `wildlife::specks`, of which this is the frame's clock plus the
+    /// effects toggle. None with effects off, `cloud_shade`'s reason.
+    pub fn wildlife(&self, min: (i32, i32), max: (i32, i32)) -> Vec<crate::wildlife::Speck> {
+        if self.enabled {
+            crate::wildlife::specks(min, max, self.now)
+        } else {
+            Vec::new()
         }
     }
 

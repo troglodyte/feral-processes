@@ -26,6 +26,7 @@ mod render;
 mod sounds;
 mod sprites;
 mod text;
+mod wildlife;
 
 use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;

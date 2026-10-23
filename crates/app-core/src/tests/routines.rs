@@ -251,9 +251,9 @@ fn an_unrelated_key_leaves_the_extract_confirm_open() {
     assert_eq!(app.mode, Mode::ExtractPick);
 }
 
-/// Extract is reached by `1` then `1`; a third `1` from key repeat must not
-/// answer the question. The confirm's rows are `[y]`/`[n]`, so a digit is
-/// a stray key here, not a row pick.
+/// Extract is reached by two Enters; a digit from key repeat must not answer
+/// the question. The confirm's rows are `[y]`/`[n]`, so a digit is a stray
+/// key here.
 #[test]
 fn a_digit_leaves_the_extract_confirm_open() {
     let mut app = on_the_extract_confirm(68);

@@ -210,7 +210,7 @@ fn the_wizard_walks_forward_and_back() {
     assert_eq!(app.creation_step(), CreationStep::Profile);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Class);
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.creation_step(), CreationStep::Kit);
     press(&mut app, GameKey::Enter);
     assert_eq!(
@@ -317,13 +317,13 @@ fn the_name_step_commits_the_choice() {
     let mut app = opened("commit");
     let classes = app.creation_catalogue.class_rows();
     let wanted_class = classes[1].class;
-    press(&mut app, ch('2')); // the second class
+    pick_row(&mut app, 1); // the second class
     spend_the_kit(&mut app); // the step will not be left with Credits in hand
     press(&mut app, GameKey::Enter);
 
     // Icon and colour are two steps now, and a pick advances off each.
-    press(&mut app, ch(menu_shortcut(1))); // the second icon
-    press(&mut app, ch(menu_shortcut(2))); // the third swatch
+    pick_row(&mut app, 1); // the second icon
+    pick_row(&mut app, 2); // the third swatch
 
     app.menu_selected = attribute_row(&app, "parity");
     press(&mut app, GameKey::ShiftRight);
@@ -336,7 +336,7 @@ fn the_name_step_commits_the_choice() {
 
     let routines = app.creation_catalogue.starter_rows(Some(wanted_class));
     let wanted_routine = routines[0].id.clone();
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
 
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Enter);
@@ -404,7 +404,7 @@ fn the_name_step_commits_the_choice() {
 #[test]
 fn points_cannot_be_overspent() {
     let mut app = opened("overspend");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app); // the step will not be left with Credits in hand
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
@@ -439,7 +439,7 @@ fn points_cannot_be_overspent() {
 #[test]
 fn the_points_step_sees_a_modifier() {
     let mut app = opened("modifier");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app); // the step will not be left with Credits in hand
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
@@ -472,7 +472,7 @@ fn the_points_step_sees_a_modifier() {
 #[test]
 fn the_save_list_shows_the_players_name() {
     let mut app = opened("save_name");
-    press(&mut app, ch('1')); // a class
+    pick_row(&mut app, 0); // a class
     walk_to_the_summary(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Enter);
@@ -504,7 +504,7 @@ fn difficulty_is_chosen_in_the_wizard() {
     press(&mut app, ch('p'));
     assert_eq!(app.creation_difficulty(), Some(DifficultyMode::Permadeath));
     press(&mut app, GameKey::Enter); // the profile summary
-    press(&mut app, ch('1')); // a class
+    pick_row(&mut app, 0); // a class
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary, accepted
     press(&mut app, GameKey::Enter); // the name, left blank
@@ -571,7 +571,7 @@ fn the_class_step_cannot_be_left_without_a_class() {
 #[test]
 fn reopening_the_wizard_starts_clean() {
     let mut app = opened("reset");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     assert_ne!(app.creation_choice(), &CharacterChoice::at_creation());
 
@@ -775,7 +775,7 @@ fn the_routine_rows_are_priced_through_the_chosen_class() {
 #[test]
 fn the_points_step_opens_with_nothing_spent() {
     let mut app = opened("nothing_spent");
-    press(&mut app, ch('1')); // a class
+    pick_row(&mut app, 0); // a class
     spend_the_kit(&mut app); // the step will not be left with Credits in hand
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app); // -> Points, no icon or swatch picked
@@ -793,7 +793,7 @@ fn the_points_step_opens_with_nothing_spent() {
 #[test]
 fn the_creation_points_step_carries_no_duel() {
     let mut app = opened("no_duel");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
@@ -808,7 +808,7 @@ fn the_creation_points_step_carries_no_duel() {
 #[test]
 fn reentering_points_keeps_a_hand_made_spread() {
     let mut app = opened("reenter_points");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app); // the step will not be left with Credits in hand
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
@@ -845,7 +845,7 @@ fn reentering_points_keeps_a_hand_made_spread() {
 /// A wizard sitting on the Kit step with a class picked.
 fn on_the_kit_step(name: &str) -> App {
     let mut app = opened(name);
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.creation_step(), CreationStep::Kit);
     app
 }
@@ -954,7 +954,7 @@ fn walking_away_from_the_kit_step_keeps_the_basket() {
 
     press(&mut app, GameKey::Esc);
     assert_eq!(app.creation_step(), CreationStep::Class);
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.creation_step(), CreationStep::Kit);
     assert_eq!(
         taken(&app, 0),
@@ -1007,7 +1007,7 @@ fn the_roll_fills_the_basket_within_the_allowance() {
 #[test]
 fn the_perk_step_reaches_the_started_run() {
     let mut app = opened("perks_commit");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
@@ -1080,7 +1080,7 @@ fn the_perk_step_reaches_the_started_run() {
 #[test]
 fn a_spending_step_gives_its_arrows_to_the_basket() {
     let mut app = opened("arrows_spend");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
 
     for step in [CreationStep::Kit, CreationStep::Points, CreationStep::Perks] {
         let (probe, undo) = (GameKey::Right, GameKey::Left);
@@ -1147,7 +1147,7 @@ fn the_profile_adds_its_perk_points_on_top_of_the_allowance() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // the profile summary
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary
     press(&mut app, GameKey::Enter); // no name, which starts the run
@@ -1185,7 +1185,7 @@ fn the_profile_adds_its_perk_points_on_top_of_the_allowance() {
 #[test]
 fn an_unspent_perk_allowance_arrives_with_the_run() {
     let mut app = opened("perks_kept");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary
     press(&mut app, GameKey::Enter); // no name, which starts the run
@@ -1207,7 +1207,7 @@ fn an_unspent_perk_allowance_arrives_with_the_run() {
 #[test]
 fn an_unspent_allowance_holds_its_step() {
     let mut app = opened("unspent");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     assert_eq!(app.creation_step(), CreationStep::Kit);
 
     press(&mut app, GameKey::Enter);
@@ -1257,7 +1257,7 @@ fn an_unspent_allowance_holds_its_step() {
 #[test]
 fn left_and_right_page_the_wizard() {
     let mut app = opened("paging");
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Icon);
@@ -1370,7 +1370,7 @@ fn a_picked_kit_reaches_the_started_run() {
 /// every test below starts from here.
 fn on_the_icon_step(name: &str) -> App {
     let mut app = opened(name);
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Icon);
@@ -1543,16 +1543,15 @@ fn enter_in_the_editor_keeps_the_drawing_and_advances_to_the_colour_step() {
     );
 }
 
-/// The row is selected on the way back even when the editor was opened by
-/// its number key — `selected_index` answers a digit without moving the
-/// cursor, so "return to the Icon step with that row selected" has to be
-/// arranged on the way in.
+/// The row is selected on the way back even when the editor was opened
+/// without the highlight having been moved onto it first — "return to the
+/// Icon step with that row selected" has to be arranged on the way in.
 #[test]
-fn opening_the_editor_by_its_number_key_selects_the_drawn_row() {
+fn opening_the_editor_from_its_row_selects_the_drawn_row() {
     let mut app = on_the_icon_step("editor_number_key");
     app.menu_selected = 0;
 
-    press(&mut app, ch('6')); // the sixth row
+    pick_row(&mut app, 5); // the drawn row, the sixth
     assert!(app.creation_sprite_view().is_some(), "the editor must open");
     press(&mut app, GameKey::Esc);
 
@@ -1603,7 +1602,7 @@ fn taking_a_preset_row_clears_a_drawn_icon() {
     assert_eq!(app.creation_step(), CreationStep::Colour);
     press(&mut app, GameKey::Esc); // back to the Icon list
 
-    press(&mut app, ch('1')); // the first preset
+    pick_row(&mut app, 0); // the first preset
 
     assert!(
         app.creation_choice().icon.is_none(),
@@ -1630,7 +1629,7 @@ fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // -> Class
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon, seeded from the profile
     assert_eq!(
@@ -1639,7 +1638,7 @@ fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
         "the step must open seeded from the profile"
     );
 
-    press(&mut app, ch('1')); // take the first preset -> Colour
+    pick_row(&mut app, 0); // take the first preset -> Colour
     assert!(
         app.creation_choice().icon.is_none(),
         "the preset must clear it"
@@ -1670,7 +1669,7 @@ fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // -> Class
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon
 
@@ -1719,7 +1718,7 @@ fn entering_the_icon_step_seeds_from_a_v1_profile() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // -> Class
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon
 
@@ -1879,12 +1878,12 @@ fn taking_a_preset_leaves_the_profiles_drawing_alone() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // -> Class
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     spend_the_kit(&mut app);
     press(&mut app, GameKey::Enter); // -> Icon, seeded from the profile
     assert_eq!(app.creation_choice().icon, Some(icon.clone()));
 
-    press(&mut app, ch('1')); // a preset -> Colour, and the drawing is cleared
+    pick_row(&mut app, 0); // a preset -> Colour, and the drawing is cleared
     assert!(app.creation_choice().icon.is_none());
     press(&mut app, ch('n')); // skip the swatch
     spend_the_points(&mut app);
@@ -1985,7 +1984,7 @@ fn a_lifetime_score_raises_the_rolled_basket_budget() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // the profile summary
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     press(&mut app, GameKey::Enter); // the class, onto the Kit step
     assert_eq!(app.creation_step(), CreationStep::Kit);
     press(&mut app, ch('r'));
@@ -2010,7 +2009,7 @@ fn a_lifetime_score_pays_unspent_stat_points_after_creation() {
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
     press(&mut app, GameKey::Enter); // the profile summary
-    press(&mut app, ch('1'));
+    pick_row(&mut app, 0);
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary
     press(&mut app, GameKey::Enter); // no name, which starts the run

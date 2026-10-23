@@ -53,13 +53,13 @@ fn esc_returns_to_playing() {
 }
 
 #[test]
-fn a_letter_selects_a_row_and_arrows_do_not() {
+fn letters_pick_no_place_and_arrows_do_not_either() {
     let mut app = open(913);
     assert!(app.world_map_marks().len() >= 2, "home and a town at least");
-    app.handle_key(GameKey::Char('2'));
-    assert_eq!(app.menu_selected, 1);
-    app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.menu_selected, 0);
+    for c in ['2', '1', 'a', 'b'] {
+        app.handle_key(GameKey::Char(c));
+        assert_eq!(app.menu_selected, 0, "[{c}] picked a place");
+    }
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 0, "Down pans, it does not move the row");
 }

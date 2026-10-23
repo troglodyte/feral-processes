@@ -125,20 +125,16 @@ pub(crate) fn shortcut_row(c: char, len: usize) -> Option<usize> {
 }
 
 impl App {
-    /// Shared Up/Down/Enter handling layered on top of every menu's direct
-    /// row shortcuts — this doesn't replace them, it's just another way to
-    /// pick the same row. `len` is how many selectable rows the menu
-    /// currently has. A typed shortcut (see `menu_shortcut`) resolves
-    /// immediately to that 0-based index; Up/Down instead move
-    /// `menu_selected` (wrapping) and return `None`; Enter resolves to
-    /// whatever `menu_selected` currently highlights. Any other key, or an
-    /// empty menu, returns `None`.
+    /// Shared list handling: `len` is how many selectable rows the menu
+    /// currently has. Up/Down move `menu_selected` (wrapping),
+    /// PageUp/PageDown move it a page (clamped), and all return `None`;
+    /// Enter resolves to whatever `menu_selected` highlights. Any other key,
+    /// digits and letters included, or an empty menu, returns `None`. The
+    /// classic battle screen's `battle_row` is the one place a typed digit
+    /// picks a row.
     pub(crate) fn selected_index(&mut self, key: GameKey, len: usize) -> Option<usize> {
         if len == 0 {
             return None;
-        }
-        if let GameKey::Char(c) = key {
-            return shortcut_row(c, len);
         }
         match key {
             GameKey::Up => {
@@ -171,9 +167,8 @@ impl App {
     /// left to the caller, whose way back differs. One door for every
     /// confirm, so they cannot disagree about what Enter means.
     pub(crate) fn yes_no(&mut self, key: GameKey) -> Option<bool> {
-        // Digits pick rows everywhere else, but a confirm labels its rows
-        // `[y]`/`[n]`, and the menus that lead into one are picked by digit:
-        // a repeated `1` would otherwise answer Yes unseen.
+        // A confirm answers to `y`/`n` and Enter alone; a digit is a stray
+        // key here, never an answer.
         if matches!(key, GameKey::Char(c) if c.is_ascii_digit()) {
             return None;
         }

@@ -242,9 +242,7 @@ fn a_refusal_reports_why_and_leaves_the_screen_open() {
             break;
         }
         let held = app.game.as_ref().unwrap().active_contracts().len();
-        app.handle_key(GameKey::Char(
-            char::from_digit(held as u32 + 1, 10).unwrap(),
-        ));
+        pick_row(&mut app, held);
     }
     assert_eq!(
         app.game.as_ref().unwrap().active_contracts().len(),

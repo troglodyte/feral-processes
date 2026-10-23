@@ -104,9 +104,7 @@ fn the_picker_opens_on_the_current_recipe() {
     let rows = app.farm_recipe_rows();
     assert!(!rows.is_empty());
     let last = rows.len() - 1;
-    // Rows 1-9 are the digits; the picker is far shorter than that.
-    assert!(last < 9);
-    app.handle_key(GameKey::Char(char::from(b'1' + last as u8)));
+    pick_row(&mut app, last);
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::FarmRecipe);
     assert_eq!(app.farm_recipe_row(), last);

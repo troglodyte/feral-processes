@@ -56,7 +56,7 @@ impl HubKind for GameMenu {
     fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
         match (app.mode, app.hub_on_rail, app.quit_unsaved_pending) {
             (Mode::QuitRunConfirm, false, true) => vec![("y", "quit"), ("n", "stay")],
-            (Mode::QuitRunConfirm, false, false) => vec![("1-3", "pick")],
+            (Mode::QuitRunConfirm, false, false) => vec![("Enter", "pick")],
             _ => Vec::new(),
         }
     }

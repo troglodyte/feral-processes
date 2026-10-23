@@ -111,9 +111,8 @@ impl App {
         }
     }
 
-    /// The manual's index — an ordinary numbered menu, so more than nine
-    /// topics is already solved by `menu_shortcut`. Esc closes back to
-    /// wherever `?` was pressed.
+    /// The manual's index — an ordinary menu. Esc closes back to wherever
+    /// `?` was pressed.
     ///
     /// `?` no longer closes on any key. The screen is navigable now, and a
     /// screen you walk through must not vanish under the keys you walk it
@@ -230,12 +229,8 @@ impl App {
 
     /// The alert board (`Mode::Alerts`, opened with `N`).
     ///
-    /// `x`/`d` are matched **before** `App::selected_index`, so they dismiss
-    /// the highlighted row rather than acting as the row shortcut lowercase
-    /// letters are everywhere else — the design spec's own test is that they
-    /// dismiss row `menu_selected` names, not whatever row their letter
-    /// would resolve to. Everything else — Up/Down, digits, other letters —
-    /// goes through `selected_index` like an ordinary menu.
+    /// `x`/`d` dismiss the highlighted row, the one `menu_selected` names.
+    /// Everything else goes through `selected_index` like an ordinary menu.
     pub(crate) fn handle_alerts_key(&mut self, key: GameKey) {
         if matches!(key, GameKey::Char('x') | GameKey::Char('d')) {
             let Some(game) = self.game.as_mut() else {

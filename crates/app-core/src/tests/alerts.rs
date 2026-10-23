@@ -89,15 +89,12 @@ fn texts(app: &App) -> Vec<String> {
         .collect()
 }
 
-/// `App::selected_index` letters row 0 as `a`, row 1 as `b`, and so on from
-/// `DIGIT_ROWS` (9) — so `d` would resolve to row 12 and `x` to row 32 if
-/// either fell through to it. A board wide enough for both collisions to be
-/// *reachable* rows (`ALERT_BOARD_CAP` is 50) is what makes this test fail
-/// if `x`/`d` ever stop being matched ahead of `selected_index`: a fixture
-/// with only a handful of rows would pass whether or not the ordering held,
-/// since neither shortcut would resolve to a real row either way.
+/// `x` and `d` are this screen's own mnemonics and act on the highlighted
+/// row. The board is wide enough (`ALERT_BOARD_CAP` is 50) that a letter
+/// which also named a row would have a real one to hit, so the test fails if
+/// either key ever picks a row of its own instead.
 #[test]
-fn x_dismisses_the_highlighted_row_not_its_letter_shortcut() {
+fn x_dismisses_the_highlighted_row_and_only_that() {
     let mut app = seeded(20003, numbered_alerts(40));
     app.handle_key(GameKey::Char('N'));
     assert_eq!(app.mode, Mode::Alerts);
@@ -113,12 +110,12 @@ fn x_dismisses_the_highlighted_row_not_its_letter_shortcut() {
     );
     assert!(
         remaining.contains(&"alert-32".to_string()),
-        "x must not fall through to its row-32 shortcut and dismiss that instead"
+        "x must not dismiss any row but the highlighted one"
     );
 }
 
 #[test]
-fn d_dismisses_the_highlighted_row_not_its_letter_shortcut() {
+fn d_dismisses_the_highlighted_row_and_only_that() {
     let mut app = seeded(20004, numbered_alerts(40));
     app.handle_key(GameKey::Char('N'));
     assert_eq!(app.mode, Mode::Alerts);
@@ -134,7 +131,7 @@ fn d_dismisses_the_highlighted_row_not_its_letter_shortcut() {
     );
     assert!(
         remaining.contains(&"alert-12".to_string()),
-        "d must not fall through to its row-12 shortcut and dismiss that instead"
+        "d must not dismiss any row but the highlighted one"
     );
 }
 

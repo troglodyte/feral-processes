@@ -972,11 +972,9 @@ impl App {
     /// always reads as "make this column uniform" rather than a fixed
     /// direction.
     ///
-    /// Deliberately **no digit or letter row-jump**: every other menu's
-    /// `selected_index` doubles a lowercase letter as a shortcut, but this
-    /// screen's only listed keys are arrows, `Space`, `<`/`>` and `A` — a
-    /// lowercase letter here does nothing, which is what keeps it from
-    /// colliding with a screen action bound to its upper-case twin.
+    /// This screen's only listed keys are arrows, `Space`, `<`/`>` and `A`;
+    /// a lowercase letter here does nothing, which keeps it from colliding
+    /// with a screen action bound to its upper-case twin.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
         if matches!(key, GameKey::Char(' ' | '<' | '>' | 'A')) && self.refuse_outside_base() {
             return;

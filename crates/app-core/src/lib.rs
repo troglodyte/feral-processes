@@ -148,8 +148,8 @@ pub const WORLD_MAP_VIEW_RADIUS: i32 = 12;
 /// visible viewport size.
 pub const MENU_SCAN_RADIUS: i32 = 40;
 
-/// How many menu rows the digits `1`-`9` can address before `menu_shortcut`
-/// switches to letters.
+/// How many classic-battle rows the digits `1`-`9` can address before
+/// `menu_shortcut` switches to letters.
 const DIGIT_ROWS: usize = 9;
 
 /// How far PageUp/PageDown move a menu's highlight. A fixed step rather
@@ -158,13 +158,10 @@ const DIGIT_ROWS: usize = 9;
 /// never skips a row the player didn't see go past.
 pub const MENU_PAGE_ROWS: usize = 10;
 
-/// The key that picks menu row `index` (0-based), and the label a renderer
-/// must print for it: `1`-`9` for the first nine rows, then `a`, `b`, `c`
-/// and so on. Several menus run past nine rows — a dozen research nodes,
-/// ten deployable structures, an inventory of any size — and a single digit
-/// can't address those, so they'd otherwise be reachable only by Up/Down +
-/// Enter. Menus that bind letters to their own actions all fit inside nine
-/// rows, so the two never overlap.
+/// The key that picks classic-battle row `index` (0-based), and the label
+/// the battle screen prints for it: `1`-`9` for the first nine rows, then
+/// `a`, `b`, `c` and so on. Every other list is highlight + Enter and prints
+/// no label.
 ///
 /// Rows past the 35th run out of letters and return `'-'`, which no key
 /// produces — they're reachable by Up/Down + Enter only, and the label says

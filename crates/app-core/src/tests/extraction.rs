@@ -35,41 +35,26 @@ fn pressing_uppercase_d_opens_the_downed_programs_screen_from_the_pack() {
     );
 }
 
-/// `selected_index` reserves shifted letters for screen actions and lower
-/// ones for rows — the trap this repo's own `S`/`U`/`I` bindings on this
-/// same screen already guard against. A lowercase `d` binding here would
-/// both open the screen and pick a row on the very keypress that opened it.
-///
-/// Asserting only that the mode isn't `DownedPrograms` would pass against
-/// several wrong implementations on a short inventory, where `selected_
-/// index` falls out on an out-of-range index regardless of case and does
-/// nothing at all — `app_on_inventory_with_many_items` gives lowercase `d`
-/// (`DIGIT_ROWS` + 3, the fourth letter row) a real row to land on, so
-/// pressing it does what any other row-selecting letter on this screen
-/// does: open `Mode::InventoryItemAction` for that item. That is the
-/// evidence lowercase `d` is an ordinary row key here and nothing more.
+/// Lowercase `d` opens nothing and picks nothing: the downed store is
+/// `D`, because `d` is demolish on the map, and a list no longer reads
+/// letters as rows. On a pack with a tenth item, where the old scheme would
+/// have opened the item action for `d`, the screen simply stays put.
 #[test]
-fn lowercase_d_selects_a_row_instead_of_opening_the_downed_programs_screen() {
+fn lowercase_d_does_nothing_in_the_pack() {
     let mut app = app_on_inventory_with_many_items(9001);
     open_hub_screen(&mut app, Mode::Inventory);
     assert_eq!(app.mode, Mode::Inventory);
-    let tenth_item = app.game.as_ref().unwrap().player_status().inventory[9]
-        .copy
-        .clone();
+    let row = app.menu_selected;
 
     app.handle_key(GameKey::Char('d'));
 
     assert_eq!(
         app.mode,
-        Mode::InventoryItemAction,
-        "lowercase d must pick the fourth letter row like any other row key, not open the \
-         downed programs screen and not do nothing"
+        Mode::Inventory,
+        "lowercase d must neither open the downed programs screen nor pick a row"
     );
-    assert_eq!(
-        app.pending_inventory_item,
-        Some(tenth_item),
-        "the row it picked must be the fourth-letter row (DIGIT_ROWS + 3), the tenth item"
-    );
+    assert_eq!(app.menu_selected, row);
+    assert_eq!(app.pending_inventory_item, None);
 }
 
 /// The store is a top-level screen, not a pocket of the pack: a body downs

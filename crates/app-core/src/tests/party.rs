@@ -283,17 +283,17 @@ fn p_stands_the_highlighted_member_down_and_puts_it_back() {
 }
 
 /// The whole of TODO 14: every action on this screen acts on the highlight,
-/// so a row shortcut only moves it. Before this change a stray digit stood a
-/// party member down on the spot.
+/// so moving the highlight only moves it. Before this change a stray digit
+/// stood a party member down on the spot.
 #[test]
-fn a_row_shortcut_only_moves_the_highlight() {
+fn moving_the_highlight_changes_nobodys_party_membership() {
     let mut app = app_with_companions_in_the_party(781, 2);
     let before = roster(&mut app);
     open_via_menu(&mut app, 'p', "Companions");
 
-    pick_row(&mut app, 1);
+    highlight_row(&mut app, 1);
 
-    assert_eq!(app.menu_selected, 1, "the digit picks the row");
+    assert_eq!(app.menu_selected, 1, "the highlight moved");
     assert!(
         in_party(&mut app, before[0]) && in_party(&mut app, before[1]),
         "and changes nothing about who is standing in the party"

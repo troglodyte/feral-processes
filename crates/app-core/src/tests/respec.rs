@@ -67,11 +67,10 @@ fn esc_backs_out_of_the_perk_confirm() {
     );
 }
 
-/// The reason the key is uppercase: `selected_index` labels rows past the
-/// digits with lowercase letters, and the perk picker has eighteen rows, so a
-/// lowercase binding would pick a perk *and* open the wipe on one keypress.
+/// The wipe is uppercase, so a stray lowercase `x` in the perk picker can
+/// never open it.
 #[test]
-fn lowercase_x_is_a_row_label_and_never_the_wipe() {
+fn lowercase_x_never_opens_the_wipe() {
     let mut app = app_on_the_perk_screen(73);
 
     app.handle_key(GameKey::Char('x'));

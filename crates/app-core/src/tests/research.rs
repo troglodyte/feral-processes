@@ -76,12 +76,10 @@ fn a_refused_selection_lands_on_the_status_line() {
 
 /// The row keys take a project on, and `[A]` gives it up again.
 ///
-/// `[A]` is **uppercase**: `selected_index` treats every lowercase letter as a
-/// row label past the digits, so a lowercase `a` on a 34-row screen would pick
-/// a row *and* abandon the project on one keypress. That second half is what
-/// this pins.
+/// `[A]` is **uppercase**, so a stray lowercase `a` on a 34-row screen can
+/// never abandon the project. That is what this pins.
 #[test]
-fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
+fn capital_a_abandons_and_lowercase_a_does_nothing() {
     let mut app = app_in_base_with_a_research_node(503);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
@@ -92,7 +90,7 @@ fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
     assert_eq!(
         active_project(&app).as_deref(),
         Some(taken.as_str()),
-        "a lowercase key is a row selector and must not abandon anything"
+        "a lowercase key must not abandon anything"
     );
 
     app.handle_key(GameKey::Char('A'));

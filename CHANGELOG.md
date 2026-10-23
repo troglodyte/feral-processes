@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.36
+
+**Lists are now picked with the arrow keys and Enter, and rows no longer carry `[1]`/`[a]` labels.** Before, every list numbered its rows and a lowercase letter could pick row ten onward, so a screen's own letter keys had to dodge the row labels. Now the highlight is the only way to pick, and letters only do what their screen says. The classic battle screen still numbers its rows. On the world map the arrows pan and Tab switches to the place list; on a help page Tab moves to the further-reading links.
+
 ## 0.19.35
 
 **A pack on a battle map can now form a line or fan out to surround you.** Under Formation, its melee programs advance abreast with the ranged ones behind them until the melee ones are gone ("The line breaks!"); under Flank, programs gang up on whatever a packmate is already hitting and come at it from the other side. Hunter-led packs flank most often and cautious-led packs form lines; a Formation pack is somewhat easier to beat than one that rushes.

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.19.41
+
+**You and your programs now gain routine slots at the same pace, and a better program carries more.** Everyone starts with 2 slots and gains 2 more every 3 levels, up to 12 at level 15. Before, a program was full at level 6 while you waited until level 25. Class now moves that number: Saboteurs carry 2 extra, Medics and Leeches 1, and Bastions 1 fewer from level 3 on. This applies to your chosen class and to a program's own class alike. A program also gains 1 slot for each rarity tier above Ordinary, and 1 or 2 for Above Average or Excellent quality. Saves are unaffected. A program that now has fewer slots than routines keeps the extras installed, but only the ones that fit are used.
+
 ## 0.19.40
 
 **Small swarms of drifting specks now move across the map, and the field holds about half as many wild programs.** A swarm fades in on open ground you can see, hangs around, drifts a few tiles as a group and fades out again. It is decoration only: you can't target it or bump into it, and turning effects off hides it. Fewer wild programs now spawn in any area, so the map reads as less crowded and each fight is a choice rather than a wall. Saves are unaffected. Ground you have already explored keeps the programs it has, and the lower count applies as areas restock.

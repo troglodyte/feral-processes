@@ -28,13 +28,7 @@ pub(super) fn downed_program_list_rows(game: &Game, selected: usize) -> Vec<Row>
         ));
     }
     for (i, p) in programs.iter().enumerate() {
-        let mut label = format!(
-            "[{}] {} Lv{}  cond {}%",
-            menu_shortcut(i),
-            p.name,
-            p.level,
-            p.condition,
-        );
+        let mut label = format!("{} Lv{}  cond {}%", p.name, p.level, p.condition,);
         if let Some(tier) = p.rarity.label() {
             label.push_str(&format!("  {tier}"));
         }
@@ -83,7 +77,7 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         rows.push(text_row("No tool is installed."));
     }
     for (i, option) in options.iter().enumerate() {
-        let head_prefix = format!("[{}] {}", menu_shortcut(i), option.name);
+        let head_prefix = option.name.to_string();
         let ticks_suffix = format!("({} ticks)", option.ticks);
         // A `Gear` tool's candidate list can run far longer than the other
         // categories' — a boss species' whole droppable table, each row

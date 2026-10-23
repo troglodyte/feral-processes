@@ -435,18 +435,18 @@ pub(super) fn wears_drawing(
 /// One row of the image picker (`Mode::BattleEmulate`/
 /// `Mode::TacticalEmulate`, todo #100 Task 6), shared so the group model's
 /// `draw_battle_emulate_menu` and the battle map's `draw_tactical_emulate`
-/// cannot drift on it — `menu_shortcut(i)`, not a bare `i + 1`, since
-/// `App::selected_index` only takes digits `1`-`9` for rows `0`-`8` and
-/// hands the alphabet to letters past that (`DIGIT_ROWS`), and
-/// `Game::emulation_options()` is unbounded.
-pub(super) fn emulation_row_label(i: usize, option: &EmulationOption) -> String {
-    format!(
-        "[{}] {} — ATK {} MIT {}",
-        menu_shortcut(i),
-        option.name,
-        option.atk,
-        option.mitigation
-    )
+/// cannot drift on it. `labelled` is the battle screen's `menu_shortcut(i)`
+/// prefix; the tactical board picks by highlight alone and prints none.
+pub(super) fn emulation_row_label(i: usize, option: &EmulationOption, labelled: bool) -> String {
+    let body = format!(
+        "{} — ATK {} MIT {}",
+        option.name, option.atk, option.mitigation
+    );
+    if labelled {
+        format!("[{}] {body}", menu_shortcut(i))
+    } else {
+        body
+    }
 }
 
 /// Pulls `color` toward its own grey, for drawing something that's present
@@ -1805,6 +1805,55 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
 mod tests {
     use super::*;
 
+    #[test]
+    fn emulation_rows_are_labelled_on_the_battle_screen_only() {
+        let option = EmulationOption {
+            species: "x".into(),
+            name: "Kestrel".to_string(),
+            glyph: 'k',
+            atk: 8,
+            mitigation: 5,
+        };
+        assert_eq!(
+            emulation_row_label(0, &option, true),
+            "[1] Kestrel — ATK 8 MIT 5"
+        );
+        assert_eq!(
+            emulation_row_label(0, &option, false),
+            "Kestrel — ATK 8 MIT 5"
+        );
+    }
+
+    #[test]
+    fn no_list_renderer_outside_battle_names_menu_shortcut() {
+        fn walk(dir: &std::path::Path, hits: &mut Vec<String>) {
+            for entry in std::fs::read_dir(dir).expect("render dir reads") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    walk(&path, hits);
+                    continue;
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                if name == "battle.rs" || name == "mod.rs" || !name.ends_with(".rs") {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&path).expect("source reads");
+                if src.contains("menu_shortcut(") || src.contains("map(menu_shortcut)") {
+                    hits.push(path.display().to_string());
+                }
+            }
+        }
+        let mut hits = Vec::new();
+        walk(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/render"),
+            &mut hits,
+        );
+        assert!(hits.is_empty(), "labelled rows outside battle: {hits:?}");
+    }
+
     /// Every `Mode`, as the status-line census below drives them.
     const ALL_MODES: [Mode; 160] = [
         Mode::Dossier,
@@ -2156,7 +2205,7 @@ mod tests {
         let mut app = census_app();
         let mut fx = Fx::new();
         app.mode = Mode::Research;
-        // The list's popup: the graph draws no numbered rows.
+        // The list's popup: the graph draws no highlighted rows.
         app.research_graph_view = false;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
         let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
@@ -2167,8 +2216,8 @@ mod tests {
         let refusal = at(CENSUS_REFUSAL).expect("the popup drew the refusal");
         let first_row = drawn
             .iter()
-            .position(|t| t.starts_with("  ["))
-            .expect("the popup drew a numbered option");
+            .position(|t| t.starts_with("> "))
+            .expect("the popup drew a highlighted option");
 
         assert!(title < refusal, "the refusal was drawn above the title");
         assert!(

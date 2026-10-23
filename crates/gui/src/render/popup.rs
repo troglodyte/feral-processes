@@ -201,17 +201,17 @@ pub(super) fn with_suffix(row: Row, text: impl Into<String>) -> Row {
     }
 }
 
-/// What precedes a tag column on a row that names an item: the row's
-/// shortcut, and the quantity where the screen prints one.
+/// What precedes a tag column on a row that names an item: the quantity
+/// where the screen prints one.
 ///
 /// One definition rather than six, for `qty_column`'s reason — the six
 /// screens that draw a tag have no reason to disagree about the columns in
 /// front of it, and a lead that is one space out puts the tag half a
 /// character off the column it is supposed to form.
-pub(super) fn row_lead(shortcut: char, qty: Option<u32>) -> String {
+pub(super) fn row_lead(qty: Option<u32>) -> String {
     match qty {
-        Some(qty) => format!("[{shortcut}] {} ", qty_column(qty)),
-        None => format!("[{shortcut}] "),
+        Some(qty) => format!("{} ", qty_column(qty)),
+        None => String::new(),
     }
 }
 
@@ -1433,38 +1433,37 @@ mod tests {
     /// so this is the assertion that says the screens did not move.
     #[test]
     fn a_lifted_tag_row_reads_exactly_as_the_hand_formatted_one_did() {
-        // `"[{}] {} {}  Sell {} ..."` — a trader's shelf, the inventory list
+        // `"{} {}  Sell {} ..."` — a trader's shelf, the inventory list
         // and the Stack market.
         assert_eq!(
             tagged_text(
-                &row_lead('a', Some(3)),
+                &row_lead(Some(3)),
                 "WEP",
                 PowerCell::Rated(54),
                 "Sell Arc Lance"
             ),
             format!(
-                "[{}] {} {}  {:>4}  {}",
-                'a',
+                "{} {}  {:>4}  {}",
                 qty_column(3),
                 "WEP",
                 54,
                 "Sell Arc Lance"
             ),
         );
-        // `"[{}] {}  Buy {} ..."` — a trader's stock, and the Compile screen,
+        // `"{}  Buy {} ..."` — a trader's stock, and the Compile screen,
         // neither of which prints a count.
         assert_eq!(
             tagged_text(
-                &row_lead('a', None),
+                &row_lead(None),
                 "MOD",
                 PowerCell::Rated(397),
                 "Buy Watchdog Tap"
             ),
-            format!("[{}] {}  {:>4}  {}", 'a', "MOD", 397, "Buy Watchdog Tap"),
+            format!("{}  {:>4}  {}", "MOD", 397, "Buy Watchdog Tap"),
         );
         // A four-digit stack grows the row rather than losing a digit, which
         // is `qty_column`'s call, not this one's.
-        assert!(row_lead('a', Some(1234)).len() > row_lead('a', Some(3)).len());
+        assert!(row_lead(Some(1234)).len() > row_lead(Some(3)).len());
     }
 
     /// The pieces `draw_row` paints and the string it measures are the same
@@ -1509,7 +1508,7 @@ mod tests {
         let cell = |power| {
             let Row::Item { text, tag, .. } = with_tag(
                 item_row("Arc Lance", false),
-                row_lead('a', None),
+                row_lead(None),
                 "WEP",
                 None,
                 power,
@@ -1555,7 +1554,7 @@ mod tests {
         assert_eq!(widths, vec![POWER_COLUMN_WIDTH; 5]);
 
         let offset = |name: &str, power| {
-            let row = tagged_text(&row_lead('a', Some(3)), "WEP", power, name);
+            let row = tagged_text(&row_lead(Some(3)), "WEP", power, name);
             row.find(name).expect("the name is in the row it names")
         };
         assert_eq!(

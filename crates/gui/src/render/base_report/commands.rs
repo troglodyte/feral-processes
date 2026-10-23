@@ -20,7 +20,7 @@ fn labelled_rows(labels: &[&str], selected: usize) -> Vec<Row> {
     labels
         .iter()
         .enumerate()
-        .map(|(i, label)| group_row(i, label, i == selected))
+        .map(|(i, label)| group_row(label, i == selected))
         .collect()
 }
 
@@ -40,10 +40,10 @@ mod tests {
     }
 
     #[test]
-    fn three_rows_are_numbered_and_the_selected_one_highlighted() {
+    fn three_rows_carry_no_label_and_the_selected_one_is_highlighted() {
         let out = labelled_rows(&["One", "Two", "Three"], 1);
         let texts: Vec<_> = out.iter().map(text_of).collect();
-        assert_eq!(texts, ["[1] One", "[2] Two", "[3] Three"]);
+        assert_eq!(texts, ["One", "Two", "Three"]);
         let selected = |r: &Row| matches!(r, Row::Item { selected: true, .. });
         assert!(!selected(&out[0]) && selected(&out[1]) && !selected(&out[2]));
     }

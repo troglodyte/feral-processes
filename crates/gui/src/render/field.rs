@@ -226,12 +226,8 @@ pub(super) fn draw_field_routine(
         // `cost` arrives already carrying its unit, which is the engine's to
         // decide, not this file's.
         let label = format!(
-            "[{}] {} — {} — {} ({})",
-            menu_shortcut(i),
-            r.name,
-            r.cost,
-            r.description,
-            r.holder_label,
+            "{} — {} — {} ({})",
+            r.name, r.cost, r.description, r.holder_label,
         );
         // Greyed rather than hidden, and still selectable: the engine
         // refuses it again on commit with the reason in `App::status_line`,
@@ -275,7 +271,7 @@ pub(super) fn draw_field_routine_ally(
     };
     let mut rows = vec![text_row(format!("Run {} on whom?", routine.name))];
     for (i, t) in game.field_routine_targets(pending).into_iter().enumerate() {
-        let mut lines = field_routine_target_rows(menu_shortcut(i), &t).into_iter();
+        let mut lines = field_routine_target_rows(&t).into_iter();
         let head = lines
             .next()
             .expect("field_routine_target_rows always emits the target's row");
@@ -315,7 +311,7 @@ pub(super) fn draw_field_routine_ally(
 ///
 /// Returns the lines rather than drawing them so their width is measurable
 /// without a window — see `the_widest_ally_picker_row_fits_its_popup`.
-fn field_routine_target_rows(num: char, t: &FieldRoutineTargetView) -> Vec<String> {
+fn field_routine_target_rows(t: &FieldRoutineTargetView) -> Vec<String> {
     let displaced = t.running.as_ref().map(|b| {
         format!(
             "replaces {} {} — {}t left",
@@ -323,7 +319,7 @@ fn field_routine_target_rows(num: char, t: &FieldRoutineTargetView) -> Vec<Strin
         )
     });
     std::iter::once(format!(
-        "[{num}] {} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}",
+        "{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}",
         t.name, t.level, t.hp, t.max_hp, t.atk, t.mitigation, t.power
     ))
     .chain(continuation_lines(displaced.as_deref().unwrap_or_default()))
@@ -880,10 +876,10 @@ mod tests {
     /// choose is to remember them.
     #[test]
     fn an_ally_picker_row_prices_the_target_by_its_stats() {
-        let lines = field_routine_target_rows('a', &target("Kestrel", None));
+        let lines = field_routine_target_rows(&target("Kestrel", None));
 
         assert_eq!(lines.len(), 1, "nothing running means no second line");
-        assert!(lines[0].contains("[a] Kestrel Lv6"), "{lines:?}");
+        assert!(lines[0].starts_with("Kestrel Lv6"), "{lines:?}");
         assert!(lines[0].contains("HP 22/28"), "{lines:?}");
         assert!(lines[0].contains("ATK 8"), "{lines:?}");
         assert!(lines[0].contains("MIT 5%"), "{lines:?}");
@@ -896,17 +892,14 @@ mod tests {
     /// alone would not say which is about to go.
     #[test]
     fn an_ally_picker_row_says_what_the_cast_would_replace() {
-        let lines = field_routine_target_rows(
-            'b',
-            &target(
-                "Kestrel",
-                Some(RunningBuffView {
-                    name: "Repair Loop Single".to_string(),
-                    magnitude: "HP+7/4t".to_string(),
-                    remaining: "62t".to_string(),
-                }),
-            ),
-        );
+        let lines = field_routine_target_rows(&target(
+            "Kestrel",
+            Some(RunningBuffView {
+                name: "Repair Loop Single".to_string(),
+                magnitude: "HP+7/4t".to_string(),
+                remaining: "62t".to_string(),
+            }),
+        ));
 
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(lines[1].contains("Repair Loop Single"), "{lines:?}");
@@ -945,25 +938,22 @@ mod tests {
             .name
             .clone();
 
-        let lines = field_routine_target_rows(
-            'a',
-            &FieldRoutineTargetView {
-                // Four digits apiece: past anything reachable, so the census
-                // is not one level-up away from being wrong.
-                hp: 9999,
-                max_hp: 9999,
-                atk: 9999,
-                mitigation: 9999,
-                power: 9999,
-                level: 99,
-                running: Some(RunningBuffView {
-                    name: widest,
-                    magnitude: "HP+9999/99t".to_string(),
-                    remaining: "9999t".to_string(),
-                }),
-                ..target("Overclocked Sentinel [z10]", None)
-            },
-        );
+        let lines = field_routine_target_rows(&FieldRoutineTargetView {
+            // Four digits apiece: past anything reachable, so the census
+            // is not one level-up away from being wrong.
+            hp: 9999,
+            max_hp: 9999,
+            atk: 9999,
+            mitigation: 9999,
+            power: 9999,
+            level: 99,
+            running: Some(RunningBuffView {
+                name: widest,
+                magnitude: "HP+9999/99t".to_string(),
+                remaining: "9999t".to_string(),
+            }),
+            ..target("Overclocked Sentinel [z10]", None)
+        });
 
         with_painter(|p| {
             let m = ui_metrics(900.0);

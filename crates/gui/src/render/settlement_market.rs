@@ -106,7 +106,7 @@ pub(super) fn settlement_market_page_rows(
         }
         let cost = offer.unit_cost * offer.qty;
         let label = format!("{}  ({cost} {money})", offer.name);
-        let lead = row_lead(menu_shortcut(idx), (offer.qty > 1).then_some(offer.qty));
+        let lead = row_lead((offer.qty > 1).then_some(offer.qty));
         let (tag, quality, power) = match &offer.kind {
             CaravanOfferKind::Gear(copy) => (
                 game.item_category(&copy.item).short_label(),
@@ -164,7 +164,7 @@ pub(super) fn settlement_market_page_rows(
                 row.copy.tier,
                 row.copy.rarity,
             ),
-            row_lead(menu_shortcut(idx), Some(row.held)),
+            row_lead(Some(row.held)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),

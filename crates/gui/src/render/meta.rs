@@ -98,9 +98,9 @@ pub(super) fn save_and_quit_rows(app: &App) -> Vec<Row> {
     }
     vec![
         text_row(""),
-        item_row("[1] Save".to_string(), selected == 0),
-        item_row("[2] Save and quit to the menu".to_string(), selected == 1),
-        item_row("[3] Quit without saving".to_string(), selected == 2),
+        item_row("Save".to_string(), selected == 0),
+        item_row("Save and quit to the menu".to_string(), selected == 1),
+        item_row("Quit without saving".to_string(), selected == 2),
     ]
 }
 
@@ -191,7 +191,7 @@ pub(super) fn draw_load_game(app: &App, refusal: Option<&str>, painter: &Painter
             .as_deref()
             .unwrap_or("(incompatible save - can still be deleted)");
         rows.push(item_row(
-            format!("[{}] {} - {}", menu_shortcut(i), save.name, summary),
+            format!("{} - {}", save.name, summary),
             i == app.menu_selected,
         ));
     }

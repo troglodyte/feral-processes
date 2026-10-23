@@ -20,7 +20,7 @@ pub(super) fn draw_craft_menu(
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let (lead, tag, power, lines) = craft_rows(game, recipe, i, &status.inventory);
+        let (lead, tag, power, lines) = craft_rows(game, recipe, &status.inventory);
         let mut lines = lines.into_iter();
         let head = lines.next().expect("craft_rows always emits the head line");
         rows.push(with_tag(
@@ -72,14 +72,13 @@ const CRAFT_ROW_INDENT: &str = "         ";
 fn craft_rows(
     game: &Game,
     recipe: &CraftRecipe,
-    i: usize,
     inventory: &[InventoryRow],
 ) -> (String, &'static str, PowerCell, Vec<String>) {
     let blurb = game
         .item_blurb(&recipe.result)
         .map(|b| format!(" ({b})"))
         .unwrap_or_default();
-    let lead = row_lead(menu_shortcut(i), None);
+    let lead = row_lead(None);
     let tag = game.item_category(&recipe.result).short_label();
     // What a plain copy of the result rates — the roll has not been made, so
     // this is what compiling one is worth before quality moves it.
@@ -494,10 +493,9 @@ mod tests {
     fn drawn_craft_lines(
         game: &Game,
         recipe: &CraftRecipe,
-        i: usize,
         inventory: &[InventoryRow],
     ) -> Vec<String> {
-        let (lead, tag, power, mut lines) = craft_rows(game, recipe, i, inventory);
+        let (lead, tag, power, mut lines) = craft_rows(game, recipe, inventory);
         lines[0] = tagged_text(&lead, tag, power, &lines[0]);
         lines
     }
@@ -514,11 +512,11 @@ mod tests {
         let status = game.player_status();
         assert!(!recipes.is_empty(), "a fresh game can compile something");
 
-        for (i, recipe) in recipes.iter().enumerate() {
-            let lines = drawn_craft_lines(&game, recipe, i, &status.inventory);
+        for recipe in recipes.iter() {
+            let lines = drawn_craft_lines(&game, recipe, &status.inventory);
             let tag = game.item_category(&recipe.result).short_label();
             assert!(
-                lines[0].contains(&format!("] {tag}  ")),
+                lines[0].starts_with(&format!("{tag}  ")),
                 "a Compile row should name its item's kind in a column of its \
                  own, as the inventory does: {}",
                 lines[0]
@@ -627,15 +625,15 @@ mod tests {
     fn a_row_too_wide_for_the_popup_wraps_instead_of_running_off() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
-        let lines = drawn_craft_lines(&game, &a_very_wide_recipe(), 0, &[]);
+        let lines = drawn_craft_lines(&game, &a_very_wide_recipe(), &[]);
 
         assert!(
             lines.len() > 1,
             "a row this wide should have been split: {lines:?}"
         );
         assert!(
-            lines[0].starts_with("[1] MOD") && lines[0].contains("  Singularity Matrix"),
-            "the shortcut, kind, rating and name are what the eye scans, so they \
+            lines[0].starts_with("MOD") && lines[0].contains("  Singularity Matrix"),
+            "the kind, rating and name are what the eye scans, so they \
              stay together on the first line: {}",
             lines[0]
         );
@@ -664,8 +662,8 @@ mod tests {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let status = game.player_status();
-        for (i, recipe) in game.craft_recipes().iter().enumerate() {
-            let lines = drawn_craft_lines(&game, recipe, i, &status.inventory);
+        for recipe in game.craft_recipes().iter() {
+            let lines = drawn_craft_lines(&game, recipe, &status.inventory);
             assert_eq!(
                 lines.len(),
                 1,
@@ -692,8 +690,7 @@ mod tests {
         let widest = game
             .craft_recipes()
             .iter()
-            .enumerate()
-            .flat_map(|(i, r)| drawn_craft_lines(&game, r, i, &status.inventory))
+            .flat_map(|r| drawn_craft_lines(&game, r, &status.inventory))
             .map(|line| format!("  {line}"))
             .max_by_key(|line| line.chars().count())
             .expect("the shipped assets declare recipes");

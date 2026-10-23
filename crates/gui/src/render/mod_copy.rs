@@ -54,18 +54,17 @@ pub(super) fn mod_copy_rows(game: &Game, copy: &GearCopy, selected: usize) -> Ve
         text_row(""),
     ];
     for (i, row) in mod_slot_rows(game, copy).iter().enumerate() {
-        let key = menu_shortcut(i);
         match row {
             Some(id) => {
                 let text = find_def(&defs, id)
                     .map_or_else(|| id.as_str().to_string(), |d| affix_text(game, d));
-                rows.push(item_row(format!("[{key}] {text}"), i == selected));
+                rows.push(item_row(text.to_string(), i == selected));
                 if let Some(note) = find_def(&defs, id).and_then(|d| decomp_note(d, slot)) {
                     rows.push(colored_item_row(note, false, TEXT_DIM));
                 }
             }
             None => rows.push(colored_item_row(
-                format!("[{key}] (empty slot)"),
+                "(empty slot)".to_string(),
                 i == selected,
                 TEXT_DIM,
             )),
@@ -90,10 +89,7 @@ pub(super) fn mod_pick_rows(game: &Game, copy: &GearCopy, selected: usize) -> Ve
         let Some(def) = find_def(&defs, id) else {
             continue;
         };
-        rows.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), affix_text(game, def)),
-            i == selected,
-        ));
+        rows.push(item_row(affix_text(game, def).to_string(), i == selected));
         rows.push(colored_item_row(
             format!("    {}", cost_text(game, def)),
             false,
@@ -158,7 +154,7 @@ mod tests {
         crate::paint::with_painter(|p| {
             for def in game.affix_defs().iter().filter(|d| d.research.is_some()) {
                 let mut lines = vec![
-                    format!("[9] {}", affix_text(&game, def)),
+                    affix_text(&game, def),
                     format!("    {}", cost_text(&game, def)),
                 ];
                 lines.extend(decomp_note(def, Some(EquipmentSlot::Weapon)).map(String::from));
@@ -196,7 +192,7 @@ mod tests {
         let rows = mod_copy_rows(&game, &copy, 0);
         let labels: Vec<String> = rows.iter().map(row_label_text).collect();
         assert!(
-            labels.iter().any(|l| l.contains("[1] (empty slot)")),
+            labels.iter().any(|l| l.contains("(empty slot)")),
             "{labels:?}"
         );
     }

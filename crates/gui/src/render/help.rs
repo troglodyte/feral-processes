@@ -16,15 +16,10 @@ pub(super) fn draw_help_index(app: &App, refusal: Option<&str>, painter: &Painte
         out.push(text_row("No help pages are installed (assets/help/)."));
     }
     for (i, row) in rows.iter().enumerate() {
-        out.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), row.title),
-            i == app.menu_selected,
-        ));
+        out.push(item_row(row.title.to_string(), i == app.menu_selected));
     }
     out.push(text_row(""));
-    out.push(text_row(
-        "Up/Down + Enter or a row's key to read, Esc to close.",
-    ));
+    out.push(text_row("Up/Down + Enter to read, Esc to close."));
     draw_popup("Help", PopupSize::Large, &out, refusal, painter, m);
 }
 

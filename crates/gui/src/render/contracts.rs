@@ -117,7 +117,7 @@ fn hint_rows(contract: &ContractRow) -> Vec<Row> {
 /// about an unrelated key. The abandon hint now leads its own line.
 fn contract_footer() -> [&'static str; 2] {
     [
-        "Pick a number to take an offer, or to hand over a held contract's cargo.",
+        "Enter takes the highlighted offer, or hands over a held contract's cargo.",
         "[A] gives back the highlighted contract.        Esc to close.",
     ]
 }
@@ -137,11 +137,8 @@ pub(super) fn contract_line(
     };
     let mut row = item_row(
         format!(
-            "[{}] {} - {}{progress} - pays {}",
-            menu_shortcut(idx),
-            contract.name,
-            contract.objective_line,
-            contract.reward_line
+            "{} - {}{progress} - pays {}",
+            contract.name, contract.objective_line, contract.reward_line
         ),
         idx == selected,
     );

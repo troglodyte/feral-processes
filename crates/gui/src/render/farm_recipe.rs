@@ -30,7 +30,7 @@ pub(super) fn body_rows(rows: &[CropRow], selected: usize) -> Vec<Row> {
     // The shortcut is printed because `selected_index` honours it.
     body.extend(rows.iter().enumerate().map(|(i, row)| {
         item_row(
-            format!("[{}] {} — {}", menu_shortcut(i), row.label, row.description),
+            format!("{} — {}", row.label, row.description),
             i == selected,
         )
     }));
@@ -44,7 +44,7 @@ mod tests {
     /// Every row prints the key that picks it, then the crop's name and what
     /// it grows.
     #[test]
-    fn a_crop_row_prints_its_key_name_and_description() {
+    fn a_crop_row_prints_its_name_and_description() {
         let rows = [CropRow {
             id: "power_cell".into(),
             label: "Power Cell".into(),
@@ -57,9 +57,6 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(
-            texts,
-            vec!["[1] Power Cell — A cell slowly grows.".to_string()]
-        );
+        assert_eq!(texts, vec!["Power Cell — A cell slowly grows.".to_string()]);
     }
 }

@@ -28,12 +28,8 @@ pub(super) fn draw_develop(
         rows.push(with_icon(
             tier_row(
                 format!(
-                    "[{}] {} Lv{}  rings {}/{}",
-                    menu_shortcut(i),
-                    p.name,
-                    p.level,
-                    p.ring,
-                    KERNEL_RING_MAX
+                    "{} Lv{}  rings {}/{}",
+                    p.name, p.level, p.ring, KERNEL_RING_MAX
                 ),
                 i == selected,
                 p.fusions,
@@ -139,11 +135,8 @@ pub(super) fn draw_develop_program(
             // number and reading nothing.
             let row = item_row(
                 format!(
-                    "  [{}] {} ({}) — {}",
-                    menu_shortcut(shortcut),
-                    option.name,
-                    option.tag,
-                    option.description
+                    "  {} ({}) — {}",
+                    option.name, option.tag, option.description
                 ),
                 shortcut == selected,
             );

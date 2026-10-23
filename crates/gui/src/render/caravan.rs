@@ -117,7 +117,7 @@ pub(super) fn caravan_page_rows(
         // hidden row is a wagon that looks emptier than it is.
         let cost = offer.unit_cost * offer.qty;
         let label = format!("{}  ({cost} {money})", offer.name);
-        let lead = row_lead(menu_shortcut(idx), (offer.qty > 1).then_some(offer.qty));
+        let lead = row_lead((offer.qty > 1).then_some(offer.qty));
         // The same column the sell list below already carries, which the
         // offer list did not: what *category* a row is, and for a copy of
         // gear what quality it rolled. Both are the questions the wagon is
@@ -202,7 +202,7 @@ pub(super) fn caravan_page_rows(
                 row.copy.tier,
                 row.copy.rarity,
             ),
-            row_lead(menu_shortcut(idx), Some(row.held)),
+            row_lead(Some(row.held)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),
@@ -457,18 +457,25 @@ mod tests {
             "one heading per run, on both lists, and never one per row"
         );
 
-        let shortcuts: Vec<char> = rows
+        let item_count = rows
             .iter()
-            .filter_map(|r| match r {
-                Row::Item { tag: Some(t), .. } => t.lead.chars().nth(1),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(
-            shortcuts,
-            (0..4).map(menu_shortcut).collect::<Vec<_>>(),
-            "the headings moved a shortcut off the row it belongs to"
-        );
+            .filter(|r| matches!(r, Row::Item { .. }))
+            .count();
+        for k in 0..item_count {
+            let rows = caravan_page_rows(&mut game, &view, &cells, view.credits, k);
+            let order: Vec<bool> = rows
+                .iter()
+                .filter_map(|r| match r {
+                    Row::Item { selected, .. } => Some(*selected),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                order.iter().position(|s| *s),
+                Some(k),
+                "the headings moved the highlight off the row it belongs to"
+            );
+        }
     }
 
     /// **This page does scroll**, unlike the gear inspect and memories

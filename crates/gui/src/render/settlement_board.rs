@@ -98,7 +98,7 @@ pub(super) fn board_rows(
 /// pushes.
 fn board_footer() -> [&'static str; 2] {
     [
-        "Pick a number to take a job, or to hand over a held job's cargo.",
+        "Enter takes the highlighted job, or hands over a held job's cargo.",
         "[A] gives back the highlighted job.        Esc to go back.",
     ]
 }

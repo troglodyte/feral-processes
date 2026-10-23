@@ -52,13 +52,7 @@ pub(super) fn perks_menu_rows(
                 String::new()
             };
             rows.push(item_row(
-                format!(
-                    "[{}] {} - {} Perk Points{}",
-                    menu_shortcut(i),
-                    def.name,
-                    def.cost,
-                    tag
-                ),
+                format!("{} - {} Perk Points{}", def.name, def.cost, tag),
                 i == selected,
             ));
             rows.extend(description_rows(&def.description));
@@ -399,17 +393,16 @@ pub(super) fn research_menu_rows(
     let mut rows = vec![
         Row::TextColored(research_header(active), CYAN),
         text_row(if dev_unlock {
-            "Pick a row's key to work it. A to abandon. U to unlock. G for the tree. Esc to close"
+            "Enter works the highlighted row. A to abandon. U to unlock. G for the tree. Esc to close"
         } else {
-            "Pick a row's key to work it. A to abandon. G for the tree. Esc to close"
+            "Enter works the highlighted row. A to abandon. G for the tree. Esc to close"
         }),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
         let tag = state_tag(&node.state);
         let label = format!(
-            "[{}] {}{} - {}{tag}",
-            menu_shortcut(i),
+            "{}{} - {}{tag}",
             flag(node),
             node.name,
             price_tag(node, currency)
@@ -625,15 +618,14 @@ mod tests {
         };
 
         assert!(
-            label(node(ResearchState::Active, Some("Build a Lathe.")))
-                .starts_with("[1] ! Automation")
+            label(node(ResearchState::Active, Some("Build a Lathe."))).starts_with("! Automation")
         );
         assert!(
             label(node(ResearchState::Available, Some("Build a Lathe.")))
-                .starts_with("[1] ! Automation")
+                .starts_with("! Automation")
         );
-        assert!(label(node(ResearchState::Active, None)).starts_with("[1] Automation"));
-        assert!(label(node(ResearchState::Available, None)).starts_with("[1] Automation"));
+        assert!(label(node(ResearchState::Active, None)).starts_with("Automation"));
+        assert!(label(node(ResearchState::Available, None)).starts_with("Automation"));
     }
 
     /// The other half of the same ask, at the other end of the node: what it
@@ -882,16 +874,11 @@ mod tests {
         for (name, defs) in &groups {
             expected.push(name.clone());
             for def in defs {
-                let i = flat
-                    .iter()
-                    .position(|d| d.id == def.id)
-                    .expect("every section's perk is in the flattened list");
-                expected.push(format!(
-                    "[{}] {} - {} Perk Points",
-                    menu_shortcut(i),
-                    def.name,
-                    def.cost
-                ));
+                assert!(
+                    flat.iter().any(|d| d.id == def.id),
+                    "every section's perk is in the flattened list"
+                );
+                expected.push(format!("{} - {} Perk Points", def.name, def.cost));
             }
         }
         assert_eq!(drawn, expected);

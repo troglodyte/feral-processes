@@ -20,16 +20,13 @@ pub(super) fn draw_dev_console(
 ) {
     let mut out = vec![text_row("Dev build only. Esc to close.")];
     for (i, label) in labels.iter().enumerate() {
-        out.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), label),
-            i == selected,
-        ));
+        out.push(item_row(label.to_string(), i == selected));
     }
     draw_popup("Dev Console", PopupSize::Large, &out, refusal, painter, m);
 }
 
 /// One `[a] Label` command row: the hub's command pages
 /// share it so the format has one home.
-pub(super) fn group_row(i: usize, label: &str, selected: bool) -> Row {
-    item_row(format!("[{}] {}", menu_shortcut(i), label), selected)
+pub(super) fn group_row(label: &str, selected: bool) -> Row {
+    item_row(label.to_string(), selected)
 }

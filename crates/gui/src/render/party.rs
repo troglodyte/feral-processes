@@ -73,13 +73,12 @@ pub(super) fn draw_companion_equip(
     };
     let mut rows = vec![
         Row::TextColored(format!("{name}'s gear"), CYAN),
-        text_row("Number to swap or unequip. Gear comes out of your cargo and goes back to it."),
+        text_row("Enter to swap or unequip. Gear comes out of your cargo and goes back to it."),
         text_row("A Decompiler bonus does nothing on a program - only you attempt a capture."),
         text_row(""),
     ];
     for (i, slot) in EquipmentSlot::ALL.into_iter().enumerate() {
         rows.push(equipped_row(
-            i,
             slot,
             game.worn(program, slot),
             i == selected,
@@ -259,18 +258,13 @@ pub(super) fn strength(intensity: f32) -> String {
 /// off the right edge, taking the activity and CRITICAL with it. Those are
 /// the two tags the list is most often being read for, which is why the fix
 /// wraps rather than chopping: a chop deletes exactly them.
-fn companion_row_lines(
-    shortcut: char,
-    p: &PetInfo,
-    extra: &[String],
-    columns: usize,
-) -> Vec<String> {
+fn companion_row_lines(p: &PetInfo, extra: &[String], columns: usize) -> Vec<String> {
     let slot = p
         .party_slot
         .map(|s| format!("#{} ", s + 1))
         .unwrap_or_default();
     let head = format!(
-        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}  {}",
+        "{slot}{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}  {}",
         p.name, p.level, p.hp, p.max_hp, p.atk, p.mitigation, p.power, p.gear,
     );
     let tags = [
@@ -349,13 +343,7 @@ pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize, columns: us
             rows.push(Row::TextColored(role_heading(p.role).to_string(), TEXT));
             run = Some(p.role);
         }
-        rows.extend(companion_rows(
-            p,
-            menu_shortcut(i),
-            i == selected,
-            &[],
-            columns,
-        ));
+        rows.extend(companion_rows(p, i == selected, &[], columns));
     }
     rows
 }
@@ -371,7 +359,6 @@ pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize, columns: us
 /// activity`, which is one of the tags already.
 pub(super) fn companion_rows(
     p: &PetInfo,
-    shortcut: char,
     selected: bool,
     extra: &[String],
     columns: usize,
@@ -391,7 +378,7 @@ pub(super) fn companion_rows(
             tier_row(text, selected, p.fusions, p.rarity)
         }
     };
-    let mut lines = companion_row_lines(shortcut, p, extra, columns).into_iter();
+    let mut lines = companion_row_lines(p, extra, columns).into_iter();
     let head = lines
         .next()
         .expect("companion_row_lines always emits the identity row");
@@ -426,11 +413,11 @@ pub(super) fn roster_rows(game: &mut Game, selected: usize) -> Vec<Row> {
 
 /// Formats one fuse-candidate row with the full stat line a fusion
 /// decision depends on.
-fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
+fn fuse_candidate_label(p: &PetInfo) -> String {
     let fused = fusion_tag(p.fusions);
     let activity = activity_tag(&p.activity);
     format!(
-        "[{num}] {} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}{fused}{activity}",
+        "{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}{fused}{activity}",
         p.name, p.level, p.hp, p.max_hp, p.atk, p.mitigation, p.power
     )
 }
@@ -453,8 +440,8 @@ fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
 /// Returns the lines rather than drawing them so their width is measurable
 /// without a window — see `the_widest_shipped_routine_kit_fits_the_fuse_picker`.
 /// The stat row is always present, so a caller may take it unconditionally.
-fn fuse_candidate_rows(num: char, p: &PetInfo, routines: &[String]) -> Vec<String> {
-    std::iter::once(fuse_candidate_label(num, p))
+fn fuse_candidate_rows(p: &PetInfo, routines: &[String]) -> Vec<String> {
+    std::iter::once(fuse_candidate_label(p))
         .chain(continuation_lines(&routines.join(", ")))
         .collect()
 }
@@ -475,9 +462,8 @@ fn installed_routines(game: &Game, program: Entity) -> Vec<String> {
 /// recipe and its cost, and for the same reason. The highlight belongs on the
 /// line carrying the shortcut, and the popup's scroll anchor is the *first*
 /// selected `Item`, so these cannot disturb it.
-fn push_fuse_candidate(rows: &mut Vec<Row>, game: &Game, i: usize, p: &PetInfo, selected: bool) {
-    let mut lines =
-        fuse_candidate_rows(menu_shortcut(i), p, &installed_routines(game, p.entity)).into_iter();
+fn push_fuse_candidate(rows: &mut Vec<Row>, game: &Game, p: &PetInfo, selected: bool) {
+    let mut lines = fuse_candidate_rows(p, &installed_routines(game, p.entity)).into_iter();
     let head = lines
         .next()
         .expect("fuse_candidate_rows always emits the stat row");
@@ -504,7 +490,7 @@ pub(super) fn draw_fuse_menu(
         rows.push(text_row("(you have no compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        push_fuse_candidate(&mut rows, game, i, p, i == selected);
+        push_fuse_candidate(&mut rows, game, p, i == selected);
     }
     draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -532,7 +518,7 @@ pub(super) fn draw_fuse_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        push_fuse_candidate(&mut rows, game, i, p, i == selected);
+        push_fuse_candidate(&mut rows, game, p, i == selected);
     }
     draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -664,8 +650,7 @@ pub(super) fn draw_refactor(
         rows.push(with_icon(
             tier_row(
                 format!(
-                    "[{}] {} Lv{}{}{}",
-                    menu_shortcut(i),
+                    "{} Lv{}{}{}",
                     p.name,
                     p.level,
                     fusion_tag(p.fusions),
@@ -716,8 +701,7 @@ pub(super) fn draw_refactor_item(
     for (i, u) in offered.iter().enumerate() {
         rows.push(item_row(
             format!(
-                "[{}] {}{}  x{}",
-                menu_shortcut(i),
+                "{}{}  x{}",
                 u.name,
                 if u.zone_bump { " (zone rebuild)" } else { "" },
                 u.qty
@@ -752,7 +736,7 @@ mod tests {
     /// the shortcut and app-core's pick both index through. Off by one,
     /// `[c]` renames what `[b]` names and nothing anywhere fails.
     #[test]
-    fn the_roster_heads_each_role_without_moving_a_shortcut() {
+    fn the_roster_heads_each_role_without_moving_the_highlight() {
         let pet = |name: &str, role: ProgramRole| PetInfo {
             role,
             party_slot: matches!(role, ProgramRole::InParty).then_some(0),
@@ -779,18 +763,25 @@ mod tests {
             "one heading per run, and never one per row"
         );
 
-        let shortcuts: Vec<char> = rows
-            .iter()
-            .filter_map(|r| match r {
-                Row::Item { text, .. } => text.strip_prefix('[').and_then(|t| t.chars().next()),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(
-            shortcuts,
-            (0..3).map(menu_shortcut).collect::<Vec<_>>(),
-            "a heading moved a shortcut off the program it belongs to"
-        );
+        for (k, pet) in pets.iter().enumerate() {
+            let rows = companion_page_rows(&pets, k, ROW_WRAP_COLUMNS);
+            let lit: Vec<&str> = rows
+                .iter()
+                .filter_map(|r| match r {
+                    Row::Item {
+                        text,
+                        selected: true,
+                        ..
+                    } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(lit.len(), 1, "one highlighted row at {k}: {lit:?}");
+            assert!(
+                lit[0].contains(&pet.name),
+                "a heading moved the highlight off the program it belongs to: {lit:?}"
+            );
+        }
     }
 
     /// The fifth role, `role_heading`'s own arm — Task 4's census that the
@@ -959,7 +950,7 @@ mod tests {
             // guess.
             p.atk = 1234;
             p.mitigation = feral_processes_engine::tuning::MAX_MITIGATION_PERCENT;
-            out.push((companion_row_lines('a', &p, &[], columns), why.to_string()));
+            out.push((companion_row_lines(&p, &[], columns), why.to_string()));
         }
         out
     }
@@ -970,7 +961,7 @@ mod tests {
     #[test]
     fn a_roster_row_names_both_build_rolls() {
         let mut p = pet("Testmon", "");
-        let without = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
+        let without = companion_row_lines(&p, &[], ROW_WRAP_COLUMNS).join(" ");
         assert!(
             !without.contains("Assembly") && !without.contains("Extraction"),
             "a program with no Potential drew a build tag: {without}"
@@ -978,7 +969,7 @@ mod tests {
 
         p.assembly = Some("Excellent".to_string());
         p.extraction = Some("Poor".to_string());
-        let with = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
+        let with = companion_row_lines(&p, &[], ROW_WRAP_COLUMNS).join(" ");
         assert!(
             with.contains("[Assembly: Excellent]"),
             "the assembly rung is missing: {with}"
@@ -1078,14 +1069,14 @@ mod tests {
         let mut p = pet("Kestrel", "w|a|m");
         p.atk = 8;
         p.mitigation = 5;
-        let head = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).remove(0);
+        let head = companion_row_lines(&p, &[], ROW_WRAP_COLUMNS).remove(0);
         assert!(head.contains("ATK 8"), "{head}");
         assert!(head.contains("MIT 5%"), "{head}");
     }
 
     #[test]
     fn a_roster_row_carries_the_loadout_cell() {
-        let head = |p: &PetInfo| companion_row_lines('a', p, &[], ROW_WRAP_COLUMNS).remove(0);
+        let head = |p: &PetInfo| companion_row_lines(p, &[], ROW_WRAP_COLUMNS).remove(0);
         assert!(head(&pet("Kestrel", "w|a|m")).contains("w|a|m"));
         let bare = head(&pet("Nine", ".|.|."));
         assert!(bare.contains(".|.|."), "{bare}");
@@ -1099,7 +1090,7 @@ mod tests {
     fn an_ordinary_roster_row_stays_on_one_line() {
         let mut p = pet("Kestrel", "w|a|m");
         p.quality = Some("Average (54%)".to_string());
-        assert_eq!(companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).len(), 1);
+        assert_eq!(companion_row_lines(&p, &[], ROW_WRAP_COLUMNS).len(), 1);
     }
 
     /// The cell sits ahead of the tags that come and go — quality, fusion,
@@ -1110,7 +1101,7 @@ mod tests {
         let mut p = pet("Kestrel", "w|.|.");
         p.quality = Some("Excellent (94%)".to_string());
         p.wielded = true;
-        let row = companion_row_lines('a', &p, &[], ROW_WRAP_COLUMNS).join(" ");
+        let row = companion_row_lines(&p, &[], ROW_WRAP_COLUMNS).join(" ");
         let cell = row.find("w|.|.").expect("the cell is drawn");
         assert!(cell < row.find("Excellent").unwrap(), "{row}");
         assert!(cell < row.find("WEP").unwrap(), "{row}");
@@ -1176,7 +1167,6 @@ mod tests {
     #[test]
     fn a_fuse_candidate_lists_its_routines_under_its_stat_row() {
         let lines = fuse_candidate_rows(
-            'a',
             &pet("Kestrel", "w|a|m"),
             &["Sandbox".to_string(), "Hyperthread Single v1.0".to_string()],
         );
@@ -1215,7 +1205,7 @@ mod tests {
             "the census found {} routines, so it is measuring nothing",
             names.len()
         );
-        let lines = fuse_candidate_rows('a', &pet("Kestrel", "w|a|m"), &names);
+        let lines = fuse_candidate_rows(&pet("Kestrel", "w|a|m"), &names);
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // 0.88 is `PopupSize::Large`'s width fraction, against the

@@ -1,6 +1,6 @@
 # Controls
 
-Every numbered menu takes Up/Down and Enter as well as typing a row's own number or letter. Esc
+Every menu is a list you move through with Up/Down and pick with Enter (the battle screen also labels its rows with a number or letter you can type). Esc
 backs out one level, and finishing a job returns you to the map. A menu lists only what you can
 actually do from where you stand, so a row you cannot see leads to an empty screen rather than a
 refusal.
@@ -24,7 +24,7 @@ Your menus and stores:
   the left: Overview, then four command pages, then the report pages below. Build holds deploy,
   work a structure yourself, upgrade and demolish. Research holds research, routine and affix
   research, study a program and hold a program. Trade holds contracts, caravan and dispatch.
-  Compile holds compile an item and recipes. Pick a row by its number or with Enter.
+  Compile holds compile an item and recipes. Pick a row with Up/Down and Enter.
   The rest of the rail is Staff, Production, Stock, Work orders, Staffing, Build orders and
   Alerts, each a page of the report beside it. One highlight moves through both: Up and Down
   walk the rail, Right (or Enter) steps onto the page's rows, and Right again walks on through

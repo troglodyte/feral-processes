@@ -15,7 +15,7 @@ Walking onto a founded outpost opens its own page.
   it is posted — the same trade a sortie or a wield makes.
 - U recalls the highlighted crew member back to ordinary staff.
 - Shift-C opens the same take-only transfer screen your Depots use, straight onto the outpost's
-  stock — uppercase because lowercase letters already pick a crew row.
+  stock — uppercase so it stays clear of the crew list's Up/Down and Enter.
 - R repairs a damaged outpost from your own pack, once it has taken a hit.
 
 Growth runs in three tiers — raw, processed, complex — and each tier's crew produces everything

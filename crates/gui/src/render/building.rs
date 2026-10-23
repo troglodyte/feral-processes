@@ -123,7 +123,7 @@ pub(super) fn build_menu_rows(
                 rows.push(colored_item_row(heading, false, TEXT_DIM));
             }
         }
-        push_entry_rows(&mut rows, entry, i, i == selected, shortfall);
+        push_entry_rows(&mut rows, entry, i == selected, shortfall);
     }
     rows
 }
@@ -144,18 +144,12 @@ fn build_menu_preamble(shortfall: Option<&str>) -> Vec<Row> {
 fn push_entry_rows(
     rows: &mut Vec<Row>,
     entry: &BuildEntry,
-    i: usize,
     selected: bool,
     shortfall: Option<&str>,
 ) {
     let label = match entry.deployed {
-        0 => format!("[{}] {} - {}", menu_shortcut(i), entry.name, entry.cost),
-        n => format!(
-            "[{}] {} ({n}) - {}",
-            menu_shortcut(i),
-            entry.name,
-            entry.cost
-        ),
+        0 => format!("{} - {}", entry.name, entry.cost),
+        n => format!("{} ({n}) - {}", entry.name, entry.cost),
     };
     let affordable = shortfall.is_none() || !entry.needs_program;
     rows.push(match affordable {
@@ -195,14 +189,10 @@ pub(super) fn build_top_rows(
     for (i, line) in lines.iter().enumerate() {
         match line {
             BuildLine::Structure(entry) => {
-                push_entry_rows(&mut rows, entry, i, i == selected, shortfall)
+                push_entry_rows(&mut rows, entry, i == selected, shortfall)
             }
             BuildLine::Category { category, count } => rows.push(item_row(
-                format!(
-                    "[{}] {} ({count})",
-                    menu_shortcut(i),
-                    category_name(*category)
-                ),
+                format!("{} ({count})", category_name(*category)),
                 i == selected,
             )),
         }
@@ -780,7 +770,6 @@ pub(super) fn build_program_rows(
         }
         rows.extend(companion_rows(
             &c.pet,
-            menu_shortcut(i),
             i == selected,
             &extra,
             ROW_WRAP_COLUMNS,
@@ -878,7 +867,7 @@ pub(super) fn draw_pin_subject(
         Some(subject) => {
             let name = game.creature_label(subject);
             vec![item_row(
-                format!("[{}] Release {name} from study", menu_shortcut(0)),
+                format!("Release {name} from study"),
                 selected == 0,
             )]
         }
@@ -891,10 +880,7 @@ pub(super) fn draw_pin_subject(
                     .into_iter()
                     .enumerate()
                     .map(|(i, entity)| {
-                        item_row(
-                            format!("[{}] {}", menu_shortcut(i), game.creature_label(entity)),
-                            i == selected,
-                        )
+                        item_row(game.creature_label(entity).to_string(), i == selected)
                     })
                     .collect()
             }
@@ -941,7 +927,7 @@ fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
         .into_iter()
         .enumerate()
         .map(|(i, r)| {
-            let mut label = format!("[{}] {}", menu_shortcut(i), r.name);
+            let mut label = r.name.to_string();
             if let Some(tier) = r.rarity.label() {
                 label.push_str(&format!("  {tier}"));
             }
@@ -967,10 +953,7 @@ fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
 fn siphon_rows(holder: Option<&str>, staff: &[String], selected: usize, left_pct: u32) -> Vec<Row> {
     if let Some(name) = holder {
         return vec![item_row(
-            format!(
-                "[{}] Release {name} (it comes out at {left_pct}% Integrity or less)",
-                menu_shortcut(0)
-            ),
+            format!("Release {name} (it comes out at {left_pct}% Integrity or less)"),
             selected == 0,
         )];
     }
@@ -980,7 +963,7 @@ fn siphon_rows(holder: Option<&str>, staff: &[String], selected: usize, left_pct
     staff
         .iter()
         .enumerate()
-        .map(|(i, name)| item_row(format!("[{}] {name}", menu_shortcut(i)), i == selected))
+        .map(|(i, name)| item_row(name.clone(), i == selected))
         .collect()
 }
 
@@ -1081,10 +1064,7 @@ pub(super) fn draw_staffing_menu(
             Some(false) => "[ ] ",
             None => "",
         };
-        rows.push(item_row(
-            format!("[{}] {mark}{}", menu_shortcut(i), row.label),
-            i == selected,
-        ));
+        rows.push(item_row(format!("{mark}{}", row.label), i == selected));
     }
     rows.push(text_row(
         "A standing job is filled only by a program no work order needs.",
@@ -1125,7 +1105,7 @@ pub(super) fn work_order_screen_rows(
         rows.push(text_row("(nothing the base can make yet)"));
     }
     for (i, row) in rows_in.iter().enumerate() {
-        let mut lines = work_order_lines(row, i, i == selected).into_iter();
+        let mut lines = work_order_lines(row).into_iter();
         if let Some(head) = lines.next() {
             rows.push(work_order_head_row(row, head, i == selected));
         }
@@ -1194,17 +1174,14 @@ fn hub_lines(text: &str) -> Vec<String> {
     continuation_lines_within(text, HUB_WRAP_COLUMNS)
 }
 
-fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<String> {
+fn work_order_lines(row: &WorkOrderRow) -> Vec<String> {
     let Some(order) = &row.order else {
-        return vec![format!("[{}] New work order...", menu_shortcut(index))];
+        return vec!["New work order...".to_string()];
     };
     let state = state_tag(order.state);
     let mut lines = vec![format!(
-        "[{}] {}  {}/{}{state}",
-        menu_shortcut(index),
-        order.label,
-        order.have,
-        order.target
+        "{}  {}/{}{state}",
+        order.label, order.have, order.target
     )];
     // Through `continuation_lines` rather than an inline `format!`: a
     // stalled order's reason is a whole sentence and a machine line carries
@@ -1269,10 +1246,7 @@ pub(super) fn draw_work_order_pick(
         rows.push(text_row("(nothing the base can make — deploy a machine)"));
     }
     for (i, (_, name)) in items.iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {name}", menu_shortcut(i)),
-            i == selected,
-        ));
+        rows.push(item_row(name.clone(), i == selected));
     }
     draw_popup(
         "New Work Order",
@@ -1586,13 +1560,8 @@ pub(super) fn draw_structure_menu(
         rows.push(with_icon(
             item_row(
                 format!(
-                    "[{}] {} at ({}, {}){}{}",
-                    menu_shortcut(i),
-                    s.label,
-                    s.pos.0,
-                    s.pos.1,
-                    durability,
-                    assigned
+                    "{} at ({}, {}){}{}",
+                    s.label, s.pos.0, s.pos.1, durability, assigned
                 ),
                 i == selected,
             ),
@@ -1625,13 +1594,8 @@ pub(super) fn draw_remove_menu(
         rows.push(with_icon(
             item_row(
                 format!(
-                    "[{}] {} at ({}, {}){}{}",
-                    menu_shortcut(i),
-                    s.label,
-                    s.pos.0,
-                    s.pos.1,
-                    durability,
-                    home_tag
+                    "{} at ({}, {}){}{}",
+                    s.label, s.pos.0, s.pos.1, durability, home_tag
                 ),
                 i == selected,
             ),
@@ -2247,9 +2211,9 @@ mod tests {
         ];
         let rows = build_top_rows(&lines, 1, None);
         let texts: Vec<&str> = rows.iter().map(row_text).collect();
-        assert!(texts.iter().any(|t| t.starts_with("[1] Home")), "{texts:?}");
-        assert!(texts.contains(&"[2] Extractors (4)"), "{texts:?}");
-        assert!(texts.contains(&"[3] Defence (1)"), "{texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("Home")), "{texts:?}");
+        assert!(texts.contains(&"Extractors (4)"), "{texts:?}");
+        assert!(texts.contains(&"Defence (1)"), "{texts:?}");
     }
 
     /// The shipped description that runs longest, which is the one both
@@ -2543,12 +2507,15 @@ mod tests {
 
     /// The colour of each *structure* row, in entry order — the headings and
     /// the wrapped descriptions are `Row::Item` too (they have to be, see
-    /// `build_menu_rows`), and only the lines carrying a shortcut stand for
+    /// `build_menu_rows`), and only the lines naming a structure stand for
     /// something the player picks.
     fn entry_colors(rows: &[Row]) -> Vec<Color> {
+        let names: Vec<String> = shipped_entries().into_iter().map(|e| e.name).collect();
         rows.iter()
             .filter_map(|r| match r {
-                Row::Item { text, color, .. } if text.starts_with('[') => Some(*color),
+                Row::Item { text, color, .. } if names.iter().any(|n| text.starts_with(n)) => {
+                    Some(*color)
+                }
                 _ => None,
             })
             .collect()
@@ -3226,18 +3193,13 @@ mod build_program_tests {
             .iter()
             .filter(|r| matches!(r, Row::Item { .. }))
             .map(row_text)
-            .filter(|t| t.starts_with('['))
+            .filter(|t| !t.starts_with(' '))
             .collect();
-        assert_eq!(
-            heads.len(),
-            pets.len(),
-            "one shortcut per candidate: {heads:?}"
-        );
+        assert_eq!(heads.len(), pets.len(), "one row per candidate: {heads:?}");
         for (i, pet) in pets.iter().enumerate() {
-            let want = format!("[{}]", menu_shortcut(i));
             assert!(
-                heads[i].starts_with(&want) && heads[i].contains(&pet.pet.name),
-                "row {i} is {:?}, not {want} {}",
+                heads[i].contains(&pet.pet.name),
+                "row {i} is {:?}, not {}",
                 heads[i],
                 pet.pet.name
             );
@@ -3838,7 +3800,7 @@ mod work_order_tests {
         ];
 
         for row in &rows {
-            for line in work_order_lines(row, 0, false) {
+            for line in work_order_lines(row) {
                 assert!(
                     line.chars().count() <= ROW_WRAP_COLUMNS,
                     "a {} char row runs past the {ROW_WRAP_COLUMNS} column body: {line:?}",
@@ -3856,7 +3818,7 @@ mod work_order_tests {
                 let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
                 let room = content.w - m.pad * 2.0;
                 for row in &rows {
-                    for line in work_order_lines(row, 0, false) {
+                    for line in work_order_lines(row) {
                         let drawn = p.measure_ui_advance(format!("     {line}"), m.font_size);
                         assert!(
                             drawn <= room,

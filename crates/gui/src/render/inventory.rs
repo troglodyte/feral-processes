@@ -67,7 +67,7 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
             CYAN,
         ),
         text_row(""),
-        text_row("Equipped (number to swap or unequip):"),
+        text_row("Equipped (Enter to swap or unequip):"),
         // A wielded program and a worn weapon are mutually exclusive, so the
         // weapon line renders one or the other and never both. It takes the
         // column through `tagged_text` rather than `with_tag` because it is
@@ -76,7 +76,7 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
         // anything about the program standing in the slot.
         match &status.wielded {
             Some(w) => text_row(tagged_text(
-                &row_lead(menu_shortcut(0), None),
+                &row_lead(None),
                 EquipmentSlot::Weapon.short_label(),
                 // A program in the weapon slot is not a copy of gear, so
                 // there is nothing to rate — blank, not an em dash.
@@ -87,7 +87,6 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
                 ),
             )),
             None => equipped_row(
-                0,
                 EquipmentSlot::Weapon,
                 status.weapon.clone(),
                 selected == 0,
@@ -95,14 +94,12 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
             ),
         },
         equipped_row(
-            1,
             EquipmentSlot::Armor,
             status.armor.clone(),
             selected == 1,
             game,
         ),
         equipped_row(
-            2,
             EquipmentSlot::Module,
             status.module.clone(),
             selected == 2,
@@ -110,7 +107,7 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
         ),
         text_row(""),
         text_row(format!(
-            "Inventory - Buffer {} (row key to equip/fuse/erase):",
+            "Inventory - Buffer {} (Enter to equip/fuse/erase):",
             status.inventory_used
         )),
     ];
@@ -118,8 +115,7 @@ pub(super) fn items_rows(game: &mut Game, selected: usize) -> Vec<Row> {
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let (lead, tag, power, lines) =
-            inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone);
+        let (lead, tag, power, lines) = inventory_row_lines(game, &row.copy, row.qty, status.zone);
         let mut lines = lines.into_iter();
         let head = lines
             .next()
@@ -235,12 +231,11 @@ pub(super) fn effect_lines(game: &Game, item: &ItemId, columns: usize) -> Vec<St
 /// answer to "what would this do if I put it on".
 fn inventory_row_lines(
     game: &Game,
-    shortcut: char,
     copy: &GearCopy,
     qty: u32,
     zone: u32,
 ) -> (String, &'static str, PowerCell, Vec<String>) {
-    let lead = row_lead(shortcut, Some(qty));
+    let lead = row_lead(Some(qty));
     let tag = game.item_category(&copy.item).short_label();
     let power = PowerCell::of_copy(game, copy);
     let mut lines = wrapped_tagged_lines(
@@ -269,7 +264,6 @@ fn inventory_row_lines(
 /// label: the word and the token are two forms of one value, and a caller
 /// passing its own string could hand over a pair that disagree.
 pub(super) fn equipped_row(
-    index: usize,
     slot: EquipmentSlot,
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     selected: bool,
@@ -289,7 +283,7 @@ pub(super) fn equipped_row(
         .unwrap_or(PowerCell::Blank);
     with_tag(
         tier_row(worn_summary(equipped, game), selected, fusions, rarity),
-        row_lead(menu_shortcut(index), None),
+        row_lead(None),
         slot.short_label(),
         quality,
         power,
@@ -373,12 +367,8 @@ fn swap_power(game: &Game, choice: &SwapChoice) -> PowerCell {
 /// Built here rather than in `app-core` because it is a *layout* decision:
 /// the head is the one part of a row `wrapped_row_lines` never breaks, so
 /// what goes in it has to be measured, and only this crate can measure text.
-fn swap_head(game: &Game, index: usize, row: &SwapRow) -> String {
-    swap_line(
-        &row_lead(menu_shortcut(index), None),
-        swap_power(game, &row.choice),
-        &row.label,
-    )
+fn swap_head(game: &Game, row: &SwapRow) -> String {
+    swap_line(&row_lead(None), swap_power(game, &row.choice), &row.label)
 }
 
 /// One line of this screen, from the three pieces every line of it carries:
@@ -398,7 +388,7 @@ fn swap_line(lead: &str, power: PowerCell, label: &str) -> String {
 /// Measured off `row_lead` rather than written as four spaces, so the heading
 /// cannot be left behind by a change to the shape of a row's key.
 fn heading_lead() -> String {
-    " ".repeat(row_lead(menu_shortcut(0), None).chars().count())
+    " ".repeat(row_lead(None).chars().count())
 }
 
 /// The picker's heading — what is worn right now, **rated in the column the
@@ -483,7 +473,7 @@ pub(super) fn draw_equip_swap(
         // what will not fit. Both lines carry the row's selection and tier
         // colour, so a wrapped entry still highlights as one thing.
         for line in wrapped_row_lines(
-            swap_head(game, i, row),
+            swap_head(game, row),
             &[row.stats.clone(), format!(" {}", row.delta)],
         ) {
             rows.push(tier_row(line, i == selected, row.fusion_tier, row.rarity));
@@ -804,7 +794,7 @@ mod tests {
     };
     use crate::render::{Row, quality_tag_style};
     use crate::text::ui_metrics;
-    use feral_processes_app_core::{GearInspect, Mode, SwapChoice, SwapRow, menu_shortcut};
+    use feral_processes_app_core::{GearInspect, Mode, SwapChoice, SwapRow};
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
     use feral_processes_engine::tuning::{ITEM_FUSION_COST, MAX_FUSIONS, QUALITY_MAX};
@@ -881,7 +871,7 @@ mod tests {
             .worn(game.player_entity(), EquipmentSlot::Weapon)
             .expect("wearing it");
         let m = ui_metrics(1080.0);
-        let row = equipped_row(0, EquipmentSlot::Weapon, Some(worn), false, &game);
+        let row = equipped_row(EquipmentSlot::Weapon, Some(worn), false, &game);
         let (_, shapes) = with_painter(|p| {
             draw_row(&row, 0.0, 800.0, 40.0, 400.0, p, &m);
         });
@@ -895,11 +885,11 @@ mod tests {
 
         // An empty slot still names the slot it is empty of, and takes its
         // key and column from the same two definitions the worn row does.
-        let empty = equipped_row(1, EquipmentSlot::Armor, None, false, &game);
+        let empty = equipped_row(EquipmentSlot::Armor, None, false, &game);
         let Row::Item { text, tag, .. } = &empty else {
             panic!("an equipment slot is a row you can pick")
         };
-        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM        (empty)");
+        assert_eq!(item_text(text, tag.as_ref()), "ARM        (empty)");
     }
 
     /// **The tallest page any shipped item can produce fits its popup.**
@@ -1265,7 +1255,7 @@ mod tests {
                     // A four-digit count rather than the three the column
                     // reserves: the buffer is unbounded and a long run's
                     // scrap pile reaches it, at which point the row grows.
-                    drawn_inventory_lines(&game, menu_shortcut(35), &copy, 1234, zone),
+                    drawn_inventory_lines(&game, &copy, 1234, zone),
                 )
             })
             .collect();
@@ -1283,14 +1273,8 @@ mod tests {
     /// The column is a reserved slot in the drawn label, so a width census
     /// measuring the head as `inventory_row_lines` returns it would be
     /// measuring a row the screen never draws. `item_text` is the one join.
-    fn drawn_inventory_lines(
-        game: &Game,
-        shortcut: char,
-        copy: &GearCopy,
-        qty: u32,
-        zone: u32,
-    ) -> Vec<String> {
-        let (lead, tag, power, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
+    fn drawn_inventory_lines(game: &Game, copy: &GearCopy, qty: u32, zone: u32) -> Vec<String> {
+        let (lead, tag, power, mut lines) = inventory_row_lines(game, copy, qty, zone);
         lines[0] = tagged_text(&lead, tag, power, &lines[0]);
         lines
     }
@@ -1312,7 +1296,7 @@ mod tests {
         let effects = game.item_effects(&copy.item);
         assert_eq!(effects.len(), 1, "precondition: {effects:?}");
 
-        let lines = drawn_inventory_lines(&game, menu_shortcut(3), &copy, 1, 1);
+        let lines = drawn_inventory_lines(&game, &copy, 1, 1);
 
         assert!(
             lines.len() > 1,
@@ -1338,10 +1322,7 @@ mod tests {
         let copy = GearCopy::plain("core_fragment".into());
         assert!(game.item_effects(&copy.item).is_empty(), "precondition");
 
-        assert_eq!(
-            drawn_inventory_lines(&game, menu_shortcut(3), &copy, 1, 1).len(),
-            1
-        );
+        assert_eq!(drawn_inventory_lines(&game, &copy, 1, 1).len(), 1);
     }
 
     /// The wrap is paid by the row that needs it and by no other. The census
@@ -1356,7 +1337,7 @@ mod tests {
 
         let plain = GearCopy::plain("kinetic_edge".into());
         assert_eq!(
-            drawn_inventory_lines(&game, 'a', &plain, 1, 1).len(),
+            drawn_inventory_lines(&game, &plain, 1, 1).len(),
             1,
             "an ordinary copy keeps its tag on the row it belongs to"
         );
@@ -1370,7 +1351,7 @@ mod tests {
             vec!["of_the_ghost_protocol".into()],
             feral_processes_engine::tuning::QUALITY_DEFAULT,
         );
-        let lines = drawn_inventory_lines(&game, 'a', &worst, 1234, 10);
+        let lines = drawn_inventory_lines(&game, &worst, 1234, 10);
         assert_eq!(lines.len(), 2, "{lines:#?}");
         assert!(
             lines[1].trim_start().starts_with('(') && lines[1].contains("maxed"),
@@ -1491,7 +1472,7 @@ mod tests {
             fusion_tier: 0,
             rarity: Rarity::Ordinary,
         };
-        let head = swap_head(&game, 0, &row);
+        let head = swap_head(&game, &row);
         assert!(
             head.contains(&rating.to_string()),
             "the rating is missing from the row head: {head:?}"
@@ -1578,7 +1559,7 @@ mod tests {
             rarity: Rarity::Ordinary,
         };
         assert_eq!(
-            cell(&swap_head(&game, 0, &row)).trim(),
+            cell(&swap_head(&game, &row)).trim(),
             candidate_rating.to_string(),
             "the heading's rating and a row's no longer share a column"
         );
@@ -1597,10 +1578,7 @@ mod tests {
         // slot said to be empty. Written out rather than probed, because what
         // is being asserted is the *absence* of a mark in a column, and a
         // predicate over that column cannot see a stray one beside it.
-        assert_eq!(
-            worn_heading_lines(&game, None),
-            ["          Wearing: (empty)"]
-        );
+        assert_eq!(worn_heading_lines(&game, None), ["      Wearing: (empty)"]);
     }
 
     /// The heading wraps, and this is the width that says it has to.

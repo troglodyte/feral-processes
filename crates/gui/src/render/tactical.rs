@@ -34,7 +34,7 @@ use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_ro
 use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_app_core::{Mode, menu_shortcut, prop_readout};
+use feral_processes_app_core::{Mode, prop_readout};
 use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
@@ -1704,10 +1704,7 @@ pub(super) fn draw_tactical_items(
     let items = game.battle_usable_items();
     let mut rows = vec![text_row("Use which item? It costs this body its action.")];
     for (i, item) in items.iter().enumerate() {
-        rows.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), game.item_name(item)),
-            i == selected,
-        ));
+        rows.push(item_row(game.item_name(item).to_string(), i == selected));
     }
     draw_popup("Use an Item", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -1730,7 +1727,7 @@ pub(super) fn draw_tactical_routines(
         rows.push(text_row("(nothing this body can run in a fight)"));
     }
     for (i, option) in options.iter().enumerate() {
-        let label = format!("[{}] {} — {}", menu_shortcut(i), option.name, option.detail);
+        let label = format!("{} — {}", option.name, option.detail);
         rows.push(match &option.unavailable {
             None => item_row(label, i == selected),
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
@@ -1761,7 +1758,7 @@ pub(super) fn draw_tactical_emulate(
     let mut rows = vec![text_row("Invoke which image?")];
     for (i, option) in options.iter().enumerate() {
         rows.push(item_row(
-            super::emulation_row_label(i, option),
+            super::emulation_row_label(i, option, false),
             i == selected,
         ));
     }

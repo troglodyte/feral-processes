@@ -1,7 +1,6 @@
 //! The landing page: one line per page, its worst gap or "ok".
 
 use super::*;
-use feral_processes_app_core::menu_shortcut;
 use feral_processes_engine::BaseReportFlags;
 
 /// The Overview is not a row in its own list: it is where you already are.
@@ -18,11 +17,7 @@ pub(super) fn overview_rows(
     let mut rows: Vec<Row> = (1..BASE_REPORT_PAGES.len())
         .map(|page| {
             let (status, color) = page_status(flags, command_counts, page);
-            let text = format!(
-                "[{}] {:<name_w$}  {status}",
-                menu_shortcut(page - 1),
-                BASE_REPORT_PAGES[page].title,
-            );
+            let text = format!("{:<name_w$}  {status}", BASE_REPORT_PAGES[page].title,);
             colored_item_row(text, page - 1 == selected, color)
         })
         .collect();

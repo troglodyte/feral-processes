@@ -58,7 +58,7 @@ impl Game {
     /// answer.
     pub fn stack_market(&mut self) -> Option<StackMarketView> {
         let pos = self.stack_pos()?;
-        if self.cell_underfoot() != Some(CellKind::Market) || !self.market_live(pos) {
+        if !self.market_underfoot() {
             return None;
         }
         let currency = self.trade_currency();
@@ -80,6 +80,14 @@ impl Game {
             sells: self.market_sell_rows(),
             credits,
             currency: self.item_name(&currency).to_string(),
+        })
+    }
+
+    /// Whether there is a live stall under the party — `stack_market`'s
+    /// gate, asked without building the shelf, for the map's key bar.
+    pub fn market_underfoot(&self) -> bool {
+        self.stack_pos().is_some_and(|pos| {
+            self.cell_underfoot() == Some(CellKind::Market) && self.market_live(pos)
         })
     }
 

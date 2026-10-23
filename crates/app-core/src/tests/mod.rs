@@ -39,6 +39,7 @@ mod level_up;
 mod list_filter;
 mod log_filter;
 mod machine_recipe;
+mod map_keybar;
 mod menus;
 mod mod_copy;
 mod notifications;

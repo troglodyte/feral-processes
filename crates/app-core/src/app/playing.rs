@@ -269,11 +269,7 @@ impl App {
                 // with a base four frames overhead — the same hole the
                 // `base_only` group-menu rows and the `d` refusal above are
                 // each closing at their own door.
-                if self
-                    .game
-                    .as_mut()
-                    .is_some_and(|g| g.stack_market().is_some())
-                {
+                if self.game.as_ref().is_some_and(|g| g.market_underfoot()) {
                     self.menu_selected = 0;
                     self.mode = Mode::StackMarket;
                     return;

@@ -1,7 +1,10 @@
 # Controls
 
 Every menu is a list you move through with Up/Down and pick with Enter (the battle screen also labels its rows with a number or letter you can type). Esc
-backs out one level, and finishing a job returns you to the map. A menu lists only what you can
+backs out one level, and finishing a job returns you to the map. On an item list (your Items page,
+a trade, a market, the compile list, Put down), typing lowercase letters, digits or space narrows
+the list to rows whose name contains that text; Backspace takes a character off, and Esc clears the
+filter before it does anything else. A menu lists only what you can
 actually do from where you stand, so a row you cannot see leads to an empty screen rather than a
 refusal.
 

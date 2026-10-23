@@ -1,6 +1,32 @@
 //! The inventory list, its per-item action page, and erasing a stack.
 
+use crate::app::list_filter::filter_matches;
 use crate::*;
+
+/// The equipped Weapon/Armor/Module rows that lead the pack list. The
+/// filter never hides them.
+pub(crate) const INVENTORY_SLOT_ROWS: usize = 3;
+
+/// Indices into the pack (`player_status().inventory`) that `filter` leaves,
+/// by displayed name. The handler and the gui both read the list through it.
+pub fn inventory_visible(game: &Game, filter: &str) -> Vec<usize> {
+    let status = game.player_status();
+    let names: Vec<String> = status
+        .inventory
+        .iter()
+        .map(|row| game.copy_name(&row.copy))
+        .collect();
+    filter_matches(names.iter().map(String::as_str), filter)
+}
+
+/// Indices into `rows` that `filter` leaves. The Unequip row names no item,
+/// so like the pack's slot rows it is always shown, where it stands.
+pub fn equip_swap_visible(rows: &[SwapRow], filter: &str) -> Vec<usize> {
+    let kept = filter_matches(rows.iter().map(|r| r.label.trim()), filter);
+    (0..rows.len())
+        .filter(|i| matches!(rows[*i].choice, SwapChoice::Unequip) || kept.contains(i))
+        .collect()
+}
 
 impl App {
     /// Opens the inspect page on `copy`, measured for `wearer`, returning to
@@ -45,19 +71,26 @@ impl App {
     /// (Weapon/Armor/Module) and open `Mode::EquipSwap` for that slot;
     /// unequipped inventory items follow and open `Mode::InventoryItemAction` for the selected item.
     pub(crate) fn handle_inventory_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         let Some(game) = &self.game else { return };
         let inventory = game.player_status().inventory;
-        let total = 3 + inventory.len();
+        let visible = inventory_visible(game, self.filter_text());
+        let total = INVENTORY_SLOT_ROWS + visible.len();
+        // The pack row under a highlight position, past the slot rows. The
+        // one place a position becomes a source row.
+        let pack_row = |pos: usize| {
+            pos.checked_sub(INVENTORY_SLOT_ROWS)
+                .and_then(|p| visible.get(p))
+                .map(|&src| &inventory[src])
+        };
 
         // Sell one of the highlighted item without the item-action page,
         // the trader picker and the quantity page in between. The three
         // equipment slot rows come first, so only rows past them are items.
         if key == GameKey::Char('S') {
-            let row = inventory
-                .get(self.menu_selected.saturating_sub(3))
-                .filter(|_| self.menu_selected >= 3)
-                .map(|row| row.copy.clone());
-            if let Some(copy) = row {
+            if let Some(copy) = pack_row(self.menu_selected).map(|row| row.copy.clone()) {
                 self.quick_sell_from_inventory(copy);
             }
             return;
@@ -84,7 +117,7 @@ impl App {
             match self.menu_selected {
                 idx @ 0..=2 => self.inspect_worn(None, EquipmentSlot::ALL[idx], Mode::Inventory),
                 idx => {
-                    if let Some(row) = inventory.get(idx - 3) {
+                    if let Some(row) = pack_row(idx) {
                         self.open_gear_inspect(row.copy.clone(), None, Mode::Inventory);
                     }
                 }
@@ -113,7 +146,7 @@ impl App {
             self.open_equip_swap(slot);
             return;
         }
-        if let Some(row) = inventory.get(idx - 3) {
+        if let Some(row) = pack_row(idx) {
             self.pending_inventory_item = Some(row.copy.clone());
             self.mode = Mode::InventoryItemAction;
         }
@@ -166,6 +199,9 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         };
+        if self.take_filter_key(key) {
+            return;
+        }
         let target = self.pending_swap_target;
         let done = |app: &mut Self| {
             app.pending_swap_slot = None;
@@ -207,9 +243,11 @@ impl App {
         // candidates the player does not own the consequences of yet. The
         // unequip row names no item and so opens nothing.
         if key == GameKey::Char('I') {
-            let row = equip_swap_rows(game, wearer, slot)
-                .into_iter()
-                .nth(self.menu_selected);
+            let rows = equip_swap_rows(game, wearer, slot);
+            let visible = equip_swap_visible(&rows, self.filter_text());
+            let row = visible
+                .get(self.menu_selected)
+                .and_then(|&src| rows.into_iter().nth(src));
             if let Some(SwapRow {
                 choice: SwapChoice::Equip(copy),
                 ..
@@ -219,15 +257,16 @@ impl App {
             }
             return;
         }
-        let choices: Vec<SwapChoice> = equip_swap_rows(game, wearer, slot)
-            .into_iter()
-            .map(|r| r.choice)
-            .collect();
-        let Some(idx) = self.selected_index(key, choices.len()) else {
+        let rows = equip_swap_rows(game, wearer, slot);
+        let visible = equip_swap_visible(&rows, self.filter_text());
+        let Some(pos) = self.selected_index(key, visible.len()) else {
+            return;
+        };
+        let Some(SwapRow { choice, .. }) = rows.into_iter().nth(visible[pos]) else {
             return;
         };
         let Some(game) = &mut self.game else { return };
-        let outcome = match &choices[idx] {
+        let outcome = match &choice {
             SwapChoice::Equip(copy) => game.equip(wearer, copy),
             SwapChoice::Unequip => game.unequip(wearer, slot),
         };

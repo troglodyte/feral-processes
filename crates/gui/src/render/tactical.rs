@@ -34,7 +34,7 @@ use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_ro
 use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_app_core::{Mode, prop_readout};
+use feral_processes_app_core::{Mode, prop_readout, tactical_items_visible};
 use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
@@ -1696,14 +1696,22 @@ pub(super) fn keybar_rows(
 /// already known to be spendable.
 pub(super) fn draw_tactical_items(
     game: &Game,
+    filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let items = game.battle_usable_items();
-    let mut rows = vec![text_row("Use which item? It costs this body its action.")];
-    for (i, item) in items.iter().enumerate() {
+    let mut rows = vec![text_row(
+        "Use which item? It costs this body its action. Type to filter.",
+    )];
+    rows.extend(super::list_filter::filter_line(filter));
+    let visible = tactical_items_visible(game, filter);
+    if visible.is_empty() && !filter.is_empty() {
+        rows.push(super::list_filter::no_match_row(filter));
+    }
+    for (i, item) in visible.iter().map(|&src| &items[src]).enumerate() {
         rows.push(item_row(game.item_name(item).to_string(), i == selected));
     }
     draw_popup("Use an Item", PopupSize::Large, &rows, refusal, painter, m);

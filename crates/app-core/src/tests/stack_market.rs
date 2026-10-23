@@ -17,7 +17,7 @@ use feral_processes_engine::{MarketOfferKind, RoutineScope};
 /// Sweeps world seeds because only about a third of frames stand a stall
 /// (`STACK_MARKET_CHANCE`) — a fixed seed here would be a fixture that
 /// silently stopped finding one the first time that constant is retuned.
-fn app_at_a_market(credits: u32) -> App {
+pub(crate) fn app_at_a_market(credits: u32) -> App {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let assets_dir = test_assets_dir();

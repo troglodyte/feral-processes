@@ -209,6 +209,8 @@ impl App {
             // downed-program handler owns; Left would strand that pick on
             // the rail.
             GameKey::Esc | GameKey::Left if self.in_downed_drill_down() => true,
+            // A typed filter takes Esc first; the next Esc is the hub's.
+            GameKey::Esc if self.filter_applied() => true,
             // A question the page is asking is answered by it, not
             // abandoned.
             GameKey::Esc => {

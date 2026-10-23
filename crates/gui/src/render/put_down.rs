@@ -2,12 +2,14 @@
 //! floor. The rows are `App::put_down_rows`, the same list the keys pick
 //! from.
 
+use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
 use feral_processes_engine::PutDownOption;
 
 pub(super) fn draw_put_down(
     rows: &[PutDownOption],
+    filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -16,18 +18,23 @@ pub(super) fn draw_put_down(
     draw_popup(
         "Put down",
         PopupSize::Large,
-        &body_rows(rows, selected),
+        &body_rows(rows, filter, selected),
         refusal,
         painter,
         m,
     );
 }
 
-fn body_rows(rows: &[PutDownOption], selected: usize) -> Vec<Row> {
+/// `rows` is already what the filter leaves (`App::put_down_rows`).
+fn body_rows(rows: &[PutDownOption], filter: &str, selected: usize) -> Vec<Row> {
     let mut body = vec![
-        text_row("Pick what to set on the floor. Esc to go back."),
+        text_row("Pick what to set on the floor. Type to filter; Esc to go back."),
         text_row(""),
     ];
+    body.extend(filter_line(filter));
+    if rows.is_empty() && !filter.is_empty() {
+        body.push(no_match_row(filter));
+    }
     body.extend(
         rows.iter()
             .enumerate()
@@ -56,7 +63,7 @@ mod tests {
                 choice: PutDownChoice::Program(0),
             },
         ];
-        let texts: Vec<_> = body_rows(&rows, 0)
+        let texts: Vec<_> = body_rows(&rows, "", 0)
             .into_iter()
             .filter_map(|row| match row {
                 Row::Item { text, .. } => Some(text),

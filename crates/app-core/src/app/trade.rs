@@ -1,5 +1,6 @@
 //! Buying, selling, and the extra confirmation a program sale takes.
 
+use crate::app::list_filter::filter_matches;
 use crate::*;
 
 /// Which section of the trade screen a picked row number lands in, and its
@@ -42,6 +43,79 @@ pub(crate) fn trade_row(
     (idx < programs).then_some(TradeRow::Program(idx))
 }
 
+/// Source indices into each of the trade screen's four sections that the
+/// filter leaves. Each section is filtered on its own.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct TradeVisible {
+    pub sells: Vec<usize>,
+    pub buys: Vec<usize>,
+    pub buybacks: Vec<usize>,
+    pub programs: Vec<usize>,
+}
+
+impl TradeVisible {
+    pub fn total(&self) -> usize {
+        self.sells.len() + self.buys.len() + self.buybacks.len() + self.programs.len()
+    }
+
+    /// The row a highlight position lands on, as a section and a *source*
+    /// index into that section's list. The one place a position becomes a
+    /// source row.
+    pub(crate) fn resolve(&self, pos: usize) -> Option<TradeRow> {
+        let row = trade_row(
+            pos,
+            self.sells.len(),
+            self.buys.len(),
+            self.buybacks.len(),
+            self.programs.len(),
+        )?;
+        Some(match row {
+            TradeRow::Sell(k) => TradeRow::Sell(self.sells[k]),
+            TradeRow::Buy(k) => TradeRow::Buy(self.buys[k]),
+            TradeRow::BuyBack(k) => TradeRow::BuyBack(self.buybacks[k]),
+            TradeRow::Program(k) => TradeRow::Program(self.programs[k]),
+        })
+    }
+}
+
+/// What the player can sell a trader: the pack minus the trade currency,
+/// which is what no trader buys. Shared by the handler and the visible set so
+/// the two number the same rows.
+pub fn trade_sellable(game: &Game) -> Vec<feral_processes_engine::InventoryRow> {
+    let currency = game.trade_currency();
+    game.player_status()
+        .inventory
+        .into_iter()
+        .filter(|row| row.copy.item != currency)
+        .collect()
+}
+
+/// The rows of the trade screen at `structure` that `filter` leaves, by
+/// displayed name. The handler and the gui both read the screen through it.
+pub fn trade_visible(game: &mut Game, structure: Entity, filter: &str) -> TradeVisible {
+    let Some(trade) = game.trade_options(structure) else {
+        return TradeVisible::default();
+    };
+    let sell_names: Vec<String> = trade_sellable(game)
+        .iter()
+        .map(|row| game.copy_name(&row.copy))
+        .collect();
+    let buy_names: Vec<String> = trade
+        .buy
+        .iter()
+        .map(|(item, _)| game.item_name(item).to_string())
+        .collect();
+    let buybacks = game.buyback_options(structure);
+    let programs = game.program_sale_options(structure);
+    let by = |names: &[String]| filter_matches(names.iter().map(String::as_str), filter);
+    TradeVisible {
+        sells: by(&sell_names),
+        buys: by(&buy_names),
+        buybacks: filter_matches(buybacks.iter().map(|b| b.name.as_str()), filter),
+        programs: filter_matches(programs.iter().map(|p| p.name.as_str()), filter),
+    }
+}
+
 impl App {
     /// Picks a nearby trading-post structure to open a trade session with.
     pub(crate) fn handle_trade_key(&mut self, key: GameKey) {
@@ -73,6 +147,9 @@ impl App {
     /// Picks a sell (from inventory) or buy (from the structure's trade
     /// list) line item — sell offers are numbered first, then buy offers.
     pub(crate) fn handle_trade_action_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         if key == GameKey::Esc {
             self.pending_trade_structure = None;
             self.mode = Mode::Trade;
@@ -82,25 +159,17 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
+        let filter = self.filter_text().to_owned();
         let Some(game) = &mut self.game else { return };
         let Some(trade) = game.trade_options(structure) else {
             self.mode = Mode::Playing;
             return;
         };
-        // The trade currency, not the build salvage — the same filter
-        // `render/trade.rs::draw_trade_action_menu` draws with, and it has
-        // to be: these two lists are indexed by the same row number, so a
-        // different exclusion here would sell the line above or below the
-        // one the player is looking at. Salvage is ordinary goods to a
-        // trader; Credits are what it won't buy (see `Game::sell_item`).
-        let currency = game.trade_currency();
-        let sell_rows: Vec<GearCopy> = game
-            .player_status()
-            .inventory
-            .iter()
-            .map(|row| row.copy.clone())
-            .filter(|copy| copy.item != currency)
-            .collect();
+        // The trade currency, not the build salvage: `trade_sellable` is the
+        // one list the renderer and this handler both number their sell
+        // rows from, so a different exclusion would sell the line above or
+        // below the one the player is looking at.
+        let sell_rows = trade_sellable(game);
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
         // Empty until the player sells this trader something, so the screen
         // is unchanged at a trader they have never sold to.
@@ -108,7 +177,8 @@ impl App {
         // Programs come last, and are empty for a trader that deals in items
         // only — so this screen is unchanged at such a trader.
         let programs = game.program_sale_options(structure);
-        let total = sell_rows.len() + buy_items.len() + buybacks.len() + programs.len();
+        let vis = trade_visible(game, structure, &filter);
+        let total = vis.total();
 
         // One unit off the highlighted row, no quantity page — a visit is
         // normally a run of trades, so the four-screen round trip is paid
@@ -119,15 +189,9 @@ impl App {
         // copy the player owns — a trader's stock is plain, which is what
         // `GearCopy::plain` says.
         if key == GameKey::Char('I') {
-            let row = trade_row(
-                self.menu_selected.min(total.saturating_sub(1)),
-                sell_rows.len(),
-                buy_items.len(),
-                buybacks.len(),
-                programs.len(),
-            );
+            let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             let copy = match row {
-                Some(TradeRow::Sell(i)) => Some(sell_rows[i].clone()),
+                Some(TradeRow::Sell(i)) => Some(sell_rows[i].copy.clone()),
                 Some(TradeRow::Buy(i)) => Some(GearCopy::plain(buy_items[i].clone())),
                 Some(TradeRow::BuyBack(i)) => Some(buybacks[i].copy.clone()),
                 Some(TradeRow::Program(_)) | None => None,
@@ -140,16 +204,10 @@ impl App {
 
         if let GameKey::Char(dir @ ('S' | 'B')) = key {
             let selling = dir == 'S';
-            let row = trade_row(
-                self.menu_selected.min(total.saturating_sub(1)),
-                sell_rows.len(),
-                buy_items.len(),
-                buybacks.len(),
-                programs.len(),
-            );
+            let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             match row {
                 Some(TradeRow::Sell(i)) if selling => {
-                    let copy = sell_rows[i].clone();
+                    let copy = sell_rows[i].copy.clone();
                     self.execute_trade(structure, TradeChoice::Sell(copy), 1)
                 }
                 Some(TradeRow::Buy(i)) if !selling => {
@@ -181,14 +239,8 @@ impl App {
         }
 
         if let Some(idx) = self.selected_index(key, total) {
-            let choice = match trade_row(
-                idx,
-                sell_rows.len(),
-                buy_items.len(),
-                buybacks.len(),
-                programs.len(),
-            ) {
-                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_rows[i].clone()),
+            let choice = match vis.resolve(idx) {
+                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_rows[i].copy.clone()),
                 Some(TradeRow::Buy(i)) => TradeChoice::Buy(buy_items[i].clone()),
                 Some(TradeRow::BuyBack(i)) => TradeChoice::BuyBack(buybacks[i].copy.clone()),
                 Some(TradeRow::Program(i)) => {

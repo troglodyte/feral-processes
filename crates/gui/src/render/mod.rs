@@ -60,6 +60,7 @@ pub(crate) mod hud;
 mod inventory;
 mod level_up;
 mod lighting;
+mod list_filter;
 mod machine_recipe;
 mod manifest;
 mod marks;
@@ -141,8 +142,8 @@ use group_menu::draw_dev_console;
 use help::{draw_help_index, draw_help_page};
 use history::draw_history;
 use inventory::{
-    draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory_item_action,
-    effect_lines,
+    SwapPicker, draw_equip_swap, draw_erase_quantity, draw_gear_inspect,
+    draw_inventory_item_action, effect_lines,
 };
 use machine_recipe::{draw_machine_recipe, draw_machine_recipe_confirm};
 use manifest::{ManifestNav, draw_dossier, draw_manifest};
@@ -1021,7 +1022,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             .collect(),
         _ => Vec::new(),
     };
+    let list_filter = app.filter_text().to_owned();
     let app_screens = base_report::AppScreens {
+        list_filter: &list_filter,
         commands: commands.as_deref(),
         command_counts: &command_counts,
         work_orders: &work_orders,
@@ -1262,9 +1265,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     }
     match app.mode {
         Mode::DevConsole => draw_dev_console(&dev_row_labels, selected, refusal, painter, m),
-        Mode::DevItemPicker => {
-            dev_pickers::draw_dev_item_picker(&dev_item_rows, selected, refusal, painter, m)
-        }
+        Mode::DevItemPicker => dev_pickers::draw_dev_item_picker(
+            &dev_item_rows,
+            &list_filter,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::DevZonePicker => {
             dev_pickers::draw_dev_zone_picker(&dev_zone_rows, selected, refusal, painter, m)
         }
@@ -1297,9 +1305,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::ExcavateBrush => draw_excavate_brush(&excavate_brush, selected, refusal, painter, m),
         Mode::FarmRecipe => draw_farm_recipe(&farm_recipe, selected, refusal, painter, m),
-        Mode::PutDown => draw_put_down(&put_down, selected, refusal, painter, m),
+        Mode::PutDown => draw_put_down(&put_down, &list_filter, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
-        Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
+        Mode::Craft => draw_craft_menu(game, &list_filter, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
             app.pending_craft.clone(),
@@ -1452,8 +1460,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::Dossier => draw_dossier(game, app.pending_manifest, refusal, painter, m),
         Mode::EquipSwap => draw_equip_swap(
             game,
-            app.pending_swap_slot,
-            app.pending_swap_target,
+            SwapPicker {
+                slot: app.pending_swap_slot,
+                target: app.pending_swap_target,
+                filter: &list_filter,
+            },
             selected,
             refusal,
             painter,
@@ -1516,7 +1527,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::TacticalResult => {
             tactical::draw_tactical_result(&game.battle_outcomes(), refusal, painter, m)
         }
-        Mode::TacticalItem => tactical::draw_tactical_items(game, selected, refusal, painter, m),
+        Mode::TacticalItem => {
+            tactical::draw_tactical_items(game, &list_filter, selected, refusal, painter, m)
+        }
         Mode::TacticalRoutine => tactical::draw_tactical_routines(
             &game.tactical_routine_options(),
             selected,
@@ -1582,7 +1595,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
+        Mode::StackMarket => draw_stack_market(game, &list_filter, selected, refusal, painter, m),
         Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
         Mode::Dispatch => draw_dispatch(
             dispatch_sections
@@ -1609,6 +1622,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::TradeAction => draw_trade_action_menu(
             game,
             app.pending_trade_structure,
+            &list_filter,
             selected,
             refusal,
             painter,

@@ -63,8 +63,8 @@ fn digits_and_lowercase_letters_pick_no_row() {
 }
 
 /// Through a real screen, not only the resolver: a long list, every digit
-/// pressed, and neither the mode nor the highlight moves. Letters are not
-/// pressed here because the inventory binds many of them as mnemonics.
+/// pressed, and the mode never changes and no row is picked: the digits go
+/// to the pack's type-to-filter instead.
 #[test]
 fn digits_leave_a_long_screen_where_it_was() {
     let mut app = app_on_inventory_with_many_items(9103);
@@ -74,8 +74,9 @@ fn digits_leave_a_long_screen_where_it_was() {
     for c in '0'..='9' {
         app.handle_key(GameKey::Char(c));
         assert_eq!(app.mode, Mode::Inventory, "[{c}] left the screen");
-        assert_eq!(app.menu_selected, 2, "[{c}] moved the highlight");
+        assert_eq!(app.pending_inventory_item, None, "[{c}] picked a row");
     }
+    assert_eq!(app.filter_text(), "0123456789");
 }
 
 /// Word letters are not row selectors and keep working: the main menu's own

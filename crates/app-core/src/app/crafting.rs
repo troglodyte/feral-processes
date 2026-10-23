@@ -1,6 +1,7 @@
 //! The recipe picker and its quantity prompt.
 
 use crate::app::basket::halve;
+use crate::app::list_filter::filter_matches;
 use crate::*;
 
 /// The most a compile may be asked for, matching the four-digit ceiling the
@@ -8,16 +9,32 @@ use crate::*;
 /// type would leave the page in a state Backspace could not get back out of.
 const CRAFT_QUANTITY_MAX: u32 = 9999;
 
+/// Indices into `Game::craft_recipes` that `filter` leaves, by the result's
+/// name — the head of the row the screen draws. The handler and the gui both
+/// read the list through it.
+pub fn craft_visible(game: &Game, filter: &str) -> Vec<usize> {
+    let names: Vec<String> = game
+        .craft_recipes()
+        .iter()
+        .map(|r| game.item_name(&r.result).to_string())
+        .collect();
+    filter_matches(names.iter().map(String::as_str), filter)
+}
+
 impl App {
     pub(crate) fn handle_craft_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
-        let Some(game) = &mut self.game else { return };
+        let Some(game) = &self.game else { return };
         let recipes = game.craft_recipes();
-        if let Some(idx) = self.selected_index(key, recipes.len()) {
-            self.pending_craft = Some(recipes[idx].result.clone());
+        let visible = craft_visible(game, self.filter_text());
+        if let Some(pos) = self.selected_index(key, visible.len()) {
+            self.pending_craft = Some(recipes[visible[pos]].result.clone());
             self.craft_quantity_input.clear();
             self.careful_craft = false;
             self.mode = Mode::CraftQuantity;

@@ -557,7 +557,7 @@ fn nothing_paces_outside_a_tactical_screen() {
 }
 
 /// Hands turns on until the player's comes round.
-fn wait_for_the_player(app: &mut App) {
+pub(super) fn wait_for_the_player(app: &mut App) {
     for _ in 0..64 {
         if app.tactical_player_turn() {
             return;

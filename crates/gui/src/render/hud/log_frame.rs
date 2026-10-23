@@ -657,12 +657,13 @@ mod tests {
             MapLocale::Stack { market: false },
             MapLocale::Stack { market: true },
         ];
-        for (locale, (w, h)) in locales
+        for (locale, (w, h), mining) in locales
             .into_iter()
             .flat_map(|l| [(l, SMALLEST), (l, (1920.0, 1080.0))])
+            .flat_map(|(l, size)| [(l, size, false), (l, size, true)])
         {
             let m = ui_metrics(h);
-            let bar = locale_keybar(locale, true);
+            let bar = locale_keybar(locale, mining);
             with_painter(|p| {
                 let char_w = p.measure_ui_advance("M", m.font_size);
                 let pane = layout::regions(w, h, char_w, &m, false).log_pane;
@@ -671,7 +672,9 @@ mod tests {
                 let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
                 let slack = avail - p.measure_ui_advance(&drawn, m.small());
 
-                println!("{locale:?} keybar at {w}x{h}: {drawn:?}  slack {slack:.1}px");
+                println!(
+                    "{locale:?} mining {mining} keybar at {w}x{h}: {drawn:?}  slack {slack:.1}px"
+                );
                 for key in ESSENTIAL {
                     assert!(
                         drawn.contains(key),

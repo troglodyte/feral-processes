@@ -105,6 +105,27 @@ fn watching_a_program_takes_over_the_bar() {
     );
 }
 
+/// A popup over the map takes `Esc` for itself, so the watch bar's "Esc
+/// stop watching" would be a lie there; the camera is still held for when
+/// the map is the screen again.
+#[test]
+fn a_popup_over_a_watched_map_does_not_offer_to_stop_watching() {
+    let mut app = app_owning_distant_programs(5108, 1);
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    for _ in 0..4 {
+        app.handle_key(GameKey::Char('.'));
+    }
+    let staff = app.game.as_ref().unwrap().base_staff()[0];
+    app.watching = Some(staff);
+    assert!(app.watch_center().is_some(), "fixture is not watching");
+
+    app.handle_key(GameKey::Char('i'));
+    assert_ne!(app.mode, Mode::Playing);
+    assert_eq!(app.watching, Some(staff), "the popup released the camera");
+    assert!(keys(&app).contains(&"< >".to_string()), "{:?}", keys(&app));
+}
+
 /// Any key but a step or the clock's cancels a walk, and the clock keys are
 /// the ones that matter while it runs — a travel set while paused waits on
 /// Space.

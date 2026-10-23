@@ -2,7 +2,7 @@
 //! draws it. The keys' meanings live in app-core, and so does which of them
 //! work where the party stands.
 
-use crate::{App, Walk};
+use crate::{App, Mode, Walk};
 
 /// One run of `(key, label)` segments; the renderer draws a divider between
 /// runs.
@@ -24,10 +24,8 @@ fn row(key: &str, label: &str) -> (String, String) {
 /// The map's own bar for `locale`, in priority order — the renderer takes
 /// the longest prefix that fits, so what is last here is what goes first.
 ///
-/// This replaces a four-line block that named eighteen keys. What is not here
-/// is in the manual (`?`), which is the discoverable home for it, and `f` and
-/// `L` moved to the filter strip on the opposite border rather than being
-/// dropped.
+/// What is not here is in the manual (`?`), the discoverable home for it,
+/// and `f` and `L` sit on the filter strip on the opposite border.
 ///
 /// **The order is priority, not reading order, and the census is why.**
 /// `the_keybar_fits_the_log_pane` (gui) measures what survives at the
@@ -48,13 +46,16 @@ fn row(key: &str, label: &str) -> (String, String) {
 /// naming the base: `<` is up and `>` is down whether the party is stepping
 /// onto their base or into a stack.
 ///
-/// `TAB` (expand/collapse the log pane) is not here either: it is narrower
-/// than nothing the census can spare, and `?` is where it is discovered.
+/// `TAB` (expand/collapse the log pane) is not here either: the bar has no
+/// room to spare for it, and `?` is where it is discovered.
 ///
 /// **The verbs are filtered by locale, because a key the bar names and the
 /// place refuses reads as a bug.** `n` cuts only base-space rock; `t` finds a
 /// trader only in base space or on a live Stack stall; `c` is not bound
-/// underground at all. The Stack's own `g` and `o` take the room that frees.
+/// underground at all. The Stack's own `g` and `o` take the room that frees,
+/// though only about three verbs survive the cut at any supported size —
+/// `o` only at 1920x1080 — so the order of the verbs matters more than
+/// their number.
 pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
     // A stall is the reason to stop on this cell, and the bar has room for
     // about three verbs, so its key leads rather than queueing past the cut.
@@ -112,12 +113,15 @@ impl App {
             rows.push(row("Space", if self.paused { "resume" } else { "pause" }));
             rows.push(row(",", "speed"));
         };
-        if self.watching.is_some() {
+        // Only while the map is the screen: a popup over it takes `Esc` for
+        // itself, and the camera stays held for when the popup closes.
+        let on_map = self.mode == Mode::Playing;
+        if on_map && self.watching.is_some() {
             let mut rows = vec![row("↑↓←→", "step"), row("Esc", "stop watching")];
             clock(&mut rows);
             return vec![rows];
         }
-        if let Some(Walk::Travel { .. }) = self.walk {
+        if on_map && let Some(Walk::Travel { .. }) = self.walk {
             let mut rows = vec![row("Esc", "stop walking")];
             clock(&mut rows);
             return vec![rows];

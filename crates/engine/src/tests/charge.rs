@@ -318,7 +318,16 @@ fn a_hostile_winds_up_instead_of_swinging() {
 
 #[test]
 fn a_hostile_releases_early_when_the_hit_would_kill_and_otherwise_holds() {
-    let (mut game, player, wild) = wild_charger(12, 100_000);
+    // The victim is a companion, not the player: the release lands for certain
+    // here (3000 into 5 HP), and a player it killed would end the fight and
+    // tear the cooldown down with it, leaving nothing to assert on.
+    let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 1);
+    enlist(&mut game, companion);
+    let (mut game, _player, wild) = charge_battle_in(game, charge_def(3000, 3, 5, 0));
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec![ID.to_string()]));
     resolve_round_with(&mut game, BattleAction::Defend);
     resolve_round_with(&mut game, BattleAction::Defend);
     assert_eq!(
@@ -327,8 +336,8 @@ fn a_hostile_releases_early_when_the_hit_would_kill_and_otherwise_holds() {
         "nothing to kill, so it holds"
     );
 
-    game.world.get_mut::<Stats>(player).unwrap().hp = 5;
-    game.world.get_mut::<Charging>(wild).unwrap().aim = ChargeAim::Group(vec![player]);
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 5;
+    game.world.get_mut::<Charging>(wild).unwrap().aim = ChargeAim::Group(vec![companion]);
     resolve_round_with(&mut game, BattleAction::Defend);
 
     assert_eq!(

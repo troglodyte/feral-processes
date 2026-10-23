@@ -844,6 +844,10 @@ fn walking_onto_an_entrance_descends_and_leaves_the_entrance_standing() {
     let mut game = game();
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let target = (ppos.x + 1, ppos.y);
+    // A wild program seeded onto the tile turns the bump into a fight.
+    while let Some(wild) = game.find_wild_creature_at(target.0, target.1) {
+        game.world.despawn(wild);
+    }
     game.world.spawn((
         SurfaceLink,
         Position {

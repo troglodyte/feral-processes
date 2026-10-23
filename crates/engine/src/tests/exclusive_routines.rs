@@ -461,16 +461,23 @@ fn a_fired_passive_goes_on_cooldown() {
         let probe = Game::new(9009, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         passive_id(&probe, PassiveTrigger::AllyDropped)
     };
-    let mut game = battle_with_a_passive_holder(9010, &passive);
-    let player = game.player_entity();
-    let doomed = game.owned_pets()[0].entity;
-
-    game.world.get_mut::<Stats>(doomed).unwrap().hp = 1;
-    resolve_a_planned_round(&mut game);
-    assert!(
-        !game.creature_alive(doomed),
-        "the ally survived, so the passive was never triggered"
+    // The hostile's swing that drops the ally rolls to hit, so the stream is
+    // chosen such that it connects; the claim is about the cooldown a fired
+    // passive leaves behind, not about that swing's luck.
+    let doomed_at = std::cell::Cell::new(None);
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = battle_with_a_passive_holder(9010, &passive);
+            let doomed = game.owned_pets()[0].entity;
+            doomed_at.set(Some(doomed));
+            game.world.get_mut::<Stats>(doomed).unwrap().hp = 1;
+            reseed_rng(&mut game, seed);
+            resolve_a_planned_round(&mut game);
+            game
+        },
+        |game| !game.creature_alive(doomed_at.get().unwrap()),
     );
+    let player = game.player_entity();
 
     let remaining = game
         .world

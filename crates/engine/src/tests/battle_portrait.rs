@@ -126,7 +126,9 @@ fn each_swing_line_shows_whoever_swung() {
         if outcome.is_none() {
             continue;
         }
-        let expected = if text.starts_with("You ") {
+        // "You ..." and "Your ... lands unchecked" are both the player's own
+        // swing lines; the roll decides which wording the round prints.
+        let expected = if text.starts_with("You") {
             saw_player = true;
             game.creature_label(player)
         } else {

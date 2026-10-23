@@ -1250,6 +1250,36 @@ fn taken_over_ready_app(start_seed: u32) -> App {
 fn a_taken_over_companion_plays_without_a_key() {
     let mut app = taken_over_ready_app(9840);
     wait_for_the_player(&mut app);
+    let player = {
+        let view = app
+            .game
+            .as_mut()
+            .expect("the fixture has a game")
+            .tactical_view()
+            .expect("the fight is open");
+        view.bodies
+            .iter()
+            .find(|b| b.is_player)
+            .expect("the player is seated")
+            .entity
+    };
+    // `wait_for_the_player` stops at any body awaiting a key, and the
+    // companion is one too: when it wins initiative, pass its turn so the
+    // routine below is the player's own.
+    for _ in 0..64 {
+        if acting_entity(&mut app) == Some(player) {
+            break;
+        }
+        let game = app.game.as_mut().expect("the fixture has a game");
+        if !game.tactical_ai_turn() {
+            game.tactical_end_turn();
+        }
+    }
+    assert_eq!(
+        acting_entity(&mut app),
+        Some(player),
+        "the turn never came round to the player's own body"
+    );
     let companion = {
         let view = app
             .game

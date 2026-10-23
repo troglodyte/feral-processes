@@ -1893,7 +1893,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
 ///
 /// Asserted exactly rather than statistically by dividing the individual
 /// roll back out — `spawn_wild_creature_scaled` is
-/// `round(base * zone_mult * depth_mult * roll)`, and zone 1 is x1.
+/// `round(base * zone_mult * depth_mult * rarity_mult * roll)`, and zone 1 is x1.
 #[test]
 fn wild_stats_do_not_vary_with_distance_from_the_danger_origin() {
     let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1910,11 +1910,18 @@ fn wild_stats_do_not_vary_with_distance_from_the_danger_origin() {
         .spawn_wild_creature("scrapper", spawn.x + 500, spawn.y + 500)
         .expect("scrapper should spawn on any tile");
     let roll = game.world.get::<Potential>(far).unwrap().hp_roll;
+    // Rarity is rolled at spawn and scales the body too; distance is the
+    // only axis this test rules out.
+    let rarity_mult = game
+        .world
+        .get::<crate::components::Rarity>(far)
+        .unwrap()
+        .stat_mult();
     let stats = *game.world.get::<Stats>(far).unwrap();
 
     assert_eq!(
         stats.max_hp,
-        ((base_hp as f32) * roll).round() as i32,
+        ((base_hp as f32) * rarity_mult * roll).round() as i32,
         "a program 500 tiles out should be worth exactly its zone-1 stats"
     );
 }
@@ -2483,15 +2490,19 @@ fn a_pack_member_is_never_placed_where_it_could_never_step() {
     let (ax, ay) = (300, 300);
     open_tile_in_a_sealed_box(&mut game, ax, ay, 12);
 
-    let pack = game.spawn_pack(
-        "scrapper",
-        false,
-        ax,
-        ay,
-        crate::game::spawning::SpawnEscalation::surface(),
-    );
-
-    assert!(pack.len() > 1, "the fixture needs a pack, not a lone spawn");
+    // The pack's size is rolled, so a single call can come back alone.
+    let pack = (0..50)
+        .map(|_| {
+            game.spawn_pack(
+                "scrapper",
+                false,
+                ax,
+                ay,
+                crate::game::spawning::SpawnEscalation::surface(),
+            )
+        })
+        .find(|pack| pack.len() > 1)
+        .expect("the fixture needs a pack, not a lone spawn");
     for e in pack {
         let pos = *game.world.get::<Position>(e).unwrap();
         assert!(

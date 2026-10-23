@@ -449,6 +449,8 @@ fn an_engaged_group_still_uses_its_melee_moves() {
     let player = game.player_entity();
     let hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
+    // Forced: the claim is that the move is used, not that it beats evasion.
+    force_the_next_attack_to_land(&mut game);
     game.wild_retaliate(construct, 0, player);
 
     assert!(

@@ -620,8 +620,9 @@ fn a_wounded_program_is_refused() {
         .unwrap()
         .max_hp;
     // Just under the threshold, so the test is about the threshold and not
-    // about a body at 1 HP.
-    let hurt = (max_hp as f32 * crate::tuning::SORTIE_MIN_HP_FRACTION) as i32 - 1;
+    // about a body at 1 HP. Rounded up: an odd `max_hp` puts the threshold
+    // between two whole Integrity points, and the lower one is still refused.
+    let hurt = (max_hp as f32 * crate::tuning::SORTIE_MIN_HP_FRACTION).ceil() as i32 - 1;
     game.world
         .get_mut::<crate::components::Stats>(staff[0])
         .unwrap()

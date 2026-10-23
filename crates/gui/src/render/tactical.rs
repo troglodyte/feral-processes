@@ -2014,6 +2014,21 @@ mod tests {
 
     /// A game standing in a tactical fight, opened the way the router opens
     /// one.
+    /// The free cell nearest the acting body. The camera is held on that
+    /// body, so the board's first free cell in reading order can sit off
+    /// the pane entirely and a mark placed there is never drawn.
+    fn free_cell_in_view(view: &TacticalView) -> Option<(i32, i32)> {
+        let occupied: std::collections::HashSet<(i32, i32)> =
+            view.bodies.iter().map(|b| b.cell).collect();
+        let acting = view.order[view.active?].entity;
+        let at = view.bodies.iter().find(|b| b.entity == acting)?.cell;
+        view.board
+            .cells()
+            .filter(|(cell, kind)| *kind != BattleCell::Blocked && !occupied.contains(cell))
+            .map(|(cell, _)| cell)
+            .min_by_key(|c| ((c.0 - at.0).abs().max((c.1 - at.1).abs()), c.1, c.0))
+    }
+
     fn fighting() -> Game {
         for seed in 0..200u32 {
             let mut game =
@@ -2448,14 +2463,7 @@ mod tests {
 
         let mut game = fighting();
         let mut view = game.tactical_view().expect("the fight is open");
-        let occupied: std::collections::HashSet<(i32, i32)> =
-            view.bodies.iter().map(|b| b.cell).collect();
-        let free = view
-            .board
-            .cells()
-            .find(|(cell, kind)| *kind != BattleCell::Blocked && !occupied.contains(cell))
-            .map(|(cell, _)| cell)
-            .expect("the board has a free cell for a decoy");
+        let free = free_cell_in_view(&view).expect("the board has a free cell for a decoy");
         view.decoys = vec![DecoyView {
             cell: free,
             glyph: 'Q',
@@ -2484,14 +2492,7 @@ mod tests {
 
         let mut game = fighting();
         let mut view = game.tactical_view().expect("the fight is open");
-        let occupied: std::collections::HashSet<(i32, i32)> =
-            view.bodies.iter().map(|b| b.cell).collect();
-        let free = view
-            .board
-            .cells()
-            .find(|(cell, kind)| *kind != BattleCell::Blocked && !occupied.contains(cell))
-            .map(|(cell, _)| cell)
-            .expect("the board has a free cell for a mark");
+        let free = free_cell_in_view(&view).expect("the board has a free cell for a mark");
         view.fallen = vec![Fallen {
             cell: free,
             footprint: 1,

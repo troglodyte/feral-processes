@@ -711,19 +711,32 @@ fn resolving_a_round_logs_one_round_separator_numbered_for_the_round_that_ran() 
 /// already ended. The round must unwind cleanly rather than panic.
 #[test]
 fn a_round_survives_its_target_dying_before_every_member_has_acted() {
-    let mut game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = spawn_tamed(&mut game, 40, 8);
-    enlist(&mut game, pet);
-    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
-    game.start_battle(vec![wild]);
-    // One HP, so whoever wins initiative ends the fight outright.
-    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    // Every swing has a miss chance by design, and this fixture is only about
+    // the unwind when one of them kills — so the stream is chosen such that
+    // somebody's swing does land, rather than pinning a seed that stops doing
+    // so the next time `Game::new` draws a different amount.
+    let wild_at: std::cell::Cell<Option<Entity>> = std::cell::Cell::new(None);
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let pet = spawn_tamed(&mut game, 40, 8);
+            enlist(&mut game, pet);
+            let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+            wild_at.set(Some(wild));
+            game.start_battle(vec![wild]);
+            // One HP, so whoever wins initiative ends the fight outright.
+            game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+            reseed_rng(&mut game, seed);
 
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_set_action(1, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+            game.battle_set_action(0, BattleAction::Attack { group: 0 })
+                .unwrap();
+            game.battle_set_action(1, BattleAction::Attack { group: 0 })
+                .unwrap();
+            game.battle_resolve_round();
+            game
+        },
+        |game| !game.creature_alive(wild_at.get().unwrap()),
+    );
 
     assert!(
         !game.has_active_battle(),

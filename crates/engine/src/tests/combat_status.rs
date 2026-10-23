@@ -11,11 +11,17 @@ fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
     let player = game.player_entity();
     // Deliberately effect-free, so the wild creature's own retaliation
     // can't re-apply (and thus reset the clock on) the status this test
-    // is tracking.
+    // is tracking. A typed move is out too: Noise jams whoever it lands on,
+    // which is a status riding in by the damage type instead of `effect`.
     let species = game
         .species_defs()
         .into_iter()
-        .find(|s| !s.is_boss && s.moves.iter().all(|m| m.effect.is_none()))
+        .find(|s| {
+            !s.is_boss
+                && s.moves
+                    .iter()
+                    .all(|m| m.effect.is_none() && m.damage_type.is_none())
+        })
         .expect("at least one species with no status-effect moves should exist for this test");
     let wild = game
         .world

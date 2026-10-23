@@ -1876,19 +1876,28 @@ fn any_item_flagged_enables_rest_can_buy_a_field_rest() {
     enables_rest: true,
 )"#,
     );
-    let mut game = Game::new(3215, DifficultyMode::Forgiving, &dir).unwrap();
+    // A field rest can be ambushed; this test is about which charge pays, so
+    // it takes a stream that lets the rest through.
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = Game::new(3215, DifficultyMode::Forgiving, &dir).unwrap();
+            let player = game.player_entity();
+            {
+                let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+                let held = inv.count(&ItemId::from(ids::OUTLET));
+                inv.take(ItemId::from(ids::OUTLET), held);
+                inv.add(ItemId::from("spare_battery"), 1);
+            }
+            *game.world.get_mut::<PowerReserve>(player).unwrap() =
+                PowerReserve::new(10.0, crate::components::POWER_MAX);
+            reseed_rng(&mut game, seed);
+            game.rest().unwrap();
+            game
+        },
+        |game| !game.has_active_battle(),
+    );
     let _ = std::fs::remove_dir_all(&dir);
     let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(&ItemId::from(ids::OUTLET));
-        inv.take(ItemId::from(ids::OUTLET), held);
-        inv.add(ItemId::from("spare_battery"), 1);
-    }
-    *game.world.get_mut::<PowerReserve>(player).unwrap() =
-        PowerReserve::new(10.0, crate::components::POWER_MAX);
-
-    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),

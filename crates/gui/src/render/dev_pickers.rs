@@ -3,13 +3,18 @@
 //! then one row per entry app-core hands over. Up/Down move the highlight,
 //! Enter picks it, and the popup's window follows the highlighted row.
 
+use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
 
-const HINT: &str = "Dev build only. Up/Down choose, Enter picks. Esc to go back.";
+const HINT: &str = "Dev build only. Up/Down choose, Enter picks. Type to filter. Esc to go back.";
 
-pub(super) fn item_picker_rows(rows: &[(String, u32)], selected: usize) -> Vec<Row> {
+pub(super) fn item_picker_rows(rows: &[(String, u32)], filter: &str, selected: usize) -> Vec<Row> {
     let mut out = vec![text_row(HINT)];
+    out.extend(filter_line(filter));
+    if rows.is_empty() {
+        out.push(no_match_row(filter));
+    }
     out.extend(
         rows.iter()
             .enumerate()
@@ -30,6 +35,7 @@ pub(super) fn zone_picker_rows(rows: &[u32], selected: usize) -> Vec<Row> {
 
 pub(super) fn draw_dev_item_picker(
     rows: &[(String, u32)],
+    filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
@@ -38,7 +44,7 @@ pub(super) fn draw_dev_item_picker(
     draw_popup(
         "Give item (x10)",
         PopupSize::Large,
-        &item_picker_rows(rows, selected),
+        &item_picker_rows(rows, filter, selected),
         refusal,
         painter,
         m,
@@ -92,7 +98,7 @@ mod tests {
             .map(|(_, name, _)| name)
             .max_by_key(|n| n.chars().count())
             .unwrap();
-        let rows = item_picker_rows(&[(widest, 99_999)], 0);
+        let rows = item_picker_rows(&[(widest, 99_999)], "", 0);
         let Some(Row::Item { text: label, .. }) = rows.last() else {
             panic!("the last row is the item");
         };
@@ -110,7 +116,7 @@ mod tests {
     fn both_pickers_draw_their_rows() {
         let m = ui_metrics(900.0);
         let (_, shapes) =
-            with_painter(|p| draw_dev_item_picker(&full_item_list()[..3], 1, None, p, &m));
+            with_painter(|p| draw_dev_item_picker(&full_item_list()[..3], "", 1, None, p, &m));
         let text = painted_text(&shapes).join("\n");
         assert!(text.contains("x99999"), "{text}");
         assert!(!text.contains("[1]"), "{text}");
@@ -125,7 +131,7 @@ mod tests {
     /// the popup can follow it.
     #[test]
     fn the_highlight_is_on_the_selected_row() {
-        let rows = item_picker_rows(&full_item_list(), 7);
+        let rows = item_picker_rows(&full_item_list(), "", 7);
         let lit: Vec<usize> = rows
             .iter()
             .enumerate()
@@ -133,5 +139,16 @@ mod tests {
             .map(|(i, _)| i)
             .collect();
         assert_eq!(lit, vec![8], "hint row first, then item 7");
+    }
+
+    /// A typed filter shows above the rows; with none left, the notice
+    /// replaces them.
+    #[test]
+    fn the_filter_and_the_empty_notice_are_drawn() {
+        let m = ui_metrics(900.0);
+        let (_, shapes) = with_painter(|p| draw_dev_item_picker(&[], "zzz", 0, None, p, &m));
+        let text = painted_text(&shapes).join("\n");
+        assert!(text.contains("filter: zzz"), "{text}");
+        assert!(text.contains("Nothing matches"), "{text}");
     }
 }

@@ -60,6 +60,7 @@ pub(crate) mod hud;
 mod inventory;
 mod level_up;
 mod lighting;
+mod list_filter;
 mod machine_recipe;
 mod manifest;
 mod marks;
@@ -1204,6 +1205,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DevItemPicker => app.dev_item_rows(),
         _ => Vec::new(),
     };
+    let list_filter = app.filter_text().to_owned();
     let dev_zone_rows = match app.mode {
         Mode::DevZonePicker => app.dev_zone_rows(),
         _ => Vec::new(),
@@ -1262,9 +1264,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     }
     match app.mode {
         Mode::DevConsole => draw_dev_console(&dev_row_labels, selected, refusal, painter, m),
-        Mode::DevItemPicker => {
-            dev_pickers::draw_dev_item_picker(&dev_item_rows, selected, refusal, painter, m)
-        }
+        Mode::DevItemPicker => dev_pickers::draw_dev_item_picker(
+            &dev_item_rows,
+            &list_filter,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::DevZonePicker => {
             dev_pickers::draw_dev_zone_picker(&dev_zone_rows, selected, refusal, painter, m)
         }

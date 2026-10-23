@@ -8,8 +8,8 @@ use super::popup::{colored_item_row, item_row};
 use super::*;
 use feral_processes_app_core::HelpPageView;
 
-/// The topic list. An ordinary numbered menu, so it draws exactly like
-/// every other one.
+/// The topic list. An ordinary menu, so it draws exactly like every other
+/// one.
 pub(super) fn draw_help_index(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let rows = app.help_index_rows();
     let mut out = vec![text_row("The manual. Pick a topic."), text_row("")];

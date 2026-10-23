@@ -38,9 +38,9 @@ pub(super) fn perks_menu_rows(
         text_row(preview),
         text_row(""),
     ];
-    // The shortcut a player types is an index into the *flattened* list,
-    // which is what `App::handle_perks_key` resolves against `perk_defs` —
-    // so it runs across the headings rather than restarting under each.
+    // `i` indexes the *flattened* list, which is what
+    // `App::handle_perks_key` resolves against `perk_defs` — so it runs
+    // across the headings rather than restarting under each.
     let mut i = 0;
     for (name, defs) in groups {
         rows.extend(heading_rows(name, i > 0));
@@ -834,11 +834,11 @@ mod tests {
     }
 
     /// The two halves of what grouping the picker had to get right, against
-    /// the shipped layout: every section is headed, and the shortcut a
-    /// player types runs *across* the headings rather than restarting under
-    /// each one. The second is what `App::handle_perks_key` resolves — it
-    /// indexes `perk_defs`, the flattened list — so a per-section counter
-    /// would draw `[a]` three times and buy the wrong perk twice.
+    /// the shipped layout: every section is headed, and the highlight
+    /// runs *across* the headings rather than restarting under each one. The
+    /// second is what `App::handle_perks_key` resolves — it indexes
+    /// `perk_defs`, the flattened list — so a per-section counter would
+    /// light three rows at once and buy the wrong perk twice.
     #[test]
     fn the_perk_picker_heads_each_section_and_numbers_across_them() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));

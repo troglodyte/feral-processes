@@ -5,7 +5,7 @@ use feral_processes_engine::StatOwner;
 use feral_processes_engine::{GraphDir, ResearchState, ResearchTree};
 
 impl App {
-    /// Picks a numbered perk to unlock; stays open so multiple can be
+    /// Unlocks the highlighted perk; stays open so multiple can be
     /// unlocked in one visit if there are enough Perk Points.
     pub(crate) fn handle_perks_key(&mut self, key: GameKey) {
         // Through `perk_defs` rather than `Perk::all()` so the numbering the
@@ -83,7 +83,7 @@ impl App {
         }
     }
 
-    /// Picks a numbered research node to unlock; stays open so several can
+    /// Unlocks the highlighted research node; stays open so several can
     /// be taken in one visit. Shared by `Mode::Research` and
     /// `Mode::RoutineResearch` — one handler taking the tree rather than a
     /// copied one, since the two screens differ only in which tree

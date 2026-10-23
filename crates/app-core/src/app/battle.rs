@@ -307,7 +307,7 @@ impl App {
         let active_slot = view.active_slot;
         let group_count = view.groups.len();
         // Groups are addressed by letter on screen, so accept the letter as
-        // well as the row number `selected_index` already handles.
+        // well as the row number `battle_row` already handles.
         let picked = match key {
             GameKey::Char(c) if c.is_ascii_alphabetic() => {
                 let idx = (c.to_ascii_lowercase() as u8 - b'a') as usize;
@@ -532,8 +532,7 @@ impl App {
         let items = game.battle_usable_items();
 
         // Undocumented on purpose — see `crates/engine/EASTER_EGGS.md`.
-        // Ahead of `selected_index`, which is where an uppercase key has to
-        // go: that function rejects every non-lowercase char precisely so a
+        // Ahead of `battle_row`, which rejects every non-lowercase char so a
         // screen action can own the uppercase space, however long the list
         // grows. Sharing the letter with the roster's taunt is intended —
         // the two handlers can never both fire, and one letter meaning "do

@@ -34,7 +34,7 @@ pub(super) fn draw_craft_menu(
         ));
         // Dim, unselected continuations, the same shape `draw_recipes` gives a
         // product and its steps: the highlight belongs on the line carrying the
-        // shortcut, and the popup's scroll anchor is the *first* selected Item,
+        // name, and the popup's scroll anchor is the *first* selected Item,
         // so these cannot disturb it.
         for line in lines {
             rows.push(colored_item_row(line, false, TEXT_DIM));
@@ -43,9 +43,9 @@ pub(super) fn draw_craft_menu(
     draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// What a wrapped cost line is indented by: the width of `"[x] MOD  "`, so the
-/// continuation sits under the item's name rather than under its shortcut.
-const CRAFT_ROW_INDENT: &str = "         ";
+/// What a wrapped cost line is indented by: the width of `"MOD  "`, so the
+/// continuation sits under the item's name rather than under its kind tag.
+const CRAFT_ROW_INDENT: &str = "     ";
 
 /// One recipe's row: its kind, its name, what it does, and what it costs.
 ///
@@ -63,7 +63,7 @@ const CRAFT_ROW_INDENT: &str = "         ";
 /// rather than running off the popup, which `draw_row` would otherwise let it
 /// do — it clamps a row vertically and nothing clamps it horizontally. The
 /// split is at the ` - ` seam rather than a word wrap of the whole row, so the
-/// shortcut, kind and name stay together on the line the eye scans.
+/// kind and name stay together on the line the eye scans.
 ///
 /// Returns the lines rather than drawing them so the width they reach is
 /// measurable without a window — see

@@ -90,9 +90,9 @@ fn texts(app: &App) -> Vec<String> {
 }
 
 /// `x` and `d` are this screen's own mnemonics and act on the highlighted
-/// row. The board is wide enough (`ALERT_BOARD_CAP` is 50) that a letter
-/// which also named a row would have a real one to hit, so the test fails if
-/// either key ever picks a row of its own instead.
+/// row. The board is wide enough (`ALERT_BOARD_CAP` is 50) that a key which
+/// also moved the highlight would have a real row to hit, so the test fails
+/// if either key ever does anything but dismiss.
 #[test]
 fn x_dismisses_the_highlighted_row_and_only_that() {
     let mut app = seeded(20003, numbered_alerts(40));

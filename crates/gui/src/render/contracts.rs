@@ -320,7 +320,7 @@ mod tests {
 
     /// **No shipped contract's description overflows the popup either.**
     ///
-    /// The row census below measures the `[n] Name - objective - pays` line
+    /// The row census below measures the `Name - objective - pays` line
     /// and has never looked at the paragraph under it — which is how eleven
     /// onboarding missions, whose descriptions are several times longer than
     /// any other contract's, shipped against a green suite.

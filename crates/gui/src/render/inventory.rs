@@ -357,9 +357,9 @@ fn swap_power(game: &Game, choice: &SwapChoice) -> PowerCell {
     }
 }
 
-/// A swap row's head: the shortcut, the rating, then the padded name.
+/// A swap row's head: the rating, then the padded name.
 ///
-/// The rating sits **between the shortcut and the name**, where the
+/// The rating sits **before the name**, where the
 /// inventory list already puts it — in a trailing column the figures would
 /// stagger with the name lengths above them, which is `PowerCell`'s own
 /// argument for where it sits on a `Row::Item`.
@@ -1370,7 +1370,7 @@ mod tests {
     ///
     /// **Measured again when quality shipped.** At 900px the popup body is
     /// 1243.2px and a UI cell is 10.8438px — 114.65 cells. The old joined
-    /// head (`[a] {name:<50} {stats:<20}`, plus `draw_row`'s two-space
+    /// head (`{name:<50} {stats:<20}`, plus `draw_row`'s two-space
     /// prefix) was 111 cells and fitted with 3.7 to spare; the quality
     /// figure costs seven, which put it 35.6px past the edge. That is why
     /// the stat column is a tag now and not part of the head — and why this

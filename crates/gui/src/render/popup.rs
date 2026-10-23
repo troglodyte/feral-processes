@@ -3,8 +3,8 @@
 
 use super::*;
 
-/// One line of a popup's body. `Item` rows are the numbered/lettered
-/// options a menu key press resolves to (see `App::selected_index`);
+/// One line of a popup's body. `Item` rows are the options a menu's
+/// highlight and Enter resolve to (see `App::selected_index`);
 /// `Text` rows are just informational.
 #[derive(Clone)]
 pub(super) enum Row {
@@ -50,8 +50,8 @@ pub(super) enum Row {
 /// and are decided once.
 #[derive(Clone)]
 pub(super) struct ItemTag {
-    /// The row's text *up to* the column: its shortcut, and the quantity
-    /// where the screen prints one.
+    /// The row's text *up to* the column: the quantity where the screen
+    /// prints one.
     ///
     /// It lives on the tag rather than in `text` because the tag sits inside
     /// the label — what precedes it is what places it. Recording an offset
@@ -1134,7 +1134,7 @@ const ROW_CONTINUATION_INDENT: &str = ICON_SLOT;
 /// routines.
 ///
 /// One definition rather than one per screen because the indent is a fact
-/// about `with_icon`'s glyph slot and `menu_shortcut`'s bracket, which every
+/// about `with_icon`'s glyph slot, which every
 /// caller shares, and because the wrap is what keeps a row inside the popup:
 /// `draw_row` clamps a row vertically and nothing clamps it horizontally.
 ///

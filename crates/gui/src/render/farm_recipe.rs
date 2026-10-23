@@ -27,7 +27,6 @@ pub(super) fn body_rows(rows: &[CropRow], selected: usize) -> Vec<Row> {
         text_row("Pick what this plot grows. Esc to go back."),
         text_row(""),
     ];
-    // The shortcut is printed because `selected_index` honours it.
     body.extend(rows.iter().enumerate().map(|(i, row)| {
         item_row(
             format!("{} — {}", row.label, row.description),

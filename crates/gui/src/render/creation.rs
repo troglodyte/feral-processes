@@ -338,7 +338,7 @@ fn plain_footer(step: CreationStep) -> &'static str {
 
 /// Where the preview cell sits inside `popup`'s box: tucked into the
 /// top-right corner, clear of the row list under it. The row labels this
-/// screen ever draws (`[3] Colour 4`, `Class ...`, a Summary line) are
+/// screen ever draws (`Colour 4`, `Class ...`, a Summary line) are
 /// short enough at `PopupSize::Large`'s width to leave that corner clear;
 /// `every_creation_step_draws_a_refusal_exactly_once` and the row census
 /// draw the real rows and would show a collision if one ever reached it.

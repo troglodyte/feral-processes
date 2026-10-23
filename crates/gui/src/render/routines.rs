@@ -172,7 +172,7 @@ pub(super) fn draw_routine_etch(
     draw_popup("Etch Disk", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// One extraction candidate's lines: the row its shortcut selects, then the
+/// One extraction candidate's lines: the row the highlight lands on, then the
 /// routines the program is carrying underneath.
 ///
 /// Extraction destroys the program for exactly one of those routines, and

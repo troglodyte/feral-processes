@@ -403,11 +403,11 @@ mod tests {
     }
 
     /// A heading per run, and — the thing that can silently break — the
-    /// shortcut on the *n*th pickable row still reads `n`.
+    /// highlight on the *n*th pickable row still lands on row `n`.
     ///
     /// Headings are `Row::TextColored` and must never touch the counter
-    /// `App::caravan_row` resolves a pick through. Off by one, `[c]` buys
-    /// what `[b]` names and nothing anywhere fails.
+    /// `App::caravan_row` resolves a pick through. Off by one, Enter buys
+    /// what the row above names and nothing anywhere fails.
     #[test]
     fn the_wagon_heads_each_run_without_moving_a_shortcut() {
         let mut game = census_game();

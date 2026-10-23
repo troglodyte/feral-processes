@@ -2190,8 +2190,7 @@ mod tests {
     }
 
     /// The top level lists the Home as the structure it is and every other
-    /// category as one row naming how many it holds — numbered on one run of
-    /// shortcuts, so key `2` is the first category.
+    /// category as one row naming how many it holds.
     #[test]
     fn the_deploy_menu_top_level_names_each_category_and_its_count() {
         let home = shipped_entries()

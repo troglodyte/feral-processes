@@ -474,12 +474,10 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
 }
 
 /// An app on `Mode::Inventory` with at least ten distinct cargo rows, so
-/// the fourth letter row (`DIGIT_ROWS` + 3 — lowercase `d`) resolves to a
-/// real row rather than `selected_index` falling out on an out-of-range
-/// index regardless of what key was pressed. A test asserting only that
-/// lowercase `d` leaves the mode unchanged on a short inventory would pass
-/// against several wrong implementations — this fixture is what makes it
-/// actually exercise the row-selector branch.
+/// a stray lowercase `d` has a real row under the highlight to act on
+/// rather than falling out on an empty list regardless of what key was
+/// pressed. A test asserting only that `d` leaves the mode unchanged on a
+/// short inventory would pass against several wrong implementations.
 pub(crate) fn app_on_inventory_with_many_items(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);

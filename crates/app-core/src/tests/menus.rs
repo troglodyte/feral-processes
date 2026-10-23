@@ -1,4 +1,4 @@
-//! Row shortcuts and menu navigation.
+//! Menu navigation and the manual.
 
 use super::support::*;
 use crate::*;

@@ -19,8 +19,8 @@ use feral_processes_app_core::ProgramRole;
 /// has to be named: the picker's own `(Unequip)` row is a keypress and a slot
 /// choice away and only ever empties the one slot, so a player who never
 /// finds this key never learns the screen can undress a program in one press
-/// at all. `P` is the one thing this screen is *for*: since the row shortcuts
-/// stopped toggling membership, nothing else points at the key.
+/// at all. `P` is the one thing this screen is *for*: since Enter does not
+/// toggle membership, nothing else points at the key.
 pub(super) const ROSTER_KEYS: [(&str, &str); 7] = [
     ("P", "party"),
     ("< >", "order"),
@@ -250,9 +250,6 @@ pub(super) fn strength(intensity: f32) -> String {
 /// separate segments: the shed has to fall on a boundary between two tags,
 /// and the head is exactly the part every row carries.
 ///
-/// Its shortcut is passed in rather than read off the row, since the number
-/// keys are the list's position and `PetInfo` has no idea where it landed.
-///
 /// Six tags at their widest run a roster row 382px past a `PopupSize::Large`
 /// body, and nothing clamps a row horizontally — so before this the tail ran
 /// off the right edge, taking the activity and CRITICAL with it. Those are
@@ -324,8 +321,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
 /// heading is emitted **on the change** rather than counted up front —
 /// `draw_caravan`'s rule, and for its reason: a run of one still gets its
 /// heading and the list needs no second walk. They are `Row::TextColored`,
-/// so `i` — which is what the shortcut and app-core's pick both index
-/// through — never sees them.
+/// so `i` — which is what app-core's pick indexes through — never sees them.
 ///
 /// Split out of `draw_companion_menu` so the grouping is measurable without
 /// a window; the drawing half needs a `Game` and this half does not.
@@ -391,7 +387,7 @@ pub(super) fn companion_rows(
     // kind of information, so it keeps the row's colour instead of the
     // dim the fuse picker gives a candidate's routines. Only the head is
     // ever `selected`: the highlight belongs on the line carrying the
-    // shortcut, and the popup's scroll anchor is the first selected
+    // row's name, and the popup's scroll anchor is the first selected
     // `Item`, so these cannot disturb it.
     for line in lines {
         rows.push(colored(line, false));
@@ -422,7 +418,7 @@ fn fuse_candidate_label(p: &PetInfo) -> String {
     )
 }
 
-/// One fuse candidate's lines: the stat row its shortcut selects, then the
+/// One fuse candidate's lines: the stat row the highlight lands on, then the
 /// routines it is carrying underneath.
 ///
 /// Fusion derives the result's kit fresh from its species, so a candidate's
@@ -460,7 +456,7 @@ fn installed_routines(game: &Game, program: Entity) -> Vec<String> {
 /// Pushes one candidate's rows: the selectable stat row, then its routines as
 /// dim unselected continuations — the same shape `draw_craft_menu` gives a
 /// recipe and its cost, and for the same reason. The highlight belongs on the
-/// line carrying the shortcut, and the popup's scroll anchor is the *first*
+/// line carrying the name, and the popup's scroll anchor is the *first*
 /// selected `Item`, so these cannot disturb it.
 fn push_fuse_candidate(rows: &mut Vec<Row>, game: &Game, p: &PetInfo, selected: bool) {
     let mut lines = fuse_candidate_rows(p, &installed_routines(game, p.entity)).into_iter();
@@ -730,11 +726,11 @@ mod tests {
     }
 
     /// One heading per run of a role, and — the thing that can silently
-    /// break — the shortcut on the *n*th program still reads `n`.
+    /// break — the highlight on the *n*th program still lands on row `n`.
     ///
     /// The headings are `Row::TextColored` and must never touch the counter
-    /// the shortcut and app-core's pick both index through. Off by one,
-    /// `[c]` renames what `[b]` names and nothing anywhere fails.
+    /// app-core's pick indexes through. Off by one, Enter renames what the
+    /// row above names and nothing anywhere fails.
     #[test]
     fn the_roster_heads_each_role_without_moving_the_highlight() {
         let pet = |name: &str, role: ProgramRole| PetInfo {
@@ -1133,8 +1129,8 @@ mod tests {
         );
     }
 
-    /// Party membership is the one thing this screen is *for*, and since the
-    /// row shortcuts stopped toggling it there is nothing but this line to
+    /// Party membership is the one thing this screen is *for*, and since Enter
+    /// does not toggle it there is nothing but this line to
     /// point at the key. A player who never finds it never fields a party.
     #[test]
     fn the_companion_screen_names_the_party_key() {

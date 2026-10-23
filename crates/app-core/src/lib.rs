@@ -175,7 +175,7 @@ pub fn menu_shortcut(index: usize) -> char {
 }
 
 /// The actions offered for `item` on the `Mode::InventoryItemAction` page,
-/// in display order, as (shortcut key, label) pairs. Both renderers draw
+/// in display order, as (key, label) pairs. Both renderers draw
 /// from this and `App::handle_inventory_item_action_key` dispatches from
 /// it, so the rows shown and the keys accepted can't drift apart.
 ///
@@ -1315,7 +1315,7 @@ pub enum CreationStep {
     ///
     /// **Icon and colour are two steps, not one screen with two lists.**
     /// They shipped as one `Look` step, whose eleven rows were five icons
-    /// and six swatches under one cursor and one shortcut sequence — the
+    /// and six swatches under one cursor — the
     /// only screen in the wizard where a row's *kind* changed partway down
     /// the list, so what Enter did depended on how far the cursor had
     /// walked. One list per step is the idiom every other step already
@@ -1555,10 +1555,11 @@ pub enum Mode {
     /// once — the shelf and the pack are two ends of one row, not two
     /// screens with a mirrored key table.
     ///
-    /// **This screen cannot use `App::selected_index`.** There a digit picks
-    /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
-    /// through `App::scroll`, so it still drives `menu_selected` and the
-    /// popup's window still follows it — the page scrolls for free.
+    /// **This screen cannot use `App::selected_index`**, because Enter is
+    /// not a pick here and a digit is a quantity. The cursor moves on
+    /// Up/Down alone, through `App::scroll`, so it still drives
+    /// `menu_selected` and the popup's window still follows it — the page
+    /// scrolls for free.
     /// A fight on a battle map — the second combat model, opt-in through
     /// `Mode::Options` and off by default.
     ///
@@ -2178,9 +2179,7 @@ pub enum Mode {
     /// Opening it calls `Game::mark_alerts_read`, so the status bar's badge
     /// clears the instant the screen is seen rather than waiting on a
     /// dismiss. `x`/`d` dismiss the highlighted row, matched **before**
-    /// `App::selected_index` — lowercase letters are row selectors on every
-    /// other list, and an alert's own text must not double as a shortcut for
-    /// it.
+    /// `App::selected_index`, so the dismiss keys never reach the list.
     Alerts,
     /// The message log in full, scrolled with Up/Down — the map's pane shows
     /// only its last few lines. Read-only, and bounded by what the engine
@@ -3397,10 +3396,10 @@ pub struct App {
     /// Not saved, `walk`'s own reason, and cleared everywhere `walk` is
     /// cleared for the same one.
     drag_ticks_owed: u32,
-    /// Which row is highlighted on the current numbered/lettered menu, for
-    /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
-    /// of, not instead of, typing a row's own number/letter directly.
-    /// Reset to 0 every time a menu mode is entered.
+    /// Which row is highlighted on the current menu, for Up/Down-plus-Enter
+    /// navigation (see `App::selected_index`); the classic battle screen
+    /// also takes a typed row label (`App::battle_row`). Reset to 0 every
+    /// time a menu mode is entered.
     pub menu_selected: usize,
     /// The column half of `Mode::BaseStaff`'s cursor — `menu_selected` is
     /// the row half, shared with every other menu. A second field rather

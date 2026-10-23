@@ -155,8 +155,7 @@ fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     assert_eq!(app.mode, Mode::Caravan);
 
     // Editing a row must not take the player anywhere. Walked to with the
-    // arrows rather than typed: a shelf is deeper than `menu_shortcut`'s 35
-    // labels, so the sell rows below it have no key of their own.
+    // arrows: the sell rows sit below the whole shelf.
     let offers = app
         .game
         .as_mut()

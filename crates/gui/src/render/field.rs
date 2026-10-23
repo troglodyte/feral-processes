@@ -294,7 +294,7 @@ pub(super) fn draw_field_routine_ally(
     );
 }
 
-/// One ally-picker target's lines: the row its shortcut selects, priced with
+/// One ally-picker target's lines: the pickable row, priced with
 /// the stats the buff is about to land on, then the buff this invocation would
 /// displace underneath.
 ///

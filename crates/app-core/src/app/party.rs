@@ -470,7 +470,7 @@ impl App {
             self.mode = Mode::RespecTalentsConfirm;
             return;
         }
-        // The ladder's numbered rows are the next untaken tier's choices —
+        // The ladder's pickable rows are the next untaken tier's choices —
         // the same rows the screen draws — so the row the player is looking at
         // and the row this buys cannot disagree. Whether they can *afford* one
         // is deliberately not asked here: `take_talent` refuses and says where

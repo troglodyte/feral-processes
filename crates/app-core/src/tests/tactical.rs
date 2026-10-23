@@ -746,9 +746,9 @@ fn esc_from_the_tactical_image_picker_returns_to_the_routine_list_spending_nothi
     );
 }
 
-/// A digit (`emulation_options()` has one row here — `1`, not a letter,
-/// `DIGIT_ROWS`' own reason) both selects the image and commits it through
-/// `Game::tactical_emulate`, which has no separate confirm step.
+/// Picking the row (`emulation_options()` has one here) both selects the
+/// image and commits it through `Game::tactical_emulate`, which has no
+/// separate confirm step.
 #[test]
 fn a_row_in_the_tactical_image_picker_invokes_it() {
     use feral_processes_engine::battle::SpecialTargeting;

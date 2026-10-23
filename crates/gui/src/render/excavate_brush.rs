@@ -33,9 +33,6 @@ fn body_rows(rows: &[BrushRow], selected: usize) -> Vec<Row> {
         text_row(""),
     ];
     body.extend(rows.iter().enumerate().map(|(i, row)| {
-        // The shortcut is printed because `selected_index` honours it: an
-        // unlabelled `h` picking a row is a keypress the plan's own `hjkl`
-        // walks straight into.
         let item = item_row(row.label.to_string(), i == selected);
         match row.shade {
             Some(shade) => with_icon(item, SWATCH, terrain::shade_color(shade)),

@@ -890,10 +890,8 @@ fn an_away_row_is_editable() {
     assert!(!app.base_staff_table().rows[0].cells[0]);
 }
 
-/// Lowercase letters are row selectors everywhere else in the app, but this
-/// screen's only keys are arrows, `Space`, `<`/`>` and `A` — a lowercase `a`
-/// must not fall through to a shortcut that toggles the column its upper-case
-/// twin does.
+/// This screen's only keys are arrows, `Space`, `<`/`>` and `A` — a lowercase
+/// `a` must not toggle the column its upper-case twin does.
 #[test]
 fn lowercase_a_does_nothing() {
     let mut app = app_owning_distant_programs(765, 1);
@@ -1123,9 +1121,7 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// fixture has already founded one — picking it again would hit the
 /// "already deployed" refusal on the old direct path rather than the
 /// picker this task adds. Row 1, `extractor`, is the first structure that
-/// actually costs a program, and `selected_index` labels rows `1`-`9`
-/// before it starts spending letters (`DIGIT_ROWS`), so row 1 is key `'2'`,
-/// not `'b'`.
+/// actually costs a program.
 fn deploy_second_structure(app: &mut App) {
     app.mode = Mode::Build;
     // Row 2 is the first category after the Home; its row 1 is the first
@@ -1138,9 +1134,8 @@ fn deploy_second_structure(app: &mut App) {
 /// Opens the build menu and picks the row for `id`, leaving the app on
 /// `Mode::BuildDirection`.
 ///
-/// Down-and-Enter rather than a row shortcut, because a row's shortcut *is*
-/// its position and every structure dropped into `assets/structures/`
-/// renumbers whatever sorts after it.
+/// Found by id rather than by a fixed row index, because every structure
+/// dropped into `assets/structures/` renumbers whatever sorts after it.
 fn choose_build_row(app: &mut App, id: &str) {
     open_command(app, "Deploy a structure");
     let menu = app.build_menu().expect("a running game");
@@ -1652,7 +1647,7 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
     );
 }
 
-/// The handler indexes the *sorted* list gui draws, so the shortcut spends
+/// The handler indexes the *sorted* list gui draws, so the pick spends
 /// the program on the row the player actually read.
 ///
 /// The roster is staged so `owned_pets`' order and `build_candidates`' order

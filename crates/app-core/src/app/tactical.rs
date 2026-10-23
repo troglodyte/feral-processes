@@ -44,6 +44,17 @@ pub fn prop_readout(prop: &PropView) -> String {
     line
 }
 
+/// Indices into `Game::battle_usable_items` that `filter` leaves, by item
+/// name. The handler and the gui both read the picker through it.
+pub fn tactical_items_visible(game: &feral_processes_engine::Game, filter: &str) -> Vec<usize> {
+    let names: Vec<String> = game
+        .battle_usable_items()
+        .iter()
+        .map(|id| game.item_name(id).to_string())
+        .collect();
+    crate::app::list_filter::filter_matches(names.iter().map(String::as_str), filter)
+}
+
 impl App {
     /// Arrows and the numpad step the acting body; a lowercase letter picks
     /// an action; `[E]` hands the turn on without spending it.
@@ -230,16 +241,20 @@ impl App {
     /// left up after a refusal would strand the player with nothing left
     /// to press but Esc.
     pub(crate) fn handle_tactical_item_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         if key == GameKey::Esc {
             self.mode = Mode::TacticalBattle;
             return;
         }
         let Some(game) = &self.game else { return };
         let items = game.battle_usable_items();
-        let Some(idx) = self.selected_index(key, items.len()) else {
+        let visible = tactical_items_visible(game, self.filter_text());
+        let Some(pos) = self.selected_index(key, visible.len()) else {
             return;
         };
-        let id = items[idx].clone();
+        let id = items[visible[pos]].clone();
         self.mode = Mode::TacticalBattle;
         let Some(game) = &mut self.game else { return };
         if !game.tactical_use_item(&id) {

@@ -173,4 +173,5 @@ mod hub {
 
 mod inventory;
 mod market;
+mod pickers;
 mod trade;

@@ -6,6 +6,7 @@
 //! applies to cannot disagree. Later screens extend `is_filter_home` and
 //! `filter_lives`; nothing else here is per-screen.
 
+use crate::app::crafting::craft_visible;
 use crate::app::dev_item_picker::dev_item_visible;
 use crate::app::inventory::{INVENTORY_SLOT_ROWS, inventory_visible};
 use crate::app::stack_market::market_visible;
@@ -42,6 +43,9 @@ fn is_filter_home(mode: Mode) -> bool {
             | Mode::EquipSwap
             | Mode::TradeAction
             | Mode::StackMarket
+            | Mode::Craft
+            | Mode::PutDown
+            | Mode::TacticalItem
     )
 }
 
@@ -74,6 +78,7 @@ pub(crate) fn filter_lives(home: Mode, now: Mode) -> bool {
                     Mode::TradeQuantity | Mode::TradeProgramConfirm | Mode::ItemDescribe
                 )
                 | (Mode::StackMarket, Mode::ItemDescribe)
+                | (Mode::Craft, Mode::CraftQuantity)
         )
 }
 
@@ -158,6 +163,7 @@ impl App {
             }
             Mode::Inventory => Some(INVENTORY_SLOT_ROWS + inventory_visible(game, &filter).len()),
             Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
+            Mode::Craft => Some(craft_visible(game, &filter).len()),
             _ => None,
         }
     }

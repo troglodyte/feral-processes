@@ -1,17 +1,30 @@
 //! `Mode::PutDown` — the picker behind `y`, which sets one thing from the
 //! pack on the floor.
 
+use crate::app::list_filter::filter_matches;
 use crate::*;
 use feral_processes_engine::PutDownOption;
 
+/// Indices into `options` that `filter` leaves, by label.
+pub fn put_down_visible(options: &[PutDownOption], filter: &str) -> Vec<usize> {
+    filter_matches(options.iter().map(|o| o.label.as_str()), filter)
+}
+
 impl App {
-    /// The one list the keys and the renderer both read, so a row's shortcut
-    /// is the row the player sees.
+    /// The one list the keys and the renderer both read: what the filter
+    /// leaves, so a row's position is the row the player sees.
     pub fn put_down_rows(&self) -> Vec<PutDownOption> {
-        self.game
+        let options = self
+            .game
             .as_ref()
             .map(|g| g.put_down_options())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let visible = put_down_visible(&options, self.filter_text());
+        let mut options: Vec<Option<PutDownOption>> = options.into_iter().map(Some).collect();
+        visible
+            .into_iter()
+            .filter_map(|i| options[i].take())
+            .collect()
     }
 
     /// Refused here, with app-core's own sentences, where the engine has no
@@ -31,6 +44,9 @@ impl App {
     }
 
     pub(crate) fn handle_put_down_key(&mut self, key: GameKey) {
+        if self.take_filter_key(key) {
+            return;
+        }
         if key == GameKey::Esc {
             self.mode = Mode::Playing;
             return;

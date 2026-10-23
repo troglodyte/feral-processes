@@ -16,12 +16,14 @@ pub use app::building::{
     roster_rows,
 };
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
+pub use app::crafting::craft_visible;
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dev_item_picker::dev_item_visible;
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
+pub use app::floor_hands::put_down_visible;
 pub use app::group_menu::GroupMenuRow;
 pub use app::hub::{Hub, HubKind, HubPage, hub_of};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
@@ -44,6 +46,7 @@ pub use app::stack_market::{MarketVisible, market_visible};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
 pub use app::structure_hub::{StructureHub, structure_page};
 pub use app::tactical::prop_readout;
+pub use app::tactical::tactical_items_visible;
 pub use app::telemetry::append_records;
 pub use app::trade::{TradeVisible, trade_sellable, trade_visible};
 pub use feral_processes_engine::ProgramRole;

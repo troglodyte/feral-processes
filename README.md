@@ -25,15 +25,16 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 |---|---|
 | `hero.png` | `--template siege` |
 | `base.png` | `--template chains` |
-| `staff.png` | `--template chains --keys "B ] ] ] ] ]"` (base report, Staffing page) |
-| `research.png` | `--template chains --keys "b 9"` |
-| `social.png` | `--template bonds --keys "p Enter M Tab"` |
-| `manifest.png` | `--template bonds --keys "p Enter M"` |
+| `staff.png` | `--template chains --keys "b Down Down Down Down Down Down Down Down Down Enter"` (base report, Staffing page) |
+| `research.png` | `--template chains --keys "b Down Down Enter"` (base report, Research page) |
+| `social.png` | `--template bonds --keys "i Down Down Down Down Enter M Tab"` (Companions page, manifest Social face) |
+| `manifest.png` | `--template bonds --keys "i Down Down Down Down Enter M"` (Companions page, manifest) |
 | `report-overview.png` | `--template chains --keys "B"` |
-| `memories.png` | `--template bonds --keys "p Enter R"` |
-| `roster.png` | `--template bonds --keys "p Enter"` (party, Companions page) |
+| `memories.png` | `--template bonds --keys "i Down Down Down Down Enter R"` (Companions page, memories) |
+| `roster.png` | `--template bonds --keys "i Down Down Down Down Enter"` (inventory, Companions page) |
 | `downed.png` | `--template bonds --keys "D"` (inventory, Downed programs page) |
 | `inventory.png` | `--template bonds --keys "i Right"` (inventory, Items page) |
+| `list-filter.png` | `--template bonds --keys "i Right p l a t Down"` (Items page filtered by "plat") |
 | `towns.png` | `--template settlements` |
 | `world-map.png` | `--template world-map --keys "g"` |
 | `stack.png` | `--template stack` |
@@ -64,8 +65,8 @@ done
 grep -m1 '^version' Cargo.toml
 ```
 
-The counts on the page as of v0.18.32: 19 species, 107 routines, 82 items,
-50 structures, 50 contracts, 8 classes, 23 affixes, 22 perks.
+The counts on the page as of v0.19.37: 19 species, 107 routines, 82 items,
+39 structures, 50 contracts, 8 classes, 23 affixes, 22 perks.
 
 The root `README.md` on `main` is carved out of the doc-update obligation and is
 already stale on several of these; do not copy its numbers. `docs/manual.md` is

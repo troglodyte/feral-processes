@@ -25,7 +25,7 @@ it first. This plan does not repeat its behaviour list.
 - **Patterns.** Only existing ones are used: "plain structs owned in one
   place" and "shared pure function". No ADR is needed.
 
-## Decisions to confirm before Phase 1
+## Decisions (confirmed by the user, 2026-10-23)
 
 1. **"Trade" means `Mode::TradeAction`.** `Mode::Trade` is the picker for
    trader structures (`app/trade.rs:47`). The item rows and `trade_row`

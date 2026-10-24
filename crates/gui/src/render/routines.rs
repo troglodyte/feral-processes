@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 use feral_processes_engine::views::{
-    EtchedDiskView, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
+    BuiltRoutineRow, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
 };
 
 pub(super) fn draw_routine_target(
@@ -45,7 +45,7 @@ fn description_row(description: &str) -> Row {
 /// without a `Game` or a `Painter`.
 pub(super) fn routine_slot_rows(slots: &[RoutineSlotView], selected: usize) -> Vec<Row> {
     let mut rows = vec![text_row(
-        "Pick a filled slot to clear it — the disk is already spent — or an empty one to install.",
+        "Pick a filled slot to clear it - the routine is destroyed - or an empty one to install.",
     )];
     for (i, s) in slots.iter().enumerate() {
         // A fixed slot is tagged rather than left to refuse when pressed:
@@ -76,37 +76,21 @@ pub(super) fn draw_routines(
     draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The install picker's rows. The two trailing rows are a deliberate footer —
-/// a legend pinned below the list rather than scrolling with it — which is
-/// the one thing `popup_layout` is allowed to hold back here.
-pub(super) fn routine_install_rows(
-    disks: &[EtchedDiskView],
-    blanks: u32,
-    selected: usize,
-) -> Vec<Row> {
+/// The install picker's rows: the routines built at the Workbench and not
+/// yet in a slot.
+pub(super) fn routine_install_rows(built: &[BuiltRoutineRow], selected: usize) -> Vec<Row> {
     let mut rows = vec![text_row(
-        "Install which disk? Installing spends it — popping the routine back out later returns nothing.",
+        "Install which routine? Popping it back out later destroys it.",
     )];
-    if disks.is_empty() {
+    if built.is_empty() {
         rows.push(text_row(
-            "(you are carrying no etched disks — press [e] to burn one, or find one on a boss)",
+            "(nothing built - compile a routine at a Workbench first)",
         ));
     }
-    for (i, d) in disks.iter().enumerate() {
-        // Exclusive disks are marked because they are the ones a wrong
-        // choice cannot be undone on: an ordinary routine can be etched
-        // again for a blank, and this one cannot be etched at all.
-        let tag = if d.exclusive { "  ★ exclusive" } else { "" };
-        rows.push(item_row(
-            format!("{} ×{}{}", d.name, d.qty, tag),
-            i == selected,
-        ));
-        rows.push(description_row(&d.description));
+    for (i, b) in built.iter().enumerate() {
+        rows.push(item_row(b.name.clone(), i == selected));
+        rows.push(description_row(&b.description));
     }
-    rows.push(text_row(""));
-    rows.push(text_row(format!(
-        "[e] burn a blank with a routine you know    Blanks: {blanks}"
-    )));
     rows
 }
 
@@ -117,7 +101,7 @@ pub(super) fn draw_routine_install(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = routine_install_rows(&game.etched_disks_held(), game.blank_disks_held(), selected);
+    let rows = routine_install_rows(&game.built_routine_rows(), selected);
     draw_popup(
         "Install Routine",
         PopupSize::Large,
@@ -236,7 +220,7 @@ pub(super) fn draw_extract(
 ) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
-        "Break down which program? Extraction destroys it and teaches you one of its routines.",
+        "Break down which program? Extraction destroys it and gives you the Subroutines of one of its routines.",
     )];
     if !game.can_extract_routines() {
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
@@ -249,7 +233,9 @@ pub(super) fn draw_extract(
 }
 
 pub(super) fn extract_pick_rows(offered: &[ExtractableRoutineView], selected: usize) -> Vec<Row> {
-    let mut rows = vec![text_row("Learn which routine? The rest are lost with it.")];
+    let mut rows = vec![text_row(
+        "Take the Subroutines of which routine? The rest are lost with it.",
+    )];
     for (i, a) in offered.iter().enumerate() {
         let known = if a.known { " (already known)" } else { "" };
         rows.push(item_row(format!("{}{known}", a.name), i == selected));
@@ -294,7 +280,10 @@ pub(super) fn draw_extract_confirm(
         .map(|(_, a)| a.name.as_str())
         .collect();
     let mut rows = vec![
-        text_row(format!("Learn {} and destroy the program?", kept.name)),
+        text_row(format!(
+            "Take the Subroutines of {} and destroy the program?",
+            kept.name
+        )),
         text_row(""),
     ];
     if !lost.is_empty() {

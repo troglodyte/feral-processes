@@ -36,6 +36,9 @@ pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
+pub use app::routine_craft::{
+    BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft, subroutines_visible,
+};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
@@ -1711,6 +1714,17 @@ pub enum Mode {
     /// and the key read one call. Nothing is written until a row resolves,
     /// so Esc simply closes it.
     Siphon,
+    /// The Workbench's Build routine page: the six part rows, the name field
+    /// and Compile. The draft lives in `App::routine_draft`.
+    RoutineBuild,
+    /// The parts that fit one build row, with how many are held.
+    RoutineBuildPick,
+    /// Typing the routine's name.
+    RoutineBuildName,
+    /// The Workbench's Subroutines page: craft a part. Type to filter.
+    Subroutines,
+    /// The Workbench's Built routines page: routines waiting for a slot.
+    BuiltRoutines,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -2489,6 +2503,12 @@ impl Mode {
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
             | Mode::Siphon
+            // The Workbench's pages open from the map, `Siphon`'s reason.
+            | Mode::RoutineBuild
+            | Mode::RoutineBuildPick
+            | Mode::RoutineBuildName
+            | Mode::Subroutines
+            | Mode::BuiltRoutines
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
@@ -2793,6 +2813,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::WorkOrderPick | Mode::WorkOrderQuantity => Some(Mode::WorkOrders),
         Mode::StructureAssign => Some(Mode::Structures),
         Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
+        Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
         _ => None,
     }
 }
@@ -3265,6 +3286,8 @@ pub struct App {
     /// `Game::adjacent_structures` on every key, since the machine can be
     /// destroyed or walked away from while the screen is open.
     pub siphon: Option<Entity>,
+    /// The routine the Workbench's build page is designing.
+    pub routine_draft: RoutineDraft,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

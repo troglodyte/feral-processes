@@ -42,6 +42,7 @@ impl App {
             machine_recipe: None,
             splice_rig: None,
             siphon: None,
+            routine_draft: RoutineDraft::default(),
             mode: Mode::MainMenu,
             game: None,
             status_line: profile_warning,

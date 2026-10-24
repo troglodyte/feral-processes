@@ -314,6 +314,15 @@ impl Game {
             .collect()
     }
 
+    /// Whether `structure` is a bench whose hub carries the routine-crafting
+    /// pages: the `extracts_routines` flag, with its research done.
+    pub(crate) fn is_routine_bench(&self, structure: Entity) -> bool {
+        self.world
+            .get::<Structure>(structure)
+            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
+            .is_some_and(|def| def.extracts_routines && self.extraction_researched(def))
+    }
+
     /// The Workbench pages and the verbs behind them share one gate: nothing
     /// mid-fight or after the end, and a bench that extracts routines
     /// standing somewhere.

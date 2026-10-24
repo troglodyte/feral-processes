@@ -283,31 +283,9 @@ fn routine_install_extract_and_etch_return_to_routines_in_page() {
 }
 
 #[test]
-fn the_etch_detour_has_two_esc_paths() {
+fn the_etch_page_returns_to_routines_in_page() {
     let mut app = test_app(31017);
     teach_player_routines(&mut app, &["sandbox"]);
-    open_via_menu(&mut app, 'p', "Install a routine");
-    press(
-        &mut app,
-        &[
-            GameKey::Enter,
-            GameKey::Down,
-            GameKey::Enter,
-            GameKey::Char('e'),
-        ],
-    );
-    assert_eq!(app.mode, Mode::RoutineEtch);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
-        Mode::RoutineInstall,
-        "[e] detour returns to the slot"
-    );
-    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
-    assert_eq!(app.mode, Mode::RoutineTarget);
-    app.handle_key(GameKey::Esc);
-    assert_in_page(&app, Mode::PartyRoutines);
-
     open_via_menu(&mut app, 'p', "Etch a routine disk");
     assert_eq!(app.mode, Mode::RoutineEtch);
     app.handle_key(GameKey::Esc);

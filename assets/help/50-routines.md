@@ -18,11 +18,11 @@ Routines reach you five ways.
 - Innately. A species grants its own kit, unlocking a routine at a level named in its file.
 - Research. Pick a node and the base works it: your Research Stations feed it the Research Data
   and your benches make the goods it asks for. Several of its branches teach routines outright.
-- Routine Disks. Etch a blank disk with something you already know from the Routines page under i, then install
-  the disk into a slot on yourself or on any program you own. Uninstalling returns nothing — the
-  disk is spent at the install.
-- Extraction. Breaking a program down at a Workbench teaches you one of its routines and destroys
-  the program.
+- Building. Compile Subroutines at a Workbench and combine them into a routine of your own, then
+  install it into a slot on yourself or on any program you own. Popping it back out destroys it. See
+  [building routines](building-routines).
+- Extraction. Breaking a program down at a Workbench gives you the Subroutines of one of its routines
+  and destroys the program.
 
 In a fight, s calls one. It is paid for out of the invoker's own Power reserve, so a companion
 spends its own, and a routine on cooldown or priced above what that program is carrying greys out with

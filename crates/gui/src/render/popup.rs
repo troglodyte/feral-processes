@@ -1796,7 +1796,7 @@ mod tests {
             extract_pick_rows, routine_etch_rows, routine_install_rows, routine_slot_rows,
         };
         use feral_processes_engine::views::{
-            EtchedDiskView, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
+            BuiltRoutineRow, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
         };
         let id = |i: usize| format!("routine_{i}");
         let name = |i: usize| format!("Routine {i}");
@@ -1823,19 +1823,16 @@ mod tests {
                 "install",
                 routine_install_rows(
                     &(0..n)
-                        .map(|i| EtchedDiskView {
-                            ability: id(i),
+                        .map(|i| BuiltRoutineRow {
+                            id: id(i),
                             name: name(i),
                             description: text(i),
-                            exclusive: i % 3 == 0,
-                            qty: 1 + i as u32,
+                            parts: Vec::new(),
                         })
                         .collect::<Vec<_>>(),
-                    4,
                     selected,
                 ),
-                // The blank line and the `[e]` legend are pinned on purpose.
-                2,
+                0,
             ),
             (
                 "etch",

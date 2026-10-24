@@ -44,35 +44,25 @@ impl App {
         self.mode = Mode::RoutineInstall;
     }
 
-    /// Spends one etched disk out of cargo on the slot chosen in
-    /// `Mode::Routines`.
-    ///
-    /// `e` opens the etch screen instead, because this is exactly where a
-    /// player finds out they hold no disk of the routine they came for —
-    /// making them back out two screens to go and make one would be a menu
-    /// asking them to remember what it already knows.
+    /// Writes a built routine into the slot chosen in `Mode::Routines`.
+    /// Only unslotted built routines are listed; they are made at the
+    /// Workbench, so there is nothing to detour to from here.
     pub(crate) fn handle_routine_install_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Routines;
-            return;
-        }
-        if key == GameKey::Char('e') {
-            self.menu_selected = 0;
-            self.etch_return = Some(Mode::RoutineInstall);
-            self.mode = Mode::RoutineEtch;
             return;
         }
         let Some(entity) = self.pending_routine_holder else {
             self.mode = Mode::RoutineTarget;
             return;
         };
-        let Some(disks) = self.game.as_ref().map(|g| g.etched_disks_held()) else {
+        let Some(built) = self.game.as_ref().map(|g| g.built_routine_rows()) else {
             return;
         };
-        if let Some(idx) = self.selected_index(key, disks.len()) {
-            let ability = disks[idx].ability.clone();
+        if let Some(idx) = self.selected_index(key, built.len()) {
+            let id = built[idx].id.clone();
             let Some(game) = &mut self.game else { return };
-            let outcome = game.install_disk(entity, &ability);
+            let outcome = game.install_built(entity, &id);
             self.report(outcome);
             self.mode = Mode::Routines;
         }

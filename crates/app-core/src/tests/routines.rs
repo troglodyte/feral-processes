@@ -174,31 +174,6 @@ fn the_routines_page_opens_the_etch_screen_and_esc_comes_straight_back() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// The `[e]` shortcut is the other way in, and it has to unwind differently:
-/// a player who came here mid-install is still holding a slot to fill.
-#[test]
-fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
-    let mut app = test_app(66);
-    teach_player_routines(&mut app, &["sandbox"]);
-    open_via_menu(&mut app, 'p', "Install a routine");
-    pick_row(&mut app, 0); // You
-    pick_row(&mut app, 1); // the slot a level-1 player has free
-    assert_eq!(app.mode, Mode::RoutineInstall);
-    app.handle_key(GameKey::Char('e'));
-    assert_eq!(app.mode, Mode::RoutineEtch);
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::RoutineInstall);
-    // And the rest of the chain is undisturbed — the `[e]` detour must not
-    // consume the origin the Routines page left behind.
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Routines);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::RoutineTarget);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::PartyRoutines);
-}
-
 /// Standing on the extract confirm for the fixture's one program.
 fn on_the_extract_confirm(seed: u32) -> App {
     let mut app = app_owning_a_program_and_an_extractor(seed, &[FALLBACK_ABILITY_ID]);

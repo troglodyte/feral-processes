@@ -20,6 +20,10 @@ pub enum StructurePage {
     Splice,
     Grow,
     Rebuild,
+    /// The Workbench's routine-crafting pages (ADR 0029), in rail order.
+    Build,
+    Subroutines,
+    Built,
     Info,
 }
 
@@ -106,6 +110,10 @@ impl Game {
         page(self.is_splice_rig(e), StructurePage::Splice);
         page(self.is_growable_plot(e), StructurePage::Grow);
         page(self.is_awaiting_site(e), StructurePage::Rebuild);
+        let bench = self.is_routine_bench(e);
+        page(bench, StructurePage::Build);
+        page(bench, StructurePage::Subroutines);
+        page(bench, StructurePage::Built);
         pages.push(StructurePage::Info);
         pages
     }

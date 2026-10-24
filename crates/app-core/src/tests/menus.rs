@@ -114,8 +114,6 @@ fn mnemonic_letters_still_act() {
     app.handle_key(GameKey::Char('z'));
     assert_eq!(app.mode, Mode::RoutineInstall, "[z] is no installer key");
     assert_eq!(app.menu_selected, row);
-    app.handle_key(GameKey::Char('e'));
-    assert_eq!(app.mode, Mode::RoutineEtch, "installer [e]");
 }
 
 #[test]

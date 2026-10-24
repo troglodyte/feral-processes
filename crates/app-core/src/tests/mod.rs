@@ -55,6 +55,7 @@ mod refactor;
 mod refit_copy;
 mod research;
 mod respec;
+mod routine_craft;
 mod routines;
 mod saves;
 mod settlement;

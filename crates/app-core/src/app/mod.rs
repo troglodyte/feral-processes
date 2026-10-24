@@ -46,6 +46,7 @@ mod pointer;
 mod progression;
 mod refit_copy;
 pub mod rig_tool;
+pub(crate) mod routine_craft;
 mod routines;
 pub(crate) mod settlement_board;
 pub(crate) mod settlement_market;

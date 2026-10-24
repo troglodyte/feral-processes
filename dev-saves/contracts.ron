@@ -10,6 +10,10 @@
     // passes again rather than weakening the assertion.
     tick: 8944,
     difficulty: Forgiving,
+    crafted_routines: [
+        (id: "crafted/1", name: "Shred Group", parts: [Core(Damage, V1), Area(Group)]),
+    ],
+    next_crafted_id: 1,
     player: (
         phase_keys: (held: 3, misses: 0, story_complete: false),
         position: (0, 0),
@@ -112,7 +116,7 @@
         ],
         routines: [
             "decompile",
-            "cascade_overflow",
+            "crafted/1",
         ],
         field_buffs: [],
     ),

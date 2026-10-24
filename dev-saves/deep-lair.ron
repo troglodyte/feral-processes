@@ -2,6 +2,11 @@
     seed: 1786492847,
     tick: 6363,
     difficulty: Forgiving,
+    crafted_routines: [
+        (id: "crafted/1", name: "Shred Group", parts: [Core(Damage, V1), Area(Group)]),
+        (id: "crafted/2", name: "Rollback", parts: [Core(Heal, V3)]),
+    ],
+    next_crafted_id: 2,
     player: (
         position: (4, -2),
         hp: 535,
@@ -99,8 +104,8 @@
         ],
         routines: [
             "decompile",
-            "rollback_v3",
-            "cascade_overflow",
+            "crafted/2",
+            "crafted/1",
         ],
         field_buffs: [],
     ),

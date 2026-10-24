@@ -3,6 +3,11 @@
     tick: 5446,
     difficulty: Forgiving,
     game_over: None,
+    crafted_routines: [
+        (id: "crafted/1", name: "Shred Group", parts: [Core(Damage, V1), Area(Group)]),
+        (id: "crafted/3", name: "Emulate", parts: [Core(Emulate, V1)]),
+    ],
+    next_crafted_id: 3,
     player: (
         phase_keys: (held: 3, misses: 0, story_complete: false),
         position: (4, -6),
@@ -181,8 +186,8 @@
         ],
         routines: [
             "decompile",
-            "cascade_overflow",
-            "emulate",
+            "crafted/1",
+            "crafted/3",
         ],
         field_buffs: [],
         sorties: [],

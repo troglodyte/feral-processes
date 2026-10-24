@@ -3,6 +3,10 @@
     tick: 5422,
     difficulty: Forgiving,
     game_over: None,
+    crafted_routines: [
+        (id: "crafted/1", name: "Shred Group", parts: [Core(Damage, V1), Area(Group)]),
+    ],
+    next_crafted_id: 1,
     player: (
         phase_keys: (held: 3, misses: 0, story_complete: false),
         position: (-125, -128),
@@ -130,7 +134,7 @@
         ],
         routines: [
             "decompile",
-            "cascade_overflow",
+            "crafted/1",
         ],
         field_buffs: [],
         sorties: [],

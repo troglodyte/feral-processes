@@ -50,8 +50,8 @@ fn sound_crafted_routines(
         .partition(|r| validate_build(&r.parts, CRAFT_PART_CAP_MAX).is_ok());
     for routine in &dropped {
         warnings.push(format!(
-            "Built routine {} ({}) is malformed and was dropped.",
-            routine.name, routine.id
+            "Built routine {} is malformed and was dropped, and its slot is now empty.",
+            routine.name
         ));
     }
     let unslotted = saved_unslotted
@@ -1602,8 +1602,11 @@ impl Game {
             &mut load_warnings,
         );
         ability_db.set_crafted(&crafted_routines);
-        let (player_routines, dropped_player_routines) =
+        let (player_routines, mut dropped_player_routines) =
             recognized_routines(&data.player.routines, &ability_db);
+        // A dropped built routine was already reported by name above; its
+        // raw id means nothing to the player.
+        dropped_player_routines.retain(|id| !id.starts_with(CRAFT_ID_PREFIX));
 
         let mut world = World::new();
         world.insert_resource(ability_db);
@@ -2268,8 +2271,9 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(&c.species)
             .cloned()?;
-        let (routines, dropped_routines) =
+        let (routines, mut dropped_routines) =
             recognized_routines(&c.routines, self.world.resource::<AbilityDb>());
+        dropped_routines.retain(|id| !id.starts_with(CRAFT_ID_PREFIX));
         if !dropped_routines.is_empty() {
             self.log(format!(
                 "{} carried {} — no longer available, and the slot is now empty.",

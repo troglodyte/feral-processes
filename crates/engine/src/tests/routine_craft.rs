@@ -852,6 +852,15 @@ fn a_malformed_build_is_dropped_on_load_with_its_slot_and_listing() {
     assert!(!state.unslotted.contains(&bad));
     assert!(!held_ids(&loaded, loaded.player_entity()).contains(&bad));
     assert!(held_ids(&loaded, loaded.player_entity()).contains(&good));
+    let log = loaded.message_log(20);
+    assert!(
+        log.iter().any(|e| e.text.contains("Broken is malformed")),
+        "the drop is reported by name: {log:?}"
+    );
+    assert!(
+        log.iter().all(|e| !e.text.contains(&bad)),
+        "no load message shows a raw built-routine id: {log:?}"
+    );
 }
 
 #[test]

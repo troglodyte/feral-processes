@@ -1,6 +1,6 @@
 # 0029 Player routines are compiled from a Rust part catalogue
 
-- Status: Agreed
+- Status: Accepted (0.20.0)
 - Decided by: the user, 2026-10-24
 - Date: 2026-10-24
 - Pattern: Builder (parts compiled into a plain value)

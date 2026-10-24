@@ -96,7 +96,7 @@ Do not duplicate between them; point instead.
 | [0026](0026-no-ci-manual-releases.md) | No CI; releases are manual per platform | Accepted (standing) | user (CLAUDE.md) | — |
 | [0027](0027-refusals-are-typed-per-feature.md) | Refusals are typed per feature | Proposed | Claude — proposed, awaiting the user | Refusal enum |
 | [0028](0028-announcements-fire-on-a-crossing.md) | Announcements fire on a crossing | Proposed | Claude — proposed, awaiting the user | Edge trigger |
-| [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | Player routines are compiled from a Rust part catalogue | Agreed | the user, 2026-10-24 | Builder |
+| [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | Player routines are compiled from a Rust part catalogue | Accepted (0.20.0) | the user, 2026-10-24 | Builder |
 
 ## Pattern index
 

@@ -1,8 +1,8 @@
 # Routines built from parts
 
-**Status:** Approved by the user 2026-10-24. ADR
+**Status:** Shipped in 0.20.0 (approved by the user 2026-10-24). ADR
 [0029](../../adr/0029-player-routines-are-compiled-from-a-rust-part-catalogue.md)
-is Agreed. Plan: `docs/superpowers/plans/2026-10-24-routine-crafting.md`; the work
+is Accepted. Plan: `docs/superpowers/plans/2026-10-24-routine-crafting.md`; the work
 follows the spec-and-plan pipeline with one release at the end.
 
 Builder check run; its questions are answered below, and the three that were

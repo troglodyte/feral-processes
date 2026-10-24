@@ -53,6 +53,18 @@ impl ItemId {
         self.0.strip_prefix(ETCHED_DISK_PREFIX)
     }
 
+    /// The id of the item that is one Subroutine (a part of a built
+    /// routine) — what `ItemDb::synthesise_parts` derives for it.
+    pub fn part(part: &crate::routine_craft::Subroutine) -> Self {
+        ItemId(format!("{PART_ITEM_PREFIX}{}", part.key()))
+    }
+
+    /// The part this item is, or `None` if it is not one — the inverse of
+    /// `part`.
+    pub fn part_of(&self) -> Option<crate::routine_craft::Subroutine> {
+        crate::routine_craft::Subroutine::from_key(self.0.strip_prefix(PART_ITEM_PREFIX)?)
+    }
+
     /// The id of the carrier item holding `tool`'s knowledge — the item
     /// `Game::forge_tool` grants and `Game::install_tool` spends.
     /// `etched`'s own reason: a synthetic id with no `.ron` behind it, so a
@@ -74,6 +86,9 @@ impl ItemId {
 /// because it is not an id — it is the scheme every etched disk's id is
 /// built from, and `ids` is a list of specific shipped items.
 pub const ETCHED_DISK_PREFIX: &str = "etched_";
+
+/// What `ItemId::part` puts in front of a part's key.
+pub const PART_ITEM_PREFIX: &str = "part_";
 
 /// What `ItemId::tool` puts in front of a tool id — `ETCHED_DISK_PREFIX`'s
 /// own reason.

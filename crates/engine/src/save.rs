@@ -1871,6 +1871,16 @@ pub struct SaveData {
     /// discovered before there was anything to discover.
     #[serde(default)]
     pub discovered_routines: Vec<crate::abilities::AbilityId>,
+    /// Every routine the player has built, slotted or not — see
+    /// `resources::CraftedRoutines`. Part items ride in the inventory.
+    #[serde(default)]
+    pub crafted_routines: Vec<crate::routine_craft::CraftedRoutine>,
+    /// The built routines not in any slot, by id.
+    #[serde(default)]
+    pub unslotted_routines: Vec<crate::abilities::AbilityId>,
+    /// The counter the next `crafted/<n>` id is minted from.
+    #[serde(default)]
+    pub next_crafted_id: u32,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -2184,7 +2194,12 @@ pub struct SaveData {
 /// 37 → 38: configurable machines. `StructureSave::recipe`, `RuinSave::recipe`
 /// and `BuildSiteSave::recipe` are written and 16 structure kinds are gone; a
 /// v37 base would load with its production structures missing.
-pub const SAVE_FORMAT_VERSION: u32 = 38;
+///
+/// 38 → 39: routine crafting (ADR 0029). `SaveData::{crafted_routines,
+/// unslotted_routines, next_crafted_id}` are written and a `crafted/<n>` id
+/// may sit in any routine slot; a v38 file would load with its slots naming
+/// nothing and its etched disks unusable.
+pub const SAVE_FORMAT_VERSION: u32 = 39;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2511,6 +2526,9 @@ mod tests {
             known_tools: Vec::new(),
             emulation_images: Vec::new(),
             discovered_routines: Vec::new(),
+            crafted_routines: Vec::new(),
+            unslotted_routines: Vec::new(),
+            next_crafted_id: 0,
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),

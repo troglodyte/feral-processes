@@ -171,7 +171,10 @@ impl Game {
         self.apply_creation_identity(choice);
         self.apply_creation_stats(choice);
         self.apply_creation_kit(choice);
-        crate::abilities::install_starter(self, choice.routine.as_ref());
+        match &choice.routine {
+            Some(_) => crate::abilities::install_starter(self, choice.routine.as_ref()),
+            None => self.grant_starting_routine(),
+        }
         self.apply_creation_perks(choice);
     }
 

@@ -393,7 +393,7 @@ fn the_filter_list_is_a_screenful_and_not_a_catalogue_dump() {
     let game = Game::new(2214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let listed = game.filterable_items().len();
     assert!(
-        (20..=200).contains(&listed),
+        (20..=300).contains(&listed),
         "the shipped catalogue offers {listed} filter rows"
     );
 }

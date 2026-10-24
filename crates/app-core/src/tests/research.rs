@@ -318,7 +318,10 @@ fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
         .map(|n| n.id)
         .collect();
     assert!(
-        !ids.is_empty() && ids.iter().all(|id| id.starts_with("routine/")),
+        !ids.is_empty()
+            && ids.iter().all(|id| {
+                id.starts_with("routine/") || id.starts_with("part/") || id.starts_with("capacity/")
+            }),
         "an open tree must list only routine nodes: {ids:?}"
     );
     assert!(
@@ -355,7 +358,11 @@ fn routine_research_graph_stepping_and_enter_stay_in_the_routine_tree() {
     let landed = ids
         .get(app.menu_selected)
         .expect("the graph cursor still indexes a listed routine node");
-    assert!(landed.starts_with("routine/"));
+    assert!(
+        landed.starts_with("routine/")
+            || landed.starts_with("part/")
+            || landed.starts_with("capacity/")
+    );
 
     app.handle_key(GameKey::Enter);
     assert_eq!(

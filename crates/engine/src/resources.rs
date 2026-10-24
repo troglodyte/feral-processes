@@ -248,6 +248,24 @@ impl ActiveResearch {
 #[derive(Resource, Default)]
 pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 
+/// The routines the player has built (ADR 0029) and where they stand.
+///
+/// `built` is every routine that exists, slotted or not; `unslotted` is the
+/// ids among them waiting on the Built routines page. A built routine is in
+/// exactly one place, and `Game::sync_crafted` rebuilds `AbilityDb`'s
+/// crafted tier from `built` after every change. `next_id` only grows, so an
+/// id (`crafted/<n>`) is never reused for a different routine.
+///
+/// Which Subroutines are known and how many parts a routine may hold are
+/// both derived from `Research` (`Game::subroutine_known`,
+/// `Game::part_cap`), so neither has a second copy here to drift.
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct CraftedRoutines {
+    pub built: Vec<crate::routine_craft::CraftedRoutine>,
+    pub unslotted: Vec<crate::abilities::AbilityId>,
+    pub next_id: u32,
+}
+
 /// Which tools the player has researched and may forge — `KnownRoutines`'
 /// own rung of the tool acquisition chain (spec decision 6). Written by
 /// exactly one thing, `Game::grant_research_knowledge` (a node's `unlocks_tools`).

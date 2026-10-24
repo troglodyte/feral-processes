@@ -58,6 +58,7 @@ pub(crate) mod refit;
 pub(crate) mod reinforcement;
 pub(crate) mod respec;
 pub(crate) mod route;
+pub(crate) mod routine_craft;
 pub(crate) mod routines;
 pub(crate) mod settlement_footprint;
 pub(crate) mod settlement_growth;

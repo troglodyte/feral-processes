@@ -2981,7 +2981,7 @@ fn no_two_shipped_stock_items_share_a_tag() {
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut checked = 0;
     for def in db.all() {
-        if def.id.etched_ability().is_some() {
+        if def.id.etched_ability().is_some() || def.id.part_of().is_some() {
             continue;
         }
         if !matches!(

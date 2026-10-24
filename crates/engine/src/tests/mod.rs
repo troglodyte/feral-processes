@@ -107,6 +107,7 @@ mod respec;
 mod respite;
 mod rig_tool;
 mod routes;
+mod routine_craft;
 mod routine_tree;
 mod routines;
 mod ruins;

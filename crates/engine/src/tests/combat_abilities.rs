@@ -477,8 +477,11 @@ fn the_player_has_no_abilities_until_they_research_one() {
         .collect();
     assert_eq!(
         ids,
-        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
-        "the player starts with only the pre-installed decompile — everything else is \
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "crafted/1".to_string()
+        ],
+        "the player starts with decompile and the built Patch — everything else is \
          what the research is selling"
     );
 }
@@ -716,7 +719,11 @@ fn a_save_round_trip_preserves_the_players_abilities() {
         .into_iter()
         .map(|a| a.id)
         .collect();
-    assert_eq!(before.len(), 3, "decompile, priority_boost and hot_patch");
+    assert_eq!(
+        before.len(),
+        4,
+        "decompile, the built Patch, priority_boost and hot_patch"
+    );
 
     let path = std::env::temp_dir().join(format!(
         "feral_player_routines_save_{}.bin",
@@ -751,8 +758,11 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
             .into_iter()
             .map(|a| a.id)
             .collect::<Vec<_>>(),
-        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
-        "the player gets decompile, not the companion fallback"
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "crafted/1".to_string()
+        ],
+        "the player gets decompile and Patch, not the companion fallback"
     );
 }
 

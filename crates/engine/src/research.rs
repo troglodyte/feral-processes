@@ -248,6 +248,9 @@ impl ResearchDb {
         for def in crate::routine_tree::synthesise_nodes(abilities) {
             db.nodes.insert(def.id.clone(), def);
         }
+        for def in crate::routine_tree::synthesise_part_nodes() {
+            db.nodes.insert(def.id.clone(), def);
+        }
         // One node per research-only affix, merged on the same terms: before
         // the fixpoint, so a node's `requires` (another affix node) is
         // validated, and a cycle among them is caught by the Kahn pass.
@@ -653,7 +656,7 @@ mod tests {
         );
         let synthesised = db
             .all()
-            .filter(|d| d.tree == ResearchTree::Routines)
+            .filter(|d| d.tree == ResearchTree::Routines && d.teaches.is_some())
             .count();
         let eligible = abilities
             .all()

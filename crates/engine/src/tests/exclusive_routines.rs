@@ -137,13 +137,13 @@ fn etching_an_exclusive_routine_is_refused_with_a_reason() {
     );
 }
 
-/// Every exclusive routine names at least one real boss, that boss's claim
-/// survives onto the synthesised disk, and the chances are probabilities.
+/// Every exclusive routine names at least one real boss, takes apart into
+/// parts the boss can pay, and the chances are probabilities.
 ///
-/// The declaration half. `killing_a_boss_can_drop_its_signature_disk`
+/// The declaration half. `killing_a_boss_can_drop_its_signature_parts`
 /// below is the half that actually runs `award_loot`.
 #[test]
-fn a_boss_drops_the_disks_its_abilities_claim() {
+fn a_boss_drops_the_parts_its_abilities_claim() {
     let game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<AbilityDb>();
 
@@ -183,27 +183,23 @@ fn a_boss_drops_the_disks_its_abilities_claim() {
         );
     }
 
-    // And the synthesised disk carries the claim through to the item db,
-    // which is what `equipment_drops_for` actually reads.
-    for (ability, species) in &claims {
-        let disk = ItemId::etched(ability);
-        let item = game
-            .world
-            .resource::<ItemDb>()
-            .get(disk.as_str())
-            .unwrap_or_else(|| panic!("no etched disk was synthesised for {ability}"));
-        let sources = item
-            .droppable
-            .as_ref()
-            .unwrap_or_else(|| panic!("{}'s droppable did not carry across", disk));
+    // And what the boss pays is the routine's parts, never a disk.
+    for (ability, _) in &claims {
+        let def = game.world.resource::<AbilityDb>().get(ability).unwrap();
         assert!(
-            sources.iter().any(|(id, _)| id == species),
-            "{disk} does not list {species} as a source"
+            crate::routine_craft::decompose(def).is_some_and(|parts| !parts.is_empty()),
+            "{ability} takes apart into nothing, so its boss has nothing to drop"
+        );
+        let disk = ItemId::etched(ability);
+        let item = game.world.resource::<ItemDb>().get(disk.as_str()).unwrap();
+        assert!(
+            item.droppable.is_none(),
+            "{disk} still drops off a boss as a disk"
         );
     }
 }
 
-/// The other half: `award_loot` actually pays the disk out.
+/// The other half: `award_loot` actually pays the parts out.
 ///
 /// The 0.35 chance is forced to certainty with a `DropBoost` field buff
 /// rather than by repeating the kill until it lands — `equipment_drops_for`
@@ -212,7 +208,7 @@ fn a_boss_drops_the_disks_its_abilities_claim() {
 /// test of the wiring rather than of the RNG, which is what the declaration
 /// half above already can't reach.
 #[test]
-fn killing_a_boss_can_drop_its_signature_disk() {
+fn killing_a_boss_can_drop_its_signature_parts() {
     let mut game = Game::new(9012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (boss, wanted) = {
         let db = game.world.resource::<AbilityDb>();
@@ -243,18 +239,28 @@ fn killing_a_boss_can_drop_its_signature_disk() {
     let corpse = game
         .spawn_wild_creature(&boss, pos.x + 1, pos.y)
         .expect("the boss species ships with the game");
-    assert_eq!(
-        game.etched_disks_of(&wanted),
-        0,
-        "the disk was in cargo before the boss even died"
+    let parts = {
+        let def = game.world.resource::<AbilityDb>().get(&wanted).unwrap();
+        crate::routine_craft::decompose(def).unwrap()
+    };
+    assert!(
+        parts.iter().all(|p| game.parts_held(p) == 0),
+        "the parts were in cargo before the boss even died"
     );
 
     game.award_loot(corpse, 0.0);
 
+    for (part, count) in crate::routine_craft::parts_used(&parts) {
+        assert!(
+            game.parts_held(&part) >= count,
+            "killing {boss} paid no {} for {wanted}, so the boss door is shut",
+            part.label()
+        );
+    }
     assert_eq!(
         game.etched_disks_of(&wanted),
-        1,
-        "killing {boss} paid no {wanted} disk, so the boss door is shut"
+        0,
+        "a boss paid the disk as well as the parts"
     );
     assert!(
         !game.knows_routine(&wanted),
@@ -263,11 +269,9 @@ fn killing_a_boss_can_drop_its_signature_disk() {
 }
 
 /// Extraction is the one way an installed exclusive routine can be moved,
-/// and it must hand back the *disk* rather than the knowledge — otherwise
-/// buy one, install it, break the program down, and you can etch that
-/// routine forever.
+/// and it hands back its *parts*, never the disk or the knowledge.
 #[test]
-fn extracting_an_exclusive_routine_returns_the_disk_and_teaches_nothing() {
+fn extracting_an_exclusive_routine_returns_its_parts_and_teaches_nothing() {
     let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let id = exclusive_ids(&game)[0].clone();
     build_extraction_bench(&mut game);
@@ -283,13 +287,17 @@ fn extracting_an_exclusive_routine_returns_the_disk_and_teaches_nothing() {
         .into_iter()
         .position(|row| row.ability == id)
         .expect("the routine is installed, so it is extractable");
+    let parts = game.parts_of_routine(&id);
     game.extract_routine(pet, index).unwrap();
 
     assert_eq!(
         game.etched_disks_of(&id),
-        1,
-        "breaking the program down must pry the disk back out"
+        0,
+        "breaking the program down no longer pries a disk out"
     );
+    for (part, count) in crate::routine_craft::parts_used(&parts) {
+        assert!(game.parts_held(&part) >= count, "{}", part.label());
+    }
     assert!(
         !game.knows_routine(&id),
         "extraction taught an exclusive routine — the duplication hole is open"
@@ -300,12 +308,9 @@ fn extracting_an_exclusive_routine_returns_the_disk_and_teaches_nothing() {
     );
 }
 
-/// The ordinary branch is untouched by the one above it: an ordinary
-/// routine still teaches and still hands back no disk. Without this, the
-/// exclusive branch could have swallowed both cases and every test of the
-/// old behaviour would still pass through `install_routine_for_test`.
+/// An ordinary routine takes apart the same way: parts, no disk.
 #[test]
-fn extracting_an_ordinary_routine_still_discovers_and_yields_no_disk() {
+fn extracting_an_ordinary_routine_yields_parts_and_no_disk() {
     let (mut game, medic) = game_with_two_ability_companion();
     build_extraction_bench(&mut game);
     let row = game.extractable_routines(medic).into_iter().next().unwrap();
@@ -315,15 +320,12 @@ fn extracting_an_ordinary_routine_still_discovers_and_yields_no_disk() {
         "this fixture's kit went exclusive; pick another"
     );
 
+    let parts = game.parts_of_routine(&ability);
     game.extract_routine(medic, 0).unwrap();
 
-    assert!(
-        game.world
-            .resource::<crate::resources::DiscoveredRoutines>()
-            .0
-            .contains(&ability),
-        "the ordinary branch stopped discovering"
-    );
+    for (part, count) in crate::routine_craft::parts_used(&parts) {
+        assert!(game.parts_held(&part) >= count, "{}", part.label());
+    }
     assert_eq!(
         game.etched_disks_of(&ability),
         0,

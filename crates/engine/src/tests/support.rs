@@ -2747,6 +2747,7 @@ pub(super) fn give_disks(game: &mut Game, qty: u32) {
 /// Distinct from `install_routine_for_test`, which arranges those too. Use
 /// this one when the disk accounting is the point of the test.
 pub(super) fn fit_routine(game: &mut Game, entity: Entity, ability: &str) {
+    make_room_for_routine(game, entity);
     game.etch_disk(ability)
         .unwrap_or_else(|e| panic!("etching {ability}: {e}"));
     game.install_disk(entity, ability)
@@ -2769,6 +2770,7 @@ pub(super) fn give_etched_disks(game: &mut Game, ability: &str, qty: u32) {
 /// hands its disk over directly instead — the same two steps the game does,
 /// minus the boss.
 pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability: &str) {
+    make_room_for_routine(game, entity);
     if game.routine_is_exclusive(ability) {
         give_etched_disks(game, ability, 1);
     } else {
@@ -2779,6 +2781,21 @@ pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability:
     }
     game.install_disk(entity, ability)
         .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
+}
+
+/// Frees a slot on a full `entity` by destroying the first built routine it
+/// holds: a new game starts with Decompile and Patch (a built Heal), so a
+/// test that wants a second routine on the player has no free slot.
+pub(super) fn make_room_for_routine(game: &mut Game, entity: Entity) {
+    let held = game.world.get::<Routines>(entity).unwrap().0.clone();
+    if held.len() < game.routine_slots(entity) {
+        return;
+    }
+    if let Some(built) = held.iter().find(|id| id.starts_with("crafted/")) {
+        let kept: Vec<String> = held.iter().filter(|id| *id != built).cloned().collect();
+        game.world.entity_mut(entity).insert(Routines(kept));
+        game.destroy_built(std::slice::from_ref(built));
+    }
 }
 
 /// Empties `entity`'s routine slots outright.

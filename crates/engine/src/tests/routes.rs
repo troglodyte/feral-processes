@@ -84,7 +84,7 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
 fn save_format_version_is_unchanged_by_routes() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        38,
+        39,
         "routes add no bump of their own; a changed version is a deliberate \
          bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

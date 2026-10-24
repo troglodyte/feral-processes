@@ -8,7 +8,6 @@
 use crate::abilities::AbilityId;
 use crate::battle::DamageRange;
 use crate::components::Hopper;
-use crate::game::routines::RoutineTaken;
 use crate::items::DownedProgram;
 use crate::species::SpeciesId;
 use crate::tools::{ToolCategory, ToolDef, ToolId};
@@ -452,10 +451,7 @@ impl Game {
             // refused too. Discovering one would have no node to research
             // toward, a dead end a shipped kit cannot reach (no shipped
             // species names any of the three).
-            if !crate::routine_tree::gets_node(db, ability_def) {
-                continue;
-            }
-            if self.family_discovered(&crate::routine_tree::family(ability_def)) {
+            if !Self::can_be_taken_apart(ability_def) {
                 continue;
             }
             if pool.contains(&id) {
@@ -464,6 +460,17 @@ impl Game {
             pool.push(id);
         }
         pool
+    }
+
+    /// Whether a downed program's `def` may be drawn for its parts: not the
+    /// permanent routine, not a passive, nothing one-of-a-kind (an exclusive
+    /// routine comes off its boss, not off a downed program), and something
+    /// `decompose` knows how to take apart.
+    fn can_be_taken_apart(def: &AbilityDef) -> bool {
+        !def.exclusive
+            && !crate::routine_tree::is_permanent(&def.id)
+            && def.triggers.is_none()
+            && crate::routine_craft::decompose(def).is_some()
     }
 
     /// `routine_candidate_ids` for a downed program — see that function.
@@ -490,7 +497,7 @@ impl Game {
     ) -> Result<(), String> {
         let pool = self.routine_candidates(program);
         if pool.is_empty() {
-            return Err("nothing unfamiliar to recover".to_string());
+            return Err("nothing to take apart".to_string());
         }
         let weights: Vec<u32> = pool
             .iter()
@@ -521,19 +528,15 @@ impl Game {
 
         let label = self.downed_program_label(program);
         let ability_name = self.ability_display_name(&picked);
-        match self.take_routine(&picked) {
-            RoutineTaken::DiskPopped => self.log_kind(
-                MessageKind::Loot,
-                format!(
-                    "You read {label} out with the {}: its {ability_name} disk comes back intact.",
-                    tool.name
-                ),
+        let parts = self.parts_of_routine(&picked);
+        self.take_routine(&parts);
+        self.log_kind(
+            MessageKind::Loot,
+            format!(
+                "You read {label} out with the {}: {ability_name} comes apart into its parts.",
+                tool.name
             ),
-            RoutineTaken::Discovered => self.log_kind(
-                MessageKind::Loot,
-                "Recovered an unfamiliar routine — see routine research.".to_string(),
-            ),
-        }
+        );
 
         let ticks = self.extraction_ticks(tool);
         for _ in 0..ticks {

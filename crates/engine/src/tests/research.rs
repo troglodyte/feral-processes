@@ -2087,7 +2087,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
 fn save_format_version_is_unchanged_by_research_projects() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        38,
+        39,
         "these fields add no bump of their own; a changed version is a \
          deliberate bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
@@ -3097,6 +3097,63 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
     assert!(
         game.world.get::<Racked>(node).is_none(),
         "the station must never read as a rack"
+    );
+}
+
+/// A subject spent in study is gone for good, and so are the routines it
+/// built (ADR 0029). The downed record it becomes carries no built routine
+/// either: the id would name nothing.
+#[test]
+fn completing_a_subject_gated_project_destroys_the_subjects_built_routines() {
+    let mut game = Game::new(4503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    set_zone(&mut game, 2);
+    let program = spawn_tamed(&mut game, 10, 3);
+    spawn_machine_at(&mut game, "quarantine_rack", 6, 2);
+    let built = "crafted/7".to_string();
+    game.world
+        .resource_mut::<crate::resources::CraftedRoutines>()
+        .built
+        .push(crate::routine_craft::CraftedRoutine {
+            id: built.clone(),
+            name: "Mender".into(),
+            parts: vec![crate::routine_craft::Subroutine::Core(
+                crate::routine_craft::Core::Heal,
+                crate::routine_craft::Version::V1,
+            )],
+        });
+    game.sync_crafted();
+    game.world.get_mut::<Routines>(program).unwrap().0 = vec![built.clone()];
+    pin_subject_at_pen(&mut game, program, node);
+    game.discover_research("paging");
+    game.select_research("paging").unwrap();
+    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_progress(&mut game, "paging");
+
+    game.tick();
+
+    assert!(game.is_researched("paging"));
+    assert!(
+        game.world.get_entity(program).is_err(),
+        "the subject is spent"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::CraftedRoutines>()
+            .built
+            .iter()
+            .all(|r| r.id != built),
+        "its built routine went with it"
+    );
+    assert!(game.world.resource::<AbilityDb>().get(&built).is_none());
+    let held = game
+        .world
+        .get::<crate::components::StudyYield>(node)
+        .and_then(|y| y.0.clone())
+        .expect("the program is held at the station");
+    assert_eq!(
+        held.carried, None,
+        "a built routine is never a carried prize"
     );
 }
 

@@ -7,7 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
-use crate::components::{Hopper, HopperEntry, PowerReserve, Tools};
+use crate::components::{Hopper, HopperEntry, Tools};
 use crate::items::DownedProgram;
 use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -2426,12 +2426,13 @@ fn a_carried_routine_heads_the_pool_and_never_doubles_the_kit() {
     );
 }
 
+/// Parts stack, so knowing a routine does not take it out of the pool.
 #[test]
-fn a_routine_already_known_leaves_the_pool() {
+fn a_known_routine_stays_in_the_pool() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 30);
-    let first = game
-        .routine_candidates(&program)
+    let before = game.routine_candidates(&program);
+    let first = before
         .first()
         .cloned()
         .expect("the scrapper declares a routine");
@@ -2440,20 +2441,13 @@ fn a_routine_already_known_leaves_the_pool() {
         .0
         .insert(first.clone());
 
-    assert!(
-        !game.routine_candidates(&program).contains(&first),
-        "a known routine is still being offered"
-    );
+    assert_eq!(game.routine_candidates(&program), before);
 }
 
-/// `routine_candidate_ids` must filter through `routine_tree::gets_node` —
-/// the same gate `synthesise_nodes` uses to decide which abilities get a
-/// research node at all — not merely the narrower `routine_is_exclusive`
-/// check it used to run on its own. A **passive** ability
-/// (`triggers.is_some()`) gets no node, so a modded species kit naming one
-/// must never be offered: discovering it would have nowhere to research
-/// toward, a dead end no shipped kit can produce (no shipped species
-/// declares a passive in its `abilities:`).
+/// A **passive** ability (`triggers.is_some()`) is never taken apart, so a
+/// modded species kit naming one must never be offered: it is not run, so
+/// there is nothing to build from it (no shipped species declares a passive
+/// in its `abilities:`).
 #[test]
 fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
     const FIXTURE_PASSIVE: &str = r#"(
@@ -2499,38 +2493,14 @@ fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
         !game
             .routine_candidates(&program)
             .contains(&"fixture_passive".to_string()),
-        "a passive ability must never be offered — it has no research node to discover toward"
+        "a passive ability must never be offered — it is not a routine anyone runs"
     );
 }
 
-/// The refusal, asserted the way every other refusal in this feature is:
-/// nothing spent. A program consumed for a routine the player already had is
-/// the exact waste `extract_routine`'s own "already known" check exists to
-/// prevent.
 #[test]
-fn a_routine_tool_with_nothing_left_to_teach_refuses_and_spends_nothing() {
+fn a_routine_tool_hands_over_parts_and_consumes_the_program() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 30);
-    for id in game.routine_candidates(&program) {
-        game.world.resource_mut::<KnownRoutines>().0.insert(id);
-    }
-    give_downed_program(&mut game, program);
-    install_routine_tool(&mut game);
-    let tool = routine_tool_id(&game);
-    let ticks_before = ticks_elapsed(&game);
-
-    let refusal = game.extract_program(0, &tool);
-
-    assert!(refusal.is_err(), "it should have refused");
-    assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
-    assert_eq!(ticks_elapsed(&game), ticks_before, "time was spent");
-}
-
-#[test]
-fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
-    let mut game = new_test_game();
-    let program = test_program("scrapper", 30);
-    let pool = game.routine_candidates(&program);
     give_downed_program(&mut game, program);
     install_routine_tool(&mut game);
     let tool = routine_tool_id(&game);
@@ -2541,13 +2511,17 @@ fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
         game.downed_program_rows().is_empty(),
         "the program survived"
     );
+    let total: u32 = crate::routine_craft::Subroutine::all()
+        .iter()
+        .map(|p| game.parts_held(p))
+        .sum();
+    assert!(total > 0, "no part came out of the program");
     assert!(
-        pool.iter().any(|id| game
-            .world
+        game.world
             .resource::<crate::resources::DiscoveredRoutines>()
             .0
-            .contains(id)),
-        "nothing from the pool was discovered"
+            .is_empty(),
+        "extraction discovers nothing any more"
     );
 }
 
@@ -2619,13 +2593,14 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         install_routine_tool(&mut game);
         let tool = routine_tool_id(&game);
         game.extract_program(0, &tool).expect("the extraction runs");
+        let recent: Vec<String> = game
+            .message_log(5)
+            .iter()
+            .map(|line| line.text.clone())
+            .collect();
         for id in pool {
-            let discovered = game
-                .world
-                .resource::<crate::resources::DiscoveredRoutines>()
-                .0
-                .contains(&id);
-            if discovered || held(&game, &ItemId::etched(&id)) > 0 {
+            let name = game.ability_display_name(&id);
+            if recent.iter().any(|line| line.contains(&name)) {
                 *counts.entry(id.to_string()).or_default() += 1;
             }
         }
@@ -2652,11 +2627,9 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
     );
 }
 
-/// The tool door's discovery log line names no routine — extraction opens a
-/// family, it does not teach one, and the next rung may sit behind a sector
-/// the player has not reached (spec §3).
+/// The tool door's log line names the routine it took apart.
 #[test]
-fn the_routine_tool_log_line_does_not_name_the_routine() {
+fn the_routine_tool_log_line_names_the_routine_taken_apart() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 30);
     let pool = game.routine_candidates(&program);
@@ -2674,65 +2647,15 @@ fn the_routine_tool_log_line_does_not_name_the_routine() {
     assert!(
         recent
             .iter()
-            .any(|line| line.contains("Recovered an unfamiliar routine")),
-        "the verbatim discovery line must be logged: {recent:?}"
+            .any(|line| line.contains("comes apart into its parts")),
+        "the log should say a routine came apart: {recent:?}"
     );
-    for id in &pool {
-        let name = game.ability_display_name(id);
-        assert!(
-            recent.iter().all(|line| !line.contains(&name)),
-            "{name} must not appear in the log: {recent:?}"
-        );
-    }
-}
-
-/// Every family a program's pool could offer already discovered is nothing
-/// left to recover — refused before the program, the tool or anything else
-/// moves.
-#[test]
-fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
-    let mut game = new_test_game();
-    let program = test_program("scrapper", 30);
-    let initial_pool = game.routine_candidates(&program);
     assert!(
-        !initial_pool.is_empty(),
-        "fixture assumption: scrapper's kit offers something at level 30"
-    );
-    for id in &initial_pool {
-        game.world
-            .resource_mut::<crate::resources::DiscoveredRoutines>()
-            .0
-            .insert(id.clone());
-    }
-    assert!(
-        game.routine_candidates(&program).is_empty(),
-        "fixture assumption: every family is now discovered"
-    );
-    give_downed_program(&mut game, program);
-    install_routine_tool(&mut game);
-    let tool = routine_tool_id(&game);
-    let tools_before = game.installed_tools();
-    let player = game.player_entity();
-    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
-
-    let err = game.extract_program(0, &tool).unwrap_err();
-
-    assert_eq!(err, "nothing unfamiliar to recover");
-    assert_eq!(
-        game.downed_program_rows().len(),
-        1,
-        "the program must survive a refused extraction"
-    );
-    assert_eq!(
-        game.installed_tools().len(),
-        tools_before.len(),
-        "the tool is untouched"
-    );
-    assert_eq!(
-        game.world.get::<PowerReserve>(player).unwrap().get(),
-        power_before,
-        "a refusal must spend nothing — not even the ticks that would have \
-         let power regenerate or drain"
+        pool.iter().any(|id| {
+            let name = game.ability_display_name(id);
+            recent.iter().any(|line| line.contains(&name))
+        }),
+        "the log should name the routine taken apart: {recent:?}"
     );
 }
 

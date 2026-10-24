@@ -1673,6 +1673,7 @@ mod emulation_tests {
             teach_routine(&mut game, "emulate");
             give_disks(&mut game, 1);
             game.etch_disk("emulate").unwrap();
+            make_room_for_routine(&mut game, player);
 
             game.install_disk(player, "emulate")
                 .expect("the player must still be able to install Emulate");

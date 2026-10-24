@@ -273,3 +273,23 @@ pub const CRAFT_MATERIAL_BYTECODE: &str = "bytecode_block";
 pub const CRAFT_MATERIAL_FRAGMENT: &str = "core_fragment";
 /// See `CRAFT_MATERIAL_BYTECODE`.
 pub const CRAFT_MATERIAL_CELL: &str = "power_cell";
+
+/// What a Subroutine is worth in trade currency: an etched disk's
+/// `ETCHED_DISK_VALUE`, which parts replace in the economy. Above
+/// `CONTRACT_MAX_DELIVER_VALUE`, so no Requisition asks for twenty of them.
+pub const CRAFT_PART_VALUE: u32 = 20;
+
+/// The shortest and longest a built routine's name may be, in characters.
+pub const CRAFT_NAME_MIN: usize = 1;
+/// See `CRAFT_NAME_MIN`.
+pub const CRAFT_NAME_MAX: usize = 24;
+
+/// What a built routine's id starts with; the rest is the counter.
+pub const CRAFT_ID_PREFIX: &str = "crafted/";
+
+/// The zone the first capacity node (2 to 3 parts) opens in; each later one
+/// opens a zone after (spec "Research").
+pub const CRAFT_CAPACITY_FIRST_ZONE: u32 = 1;
+
+/// The name of the routine every new run starts with beside Decompile.
+pub const CRAFT_STARTER_NAME: &str = "Patch";

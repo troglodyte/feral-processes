@@ -322,7 +322,10 @@ impl Game {
         // asymmetry, so a spare or unwanted carrier still converts back to
         // Credits like any other held cargo.
         let mut materials = self.stock_pool(|d| {
-            d.equipment.is_none() && d.id.etched_ability().is_none() && d.id.tool_id().is_none()
+            d.equipment.is_none()
+                && d.id.etched_ability().is_none()
+                && d.id.part_of().is_none()
+                && d.id.tool_id().is_none()
         });
         let mut programs: Vec<String> = self
             .world

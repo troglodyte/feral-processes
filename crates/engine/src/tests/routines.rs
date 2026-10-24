@@ -77,18 +77,7 @@ fn unseen_routine_agrees_with_the_candidate_function_and_is_false_when_owned() {
         "the marker must agree with the same candidate function extraction reads"
     );
 
-    // Discovering the family clears both the candidate pool and the marker.
-    game.world
-        .resource_mut::<crate::resources::DiscoveredRoutines>()
-        .0
-        .insert("hot_patch".to_string());
-    assert!(game.routine_candidates(&program).is_empty());
-    assert!(
-        !game.unseen_routine(wild),
-        "a discovered family must clear the marker"
-    );
-
-    // A tamed program is never flagged, discovered or not.
+    // A tamed program is never flagged.
     let pet = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(pet)
@@ -687,41 +676,44 @@ fn extract_routine_refuses_a_posted_program() {
 }
 
 #[test]
-fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_rest() {
+fn extracting_hands_over_the_picked_routines_parts_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5); // both of its unlocks installed
     stand_an_extraction_bench(&mut game, 30, 30);
 
     let offered = game.extractable_routines(medic);
     assert_eq!(offered.len(), 2, "both installed routines are on offer");
-    assert!(
-        offered.iter().all(|r| !r.known),
-        "neither is familiar yet, so neither row is marked"
-    );
     let kept = offered[1].ability.clone();
-    let lost = offered[0].ability.clone();
+    let expected = crate::routine_craft::parts_used(&game.parts_of_routine(&kept));
+    assert!(!expected.is_empty(), "the picked routine takes apart");
 
     game.extract_routine(medic, 1).unwrap();
 
-    let discovered = |id: &str| {
-        game.world
-            .resource::<crate::resources::DiscoveredRoutines>()
-            .0
-            .contains(id)
-    };
-    assert!(
-        discovered(&kept),
-        "the picked routine is discovered, not stocked"
-    );
-    assert!(
-        !discovered(&lost),
+    for (part, count) in &expected {
+        assert!(
+            game.parts_held(part) >= *count,
+            "{} should have come out of {kept}",
+            part.label()
+        );
+    }
+    let total: u32 = crate::routine_craft::Subroutine::all()
+        .iter()
+        .map(|p| game.parts_held(p))
+        .sum();
+    assert_eq!(
+        total,
+        expected.iter().map(|(_, n)| n).sum::<u32>(),
         "everything else on the program is lost with it"
     );
-    assert_eq!(
-        game.blank_disks_held(),
-        0,
-        "extraction teaches; it does not hand over a blank to write with"
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(&kept),
+        "extraction no longer discovers anything"
     );
+    assert_eq!(game.blank_disks_held(), 0, "and hands over no blank");
     assert!(
         game.owned_pets().iter().all(|p| p.entity != medic),
         "the program is consumed"
@@ -742,40 +734,34 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     assert!(err.contains("right now"), "{err}");
 }
 
-/// Discovery does not stack, so extracting a routine whose family is
-/// already familiar would destroy a program for nothing. Refused before the
-/// despawn, not after.
+/// Parts stack, so a routine the player already knows is no reason to
+/// refuse: extraction takes the program apart whatever it is carrying.
 #[test]
-fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
+fn extracting_a_routine_you_already_know_still_yields_its_parts() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_an_extraction_bench(&mut game, 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     let installed = game.extractable_routines(pet)[0].ability.clone();
-    // A known routine counts as its family being discovered too — see
-    // `Game::family_discovered`.
     teach_routine(&mut game, &installed);
+    let parts = game.parts_of_routine(&installed);
 
+    game.extract_routine(pet, 0).unwrap();
+
+    for (part, count) in crate::routine_craft::parts_used(&parts) {
+        assert!(game.parts_held(&part) >= count, "{}", part.label());
+    }
     assert!(
-        game.extractable_routines(pet)[0].known,
-        "the picker must mark it before the player commits"
-    );
-    let err = game.extract_routine(pet, 0).unwrap_err();
-    assert!(err.contains("familiar"), "{err}");
-    assert!(
-        game.world.get::<Stats>(pet).is_some(),
-        "the program must survive a refused extraction"
+        game.world.get::<Stats>(pet).is_none(),
+        "the program is spent"
     );
 }
 
-/// The tamed door's discovery log line, `extract_routine`'s own version of
-/// the tool door's: it names no routine either.
+/// The tamed door's log line says a routine came apart.
 #[test]
-fn extracting_a_routine_logs_no_routine_name() {
+fn extracting_a_routine_logs_that_it_came_apart() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_an_extraction_bench(&mut game, 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
-    let ability = game.extractable_routines(pet)[0].ability.clone();
-    let name = game.ability_display_name(&ability);
 
     game.extract_routine(pet, 0).unwrap();
 
@@ -787,12 +773,8 @@ fn extracting_a_routine_logs_no_routine_name() {
     assert!(
         recent
             .iter()
-            .any(|line| line.contains("Recovered an unfamiliar routine")),
-        "the verbatim discovery line must be logged: {recent:?}"
-    );
-    assert!(
-        recent.iter().all(|line| !line.contains(&name)),
-        "{name} must not appear in the log: {recent:?}"
+            .any(|line| line.contains("apart into its parts")),
+        "the log should say what was recovered: {recent:?}"
     );
 }
 
@@ -844,9 +826,14 @@ fn a_new_game_starts_with_decompile_installed_in_the_players_first_slot() {
         slots[0].ability.as_deref(),
         Some(crate::abilities::DECOMPILE_ABILITY_ID)
     );
+    assert_eq!(
+        slots[1].ability.as_deref(),
+        Some("crafted/1"),
+        "the built Patch is the second thing a new game installs"
+    );
     assert!(
-        slots[1..].iter().all(|s| s.ability.is_none()),
-        "decompile is the only thing a new game pre-installs"
+        slots[2..].iter().all(|s| s.ability.is_none()),
+        "decompile and Patch are all a new game pre-installs"
     );
 }
 
@@ -1400,7 +1387,10 @@ fn no_starter_choice_leaves_the_slot_empty() {
     let player = game.player_entity();
     assert_eq!(
         game.world.get::<Routines>(player).unwrap().0,
-        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()]
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "crafted/1".to_string()
+        ]
     );
     assert!(!game.knows_routine("stack_smash"));
     assert!(!game.knows_routine("checksum_repair"));

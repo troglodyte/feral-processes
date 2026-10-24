@@ -601,6 +601,7 @@ impl Game {
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
         world.init_resource::<crate::resources::DiscoveredRoutines>();
+        world.init_resource::<crate::resources::CraftedRoutines>();
         world.init_resource::<crate::resources::DiscoveredResearch>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
@@ -1508,7 +1509,7 @@ impl Game {
             ));
         }
         let AssetDbs {
-            abilities: ability_db,
+            abilities: mut ability_db,
             tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
@@ -1563,6 +1564,9 @@ impl Game {
         // save data and the loaded `AbilityDb` are in hand.
         // Taken before the bundle moves `unlocked_perks` out of `data`.
         let player_perk_levels = data.player.unlocked_perks.len() as u32;
+        // Before any slot is recognised: a `crafted/<n>` id resolves only
+        // once the crafted tier holds it.
+        ability_db.set_crafted(&data.crafted_routines);
         let (player_routines, dropped_player_routines) =
             recognized_routines(&data.player.routines, &ability_db);
 
@@ -1629,6 +1633,11 @@ impl Game {
         world.insert_resource(crate::resources::DiscoveredRoutines(
             data.discovered_routines.into_iter().collect(),
         ));
+        world.insert_resource(crate::resources::CraftedRoutines {
+            built: data.crafted_routines,
+            unslotted: data.unslotted_routines,
+            next_id: data.next_crafted_id,
+        });
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here
             // and read nowhere else, exactly as `fused_gear` is above.
@@ -3537,6 +3546,20 @@ impl Game {
                 .iter()
                 .cloned()
                 .collect(),
+            crafted_routines: self
+                .world
+                .resource::<crate::resources::CraftedRoutines>()
+                .built
+                .clone(),
+            unslotted_routines: self
+                .world
+                .resource::<crate::resources::CraftedRoutines>()
+                .unslotted
+                .clone(),
+            next_crafted_id: self
+                .world
+                .resource::<crate::resources::CraftedRoutines>()
+                .next_id,
             link_sites: {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
@@ -3964,6 +3987,7 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // databases have, and the only reason `items` is loaded below
     // `abilities` rather than beside it.
     warnings.extend(items.synthesise_etched_disks(&abilities));
+    warnings.extend(items.synthesise_parts());
     // Same ordering dependency as the etched disks just above: every
     // carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.

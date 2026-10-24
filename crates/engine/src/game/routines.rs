@@ -5,20 +5,6 @@ use crate::classes::PlayerClass;
 use crate::components::Routines;
 use crate::*;
 
-/// Which of `Game::take_routine`'s two branches ran, so each caller words
-/// its own line — the tamed-program door and the downed-program door
-/// describe the same effect in different sentences, and a shared function
-/// returning a shared string would make one of them wrong.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RoutineTaken {
-    /// Ordinary: the ability entered `DiscoveredRoutines`, not
-    /// `KnownRoutines` (todo #101). No disk, and no name in the log line —
-    /// extraction opens the routine tree's family, it does not teach.
-    Discovered,
-    /// Exclusive: the etched disk came back out, and nothing was learned.
-    DiskPopped,
-}
-
 impl Game {
     /// `id`'s display name, falling back to the raw id if the ability set
     /// doesn't define it (a mod removed since a save referenced it). Every
@@ -409,7 +395,7 @@ impl Game {
     /// `install_routine`/`uninstall_routine` would accept an entity no menu
     /// ever offers but nothing here refused either — the same ownership
     /// gate `extract_routine` and `sell_companion` already both apply.
-    fn owns_routine_holder(&self, entity: Entity) -> bool {
+    pub(crate) fn owns_routine_holder(&self, entity: Entity) -> bool {
         entity == self.player_entity()
             || self
                 .world
@@ -610,8 +596,11 @@ impl Game {
                 "{name} is welded into that slot. It doesn't come out."
             ));
         }
-        installed.remove(slot);
+        let removed = installed.remove(slot);
         self.world.entity_mut(entity).insert(Routines(installed));
+        // A built routine exists only in its slot or on the Built page, so
+        // pulling it out destroys it (ADR 0029).
+        self.destroy_built(&[removed]);
         let name = self.routine_holder_label(entity);
         self.log(format!("{name} stops running that routine."));
         Ok(())
@@ -774,58 +763,42 @@ impl Game {
             .get(index)
             .map(|row| row.ability.clone())
             .ok_or_else(|| "That program has no such routine.".to_string())?;
-        let exclusive = self.routine_is_exclusive(&ability);
-        if !exclusive
-            && let Some(ability_def) = self.world.resource::<AbilityDb>().get(&ability).cloned()
-            && self.family_discovered(&crate::routine_tree::family(&ability_def))
-        {
-            return Err("that routine is already familiar".into());
+        // Read before the dissolve: a built routine is destroyed with its
+        // holder, and its record is where its parts are.
+        let parts = self.parts_of_routine(&ability);
+        if parts.is_empty() {
+            return Err("There's nothing in that routine to take apart.".into());
         }
-
         let name = self.dissolve_tamed_program(creature, crate::bonds::Departure::LetGo);
         let ability_name = self.ability_display_name(&ability);
-        match self.take_routine(&ability) {
-            RoutineTaken::DiskPopped => self.log(format!(
-                "You break {name} down and pry its {ability_name} disk back out intact."
-            )),
-            RoutineTaken::Discovered => {
-                self.log("Recovered an unfamiliar routine — see routine research.".to_string())
-            }
-        }
+        self.take_routine(&parts);
+        self.log(format!(
+            "You break {name} down and take {ability_name} apart into its parts."
+        ));
         self.tick();
         Ok(())
     }
 
+    /// The parts `ability` is made of: a built routine's own record, an
+    /// authored one's `decompose`. Empty for what no Core stands for.
+    pub(crate) fn parts_of_routine(&self, ability: &str) -> Vec<crate::routine_craft::Subroutine> {
+        let crafted = self.world.resource::<crate::resources::CraftedRoutines>();
+        if let Some(built) = crafted.built.iter().find(|r| r.id == ability) {
+            return built.parts.clone();
+        }
+        self.world
+            .resource::<AbilityDb>()
+            .get(ability)
+            .and_then(crate::routine_craft::decompose)
+            .unwrap_or_default()
+    }
+
     /// The one place a routine comes off a program — `extract_routine`'s
     /// tamed-program door and `extract_program`'s `Routines`-tool door both
-    /// call this rather than each carrying a copy of the two branches.
-    /// Callers own their refusals and their log lines; this owns only the
-    /// effect.
-    ///
-    /// **Exclusive routines pop the disk and teach nothing.** That is what
-    /// keeps exactly one copy in the run, and it is the reason this function
-    /// exists instead of two implementations that agree today.
-    ///
-    /// The pop conserves copies only because a disk was consumed to put the
-    /// routine there — `install_disk`'s spend, which the tamed door's caller
-    /// can rely on and a downed program's cannot. `Game::routine_candidates`
-    /// therefore never offers an exclusive routine at all, rather than
-    /// reaching this branch and minting a second copy of one; see its doc,
-    /// and the spec's amended section 4.
-    ///
-    /// `&str` rather than `&AbilityId` because that alias is `String`, and
-    /// `routine_is_exclusive`, which a caller has already gone through,
-    /// takes `&str`.
-    pub(crate) fn take_routine(&mut self, ability: &str) -> RoutineTaken {
-        if self.routine_is_exclusive(ability) {
-            self.grant_loot(ItemId::etched(ability), 1, LootSource::Etch);
-            RoutineTaken::DiskPopped
-        } else {
-            self.world
-                .resource_mut::<crate::resources::DiscoveredRoutines>()
-                .0
-                .insert(ability.to_string());
-            RoutineTaken::Discovered
-        }
+    /// call this. It hands over the routine's parts (ADR 0029) and nothing
+    /// else: no discovery, and never an etched disk, so the exclusive pool
+    /// no longer has a second copy to guard.
+    pub(crate) fn take_routine(&mut self, parts: &[crate::routine_craft::Subroutine]) {
+        self.grant_parts(parts, LootSource::Etch);
     }
 }

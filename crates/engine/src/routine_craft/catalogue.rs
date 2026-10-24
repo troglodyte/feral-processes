@@ -92,6 +92,11 @@ impl Core {
         Core::Symlink,
     ];
 
+    /// The snake-case word `Subroutine::key` spells this Core with.
+    pub fn key(self) -> String {
+        self.name().to_lowercase().replace(' ', "_")
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Core::Damage => "Damage",
@@ -398,7 +403,7 @@ impl StatusKind {
 }
 
 /// One part. A Core carries its version; every modifier is unversioned.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Subroutine {
     Core(Core, Version),
     Range(RangeKind),
@@ -410,6 +415,49 @@ pub enum Subroutine {
 }
 
 impl Subroutine {
+    /// Every part that exists: each Core at each version it has, then each
+    /// modifier. The order is the order a list shows them in.
+    pub fn all() -> Vec<Subroutine> {
+        let mut parts = Vec::new();
+        for core in Core::ALL {
+            let versions: &[Version] = if core.versioned() {
+                &Version::ALL
+            } else {
+                &[Version::V1]
+            };
+            parts.extend(versions.iter().map(|v| Subroutine::Core(core, *v)));
+        }
+        parts.push(Subroutine::Range(RangeKind::Near));
+        parts.push(Subroutine::Range(RangeKind::Far));
+        parts.push(Subroutine::Area(AreaKind::Group));
+        parts.push(Subroutine::Area(AreaKind::Everyone));
+        parts.push(Subroutine::Trickle);
+        parts.extend(DamageType::ALL.map(Subroutine::DamageType));
+        parts.extend(StatusKind::ALL.map(Subroutine::Status));
+        parts
+    }
+
+    /// A stable text key, the tail of a part's item id and its research
+    /// node's id. `from_key` is its inverse.
+    pub fn key(&self) -> String {
+        match self {
+            Subroutine::Core(core, version) => {
+                format!("core.{}.{}", core.key(), version.number())
+            }
+            Subroutine::Range(RangeKind::Near) => "range.near".into(),
+            Subroutine::Range(RangeKind::Far) => "range.far".into(),
+            Subroutine::Area(AreaKind::Group) => "area.group".into(),
+            Subroutine::Area(AreaKind::Everyone) => "area.everyone".into(),
+            Subroutine::Trickle => "trickle".into(),
+            Subroutine::DamageType(t) => format!("type.{}", t.name().to_lowercase()),
+            Subroutine::Status(s) => format!("status.{}", s.id().0),
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Subroutine> {
+        Subroutine::all().into_iter().find(|p| p.key() == key)
+    }
+
     /// What a list row calls it.
     pub fn label(&self) -> String {
         match self {
@@ -427,7 +475,8 @@ impl Subroutine {
         }
     }
 
-    fn slot(&self) -> &'static str {
+    /// Which row of the build page this part fills.
+    pub fn slot(&self) -> &'static str {
         match self {
             Subroutine::Core(..) => "Core",
             Subroutine::Range(_) => "Range",

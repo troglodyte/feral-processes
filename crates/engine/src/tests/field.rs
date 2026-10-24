@@ -818,6 +818,11 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    let player = game.player_entity();
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
@@ -910,6 +915,10 @@ fn a_companions_field_routine_spends_the_companions_reserve() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
 
     let routines = game.field_routines();
     assert_eq!(routines.len(), 1, "only the companion holds one");
@@ -944,6 +953,10 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
 
     *game.world.get_mut::<PowerReserve>(player).unwrap() =
         PowerReserve::new(100.0, crate::components::POWER_MAX);

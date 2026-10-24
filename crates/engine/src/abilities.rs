@@ -1647,6 +1647,11 @@ pub fn validate(def: &AbilityDef) -> Result<(), String> {
 #[derive(Resource, Default)]
 pub struct AbilityDb {
     abilities: HashMap<AbilityId, AbilityDef>,
+    /// The player's built routines, compiled. Rebuilt from the surviving set
+    /// by `set_crafted` after every change and on load, so no def outlives
+    /// its routine. Never iterated by `all`, `wild_pool` or
+    /// `exclusive_pool`: a built routine is not content to be found.
+    crafted: HashMap<AbilityId, AbilityDef>,
 }
 
 impl AbilityDb {
@@ -1730,7 +1735,15 @@ impl AbilityDb {
     }
 
     pub fn get(&self, id: &str) -> Option<&AbilityDef> {
-        self.abilities.get(id)
+        self.abilities.get(id).or_else(|| self.crafted.get(id))
+    }
+
+    /// Replaces the crafted tier with `routines`, compiled.
+    pub fn set_crafted(&mut self, routines: &[crate::routine_craft::CraftedRoutine]) {
+        self.crafted = routines
+            .iter()
+            .map(|r| (r.id.clone(), crate::routine_craft::compile(r)))
+            .collect();
     }
 
     /// Every loaded ability, by id. `HashMap` iteration order is randomized

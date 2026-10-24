@@ -492,8 +492,10 @@ impl Game {
     /// party could in principle see gets marked `Locked` for an unmet
     /// prerequisite, the same as a base node.
     fn routine_node_visible(&self, def: &ResearchDef) -> bool {
+        // A part or capacity node (ADR 0029) teaches no authored routine and
+        // has no family to discover: the zone gate is its only visibility.
         let Some(ability) = def.teaches.as_deref() else {
-            return false;
+            return def.tree == ResearchTree::Routines && self.research_zone_gate(def).is_none();
         };
         let Some(ability_def) = self.world.resource::<AbilityDb>().get(ability) else {
             return false;
@@ -1530,6 +1532,7 @@ impl Game {
                 .map(|id| (id, self.creature_short_label(subject)));
             if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0) {
                 self.hold_at_station(station, program);
+                self.destroy_built_held_by(subject);
                 self.world.despawn(subject);
                 if let Some((id, short)) = departing {
                     self.note_departure(id, &short, crate::bonds::Departure::LetGo);

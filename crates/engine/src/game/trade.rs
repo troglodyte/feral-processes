@@ -603,6 +603,7 @@ impl Game {
         let id = self.world.get::<ProgramId>(creature).copied();
         let short = self.creature_short_label(creature);
         let name = self.detach_from_play(creature);
+        self.destroy_built_held_by(creature);
         self.world.despawn(creature);
         if let Some(id) = id {
             self.note_departure(id, &short, how);

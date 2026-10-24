@@ -624,7 +624,9 @@ impl ItemDb {
                     taming_potency: None,
                     consume: None,
                     craftable: None,
-                    droppable: ability.boss_drop.clone(),
+                    // An exclusive routine's boss pays its parts instead
+                    // (`Game::pay_boss_routine_parts`), never the disk.
+                    droppable: None,
                     cache_drop: None,
                     grid_fuel: None,
                     // A disk *installs* its routine; it is not worn, so
@@ -738,6 +740,67 @@ impl ItemDb {
                     // to author this one from.
                     abbrev: None,
                     // One shared mark: no `ToolDef` field to author one from.
+                    glyph: Some(','),
+                    fx: None,
+                },
+            );
+        }
+        warnings
+    }
+
+    /// Derives one item per Subroutine in the Rust catalogue (ADR 0029).
+    /// A part is cargo: it is held, hauled, sold and dropped like an etched
+    /// disk was, and it is *spent* by `Game::build_routine`. Every field is
+    /// spelled out, `synthesise_etched_disks`' reason: a new `ItemDef`
+    /// field is a compile error here and someone decides what a part does
+    /// about it.
+    ///
+    /// No `craftable`: `Game::craft_subroutine` is the one door, because the
+    /// bill names a Routine Disk and a material by part and a recipe cannot
+    /// say "any researched part". No `droppable` either; the bosses'
+    /// parts come through `Game::pay_boss_routine_parts`, which drops a
+    /// routine's whole set or none of it.
+    pub fn synthesise_parts(&mut self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for part in crate::routine_craft::Subroutine::all() {
+            let id = ItemId::part(&part);
+            if self.items.contains_key(id.as_str()) {
+                warnings.push(format!(
+                    "item file {} shadows the part item derived for {}; the file wins",
+                    id.as_str(),
+                    part.label()
+                ));
+                continue;
+            }
+            self.items.insert(
+                id.0.clone(),
+                ItemDef {
+                    id,
+                    name: format!("Subroutine · {}", part.label()),
+                    description: format!(
+                        "A {} part for a routine built at the Workbench.",
+                        part.slot().to_lowercase()
+                    ),
+                    banked: false,
+                    value: Some(crate::tuning::CRAFT_PART_VALUE),
+                    role: None,
+                    equipment: None,
+                    durability: None,
+                    taming_potency: None,
+                    consume: None,
+                    craftable: None,
+                    droppable: None,
+                    cache_drop: None,
+                    grid_fuel: None,
+                    grants: None,
+                    reach: None,
+                    range: None,
+                    upgrade: None,
+                    enables_rest: false,
+                    implant: None,
+                    trap: None,
+                    // The etched disks' own gap: parts share a family tag.
+                    abbrev: None,
                     glyph: Some(','),
                     fx: None,
                 },

@@ -2221,6 +2221,10 @@ pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
 
     let mut data = save::load_from_file(&path).unwrap();
     data.known_routines = routines.iter().map(|r| r.to_string()).collect();
+    // A new game's built Patch fills the one free slot; these screens are
+    // about installing into it.
+    data.player.routines.retain(|r| !r.starts_with("crafted/"));
+    data.crafted_routines.clear();
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

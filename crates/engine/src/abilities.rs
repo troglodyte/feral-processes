@@ -472,6 +472,24 @@ pub enum AbilityEffect {
         #[serde(default)]
         spread: i32,
     },
+    /// A heal that arrives a share at a time: arms the built-in `regen`
+    /// status for `rounds`, and each end-of-round upkeep restores `power`
+    /// (rolled once, from the band, when it lands) through `restore_hp`.
+    ///
+    /// **Only `routine_craft::compile` builds one** — a Heal Core with
+    /// Trickle parts. A separate variant rather than a `rounds` field on
+    /// `Heal`, so no authored file or shipped match on `Heal` changes shape
+    /// (ADR 0029: Rust only). Battle-only: `field_runnable` names `Heal`
+    /// alone, and the out-of-battle over-time heal is the Field Regen Core.
+    HealOverTime {
+        /// The centre of each round's restored band.
+        power: i32,
+        /// Half-width of that band, `Heal::spread`'s terms.
+        #[serde(default)]
+        spread: i32,
+        /// Upkeeps it restores on, after the round it landed in.
+        rounds: u32,
+    },
     Buff {
         kind: BuffKind,
         power: i32,
@@ -749,6 +767,7 @@ impl AbilityEffect {
             AbilityEffect::Reanimate { .. } => true,
             AbilityEffect::Damage { .. }
             | AbilityEffect::Heal { .. }
+            | AbilityEffect::HealOverTime { .. }
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Debuff { .. }
             | AbilityEffect::Drain { .. }
@@ -774,7 +793,9 @@ impl AbilityEffect {
     pub fn affinity_kind(&self) -> Option<AffinityKind> {
         match self {
             AbilityEffect::Damage { .. } => Some(AffinityKind::Damage),
-            AbilityEffect::Heal { .. } => Some(AffinityKind::Heal),
+            AbilityEffect::Heal { .. } | AbilityEffect::HealOverTime { .. } => {
+                Some(AffinityKind::Heal)
+            }
             AbilityEffect::Buff { .. } => Some(AffinityKind::Buff),
             AbilityEffect::Debuff { .. } => Some(AffinityKind::Debuff),
             AbilityEffect::Drain { .. } => Some(AffinityKind::Drain),
@@ -845,6 +866,7 @@ impl AbilityEffect {
             // for — `Debuff`'s reason, exactly.
             | AbilityEffect::Tamper { .. } => true,
             AbilityEffect::Heal { .. }
+            | AbilityEffect::HealOverTime { .. }
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Cleanse
             | AbilityEffect::Cloak { .. }
@@ -1429,6 +1451,17 @@ impl AbilityDef {
     /// A `charge` on anything but `Damage`, or a charge of fewer than two
     /// rounds. Refused at load, like the other mismatches: scaling is defined
     /// only for a damage band, and a one-round charge is not a wind-up.
+    fn heal_over_time_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::HealOverTime { rounds, .. } = &self.effect else {
+            return None;
+        };
+        if *rounds == 0 {
+            return Some("effect: HealOverTime needs at least one round");
+        }
+        (!self.target.is_ally_facing())
+            .then_some("effect: HealOverTime requires an ally-facing target")
+    }
+
     fn charge_mismatch(&self) -> Option<&'static str> {
         let spec = self.charge?;
         if !matches!(self.effect, AbilityEffect::Damage { .. }) {
@@ -1582,6 +1615,35 @@ impl AbilityTarget {
     }
 }
 
+/// Whether `def` is a routine the engine can run, the verdict
+/// `AbilityDb::load_dir` applies to an authored file and
+/// `routine_craft::compile`'s census applies to a built one — one function
+/// so a built routine cannot pass a gentler check than a file does.
+///
+/// Pure and order-significant: the first fault found is the one reported.
+pub fn validate(def: &AbilityDef) -> Result<(), String> {
+    if let Some(field) = def.non_finite_field() {
+        return Err(format!("{field} is not a finite number"));
+    }
+    let faults = [
+        def.decompile_target_mismatch(),
+        def.summon_target_mismatch(),
+        def.tamper_faults(),
+        def.field_buff_target_mismatch(),
+        def.field_buff_duration_mismatch(),
+        def.movement_target_mismatch(),
+        def.cloak_mismatch(),
+        def.heal_over_time_mismatch(),
+        def.passive_field_mismatch(),
+        def.charge_mismatch(),
+        def.exclusive_source_conflict(),
+    ];
+    match faults.into_iter().flatten().next() {
+        Some(reason) => Err(reason.to_string()),
+        None => Ok(()),
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct AbilityDb {
     abilities: HashMap<AbilityId, AbilityDef>,
@@ -1602,49 +1664,7 @@ impl AbilityDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<AbilityDef>(&text) {
                 Ok(mut def) => {
-                    if let Some(field) = def.non_finite_field() {
-                        warnings.push(format!(
-                            "skipped invalid ability file {path:?}: {field} is not a finite number"
-                        ));
-                        continue;
-                    }
-                    if let Some(reason) = def.decompile_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.summon_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.tamper_faults() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.field_buff_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.field_buff_duration_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.movement_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.cloak_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.passive_field_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.charge_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.exclusive_source_conflict() {
+                    if let Err(reason) = validate(&def) {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
@@ -1828,6 +1848,21 @@ pub fn effect_label(
                 affinity,
             );
             format!("Restores {} Integrity", range_label(band))
+        }
+        AbilityEffect::HealOverTime {
+            power,
+            spread,
+            rounds,
+        } => {
+            let band = scaled_range(
+                crate::battle::DamageRange::centred(*power, *spread),
+                level,
+                affinity,
+            );
+            format!(
+                "Restores {} Integrity each round for {rounds} rounds",
+                range_label(band)
+            )
         }
         AbilityEffect::Buff {
             kind,

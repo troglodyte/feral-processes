@@ -766,6 +766,9 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             // A relocation moves no Integrity at all — it moves a body.
             | E::Reinforce
             | E::Teleport
+            // Built by `routine_craft::compile` alone; its band is
+            // `Heal`'s, and no shipped file names it.
+            | E::HealOverTime { .. }
             // `Reinforce`'s reason: what rises is scaled by a fixed
             // multiplier off a snapshot, not by a rolled band.
             | E::Reanimate { .. } => continue,
@@ -810,6 +813,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
         let rolls_to_hit = match &def.effect {
             E::Damage { .. } | E::Drain { .. } => true,
             E::Heal { .. }
+            | E::HealOverTime { .. }
             | E::Buff { .. }
             | E::Debuff { .. }
             | E::Cleanse
@@ -1069,6 +1073,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             // A tamper names the other side, `Debuff`'s reason exactly.
             E::Tamper { .. } => true,
             E::Heal { .. }
+            | E::HealOverTime { .. }
             | E::Buff { .. }
             | E::Cleanse
             | E::Cloak { .. }

@@ -69,6 +69,7 @@ mod floor;
 mod gear_detail;
 mod gear_passives;
 mod hauling;
+mod heal_over_time;
 mod healing;
 mod implants;
 mod inspection;

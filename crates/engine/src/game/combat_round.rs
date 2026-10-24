@@ -1764,6 +1764,35 @@ impl Game {
                         self.log_kind(heal_kind, line);
                     }
                 }
+                AbilityEffect::HealOverTime {
+                    power,
+                    spread,
+                    rounds,
+                } => {
+                    // One draw per recipient, `Heal`'s rule: the band is
+                    // rolled when it lands and each round restores that
+                    // figure, so the stream does not depend on the length.
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
+                    let per_round = {
+                        let mut rng = self.world.resource_mut::<GameRng>();
+                        band.roll(&mut rng.0)
+                    };
+                    self.arm_status(
+                        recipient,
+                        &StatusId::from(crate::tuning::REGEN_STATUS),
+                        *rounds,
+                        per_round,
+                    );
+                    self.log_status_landing(
+                        &StatusId::from(crate::tuning::REGEN_STATUS),
+                        &on,
+                        None,
+                    );
+                }
                 AbilityEffect::Debuff {
                     kind,
                     power,

@@ -51,6 +51,12 @@ pub enum StatusBehaviour {
     /// props as well as swings.
     DamageTakenPercent(i32),
     HealBlock,
+    /// Restores `power × stacks` Integrity at the end of every round it is
+    /// active, through `Game::restore_hp` so `HealBlock` still bites. Armed
+    /// only by `AbilityEffect::HealOverTime`; and because it is a boon,
+    /// `Game::arm_status` does not let the holder's `status_resist` shorten
+    /// it.
+    HealPerRound,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

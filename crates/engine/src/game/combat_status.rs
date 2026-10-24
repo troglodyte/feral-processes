@@ -90,10 +90,20 @@ impl Game {
         if !self.world.resource::<StatusDb>().contains(id) {
             return;
         }
-        let resist = self
+        // A boon is not resisted: a holder who shrugs conditions off should
+        // not also shorten the repair routine it was given.
+        let boon = self
             .world
-            .get::<crate::components::Derived>(entity)
-            .map_or(0, |d| d.status_resist);
+            .resource::<StatusDb>()
+            .get(id)
+            .is_some_and(|def| def.has_behaviour(|b| matches!(b, StatusBehaviour::HealPerRound)));
+        let resist = if boon {
+            0
+        } else {
+            self.world
+                .get::<crate::components::Derived>(entity)
+                .map_or(0, |d| d.status_resist)
+        };
         let remaining = crate::progression::resisted_duration(duration, resist);
         let stacking = self
             .world
@@ -239,6 +249,16 @@ impl Game {
                         .resource_mut::<MessageLog>()
                         .push_kind(MessageKind::Info, line);
                     self.snapshot_roster();
+                }
+            }
+            if let Some(def) = &def
+                && def.has_behaviour(|b| matches!(b, StatusBehaviour::HealPerRound))
+            {
+                let n = entry.power * entry.stacks as i32;
+                let restored = self.restore_hp(entity, n);
+                let line = def.tick_line(label, restored);
+                if restored > 0 {
+                    self.log_impact(MessageKind::Heal, entity, ImpactKind::Heal(restored), line);
                 }
             }
             entry.remaining = entry.remaining.saturating_sub(1);

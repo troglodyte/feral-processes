@@ -19,6 +19,7 @@ pub enum Core {
     BoostAttack,
     BoostMitigation,
     SapAttack,
+    SapMitigation,
     Debuff,
     Cleanse,
     Cloak,
@@ -57,13 +58,14 @@ pub enum Facing {
 }
 
 impl Core {
-    pub const ALL: [Core; 30] = [
+    pub const ALL: [Core; 31] = [
         Core::Damage,
         Core::Heal,
         Core::Drain,
         Core::BoostAttack,
         Core::BoostMitigation,
         Core::SapAttack,
+        Core::SapMitigation,
         Core::Debuff,
         Core::Cleanse,
         Core::Cloak,
@@ -98,6 +100,7 @@ impl Core {
             Core::BoostAttack => "Boost Attack",
             Core::BoostMitigation => "Boost Mitigation",
             Core::SapAttack => "Sap Attack",
+            Core::SapMitigation => "Sap Mitigation",
             Core::Debuff => "Debuff",
             Core::Cleanse => "Cleanse",
             Core::Cloak => "Cloak",
@@ -135,6 +138,7 @@ impl Core {
             | Core::BoostAttack
             | Core::BoostMitigation
             | Core::SapAttack
+            | Core::SapMitigation
             | Core::Fork
             | Core::Respawn
             | Core::FieldRegen
@@ -167,6 +171,7 @@ impl Core {
             Core::Damage
             | Core::Drain
             | Core::SapAttack
+            | Core::SapMitigation
             | Core::Debuff
             | Core::ColdSample
             | Core::HeatInjection
@@ -221,6 +226,7 @@ impl Core {
                 | Core::BoostAttack
                 | Core::BoostMitigation
                 | Core::SapAttack
+                | Core::SapMitigation
                 | Core::Debuff
                 | Core::Cleanse
                 | Core::ColdSample
@@ -238,6 +244,7 @@ impl Core {
                 | Core::BoostAttack
                 | Core::BoostMitigation
                 | Core::SapAttack
+                | Core::SapMitigation
                 | Core::Debuff
                 | Core::Cloak
                 | Core::ColdSample
@@ -253,9 +260,12 @@ impl Core {
     /// The Area kinds this Core reads, empty when it takes none.
     pub fn areas(self) -> &'static [AreaKind] {
         match self {
-            Core::Damage | Core::Drain | Core::SapAttack | Core::Debuff | Core::Hallucinate => {
-                &[AreaKind::Group, AreaKind::Everyone]
-            }
+            Core::Damage
+            | Core::Drain
+            | Core::SapAttack
+            | Core::SapMitigation
+            | Core::Debuff
+            | Core::Hallucinate => &[AreaKind::Group, AreaKind::Everyone],
             Core::Heal
             | Core::BoostAttack
             | Core::BoostMitigation
@@ -555,9 +565,11 @@ pub fn material(part: &Subroutine) -> (ItemId, u32) {
                 | Core::BoostMitigation
                 | Core::Cleanse
                 | Core::Cloak => CRAFT_MATERIAL_BYTECODE,
-                Core::Damage | Core::Drain | Core::SapAttack | Core::Debuff => {
-                    CRAFT_MATERIAL_FRAGMENT
-                }
+                Core::Damage
+                | Core::Drain
+                | Core::SapAttack
+                | Core::SapMitigation
+                | Core::Debuff => CRAFT_MATERIAL_FRAGMENT,
                 Core::Fork
                 | Core::Respawn
                 | Core::ColdSample

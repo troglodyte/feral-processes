@@ -61,6 +61,7 @@ pub(super) fn core_figures(core: Core) -> CoreFigures {
         Core::BoostAttack => t::CRAFT_BOOST_ATTACK,
         Core::BoostMitigation => t::CRAFT_BOOST_MITIGATION,
         Core::SapAttack => t::CRAFT_SAP_ATTACK,
+        Core::SapMitigation => t::CRAFT_SAP_MITIGATION,
         Core::Debuff => t::CRAFT_DEBUFF,
         Core::Cleanse => t::CRAFT_CLEANSE,
         Core::Cloak => t::CRAFT_CLOAK,
@@ -213,6 +214,11 @@ fn effect_of(s: &Split) -> AbilityEffect {
         },
         Core::SapAttack => AbilityEffect::Buff {
             kind: BuffKind::Atk,
+            power: -power,
+            duration: rounds,
+        },
+        Core::SapMitigation => AbilityEffect::Buff {
+            kind: BuffKind::Mitigation,
             power: -power,
             duration: rounds,
         },

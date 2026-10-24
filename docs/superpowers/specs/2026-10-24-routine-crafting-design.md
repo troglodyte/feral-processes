@@ -88,6 +88,7 @@ One Core per routine. "Versioned" Cores exist as v1.0, v2.0 and v3.0.
 | Boost Attack | `Buff { kind: Atk }` positive | yes | ally-facing |
 | Boost Mitigation | `Buff { kind: Mitigation }` positive | yes | ally-facing |
 | Sap Attack | `Buff { kind: Atk }` negative | yes | enemy-facing |
+| Sap Mitigation | `Buff { kind: Mitigation }` negative | yes | enemy-facing; base from `acid_wash` (`etch` and `oxide_strip` are its Group and Everyone forms) |
 | Debuff | `Debuff` | no | needs a Status modifier |
 | Cleanse | `Cleanse` | no | |
 | Cloak | `Cloak` | no | ally-facing |
@@ -122,7 +123,7 @@ Decompile is not a Core. It stays pre-installed and permanent, as today.
 | Damage | ✓ | ✓ | — | ✓ | ✓ (rider) |
 | Heal | ✓ | ✓ | ✓ (heal each round, in battle) | — | — |
 | Drain | ✓ | ✓ | — | ✓ | — |
-| Boost / Sap | ✓ | ✓ | ✓ (+rounds) | — | — |
+| Boost / Sap (Attack, Mitigation) | ✓ | ✓ | ✓ (+rounds) | — | — |
 | Debuff | ✓ | ✓ | ✓ (+rounds) | — | required |
 | Cleanse | ✓ | ✓ | — | — | — |
 | Cloak | — | ✓ (Group = whole party) | ✓ (+rounds) | — | — |
@@ -137,7 +138,7 @@ modifiers at all; Trickle only lengthens it. Debuff alone needs a modifier
 
 **Facing.** Ally-facing: Heal, Boost Attack, Boost Mitigation, Cleanse, Cloak,
 the field Cores, Fork, Respawn, Reinforce, Emulate. Enemy-facing: Damage,
-Drain, Sap Attack, Debuff, the Tamper Cores. Teleport takes no target (today's
+Drain, Sap Attack, Sap Mitigation, Debuff, the Tamper Cores. Teleport takes no target (today's
 rule).
 
 Ally-facing Cores read Area as "one ally or yourself" / "your whole party";
@@ -180,7 +181,9 @@ per capacity research node, to **6** (my call).
 - **Area** lowers per-target magnitude and raises Power cost, in line with what
   today's Group and Everyone routines pay relative to Single. The factors are
   tuning constants the builder derives from the shipped families.
-- **Range** adds Power cost only.
+- **Range** adds Power cost and sets only how far away the effect may be
+  centred (`range`). It never resizes or replaces the Area part's shape: a
+  Group area with Near keeps the Group shape size, centred up to 3 cells away.
 - **Trickle** adds a fixed duration per stack (a tuning constant), and Power
   cost per stack. Stacking gives the same amount each time (no diminishing
   returns for now; the cap is the limit).

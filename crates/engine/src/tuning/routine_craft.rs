@@ -91,6 +91,10 @@ pub const CRAFT_BOOST_ATTACK: CoreFigures = figures(1, 5.0, 0, 3, 0, 3);
 pub const CRAFT_BOOST_MITIGATION: CoreFigures = figures(1, 5.0, 0, 9, 0, 3);
 /// `clock_gate`, the single-target Atk sap.
 pub const CRAFT_SAP_ATTACK: CoreFigures = figures(2, 8.0, 0, 5, 0, 3);
+/// `acid_wash`, the single-target Mitigation sap (-15% for 3 rounds). `etch`
+/// (-12) and `oxide_strip` (-9) are exactly this at the Group and Everyone
+/// magnitude factors.
+pub const CRAFT_SAP_MITIGATION: CoreFigures = figures(2, 8.0, 0, 15, 0, 3);
 /// The Debuff Core's own price; the status it carries sets its power and
 /// rounds (`CRAFT_DEBUFF_STATUS`). `deadlock` and `write_lock`.
 pub const CRAFT_DEBUFF: CoreFigures = figures(2, 6.0, 0, 0, 0, 0);

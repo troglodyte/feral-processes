@@ -29,12 +29,6 @@ fn core(c: Core) -> Subroutine {
 // item or boss can carry.
 // ---------------------------------------------------------------------------
 
-/// Routines no Core can stand for. The spec's Core list has a Sap Attack but
-/// no negative-Mitigation Buff, and three wild programs carry one. Listed so
-/// the census is exact in both directions: a fourth misfit fails it, and so
-/// does fixing one without deleting its line.
-const KNOWN_MISFITS: [&str; 3] = ["acid_wash", "etch", "oxide_strip"];
-
 /// Every authored routine a player-facing source can reach, by id.
 fn reachable(db: &AbilityDb) -> BTreeSet<String> {
     let assets = test_assets_dir();
@@ -82,7 +76,7 @@ fn every_reachable_routine_decomposes_except_the_known_misfits() {
             None => misfits.push(id.as_str()),
         }
     }
-    assert_eq!(misfits, KNOWN_MISFITS);
+    assert!(misfits.is_empty(), "no Core stands for {misfits:?}");
 }
 
 #[test]
@@ -170,7 +164,8 @@ fn decompose_reads_the_modifiers_a_routine_implies() {
 
 /// The spec's "What fits which Core", one row per Core:
 /// range, area, trickle, damage type, status.
-const MATRIX: [(Core, [bool; 5]); 30] = [
+const MATRIX: [(Core, [bool; 5]); 31] = [
+    (Core::SapMitigation, [true, true, true, false, false]),
     (Core::Damage, [true, true, false, true, true]),
     (Core::Heal, [true, true, true, false, false]),
     (Core::Drain, [true, true, false, true, false]),
@@ -423,6 +418,51 @@ fn an_area_lowers_the_per_target_figure_and_raises_price_and_wait() {
     assert!(group.power_cost > single.power_cost && everyone.power_cost > group.power_cost);
     assert_eq!(group.cooldown, single.cooldown + 1);
     assert!(group.accuracy < single.accuracy);
+}
+
+#[test]
+fn range_only_centres_the_area_and_never_resizes_it() {
+    let def = compile(&routine(&[
+        core(Core::Damage),
+        Subroutine::Area(AreaKind::Group),
+        Subroutine::Range(RangeKind::Near),
+    ]));
+    assert_eq!(
+        def.shape,
+        Some(crate::abilities::AbilityShape::Radius {
+            radius: crate::tuning::TACTICAL_GROUP_RADIUS
+        })
+    );
+    assert_eq!(def.range.map(|r| r.max), Some(3));
+    let unranged = compile(&routine(&[
+        core(Core::Damage),
+        Subroutine::Area(AreaKind::Group),
+    ]));
+    assert_eq!(def.shape, unranged.shape);
+    assert_eq!(def.tactical_shape(), unranged.tactical_shape());
+}
+
+#[test]
+fn sap_mitigation_matches_the_three_shipped_mitigation_saps() {
+    let shipped = abilities();
+    let magnitude = |d: &AbilityDef| match d.effect {
+        AbilityEffect::Buff {
+            power, duration, ..
+        } => (power, duration),
+        _ => panic!(),
+    };
+    for (id, area) in [
+        ("acid_wash", None),
+        ("etch", Some(AreaKind::Group)),
+        ("oxide_strip", Some(AreaKind::Everyone)),
+    ] {
+        let mut parts = vec![core(Core::SapMitigation)];
+        parts.extend(area.map(Subroutine::Area));
+        let built = compile(&routine(&parts));
+        let authored = shipped.get(id).unwrap();
+        assert_eq!(magnitude(&built), magnitude(authored), "{id}");
+        assert_eq!(built.target, authored.target, "{id}");
+    }
 }
 
 #[test]

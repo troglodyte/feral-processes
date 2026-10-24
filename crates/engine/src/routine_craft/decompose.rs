@@ -17,7 +17,7 @@ fn named_version(name: &str) -> Option<Version> {
 }
 
 /// The Core `def`'s effect is, with the version its numbers imply. `None`
-/// for what no Core stands for: a capture, a Mitigation sap.
+/// for what no Core stands for: a capture.
 fn core_and_version(def: &AbilityDef) -> Option<(Core, Version)> {
     let named = named_version(&def.name).unwrap_or(Version::V1);
     let (core, version) = match &def.effect {
@@ -41,7 +41,7 @@ fn core_and_version(def: &AbilityDef) -> Option<(Core, Version)> {
         AbilityEffect::Buff {
             kind: BuffKind::Mitigation,
             ..
-        } => return None,
+        } => (Core::SapMitigation, named),
         AbilityEffect::Debuff { .. } => (Core::Debuff, Version::V1),
         AbilityEffect::Cleanse => (Core::Cleanse, Version::V1),
         AbilityEffect::Cloak { .. } => (Core::Cloak, Version::V1),

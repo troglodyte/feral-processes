@@ -721,12 +721,11 @@ fn a_slots_list_offers_only_what_fits_with_the_count_held() {
 }
 
 #[test]
-fn a_slots_list_shows_only_researched_parts() {
+fn a_slots_list_shows_researched_and_held_parts() {
     let mut game = bench_game(70_043);
     let group = Subroutine::Area(AreaKind::Group);
-    // Held but unresearched: holding a part is not knowing it.
-    stock(&mut game, &group, 1);
-    stock(&mut game, &damage(), 1);
+    let everyone = Subroutine::Area(AreaKind::Everyone);
+    let drain = Subroutine::Core(Core::Drain, Version::V1);
 
     let cores: Vec<_> = game
         .build_part_options("Core", &[])
@@ -734,23 +733,35 @@ fn a_slots_list_shows_only_researched_parts() {
         .map(|o| o.part)
         .collect();
     assert_eq!(cores, vec![heal()], "a new run knows only Heal v1.0");
-    assert!(game.build_part_options("Area", &[heal()]).is_empty());
+    assert!(game.build_part_options("Area", &[damage()]).is_empty());
 
-    know(&mut game, &damage());
-    know(&mut game, &group);
+    // Held but unresearched, as an extraction or a boss drop leaves it:
+    // usable without the research.
+    stock(&mut game, &group, 1);
+    stock(&mut game, &damage(), 1);
+    // Researched but not held.
+    know(&mut game, &drain);
     let cores: Vec<_> = game
         .build_part_options("Core", &[])
         .into_iter()
         .map(|o| o.part)
         .collect();
-    assert!(cores.contains(&damage()) && cores.contains(&heal()));
-    assert_eq!(cores.len(), 2);
+    assert_eq!(cores.len(), 3);
+    assert!(cores.contains(&heal()) && cores.contains(&damage()) && cores.contains(&drain));
+    let areas: Vec<_> = game
+        .build_part_options("Area", &[damage()])
+        .into_iter()
+        .map(|o| o.part)
+        .collect();
     assert_eq!(
-        game.build_part_options("Area", &[heal()])
-            .into_iter()
-            .map(|o| o.part)
-            .collect::<Vec<_>>(),
-        vec![group]
+        areas,
+        vec![group],
+        "Everyone is neither researched nor held"
+    );
+    assert!(!areas.contains(&everyone));
+    assert!(
+        game.build_routine("Spare", &[damage(), group]).is_ok(),
+        "held parts build without their research"
     );
 }
 

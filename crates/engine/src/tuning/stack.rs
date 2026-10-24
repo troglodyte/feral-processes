@@ -12,52 +12,36 @@
 /// one, and neither has this one once you have bought the shelf out.
 pub const STACK_MARKET_CHANCE: f64 = 0.35;
 
-/// How many routines a market lists, before the program row it may or may
-/// not also carry.
+/// How many distinct parts a market lists, before the program row it may or
+/// may not also carry.
 ///
 /// Two rather than one so the shelf poses a choice rather than a price, and
-/// not more because each is listed at all three scopes below — four rows a
-/// routine, and a screen that has to be scrolled is a screen that hides the
+/// not more because each is listed at all three scopes below — three rows a
+/// part, and a screen that has to be scrolled is a screen that hides the
 /// thing you came for.
 pub const STACK_MARKET_ROUTINE_OFFERS: usize = 2;
 
 /// The odds a market also has a program for sale.
 pub const STACK_MARKET_PROGRAM_CHANCE: f64 = 0.4;
 
-/// What a market charges for a bundle of etched disks: one, enough for a
-/// fielded party, and enough for a roster.
+/// What a market charges for a lot of one part: a single, a small lot and a
+/// crate.
 ///
-/// Flat Credits rather than anything derived from the routine: the market
-/// is selling the *writing*, not the knowledge (nothing here touches
-/// `KnownRoutines`), and what a disk is worth does not depend on what is
-/// burnt onto it. Against `STACK_CACHE_CREDITS` at 12-30 a cache and three
+/// Flat Credits rather than anything derived from the part. Against `STACK_CACHE_CREDITS` at 12-30 a cache and three
 /// caches a frame, the cheapest rung is a frame or two of thorough looting
 /// at depth 1 and much less deeper down.
 ///
-/// The party rung is deliberately only twice the single rung while carrying
-/// three times the disks, and the roster rung is priced above what a roster
-/// is ever likely to need: buying breadth is the point of the ladder, and
-/// the top rung is a run's savings rather than an errand.
+/// The middle rung is deliberately only twice the single rung while carrying
+/// three times the parts, and the top rung is a run's savings rather than an
+/// errand.
 pub const STACK_MARKET_ROUTINE_PRICE_ONE: u32 = 150;
 pub const STACK_MARKET_ROUTINE_PRICE_PARTY: u32 = 300;
 pub const STACK_MARKET_ROUTINE_PRICE_EVERYONE: u32 = 1000;
 
-/// How many etched disks each price rung above hands over.
-///
-/// **Constants rather than the live party and roster sizes**, and that is
-/// the whole reason they are here rather than read off `Party` and
-/// `owned_pets`. A quantity derived from the party would change between the
-/// player reading the shelf and paying for it — a program dismissed, a
-/// companion left behind — which is exactly the objection
-/// `Game::market_program_price` already makes about folding Trace into a
-/// quote. What is on the shelf has to be what is bought.
-///
-/// `MAX_PARTY_SIZE` and a roster's realistic size are what these are
-/// modelled on, but they are not *bound* to them: a retune of party size is
-/// not automatically a retune of what a shelf sells.
-pub const STACK_MARKET_ROUTINE_DISKS_ONE: u32 = 1;
-pub const STACK_MARKET_ROUTINE_DISKS_PARTY: u32 = 3;
-pub const STACK_MARKET_ROUTINE_DISKS_EVERYONE: u32 = 6;
+/// How many parts each price rung above hands over.
+pub const STACK_MARKET_PARTS_ONE: u32 = 1;
+pub const STACK_MARKET_PARTS_PARTY: u32 = 3;
+pub const STACK_MARKET_PARTS_EVERYONE: u32 = 6;
 
 /// The odds a market carries an exclusive routine's etched disk, as
 /// `BASE + PER_DEPTH * depth`, clamped to `0.0..=1.0`.
@@ -75,12 +59,12 @@ pub const STACK_MARKET_ROUTINE_DISKS_EVERYONE: u32 = 6;
 pub const STACK_MARKET_EXCLUSIVE_CHANCE_BASE: f64 = 0.04;
 pub const STACK_MARKET_EXCLUSIVE_CHANCE_PER_DEPTH: f64 = 0.04;
 
-/// What a market charges for a single exclusive routine's etched disk.
+/// What a market charges for every part of one exclusive routine.
 ///
-/// Above `STACK_MARKET_ROUTINE_PRICE_EVERYONE` deliberately: six disks of
-/// something anyone can etch is a convenience, and one disk of something
-/// nobody can etch is the run's prize. A player who can afford both should
-/// feel the second one cost more.
+/// Above `STACK_MARKET_ROUTINE_PRICE_EVERYONE` deliberately: a crate of an
+/// ordinary part is a convenience, and a whole boss routine is the run's
+/// prize. A player who can afford both should feel the second one cost
+/// more.
 pub const STACK_MARKET_EXCLUSIVE_PRICE: u32 = 1400;
 
 /// What a market charges per point of a program's power (`Stats::power()`

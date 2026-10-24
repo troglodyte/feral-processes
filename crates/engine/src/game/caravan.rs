@@ -184,7 +184,7 @@ const SHELF_SALT: u64 = 0x5_4E1F;
 ///
 /// Derived from the enum rather than written as a literal 6, so a seventh
 /// category cannot silently land on top of the Routine Disks run.
-const CARAVAN_ROUTINE_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
+const CARAVAN_PART_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
 
 /// One shelf row's identity, drawn but not yet rolled.
 ///
@@ -199,7 +199,7 @@ const CARAVAN_ROUTINE_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
 /// the stream.
 pub(crate) enum Drawn {
     Gear(ItemId),
-    Routine(String),
+    Part(crate::routine_craft::Subroutine),
     Program(String),
     Material(ItemId),
 }
@@ -248,7 +248,7 @@ impl Game {
                 Drawn::Gear(item) => {
                     views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
                 }
-                Drawn::Routine(ability) => views::CaravanOfferKind::Routine(ability),
+                Drawn::Part(part) => views::CaravanOfferKind::Part(part),
                 Drawn::Program(species) => views::CaravanOfferKind::Program(species),
                 Drawn::Material(item) => views::CaravanOfferKind::Material(item),
             })
@@ -307,7 +307,7 @@ impl Game {
             .iter()
             .map(|slot| self.stock_pool(|d| d.equipment.is_some_and(|(s, _)| s == *slot)))
             .collect();
-        let mut routines = self.routine_disk_pool();
+        let mut parts = crate::routine_craft::Subroutine::shelf();
         // Every other piece of cargo, craftable or not — a caravan pulls up
         // beside a base and the base wants feedstock, so salvage it would
         // otherwise have to go and mine belongs here. That width is what
@@ -322,10 +322,7 @@ impl Game {
         // asymmetry, so a spare or unwanted carrier still converts back to
         // Credits like any other held cargo.
         let mut materials = self.stock_pool(|d| {
-            d.equipment.is_none()
-                && d.id.etched_ability().is_none()
-                && d.id.part_of().is_none()
-                && d.id.tool_id().is_none()
+            d.equipment.is_none() && d.id.part_of().is_none() && d.id.tool_id().is_none()
         });
         let mut programs: Vec<String> = self
             .world
@@ -358,7 +355,7 @@ impl Game {
             if gear_by_slot.iter().any(|pool| !pool.is_empty()) {
                 buckets.push((weights.gear, 0));
             }
-            if !routines.is_empty() {
+            if !parts.is_empty() {
                 buckets.push((weights.routines, 1));
             }
             if !programs.is_empty() {
@@ -399,8 +396,8 @@ impl Game {
                     Drawn::Gear(pool.swap_remove(pick))
                 }
                 1 => {
-                    let pick = rng.random_range(0..routines.len());
-                    Drawn::Routine(routines.swap_remove(pick))
+                    let pick = rng.random_range(0..parts.len());
+                    Drawn::Part(parts.swap_remove(pick))
                 }
                 2 => {
                     let pick = rng.random_range(0..programs.len());
@@ -467,8 +464,8 @@ impl Game {
             // Past every `ItemCategory`, and in the order the shelf offers
             // them. Neither is cargo, so neither can borrow a category's
             // rank without colliding with a real one.
-            views::CaravanOfferKind::Routine(_) => (CARAVAN_ROUTINE_RANK, "Routine Disks"),
-            views::CaravanOfferKind::Program(_) => (CARAVAN_ROUTINE_RANK + 1, "Programs"),
+            views::CaravanOfferKind::Part(_) => (CARAVAN_PART_RANK, "Subroutines"),
+            views::CaravanOfferKind::Program(_) => (CARAVAN_PART_RANK + 1, "Programs"),
         }
     }
 
@@ -488,32 +485,6 @@ impl Game {
             .filter(|d| d.role.is_none() && !d.banked)
             .filter(|d| keep(d))
             .map(|d| d.id.clone())
-            .collect()
-    }
-
-    /// The ability ids a caravan may sell disks of.
-    ///
-    /// The same two exclusions `Game::market_offers` makes and for the same
-    /// reasons: `AbilityDb::wild_pool` is hunt-only and a shop selling one is
-    /// the "just target the species" shortcut that boundary exists to break,
-    /// and `exclusive_pool` is the one thing that cannot be etched at home —
-    /// a caravan is convenience, and convenience must not be the way past
-    /// either boundary. A third, `abilities::ability_disk_shelved` (todo
-    /// #100 Task 4 decision 9), keeps Emulate's disk off this shelf for the
-    /// same reason it's off the creation one: unlocking it is the routine
-    /// tree's own gate, and a caravan selling the disk would sell straight
-    /// past it.
-    fn routine_disk_pool(&self) -> Vec<String> {
-        let db = self.world.resource::<AbilityDb>();
-        let hunt_only: Vec<&str> = db
-            .wild_pool()
-            .into_iter()
-            .map(|(def, _)| def.id.as_str())
-            .collect();
-        db.all()
-            .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
-            .filter(|def| crate::abilities::ability_disk_shelved(def))
-            .map(|def| def.id.clone())
             .collect()
     }
 
@@ -586,9 +557,7 @@ impl Game {
         let (name, detail) = self.offer_text(&kind);
         let unit_cost = match &kind {
             views::CaravanOfferKind::Gear(copy) => self.caravan_unit_cost(&copy.item),
-            views::CaravanOfferKind::Routine(ability) => {
-                self.caravan_unit_cost(&ItemId::etched(ability))
-            }
+            views::CaravanOfferKind::Part(part) => self.caravan_unit_cost(&ItemId::part(part)),
             views::CaravanOfferKind::Program(species) => {
                 let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
                 self.program_price(species, mult)
@@ -624,15 +593,11 @@ impl Game {
                     .unwrap_or_default()
                     .to_string(),
             ),
-            views::CaravanOfferKind::Routine(ability) => {
-                let disk = ItemId::etched(ability);
+            views::CaravanOfferKind::Part(part) => {
+                let item = ItemId::part(part);
                 (
-                    self.item_name(&disk).to_string(),
-                    self.world
-                        .resource::<AbilityDb>()
-                        .get(ability)
-                        .map(|def| def.description.clone())
-                        .unwrap_or_default(),
+                    self.item_name(&item).to_string(),
+                    self.item_description(&item).unwrap_or_default().to_string(),
                 )
             }
             views::CaravanOfferKind::Program(species) => {
@@ -1327,10 +1292,10 @@ impl Game {
                 self.add_copies(copy, offer.qty);
                 format!("{} goes in the pack", self.copy_name(copy))
             }
-            views::CaravanOfferKind::Routine(ability) => {
-                let disk = ItemId::etched(ability);
-                let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, offer.qty, LootSource::Trade);
+            views::CaravanOfferKind::Part(part) => {
+                let item = ItemId::part(part);
+                let name = self.item_name(&item).to_string();
+                self.grant_loot(item, offer.qty, LootSource::Trade);
                 format!("{name} goes in the pack")
             }
             views::CaravanOfferKind::Material(item) => {

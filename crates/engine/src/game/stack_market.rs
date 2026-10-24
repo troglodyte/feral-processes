@@ -97,31 +97,20 @@ impl Game {
     /// rather than inside the list comprehension that builds the shelf.
     fn offer_row(&mut self, index: usize, kind: MarketOfferKind, credits: u32) -> MarketOffer {
         let (name, detail, price) = match &kind {
-            MarketOfferKind::Routine { ability, scope } => (
-                format!(
-                    "{} ×{} — {}",
-                    self.ability_display_name(ability),
-                    scope.disks(),
-                    scope.label()
-                ),
+            MarketOfferKind::Part { part, scope } => {
+                let item = ItemId::part(part);
+                (
+                    format!("{} ×{} — {}", part.label(), scope.parts(), scope.label()),
+                    self.item_description(&item).unwrap_or_default().to_string(),
+                    scope.price(),
+                )
+            }
+            MarketOfferKind::ExclusiveRoutine { ability } => (
+                format!("{} — every part", self.ability_display_name(ability)),
                 self.world
                     .resource::<AbilityDb>()
                     .get(ability)
-                    .map(|def| def.description.clone())
-                    .unwrap_or_default(),
-                scope.price(),
-            ),
-            MarketOfferKind::ExclusiveDisk { ability } => (
-                // Named as the disk rather than as the routine, because
-                // that is what changes hands and what will be sitting in
-                // cargo afterwards. The ordinary rows above can say the
-                // routine's name plainly; this one is the only shelf row
-                // that is a *thing*.
-                self.item_name(&ItemId::etched(ability)).to_string(),
-                self.world
-                    .resource::<AbilityDb>()
-                    .get(ability)
-                    .map(|def| format!("{} Nobody can write this one.", def.description))
+                    .map(|def| format!("{} Nobody else is selling this one.", def.description))
                     .unwrap_or_default(),
                 STACK_MARKET_EXCLUSIVE_PRICE,
             ),
@@ -166,21 +155,12 @@ impl Game {
     /// than working the length out from the constants, because a second
     /// expression of "how big is a shelf" is a copy that drifts.
     ///
-    /// Two routines at all three bundle sizes, then a program on some
-    /// markets and not others, then — rarely, and more often the deeper the
-    /// frame — one exclusive routine's disk.
+    /// Two parts at all three bundle sizes, then a program on some markets
+    /// and not others, then — rarely, and more often the deeper the frame —
+    /// every part of one exclusive routine.
     ///
-    /// The ordinary routine pool deliberately **excludes everything in
-    /// `AbilityDb::wild_pool`**: those are the hunt-only routines, reachable
-    /// exactly one way — off a wild carrier — and a shop selling them is
-    /// precisely the "just target the species" shortcut that boundary exists
-    /// to break. See `no_species_or_research_file_grants_a_wild_only_ability`,
-    /// which makes the same demand of species and research files.
-    ///
-    /// It excludes `AbilityDb::exclusive_pool` for the opposite reason: those
-    /// are not cheaper or rarer versions of an ordinary row, they are the one
-    /// thing on the shelf that cannot be etched at home, and listing one at
-    /// six copies for a party would make it exactly as ordinary as Throttle.
+    /// `Subroutine::shelf` is the part pool: it keeps Emulate's Core off the
+    /// shelf, since unlocking Emulate is what its research gates.
     ///
     /// The program is drawn from the **whole non-boss roster**, not from the
     /// entrance biome's `habitat_pools` the way `orphan_species` is, and the
@@ -197,35 +177,17 @@ impl Game {
         let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
         let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ MARKET_SALT);
 
-        // `AbilityDb::all` and `SpeciesDb::all` both iterate id-sorted, so a
-        // shelf is a function of the seed rather than of however the asset
-        // files happened to load — the same guarantee `open_cache`'s drop
-        // table makes by sorting its own table.
-        let db = self.world.resource::<AbilityDb>();
-        let hunt_only: Vec<&str> = db
-            .wild_pool()
-            .into_iter()
-            .map(|(def, _)| def.id.as_str())
-            .collect();
-        let mut pool: Vec<String> = db
-            .all()
-            .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
-            // Final review F2: the same door `ItemDb::creation_shelf` and
-            // `Game::routine_disk_pool` already go through — a disk shelf
-            // that skips it sells straight past whatever it exists to
-            // gate (Emulate, today).
-            .filter(|def| crate::abilities::ability_disk_shelved(def))
-            .map(|def| def.id.clone())
-            .collect();
+        // `Subroutine::shelf` and `SpeciesDb::all` both iterate in a fixed
+        // order, so a shelf is a function of the seed rather than of
+        // however the asset files happened to load — the same guarantee
+        // `open_cache`'s drop table makes by sorting its own table.
+        let mut pool = crate::routine_craft::Subroutine::shelf();
 
         let mut offers = Vec::new();
         for _ in 0..STACK_MARKET_ROUTINE_OFFERS.min(pool.len()) {
-            let ability = pool.swap_remove(rng.random_range(0..pool.len()));
+            let part = pool.swap_remove(rng.random_range(0..pool.len()));
             for scope in RoutineScope::ALL {
-                offers.push(MarketOfferKind::Routine {
-                    ability: ability.clone(),
-                    scope,
-                });
+                offers.push(MarketOfferKind::Part { part, scope });
             }
         }
         // Rolled after the routines so the two are independent: a market
@@ -263,7 +225,7 @@ impl Game {
                 .map(|def| def.id.clone())
                 .collect();
             if !pool.is_empty() {
-                offers.push(MarketOfferKind::ExclusiveDisk {
+                offers.push(MarketOfferKind::ExclusiveRoutine {
                     ability: pool[rng.random_range(0..pool.len())].clone(),
                 });
             }
@@ -400,8 +362,8 @@ impl Game {
             .ok_or_else(|| "There's nothing like that on the shelf.".to_string())?;
 
         let price = match &kind {
-            MarketOfferKind::Routine { scope, .. } => scope.price(),
-            MarketOfferKind::ExclusiveDisk { .. } => STACK_MARKET_EXCLUSIVE_PRICE,
+            MarketOfferKind::Part { scope, .. } => scope.price(),
+            MarketOfferKind::ExclusiveRoutine { .. } => STACK_MARKET_EXCLUSIVE_PRICE,
             MarketOfferKind::Program { species } => self.market_program_price(species),
         };
         let currency = self.trade_currency();
@@ -423,18 +385,18 @@ impl Game {
         // the player has paid and holds nothing, and none in which they hold
         // it and have not paid.
         let delivered = match &kind {
-            MarketOfferKind::Routine { ability, scope } => {
-                let qty = scope.disks();
-                let disk = ItemId::etched(ability);
-                let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, qty, LootSource::Trade);
+            MarketOfferKind::Part { part, scope } => {
+                let qty = scope.parts();
+                let item = ItemId::part(part);
+                let name = self.item_name(&item).to_string();
+                self.grant_loot(item, qty, LootSource::Trade);
                 format!("{qty} × {name} goes in the pack")
             }
-            MarketOfferKind::ExclusiveDisk { ability } => {
-                let disk = ItemId::etched(ability);
-                let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, 1, LootSource::Trade);
-                format!("{name} is yours — the only one you'll see on this shelf")
+            MarketOfferKind::ExclusiveRoutine { ability } => {
+                let name = self.ability_display_name(ability);
+                let parts = self.parts_of_routine(ability);
+                self.grant_parts(&parts, LootSource::Trade);
+                format!("Every part of {name} is yours — the only set you'll see on this shelf")
             }
             MarketOfferKind::Program { species } => {
                 if self.roster_room() == 0 {

@@ -437,6 +437,18 @@ impl Subroutine {
         parts
     }
 
+    /// Every part a trader may sell. Emulate's Core stays off every shelf:
+    /// crafting it is gated by research, and unlocking Emulate is the
+    /// feature that research exists to gate, so a shelf would sell straight
+    /// past it. One door for the Stack market, the caravans and the
+    /// settlements.
+    pub fn shelf() -> Vec<Subroutine> {
+        Subroutine::all()
+            .into_iter()
+            .filter(|part| !matches!(part, Subroutine::Core(Core::Emulate, _)))
+            .collect()
+    }
+
     /// A stable text key, the tail of a part's item id and its research
     /// node's id. `from_key` is its inverse.
     pub fn key(&self) -> String {

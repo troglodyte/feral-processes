@@ -127,7 +127,7 @@ impl Game {
                 Drawn::Gear(item) => {
                     views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
                 }
-                Drawn::Routine(ability) => views::CaravanOfferKind::Routine(ability),
+                Drawn::Part(part) => views::CaravanOfferKind::Part(part),
                 Drawn::Program(species) => views::CaravanOfferKind::Program(species),
                 Drawn::Material(item) => views::CaravanOfferKind::Material(item),
             })
@@ -165,8 +165,8 @@ impl Game {
             views::CaravanOfferKind::Gear(copy) => {
                 self.settlement_unit_cost(&copy.item, temperament)
             }
-            views::CaravanOfferKind::Routine(ability) => {
-                self.settlement_unit_cost(&ItemId::etched(ability), temperament)
+            views::CaravanOfferKind::Part(part) => {
+                self.settlement_unit_cost(&ItemId::part(part), temperament)
             }
             views::CaravanOfferKind::Program(species) => {
                 let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;

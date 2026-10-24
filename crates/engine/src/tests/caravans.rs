@@ -497,7 +497,7 @@ fn a_shelf_never_lists_the_same_thing_twice() {
         for offer in shelf(&mut game, visit) {
             let key = match &offer.kind {
                 CaravanOfferKind::Gear(copy) => format!("gear {copy:?}"),
-                CaravanOfferKind::Routine(ability) => format!("routine {ability}"),
+                CaravanOfferKind::Part(part) => format!("part {part:?}"),
                 CaravanOfferKind::Program(species) => format!("program {species}"),
                 CaravanOfferKind::Material(item) => format!("material {item:?}"),
             };
@@ -718,7 +718,7 @@ fn no_craftable_is_sold_under_its_parts() {
         let item = match &offer.kind {
             CaravanOfferKind::Gear(copy) => copy.item.clone(),
             CaravanOfferKind::Material(item) => item.clone(),
-            CaravanOfferKind::Routine(ability) => crate::ItemId::etched(ability),
+            CaravanOfferKind::Part(part) => crate::ItemId::part(part),
             CaravanOfferKind::Program(_) => continue,
         };
         let Some(parts) = game
@@ -742,8 +742,7 @@ fn no_craftable_is_sold_under_its_parts() {
 /// A tool carrier must never be a caravan's own offer — buying one would let
 /// Credits skip the research→forge chain the feature exists to make the
 /// player earn. `stock_pool`'s exclusion (`game::caravan`) is what this
-/// walks: an etched ability already gets the same treatment for the same
-/// reason.
+/// walks.
 #[test]
 fn no_caravan_shelf_ever_stocks_a_tool_carrier() {
     let mut game = fresh();
@@ -761,22 +760,23 @@ fn no_caravan_shelf_ever_stocks_a_tool_carrier() {
     }
 }
 
-/// The Emulate disk must never be a caravan's own offer — buying one would
-/// let Credits skip the routine tree entirely, and unlocking Emulate *is*
-/// what that tree gates (todo #100 Task 4 decision 9). `Game::install_disk`
-/// never checks `Game::node_researched`, so this exclusion lives beside
-/// `routine_disk_pool`'s own two rather than in the research door itself.
+/// The Emulate Core must never be a caravan's own offer — buying one would
+/// let Credits skip the routine tree, and unlocking Emulate *is* what that
+/// tree gates. `Subroutine::shelf` is the one door that keeps it off.
 #[test]
-fn no_caravan_shelf_ever_stocks_the_emulate_disk() {
+fn no_caravan_shelf_ever_stocks_the_emulate_core() {
     let mut game = fresh();
     based(&mut game);
     set_zone(&mut game, 4);
 
     for offer in every_shelf(&mut game, 60) {
-        if let CaravanOfferKind::Routine(ability) = &offer.kind {
-            assert_ne!(
-                ability, "emulate",
-                "the Emulate disk must never be stocked for sale"
+        if let CaravanOfferKind::Part(part) = &offer.kind {
+            assert!(
+                !matches!(
+                    part,
+                    crate::routine_craft::Subroutine::Core(crate::routine_craft::Core::Emulate, _)
+                ),
+                "the Emulate Core must never be stocked for sale"
             );
         }
     }
@@ -857,7 +857,7 @@ fn no_shelf_anywhere_ever_stocks_a_currency() {
             let item = match &offer.kind {
                 CaravanOfferKind::Gear(copy) => copy.item.clone(),
                 CaravanOfferKind::Material(item) => item.clone(),
-                CaravanOfferKind::Routine(ability) => crate::ItemId::etched(ability),
+                CaravanOfferKind::Part(part) => crate::ItemId::part(part),
                 CaravanOfferKind::Program(_) => continue,
             };
             assert_ne!(item, fragment, "a Portal Fragment reached a shelf");

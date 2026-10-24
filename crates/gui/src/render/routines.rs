@@ -159,12 +159,8 @@ pub(super) fn draw_routine_etch(
 /// One extraction candidate's lines: the row the highlight lands on, then the
 /// routines the program is carrying underneath.
 ///
-/// Extraction destroys the program for exactly one of those routines, and
-/// `Game::extract_routine` *refuses* one the player already knows — so a
-/// program whose whole kit is known is worth nothing on the block, and
-/// without this the only way to find that out is to open each program in
-/// turn. The `(known)` tag is what says it; the next page says the same
-/// thing about a single row with `(already known)`.
+/// Extraction destroys the program for exactly one of those routines, so
+/// what each program carries is what decides which one to put on the block.
 ///
 /// The routines shed onto their own lines through `continuation_lines`
 /// rather than joining the row, for the reason that function states. A
@@ -175,13 +171,7 @@ pub(super) fn draw_routine_etch(
 /// The program's row is always present, so a caller may take it
 /// unconditionally.
 fn extract_candidate_rows(p: &PetInfo, routines: &[ExtractableRoutineView]) -> Vec<String> {
-    let kit: Vec<String> = routines
-        .iter()
-        .map(|r| {
-            let known = if r.known { " (known)" } else { "" };
-            format!("{}{known}", r.name)
-        })
-        .collect();
+    let kit: Vec<String> = routines.iter().map(|r| r.name.clone()).collect();
     std::iter::once(format!("{} Lv{}{}", p.name, p.level, fusion_tag(p.fusions)))
         .chain(continuation_lines(&kit.join(", ")))
         .collect()
@@ -237,8 +227,7 @@ pub(super) fn extract_pick_rows(offered: &[ExtractableRoutineView], selected: us
         "Take the Subroutines of which routine? The rest are lost with it.",
     )];
     for (i, a) in offered.iter().enumerate() {
-        let known = if a.known { " (already known)" } else { "" };
-        rows.push(item_row(format!("{}{known}", a.name), i == selected));
+        rows.push(item_row(a.name.clone(), i == selected));
         rows.push(description_row(&a.description));
     }
     rows
@@ -303,25 +292,21 @@ mod tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
 
-    fn offered(name: &str, known: bool) -> ExtractableRoutineView {
+    fn offered(name: &str) -> ExtractableRoutineView {
         ExtractableRoutineView {
             ability: name.to_lowercase().replace(' ', "_"),
             name: name.to_string(),
             description: String::new(),
-            known,
         }
     }
 
     /// The picker's whole job is choosing which program to destroy, and the
-    /// thing that decides it is what each one is carrying. `extract_routine`
-    /// refuses a routine already known, so a kit that is all `(known)` is a
-    /// program with nothing to give — the tag is the only thing on this
-    /// screen that says so.
+    /// thing that decides it is what each one is carrying.
     #[test]
-    fn an_extract_candidate_names_its_routines_and_marks_the_known_ones() {
+    fn an_extract_candidate_names_its_routines() {
         let lines = extract_candidate_rows(
             &test_pet("Kestrel", "w|a|m"),
-            &[offered("Sandbox", false), offered("Patch Routine", true)],
+            &[offered("Sandbox"), offered("Patch Routine")],
         );
         assert!(lines[0].contains("Kestrel"), "{lines:?}");
         assert!(
@@ -330,12 +315,8 @@ mod tests {
         );
         let under = lines[1..].join(" ");
         assert!(
-            under.contains("Patch Routine (known)"),
-            "a routine already known is marked: {lines:?}"
-        );
-        assert!(
-            under.contains("Sandbox") && !under.contains("Sandbox (known)"),
-            "one not yet known is named plainly: {lines:?}"
+            under.contains("Sandbox") && under.contains("Patch Routine"),
+            "{lines:?}"
         );
     }
 
@@ -351,9 +332,7 @@ mod tests {
     /// horizontally, so the kit has to shed onto continuation lines rather
     /// than off the right edge. The same census
     /// `the_widest_shipped_routine_kit_fits_the_fuse_picker` runs, against
-    /// the worst case *this* screen can build — which is wider, because
-    /// every name here can carry a `(known)` tag the fuse picker has no
-    /// equivalent of.
+    /// the worst case *this* screen can build.
     ///
     /// Measured against the real ability set rather than a literal, so an
     /// author naming a routine longer fails this instead of shipping a line
@@ -372,7 +351,7 @@ mod tests {
             "the census found {} routines, so it is measuring nothing",
             names.len()
         );
-        let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n, true)).collect();
+        let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n)).collect();
         let lines = extract_candidate_rows(&test_pet("Kestrel", "w|a|m"), &kit);
         with_painter(|p| {
             let m = ui_metrics(900.0);

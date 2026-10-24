@@ -92,22 +92,12 @@ pub(super) fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
 /// one `N slots open` line in `hud-attention` — an empty slot is something
 /// to spend, not a row to read.
 fn routines_section(view: &ManifestView) -> Section {
-    // `r.unseen` is a filled slot whose routine the player has not met:
-    // `RoutineSlotView::unseen`'s doc warns a renderer off reading the
-    // name instead, since an empty slot's name is "(empty)", never blank.
-    let filled = |r: &&feral_processes_engine::RoutineSlotView| r.ability.is_some() || r.unseen;
+    let filled = |r: &&feral_processes_engine::RoutineSlotView| r.ability.is_some();
     let rows: Vec<SectionRow> = view
         .routines
         .iter()
         .filter(filled)
-        .map(|r| {
-            let name = if r.unseen {
-                "??? — a routine you haven't seen".to_string()
-            } else {
-                r.name.clone()
-            };
-            stat(format!("{}", r.index + 1), name)
-        })
+        .map(|r| stat(format!("{}", r.index + 1), r.name.clone()))
         .collect();
     let open = view.routines.len() - rows.len();
     let n = rows.len();

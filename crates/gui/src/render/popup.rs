@@ -1812,7 +1812,6 @@ mod tests {
                             name: name(i),
                             description: text(i),
                             fixed: false,
-                            unseen: false,
                         })
                         .collect::<Vec<_>>(),
                     selected,
@@ -1858,7 +1857,6 @@ mod tests {
                             ability: id(i),
                             name: name(i),
                             description: text(i),
-                            known: i % 2 == 0,
                         })
                         .collect::<Vec<_>>(),
                     selected,

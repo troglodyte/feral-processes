@@ -120,12 +120,6 @@ impl Game {
     }
 
     /// `entity`'s slots in menu order, filled and empty alike.
-    ///
-    /// **A filled slot on a program the player does not own conceals
-    /// itself** when its family isn't discovered yet (spec §4
-    /// "Concealment") — `unseen` is set and the name, description and
-    /// ability id are all blanked, so a renderer reading any of the three
-    /// instead of the flag still can't leak it.
     pub fn routine_view(&self, entity: Entity) -> Vec<RoutineSlotView> {
         let db = self.world.resource::<AbilityDb>();
         let installed = self
@@ -133,29 +127,15 @@ impl Game {
             .get::<Routines>(entity)
             .map(|r| r.0.clone())
             .unwrap_or_default();
-        let owned = self.program_is_owned(entity);
         (0..self.routine_slots(entity))
             .map(
                 |index| match installed.get(index).and_then(|id| db.get(id)) {
-                    Some(def)
-                        if !owned && !self.family_discovered(&crate::routine_tree::family(def)) =>
-                    {
-                        RoutineSlotView {
-                            index,
-                            ability: None,
-                            name: String::new(),
-                            description: String::new(),
-                            fixed: self.routine_is_permanent(&def.id),
-                            unseen: true,
-                        }
-                    }
                     Some(def) => RoutineSlotView {
                         index,
                         ability: Some(def.id.clone()),
                         name: def.name.clone(),
                         description: def.description.clone(),
                         fixed: self.routine_is_permanent(&def.id),
-                        unseen: false,
                     },
                     None => RoutineSlotView {
                         index,
@@ -163,7 +143,6 @@ impl Game {
                         name: "(empty)".to_string(),
                         description: String::new(),
                         fixed: false,
-                        unseen: false,
                     },
                 },
             )
@@ -647,9 +626,7 @@ impl Game {
     }
 
     /// The routines installed on `creature`, in slot order — what an
-    /// extraction offers to salvage. A row already `known` is one
-    /// `extract_routine` will refuse, so the picker can say so before the
-    /// program is on the block.
+    /// extraction offers to salvage.
     pub fn extractable_routines(&self, creature: Entity) -> Vec<ExtractableRoutineView> {
         let db = self.world.resource::<AbilityDb>();
         self.world
@@ -662,7 +639,6 @@ impl Game {
                 ability: def.id.clone(),
                 name: def.name.clone(),
                 description: def.description.clone(),
-                known: !def.exclusive && self.family_discovered(&crate::routine_tree::family(def)),
             })
             .collect()
     }

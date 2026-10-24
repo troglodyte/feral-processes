@@ -96,6 +96,7 @@ Do not duplicate between them; point instead.
 | [0026](0026-no-ci-manual-releases.md) | No CI; releases are manual per platform | Accepted (standing) | user (CLAUDE.md) | — |
 | [0027](0027-refusals-are-typed-per-feature.md) | Refusals are typed per feature | Proposed | Claude — proposed, awaiting the user | Refusal enum |
 | [0028](0028-announcements-fire-on-a-crossing.md) | Announcements fire on a crossing | Proposed | Claude — proposed, awaiting the user | Edge trigger |
+| [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | Player routines are compiled from a Rust part catalogue | Proposed | Claude — proposed, awaiting the user | Builder |
 
 ## Pattern index
 
@@ -122,3 +123,4 @@ A pattern not listed here, or listed only as (Proposed), is not yet agreed: it n
 | Navigation stack (Proposed) | [0007](0007-navigation-is-a-stack.md) | none yet |
 | Refusal enum (Proposed) | [0027](0027-refusals-are-typed-per-feature.md) | `SortieRefusal`, `ContractRefusal` |
 | Edge trigger (Proposed) | [0028](0028-announcements-fire-on-a-crossing.md) | `Outpost::announced` (latch form) |
+| Builder, parts compiled into a value (Proposed) | [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | none yet (proposed `routine_craft::compile`) |

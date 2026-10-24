@@ -29,7 +29,7 @@ crate stays green. Each phase is one subagent dispatch (sonnet); the phase's
 
 ## Global constraints (every phase, every dispatch prompt)
 
-- Worktree on branch `routine-crafting` (ask the user before creating it —
+- Worktree on branch `routine-crafting` (the user approved a new worktree on 2026-10-24 —
   they play from the primary checkout). `git fetch` and compare `origin/main`
   at each phase boundary; merge main in before a phase builds on a moved API.
 - Never push, `git checkout` uncommitted work, `git stash`, `git add -A`, or

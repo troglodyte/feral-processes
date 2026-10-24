@@ -13,7 +13,7 @@ fn a_from_playing_opens_field_routine() {
 
 #[test]
 fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
-    let mut app = app_with_player_routines(71, &["built:field_mitigation+group"], 100.0);
+    let mut app = app_with_player_routines(71, &["built:field_regen+group"], 100.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     pick_row(&mut app, 0);
@@ -26,7 +26,7 @@ fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "field_mitigation+group"),
+        buffs.iter().any(|b| b.name == "field_regen+group"),
         "the buff should now be running"
     );
 }
@@ -62,7 +62,7 @@ fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
 
 #[test]
 fn escape_backs_out_of_field_routine_without_casting_anything() {
-    let mut app = app_with_player_routines(73, &["built:field_mitigation+group"], 100.0);
+    let mut app = app_with_player_routines(73, &["built:field_regen+group"], 100.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Esc);

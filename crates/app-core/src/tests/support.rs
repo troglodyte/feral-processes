@@ -2204,7 +2204,7 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
 
 /// The routine ids a fixture's save should carry for `tokens`. A plain token
 /// is an authored ability id and passes through; `built:<core>[+<part>...]`
-/// (`built:field_mitigation+group`) adds a routine built from those parts to
+/// (`built:field_regen+group`) adds a routine built from those parts to
 /// the save's crafted record and names its `crafted/<n>` id, the way a
 /// player's Workbench would.
 fn expand_routines(data: &mut save::SaveData, tokens: &[&str]) -> Vec<String> {

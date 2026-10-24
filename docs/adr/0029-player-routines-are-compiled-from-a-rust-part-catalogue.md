@@ -1,7 +1,7 @@
 # 0029 Player routines are compiled from a Rust part catalogue
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: the user, 2026-10-24
 - Date: 2026-10-24
 - Pattern: Builder (parts compiled into a plain value)
 - Depends on: [0019](0019-content-defaults-to-rust.md), [0023](0023-saves-are-field-named-ron.md), [0017](0017-game-is-the-entire-api.md)

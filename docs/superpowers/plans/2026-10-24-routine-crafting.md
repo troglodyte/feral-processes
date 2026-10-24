@@ -11,8 +11,7 @@ authored player routines and the creation Routine step go away.
 **Spec:** `docs/superpowers/specs/2026-10-24-routine-crafting-design.md` — the
 source of truth for every table (Cores, modifiers, fit matrix, cap, costs).
 Phase files cite its section names; they do not restate them.
-**ADR:** `docs/adr/0029-…` — **Proposed. Phase 1 does not start until the user
-marks it Agreed** (CLAUDE.md: never build on a Proposed record).
+**ADR:** `docs/adr/0029-…` — Agreed by the user 2026-10-24.
 
 ## Phases
 

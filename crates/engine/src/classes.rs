@@ -523,24 +523,9 @@ impl Game {
     /// spread plus `perks::affinity_bonus`'s per-kind perk bonus (`Perk::
     /// DamageAffinity`, `HealAffinity`, ...), clamped at `AFFINITY_MAX`. The
     /// one place that combination is computed: `ability_affinity` calls it
-    /// with `player_class_affinity`'s resolve (the entity's own class),
-    /// `player_affinity_for` below with an explicit class's — so neither
-    /// path can drift from the other by re-deriving the sum itself.
+    /// with `player_class_affinity`'s resolve (the entity's own class).
     pub(crate) fn affinity_with_perk(&self, class_affinity: f32, kind: AffinityKind) -> f32 {
         affinity_with_perk(class_affinity, self.player_perks(), kind)
-    }
-
-    /// `ability_affinity`'s player-arm formula in full, for an explicit
-    /// `class` rather than the one on `PlayerIdentity`. This is the door
-    /// `starter_routine_rows` prices a row through against a class the
-    /// creation wizard's player has only picked, not yet committed to the
-    /// entity.
-    pub(crate) fn player_affinity_for(
-        &self,
-        class: Option<PlayerClass>,
-        kind: AffinityKind,
-    ) -> f32 {
-        self.affinity_with_perk(self.class_affinity(class, kind), kind)
     }
 
     /// One row per loaded class, in `ClassDb::iter`'s order, for the

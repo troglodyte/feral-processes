@@ -7434,6 +7434,7 @@ mod teleport {
     use crate::abilities::{AbilityDb, teleport_reach};
     use crate::components::{AbilityCooldowns, PowerReserve};
     use crate::tactical::reach::distance;
+    use crate::tests::support::built_core;
 
     /// A level the reach is worth measuring at. At level 1 the reach is the
     /// floor, which is also touching distance — so every "past the reach"
@@ -7446,7 +7447,8 @@ mod teleport {
     fn armed(game: &mut Game) -> Entity {
         let player = game.player_entity();
         game.world.get_mut::<Experience>(player).unwrap().level = LEVEL;
-        only_routine(game, player, "teleport");
+        let id = built_core(game, crate::routine_craft::Core::Teleport);
+        only_routine(game, player, &id);
         assert!(wait_for_turn(game, player));
         player
     }
@@ -7511,12 +7513,13 @@ mod teleport {
     fn only_the_player_may_relocate_a_body() {
         let mut game = game();
         let pack = tactical_fight(&mut game, 1, 40);
+        let id = built_core(&mut game, crate::routine_craft::Core::Teleport);
         let def = game
             .world
             .resource::<AbilityDb>()
-            .get("teleport")
+            .get(&id)
             .cloned()
-            .expect("teleport ships");
+            .expect("teleport compiles");
         let player = game.player_entity();
         assert!(
             game.ability_unavailable(player, &def).is_none(),
@@ -7551,12 +7554,13 @@ mod teleport {
     fn ability_unavailable_prefers_an_earlier_refusal_over_power_when_both_apply() {
         let mut game = game();
         let pack = tactical_fight(&mut game, 1, 40);
+        let id = built_core(&mut game, crate::routine_craft::Core::Teleport);
         let def = game
             .world
             .resource::<AbilityDb>()
-            .get("teleport")
+            .get(&id)
             .cloned()
-            .expect("teleport ships");
+            .expect("teleport compiles");
         // Refused twice over: not the player, and (unlike the test above) no
         // reserve at all to pay Teleport's cost with.
         game.world

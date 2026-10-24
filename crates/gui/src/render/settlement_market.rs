@@ -118,7 +118,7 @@ pub(super) fn settlement_market_page_rows(
                 None,
                 PowerCell::of_item(game, item),
             ),
-            CaravanOfferKind::Routine(_) | CaravanOfferKind::Program(_) => {
+            CaravanOfferKind::Part(_) | CaravanOfferKind::Program(_) => {
                 ("", None, PowerCell::Blank)
             }
         };

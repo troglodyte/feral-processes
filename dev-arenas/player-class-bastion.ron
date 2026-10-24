@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: is a Bastion's buff worth a round of not attacking?
 //
 // One of seven files — `player-class-striker`, `-bastion`, `-medic`,
@@ -36,7 +39,6 @@
     character: (
         class: Some(Bastion),
         stats: {},
-        routine: Some("hyperthread"),
     ),
     party: [
         (species: "glitch", level: 5),

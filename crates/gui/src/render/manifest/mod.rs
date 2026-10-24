@@ -568,7 +568,6 @@ mod tests {
                 name: "(empty)".to_string(),
                 description: String::new(),
                 fixed: false,
-                unseen: false,
             }],
             equipment,
             subject: ManifestSubject::Program(Box::new(program)),
@@ -1044,7 +1043,6 @@ mod tests {
                 name: "(empty)".to_string(),
                 description: String::new(),
                 fixed: false,
-                unseen: index == 0,
             })
             .collect();
         let program = worst_case_owned(
@@ -1555,7 +1553,6 @@ mod tests {
             name: "(empty)".to_string(),
             description: String::new(),
             fixed: false,
-            unseen: false,
         }];
 
         use LedgerColumn::{Duty, Fight, Growth};
@@ -1623,7 +1620,6 @@ mod tests {
             .to_string(),
             description: String::new(),
             fixed: false,
-            unseen: false,
         };
         let mut view = program_view(plain_program(6, 6), Vec::new());
         view.routines = (0..12).map(|i| slot(i, i < 7)).collect();
@@ -1639,45 +1635,6 @@ mod tests {
                 .rows
                 .contains(&SectionRow::Note("+2 more".to_string())),
             "{:?}",
-            routines.rows
-        );
-    }
-
-    /// An unseen slot draws the concealment line — never the blanked name,
-    /// never the ability id — because `sections_for` reads nothing but the
-    /// `unseen` flag itself. Spec §4 "Concealment"'s inspect-sheet clause.
-    #[test]
-    fn an_unseen_routine_slot_draws_the_concealment_line() {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(
-            11,
-            feral_processes_engine::DifficultyMode::Forgiving,
-            assets,
-        )
-        .expect("shipped assets load");
-        let program = plain_program(14, 12);
-        let mut view = program_view(program, Vec::new());
-        view.routines = vec![feral_processes_engine::RoutineSlotView {
-            index: 0,
-            ability: None,
-            name: String::new(),
-            description: String::new(),
-            fixed: false,
-            unseen: true,
-        }];
-
-        let sections = sections_for(&game, &view);
-        let routines = sections
-            .iter()
-            .find(|s| s.title == "ROUTINES")
-            .expect("one unseen slot still emits the ROUTINES box");
-        assert!(
-            routines.rows.iter().any(|r| matches!(
-                r,
-                SectionRow::Stat(_, value) if value == "??? — a routine you haven't seen"
-            )),
-            "an unseen slot must draw the concealment line, not its blanked \
-             fields: {:?}",
             routines.rows
         );
     }

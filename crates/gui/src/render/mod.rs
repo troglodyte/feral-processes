@@ -77,6 +77,7 @@ mod put_down;
 mod refit_copy;
 mod research_graph;
 mod rig_tool;
+mod routine_craft;
 mod routines;
 mod score;
 mod settlement;
@@ -164,7 +165,7 @@ use put_down::draw_put_down;
 use refit_copy::draw_refit_copy;
 use rig_tool::draw_rig_tool;
 use routines::{
-    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
+    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
     draw_routine_target, draw_routines,
 };
 use settlement::draw_settlement;
@@ -1047,6 +1048,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => None,
     };
     let siphon = app.siphon;
+    let routine_draft = app.routine_draft.clone();
     let splice_rig = match app.mode {
         Mode::SpliceRig => app.splice_rig.clone(),
         _ => None,
@@ -1238,6 +1240,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         )),
         Mode::RigTool => Some((rig_tool::page_rows(rig_tool.as_ref(), selected), None)),
         Mode::Siphon => Some((building::siphon_page_rows(game, siphon, selected), None)),
+        Mode::RoutineBuild => Some((
+            routine_craft::build_page_rows(game, &routine_draft, selected),
+            None,
+        )),
+        Mode::Subroutines => Some((
+            routine_craft::subroutine_page_rows(game, &list_filter, selected),
+            None,
+        )),
+        Mode::BuiltRoutines => Some((routine_craft::built_page_rows(game, selected), None)),
         Mode::SpliceRig => Some((splice_rig::page_rows(splice_rig.as_ref(), selected), None)),
         Mode::FarmRecipe => Some((farm_recipe::body_rows(&farm_recipe, selected), None)),
         Mode::BuildProgram => Some(building::build_program_page(
@@ -1285,6 +1296,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::PinSubject => draw_pin_subject(game, selected, refusal, painter, m),
         Mode::PinPrisoner => draw_pin_prisoner(game, selected, refusal, painter, m),
         Mode::Siphon => draw_siphon(game, siphon, selected, refusal, painter, m),
+        Mode::RoutineBuildPick => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            routine_craft::draw_pick(game, &routine_draft, selected, refusal, painter, m)
+        }
+        Mode::RoutineBuildName => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            routine_craft::draw_name(&routine_draft, refusal, painter, m)
+        }
         Mode::Transfer => draw_transfer(
             &transfer_entries,
             app.basket_room,
@@ -1559,7 +1578,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::RoutineInstall => draw_routine_install(game, selected, refusal, painter, m),
-        Mode::RoutineEtch => draw_routine_etch(game, selected, refusal, painter, m),
         Mode::Refactor => draw_refactor(game, selected, refusal, painter, m),
         Mode::Develop => draw_develop(game, selected, refusal, painter, m),
         Mode::DevelopProgram => draw_develop_program(
@@ -1895,7 +1913,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 160] = [
+    const ALL_MODES: [Mode; 164] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1927,6 +1945,11 @@ mod tests {
         Mode::PinSubject,
         Mode::PinPrisoner,
         Mode::Siphon,
+        Mode::RoutineBuild,
+        Mode::RoutineBuildPick,
+        Mode::RoutineBuildName,
+        Mode::Subroutines,
+        Mode::BuiltRoutines,
         Mode::DevConsole,
         Mode::DevItemPicker,
         Mode::DevZonePicker,
@@ -1975,7 +1998,6 @@ mod tests {
         Mode::RoutineTarget,
         Mode::Routines,
         Mode::RoutineInstall,
-        Mode::RoutineEtch,
         Mode::FieldRoutine,
         Mode::FieldRoutineAlly,
         Mode::FieldRoutineCell,
@@ -2109,8 +2131,7 @@ mod tests {
                     app.handle_key(feral_processes_app_core::GameKey::Enter);
                 }
                 feral_processes_app_core::CreationStep::Icon
-                | feral_processes_app_core::CreationStep::Colour
-                | feral_processes_app_core::CreationStep::Routine => {
+                | feral_processes_app_core::CreationStep::Colour => {
                     app.handle_key(feral_processes_app_core::GameKey::Char('n'))
                 }
                 feral_processes_app_core::CreationStep::Perks => {
@@ -2148,7 +2169,12 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 29] = [
+    const NEEDS_PENDING_STATE: [Mode; 32] = [
+        // The Workbench pages are drawn only inside the structure hub frame,
+        // which the census app never opens.
+        Mode::RoutineBuild,
+        Mode::Subroutines,
+        Mode::BuiltRoutines,
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,
         Mode::ModPickAffix,

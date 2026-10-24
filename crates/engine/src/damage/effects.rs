@@ -122,6 +122,16 @@ pub fn statuses() -> Vec<StatusDef> {
             tick: String::new(),
             expire: "Heat dissipates from {target}.".into(),
         },
+        StatusDef {
+            id: StatusId::from(crate::tuning::REGEN_STATUS),
+            name: "Regenerating".into(),
+            tag: "RGN".into(),
+            stacking: StatusStacking::Refresh,
+            behaviours: vec![StatusBehaviour::HealPerRound],
+            inflict: "A repair routine takes hold on {target}.".into(),
+            tick: "{target} mends {n} Integrity.".into(),
+            expire: "The repair routine finishes on {target}.".into(),
+        },
     ]
 }
 

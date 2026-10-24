@@ -73,32 +73,18 @@ fn drop_troopers_are_listed_in_staff_rank_order() {
     assert_eq!(game.drop_troopers(), vec![first]);
 }
 
-/// The shipped routine is battle-map only — `tactical_only` is what keeps it
-/// out of the group model's pickers and the arena's `SwingOnly` party — and
-/// researchable through an ordinary synthesised node with no structure gate
-/// (decided 2026-09-27: `NoPodReady` already makes it inert without a pod).
+/// The Reinforce Core compiles to a battle-map-only routine —
+/// `tactical_only` is what keeps it out of the group model's pickers and the
+/// arena's `SwingOnly` party.
 #[test]
-fn call_reinforcements_is_tactical_only_and_gets_an_ungated_node() {
-    let game = Game::new(20260930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let def = game
-        .world
-        .resource::<crate::abilities::AbilityDb>()
-        .get("call_reinforcements")
-        .expect("the shipped routine should load")
-        .clone();
+fn call_reinforcements_is_tactical_only() {
+    let mut game = Game::new(20260930, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = routine(&mut game);
     assert!(matches!(
         def.effect,
         crate::abilities::AbilityEffect::Reinforce
     ));
     assert!(def.effect.tactical_only());
-    let node = crate::routine_tree::node_id(&def.id);
-    assert!(
-        game.world
-            .resource::<crate::research::ResearchDb>()
-            .get(&node)
-            .is_some(),
-        "a synthesised routine node should exist"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +119,8 @@ fn trooper_at(game: &mut Game, x: i32, y: i32, rank: u32) -> Entity {
 fn fight(game: &mut Game) -> Entity {
     tactical_fight(game, 1, 40);
     let player = game.player_entity();
-    only_routine(game, player, "call_reinforcements");
+    let id = built_core(game, crate::routine_craft::Core::Reinforce);
+    only_routine(game, player, &id);
     assert!(wait_for_turn(game, player));
     player
 }
@@ -148,10 +135,11 @@ fn call(game: &mut Game) -> bool {
     game.tactical_use_routine(0, at)
 }
 
-fn routine(game: &Game) -> crate::abilities::AbilityDef {
+fn routine(game: &mut Game) -> crate::abilities::AbilityDef {
+    let id = built_core(game, crate::routine_craft::Core::Reinforce);
     game.world
         .resource::<crate::abilities::AbilityDb>()
-        .get("call_reinforcements")
+        .get(&id)
         .cloned()
         .unwrap()
 }

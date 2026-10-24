@@ -2760,7 +2760,7 @@ mod persist {
     fn save_format_version_is_unchanged() {
         assert_eq!(
             crate::save::SAVE_FORMAT_VERSION,
-            38,
+            39,
             "the save format version moves only with a deliberate bump; update \
              this pin and the changelog together"
         );

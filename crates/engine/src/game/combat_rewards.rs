@@ -97,6 +97,19 @@ impl Game {
             }
         }
         drops.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        let multiplier = self.drop_boost_multiplier();
+        if multiplier != 1.0 {
+            for (_, chance) in &mut drops {
+                *chance *= multiplier;
+            }
+        }
+        drops
+    }
+
+    /// What every drop chance is scaled by: the running `DropBoost` field
+    /// buff plus, on the Stack only, the implant's. Shared by gear drops and
+    /// a boss's routine parts so the two cannot read the boost differently.
+    fn drop_boost_multiplier(&self) -> f32 {
         // Stack only, by design: the implant's pct has no scope flag in data.
         let implant_pct = if self.is_underground() {
             self.implant_hook_total(|h| match h {
@@ -108,13 +121,59 @@ impl Game {
         };
         let boost_pct =
             self.field_buff_power(self.player_entity(), FieldBuffKind::DropBoost) + implant_pct;
-        if boost_pct != 0 {
-            let multiplier = 1.0 + boost_pct as f32 / 100.0;
-            for (_, chance) in &mut drops {
-                *chance *= multiplier;
+        1.0 + boost_pct as f32 / 100.0
+    }
+
+    /// The routines `species` drops as parts when it dies, with each one's
+    /// chance (`AbilityDef::boss_drop`, today's odds) and its parts. Ordered
+    /// by ability id so a seeded run draws in the same order.
+    fn boss_routine_drops(
+        &self,
+        species: &SpeciesDef,
+    ) -> Vec<(
+        crate::abilities::AbilityId,
+        f32,
+        Vec<crate::routine_craft::Subroutine>,
+    )> {
+        self.world
+            .resource::<AbilityDb>()
+            .exclusive_pool()
+            .into_iter()
+            .filter_map(|def| {
+                let chance = def
+                    .boss_drop
+                    .iter()
+                    .flatten()
+                    .filter(|(id, _)| *id == species.id)
+                    .map(|&(_, chance)| chance)
+                    .fold(None, |best: Option<f32>, c| {
+                        Some(best.map_or(c, |b| b.max(c)))
+                    })?;
+                let parts = crate::routine_craft::decompose(def)?;
+                Some((def.id.clone(), chance, parts))
+            })
+            .collect()
+    }
+
+    /// A killed boss's exclusive routines, as the parts that make them up:
+    /// one draw per routine, and a hit hands over every part of it or none
+    /// (a half-routine would be a Core with nothing to hang on it).
+    pub(crate) fn pay_boss_routine_parts(&mut self, species: &SpeciesDef) {
+        let multiplier = self.drop_boost_multiplier();
+        for (ability, chance, parts) in self.boss_routine_drops(species) {
+            let hit = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0
+                    .random_bool((chance * multiplier).clamp(0.0, 1.0) as f64)
+            };
+            if hit {
+                let name = self.ability_display_name(&ability);
+                self.grant_parts(&parts, LootSource::Kill);
+                self.log(format!(
+                    "{name} comes apart in the wreckage: parts to build with."
+                ));
             }
         }
-        drops
     }
 
     /// Hands the player one dropped copy of `item`, rolling its rare tier
@@ -719,6 +778,9 @@ impl Game {
         installed
             .0
             .iter()
+            // A built routine is destroyed with its holder, so it is never a
+            // prize a downed program carries on (ADR 0029).
+            .filter(|id| !id.starts_with(crate::tuning::CRAFT_ID_PREFIX))
             .find(|id| {
                 !declared
                     .unwrap_or(&[])
@@ -842,6 +904,8 @@ impl Game {
                 self.record_drop(copy, 1);
             }
         }
+
+        self.pay_boss_routine_parts(&species);
 
         // Underground this may be the stack's guardian going down, and this
         // is the one point that knows it actually died rather than being

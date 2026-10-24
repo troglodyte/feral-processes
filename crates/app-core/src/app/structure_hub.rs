@@ -47,6 +47,18 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Rebuild",
             screens: &[Mode::BuildProgram],
         },
+        StructurePage::Build => &HubPage {
+            title: "Build routine",
+            screens: &[Mode::RoutineBuild],
+        },
+        StructurePage::Subroutines => &HubPage {
+            title: "Subroutines",
+            screens: &[Mode::Subroutines],
+        },
+        StructurePage::Built => &HubPage {
+            title: "Built routines",
+            screens: &[Mode::BuiltRoutines],
+        },
         StructurePage::Info => &HubPage {
             title: "Info",
             screens: &[Mode::StructureManifest],
@@ -210,6 +222,9 @@ impl App {
                 self.pending_build = Some(PendingBuild::Rebuild { site: entity });
                 self.mode = Mode::BuildProgram;
             }
+            StructurePage::Build => self.mode = Mode::RoutineBuild,
+            StructurePage::Subroutines => self.mode = Mode::Subroutines,
+            StructurePage::Built => self.mode = Mode::BuiltRoutines,
             StructurePage::Info => {
                 self.pending_structure_manifest = Some(entity);
                 self.mode = Mode::StructureManifest;
@@ -284,6 +299,7 @@ impl App {
         self.splice_rig = None;
         self.pending_plot = None;
         self.pending_structure_manifest = None;
+        self.drop_routine_craft_state();
         if matches!(self.pending_build, Some(PendingBuild::Rebuild { .. })) {
             self.pending_build = None;
         }

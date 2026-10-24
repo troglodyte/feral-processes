@@ -286,12 +286,6 @@ impl App {
                     CreationRow::Perk { row, taken }
                 })
                 .collect(),
-            CreationStep::Routine => self
-                .creation_catalogue
-                .starter_rows(self.creation_choice.class)
-                .into_iter()
-                .map(CreationRow::Routine)
-                .collect(),
             CreationStep::Name => vec![CreationRow::Name {
                 typed: self.creation_choice.name.clone(),
             }],
@@ -359,15 +353,6 @@ impl App {
                     .collect::<Vec<_>>()
                     .join(", "),
             },
-        ));
-        rows.push(line(
-            "Routine",
-            self.creation_catalogue
-                .starter_rows(choice.class)
-                .into_iter()
-                .find(|row| Some(&row.id) == choice.routine.as_ref())
-                .map(|row| row.name)
-                .unwrap_or_else(|| "—".to_string()),
         ));
         for preview in self.profile_preview_rows() {
             rows.push(line("Profile", preview));
@@ -461,7 +446,6 @@ impl App {
             CreationStep::Colour => self.handle_creation_colour_key(key),
             CreationStep::Points => self.handle_creation_points_key(key),
             CreationStep::Perks => self.handle_creation_perks_key(key),
-            CreationStep::Routine => self.handle_creation_routine_key(key),
             CreationStep::Name => self.handle_creation_name_key(key),
             CreationStep::Summary => self.handle_creation_summary_key(key),
         }
@@ -665,7 +649,7 @@ impl App {
     /// change here rather than a feature to rebuild.
     ///
     /// **Enter is the only way forward, and there is deliberately no `[n]`
-    /// here.** On the Icon, Colour and Routine steps `[n]` means "I am not
+    /// here.** On the Icon and Colour steps `[n]` means "I am not
     /// picking on this screen", which those steps have no other way to say.
     /// This one has nothing to say it about any more — the allowance must
     /// be spent — and an `[n]` would have had to mean "empty the basket and
@@ -721,7 +705,7 @@ impl App {
     }
 
     /// The glyph list, plus the sixth row that opens the icon editor.
-    /// `Mode::CreateCharacter`'s Class and Routine key table: taking a
+    /// `Mode::CreateCharacter`'s Class key table: taking a
     /// preset row decides the choice and moves on, `[n]` skips the step
     /// with the default look left in place.
     ///
@@ -915,25 +899,6 @@ impl App {
              though the swatch still colours your glyph everywhere else."
                 .to_string()
         })
-    }
-
-    /// The starter pool, priced through the class already picked. Enter on
-    /// a row takes it; `[n]` moves on with the slot left empty, which is
-    /// what `CharacterChoice::default()` is and so still a supported run.
-    fn handle_creation_routine_key(&mut self, key: GameKey) {
-        let rows = self
-            .creation_catalogue
-            .starter_rows(self.creation_choice.class);
-        if key == GameKey::Char('n') || rows.is_empty() && key == GameKey::Enter {
-            self.creation_choice.routine = None;
-            self.advance_creation();
-            return;
-        }
-        let Some(idx) = self.selected_index(key, rows.len()) else {
-            return;
-        };
-        self.creation_choice.routine = Some(rows[idx].id.clone());
-        self.advance_creation();
     }
 
     /// Text entry, `Mode::FuseName`'s table: printable characters up to

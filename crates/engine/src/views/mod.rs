@@ -34,6 +34,7 @@ mod outposts;
 mod player;
 mod programs;
 mod research;
+mod routine_craft;
 mod routines;
 mod work;
 
@@ -46,5 +47,6 @@ pub use outposts::*;
 pub use player::*;
 pub use programs::*;
 pub use research::*;
+pub use routine_craft::*;
 pub use routines::*;
 pub use work::*;

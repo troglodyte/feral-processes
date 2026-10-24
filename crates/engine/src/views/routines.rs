@@ -32,19 +32,12 @@ pub struct RoutineDetailView {
     pub rolls_to_hit: bool,
 }
 
-/// How many of the player's routine holders one purchase at a Stack market
-/// writes to — see `Game::market_offers`.
-///
-/// The ladder is the product: a market sells the *writing* of a routine,
-/// never the knowledge of it, so what varies between the three rungs is
-/// breadth and nothing else. Prices are `tuning::STACK_MARKET_ROUTINE_PRICE_*`.
+/// How many copies of one part a purchase at a Stack market hands over —
+/// see `Game::market_offers`. Prices are `tuning::STACK_MARKET_ROUTINE_PRICE_*`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RoutineScope {
-    /// One holder the player picks — themself, or any program they own.
     One,
-    /// The player and everyone currently fielded in `Party`.
     Party,
-    /// The player and every program on the roster.
     Everyone,
 }
 
@@ -65,31 +58,22 @@ impl RoutineScope {
         }
     }
 
-    /// How many etched disks this rung hands over.
-    ///
-    /// Fixed constants, **not** the live party and roster sizes. A quantity
-    /// read off `Party` would change between the player reading the shelf
-    /// and paying for it — a companion left behind, a program dismissed —
-    /// which is the same objection `Game::market_program_price` already
-    /// makes about folding Trace into a quote. What is on the shelf has to
-    /// be what is bought.
-    pub fn disks(self) -> u32 {
+    /// How many parts this rung hands over.
+    pub fn parts(self) -> u32 {
         match self {
-            RoutineScope::One => crate::tuning::STACK_MARKET_ROUTINE_DISKS_ONE,
-            RoutineScope::Party => crate::tuning::STACK_MARKET_ROUTINE_DISKS_PARTY,
-            RoutineScope::Everyone => crate::tuning::STACK_MARKET_ROUTINE_DISKS_EVERYONE,
+            RoutineScope::One => crate::tuning::STACK_MARKET_PARTS_ONE,
+            RoutineScope::Party => crate::tuning::STACK_MARKET_PARTS_PARTY,
+            RoutineScope::Everyone => crate::tuning::STACK_MARKET_PARTS_EVERYONE,
         }
     }
 
-    /// How the rung reads on the shelf. Worded as what it would *outfit*
-    /// rather than as a tier name or a bare count, because the price and
-    /// the quantity are both already on the row and "T2" would say nothing
-    /// about why anyone wants three.
+    /// How the rung reads on the shelf: the price and the quantity are both
+    /// already on the row, so this says only what size of lot it is.
     pub fn label(self) -> &'static str {
         match self {
-            RoutineScope::One => "one program",
-            RoutineScope::Party => "your party",
-            RoutineScope::Everyone => "everything you own",
+            RoutineScope::One => "a single",
+            RoutineScope::Party => "a small lot",
+            RoutineScope::Everyone => "a crate",
         }
     }
 }
@@ -97,28 +81,17 @@ impl RoutineScope {
 /// One row of an entity's routine panel — a slot, filled or not.
 pub struct RoutineSlotView {
     pub index: usize,
-    /// `None` for a free slot, **and for an unseen one** — see `unseen`
-    /// below. The id is part of what conceals, not just the name: a
-    /// renderer that fell back to formatting the id would still leak it.
+    /// `None` for a free slot.
     pub ability: Option<crate::abilities::AbilityId>,
-    /// The ability's name, or "(empty)" for a free slot, or blank (`""`)
-    /// for an unseen one.
+    /// The ability's name, or "(empty)" for a free slot.
     pub name: String,
-    /// The ability's own authored description; empty for a free slot and
-    /// for an unseen one alike.
+    /// The ability's own authored description; empty for a free slot.
     pub description: String,
     /// Whether this slot's routine is welded in — `Game::
     /// routine_is_permanent`, resolved here so the screen can say so on the
     /// row rather than let the player find out by pressing it. False for a
     /// free slot.
     pub fixed: bool,
-    /// Whether this slot holds a routine the viewer hasn't discovered yet —
-    /// `Game::routine_view`'s concealment (spec §4 "Concealment"). True
-    /// only for a filled slot on a program that is neither `Tamed` nor the
-    /// player, whose family `Game::family_discovered` still answers false
-    /// for. Never true on a free slot: there is nothing there to conceal,
-    /// and "(empty)" already says so.
-    pub unseen: bool,
 }
 
 /// One row of the "whose routines?" picker — you and every program you own.
@@ -154,50 +127,12 @@ pub struct UpgradeOption {
     pub zone_bump: bool,
 }
 
-/// One row of the etch picker — a routine the player knows. Knowing it is
-/// not enough to put it in a slot: it first has to be burnt onto a blank
-/// Routine Disk (`Game::etch_disk`), which the screen reports separately
-/// through `Game::blank_disks_held`, and only then installed.
-///
-/// An exclusive routine never appears here. Nothing writes one into
-/// `KnownRoutines`, so the list is empty of them by construction rather than
-/// by a filter — see `AbilityDef::exclusive`.
-pub struct KnownRoutineView {
-    pub ability: crate::abilities::AbilityId,
-    pub name: String,
-    pub description: String,
-    /// Etched disks of this routine already in cargo — what the player would
-    /// be adding to rather than starting. Read off `Game::etched_disks_of`,
-    /// which is also what `Game::install_disk` refuses on, so the screen and
-    /// the refusal cannot report different numbers.
-    pub held: u32,
-}
-
-/// One row of the install picker — an etched Routine Disk in cargo, ready to
-/// be spent on a slot.
-///
-/// `qty` is how many of that disk are carried, which is what makes a bought
-/// bundle from a Stack market read as one row rather than six. `exclusive`
-/// is the flag the screen marks a prize with; it is the ability's, not the
-/// disk's, and it is here so no renderer has to reach back into `AbilityDb`
-/// to ask.
-pub struct EtchedDiskView {
-    pub ability: crate::abilities::AbilityId,
-    pub name: String,
-    pub description: String,
-    pub exclusive: bool,
-    pub qty: u32,
-}
-
 /// One row of the extraction picker — a routine installed on the program
-/// about to be broken down. `known` marks one the player has already
-/// learned, which `Game::extract_routine` refuses: extraction teaches a
-/// routine, and there is nothing to teach twice.
+/// about to be broken down.
 pub struct ExtractableRoutineView {
     pub ability: crate::abilities::AbilityId,
     pub name: String,
     pub description: String,
-    pub known: bool,
 }
 
 /// Which second pick a field routine needs after it has been chosen, or

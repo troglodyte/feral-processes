@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: does a Leech's drain pay for the round it costs, or is it a
 // worse attack with a garnish?
 //
@@ -39,7 +42,6 @@
     character: (
         class: Some(Leech),
         stats: {},
-        routine: Some("siphon_cycles"),
     ),
     party: [
         (species: "glitch", level: 5),

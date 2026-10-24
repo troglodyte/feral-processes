@@ -10,7 +10,7 @@ use std::ops::Add;
 
 use crate::tuning::{DAMAGE_RESIST_CAP, SIDE_EFFECT_BLOCK_THRESHOLD};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DamageType {
     Thermal,
     Magnetic,

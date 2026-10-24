@@ -265,13 +265,12 @@ fn refactor_and_develop_are_reached_from_programs() {
 }
 
 #[test]
-fn routine_install_extract_and_etch_return_to_routines_in_page() {
+fn routine_install_and_extract_return_to_routines_in_page() {
     let mut app = app_owning_a_program_and_an_extractor(31016, &["sandbox"]);
-    teach_player_routines(&mut app, &["sandbox"]);
+    free_a_routine_slot(&mut app);
     for (label, mode) in [
         ("Install a routine", Mode::RoutineTarget),
         ("Extract a routine", Mode::Extract),
-        ("Etch a routine disk", Mode::RoutineEtch),
     ] {
         open_via_menu(&mut app, 'p', label);
         assert_eq!(app.mode, mode, "{label}");
@@ -280,38 +279,6 @@ fn routine_install_extract_and_etch_return_to_routines_in_page() {
         press(&mut app, &[GameKey::Esc, GameKey::Esc]);
         assert_eq!(app.mode, Mode::Playing);
     }
-}
-
-#[test]
-fn the_etch_detour_has_two_esc_paths() {
-    let mut app = test_app(31017);
-    teach_player_routines(&mut app, &["sandbox"]);
-    open_via_menu(&mut app, 'p', "Install a routine");
-    press(
-        &mut app,
-        &[
-            GameKey::Enter,
-            GameKey::Down,
-            GameKey::Enter,
-            GameKey::Char('e'),
-        ],
-    );
-    assert_eq!(app.mode, Mode::RoutineEtch);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
-        Mode::RoutineInstall,
-        "[e] detour returns to the slot"
-    );
-    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
-    assert_eq!(app.mode, Mode::RoutineTarget);
-    app.handle_key(GameKey::Esc);
-    assert_in_page(&app, Mode::PartyRoutines);
-
-    open_via_menu(&mut app, 'p', "Etch a routine disk");
-    assert_eq!(app.mode, Mode::RoutineEtch);
-    app.handle_key(GameKey::Esc);
-    assert_in_page(&app, Mode::PartyRoutines);
 }
 
 #[test]

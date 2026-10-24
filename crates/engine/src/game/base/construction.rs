@@ -527,6 +527,15 @@ impl Game {
                 );
                 (id, name)
             });
+        // The committed program is consumed for good, and its built routines
+        // with it (ADR 0029).
+        let spent_routines = self
+            .world
+            .get::<BuildSite>(site)
+            .and_then(|b| b.program.as_ref())
+            .map(|p| p.routines.clone())
+            .unwrap_or_default();
+        self.destroy_built(&spent_routines);
         self.world.despawn(site);
         if let Some((id, name)) = spent {
             self.note_departure(id, &name, crate::bonds::Departure::LetGo);

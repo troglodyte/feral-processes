@@ -81,7 +81,7 @@ fn row_of_scope(app: &mut App, want: RoutineScope) -> usize {
     shelf(app)
         .iter()
         .position(
-            |offer| matches!(offer.kind, MarketOfferKind::Routine { scope, .. } if scope == want),
+            |offer| matches!(offer.kind, MarketOfferKind::Part { scope, .. } if scope == want),
         )
         .expect("every shelf lists its routines at all three scopes")
 }
@@ -127,9 +127,8 @@ fn t_underground_with_no_stall_refuses_rather_than_listing_the_base() {
     );
 }
 
-/// No rung opens a picker any more: every routine row sells disks into
-/// cargo, and who ends up running them is a question the routine panel asks
-/// later. This is the app-side half of what deleted `routine_recipients`.
+/// No rung opens a picker any more: every part row sells parts into
+/// cargo, and what they are built into is a question the Workbench asks later. This is the app-side half of what deleted `routine_recipients`.
 #[test]
 fn no_routine_rung_asks_who_it_is_for() {
     let mut app = app_at_a_market(5_000);
@@ -149,28 +148,29 @@ fn no_routine_rung_asks_who_it_is_for() {
 }
 
 /// Buying leaves the screen open on the shelf — a visit is normally a run
-/// of trades, exactly as it is at a surface post — and the disks land in
-/// cargo rather than in anybody's slot.
+/// of trades, exactly as it is at a surface post — and the parts land in
+/// cargo.
 #[test]
-fn buying_a_rung_banks_the_disks_and_returns_to_the_shelf() {
+fn buying_a_rung_banks_the_parts_and_returns_to_the_shelf() {
     let mut app = app_at_a_market(5_000);
     app.handle_key(GameKey::Char('t'));
     let before = shelf(&mut app).len();
     let row = row_of_scope(&mut app, RoutineScope::One);
     let index = shelf(&mut app)[row].index;
-    let ability = match &shelf(&mut app)[row].kind {
-        MarketOfferKind::Routine { ability, .. } => ability.clone(),
-        other => panic!("row {row} is {other:?}, not a routine"),
+    let part = match &shelf(&mut app)[row].kind {
+        MarketOfferKind::Part { part, .. } => *part,
+        other => panic!("row {row} is {other:?}, not a part"),
     };
+    let held = app.game.as_ref().unwrap().parts_held(&part);
 
     pick_row(&mut app, row);
 
     assert_eq!(app.mode, Mode::StackMarket);
     let game = app.game.as_ref().unwrap();
     assert_eq!(
-        game.etched_disks_of(&ability),
-        RoutineScope::One.disks(),
-        "the rung's disks are not in cargo"
+        game.parts_held(&part),
+        held + RoutineScope::One.parts(),
+        "the rung's parts are not in cargo"
     );
     let after = shelf(&mut app);
     assert_eq!(after.len(), before - 1, "the row is still on the shelf");

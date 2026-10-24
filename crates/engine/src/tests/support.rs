@@ -2724,61 +2724,69 @@ pub(super) fn give(game: &mut Game, item: &ItemId, qty: u32) {
         .add(item.clone(), qty);
 }
 
-/// Teaches the player `ability` without the research node that normally
-/// would — see `resources::KnownRoutines`. Half of what an install needs;
-/// `disks` is the other half.
-pub(super) fn teach_routine(game: &mut Game, ability: &str) {
-    game.world
-        .resource_mut::<KnownRoutines>()
-        .0
-        .insert(ability.to_string());
-}
-
-/// Puts `qty` blank Routine Disks in the player's pack, skipping the
-/// four-machine chain that manufactures them.
-pub(super) fn give_disks(game: &mut Game, qty: u32) {
-    give(game, &ItemId::from(ids::ROUTINE_DISK), qty);
-}
-
-/// Both halves of a real install — etch a blank, then spend the result —
-/// for a test that has already arranged the knowledge and the blank disks
-/// itself and is asserting on what they cost.
-///
-/// Distinct from `install_routine_for_test`, which arranges those too. Use
-/// this one when the disk accounting is the point of the test.
-pub(super) fn fit_routine(game: &mut Game, entity: Entity, ability: &str) {
-    game.etch_disk(ability)
-        .unwrap_or_else(|e| panic!("etching {ability}: {e}"));
-    game.install_disk(entity, ability)
-        .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
-}
-
-/// Puts `qty` etched disks of `ability` in the player's pack, skipping both
-/// the blank chain and whatever would have etched them.
-pub(super) fn give_etched_disks(game: &mut Game, ability: &str, qty: u32) {
-    give(game, &ItemId::etched(ability), qty);
-}
-
-/// Writes `ability` into `entity`'s next free slot the way the game does —
-/// teach it, hand over the blank it burns, etch, install. Most tests want a
-/// routine sitting in a slot rather than the chain that got it there.
-///
-/// Goes through both real verbs rather than `write_routine` directly, so a
-/// test that depends on a routine being installed also depends on the
-/// install path still working. An exclusive routine can't be taught, so this
-/// hands its disk over directly instead — the same two steps the game does,
-/// minus the boss.
+/// Writes `ability` into `entity`'s next free slot, making room first. Most
+/// tests want a routine sitting in a slot rather than the chain that got it
+/// there; the player's real door is `Game::install_built`, which only takes
+/// a routine built from parts.
 pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability: &str) {
-    if game.routine_is_exclusive(ability) {
-        give_etched_disks(game, ability, 1);
-    } else {
-        teach_routine(game, ability);
-        give_disks(game, 1);
-        game.etch_disk(ability)
-            .unwrap_or_else(|e| panic!("etching {ability}: {e}"));
+    make_room_for_routine(game, entity);
+    game.write_routine(entity, ability);
+}
+
+/// Mints a built routine out of `core` at version 1.0 and returns its
+/// `crafted/<n>` id, without installing it — a fixture that needs a
+/// particular authored-style effect on a player builds it the way the game
+/// would. Ids are sequential from a new game's Patch (`crafted/1`), so a
+/// fixture that mints in a fixed order may name the ids.
+pub(super) fn mint_core(game: &mut Game, core: crate::routine_craft::Core) -> String {
+    game.mint_built(
+        core.name(),
+        &[crate::routine_craft::Subroutine::Core(
+            core,
+            crate::routine_craft::Version::V1,
+        )],
+    )
+}
+
+/// Mints a built routine out of exactly `parts`, for a fixture that needs a
+/// routine of a particular shape (a Core plus an Area, say).
+pub(super) fn mint_parts(game: &mut Game, parts: &[crate::routine_craft::Subroutine]) -> String {
+    game.mint_built("Test routine", parts)
+}
+
+/// The id of the built routine made from `core` alone, minting it the first
+/// time it is asked for. The tests that once read a shipped routine by id
+/// (Teleport, Symlink, Detach...) read the routine the game would compile.
+pub(super) fn built_core(game: &mut Game, core: crate::routine_craft::Core) -> String {
+    let existing = game
+        .world
+        .resource::<crate::resources::CraftedRoutines>()
+        .built
+        .iter()
+        .find(|r| {
+            r.parts
+                == [crate::routine_craft::Subroutine::Core(
+                    core,
+                    crate::routine_craft::Version::V1,
+                )]
+        })
+        .map(|r| r.id.clone());
+    existing.unwrap_or_else(|| mint_core(game, core))
+}
+
+/// Frees a slot on a full `entity` by destroying the first built routine it
+/// holds: a new game starts with Decompile and Patch (a built Heal), so a
+/// test that wants a second routine on the player has no free slot.
+pub(super) fn make_room_for_routine(game: &mut Game, entity: Entity) {
+    let held = game.world.get::<Routines>(entity).unwrap().0.clone();
+    if held.len() < game.routine_slots(entity) {
+        return;
     }
-    game.install_disk(entity, ability)
-        .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
+    if let Some(built) = held.iter().find(|id| id.starts_with("crafted/")) {
+        let kept: Vec<String> = held.iter().filter(|id| *id != built).cloned().collect();
+        game.world.entity_mut(entity).insert(Routines(kept));
+        game.destroy_built(std::slice::from_ref(built));
+    }
 }
 
 /// Empties `entity`'s routine slots outright.
@@ -3292,8 +3300,7 @@ pub(crate) fn battle_with_a_passive_holder_prepared(
     let player = game.player_entity();
     set_level(&mut game, player, 40);
     if let Some(passive) = passive {
-        give_etched_disks(&mut game, passive, 1);
-        game.install_disk(player, passive).unwrap();
+        install_routine_for_test(&mut game, player, passive);
     }
 
     let ally = spawn_tamed(&mut game, 30, 3);

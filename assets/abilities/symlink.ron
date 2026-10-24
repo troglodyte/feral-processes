@@ -1,8 +1,0 @@
-(
-    id: "symlink",
-    name: "Symlink Party",
-    description: "Return the party to your base from anywhere, even inside the Stack",
-    target: WholeParty,
-    effect: Symlink,
-    power_cost: 25.0,
-)

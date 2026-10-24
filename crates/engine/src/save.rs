@@ -1839,19 +1839,9 @@ pub struct SaveData {
     /// `discovered_research`'s reason.
     #[serde(default)]
     pub study_progress: u32,
-    /// Which routines the player has learned — see `resources::KnownRoutines`.
-    /// Sorted on write for the reason `researched` is: the encoded bytes must
-    /// not depend on set iteration order.
-    ///
-    /// `#[serde(default)]` does nothing for bincode (see
-    /// `SAVE_FORMAT_VERSION`); it is here so an existing `dev-saves/` RON
-    /// template keeps parsing without being re-captured, exactly as `trace`
-    /// documents below.
-    #[serde(default)]
-    pub known_routines: Vec<crate::abilities::AbilityId>,
     /// Which tools the player has researched — see
     /// `resources::KnownTools`. Sorted on write for the reason `researched`
-    /// is. Unlike `known_routines` above, this field was born after the
+    /// is. This field was born after the
     /// save became field-named RON (`SAVE_FORMAT_VERSION` 29), so
     /// `#[serde(default)]` genuinely means what it says here: a save
     /// written before this field existed loads with an empty set, and
@@ -1865,12 +1855,16 @@ pub struct SaveData {
     /// loads with an empty set and costs no version bump.
     #[serde(default)]
     pub emulation_images: Vec<crate::species::SpeciesId>,
-    /// Which routine families the player has discovered — see
-    /// `resources::DiscoveredRoutines`. `#[serde(default)]` so a save
-    /// written before todo #101 loads with an empty set: nothing was
-    /// discovered before there was anything to discover.
+    /// Every routine the player has built, slotted or not — see
+    /// `resources::CraftedRoutines`. Part items ride in the inventory.
     #[serde(default)]
-    pub discovered_routines: Vec<crate::abilities::AbilityId>,
+    pub crafted_routines: Vec<crate::routine_craft::CraftedRoutine>,
+    /// The built routines not in any slot, by id.
+    #[serde(default)]
+    pub unslotted_routines: Vec<crate::abilities::AbilityId>,
+    /// The counter the next `crafted/<n>` id is minted from.
+    #[serde(default)]
+    pub next_crafted_id: u32,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -2184,7 +2178,12 @@ pub struct SaveData {
 /// 37 → 38: configurable machines. `StructureSave::recipe`, `RuinSave::recipe`
 /// and `BuildSiteSave::recipe` are written and 16 structure kinds are gone; a
 /// v37 base would load with its production structures missing.
-pub const SAVE_FORMAT_VERSION: u32 = 38;
+///
+/// 38 → 39: routine crafting (ADR 0029). `SaveData::{crafted_routines,
+/// unslotted_routines, next_crafted_id}` are written and a `crafted/<n>` id
+/// may sit in any routine slot; a v38 file would load with its slots naming
+/// nothing and its etched disks unusable.
+pub const SAVE_FORMAT_VERSION: u32 = 39;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2507,10 +2506,11 @@ mod tests {
             research_progress: Vec::new(),
             discovered_research: Vec::new(),
             study_progress: 0,
-            known_routines: Vec::new(),
             known_tools: Vec::new(),
             emulation_images: Vec::new(),
-            discovered_routines: Vec::new(),
+            crafted_routines: Vec::new(),
+            unslotted_routines: Vec::new(),
+            next_crafted_id: 0,
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),

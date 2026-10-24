@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: a Saboteur's affliction is a stun. Is a round taken off the
 // pack worth a round taken off you?
 //
@@ -43,7 +46,6 @@
     character: (
         class: Some(Saboteur),
         stats: {},
-        routine: Some("hard_lock"),
     ),
     party: [
         (species: "glitch", level: 5),

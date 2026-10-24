@@ -274,30 +274,30 @@ impl Game {
     }
 }
 
-/// The family the synthesised `etched_*` disks fold into.
-const ETCHED_DISKS: &str = "Etched Disks";
+/// The family the Subroutine part items fold into.
+const SUBROUTINES: &str = "Subroutines";
 
 /// The families the filter screen folds into one row each, in the order
-/// they head the list. A player sorting a shelf means "gear" or "disks",
-/// never one weapon of forty, and the etched family alone is a disk per
-/// routine in the catalogue. The gear rows take `ItemCategory::heading`,
+/// they head the list. A player sorting a shelf means "gear" or "parts",
+/// never one weapon of forty, and the part family alone is an item per
+/// Core version and modifier. The gear rows take `ItemCategory::heading`,
 /// the wagon's own words for the same runs.
 fn filter_groups() -> [&'static str; 4] {
     [
         ItemCategory::Weapon.heading(),
         ItemCategory::Armor.heading(),
         ItemCategory::Module.heading(),
-        ETCHED_DISKS,
+        SUBROUTINES,
     ]
 }
 
 /// Which `filter_groups` row an item folds into, if any. Derived, never
-/// authored, so a modded weapon or a routine's synthesised disk joins its
-/// row without a field saying so. The disk test comes first: it is the id
-/// that marks the family, whatever the def's category reads.
+/// authored, so a modded weapon or a synthesised part joins its row without
+/// a field saying so. The part test comes first: it is the id that marks the
+/// family, whatever the def's category reads.
 fn filter_group(def: &ItemDef) -> Option<&'static str> {
-    if def.id.etched_ability().is_some() {
-        return Some(ETCHED_DISKS);
+    if def.id.part_of().is_some() {
+        return Some(SUBROUTINES);
     }
     match def.category() {
         c @ (ItemCategory::Weapon | ItemCategory::Armor | ItemCategory::Module) => {

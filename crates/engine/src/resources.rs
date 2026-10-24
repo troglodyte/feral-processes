@@ -236,17 +236,23 @@ impl ActiveResearch {
     }
 }
 
-/// Which routines the player has learned and may install, given a blank
-/// Routine Disk to burn one onto. Written by exactly two things:
-/// `Game::grant_research_knowledge` (a node's `unlocks_abilities`) and
-/// `Game::extract_routine`. Knowledge is permanent — installing spends a
-/// disk, never the knowledge.
+/// The routines the player has built (ADR 0029) and where they stand.
 ///
-/// A `BTreeSet` rather than a `HashSet` for the reason `components::Stock`
-/// keys by a `BTreeMap`: the save writes this set out, and a `HashSet`'s
-/// iteration order would make the encoded bytes differ run to run.
-#[derive(Resource, Default)]
-pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
+/// `built` is every routine that exists, slotted or not; `unslotted` is the
+/// ids among them waiting on the Built routines page. A built routine is in
+/// exactly one place, and `Game::sync_crafted` rebuilds `AbilityDb`'s
+/// crafted tier from `built` after every change. `next_id` only grows, so an
+/// id (`crafted/<n>`) is never reused for a different routine.
+///
+/// Which Subroutines are known and how many parts a routine may hold are
+/// both derived from `Research` (`Game::subroutine_known`,
+/// `Game::part_cap`), so neither has a second copy here to drift.
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct CraftedRoutines {
+    pub built: Vec<crate::routine_craft::CraftedRoutine>,
+    pub unslotted: Vec<crate::abilities::AbilityId>,
+    pub next_id: u32,
+}
 
 /// Which tools the player has researched and may forge — `KnownRoutines`'
 /// own rung of the tool acquisition chain (spec decision 6). Written by
@@ -265,19 +271,6 @@ pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 /// differ run to run.
 #[derive(Resource, Default)]
 pub struct KnownTools(pub BTreeSet<crate::tools::ToolId>);
-
-/// Which routine families the player has *discovered* — extracted at least
-/// one rung of, without necessarily having researched any (see
-/// `Game::take_routine`, todo #101). This is what opens a family in the
-/// routine research tree; researching climbs it from there.
-///
-/// Holds ability ids, not family names, so a display-name rename can't
-/// orphan a record — `Game::family_discovered` resolves the id back to a
-/// family at read time. A `BTreeSet` for `KnownRoutines`'s own reason: the
-/// save writes this set out, and a `HashSet`'s iteration order would make
-/// the encoded bytes differ run to run.
-#[derive(Resource, Default)]
-pub struct DiscoveredRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 
 /// Which research nodes the base has discovered — see
 /// `research::ResearchDef::discoverable` and `Game::settle_study`. A node in

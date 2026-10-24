@@ -766,6 +766,9 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             // A relocation moves no Integrity at all — it moves a body.
             | E::Reinforce
             | E::Teleport
+            // Built by `routine_craft::compile` alone; its band is
+            // `Heal`'s, and no shipped file names it.
+            | E::HealOverTime { .. }
             // `Reinforce`'s reason: what rises is scaled by a fixed
             // multiplier off a snapshot, not by a rolled band.
             | E::Reanimate { .. } => continue,
@@ -810,6 +813,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
         let rolls_to_hit = match &def.effect {
             E::Damage { .. } | E::Drain { .. } => true,
             E::Heal { .. }
+            | E::HealOverTime { .. }
             | E::Buff { .. }
             | E::Debuff { .. }
             | E::Cleanse
@@ -1069,6 +1073,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             // A tamper names the other side, `Debuff`'s reason exactly.
             E::Tamper { .. } => true,
             E::Heal { .. }
+            | E::HealOverTime { .. }
             | E::Buff { .. }
             | E::Cleanse
             | E::Cloak { .. }
@@ -1122,71 +1127,6 @@ fn no_two_shipped_abilities_share_a_display_name() {
                 other, def.id, def.name
             );
         }
-    }
-}
-
-/// A family occupies a contiguous run of scopes starting at Single. A hole
-/// is invisible in a directory listing — the files are named for flavour,
-/// so nothing about `bus_fault` sitting in `assets/abilities/` says it is
-/// Pipeline Stall reaching the whole field with nothing between it and one
-/// target, which is exactly how that family shipped. What the player meets
-/// is an effect that exists only at a scale they can't always afford, or a
-/// prize with no ladder leading up to it.
-///
-/// Field routines are excluded rather than exempted by accident: they are
-/// run from the map, never appear in the battle picker, and each is its
-/// own thing — Deep Scan has no Single tier because a scope ladder is not
-/// what that half of the set is organised by.
-///
-/// **Exclusive routines are excluded for the opposite reason.** The ladder
-/// exists so that meeting a family at its widest rung means a cheaper rung
-/// is also reachable; an exclusive routine has no cheaper rung anywhere by
-/// design, because there is no path to it but a boss or a trader. Building
-/// three rungs of Kernel Shear so it could sit in this list would triple the
-/// exclusive pool for a reason no player would ever see.
-///
-/// **Tactical-only routines are excluded for a third reason.** The ladder
-/// exists so a hostile's species kit or the hunt pool always offers a
-/// cheaper rung below whatever a wild carrier rolls; a tamper routine is
-/// research-taught and enters neither, so Heat Injection Group and
-/// Hallucination Group are free to have no Single rung nothing would ever
-/// need.
-///
-/// **`Emulate` is excluded for `Summon`'s reason.** It is a single
-/// research-taught rung with `target: WholeParty` and no cheaper sibling
-/// scope was ever going to exist for it — there is exactly one way to adopt
-/// an image, not a Single/Group/Everyone ladder of them.
-#[test]
-fn every_battle_ability_family_is_contiguous_from_single_upward() {
-    let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<u8>> =
-        std::collections::BTreeMap::new();
-    for def in game
-        .world
-        .resource::<crate::abilities::AbilityDb>()
-        .all()
-        .filter(|d| {
-            !d.effect.field_only()
-                && !d.exclusive
-                && !matches!(
-                    d.effect,
-                    crate::abilities::AbilityEffect::Summon { .. }
-                        | crate::abilities::AbilityEffect::Emulate { .. }
-                )
-                && !d.effect.tactical_only()
-        })
-    {
-        scopes
-            .entry(crate::routine_tree::family(def))
-            .or_default()
-            .insert(crate::routine_tree::scope_rank(def.target));
-    }
-    for (fam, ranks) in &scopes {
-        let expected: std::collections::BTreeSet<u8> = (0..ranks.len() as u8).collect();
-        assert_eq!(
-            ranks, &expected,
-            "{fam:?} occupies scopes {ranks:?}; a family runs from Single upward with no gaps"
-        );
     }
 }
 
@@ -1260,8 +1200,6 @@ fn the_flip_to_power_cost_carried_the_authored_numbers_over_unchanged() {
     let game = Game::new(3308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::abilities::AbilityDb>();
     for (id, expected) in [
-        ("wild_jump", 20.0),
-        ("trickle_charge", 25.0),
         ("deadlock", 6.0),
         // Taming is really paid for in the Breach Kit the call spends. The
         // token is here because `decompile` is the one routine with no
@@ -1402,110 +1340,6 @@ fn an_affinity_below_the_floor_is_clamped_at_load() {
     assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MIN);
 }
 
-/// The ten field routines this file ships, at least one per `FieldBuffKind`
-/// variant — `Def` ships two, one per scope.
-/// Mirrors the table in `assets/abilities/README.md`'s `FieldBuff` section.
-const FIELD_ROUTINE_IDS: &[&str] = &[
-    "repair_loop",
-    "trickle_charge",
-    "hardened_shell",
-    "hardened_shell_party",
-    "overclock",
-    "ablative_layer",
-    "deep_scan",
-    "trace_analysis",
-    "stealth_protocol",
-    "salvage_routine",
-];
-
-/// Each of the ten field routines loads, carries a `FieldBuff` effect, ships
-/// a real description (the picker's only detail line for it — see
-/// `AbilityDef::description`), and stays out of the wild-carrier pool: a
-/// field routine is installed, never found on a hostile.
-#[test]
-fn the_ten_field_routines_load_with_real_descriptions_and_no_wild_weight() {
-    let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let db = game.world.resource::<crate::abilities::AbilityDb>();
-    for id in FIELD_ROUTINE_IDS {
-        let def = db
-            .get(id)
-            .unwrap_or_else(|| panic!("missing field routine {id:?}"));
-        assert!(
-            matches!(
-                def.effect,
-                crate::abilities::AbilityEffect::FieldBuff { .. }
-            ),
-            "{id:?} should carry a FieldBuff effect, got {:?}",
-            def.effect
-        );
-        assert!(
-            !def.description.trim().is_empty(),
-            "{id:?} ships with no description"
-        );
-        assert_eq!(
-            def.wild_weight, 0,
-            "{id:?} should never spawn on a wild carrier"
-        );
-    }
-}
-
-/// The `Def` field routine ships at both scopes, and the Party one is priced
-/// *between* one Single and covering the whole party a Single at a time.
-///
-/// Both bounds are the reason the wide one exists. Under the cheaper bound it
-/// is strictly better than the Single at every party size, which makes the
-/// Single dead content the moment the research lands. Over the dearer one
-/// nobody would ever run it: running on each body in turn would cost less
-/// Power *and* leave the same buffs standing, and the only thing the wide invocation
-/// would still buy is the turns — which are free.
-///
-/// Asserted as a relationship rather than as the three authored numbers, so a
-/// Power retune moves them freely and only an inversion fails. The party size
-/// comes from `Game::pet_capacity` (+1 for the player) rather than
-/// `BASE_PET_CAPACITY`, because a deployed `pet_slot_bonus` widens the party
-/// the invocation has to beat.
-#[test]
-fn the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between() {
-    use crate::abilities::{AbilityEffect, AbilityTarget};
-    let game = Game::new(3309, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let db = game.world.resource::<crate::abilities::AbilityDb>();
-
-    let single = db.get("hardened_shell").expect("the Single ships");
-    let party = db.get("hardened_shell_party").expect("the Party one ships");
-
-    assert_eq!(single.target, AbilityTarget::OneAlly);
-    assert_eq!(party.target, AbilityTarget::WholeParty);
-    for def in [single, party] {
-        assert!(
-            matches!(
-                def.effect,
-                AbilityEffect::FieldBuff {
-                    kind: crate::components::FieldBuffKind::Mitigation,
-                    duration: 0,
-                    ..
-                }
-            ),
-            "{:?} should harden until rest, got {:?}",
-            def.id,
-            def.effect
-        );
-    }
-
-    let bodies = (game.pet_capacity() + 1) as f32;
-    assert!(
-        party.power_cost > single.power_cost,
-        "the Party invocation ({}) must cost more than one Single ({})",
-        party.power_cost,
-        single.power_cost
-    );
-    assert!(
-        party.power_cost < bodies * single.power_cost,
-        "the Party invocation ({}) must undercut {bodies} Singles ({})",
-        party.power_cost,
-        bodies * single.power_cost
-    );
-}
-
 /// Every `FieldBuffKind` variant must be exercised by at least one shipped
 /// ability. The match below is exhaustive on purpose — no wildcard arm — so
 /// an eleventh `FieldBuffKind` added later without shipped content fails to
@@ -1527,7 +1361,20 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
     let mut encounter_damp = false;
     let mut drop_boost = false;
 
-    for def in db.all() {
+    let compiled: Vec<crate::abilities::AbilityDef> = crate::routine_craft::Core::ALL
+        .iter()
+        .map(|core| {
+            crate::routine_craft::compile(&crate::routine_craft::CraftedRoutine {
+                id: format!("crafted/{}", core.key()),
+                name: core.name().to_string(),
+                parts: vec![crate::routine_craft::Subroutine::Core(
+                    *core,
+                    crate::routine_craft::Version::V1,
+                )],
+            })
+        })
+        .collect();
+    for def in db.all().chain(compiled.iter()) {
         if let AbilityEffect::FieldBuff { kind, .. } = &def.effect {
             match kind {
                 FieldBuffKind::Regen => regen = true,
@@ -1593,9 +1440,8 @@ fn a_nan_affinity_disqualifies_the_file_and_the_rest_still_load() {
 /// of the contract — an ability file existing is not the same as it being
 /// obtainable.
 ///
-/// Research hands routine items to the player; a species file is what a
-/// companion's kit comes from; an exclusive routine's `boss_drop` is what a
-/// boss leaves behind. Any of the three counts as reachable.
+/// A species file is what a companion's kit comes from; an exclusive routine's `boss_drop` is what a
+/// boss leaves behind. Either counts as reachable.
 ///
 /// A boss drop counts as a door but an empty `boss_drop` does not: an
 /// exclusive routine naming no species at all would still be listed on a
@@ -1609,16 +1455,10 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
 
     let granted: std::collections::HashSet<&str> = game
         .world
-        .resource::<crate::research::ResearchDb>()
+        .resource::<SpeciesDb>()
         .all()
-        .filter_map(|node| node.teaches.as_deref())
-        .chain(
-            game.world
-                .resource::<SpeciesDb>()
-                .all()
-                .flat_map(|s| s.abilities.iter())
-                .map(|a| a.id.as_str()),
-        )
+        .flat_map(|s| s.abilities.iter())
+        .map(|a| a.id.as_str())
         .collect();
 
     let unreachable: Vec<&str> = game
@@ -1637,7 +1477,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
 
     assert!(
         unreachable.is_empty(),
-        "these field routines are in no research node and no species kit, \
+        "these field routines are in no species kit, \
          so nothing in a real game can ever hand them over: {unreachable:?}"
     );
 }
@@ -2976,7 +2816,7 @@ fn no_two_shipped_stock_items_share_a_tag() {
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut checked = 0;
     for def in db.all() {
-        if def.id.etched_ability().is_some() {
+        if def.id.part_of().is_some() {
             continue;
         }
         if !matches!(
@@ -3981,135 +3821,6 @@ mod classes {
                 );
             }
         }
-    }
-}
-
-/// A starter routine is chosen for one person and installed for free — a
-/// `WholeParty`/`WholeEnemyGroup`/`AllEnemies` effect landing on more than
-/// the chooser (or their one target) would be a strange first routine to
-/// hand out, and the creation screen has no picker for "which ally" beyond
-/// the player themselves.
-#[test]
-fn every_starter_is_single_target() {
-    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
-        if !def.starter {
-            continue;
-        }
-        assert!(
-            matches!(
-                def.target,
-                AbilityTarget::OneAlly | AbilityTarget::OneEnemyGroupFront
-            ),
-            "starter {:?} targets {:?}, which is not single-target",
-            def.id,
-            def.target
-        );
-    }
-}
-
-/// An `exclusive` routine never enters `KnownRoutines` — `AbilityDef::
-/// exclusive`'s whole point is that nothing may teach it. Creation grants
-/// knowledge (`abilities::install_starter`), so a starter that was also
-/// exclusive would be a fourth door around that gate, alongside a research
-/// node, a species file and a blank disk etch (none of which may name one
-/// either).
-#[test]
-fn every_starter_is_not_exclusive() {
-    let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
-        if !def.starter {
-            continue;
-        }
-        assert!(
-            !def.exclusive,
-            "starter {:?} is exclusive, so creation could never actually learn it",
-            def.id
-        );
-    }
-}
-
-/// **The point of this census.** A `#[serde(default)]` field authored
-/// nowhere ships documented and dead — `AbilityEffect::Damage::spread`
-/// shipped exactly that way, used by 0 of 77 files, and read as a working
-/// feature until someone went looking. `starter` is opt-in the same way, so
-/// nothing short of walking the real shipped assets can tell "nobody has
-/// asked yet" from "the pool is simply thin" — and the design's whole
-/// promise, a starter for every affinity axis, would silently fail to hold
-/// with an empty pool passing every other test in this file.
-#[test]
-fn there_is_a_starter_for_every_affinity_axis() {
-    let game = Game::new(3403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let starters: Vec<_> = game
-        .world
-        .resource::<crate::abilities::AbilityDb>()
-        .all()
-        .filter(|d| d.starter)
-        .collect();
-    assert!(
-        !starters.is_empty(),
-        "the starter pool is empty — no ability authors `starter: true`"
-    );
-    for axis in [
-        AffinityKind::Damage,
-        AffinityKind::Heal,
-        AffinityKind::Buff,
-        AffinityKind::Debuff,
-        AffinityKind::Drain,
-    ] {
-        assert!(
-            starters
-                .iter()
-                .any(|d| d.effect.affinity_kind() == Some(axis)),
-            "no starter exists for the {axis:?} axis — the creation wizard's Routine step \
-             would offer nothing that teaches it"
-        );
-    }
-}
-
-/// The half of the axis census that cannot pass on a technicality.
-///
-/// Covering an axis is not the same as *teaching* it: `hard_lock` was the
-/// only Debuff starter and its magnitude was `power: 0`, so its row read
-/// `Inflicts Stun (0) for 2 rounds` identically for all five classes and a
-/// Saboteur's 1.3 bought nothing on the one starter aimed at their own
-/// axis. The pool is unfiltered precisely so the rows show each routine's
-/// numbers *through* the chosen class's affinity; a starter whose label
-/// does not move with the affinity teaches nobody anything.
-///
-/// Read against the **real** class files rather than two literals, so a
-/// retuned spread is checked as authored.
-#[test]
-fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
-    let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (classes, _) =
-        crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
-    let statuses = game.world.resource::<StatusDb>().clone();
-    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
-        if !def.starter {
-            continue;
-        }
-        let axis = def
-            .effect
-            .affinity_kind()
-            .unwrap_or_else(|| panic!("starter {:?} scales on no affinity axis at all", def.id));
-        let raised = crate::classes::PlayerClass::ALL
-            .iter()
-            .map(|class| crate::classes::class_affinity(&classes, Some(*class), axis))
-            .fold(crate::tuning::AFFINITY_NEUTRAL, f32::max);
-        assert!(
-            raised > crate::tuning::AFFINITY_NEUTRAL,
-            "no shipped class raises the {axis:?} axis, so starter {:?} can never read              differently for anyone",
-            def.id
-        );
-        assert_ne!(
-            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL, &statuses),
-            crate::abilities::effect_label(def, 1, raised, &statuses),
-            "starter {:?} prints the same numbers at {} and at {raised} — its magnitude \
-             cannot be scaled, so the Routine step teaches nothing for the {axis:?} axis",
-            def.id,
-            crate::tuning::AFFINITY_NEUTRAL
-        );
     }
 }
 
@@ -5344,10 +5055,7 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
         !gated.is_empty(),
         "the tree unlocks no recipes at all, so this census proves nothing"
     );
-    let shelf = game
-        .world
-        .resource::<ItemDb>()
-        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
+    let shelf = game.world.resource::<ItemDb>().creation_shelf();
     for row in &shelf {
         assert!(
             !gated.contains(&&row.id),
@@ -5360,93 +5068,22 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
     }
 }
 
-/// The Emulate disk is the one etched disk barred from the creation shelf —
-/// `abilities::ability_disk_shelved` (todo #100 Task 4 decision 9).
-/// `Game::install_disk` never checks `Game::node_researched`, so an
-/// ordinary routine's disk being offered here is accepted, existing
-/// behaviour; this asserts the one exception rather than every disk, since
-/// asserting every disk is barred would be asserting something false.
+/// Emulate's Core is the one part barred from the creation shelf —
+/// `Subroutine::shelf`: unlocking Emulate is what its research gates.
 #[test]
-fn the_creation_shelf_never_offers_the_emulate_disk() {
+fn the_creation_shelf_never_offers_the_emulate_core() {
     let game = Game::new(958, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let shelf = game
-        .world
-        .resource::<ItemDb>()
-        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
-    let emulate_disk = crate::items::ItemId::etched("emulate");
+    let shelf = game.world.resource::<ItemDb>().creation_shelf();
+    let emulate = crate::routine_craft::Subroutine::all()
+        .into_iter()
+        .filter(|p| !crate::routine_craft::Subroutine::shelf().contains(p))
+        .map(|p| crate::items::ItemId::part(&p))
+        .collect::<Vec<_>>();
+    assert!(!emulate.is_empty(), "the shelf bars nothing");
     assert!(
-        shelf.iter().all(|row| row.id != emulate_disk),
-        "the Emulate disk must never be offered on the creation shelf"
+        shelf.iter().all(|row| !emulate.contains(&row.id)),
+        "a barred part must never be offered on the creation shelf"
     );
-}
-
-/// The two shipped fork routines. `every_runnable_routine_is_priced_in_power`
-/// already holds the price above zero; what this adds is the *shape* — one
-/// body against two-or-three, and the rung of quality the second pays for
-/// the numbers.
-#[test]
-fn the_two_fork_routines_ship_as_one_body_and_a_cluster() {
-    use crate::abilities::AbilityEffect;
-    let game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let db = game.world.resource::<crate::abilities::AbilityDb>();
-
-    let one = db.get("fork_program").expect("fork_program ships");
-    assert!(matches!(
-        one.effect,
-        AbilityEffect::Summon {
-            count: 1,
-            extra: 0,
-            rarity_penalty: 0
-        }
-    ));
-
-    let many = db.get("fork_cluster").expect("fork_cluster ships");
-    let AbilityEffect::Summon {
-        count,
-        extra,
-        rarity_penalty,
-    } = many.effect
-    else {
-        panic!("fork_cluster is a Summon");
-    };
-    assert_eq!((count, count + extra), (2, 3), "two or three bodies");
-    assert_eq!(
-        rarity_penalty, 1,
-        "a rung worse than fork_program at every rank"
-    );
-
-    assert!(
-        many.power_cost > one.power_cost,
-        "the cluster is the expensive one: {} against {}",
-        many.power_cost,
-        one.power_cost
-    );
-    for def in [one, many] {
-        assert_eq!(
-            def.target,
-            crate::abilities::AbilityTarget::WholeParty,
-            "{:?} is centred on the invoker",
-            def.id
-        );
-        assert!(def.cooldown > 0, "{:?} needs a cooldown", def.id);
-    }
-}
-
-/// The empty-catalogue property every data-driven subsystem here holds:
-/// deleting both files leaves the game exactly as it was, rather than
-/// leaving a dangling reference behind.
-#[test]
-fn deleting_the_fork_routines_leaves_the_game_as_it_was() {
-    let dir = scratch_assets_dir("no_forks");
-    copy_shipped_assets(&dir, &[]);
-    for file in ["fork_program.ron", "fork_cluster.ron"] {
-        std::fs::remove_file(dir.join("abilities").join(file)).unwrap();
-    }
-    let game = Game::new(4402, DifficultyMode::Forgiving, &dir).unwrap();
-    let db = game.world.resource::<crate::abilities::AbilityDb>();
-    assert!(db.get("fork_program").is_none());
-    assert!(db.get("fork_cluster").is_none());
-    assert!(db.all().count() > 0, "every other routine is still there");
 }
 
 /// **The census.** `discoverable` is `#[serde(default)]`, so a shipped tree
@@ -5898,6 +5535,9 @@ fn shipped_status_references() -> Vec<(String, StatusId)> {
             _ => {}
         }
     }
+    for status in crate::routine_craft::StatusKind::ALL {
+        refs.push((format!("Status part {}", status.name()), status.id()));
+    }
     for def in species.all() {
         for mv in &def.moves {
             if let Some(effect) = &mv.effect {
@@ -6206,19 +5846,15 @@ fn every_floor_shade_has_a_shipped_finish_and_every_file_parses() {
 /// A charge routine winds up a damage hit, and a one-turn wind-up is an
 /// ordinary routine with a delay. The loader skips a malformed `charge`, so
 /// only a census over the shipped files notices one that quietly vanished.
-/// Both shipped charge routines also have to get a research node, or the
-/// player-side half of the feature is unreachable.
 #[test]
-fn every_shipped_charge_routine_is_a_multi_round_damage_with_a_node() {
+fn every_shipped_charge_routine_is_a_multi_round_damage() {
     let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::abilities::AbilityDb>();
     let charged: Vec<_> = db.all().filter(|d| d.charge.is_some()).collect();
-    for id in ["haymaker", "long_compile"] {
-        assert!(
-            charged.iter().any(|d| d.id == id),
-            "{id} must load as a charge routine"
-        );
-    }
+    assert!(
+        charged.iter().any(|d| d.id == "haymaker"),
+        "haymaker must load as a charge routine"
+    );
     for def in charged {
         assert!(
             matches!(def.effect, crate::abilities::AbilityEffect::Damage { .. }),
@@ -6226,11 +5862,6 @@ fn every_shipped_charge_routine_is_a_multi_round_damage_with_a_node() {
             def.id
         );
         assert!(def.charge.as_ref().unwrap().rounds >= 2, "{}", def.id);
-        assert!(
-            crate::routine_tree::gets_node(db, def),
-            "{} gets no research node",
-            def.id
-        );
     }
 }
 

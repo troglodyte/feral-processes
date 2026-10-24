@@ -200,7 +200,7 @@ pub const CONTRACT_REFRESH_CYCLES: u32 = 400;
 /// printable 1 → scavenged 3-8 → standard 12-16 → researched 20-60 → premium
 /// 80-120. Only the bottom rungs are things a base accumulates twenty of, so
 /// this sits at the top of the scavenged band. Raising it puts researched
-/// goods on the board as bulk errands; an etched Routine Disk is 20.
+/// goods on the board as bulk errands; a Subroutine part is 20.
 pub const CONTRACT_MAX_DELIVER_VALUE: u32 = 8;
 
 /// How many points around the base's doorstep a rolled contract samples to

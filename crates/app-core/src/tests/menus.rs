@@ -105,7 +105,7 @@ fn mnemonic_letters_still_act() {
     assert_eq!(app.menu_selected, 0);
 
     let mut app = test_app(924);
-    teach_player_routines(&mut app, &["sandbox"]);
+    free_a_routine_slot(&mut app);
     open_via_menu(&mut app, 'p', "Install a routine");
     pick_row(&mut app, 0);
     pick_row(&mut app, 1);
@@ -114,8 +114,6 @@ fn mnemonic_letters_still_act() {
     app.handle_key(GameKey::Char('z'));
     assert_eq!(app.mode, Mode::RoutineInstall, "[z] is no installer key");
     assert_eq!(app.menu_selected, row);
-    app.handle_key(GameKey::Char('e'));
-    assert_eq!(app.mode, Mode::RoutineEtch, "installer [e]");
 }
 
 #[test]

@@ -1741,6 +1741,10 @@ impl Game {
         // A parent mid-haul: its load is set on the floor, not despawned.
         self.drop_load(a);
         self.drop_load(b);
+        // The child's kit comes fresh from its species, so neither parent's
+        // built routines survive (ADR 0029).
+        self.destroy_built_held_by(a);
+        self.destroy_built_held_by(b);
         self.world.despawn(a);
         self.world.despawn(b);
         // After both despawns, so neither parent is a holder of the other's

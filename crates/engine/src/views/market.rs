@@ -22,20 +22,18 @@ pub struct BuybackOption {
 /// What one row of a Stack market's shelf is.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum MarketOfferKind {
-    /// A bundle of etched disks — `scope.disks()` of them, ready to install
-    /// into whichever holders the player picks. Nothing is added to
-    /// `KnownRoutines`: a trader sells the *writing*, never the knowledge.
-    /// See `Game::buy_market_offer`.
-    Routine {
-        ability: String,
+    /// A bundle of one Subroutine part — `scope.parts()` of them, for
+    /// building routines at the Workbench. See `Game::buy_market_offer`.
+    Part {
+        part: crate::routine_craft::Subroutine,
         scope: RoutineScope,
     },
-    /// A single exclusive routine's etched disk — the rare row. Deliberately
-    /// a kind of its own rather than a `Routine` at a fourth scope: it is
-    /// sold one at a time and priced off `STACK_MARKET_EXCLUSIVE_PRICE`
-    /// rather than off any rung, and rolling it into `RoutineScope` would
-    /// mean a rung whose `disks()` and `price()` both lie.
-    ExclusiveDisk { ability: String },
+    /// Every part of one exclusive routine — the rare row. Deliberately a
+    /// kind of its own rather than a `Part` at a fourth scope: it is sold
+    /// whole and priced off `STACK_MARKET_EXCLUSIVE_PRICE` rather than off
+    /// any rung, and rolling it into `RoutineScope` would mean a rung whose
+    /// `parts()` and `price()` both lie.
+    ExclusiveRoutine { ability: String },
     /// A program, adopted through the same `Game::adopt_program` an orphan
     /// goes through.
     Program { species: String },
@@ -76,10 +74,8 @@ pub enum CaravanOfferKind {
     /// A rolled copy, with its own rarity, affix and quality — the shelf is
     /// derived, so the copy is the same one every time it is looked at.
     Gear(GearCopy),
-    /// An etched Routine Disk, by ability id. A disk and never a slot, for
-    /// `Game::buy_market_offer`'s reason: who it is for is a question the
-    /// player answers later, through `Game::install_disk`.
-    Routine(String),
+    /// One Subroutine part, for building routines at the Workbench.
+    Part(crate::routine_craft::Subroutine),
     /// A program, adopted through the same `Game::adopt_program` an orphan
     /// goes through.
     Program(String),

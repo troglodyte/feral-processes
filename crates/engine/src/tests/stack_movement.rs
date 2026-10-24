@@ -10,9 +10,11 @@ use crate::stack::{CellKind, Dir};
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
 use crate::*;
 
-const PHASE: &str = "buffer_overrun";
-const JUMP: &str = "wild_jump";
-const SYMLINK: &str = "symlink";
+// Built in this order by `surfaced_with_routines_from`, after a new game's
+// Patch (`crafted/1`).
+const PHASE: &str = "crafted/2";
+const JUMP: &str = "crafted/3";
+const SYMLINK: &str = "crafted/4";
 
 /// A game whose player carries both movement routines, standing on depth 1
 /// of the stack under their own tile.
@@ -59,6 +61,10 @@ fn surfaced_with_routines_on(mode: DifficultyMode) -> Game {
 fn surfaced_with_routines_from(seed: u32, mode: DifficultyMode) -> Game {
     let mut game = Game::new(seed, mode, &test_assets_dir()).unwrap();
     let player = game.player_entity();
+    use crate::routine_craft::Core;
+    assert_eq!(mint_core(&mut game, Core::Phase), PHASE);
+    assert_eq!(mint_core(&mut game, Core::Jump), JUMP);
+    assert_eq!(mint_core(&mut game, Core::Symlink), SYMLINK);
     game.world
         .entity_mut(player)
         .insert(Routines(vec![PHASE.to_string(), JUMP.to_string()]));
@@ -581,21 +587,6 @@ fn a_routine_the_player_cannot_pay_for_is_greyed_rather_than_hidden() {
             .all(|r| r.unavailable.as_deref() == Some("not enough PWR"))
     );
     assert!(run(&mut game, PHASE, FieldRoutineTarget::None).is_err());
-}
-
-/// Installing either routine goes through the ordinary door — a research
-/// node teaches it, a manufactured disk writes it — with no new machinery.
-#[test]
-fn both_routines_install_the_way_every_other_researched_routine_does() {
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    set_level(&mut game, player, 30);
-    for id in [PHASE, JUMP] {
-        install_routine_for_test(&mut game, player, id);
-    }
-    let installed = game.world.get::<Routines>(player).unwrap().0.clone();
-    assert!(installed.contains(&PHASE.to_string()));
-    assert!(installed.contains(&JUMP.to_string()));
 }
 
 /// A landing is unwalkable or it is not; `StackMemory` has no say. The

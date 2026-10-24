@@ -9521,7 +9521,6 @@
     spawn_point: (0, 0),
     buyback_shelves: [],
     researched: [],
-    known_routines: [],
     known_tools: [],
     link_sites: [
         (-13, -12),

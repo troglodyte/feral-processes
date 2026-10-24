@@ -94,7 +94,7 @@ impl MoveDef {
 /// attack is what a program does when it has nothing better, so a cooldown
 /// or a Power charge would leave a hostile with no action at all, and
 /// `wild_weight: 0` keeps thirty-odd filler attacks out of the pool a
-/// Routine Disk rolls from.
+/// wild program's carried routine rolls from.
 ///
 /// The id is derived from the species and the attack's position rather than
 /// its name: two species may ship an attack of the same name, and a name is
@@ -118,9 +118,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         boss_drop: None,
         triggers: None,
         ranged: mv.ranged,
@@ -1488,7 +1486,7 @@ mod tests {
         assert!(ping.ranged, "Recon Ping reaches past the front line");
 
         // Priced at nothing and out of the wild pool: a basic attack is what
-        // a program falls back on, and thirty-odd of them in the Routine Disk
+        // a program falls back on, and thirty-odd of them in the wild routine
         // pool is not a content drop anyone asked for.
         for a in &attacks {
             assert_eq!(a.power_cost, 0.0, "{} costs Power", a.name);

@@ -110,8 +110,8 @@ impl App {
             return;
         }
 
-        // Only the sell rows name gear — an offer is a routine disk or a
-        // program, and its own `detail` line already carries what it is.
+        // Only the sell rows name gear — an offer is a part lot, an
+        // exclusive routine or a program, and its own `detail` line already carries what it is.
         if key == GameKey::Char('I') {
             let row = vis.resolve(self.menu_selected.min(total.saturating_sub(1)));
             if let Some(MarketRow::Sell(i)) = row {
@@ -126,10 +126,9 @@ impl App {
         };
         match vis.resolve(idx) {
             Some(MarketRow::Offer(i)) => {
-                // No target picker on any row any more: every routine row
-                // sells disks into cargo, and who runs them is a question
-                // the routine panel asks later. That is what deleted
-                // `Mode::StackMarketTarget`.
+                // No target picker on any row: every part row sells parts
+                // into cargo, and what they are built into is a question
+                // the Workbench asks later.
                 self.buy_market_offer(view.offers[i].index);
             }
             Some(MarketRow::Sell(i)) => {

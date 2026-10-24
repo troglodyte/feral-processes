@@ -131,9 +131,8 @@ pub enum LootSource {
     Trade,
     /// Given back — a demolished structure's materials.
     Refund,
-    /// A routine disk the player made, by etching a blank or by extracting
-    /// one from a program.
-    Etch,
+    /// A part the player made at the Workbench.
+    Craft,
     /// A tool carrier the player forged — `Game::forge_tool`, `Etch`'s own
     /// sibling on the tool side of the acquisition chain.
     Forge,
@@ -170,7 +169,7 @@ impl LootSource {
             LootSource::Trade => "trade",
             LootSource::Refund => "refund",
             LootSource::Salvage => "salvage",
-            LootSource::Etch => "etch",
+            LootSource::Craft => "craft",
             LootSource::Forge => "forge",
             LootSource::Extract => "extract",
             LootSource::Outpost => "outpost",

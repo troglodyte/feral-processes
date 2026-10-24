@@ -477,8 +477,11 @@ fn the_player_has_no_abilities_until_they_research_one() {
         .collect();
     assert_eq!(
         ids,
-        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
-        "the player starts with only the pre-installed decompile — everything else is \
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "crafted/1".to_string()
+        ],
+        "the player starts with decompile and the built Patch — everything else is \
          what the research is selling"
     );
 }
@@ -488,9 +491,8 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "routine/priority_boost");
 
-    give_disks(&mut game, 1);
     let player = game.player_entity();
-    fit_routine(&mut game, player, "priority_boost");
+    install_routine_for_test(&mut game, player, "priority_boost");
 
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
@@ -507,76 +509,6 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     );
 }
 
-/// Two nodes may legitimately name the same ability — a mod branching the
-/// tree, say. Knowledge is a set, so the second node teaches nothing new,
-/// and installing is still a separate, deliberate act that costs a disk.
-///
-/// `teaches` is `#[serde(skip)]` — a `.ron` file cannot author it at all,
-/// only `routine_tree::synthesise_nodes` does — so this fixture builds the
-/// node in Rust and inserts it through `ResearchDb::insert_for_test` rather
-/// than through a modded file, the shape a real mod could never take.
-#[test]
-fn an_ability_granted_by_two_nodes_is_learned_once() {
-    const ALSO_BOOST: &str = r#"(
-        id: "also_boost",
-        name: "Redundant Routine",
-        description: "Grants what the routine tree's own node already grants.",
-        cost: 12,
-    )"#;
-    let dir = modded_assets_dir(
-        "dup_ability",
-        &[],
-        &[],
-        &[],
-        &[("also_boost.ron", ALSO_BOOST)],
-        &[],
-    );
-    let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
-    {
-        let mut db = game.world.resource_mut::<ResearchDb>();
-        let mut also_boost = db
-            .get("also_boost")
-            .expect("the fixture file loaded")
-            .clone();
-        also_boost.teaches = Some("priority_boost".to_string());
-        db.insert_for_test(also_boost);
-    }
-    unlock_research_chain(&mut game, "routine/priority_boost");
-    unlock_research_chain(&mut game, "also_boost");
-
-    assert_eq!(
-        game.etchable_routines()
-            .iter()
-            .filter(|r| r.ability == "priority_boost")
-            .count(),
-        1,
-        "the second node teaches nothing the first didn't"
-    );
-
-    give_disks(&mut game, 2);
-    let player = game.player_entity();
-    fit_routine(&mut game, player, "priority_boost");
-    let ids: Vec<String> = game
-        .actor_abilities(game.player_entity())
-        .into_iter()
-        .map(|a| a.id)
-        .collect();
-    assert_eq!(
-        ids,
-        vec![
-            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
-            "priority_boost".to_string(),
-        ],
-        "installing fills one slot, however many nodes granted it"
-    );
-    assert_eq!(
-        game.blank_disks_held(),
-        1,
-        "one install burns exactly one disk"
-    );
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
 /// The player's Special goes through the same resolution path a companion's
 /// does — so the cooldown must arm on the player's own entity, and the
 /// effect must land.
@@ -589,9 +521,8 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
-    give_disks(&mut game, 2);
-    fit_routine(&mut game, player, "priority_boost");
-    fit_routine(&mut game, player, "hot_patch");
+    install_routine_for_test(&mut game, player, "priority_boost");
+    install_routine_for_test(&mut game, player, "hot_patch");
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -652,8 +583,7 @@ fn a_player_special_spends_its_authored_power_cost() {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "routine/null_route");
         let player = game.player_entity();
-        give_disks(&mut game, 1);
-        fit_routine(&mut game, player, "null_route");
+        install_routine_for_test(&mut game, player, "null_route");
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
@@ -668,9 +598,8 @@ fn a_player_special_spends_its_authored_power_cost() {
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut probe, "routine/null_route");
-    give_disks(&mut probe, 1);
     let probe_player = probe.player_entity();
-    fit_routine(&mut probe, probe_player, "null_route");
+    install_routine_for_test(&mut probe, probe_player, "null_route");
     let abilities = probe.actor_abilities(probe.player_entity());
     let index = abilities
         .iter()
@@ -708,15 +637,18 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
-    give_disks(&mut game, 2);
-    fit_routine(&mut game, player, "priority_boost");
-    fit_routine(&mut game, player, "hot_patch");
+    install_routine_for_test(&mut game, player, "priority_boost");
+    install_routine_for_test(&mut game, player, "hot_patch");
     let before: Vec<String> = game
         .actor_abilities(player)
         .into_iter()
         .map(|a| a.id)
         .collect();
-    assert_eq!(before.len(), 3, "decompile, priority_boost and hot_patch");
+    assert_eq!(
+        before.len(),
+        4,
+        "decompile, the built Patch, priority_boost and hot_patch"
+    );
 
     let path = std::env::temp_dir().join(format!(
         "feral_player_routines_save_{}.bin",
@@ -751,8 +683,11 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
             .into_iter()
             .map(|a| a.id)
             .collect::<Vec<_>>(),
-        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()],
-        "the player gets decompile, not the companion fallback"
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "crafted/1".to_string()
+        ],
+        "the player gets decompile and Patch, not the companion fallback"
     );
 }
 
@@ -786,9 +721,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -836,9 +769,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -883,9 +814,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -934,9 +863,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -985,9 +912,7 @@ fn drain_logs_what_it_actually_restored() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1031,9 +956,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1086,9 +1009,7 @@ fn a_negative_power_buff_saps_effective_attack() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1132,9 +1053,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1178,9 +1097,7 @@ fn a_heal_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1227,9 +1144,7 @@ fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1282,9 +1197,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1328,9 +1241,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1381,9 +1292,7 @@ fn ability_damage_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1440,9 +1349,7 @@ fn drain_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1633,9 +1540,7 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -1702,9 +1607,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,
@@ -2588,9 +2491,7 @@ fn an_aimed_routine_lands_more_often_than_an_unaimed_one() {
                 accuracy,
                 power_cost: 0.0,
                 wild_weight: 0,
-                research_zone: 0,
                 exclusive: false,
-                starter: false,
                 ranged: false,
                 boss_drop: None,
                 triggers: None,

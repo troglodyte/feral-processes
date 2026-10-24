@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: is a deeper kit worth a weaker one? An Invoker holds six
 // routine slots at level 5 where everyone else holds four, and every
 // routine it runs is authored 15% up on Buff and Debuff against a
@@ -37,7 +40,6 @@
     character: (
         class: Some(Invoker),
         stats: {},
-        routine: Some("hyperthread"),
     ),
     party: [
         (species: "glitch", level: 5),

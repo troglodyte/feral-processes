@@ -722,8 +722,8 @@ impl Game {
     /// sitting in it. The value ceiling is the rest: `ItemDef::value`'s ladder
     /// runs printable 1 → scavenged 3-8 → standard 12-16 → researched 20-60 →
     /// premium 80-120, and only the bottom rungs are things a base accumulates
-    /// twenty of. Without it a Requisition asked for twenty etched Routine
-    /// Disks — a run's worth of research, stated as an errand.
+    /// twenty of. Without it a Requisition asked for twenty Subroutine
+    /// parts — a run's worth of research, stated as an errand.
     ///
     /// Portal Fragments fall out of the first filter, since `role` makes them
     /// `Currency`. That matters more than it looks: they are the breaching
@@ -1309,7 +1309,7 @@ impl Game {
     /// Takes a contract off the board in front of the player.
     ///
     /// Every refusal is checked before anything is written, the ordering
-    /// `use_symlink` and `install_routine` follow — a refused acceptance must
+    /// `use_symlink` and `install_built` follow — a refused acceptance must
     /// leave the run exactly as it found it.
     pub fn accept_contract(
         &mut self,

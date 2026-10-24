@@ -9,8 +9,11 @@ use crate::abilities::AbilityId;
 use crate::components::{Needs, Tools};
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
+use crate::routine_craft::{CraftedRoutine, validate_build};
 use crate::tools::ToolId;
-use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID};
+use crate::tuning::{
+    CRAFT_ID_PREFIX, CRAFT_PART_CAP_MAX, NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID,
+};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -23,6 +26,39 @@ use crate::*;
 /// uninstallable.
 fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
     ids.iter().cloned().partition(|id| db.get(id).is_some())
+}
+
+/// The built routines a save may keep: a record that fails `validate_build`
+/// (a Core-less one would panic `compile`) is dropped with a warning, and the
+/// slots that named it empty themselves through `recognized_routines`.
+///
+/// The counter is raised past every id the save holds, so a save whose
+/// counter was lost or defaulted cannot mint an id a routine still names.
+fn sound_crafted_routines(
+    saved: Vec<CraftedRoutine>,
+    saved_unslotted: Vec<AbilityId>,
+    saved_next_id: u32,
+    warnings: &mut Vec<String>,
+) -> (Vec<CraftedRoutine>, Vec<AbilityId>, u32) {
+    let highest_used = saved
+        .iter()
+        .filter_map(|r| r.id.strip_prefix(CRAFT_ID_PREFIX)?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    let (kept, dropped): (Vec<CraftedRoutine>, Vec<CraftedRoutine>) = saved
+        .into_iter()
+        .partition(|r| validate_build(&r.parts, CRAFT_PART_CAP_MAX).is_ok());
+    for routine in &dropped {
+        warnings.push(format!(
+            "Built routine {} is malformed and was dropped, and its slot is now empty.",
+            routine.name
+        ));
+    }
+    let unslotted = saved_unslotted
+        .into_iter()
+        .filter(|id| kept.iter().any(|r| r.id == *id))
+        .collect();
+    (kept, unslotted, saved_next_id.max(highest_used))
 }
 
 /// The save's flat worn-item fields back into the live nested form, `None`
@@ -590,17 +626,11 @@ impl Game {
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
         world.insert_resource(crate::resources::ActiveResearch::default());
-        // Empty, decompile included. It used to be seeded here so that
-        // popping decompile out of its starting slot could be undone by
-        // etching a fresh disk — but `Game::routine_is_permanent` closed the
-        // pop-out, and the entry's only remaining effect would be to offer
-        // the run's one unduplicable routine on the etch picker.
-        world.init_resource::<KnownRoutines>();
         // Empty, not the starter tool: the starter is granted straight into
         // the slot below, and knowledge is not what put it there — see
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
-        world.init_resource::<crate::resources::DiscoveredRoutines>();
+        world.init_resource::<crate::resources::CraftedRoutines>();
         world.init_resource::<crate::resources::DiscoveredResearch>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
@@ -1508,7 +1538,7 @@ impl Game {
             ));
         }
         let AssetDbs {
-            abilities: ability_db,
+            abilities: mut ability_db,
             tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
@@ -1557,14 +1587,26 @@ impl Game {
         // ability a later load's asset set doesn't have (the file was
         // removed, or is now malformed and got skipped with a warning of
         // its own). Left in place, `routine_view` can't resolve the id and
-        // renders the slot `(empty)` — which then makes `install_routine`
+        // renders the slot `(empty)` — which then makes `install_built`
         // refuse "no free slot" for a slot the panel just told the player
         // was free. Dropped here instead, once, at the only point both the
         // save data and the loaded `AbilityDb` are in hand.
         // Taken before the bundle moves `unlocked_perks` out of `data`.
         let player_perk_levels = data.player.unlocked_perks.len() as u32;
-        let (player_routines, dropped_player_routines) =
+        // Before any slot is recognised: a `crafted/<n>` id resolves only
+        // once the crafted tier holds it.
+        let (crafted_routines, unslotted_routines, next_crafted_id) = sound_crafted_routines(
+            data.crafted_routines,
+            data.unslotted_routines,
+            data.next_crafted_id,
+            &mut load_warnings,
+        );
+        ability_db.set_crafted(&crafted_routines);
+        let (player_routines, mut dropped_player_routines) =
             recognized_routines(&data.player.routines, &ability_db);
+        // A dropped built routine was already reported by name above; its
+        // raw id means nothing to the player.
+        dropped_player_routines.retain(|id| !id.starts_with(CRAFT_ID_PREFIX));
 
         let mut world = World::new();
         world.insert_resource(ability_db);
@@ -1624,11 +1666,12 @@ impl Game {
         world.insert_resource(crate::resources::DiscoveredResearch(
             data.discovered_research.into_iter().collect(),
         ));
-        world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
-        world.insert_resource(crate::resources::DiscoveredRoutines(
-            data.discovered_routines.into_iter().collect(),
-        ));
+        world.insert_resource(crate::resources::CraftedRoutines {
+            built: crafted_routines,
+            unslotted: unslotted_routines,
+            next_id: next_crafted_id,
+        });
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here
             // and read nowhere else, exactly as `fused_gear` is above.
@@ -2228,8 +2271,9 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(&c.species)
             .cloned()?;
-        let (routines, dropped_routines) =
+        let (routines, mut dropped_routines) =
             recognized_routines(&c.routines, self.world.resource::<AbilityDb>());
+        dropped_routines.retain(|id| !id.starts_with(CRAFT_ID_PREFIX));
         if !dropped_routines.is_empty() {
             self.log(format!(
                 "{} carried {} — no longer available, and the slot is now empty.",
@@ -3509,13 +3553,6 @@ impl Game {
                 .world
                 .resource::<crate::resources::ActiveResearch>()
                 .study,
-            known_routines: self
-                .world
-                .resource::<KnownRoutines>()
-                .0
-                .iter()
-                .cloned()
-                .collect(),
             known_tools: self
                 .world
                 .resource::<KnownTools>()
@@ -3530,13 +3567,20 @@ impl Game {
                 .iter()
                 .cloned()
                 .collect(),
-            discovered_routines: self
+            crafted_routines: self
                 .world
-                .resource::<crate::resources::DiscoveredRoutines>()
-                .0
-                .iter()
-                .cloned()
-                .collect(),
+                .resource::<crate::resources::CraftedRoutines>()
+                .built
+                .clone(),
+            unslotted_routines: self
+                .world
+                .resource::<crate::resources::CraftedRoutines>()
+                .unslotted
+                .clone(),
+            next_crafted_id: self
+                .world
+                .resource::<crate::resources::CraftedRoutines>()
+                .next_id,
             link_sites: {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
@@ -3959,13 +4003,8 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(structure_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
-    // After the files, and after `abilities`, because every etched disk is
-    // derived from an ability — this is the one ordering dependency the two
-    // databases have, and the only reason `items` is loaded below
-    // `abilities` rather than beside it.
-    warnings.extend(items.synthesise_etched_disks(&abilities));
-    // Same ordering dependency as the etched disks just above: every
-    // carrier is derived from a loaded `ToolDef`, and `tools` finished
+    warnings.extend(items.synthesise_parts());
+    // Every carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
     warnings.extend(structures.validate_machines(&items));
@@ -3991,13 +4030,8 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // After `affixes`: every research-only affix is a node in the Affixes
     // tree, derived from `AffixDb` (`affix_tree::synthesise_nodes`). Nothing
     // between the old position and this one reads research.
-    let (research, research_warnings) = ResearchDb::load_dir(
-        &assets_dir.join("research"),
-        &structures,
-        &abilities,
-        &tools,
-        &affixes,
-    )?;
+    let (research, research_warnings) =
+        ResearchDb::load_dir(&assets_dir.join("research"), &structures, &tools, &affixes)?;
     warnings.extend(research_warnings);
     warnings.extend(structures.unknown_research_references(&items, &research));
     // A file, not a directory, and an absent one is silent — see

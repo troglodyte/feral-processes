@@ -242,9 +242,8 @@ impl Default for PlayerSource {
     }
 }
 
-/// Who the player was made as, for a `Fresh` scenario — the class, the
-/// creation stat pool and the starter routine, the three creation answers
-/// that reach a fight.
+/// Who the player was made as, for a `Fresh` scenario — the class and the
+/// creation stat pool, the creation answers that reach a fight.
 ///
 /// The look is deliberately absent: a glyph and a swatch are what the map
 /// draws, and nothing in a staged fight reads either.
@@ -253,8 +252,7 @@ impl Default for PlayerSource {
 /// clean half of it.** `run_rep` plays `PartyPlan::AllAttack` — the game's
 /// own `[A]` plan — which invokes no routine, so a class's *affinity*
 /// spread over authored routine power (`Game::ability_affinity`) never
-/// touches an ordinary swing and `routine` changes nothing the bin reports.
-/// But `class` also gates `battle::attacks_per_round`'s second swing (a
+/// touches an ordinary swing. But `class` also gates `battle::attacks_per_round`'s second swing (a
 /// Striker at `EXTRA_ATTACK_LEVEL`+), which an ordinary swing very much
 /// reads — so a `class: Some(Striker)` scenario at or above that level
 /// *does* change what the bin reports, and any measurement run with one
@@ -271,7 +269,6 @@ pub struct CharacterSpec {
     /// closed is right inside a run and wrong in an instrument, where a
     /// silently ignored input reads as the axis being worthless.
     pub stats: std::collections::BTreeMap<crate::attributes::AttributeId, u32>,
-    pub routine: Option<AbilityId>,
     /// Perk Points the player starts with, spent by `perks` below —
     /// final review F10 (U4): a scenario had no way to give the staged
     /// player any perks at all, which is not what a level-20 player looks
@@ -295,7 +292,6 @@ impl CharacterSpec {
         CharacterChoice {
             class: self.class,
             stats: self.stats.clone(),
-            routine: self.routine.clone(),
             perk_points: self.perk_points,
             perks: self.perks.clone(),
             ..CharacterChoice::default()

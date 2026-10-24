@@ -936,40 +936,6 @@ mod tests {
         );
     }
 
-    /// The starter routine has to survive `set_level`, which runs *after*
-    /// `Game::new_with` and installs whatever the level unlocked. A class
-    /// scenario is staged at a level, and a starter displaced on the way up
-    /// would leave every `dev-arenas/class-*` file measuring nothing while
-    /// still reporting numbers.
-    #[test]
-    fn a_character_spec_routine_survives_being_levelled_to_the_scenarios_level() {
-        use crate::arena::scenario::CharacterSpec;
-        let mut s = fresh(5, 1);
-        s.character = CharacterSpec {
-            routine: Some("checksum_repair".to_string()),
-            ..CharacterSpec::default()
-        };
-        let game = build_player(&s, &test_assets_dir()).unwrap();
-        let player = game.player_entity();
-        assert!(
-            game.world
-                .get::<Routines>(player)
-                .unwrap()
-                .0
-                .iter()
-                .any(|r| r == "checksum_repair"),
-            "the starter routine is not installed: {:?}",
-            game.world.get::<Routines>(player).unwrap().0
-        );
-        assert!(
-            game.world
-                .resource::<crate::KnownRoutines>()
-                .0
-                .contains("checksum_repair"),
-            "the starter routine is installed but not known"
-        );
-    }
-
     #[test]
     fn a_template_player_is_an_err_pointing_at_the_bin() {
         let s = scenario(PlayerSource::Template("extraction".into()));

@@ -1764,6 +1764,35 @@ impl Game {
                         self.log_kind(heal_kind, line);
                     }
                 }
+                AbilityEffect::HealOverTime {
+                    power,
+                    spread,
+                    rounds,
+                } => {
+                    // One draw per recipient, `Heal`'s rule: the band is
+                    // rolled when it lands and each round restores that
+                    // figure, so the stream does not depend on the length.
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
+                    let per_round = {
+                        let mut rng = self.world.resource_mut::<GameRng>();
+                        band.roll(&mut rng.0)
+                    };
+                    self.arm_status(
+                        recipient,
+                        &StatusId::from(crate::tuning::REGEN_STATUS),
+                        *rounds,
+                        per_round,
+                    );
+                    self.log_status_landing(
+                        &StatusId::from(crate::tuning::REGEN_STATUS),
+                        &on,
+                        None,
+                    );
+                }
                 AbilityEffect::Debuff {
                     kind,
                     power,
@@ -1890,13 +1919,18 @@ impl Game {
                     self.log(format!("{name} detaches {on} from the scheduler."));
                 }
                 AbilityEffect::Cleanse => {
-                    let had_status = self
+                    let afflictions: Vec<StatusId> = self
                         .world
                         .get::<StatusEffects>(recipient)
-                        .is_some_and(|s| !s.active.is_empty());
-                    if had_status {
+                        .map(|s| s.active.iter().map(|a| a.id.clone()).collect())
+                        .unwrap_or_default();
+                    let afflictions: Vec<StatusId> = afflictions
+                        .into_iter()
+                        .filter(|id| !self.is_boon(id))
+                        .collect();
+                    if !afflictions.is_empty() {
                         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                            statuses.active.clear();
+                            statuses.active.retain(|a| !afflictions.contains(&a.id));
                         }
                         self.log(format!("{name} flushes the corruption from {on}."));
                     }

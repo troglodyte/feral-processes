@@ -260,21 +260,12 @@
   colour rule for anything fused.** Two screens deliberately opt out, because
   a second meaning on the same axis makes both unreadable. `fusion_color`
   returns `Option` so a caller with a louder rule wins.
-- **Installing from a disk spends the disk last, and creation is the second
-  door into a slot and spends no item at all.** `install_routine` checks
-  battle, ownership, knowledge and a free slot before it looks for the disk.
-  Uninstalling returns nothing. A new game *knows* `DECOMPILE_ABILITY_ID`,
-  and a displaced innate routine is lost. **The trap is that `install_routine`
-  is no longer where a rule about routine slots belongs**:
-  `abilities::install_starter` writes `KnownRoutines` *and* the slot through
-  `Game::write_routine` directly, with no disk, no ownership check and no
-  `exclusive` check, so anything added to `install_routine` is bypassed by
-  every character made after it lands. What holds the pool's shape instead is
-  a census — `every_starter_is_single_target` and
-  `every_starter_is_not_exclusive` in `tests/assets.rs` — plus the wizard
-  only offering `Game::starter_routine_rows`. Knowledge as well as the
-  install is deliberate: it is what lets a starter be etched onto a disk
-  later rather than lost when the slot is wanted for something else.
+- **A player's slot takes a built routine and nothing else.**
+  `Game::install_built` checks battle, ownership, the Emulate rule and a
+  free slot; uninstalling a built routine destroys it. A species kit goes
+  in through `Game::write_routine` directly, with no ownership check, so a
+  rule about routine slots that belongs to both doors belongs in
+  `write_routine`.
 - **Hand-compiling is priced at `Game::hand_craft_ticks` — the cycle of the
   machine that exists to do the job times `HAND_CRAFT_TICK_MULT` — and
   `Game::craft` is that loop drained to completion.** The lookup is `maker_of`: an
@@ -378,11 +369,9 @@
   and in the Stack alike, because the starting tool is useless otherwise.
 - **`Game::take_routine` owns the effect and neither door owns a copy of
   it.** `extract_routine` (a tamed program) and a `Routines`-category tool
-  through `extract_program` (a downed one) both call it. The exclusive
-  branch popping `ItemId::etched(id)` back out instead of teaching is the
-  whole of why exactly one copy of an exclusive routine exists in a run,
-  and two implementations that agree today are the shape that stops
-  agreeing later. The *refusals* stay unshared on purpose — the tamed door
+  through `extract_program` (a downed one) both call it. It hands over the
+  routine's parts through `parts_of_routine`, and two implementations that
+  agree today are the shape that stops agreeing later. The *refusals* stay unshared on purpose — the tamed door
   needs a bench and an ownership check, the tool door needs neither.
 - **A downed program's routine pool is derived from species and level, so
   it cannot offer what the individual was actually carrying.**
@@ -429,8 +418,7 @@
   pack showed `tool_core_tap`, the refusal line said "You're not carrying
   tool_core_tap", and a trader priced it at the default — all of it silent,
   because every test in the feature names a tool through `ToolDef::name`.
-- **A tool carrier is sold everywhere and bought nowhere**, the etched disk's
-  asymmetry, filtered through `ItemId::tool_id` in `caravan::stock_pool` (the
+- **A tool carrier is sold everywhere and bought nowhere**, an asymmetry filtered through `ItemId::tool_id` in `caravan::stock_pool` (the
   settlement shelf's source too) and `ItemDb::creation_shelf`. The second one
   is the one nobody predicts: `TOOL_CARRIER_VALUE` sits below every shipped
   `forge_cost`, which also puts it under `CREATION_SHELF_MAX_VALUE`, so a new

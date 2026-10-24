@@ -81,7 +81,6 @@ fn a_research_only_affix_becomes_a_hidden_node_carrying_its_block() {
     assert_eq!(n.min_zone, 0);
     assert!(n.discoverable, "an affix node is hidden until found");
     assert!(!n.requires_subject);
-    assert!(n.teaches.is_none(), "researched state is the Research set");
     assert_eq!(n.name, "Alpha");
     assert!(n.description.contains("Armor"), "{}", n.description);
 }
@@ -142,14 +141,8 @@ fn a_cycle_among_research_only_affixes_is_dropped_by_the_research_load() {
     let (structures, _) =
         crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
     let (tools, _) = crate::tools::ToolDb::load_dir(&assets.join("tools")).unwrap();
-    let (db, warnings) = ResearchDb::load_dir(
-        &assets.join("research"),
-        &structures,
-        &abilities,
-        &tools,
-        &affixes,
-    )
-    .unwrap();
+    let (db, warnings) =
+        ResearchDb::load_dir(&assets.join("research"), &structures, &tools, &affixes).unwrap();
     assert!(db.get("affix:t_ca").is_none() && db.get("affix:t_cb").is_none());
     assert_eq!(
         warnings.iter().filter(|w| w.contains("cycle")).count(),

@@ -13,7 +13,6 @@
     power_cost: 30.0,
     shape: Some(Radius(radius: 2)),
     range: Some((min: 0, max: 5)),
-    research_zone: 3,
     // Joins the hunt-only set (`bit_rot`'s reason): any wild program may
     // spawn carrying it, and no species kit names it.
     wild_weight: 4,

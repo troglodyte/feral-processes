@@ -28,41 +28,28 @@ impl ItemId {
         &self.0
     }
 
-    /// The id of the etched Routine Disk holding `ability` — the item
-    /// `ItemDb::synthesise_etched_disks` derives for it.
-    ///
-    /// One function rather than a `format!` at each site because this id is
-    /// the seam between two databases: the ability half spells it when a
-    /// boss drop or a market row is built, and the item half spells it when
-    /// the disk is derived. A prefix typed twice is a disk nothing can ever
-    /// install.
-    ///
-    /// The `etched_` prefix could in principle collide with a modder's own
-    /// item — `ItemDb::synthesise_etched_disks` refuses to overwrite one and
-    /// warns instead, which is the same call `load_dir` makes about a
-    /// duplicated economy role.
-    pub fn etched(ability: &str) -> Self {
-        ItemId(format!("{ETCHED_DISK_PREFIX}{ability}"))
+    /// The id of the item that is one Subroutine (a part of a built
+    /// routine) — what `ItemDb::synthesise_parts` derives for it.
+    pub fn part(part: &crate::routine_craft::Subroutine) -> Self {
+        ItemId(format!("{PART_ITEM_PREFIX}{}", part.key()))
     }
 
-    /// The ability burnt onto this disk, or `None` if this is not an etched
-    /// disk at all. The inverse of `etched`, and the reason both live here:
-    /// a round trip that does not close is a disk that installs the wrong
-    /// routine.
-    pub fn etched_ability(&self) -> Option<&str> {
-        self.0.strip_prefix(ETCHED_DISK_PREFIX)
+    /// The part this item is, or `None` if it is not one — the inverse of
+    /// `part`.
+    pub fn part_of(&self) -> Option<crate::routine_craft::Subroutine> {
+        crate::routine_craft::Subroutine::from_key(self.0.strip_prefix(PART_ITEM_PREFIX)?)
     }
 
     /// The id of the carrier item holding `tool`'s knowledge — the item
     /// `Game::forge_tool` grants and `Game::install_tool` spends.
-    /// `etched`'s own reason: a synthetic id with no `.ron` behind it, so a
-    /// tool needs no item file of its own.
+    /// A synthetic id with no `.ron` behind it, so a tool needs no item file
+    /// of its own.
     pub fn tool(tool: &crate::tools::ToolId) -> Self {
         ItemId(format!("{TOOL_ITEM_PREFIX}{}", tool.as_str()))
     }
 
     /// The tool id a carrier item holds, or `None` if this isn't one — the
-    /// inverse of `tool`, `etched_ability`'s own reason.
+    /// inverse of `tool`.
     pub fn tool_id(&self) -> Option<crate::tools::ToolId> {
         self.0
             .strip_prefix(TOOL_ITEM_PREFIX)
@@ -70,13 +57,11 @@ impl ItemId {
     }
 }
 
-/// What `ItemId::etched` puts in front of an ability id. Not in `ids`
-/// because it is not an id — it is the scheme every etched disk's id is
-/// built from, and `ids` is a list of specific shipped items.
-pub const ETCHED_DISK_PREFIX: &str = "etched_";
+/// What `ItemId::part` puts in front of a part's key.
+pub const PART_ITEM_PREFIX: &str = "part_";
 
-/// What `ItemId::tool` puts in front of a tool id — `ETCHED_DISK_PREFIX`'s
-/// own reason.
+/// What `ItemId::tool` puts in front of a tool id. Not in `ids` because it
+/// is not an id — it is the scheme every carrier's id is built from.
 pub const TOOL_ITEM_PREFIX: &str = "tool_";
 
 impl From<&str> for ItemId {
@@ -125,9 +110,9 @@ pub mod ids {
     /// nothing spends one now — the id is kept, and the item still ships,
     /// against deciding what it is for instead.
     pub const ACCESS_SHARD: &str = "access_shard";
-    /// Burnt to install a routine the player knows — see
-    /// `Game::install_routine`. Named from Rust for the same reason
-    /// `ACCESS_SHARD` is: what installing costs is engine content, not a
+    /// Burnt to craft a Subroutine part — see
+    /// `Game::craft_subroutine`. Named from Rust for the same reason
+    /// `ACCESS_SHARD` is: what crafting costs is engine content, not a
     /// data-driven requirement. The item, and the whole chain that makes it,
     /// are still ordinary `.ron` files.
     pub const ROUTINE_DISK: &str = "routine_disk";

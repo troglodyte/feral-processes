@@ -2,9 +2,7 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::views::{
-    EtchedDiskView, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
-};
+use feral_processes_engine::views::{BuiltRoutineRow, ExtractableRoutineView, RoutineSlotView};
 
 pub(super) fn draw_routine_target(
     game: &mut Game,
@@ -45,7 +43,7 @@ fn description_row(description: &str) -> Row {
 /// without a `Game` or a `Painter`.
 pub(super) fn routine_slot_rows(slots: &[RoutineSlotView], selected: usize) -> Vec<Row> {
     let mut rows = vec![text_row(
-        "Pick a filled slot to clear it — the disk is already spent — or an empty one to install.",
+        "Pick a filled slot to clear it - the routine is destroyed - or an empty one to install.",
     )];
     for (i, s) in slots.iter().enumerate() {
         // A fixed slot is tagged rather than left to refuse when pressed:
@@ -76,37 +74,21 @@ pub(super) fn draw_routines(
     draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The install picker's rows. The two trailing rows are a deliberate footer —
-/// a legend pinned below the list rather than scrolling with it — which is
-/// the one thing `popup_layout` is allowed to hold back here.
-pub(super) fn routine_install_rows(
-    disks: &[EtchedDiskView],
-    blanks: u32,
-    selected: usize,
-) -> Vec<Row> {
+/// The install picker's rows: the routines built at the Workbench and not
+/// yet in a slot.
+pub(super) fn routine_install_rows(built: &[BuiltRoutineRow], selected: usize) -> Vec<Row> {
     let mut rows = vec![text_row(
-        "Install which disk? Installing spends it — popping the routine back out later returns nothing.",
+        "Install which routine? Popping it back out later destroys it.",
     )];
-    if disks.is_empty() {
+    if built.is_empty() {
         rows.push(text_row(
-            "(you are carrying no etched disks — press [e] to burn one, or find one on a boss)",
+            "(nothing built - compile a routine at a Workbench first)",
         ));
     }
-    for (i, d) in disks.iter().enumerate() {
-        // Exclusive disks are marked because they are the ones a wrong
-        // choice cannot be undone on: an ordinary routine can be etched
-        // again for a blank, and this one cannot be etched at all.
-        let tag = if d.exclusive { "  ★ exclusive" } else { "" };
-        rows.push(item_row(
-            format!("{} ×{}{}", d.name, d.qty, tag),
-            i == selected,
-        ));
-        rows.push(description_row(&d.description));
+    for (i, b) in built.iter().enumerate() {
+        rows.push(item_row(b.name.clone(), i == selected));
+        rows.push(description_row(&b.description));
     }
-    rows.push(text_row(""));
-    rows.push(text_row(format!(
-        "[e] burn a blank with a routine you know    Blanks: {blanks}"
-    )));
     rows
 }
 
@@ -117,7 +99,7 @@ pub(super) fn draw_routine_install(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = routine_install_rows(&game.etched_disks_held(), game.blank_disks_held(), selected);
+    let rows = routine_install_rows(&game.built_routine_rows(), selected);
     draw_popup(
         "Install Routine",
         PopupSize::Large,
@@ -128,59 +110,11 @@ pub(super) fn draw_routine_install(
     );
 }
 
-/// The etch picker's rows.
-///
-/// A routine already in cargo carries a dim `×N held` note: this screen is
-/// where a blank is spent for good, and the question it has to answer before
-/// that is whether the player is starting a stock or adding to one they
-/// forgot they had. Nothing at all on a routine held zero of — a `×0` on
-/// every line is the noise the annotation exists to avoid.
-pub(super) fn routine_etch_rows(
-    known: &[KnownRoutineView],
-    blanks: u32,
-    selected: usize,
-) -> Vec<Row> {
-    let mut rows = vec![
-        text_row("Burn which routine onto a blank? The blank is gone either way."),
-        text_row(format!("Blanks: {blanks}")),
-    ];
-    if known.is_empty() {
-        rows.push(text_row(
-            "(you know no routines — research one, or extract one from a program)",
-        ));
-    }
-    for (i, r) in known.iter().enumerate() {
-        rows.push(annotated_item_row(
-            r.name.to_string(),
-            (r.held > 0).then(|| format!("×{} held", r.held)),
-            i == selected,
-            TEXT,
-        ));
-        rows.push(description_row(&r.description));
-    }
-    rows
-}
-
-pub(super) fn draw_routine_etch(
-    game: &Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = routine_etch_rows(&game.etchable_routines(), game.blank_disks_held(), selected);
-    draw_popup("Etch Disk", PopupSize::Large, &rows, refusal, painter, m);
-}
-
 /// One extraction candidate's lines: the row the highlight lands on, then the
 /// routines the program is carrying underneath.
 ///
-/// Extraction destroys the program for exactly one of those routines, and
-/// `Game::extract_routine` *refuses* one the player already knows — so a
-/// program whose whole kit is known is worth nothing on the block, and
-/// without this the only way to find that out is to open each program in
-/// turn. The `(known)` tag is what says it; the next page says the same
-/// thing about a single row with `(already known)`.
+/// Extraction destroys the program for exactly one of those routines, so
+/// what each program carries is what decides which one to put on the block.
 ///
 /// The routines shed onto their own lines through `continuation_lines`
 /// rather than joining the row, for the reason that function states. A
@@ -191,13 +125,7 @@ pub(super) fn draw_routine_etch(
 /// The program's row is always present, so a caller may take it
 /// unconditionally.
 fn extract_candidate_rows(p: &PetInfo, routines: &[ExtractableRoutineView]) -> Vec<String> {
-    let kit: Vec<String> = routines
-        .iter()
-        .map(|r| {
-            let known = if r.known { " (known)" } else { "" };
-            format!("{}{known}", r.name)
-        })
-        .collect();
+    let kit: Vec<String> = routines.iter().map(|r| r.name.clone()).collect();
     std::iter::once(format!("{} Lv{}{}", p.name, p.level, fusion_tag(p.fusions)))
         .chain(continuation_lines(&kit.join(", ")))
         .collect()
@@ -236,7 +164,7 @@ pub(super) fn draw_extract(
 ) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
-        "Break down which program? Extraction destroys it and teaches you one of its routines.",
+        "Break down which program? Extraction destroys it and gives you the Subroutines of one of its routines.",
     )];
     if !game.can_extract_routines() {
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
@@ -249,10 +177,11 @@ pub(super) fn draw_extract(
 }
 
 pub(super) fn extract_pick_rows(offered: &[ExtractableRoutineView], selected: usize) -> Vec<Row> {
-    let mut rows = vec![text_row("Learn which routine? The rest are lost with it.")];
+    let mut rows = vec![text_row(
+        "Take the Subroutines of which routine? The rest are lost with it.",
+    )];
     for (i, a) in offered.iter().enumerate() {
-        let known = if a.known { " (already known)" } else { "" };
-        rows.push(item_row(format!("{}{known}", a.name), i == selected));
+        rows.push(item_row(a.name.clone(), i == selected));
         rows.push(description_row(&a.description));
     }
     rows
@@ -294,7 +223,10 @@ pub(super) fn draw_extract_confirm(
         .map(|(_, a)| a.name.as_str())
         .collect();
     let mut rows = vec![
-        text_row(format!("Learn {} and destroy the program?", kept.name)),
+        text_row(format!(
+            "Take the Subroutines of {} and destroy the program?",
+            kept.name
+        )),
         text_row(""),
     ];
     if !lost.is_empty() {
@@ -314,25 +246,21 @@ mod tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
 
-    fn offered(name: &str, known: bool) -> ExtractableRoutineView {
+    fn offered(name: &str) -> ExtractableRoutineView {
         ExtractableRoutineView {
             ability: name.to_lowercase().replace(' ', "_"),
             name: name.to_string(),
             description: String::new(),
-            known,
         }
     }
 
     /// The picker's whole job is choosing which program to destroy, and the
-    /// thing that decides it is what each one is carrying. `extract_routine`
-    /// refuses a routine already known, so a kit that is all `(known)` is a
-    /// program with nothing to give — the tag is the only thing on this
-    /// screen that says so.
+    /// thing that decides it is what each one is carrying.
     #[test]
-    fn an_extract_candidate_names_its_routines_and_marks_the_known_ones() {
+    fn an_extract_candidate_names_its_routines() {
         let lines = extract_candidate_rows(
             &test_pet("Kestrel", "w|a|m"),
-            &[offered("Sandbox", false), offered("Patch Routine", true)],
+            &[offered("Sandbox"), offered("Patch Routine")],
         );
         assert!(lines[0].contains("Kestrel"), "{lines:?}");
         assert!(
@@ -341,12 +269,8 @@ mod tests {
         );
         let under = lines[1..].join(" ");
         assert!(
-            under.contains("Patch Routine (known)"),
-            "a routine already known is marked: {lines:?}"
-        );
-        assert!(
-            under.contains("Sandbox") && !under.contains("Sandbox (known)"),
-            "one not yet known is named plainly: {lines:?}"
+            under.contains("Sandbox") && under.contains("Patch Routine"),
+            "{lines:?}"
         );
     }
 
@@ -362,9 +286,7 @@ mod tests {
     /// horizontally, so the kit has to shed onto continuation lines rather
     /// than off the right edge. The same census
     /// `the_widest_shipped_routine_kit_fits_the_fuse_picker` runs, against
-    /// the worst case *this* screen can build — which is wider, because
-    /// every name here can carry a `(known)` tag the fuse picker has no
-    /// equivalent of.
+    /// the worst case *this* screen can build.
     ///
     /// Measured against the real ability set rather than a literal, so an
     /// author naming a routine longer fails this instead of shipping a line
@@ -383,7 +305,7 @@ mod tests {
             "the census found {} routines, so it is measuring nothing",
             names.len()
         );
-        let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n, true)).collect();
+        let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n)).collect();
         let lines = extract_candidate_rows(&test_pet("Kestrel", "w|a|m"), &kit);
         with_painter(|p| {
             let m = ui_metrics(900.0);

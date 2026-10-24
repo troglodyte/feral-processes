@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: does a 15-point boost to every decompile attempt change how you
 // fight, or only how the odds line reads?
 //
@@ -42,7 +45,6 @@
     character: (
         class: Some(Decompiler),
         stats: {},
-        routine: Some("bit_rot_v2"),
     ),
     party: [
         (species: "glitch", level: 5),

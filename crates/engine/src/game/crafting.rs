@@ -927,7 +927,7 @@ impl Game {
 
     /// Refuses a wearer that is neither the player nor a program they own.
     /// Both `equip` and `unequip` ask *before* anything moves — the ordering
-    /// `use_symlink` and `install_routine` keep, so a refusal spends nothing.
+    /// `use_symlink` and `install_built` keep, so a refusal spends nothing.
     ///
     /// The wearer is an `Entity` rather than a `Wearer` enum because that is
     /// already the idiom (`add_companion`, `refactor_companion`,
@@ -1103,7 +1103,7 @@ impl Game {
     /// Bounded by `tuning::MAX_FUSIONS`, the same ceiling a program's
     /// lineage has — see `Game::fuse_companions`. Both refusals sit above
     /// the first `take_copies` deliberately: a refused fusion must spend
-    /// nothing from either store, the same ordering `install_routine` and
+    /// nothing from either store, the same ordering `install_built` and
     /// `use_symlink` keep.
     /// **What must match is `GearCopy::fusable_with` — item, rare tier and
     /// fusion tier.** Quality and affixes go free and are carried forward:

@@ -2,27 +2,25 @@
 
 A routine is an ability sitting in a slot. Levels buy slots in pairs — you and a fresh program both
 start with two, and levels alone take anybody to twelve. A class, talents and some implants add slots past that. One of your two already holds Decompile and
-the other holds whatever you took at creation, and a program arrives with its innate kit in its own,
+the other holds the Patch you start with, and a program arrives with its innate kit in its own,
 so installing something new eventually means displacing something old, and a program's innate
 routine, once displaced, is gone.
 
 Decompile is the exception, and the slot panel marks it. It is welded where it is: it cannot be
-cleared to make room, it cannot be written onto a blank disk, and no program can be made to run it.
+cleared to make room, and no program can be made to run it.
 It is how you take a program at all, and there is exactly one of it for the length of a run.
 
-Routines reach you five ways.
+Routines reach you four ways.
 
-- At creation. The starter routine you picked when you made your character is both installed in
-  your free slot and known outright, so you can etch it onto a disk later like anything else you
-  know. See [your character](your-character).
 - Innately. A species grants its own kit, unlocking a routine at a level named in its file.
 - Research. Pick a node and the base works it: your Research Stations feed it the Research Data
-  and your benches make the goods it asks for. Several of its branches teach routines outright.
-- Routine Disks. Etch a blank disk with something you already know from the Routines page under i, then install
-  the disk into a slot on yourself or on any program you own. Uninstalling returns nothing — the
-  disk is spent at the install.
-- Extraction. Breaking a program down at a Workbench teaches you one of its routines and destroys
-  the program.
+  and your benches make the goods it asks for. The routine branches teach you to craft Subroutines
+  and raise how many a routine can hold; they never hand you a finished routine.
+- Building. Compile Subroutines at a Workbench and combine them into a routine of your own, then
+  install it into a slot on yourself or on any program you own. Popping it back out destroys it. See
+  [building routines](building-routines).
+- Extraction. Breaking a program down at a Workbench gives you the Subroutines of one of its routines
+  and destroys the program.
 
 In a fight, s calls one. It is paid for out of the invoker's own Power reserve, so a companion
 spends its own, and a routine on cooldown or priced above what that program is carrying greys out with
@@ -36,13 +34,13 @@ three and four groups the later zones field are what an Everyone routine answers
 Field routines are the ones you call outside a fight, with a on the map — an expedition loadout you
 buy at home and carry with you rather than something you time against a fight you cannot predict.
 
-- Every buff on that list except Repair Loop and Trickle Charge runs until you rest. Nothing else ends
+- Every buff on that list except Field Regen and Recharge runs until you rest. Nothing else ends
   one but a Forgiving reboot, or running another of the same kind over it.
-- Repair Loop and Trickle Charge run on a timer of 300 and 60 turns, because they are the two that pay out
+- Field Regen and Recharge run on a timer of 300 and 60 turns, because they are the two that pay out
   over time, and unbounded Integrity or unbounded Power would answer scarcity the game is built on.
 - What they buy: mitigation, attack, Integrity regeneration, a Power trickle, more XP, better
   drops, better decompile odds, and fewer wandering encounters.
-- Buffer Overrun and Wild Jump are Stack-only. They read and write coordinates that exist only
+- Phase and Jump are Stack-only. They read and write coordinates that exist only
   underground, so they refuse on the surface.
 
 A patch routine that costs Power is on that list too, and it is the one kind of routine you can

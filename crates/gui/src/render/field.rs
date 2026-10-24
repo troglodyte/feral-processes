@@ -610,7 +610,7 @@ mod tests {
                 _ => None,
             })
             .max()
-            .expect("a Cloak routine ships with the game");
+            .unwrap_or(0);
         let rows = [buff(
             "Cloaked",
             "\u{2014}",

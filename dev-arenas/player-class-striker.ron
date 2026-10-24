@@ -1,3 +1,6 @@
+// NOTE: the starter routine this scenario once gave the player is gone; a
+// fresh player now starts with Decompile and Patch, so the routine questions
+// below can only be asked of a routine the player is handed some other way.
 // PLAYTEST: is a Striker's damage routine worth the round it costs, and
 // does it read as *this class's* move rather than a bigger swing?
 //
@@ -71,7 +74,6 @@
     character: (
         class: Some(Striker),
         stats: {},
-        routine: Some("stack_smash"),
     ),
     party: [
         (species: "glitch", level: 5),

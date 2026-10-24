@@ -2084,10 +2084,7 @@ mod tests {
         use feral_processes_engine::{CharacterChoice, DifficultyMode};
 
         for seed in 0..200u32 {
-            let choice = CharacterChoice {
-                routine: Some("emulate".to_string()),
-                ..CharacterChoice::default()
-            };
+            let choice = CharacterChoice::default();
             let mut game = Game::new_with(seed, DifficultyMode::Forgiving, &assets(), &choice)
                 .expect("the assets parse");
             let species = game
@@ -2104,6 +2101,8 @@ mod tests {
             game.save(&tmp).expect("the fixture must save");
             let mut data = save::load_from_file(&tmp).expect("the fixture save must load back");
             data.emulation_images.push(species.clone());
+            data.player.routines.truncate(1);
+            data.player.routines.push("emulate".to_string());
             save::save_to_file(&tmp, &data).expect("the edited save must write back");
             let mut game = Game::load(&tmp, &assets()).expect("the edited save must load");
             let _ = std::fs::remove_file(&tmp);

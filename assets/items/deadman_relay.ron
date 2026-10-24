@@ -8,10 +8,10 @@
     // `core_dump`'s power, and until now reachable only by beating
     // Wintermute for the disk. This is still that — the relay drops from
     // Wintermute and nothing else — but it spends a module slot rather than
-    // a routine slot, and unlike the disk it cannot be etched or taught on.
+    // a routine slot, and unlike the parts it cannot be built from.
     // Exclusivity was never about how many things can carry a routine; it is
-    // about the routine never entering `KnownRoutines`, and a grant is
-    // derived off the worn item rather than learned.
+    // about no species carrying it, and a grant is derived off the worn item
+    // rather than learned.
     value: Some(180),
     equipment: Some((Module, (mitigation: 6))),
     grants: Some("deadman"),

@@ -6,6 +6,7 @@ use crate::components::{
     ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Perks, PowerReserve, Routines,
 };
 use crate::resources::{MessageLog, Party};
+use crate::routine_craft::{AreaKind, Core, Subroutine, Version};
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, TALENT_START_LEVEL};
 use crate::*;
 
@@ -642,8 +643,8 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
     );
 }
 
-/// The same walk against the **shipped** routine rather than a fixture one:
-/// `hardened_shell_party` hardens the player and every companion off one invocation,
+/// The same walk against a **compiled** routine rather than a fixture one:
+/// a Field Mitigation Core with a Group Area hardens the player and every companion off one invocation,
 /// which is the whole of what it buys over `hardened_shell` at the same +4.
 ///
 /// Worth an asset-level test of its own because everything about the wide invocation
@@ -651,20 +652,27 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
 /// `assets/` edit narrowing it to `OneAlly` would leave a routine that still
 /// loads, still lists, still costs the wide price and quietly hardens one body.
 #[test]
-fn the_shipped_party_def_routine_hardens_the_whole_party() {
+fn a_compiled_party_def_routine_hardens_the_whole_party() {
     let mut game = Game::new(9105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
     game.world.resource_mut::<Party>().0.extend([first, second]);
+    let id = mint_parts(
+        &mut game,
+        &[
+            Subroutine::Core(Core::FieldMitigation, Version::V1),
+            Subroutine::Area(AreaKind::Group),
+        ],
+    );
     game.world
         .entity_mut(player)
-        .insert(Routines(vec!["hardened_shell_party".to_string()]));
+        .insert(Routines(vec![id.clone()]));
 
     let routines = game.field_routines();
     let index = routines
         .iter()
-        .position(|r| r.ability == "hardened_shell_party")
+        .position(|r| r.ability == id)
         .expect("the party routine is listed once installed");
     assert_eq!(
         routines[index].second_pick,
@@ -675,8 +683,8 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
     game.run_field_routine(index, FieldRoutineTarget::None)
         .expect("a WholeParty invocation needs no target");
 
-    // Authored, not scaled: `hardened_shell_party` is a `Mitigation` buff
-    // now, and a percentage kind is delivered at exactly what the file says
+    // Authored, not scaled: a `Mitigation` buff
+    // is a percentage kind is delivered at exactly what the file says
     // — see `FieldBuffKind::scales_with_invoker`.
     for holder in [player, first, second] {
         let active = &game.world.get::<FieldBuff>(holder).unwrap().active;
@@ -690,19 +698,26 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
     }
 }
 
-/// `trickle_charge` is authored `WholeParty` and every companion holds its
+/// A Recharge Core with a Group Area is `WholeParty` and every companion holds its
 /// own reserve, so the drip has to reach them too — a `Run` scope used to
 /// land it on the player alone while the routine's name promised the party.
 #[test]
-fn the_shipped_trickle_charge_restores_every_party_members_power() {
+fn a_compiled_recharge_group_restores_every_party_members_power() {
     let mut game = Game::new(9106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
     game.world.resource_mut::<Party>().0.extend([first, second]);
+    let id = mint_parts(
+        &mut game,
+        &[
+            Subroutine::Core(Core::Recharge, Version::V1),
+            Subroutine::Area(AreaKind::Group),
+        ],
+    );
     game.world
         .entity_mut(player)
-        .insert(Routines(vec!["trickle_charge".to_string()]));
+        .insert(Routines(vec![id.clone()]));
     for companion in [first, second] {
         *game.world.get_mut::<PowerReserve>(companion).unwrap() =
             PowerReserve::new(50.0, crate::components::POWER_MAX);
@@ -711,7 +726,7 @@ fn the_shipped_trickle_charge_restores_every_party_members_power() {
     let routines = game.field_routines();
     let index = routines
         .iter()
-        .position(|r| r.ability == "trickle_charge")
+        .position(|r| r.ability == id)
         .expect("the routine is listed once installed");
     game.run_field_routine(index, FieldRoutineTarget::None)
         .expect("a WholeParty invocation needs no target");
@@ -818,6 +833,11 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    let player = game.player_entity();
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
     *game
         .world
         .get_mut::<PowerReserve>(game.player_entity())
@@ -910,6 +930,10 @@ fn a_companions_field_routine_spends_the_companions_reserve() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
 
     let routines = game.field_routines();
     assert_eq!(routines.len(), 1, "only the companion holds one");
@@ -944,6 +968,10 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
+    // Patch is a field-runnable heal; these tests are about the companion's.
+    game.world.entity_mut(player).insert(Routines(vec![
+        crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+    ]));
 
     *game.world.get_mut::<PowerReserve>(player).unwrap() =
         PowerReserve::new(100.0, crate::components::POWER_MAX);

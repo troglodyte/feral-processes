@@ -300,21 +300,6 @@ pub const MAX_COMPANION_REFACTORS: u32 = 5;
 /// a Credit-per-tick rate, and the recipe ceiling below cannot see it.
 pub const DEFAULT_ITEM_VALUE: u32 = 1;
 
-/// What an etched Routine Disk is worth, and what an *exclusive* one is —
-/// the `ItemDef::value` `ItemDb::synthesise_etched_disks` gives every disk
-/// it derives.
-///
-/// An ordinary disk is worth a good deal more than the blank it was written
-/// on (`routine_disk.ron` values a blank at 5), because the labour of
-/// knowing the routine went into it. The exclusive figure is set well below
-/// `STACK_MARKET_EXCLUSIVE_PRICE`: a trader pays `STACK_MARKET_SELL_RATE`
-/// per point of value, so a disk that sold back for what it cost would make
-/// the shelf a laundry — buy the row, walk two frames, sell it to the next
-/// trader, repeat. Sixty against fourteen hundred is a loss the player takes
-/// on purpose or not at all.
-pub const ETCHED_DISK_VALUE: u32 = 20;
-pub const ETCHED_DISK_EXCLUSIVE_VALUE: u32 = 60;
-
 /// What a trading post charges to sell the player back something they sold
 /// it, as a multiple of that trader's own `TradeDef::sell_rate` — see
 /// `Game::buy_back`. At 2 every round trip is a net loss, which is what
@@ -533,13 +518,10 @@ pub const ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT: u32 = 3;
 pub const RICH_IN_UNITS: u32 = 1;
 
 /// What one carrier of any tool is worth in trade currency —
-/// `ItemDb::synthesise_tool_carriers`'s flat price, `ETCHED_DISK_VALUE`'s
-/// own shape but a single constant rather than an exclusive/ordinary split:
-/// a tool has no analog to an exclusive routine yet. Set below every
+/// `ItemDb::synthesise_tool_carriers`'s flat price. Set below every
 /// shipped tool's own `forge_cost` (cheapest today is `salvage_clamp`'s 3
 /// `core_fragment`, worth 3), so forging a carrier and immediately selling
 /// it back is a loss rather than a Credit loop — the carrier is buyable
-/// nowhere (`game::caravan`'s `stock_pool` excludes a tool id the way it
-/// excludes an etched ability), so this only prices what selling a spare
-/// one back nets.
+/// nowhere (`game::caravan`'s `stock_pool` excludes a tool id), so this only
+/// prices what selling a spare one back nets.
 pub const TOOL_CARRIER_VALUE: u32 = 2;

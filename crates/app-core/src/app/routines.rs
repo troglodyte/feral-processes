@@ -44,67 +44,27 @@ impl App {
         self.mode = Mode::RoutineInstall;
     }
 
-    /// Spends one etched disk out of cargo on the slot chosen in
-    /// `Mode::Routines`.
-    ///
-    /// `e` opens the etch screen instead, because this is exactly where a
-    /// player finds out they hold no disk of the routine they came for —
-    /// making them back out two screens to go and make one would be a menu
-    /// asking them to remember what it already knows.
+    /// Writes a built routine into the slot chosen in `Mode::Routines`.
+    /// Only unslotted built routines are listed; they are made at the
+    /// Workbench, so there is nothing to detour to from here.
     pub(crate) fn handle_routine_install_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Routines;
-            return;
-        }
-        if key == GameKey::Char('e') {
-            self.menu_selected = 0;
-            self.etch_return = Some(Mode::RoutineInstall);
-            self.mode = Mode::RoutineEtch;
             return;
         }
         let Some(entity) = self.pending_routine_holder else {
             self.mode = Mode::RoutineTarget;
             return;
         };
-        let Some(disks) = self.game.as_ref().map(|g| g.etched_disks_held()) else {
+        let Some(built) = self.game.as_ref().map(|g| g.built_routine_rows()) else {
             return;
         };
-        if let Some(idx) = self.selected_index(key, disks.len()) {
-            let ability = disks[idx].ability.clone();
+        if let Some(idx) = self.selected_index(key, built.len()) {
+            let id = built[idx].id.clone();
             let Some(game) = &mut self.game else { return };
-            let outcome = game.install_disk(entity, &ability);
+            let outcome = game.install_built(entity, &id);
             self.report(outcome);
             self.mode = Mode::Routines;
-        }
-    }
-
-    /// Burns a blank Routine Disk with a routine the player knows.
-    ///
-    /// Stays open after each etch rather than dropping back, the way
-    /// `Mode::Research` does: a player who came here to make one disk
-    /// usually came to make three, and the blanks are the only thing
-    /// stopping them.
-    ///
-    /// Esc follows `App::etch_return` — back to the install screen for the
-    /// `[e]` detour, out to the Routines page for the row that opens this
-    /// screen in its own right.
-    pub(crate) fn handle_routine_etch_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.menu_selected = 0;
-            match self.etch_return.take() {
-                Some(mode) => self.mode = mode,
-                None => self.close_screen(),
-            }
-            return;
-        }
-        let Some(known) = self.game.as_ref().map(|g| g.etchable_routines()) else {
-            return;
-        };
-        if let Some(idx) = self.selected_index(key, known.len()) {
-            let ability = known[idx].ability.clone();
-            let Some(game) = &mut self.game else { return };
-            let outcome = game.etch_disk(&ability);
-            self.report(outcome);
         }
     }
 

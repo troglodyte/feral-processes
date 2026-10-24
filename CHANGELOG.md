@@ -53,6 +53,20 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.0
+
+**Saves from earlier versions no longer load.** Routines are now built from parts, so the routines an older save knew and the disks it etched have nowhere to go. Start a new game.
+
+**You build your routines at a Workbench from Subroutines: one Core that sets what the routine does, plus modifiers for range, area, damage type, a lingering effect or a status.** Press `c` beside a standing Workbench and open Build routine. Pick a Core and up to five modifiers, name it, and compile it; the preview shows what it will do, its Power cost and its cooldown before you spend anything. Install it with `m` on yourself or a companion. A routine you uninstall, or one whose program leaves you, is destroyed, so its parts are spent.
+
+**Subroutines are crafted at the Workbench from Core Fragments, Bytecode Blocks and Power Cells, and research decides which you can make and how many parts a routine can hold.** The Routines research tree now unlocks Subroutines and raises the part limit from three to six as you go deeper. Higher versions of a Core hit harder and cost more Power.
+
+**Extracting a program's routine, a boss kill, the Stack market and caravans now give you Subroutines instead of a finished routine.** A boss drops every part of its signature routine or none of them, so you can rebuild it yourself. Wild programs' routines are no longer hidden behind `???`.
+
+**A new character starts with Patch, a one-target heal, and character creation no longer asks you to pick a routine.** Etching routine disks is gone, along with the list of routines you knew.
+
+**Heals can now linger.** A heal with a Trickle part restores health at the end of each round for a few rounds instead of all at once. Cleanse leaves it alone, and it never brings back a program that has already gone down.
+
 ## 0.19.42
 
 **A Quarantine Rack now shows how full it is on the map, with the same bar a Depot has.** Before, the only way to see whether a rack had room was to open it. Now a bar up the right edge of the rack fills as programs are racked, turns yellow when it is nearly full and red when it is full, and counts the extra slots from an upgrade. Saves are unaffected.

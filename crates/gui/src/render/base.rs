@@ -3260,9 +3260,9 @@ mod tests {
     /// tests.
     ///
     /// `resources::EmulationImages` has no public writer short of a real
-    /// extraction, unlike `KnownRoutines` (`CharacterChoice::routine`,
-    /// `abilities::install_starter`'s own door). So this writes the image
-    /// straight into `save::SaveData::emulation_images` and reloads —
+    /// extraction, and nor does a player's slot for an authored routine. So
+    /// this writes the image and the Emulate routine straight into the save
+    /// and reloads —
     /// `savetool`'s own dump-edit-pack shape, entirely through the
     /// engine's public `save::` functions, never `Game::world`.
     fn emulating_player() -> (Game, String) {
@@ -3270,10 +3270,7 @@ mod tests {
         use feral_processes_engine::save;
 
         for seed in 0..200u32 {
-            let choice = CharacterChoice {
-                routine: Some("emulate".to_string()),
-                ..CharacterChoice::default()
-            };
+            let choice = CharacterChoice::default();
             let mut game = Game::new_with(seed, DifficultyMode::Forgiving, &test_assets(), &choice)
                 .expect("the shipped assets must load");
             let species = game
@@ -3290,6 +3287,8 @@ mod tests {
             game.save(&tmp).expect("the fixture must save");
             let mut data = save::load_from_file(&tmp).expect("the fixture save must load back");
             data.emulation_images.push(species.clone());
+            data.player.routines.truncate(1);
+            data.player.routines.push("emulate".to_string());
             save::save_to_file(&tmp, &data).expect("the edited save must write back");
             let mut game = Game::load(&tmp, &test_assets()).expect("the edited save must load");
             let _ = std::fs::remove_file(&tmp);

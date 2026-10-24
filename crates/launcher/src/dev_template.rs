@@ -664,8 +664,8 @@ mod tests {
         assert!(
             game.routine_view(player)
                 .iter()
-                .any(|slot| slot.ability.as_deref() == Some("emulate")),
-            "known is not installed: `emulate` has to sit in an actual slot, \
+                .any(|slot| slot.ability.is_some() && slot.name == "Emulate"),
+            "known is not installed: a built `Emulate` routine has to sit in an actual slot, \
              or invoking it is still one more step the template was built to skip"
         );
     }

@@ -10,7 +10,6 @@ use super::support::*;
 use crate::*;
 use feral_processes_engine::achievements::Earned;
 use feral_processes_engine::attributes::AttributeId;
-use feral_processes_engine::classes::PlayerClass;
 use feral_processes_engine::icon::{Canvas, quantise};
 use feral_processes_engine::save;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
@@ -230,8 +229,6 @@ fn the_wizard_walks_forward_and_back() {
     assert_eq!(app.creation_step(), CreationStep::Perks);
     spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter);
-    assert_eq!(app.creation_step(), CreationStep::Routine);
-    press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Name);
@@ -239,7 +236,6 @@ fn the_wizard_walks_forward_and_back() {
     // Esc walks back one step at a time, all the way to the first.
     for expected in [
         CreationStep::Summary,
-        CreationStep::Routine,
         CreationStep::Perks,
         CreationStep::Points,
         CreationStep::Colour,
@@ -286,8 +282,7 @@ fn enter_alone_walks_every_step_forward() {
     spend_the_points(&mut app);
     for (step, next) in [
         (CreationStep::Points, CreationStep::Perks),
-        (CreationStep::Perks, CreationStep::Routine),
-        (CreationStep::Routine, CreationStep::Summary),
+        (CreationStep::Perks, CreationStep::Summary),
         (CreationStep::Summary, CreationStep::Name),
     ] {
         assert_eq!(app.creation_step(), step);
@@ -333,10 +328,6 @@ fn the_name_step_commits_the_choice() {
     assert_eq!(app.creation_step(), CreationStep::Perks);
     spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter);
-
-    let routines = app.creation_catalogue.starter_rows(Some(wanted_class));
-    let wanted_routine = routines[0].id.clone();
-    pick_row(&mut app, 0);
 
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Enter);
@@ -390,9 +381,10 @@ fn the_name_step_commits_the_choice() {
             + (class["footprint"] - 45) * 2
     );
     assert_eq!(data.player.hp, max_hp, "a run must not start damaged");
-    assert!(
-        data.player.routines.contains(&wanted_routine),
-        "the starter routine reached the player: {:?}",
+    assert_eq!(
+        data.player.routines.len(),
+        2,
+        "a new run holds Decompile and Patch: {:?}",
         data.player.routines
     );
     assert_eq!(data.difficulty, DifficultyMode::Forgiving);
@@ -748,28 +740,6 @@ fn the_preview_matches_what_is_paid() {
     );
 }
 
-/// The class picked on step two is what prices the routine rows on step
-/// five — a Medic reading a damage routine at 0.8 is the whole point of not
-/// filtering the pool by class.
-#[test]
-fn the_routine_rows_are_priced_through_the_chosen_class() {
-    let app = opened("priced");
-    let striker = app
-        .creation_catalogue
-        .starter_rows(Some(PlayerClass::Striker));
-    let medic = app
-        .creation_catalogue
-        .starter_rows(Some(PlayerClass::Medic));
-    assert!(
-        !striker.is_empty(),
-        "the shipped assets carry starter routines"
-    );
-    assert_ne!(
-        striker, medic,
-        "two classes priced the same pool identically — the class term is not reaching the rows"
-    );
-}
-
 /// The Points step opens on an empty pool: every point is the player's
 /// own placement, so nothing on the screen arrives already decided.
 #[test]
@@ -823,10 +793,8 @@ fn reentering_points_keeps_a_hand_made_spread() {
     press(&mut app, GameKey::Enter); // -> Perks
     assert_eq!(app.creation_step(), CreationStep::Perks);
     spend_the_perks(&mut app);
-    press(&mut app, GameKey::Enter); // -> Routine
-    press(&mut app, ch('n')); // no routine -> Summary
+    press(&mut app, GameKey::Enter); // -> Summary
     assert_eq!(app.creation_step(), CreationStep::Summary);
-    press(&mut app, GameKey::Esc); // -> Routine
     press(&mut app, GameKey::Esc); // -> Perks
     press(&mut app, GameKey::Esc); // -> Points, re-entered
 
@@ -1244,7 +1212,7 @@ fn an_unspent_allowance_holds_its_step() {
     assert_eq!(app.creation_step(), CreationStep::Perks);
     spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter);
-    assert_eq!(app.creation_step(), CreationStep::Routine);
+    assert_eq!(app.creation_step(), CreationStep::Summary);
 }
 
 /// **Left and Right page the wizard**, on every step that does not spend —

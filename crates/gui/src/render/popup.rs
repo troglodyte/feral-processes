@@ -1792,11 +1792,9 @@ mod tests {
     /// reason: a hand-written mirror would keep passing after the real one
     /// drifted.
     fn routine_rows_fixtures(n: usize, selected: usize) -> Vec<(&'static str, Vec<Row>, usize)> {
-        use super::super::routines::{
-            extract_pick_rows, routine_etch_rows, routine_install_rows, routine_slot_rows,
-        };
+        use super::super::routines::{extract_pick_rows, routine_install_rows, routine_slot_rows};
         use feral_processes_engine::views::{
-            EtchedDiskView, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
+            BuiltRoutineRow, ExtractableRoutineView, RoutineSlotView,
         };
         let id = |i: usize| format!("routine_{i}");
         let name = |i: usize| format!("Routine {i}");
@@ -1812,7 +1810,6 @@ mod tests {
                             name: name(i),
                             description: text(i),
                             fixed: false,
-                            unseen: false,
                         })
                         .collect::<Vec<_>>(),
                     selected,
@@ -1823,32 +1820,13 @@ mod tests {
                 "install",
                 routine_install_rows(
                     &(0..n)
-                        .map(|i| EtchedDiskView {
-                            ability: id(i),
+                        .map(|i| BuiltRoutineRow {
+                            id: id(i),
                             name: name(i),
                             description: text(i),
-                            exclusive: i % 3 == 0,
-                            qty: 1 + i as u32,
+                            parts: Vec::new(),
                         })
                         .collect::<Vec<_>>(),
-                    4,
-                    selected,
-                ),
-                // The blank line and the `[e]` legend are pinned on purpose.
-                2,
-            ),
-            (
-                "etch",
-                routine_etch_rows(
-                    &(0..n)
-                        .map(|i| KnownRoutineView {
-                            ability: id(i),
-                            name: name(i),
-                            description: text(i),
-                            held: i as u32 % 3,
-                        })
-                        .collect::<Vec<_>>(),
-                    4,
                     selected,
                 ),
                 0,
@@ -1861,7 +1839,6 @@ mod tests {
                             ability: id(i),
                             name: name(i),
                             description: text(i),
-                            known: i % 2 == 0,
                         })
                         .collect::<Vec<_>>(),
                     selected,

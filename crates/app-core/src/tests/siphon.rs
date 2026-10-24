@@ -107,9 +107,12 @@ fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Siphon);
 
-    // Walked away while the screen was open.
+    // Walked away while the screen was open. The hub is re-read after every
+    // tick, which a reload does not run, so run it: a key sent to the stale
+    // screen first would be the screen acting on a structure that is no
+    // longer beside the party.
     stand_in_base_at(&mut app, 40, 40);
-    pick_row(&mut app, 0);
+    app.refresh_structure_hub();
 
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.siphon.is_none());

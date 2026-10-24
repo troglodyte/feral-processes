@@ -36,6 +36,9 @@ pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
+pub use app::routine_craft::{
+    BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft, subroutines_visible,
+};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
@@ -1297,9 +1300,9 @@ pub enum ManifestTab {
     Score,
 }
 
-/// Which of the character-creation wizard's nine steps is showing. One
+/// Which of the character-creation wizard's steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
-/// being nine modes — see that variant.
+/// being one mode per step — see that variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
@@ -1338,7 +1341,7 @@ pub enum CreationStep {
     Points,
     /// The first perks, bought out of `tuning::CREATION_PERK_POINTS`.
     ///
-    /// **Before Routine, and the one budget that is not a gate.** The Kit
+    /// **The one budget that is not a gate.** The Kit
     /// and Points steps refuse to be left with anything affordable
     /// unspent; this one does not, because a Perk Point is the only one of
     /// the three allowances that survives the door — it is the same point
@@ -1347,7 +1350,6 @@ pub enum CreationStep {
     /// rides `CharacterChoice::perk_points` rather than a constant, which
     /// is what keeps `Game::new`'s default character on zero.
     Perks,
-    Routine,
     /// The character read back whole, and the last screen carrying a
     /// decision — Enter accepts it and `[R]` rerolls everything the player
     /// has not made by hand, which is what makes this the step the roll
@@ -1374,7 +1376,7 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 11] = [
+    pub const ALL: [CreationStep; 10] = [
         CreationStep::Difficulty,
         CreationStep::Profile,
         CreationStep::Class,
@@ -1383,7 +1385,6 @@ impl CreationStep {
         CreationStep::Colour,
         CreationStep::Points,
         CreationStep::Perks,
-        CreationStep::Routine,
         CreationStep::Summary,
         CreationStep::Name,
     ];
@@ -1441,7 +1442,6 @@ impl CreationStep {
             CreationStep::Colour => "Colour",
             CreationStep::Points => "Points",
             CreationStep::Perks => "Perks",
-            CreationStep::Routine => "Starter routine",
             CreationStep::Name => "Name",
             CreationStep::Summary => "Summary",
         }
@@ -1505,7 +1505,6 @@ pub enum CreationRow {
         row: feral_processes_engine::StartingItemRow,
         taken: u32,
     },
-    Routine(feral_processes_engine::StarterRoutineRow),
     /// One perk on the Perks step. `taken` is how many levels the basket
     /// holds of it — the `Item` row's shape, in Perk Points.
     Perk {
@@ -1711,6 +1710,17 @@ pub enum Mode {
     /// and the key read one call. Nothing is written until a row resolves,
     /// so Esc simply closes it.
     Siphon,
+    /// The Workbench's Build routine page: the six part rows, the name field
+    /// and Compile. The draft lives in `App::routine_draft`.
+    RoutineBuild,
+    /// The parts that fit one build row, with how many are held.
+    RoutineBuildPick,
+    /// Typing the routine's name.
+    RoutineBuildName,
+    /// The Workbench's Subroutines page: craft a part. Type to filter.
+    Subroutines,
+    /// The Workbench's Built routines page: routines waiting for a slot.
+    BuiltRoutines,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -1993,23 +2003,12 @@ pub enum Mode {
     /// Picking whose routines to manage — you, or any program you own.
     /// Reached with `m` from `Mode::Playing`.
     RoutineTarget,
-    /// The chosen member's slot list. A filled slot pops its routine back
-    /// into cargo; an empty one opens `Mode::RoutineInstall`.
+    /// The chosen member's slot list. A filled slot pops its routine out,
+    /// destroying it; an empty one opens `Mode::RoutineInstall`.
     Routines,
-    /// Picking which etched disk in cargo to spend on the slot chosen in
-    /// `Mode::Routines`. Rows come from `Game::etched_disks_held`.
-    ///
-    /// A disk, never a routine you merely know: knowing one lets you *make*
-    /// a disk (`Mode::RoutineEtch`), and the two steps are separate so that
-    /// a routine nobody can know — an exclusive one, off a boss or a Stack
-    /// trader — can still arrive as a disk and install through this same
-    /// screen.
+    /// Picking which built routine to write into the slot chosen in
+    /// `Mode::Routines`. Rows come from `Game::built_routine_rows`.
     RoutineInstall,
-    /// Burning a blank Routine Disk with a routine the player knows, off
-    /// `Game::etchable_routines`. Reached with `e` from
-    /// `Mode::RoutineInstall`, which is where a player discovers they have
-    /// no disk of the thing they wanted.
-    RoutineEtch,
     /// Picking which installed field routine to run — a `FieldBuff` ability
     /// on you or a program you own, run outside battle rather than spent as
     /// a Special. Reached with `a` from `Mode::Playing`; rows come from
@@ -2489,6 +2488,12 @@ impl Mode {
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
             | Mode::Siphon
+            // The Workbench's pages open from the map, `Siphon`'s reason.
+            | Mode::RoutineBuild
+            | Mode::RoutineBuildPick
+            | Mode::RoutineBuildName
+            | Mode::Subroutines
+            | Mode::BuiltRoutines
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
@@ -2563,7 +2568,6 @@ impl Mode {
             | Mode::RoutineTarget
             | Mode::Routines
             | Mode::RoutineInstall
-            | Mode::RoutineEtch
             | Mode::FieldRoutine
             | Mode::FieldRoutineAlly
             | Mode::FieldRoutineCell
@@ -2793,6 +2797,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::WorkOrderPick | Mode::WorkOrderQuantity => Some(Mode::WorkOrders),
         Mode::StructureAssign => Some(Mode::Structures),
         Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
+        Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
         _ => None,
     }
 }
@@ -2893,18 +2898,6 @@ pub struct App {
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.
     pub hub_on_rail: bool,
-    /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
-    /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
-    /// the player is still holding open. `None` when the etch screen was
-    /// opened from the Routines page in its own right, which falls back to
-    /// `App::close_screen`.
-    ///
-    /// Deliberately not `menu_origin`: that is a single slot already holding
-    /// `Mode::PartyRoutines` for this chain, so borrowing it for the `[e]`
-    /// detour would make Esc out of `Mode::RoutineInstall` and
-    /// `Mode::RoutineTarget` skip the Routines page on the way back to the
-    /// map.
-    etch_return: Option<Mode>,
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
@@ -3265,6 +3258,8 @@ pub struct App {
     /// `Game::adjacent_structures` on every key, since the machine can be
     /// destroyed or walked away from while the screen is open.
     pub siphon: Option<Entity>,
+    /// The routine the Workbench's build page is designing.
+    pub routine_draft: RoutineDraft,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

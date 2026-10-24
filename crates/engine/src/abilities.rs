@@ -472,6 +472,24 @@ pub enum AbilityEffect {
         #[serde(default)]
         spread: i32,
     },
+    /// A heal that arrives a share at a time: arms the built-in `regen`
+    /// status for `rounds`, and each end-of-round upkeep restores `power`
+    /// (rolled once, from the band, when it lands) through `restore_hp`.
+    ///
+    /// **Only `routine_craft::compile` builds one** — a Heal Core with
+    /// Trickle parts. A separate variant rather than a `rounds` field on
+    /// `Heal`, so no authored file or shipped match on `Heal` changes shape
+    /// (ADR 0029: Rust only). Battle-only: `field_runnable` names `Heal`
+    /// alone, and the out-of-battle over-time heal is the Field Regen Core.
+    HealOverTime {
+        /// The centre of each round's restored band.
+        power: i32,
+        /// Half-width of that band, `Heal::spread`'s terms.
+        #[serde(default)]
+        spread: i32,
+        /// Upkeeps it restores on, after the round it landed in.
+        rounds: u32,
+    },
     Buff {
         kind: BuffKind,
         power: i32,
@@ -749,6 +767,7 @@ impl AbilityEffect {
             AbilityEffect::Reanimate { .. } => true,
             AbilityEffect::Damage { .. }
             | AbilityEffect::Heal { .. }
+            | AbilityEffect::HealOverTime { .. }
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Debuff { .. }
             | AbilityEffect::Drain { .. }
@@ -774,7 +793,9 @@ impl AbilityEffect {
     pub fn affinity_kind(&self) -> Option<AffinityKind> {
         match self {
             AbilityEffect::Damage { .. } => Some(AffinityKind::Damage),
-            AbilityEffect::Heal { .. } => Some(AffinityKind::Heal),
+            AbilityEffect::Heal { .. } | AbilityEffect::HealOverTime { .. } => {
+                Some(AffinityKind::Heal)
+            }
             AbilityEffect::Buff { .. } => Some(AffinityKind::Buff),
             AbilityEffect::Debuff { .. } => Some(AffinityKind::Debuff),
             AbilityEffect::Drain { .. } => Some(AffinityKind::Drain),
@@ -845,6 +866,7 @@ impl AbilityEffect {
             // for — `Debuff`'s reason, exactly.
             | AbilityEffect::Tamper { .. } => true,
             AbilityEffect::Heal { .. }
+            | AbilityEffect::HealOverTime { .. }
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Cleanse
             | AbilityEffect::Cloak { .. }
@@ -935,48 +957,15 @@ pub struct AbilityDef {
     pub accuracy: i32,
     #[serde(default)]
     pub wild_weight: u32,
-    /// The zone the player must have reached before this routine's
-    /// synthesised research node becomes available — `research::ResearchDef
-    /// ::min_zone` for a `routine_tree`-derived node. `#[serde(default)]`
-    /// to 0, which reads as zone 1 (ungated) through
-    /// `routine_tree::synthesise_nodes` rather than being a second spelling
-    /// of "ungated" the way `ResearchDef::min_zone` itself is not: an
-    /// ability file authoring nothing here means the same as authoring
-    /// `research_zone: 1`.
-    ///
-    /// Not read anywhere else — a routine's own field-runnable or
-    /// battle-legal gating stays level-based, exactly as it was before this
-    /// existed.
-    #[serde(default)]
-    pub research_zone: u32,
-    /// Marks this routine **exclusive**: it never enters `KnownRoutines`, no
-    /// research node or species may grant it, and no blank Routine Disk can
-    /// be etched with it. Its etched disk is reachable exactly two ways — a
-    /// boss drop (`boss_drop`) or a Stack trader's rare shelf row.
+    /// Marks this routine **exclusive**: no species kit may grant it, and
+    /// it is never found in the wild. Its parts are reachable exactly two
+    /// ways — a boss drop (`boss_drop`) or a Stack trader's rare shelf row.
     ///
     /// Opt-in exclusion, the same idiom `wild_weight` uses: the default is
     /// ordinary, so the pool is defined by the files that ask to be in it
-    /// rather than by this module listing them. Knowledge is the only thing
-    /// in this game that duplicates — you learn a routine once and etch it
-    /// forever — so keeping these out of `KnownRoutines` is the whole gate,
-    /// and `Game::etch_disk`, `Game::grant_research_knowledge` and
-    /// `Game::extract_routine` are the three places that honour it.
+    /// rather than by this module listing them.
     #[serde(default)]
     pub exclusive: bool,
-    /// Offered in the creation wizard's Routine step as a candidate for the
-    /// free starter slot — see `abilities::install_starter`.
-    ///
-    /// Opt-in, the same idiom `exclusive` and `wild_weight` already use: the
-    /// pool is defined by the files that ask to be in it rather than by this
-    /// module listing them. Not refused at load — held to shape by three
-    /// censuses in `tests/assets.rs` instead, the same way the hunt-only set
-    /// is: a starter must be single-target
-    /// (`OneAlly`/`OneEnemyGroupFront`) and `exclusive: false`, since an
-    /// exclusive routine may never enter `KnownRoutines` and creation must
-    /// not become a fourth way around that gate.
-    #[serde(default)]
-    pub starter: bool,
-
     /// Whether this attack reaches past the front line. Read by **the basic
     /// attack path only** — `Game::basic_attacks_that_reach` — because that
     /// is the only place reach has ever been decided: a group standing
@@ -989,12 +978,8 @@ pub struct AbilityDef {
     /// converted attack and an authored ability agree on melee-by-default.
     #[serde(default)]
     pub ranged: bool,
-    /// Which species drop this routine's etched disk, each with its own
-    /// 0.0-1.0 chance. Becomes the synthesised disk item's
-    /// `ItemDef::droppable` (see `ItemDb::synthesise_etched_disks`), which
-    /// is why the boss-drop path needs no engine code of its own:
-    /// `Game::equipment_drops_for` already merges every item that names the
-    /// dead species, and `award_loot` already rolls them.
+    /// Which species drop this routine's parts, each with its own 0.0-1.0
+    /// chance — rolled by `Game::pay_boss_routine_parts`.
     ///
     /// Nothing here requires the named species to be a boss. What makes
     /// these boss drops is that only bosses are named — the shipped set is
@@ -1145,22 +1130,6 @@ impl AbilityDef {
 /// pay for, or one charged more than the row quoted.
 pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
     def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
-}
-
-/// Whether `def`'s etched disk may be offered on a shelf that bypasses
-/// research entirely — `ItemDb::creation_shelf` and `Game::
-/// routine_disk_pool`'s shared door (todo #100 Task 4, constraints.md
-/// decision 9).
-///
-/// `Game::install_disk` (`game/routines.rs`) never calls `Game::
-/// node_researched`: it checks ownership, a duplicate, a free slot and a
-/// carried disk, and nothing else, so an ordinary routine's disk being
-/// craftable or purchasable already lets a player skip researching it —
-/// accepted, existing behaviour this predicate does not touch. `Emulate` is
-/// the one exception: unlocking it *is* the feature the routine tree
-/// gates, so a shelf selling its disk would sell straight past that gate.
-pub(crate) fn ability_disk_shelved(def: &AbilityDef) -> bool {
-    !matches!(def.effect, AbilityEffect::Emulate { .. })
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
@@ -1426,6 +1395,18 @@ impl AbilityDef {
         (*duration == 0).then_some("effect: Cloak needs a duration of at least one round")
     }
 
+    /// A `HealOverTime` with no rounds, or aimed at a non-ally target.
+    fn heal_over_time_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::HealOverTime { rounds, .. } = &self.effect else {
+            return None;
+        };
+        if *rounds == 0 {
+            return Some("effect: HealOverTime needs at least one round");
+        }
+        (!self.target.is_ally_facing())
+            .then_some("effect: HealOverTime requires an ally-facing target")
+    }
+
     /// A `charge` on anything but `Damage`, or a charge of fewer than two
     /// rounds. Refused at load, like the other mismatches: scaling is defined
     /// only for a damage band, and a one-round charge is not a wind-up.
@@ -1582,9 +1563,43 @@ impl AbilityTarget {
     }
 }
 
+/// Whether `def` is a routine the engine can run, the verdict
+/// `AbilityDb::load_dir` applies to an authored file and
+/// `routine_craft::compile`'s census applies to a built one — one function
+/// so a built routine cannot pass a gentler check than a file does.
+///
+/// Pure and order-significant: the first fault found is the one reported.
+pub fn validate(def: &AbilityDef) -> Result<(), String> {
+    if let Some(field) = def.non_finite_field() {
+        return Err(format!("{field} is not a finite number"));
+    }
+    let faults = [
+        def.decompile_target_mismatch(),
+        def.summon_target_mismatch(),
+        def.tamper_faults(),
+        def.field_buff_target_mismatch(),
+        def.field_buff_duration_mismatch(),
+        def.movement_target_mismatch(),
+        def.cloak_mismatch(),
+        def.heal_over_time_mismatch(),
+        def.passive_field_mismatch(),
+        def.charge_mismatch(),
+        def.exclusive_source_conflict(),
+    ];
+    match faults.into_iter().flatten().next() {
+        Some(reason) => Err(reason.to_string()),
+        None => Ok(()),
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct AbilityDb {
     abilities: HashMap<AbilityId, AbilityDef>,
+    /// The player's built routines, compiled. Rebuilt from the surviving set
+    /// by `set_crafted` after every change and on load, so no def outlives
+    /// its routine. Never iterated by `all`, `wild_pool` or
+    /// `exclusive_pool`: a built routine is not content to be found.
+    crafted: HashMap<AbilityId, AbilityDef>,
 }
 
 impl AbilityDb {
@@ -1602,49 +1617,7 @@ impl AbilityDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<AbilityDef>(&text) {
                 Ok(mut def) => {
-                    if let Some(field) = def.non_finite_field() {
-                        warnings.push(format!(
-                            "skipped invalid ability file {path:?}: {field} is not a finite number"
-                        ));
-                        continue;
-                    }
-                    if let Some(reason) = def.decompile_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.summon_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.tamper_faults() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.field_buff_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.field_buff_duration_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.movement_target_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.cloak_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.passive_field_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.charge_mismatch() {
-                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.exclusive_source_conflict() {
+                    if let Err(reason) = validate(&def) {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
@@ -1710,7 +1683,15 @@ impl AbilityDb {
     }
 
     pub fn get(&self, id: &str) -> Option<&AbilityDef> {
-        self.abilities.get(id)
+        self.abilities.get(id).or_else(|| self.crafted.get(id))
+    }
+
+    /// Replaces the crafted tier with `routines`, compiled.
+    pub fn set_crafted(&mut self, routines: &[crate::routine_craft::CraftedRoutine]) {
+        self.crafted = routines
+            .iter()
+            .map(|r| (r.id.clone(), crate::routine_craft::compile(r)))
+            .collect();
     }
 
     /// Every loaded ability, by id. `HashMap` iteration order is randomized
@@ -1746,39 +1727,6 @@ impl AbilityDb {
     pub fn exclusive_pool(&self) -> Vec<&AbilityDef> {
         self.all().filter(|d| d.exclusive).collect()
     }
-}
-
-/// Grants `routine` as knowledge and installs it into the player's free
-/// starter slot — `Game::apply_character_choice`'s "routine" step.
-///
-/// `None` — `CharacterChoice::default()`'s value — does nothing, which is
-/// what keeps every one of the ~1,600 `Game::new` call sites producing
-/// today's player: nothing installed beyond `DECOMPILE_ABILITY_ID`.
-///
-/// **Knowledge first, then the install.** A `KnownRoutines` entry is what
-/// lets the routine be etched onto a disk later like anything else the
-/// player knows — see `assets/abilities/README.md`'s "The starter set".
-/// The install itself is `Game::write_routine`, the same door
-/// `Game::install_disk` uses: no ownership check, no disk spent, just a
-/// write into the next free slot. `ROUTINE_SLOT_BASE` is 2 and
-/// `decompile` already occupies one slot at this point in
-/// `apply_character_choice`'s order (stats, identity, kit, *then*
-/// routine), so this always has exactly one slot to land in and never
-/// displaces it.
-///
-/// Does not validate `routine` against `AbilityDef::starter` — the wizard
-/// (Track D/E) is the one surface that offers a choice at all, and it can
-/// only ever offer what `Game::starter_routine_rows` lists.
-pub fn install_starter(game: &mut crate::Game, routine: Option<&AbilityId>) {
-    let Some(routine) = routine else {
-        return;
-    };
-    game.world
-        .resource_mut::<crate::KnownRoutines>()
-        .0
-        .insert(routine.clone());
-    let player = game.player_entity();
-    game.write_routine(player, routine);
 }
 
 /// What one use of `def` does, as a sentence, with its magnitudes already
@@ -1828,6 +1776,21 @@ pub fn effect_label(
                 affinity,
             );
             format!("Restores {} Integrity", range_label(band))
+        }
+        AbilityEffect::HealOverTime {
+            power,
+            spread,
+            rounds,
+        } => {
+            let band = scaled_range(
+                crate::battle::DamageRange::centred(*power, *spread),
+                level,
+                affinity,
+            );
+            format!(
+                "Restores {} Integrity each round for {rounds} rounds",
+                range_label(band)
+            )
         }
         AbilityEffect::Buff {
             kind,
@@ -1980,40 +1943,6 @@ pub fn range_label(range: crate::battle::DamageRange) -> String {
     } else {
         format!("{}\u{2013}{}", range.min, range.max)
     }
-}
-
-/// Every `AbilityDef::starter` ability, id-sorted so a picker's numbering is
-/// stable, each priced at level 1 through [`effect_label`] and
-/// [`routine_power_cost`] — the two real doors, not a copy of either.
-///
-/// `affinity` is asked per axis rather than resolved here: `Game::
-/// starter_routine_rows` passes the player-arm formula for a class the
-/// player has only *picked*, and the creation wizard's catalogue passes the
-/// same formula with no perks. Neither can drift, because both call
-/// `classes::affinity_with_perk`.
-pub fn starter_rows(
-    db: &AbilityDb,
-    statuses: &crate::statuses::StatusDb,
-    affinity: impl Fn(AffinityKind) -> f32,
-) -> Vec<crate::views::StarterRoutineRow> {
-    db.all()
-        .filter(|def| def.starter)
-        .map(|def| crate::views::StarterRoutineRow {
-            id: def.id.clone(),
-            name: def.name.clone(),
-            description: def.description.clone(),
-            effect: effect_label(
-                def,
-                1,
-                match def.effect.affinity_kind() {
-                    Some(kind) => affinity(kind),
-                    None => crate::tuning::AFFINITY_NEUTRAL,
-                },
-                statuses,
-            ),
-            power_cost: routine_power_cost(def),
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -2007,23 +2007,12 @@ pub enum Mode {
     /// Picking whose routines to manage — you, or any program you own.
     /// Reached with `m` from `Mode::Playing`.
     RoutineTarget,
-    /// The chosen member's slot list. A filled slot pops its routine back
-    /// into cargo; an empty one opens `Mode::RoutineInstall`.
+    /// The chosen member's slot list. A filled slot pops its routine out,
+    /// destroying it; an empty one opens `Mode::RoutineInstall`.
     Routines,
-    /// Picking which etched disk in cargo to spend on the slot chosen in
-    /// `Mode::Routines`. Rows come from `Game::etched_disks_held`.
-    ///
-    /// A disk, never a routine you merely know: knowing one lets you *make*
-    /// a disk (`Mode::RoutineEtch`), and the two steps are separate so that
-    /// a routine nobody can know — an exclusive one, off a boss or a Stack
-    /// trader — can still arrive as a disk and install through this same
-    /// screen.
+    /// Picking which built routine to write into the slot chosen in
+    /// `Mode::Routines`. Rows come from `Game::built_routine_rows`.
     RoutineInstall,
-    /// Burning a blank Routine Disk with a routine the player knows, off
-    /// `Game::etchable_routines`. Reached with `e` from
-    /// `Mode::RoutineInstall`, which is where a player discovers they have
-    /// no disk of the thing they wanted.
-    RoutineEtch,
     /// Picking which installed field routine to run — a `FieldBuff` ability
     /// on you or a program you own, run outside battle rather than spent as
     /// a Special. Reached with `a` from `Mode::Playing`; rows come from
@@ -2583,7 +2572,6 @@ impl Mode {
             | Mode::RoutineTarget
             | Mode::Routines
             | Mode::RoutineInstall
-            | Mode::RoutineEtch
             | Mode::FieldRoutine
             | Mode::FieldRoutineAlly
             | Mode::FieldRoutineCell
@@ -2914,18 +2902,6 @@ pub struct App {
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.
     pub hub_on_rail: bool,
-    /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
-    /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
-    /// the player is still holding open. `None` when the etch screen was
-    /// opened from the Routines page in its own right, which falls back to
-    /// `App::close_screen`.
-    ///
-    /// Deliberately not `menu_origin`: that is a single slot already holding
-    /// `Mode::PartyRoutines` for this chain, so borrowing it for the `[e]`
-    /// detour would make Esc out of `Mode::RoutineInstall` and
-    /// `Mode::RoutineTarget` skip the Routines page on the way back to the
-    /// map.
-    etch_return: Option<Mode>,
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,

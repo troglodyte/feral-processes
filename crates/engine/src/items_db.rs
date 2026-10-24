@@ -555,113 +555,9 @@ impl ItemDb {
         Ok((db, warnings))
     }
 
-    /// Derives one etched Routine Disk item per loaded ability and returns
-    /// a warning for every id a real `.ron` file had already claimed.
-    ///
-    /// **Derived rather than authored** because the disk set is a function
-    /// of the ability set. Sixty-six hand-written files would be sixty-six
-    /// chances for the two to drift, and nothing in the suite would notice
-    /// a disk whose ability had been deleted — where this cannot produce
-    /// one at all.
-    ///
-    /// What is left at its default is doing as much work as what is set.
-    /// No `craftable`, so a disk press cannot make one; no `cache_drop`, so
-    /// a Stack cache cannot hold one; no `equipment`, so it cannot leak into
-    /// `Game::surface_boss_loot`, which filters on `equipment.is_some()`.
-    /// That is the whole of what keeps an exclusive routine exclusive
-    /// without a single explicit exclusion — the disk is reachable only
-    /// where something reaches for it by id.
-    ///
-    /// `droppable` is carried straight across from `AbilityDef::boss_drop`,
-    /// which is why the boss path needs no engine code:
-    /// `Game::equipment_drops_for` already merges every item naming the dead
-    /// species and `award_loot` already rolls them.
-    ///
-    /// A modder's own `etched_*.ron` wins and is warned about, the same call
-    /// `load_dir` makes about a duplicated economy role: a file on disk is a
-    /// deliberate act, and silently overwriting one would make the conflict
-    /// invisible.
-    pub fn synthesise_etched_disks(
-        &mut self,
-        abilities: &crate::abilities::AbilityDb,
-    ) -> Vec<String> {
-        let mut warnings = Vec::new();
-        for ability in abilities.all() {
-            let id = ItemId::etched(&ability.id);
-            if self.items.contains_key(id.as_str()) {
-                warnings.push(format!(
-                    "item file {} shadows the etched disk derived for ability {}; \
-                     the file wins and the routine cannot be installed from a derived disk",
-                    id.as_str(),
-                    ability.id
-                ));
-                continue;
-            }
-            let value = if ability.exclusive {
-                crate::tuning::ETCHED_DISK_EXCLUSIVE_VALUE
-            } else {
-                crate::tuning::ETCHED_DISK_VALUE
-            };
-            // Every field spelled out rather than `..Default::default()`, so
-            // a new `ItemDef` field is a compile error here and someone has
-            // to decide what an etched disk does about it. The four `None`s
-            // below are load-bearing and a silent default would hide that.
-            self.items.insert(
-                id.0.clone(),
-                ItemDef {
-                    id,
-                    name: format!("Etched Disk · {}", ability.name),
-                    // The ability's own line, so a disk in cargo reads as
-                    // what it will do rather than as what it is. A player
-                    // deciding which of three disks to burn a slot on is
-                    // asking the routine's question, not the item's.
-                    description: ability.description.clone(),
-                    banked: false,
-                    value: Some(value),
-                    role: None,
-                    equipment: None,
-                    durability: None,
-                    taming_potency: None,
-                    consume: None,
-                    craftable: None,
-                    // An exclusive routine's boss pays its parts instead
-                    // (`Game::pay_boss_routine_parts`), never the disk.
-                    droppable: None,
-                    cache_drop: None,
-                    grid_fuel: None,
-                    // A disk *installs* its routine; it is not worn, so
-                    // there is nothing for a worn grant to hang off. Nor
-                    // is it swung, so it declares no reach or range either.
-                    grants: None,
-                    reach: None,
-                    range: None,
-                    upgrade: None,
-                    // A disk is installed, not slept against.
-                    enables_rest: false,
-                    implant: None,
-                    // Installed or fitted, never dropped on the ground.
-                    trap: None,
-                    // Every disk derives the same family tag, "ED" — the
-                    // one place `ItemDef::tag`'s per-item promise does not
-                    // hold. Two disks sitting in one Depot do draw two "ED"
-                    // PRODUCTION rows, so this is a known gap rather
-                    // than the impossibility it was once documented as;
-                    // `no_two_shipped_stock_items_share_a_tag` excludes the
-                    // family because no per-disk `abbrev` could be authored
-                    // for a derived item anyway.
-                    abbrev: None,
-                    // One shared mark: a disk has no per-item art to author.
-                    glyph: Some(','),
-                    fx: None,
-                },
-            );
-        }
-        warnings
-    }
-
     /// Derives one carrier item per loaded tool and returns a warning for
     /// every id a real `.ron` file had already claimed —
-    /// `synthesise_etched_disks`'s own shape, ported: the carrier set is a
+    /// the carrier set is a
     /// function of the tool set, so a hand-written file per tool would be
     /// one more chance for the two to drift, and nothing would notice a
     /// carrier whose tool had been deleted, where this cannot produce one
@@ -672,13 +568,11 @@ impl ItemDb {
     /// someone has to decide what a carrier does about it.
     ///
     /// **Buyable: no. Sellable: yes.** `game::caravan`'s `stock_pool`
-    /// excludes a tool id (`ItemId::tool_id`) the same way it already
-    /// excludes an etched ability, because a shelf that could hand a player
+    /// excludes a tool id (`ItemId::tool_id`) because a shelf that could hand a player
     /// a carrier would let Credits buy past the research→forge chain the
     /// whole feature exists to make you earn. Nothing excludes a carrier
-    /// from `caravan_sell_rows`/`settlement_sell_rows`/`market_sell_rows` —
-    /// an etched disk already has that same asymmetry — so a spare or
-    /// unwanted carrier converts back to Credits like any other held cargo.
+    /// from `caravan_sell_rows`/`settlement_sell_rows`/`market_sell_rows`, so
+    /// a spare or unwanted carrier converts back to Credits like any other held cargo.
     /// `TOOL_CARRIER_VALUE` prices that sell-back below every shipped
     /// tool's own `forge_cost`, so forging one and reselling it is a loss.
     pub fn synthesise_tool_carriers(&mut self, tools: &crate::tools::ToolDb) -> Vec<String> {
@@ -700,8 +594,7 @@ impl ItemDb {
                     id,
                     name: format!("{} Carrier", tool.name),
                     // The tool's own line, so a carrier in cargo reads as
-                    // what installing it will do — `synthesise_etched_
-                    // disks`'s reason for copying `ability.description`.
+                    // what installing it will do.
                     description: tool.description.clone(),
                     banked: false,
                     value: Some(crate::tuning::TOOL_CARRIER_VALUE),
@@ -749,9 +642,8 @@ impl ItemDb {
     }
 
     /// Derives one item per Subroutine in the Rust catalogue (ADR 0029).
-    /// A part is cargo: it is held, hauled, sold and dropped like an etched
-    /// disk was, and it is *spent* by `Game::build_routine`. Every field is
-    /// spelled out, `synthesise_etched_disks`' reason: a new `ItemDef`
+    /// A part is cargo: it is held, hauled and sold, and it is *spent* by
+    /// `Game::build_routine`. Every field is spelled out, so a new `ItemDef`
     /// field is a compile error here and someone decides what a part does
     /// about it.
     ///
@@ -799,7 +691,7 @@ impl ItemDb {
                     enables_rest: false,
                     implant: None,
                     trap: None,
-                    // The etched disks' own gap: parts share a family tag.
+                    // Parts share a family tag.
                     abbrev: None,
                     glyph: Some(','),
                     fx: None,
@@ -857,26 +749,22 @@ impl ItemDb {
     /// free would let a new run skip the research→forge chain the whole
     /// feature exists to make you earn — `TOOL_CARRIER_VALUE`'s low price
     /// would otherwise seat every carrier at the front of this shelf. An
-    /// **Emulate disk** (`abilities::ability_disk_shelved`, todo #100 Task 4
-    /// decision 9) is barred for the same shape of reason: a new run
-    /// starting with one would skip the routine tree entirely for the one
-    /// routine unlocking it *is* the feature.
+    /// **part off the trade shelf** (`Subroutine::shelf`: Emulate's Core) is
+    /// barred for the same shape of reason: a new run starting with one
+    /// would skip the routine tree entirely for the one routine unlocking it
+    /// *is* the feature.
     ///
     /// Sorted `(price, id)` because `ItemDb` keys by `String` in a
     /// `HashMap`, so the rows — and the digit shortcuts over them — would
     /// otherwise land in a different order every run.
-    pub fn creation_shelf(
-        &self,
-        abilities: &crate::abilities::AbilityDb,
-    ) -> Vec<crate::views::StartingItemRow> {
+    pub fn creation_shelf(&self) -> Vec<crate::views::StartingItemRow> {
         let barred = |id: &ItemId| {
             Some(id) == self.trade_currency()
                 || Some(id) == self.craft_currency()
                 || id.tool_id().is_some()
                 || id
-                    .etched_ability()
-                    .and_then(|a| abilities.get(a))
-                    .is_some_and(|def| !crate::abilities::ability_disk_shelved(def))
+                    .part_of()
+                    .is_some_and(|part| !crate::routine_craft::Subroutine::shelf().contains(&part))
         };
         let mut rows: Vec<crate::views::StartingItemRow> = self
             .all()
@@ -1041,9 +929,7 @@ mod tests {
 
         let carrier_id = ItemId::tool(&crate::tools::ToolId("widget".to_string()));
         assert!(
-            db.creation_shelf(&crate::abilities::AbilityDb::default())
-                .iter()
-                .all(|row| row.id != carrier_id),
+            db.creation_shelf().iter().all(|row| row.id != carrier_id),
             "a tool carrier must never be offered on the creation shelf"
         );
     }

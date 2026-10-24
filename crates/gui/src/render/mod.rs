@@ -165,7 +165,7 @@ use put_down::draw_put_down;
 use refit_copy::draw_refit_copy;
 use rig_tool::draw_rig_tool;
 use routines::{
-    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
+    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
     draw_routine_target, draw_routines,
 };
 use settlement::draw_settlement;
@@ -1578,7 +1578,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::RoutineInstall => draw_routine_install(game, selected, refusal, painter, m),
-        Mode::RoutineEtch => draw_routine_etch(game, selected, refusal, painter, m),
         Mode::Refactor => draw_refactor(game, selected, refusal, painter, m),
         Mode::Develop => draw_develop(game, selected, refusal, painter, m),
         Mode::DevelopProgram => draw_develop_program(
@@ -1914,7 +1913,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 165] = [
+    const ALL_MODES: [Mode; 164] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1999,7 +1998,6 @@ mod tests {
         Mode::RoutineTarget,
         Mode::Routines,
         Mode::RoutineInstall,
-        Mode::RoutineEtch,
         Mode::FieldRoutine,
         Mode::FieldRoutineAlly,
         Mode::FieldRoutineCell,

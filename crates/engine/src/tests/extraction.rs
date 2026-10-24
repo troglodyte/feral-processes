@@ -2558,11 +2558,6 @@ fn an_exclusive_routine_is_never_in_a_downed_programs_pool() {
     assert!(refusal.is_err(), "it should have refused");
     assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
     assert!(!game.knows_routine(&ability), "an exclusive was learned");
-    assert_eq!(
-        held(&game, &ItemId::etched(&ability)),
-        0,
-        "the reader pressed a disk out of nothing"
-    );
 }
 
 /// The first entry is favoured, not guaranteed — decision 4. Run the draw

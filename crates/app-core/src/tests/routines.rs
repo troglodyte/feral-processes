@@ -149,31 +149,6 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
     );
 }
 
-/// The etch screen used to be reachable only through *Install a routine* →
-/// a holder → an **empty** slot → `[e]`. Every routine slot in the game
-/// starts full, so a player who had never popped one out could not reach it
-/// at all — and it is where blanks turn into the disks that fill slots.
-#[test]
-fn the_routines_page_opens_the_etch_screen_and_esc_comes_straight_back() {
-    let mut app = test_app(65);
-    // The row is hidden while there is nothing to write, and a new game
-    // knows nothing: `Game::new` takes `CharacterChoice::default()`, whose
-    // starter pick is `None`.
-    teach_player_routines(&mut app, &["sandbox"]);
-    open_via_menu(&mut app, 'p', "Etch a routine disk");
-    assert_eq!(app.mode, Mode::RoutineEtch);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
-        Mode::PartyRoutines,
-        "Esc returns to the page that opened it, not into the install flow"
-    );
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing);
-}
-
 /// Standing on the extract confirm for the fixture's one program.
 fn on_the_extract_confirm(seed: u32) -> App {
     let mut app = app_owning_a_program_and_an_extractor(seed, &[FALLBACK_ABILITY_ID]);

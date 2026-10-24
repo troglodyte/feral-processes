@@ -345,7 +345,6 @@ impl App {
             Mode::RoutineTarget => self.handle_routine_target_key(key),
             Mode::Routines => self.handle_routines_key(key),
             Mode::RoutineInstall => self.handle_routine_install_key(key),
-            Mode::RoutineEtch => self.handle_routine_etch_key(key),
             Mode::FieldRoutine => self.handle_field_routine_key(key),
             Mode::FieldRoutineAlly => self.handle_field_routine_ally_key(key),
             Mode::FieldRoutineCell => self.handle_field_routine_cell_key(key),

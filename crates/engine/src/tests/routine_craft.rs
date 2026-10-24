@@ -191,7 +191,7 @@ fn crafting_a_part_spends_a_disk_and_its_material_and_needs_research_and_a_bench
     let err = game.craft_subroutine(part).unwrap_err();
     assert!(err.contains("blank"), "{err}");
 
-    give_disks(&mut game, 2);
+    give(&mut game, &ItemId::from(ids::ROUTINE_DISK), 2);
     let err = game.craft_subroutine(part).unwrap_err();
     assert!(err.contains(&format!("{count}")), "{err}");
     assert_eq!(game.blank_disks_held(), 2, "a refusal spent a disk");

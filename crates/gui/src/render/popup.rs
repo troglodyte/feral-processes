@@ -1792,11 +1792,9 @@ mod tests {
     /// reason: a hand-written mirror would keep passing after the real one
     /// drifted.
     fn routine_rows_fixtures(n: usize, selected: usize) -> Vec<(&'static str, Vec<Row>, usize)> {
-        use super::super::routines::{
-            extract_pick_rows, routine_etch_rows, routine_install_rows, routine_slot_rows,
-        };
+        use super::super::routines::{extract_pick_rows, routine_install_rows, routine_slot_rows};
         use feral_processes_engine::views::{
-            BuiltRoutineRow, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
+            BuiltRoutineRow, ExtractableRoutineView, RoutineSlotView,
         };
         let id = |i: usize| format!("routine_{i}");
         let name = |i: usize| format!("Routine {i}");
@@ -1829,22 +1827,6 @@ mod tests {
                             parts: Vec::new(),
                         })
                         .collect::<Vec<_>>(),
-                    selected,
-                ),
-                0,
-            ),
-            (
-                "etch",
-                routine_etch_rows(
-                    &(0..n)
-                        .map(|i| KnownRoutineView {
-                            ability: id(i),
-                            name: name(i),
-                            description: text(i),
-                            held: i as u32 % 3,
-                        })
-                        .collect::<Vec<_>>(),
-                    4,
                     selected,
                 ),
                 0,

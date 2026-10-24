@@ -2,9 +2,7 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::views::{
-    BuiltRoutineRow, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
-};
+use feral_processes_engine::views::{BuiltRoutineRow, ExtractableRoutineView, RoutineSlotView};
 
 pub(super) fn draw_routine_target(
     game: &mut Game,
@@ -110,50 +108,6 @@ pub(super) fn draw_routine_install(
         painter,
         m,
     );
-}
-
-/// The etch picker's rows.
-///
-/// A routine already in cargo carries a dim `×N held` note: this screen is
-/// where a blank is spent for good, and the question it has to answer before
-/// that is whether the player is starting a stock or adding to one they
-/// forgot they had. Nothing at all on a routine held zero of — a `×0` on
-/// every line is the noise the annotation exists to avoid.
-pub(super) fn routine_etch_rows(
-    known: &[KnownRoutineView],
-    blanks: u32,
-    selected: usize,
-) -> Vec<Row> {
-    let mut rows = vec![
-        text_row("Burn which routine onto a blank? The blank is gone either way."),
-        text_row(format!("Blanks: {blanks}")),
-    ];
-    if known.is_empty() {
-        rows.push(text_row(
-            "(you know no routines — research one, or extract one from a program)",
-        ));
-    }
-    for (i, r) in known.iter().enumerate() {
-        rows.push(annotated_item_row(
-            r.name.to_string(),
-            (r.held > 0).then(|| format!("×{} held", r.held)),
-            i == selected,
-            TEXT,
-        ));
-        rows.push(description_row(&r.description));
-    }
-    rows
-}
-
-pub(super) fn draw_routine_etch(
-    game: &Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = routine_etch_rows(&game.etchable_routines(), game.blank_disks_held(), selected);
-    draw_popup("Etch Disk", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// One extraction candidate's lines: the row the highlight lands on, then the

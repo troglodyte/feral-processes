@@ -192,20 +192,12 @@ impl Game {
 
     /// Whether the player has learned `ability` — by researching a node that
     /// grants it, or by extracting it out of a program.
-    ///
-    /// Always false for an exclusive routine. Nothing writes one into
-    /// `KnownRoutines`, which is the whole of what makes it exclusive: a
-    /// routine you know is one you can etch onto blank disks forever, so
-    /// knowledge is the only thing in this game that duplicates.
     pub fn knows_routine(&self, ability: &str) -> bool {
         self.world.resource::<KnownRoutines>().0.contains(ability)
     }
 
     /// Whether `family` has been discovered — any of its rungs is in
-    /// `DiscoveredRoutines` **or** `KnownRoutines`. The second half is what
-    /// makes a starter routine, and every routine already known in a save
-    /// written before this feature existed, read as discovered with no
-    /// write of its own: nothing needed extracting to already have it.
+    /// `DiscoveredRoutines` **or** `KnownRoutines`.
     pub fn family_discovered(&self, family: &str) -> bool {
         let discovered = &self
             .world
@@ -220,12 +212,7 @@ impl Game {
     }
 
     /// Whether `family` has a carrier at all — a positive `wild_weight` on
-    /// any of its rungs, or a place in some species' kit. Computed at query
-    /// time rather than cached, because `ResearchDb` has no `SpeciesDb` to
-    /// derive it from at load — see spec §2 "Discoverable vs. always
-    /// visible". A family with no carrier is **always visible** instead:
-    /// nothing can ever discover it, so hiding it behind discovery would
-    /// make it unreachable.
+    /// any of its rungs, or a place in some species' kit.
     pub fn family_is_discoverable(&self, family: &str) -> bool {
         let abilities = self.world.resource::<AbilityDb>();
         let rungs: Vec<&str> = abilities
@@ -247,33 +234,13 @@ impl Game {
         })
     }
 
-    /// Whether `ability` is an exclusive routine — one nobody can learn or
-    /// etch, reachable only as an already-written disk off a boss or a Stack
-    /// trader's shelf.
-    ///
-    /// An ability this build no longer has is *not* exclusive: a save can
-    /// reference a routine a mod has since removed, and treating an unknown
-    /// id as exclusive would silently refuse to etch a disk the player has
-    /// every right to. Unknown means gone, and gone is handled by the
-    /// `AbilityDb::get` that fails right after.
-    pub fn routine_is_exclusive(&self, ability: &str) -> bool {
-        self.world
-            .resource::<AbilityDb>()
-            .get(ability)
-            .is_some_and(|def| def.exclusive)
-    }
-
     /// Whether `ability` is **fixed** — welded to the slot it is born in.
-    /// It can't be etched onto a blank, can't be installed off one, and
-    /// can't be popped back out of the slot it occupies.
+    /// It can't be moved and can't be popped back out of the slot it
+    /// occupies.
     ///
     /// `decompile` is the whole of the set and the reason it exists: it is
     /// the player's capture mechanism, granted once by `spawn_player` and by
-    /// nothing else in the game. Letting it be cleared meant the pop-out had
-    /// to be made recoverable, which meant seeding `KnownRoutines` with it,
-    /// which meant it appeared in the etch picker as a routine you could
-    /// stamp onto disks forever — three consequences all paying for a
-    /// gesture nobody wants.
+    /// nothing else in the game.
     ///
     /// Keyed to `abilities::DECOMPILE_ABILITY_ID` rather than an
     /// asset-authored flag beside `exclusive`, because permanence is not a
@@ -285,93 +252,11 @@ impl Game {
         crate::routine_tree::is_permanent(ability)
     }
 
-    /// Every routine the player knows, name-sorted so the etch picker's
-    /// numbering is stable between sessions. Knowing one is half of an
-    /// etch; the other half is `blank_disks_held`.
-    ///
-    /// Exclusive and permanent routines are filtered out explicitly, even
-    /// though nothing is supposed to put either in `KnownRoutines` in the
-    /// first place. That is deliberate belt-and-braces: `etch_disk` refuses
-    /// them anyway, so without this a leak would show up as a picker row
-    /// that always fails rather than as a routine quietly missing. Two
-    /// cheap checks, and the loud failure mode is the one on the outside.
-    ///
-    /// For `decompile` the leak is not hypothetical. Builds up to 0.13.x
-    /// seeded `KnownRoutines` with it so a pop-out could be undone, so
-    /// **every save written before this rule carries the entry**, and this
-    /// filter is the only thing keeping it off the picker there.
-    pub fn etchable_routines(&self) -> Vec<KnownRoutineView> {
-        let db = self.world.resource::<AbilityDb>();
-        let mut rows: Vec<KnownRoutineView> = self
-            .world
-            .resource::<KnownRoutines>()
-            .0
-            .iter()
-            .filter_map(|id| db.get(id))
-            .filter(|def| !def.exclusive && !self.routine_is_permanent(&def.id))
-            .map(|def| KnownRoutineView {
-                ability: def.id.clone(),
-                name: def.name.clone(),
-                description: def.description.clone(),
-                held: self.etched_disks_of(&def.id),
-            })
-            .collect();
-        rows.sort_by(|a, b| a.name.cmp(&b.name));
-        rows
-    }
-
-    /// Blank Routine Disks in cargo — what an etch spends.
-    pub fn blank_disks_held(&self) -> u32 {
-        self.world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&ItemId::from(ids::ROUTINE_DISK)))
-            .unwrap_or(0)
-    }
-
-    /// Every etched disk in cargo, name-sorted — what an *install* spends,
-    /// and the picker the routine screen offers.
-    ///
-    /// Derived by walking cargo for the `etched_` prefix rather than by
-    /// walking the ability set and counting each: cargo is short, the
-    /// ability set is not, and a disk whose ability a mod has removed drops
-    /// out here on its own rather than needing a rule.
-    pub fn etched_disks_held(&self) -> Vec<EtchedDiskView> {
-        let db = self.world.resource::<AbilityDb>();
-        let mut rows: Vec<EtchedDiskView> = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.items.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|(_, qty)| *qty > 0)
-            .filter_map(|(item, qty)| {
-                let def = db.get(item.etched_ability()?)?;
-                Some(EtchedDiskView {
-                    ability: def.id.clone(),
-                    name: def.name.clone(),
-                    description: def.description.clone(),
-                    exclusive: def.exclusive,
-                    qty,
-                })
-            })
-            .collect();
-        rows.sort_by(|a, b| a.name.cmp(&b.name));
-        rows
-    }
-
-    /// How many etched disks of `ability` are in cargo.
-    pub fn etched_disks_of(&self, ability: &str) -> u32 {
-        self.world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&ItemId::etched(ability)))
-            .unwrap_or(0)
-    }
-
     /// Whether `entity` is a routine holder the player actually controls —
     /// themself, or a program `Tamed` to them. A save-loaded wild creature
     /// carries an empty `Routines` too (the common creature bundle inserts
     /// it before the `if c.tamed` branch), so without this check
-    /// `install_routine`/`uninstall_routine` would accept an entity no menu
+    /// `install_built`/`uninstall_routine` would accept an entity no menu
     /// ever offers but nothing here refused either — the same ownership
     /// gate `extract_routine` and `sell_companion` already both apply.
     pub(crate) fn owns_routine_holder(&self, entity: Entity) -> bool {
@@ -382,156 +267,15 @@ impl Game {
                 .is_some_and(|t| t.owner == self.player_entity())
     }
 
-    /// Burns one blank Routine Disk to write `ability` onto it, producing an
-    /// etched disk in cargo. Knowing the routine is not enough — the blank
-    /// is the manufactured half, and it is gone for good.
-    ///
-    /// The first half of what `install_routine` used to do in one step. The
-    /// split exists so that a routine can arrive in the world *already*
-    /// etched, off a boss or a trader's shelf, without anyone having to know
-    /// it: an exclusive routine is simply one that never reaches this
-    /// function, because nothing puts it in `KnownRoutines`.
-    ///
-    /// The blank is spent last, after every refusal has been cleared, for
-    /// the reason `use_symlink` drops the locale only once its checks have
-    /// all passed: nothing here may consume the disk on a path that then
-    /// fails.
-    pub fn etch_disk(&mut self, ability: &str) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        // Checked before `knows_routine`, and this is the only reason this
-        // branch exists at all: an exclusive routine is never known, so the
-        // check below would already refuse it — with "you don't know that
-        // routine", which is true and tells the player nothing about why
-        // they never will.
-        if self.routine_is_exclusive(ability) {
-            let name = self.ability_display_name(ability);
-            return Err(format!(
-                "{name} can't be written to a blank. That one only comes already etched."
-            ));
-        }
-        // Beside the exclusive branch and for the same reason: a permanent
-        // routine is never known either, so the check below would refuse it
-        // with "you don't know that routine" — true, and no help at all to a
-        // player looking at the one routine they have run since they booted.
-        if self.routine_is_permanent(ability) {
-            let name = self.ability_display_name(ability);
-            return Err(format!(
-                "{name} is welded into its slot. There's no writing a second copy of it."
-            ));
-        }
-        if !self.knows_routine(ability) {
-            return Err("You don't know that routine.".into());
-        }
-        let blank = ItemId::from(ids::ROUTINE_DISK);
-        if self.blank_disks_held() == 0 {
-            return Err(format!(
-                "You need a blank {} to write that routine onto.",
-                self.item_name(&blank)
-            ));
-        }
-        // No cargo-room check, here or in `extract_routine`'s exclusive
-        // branch: the Buffer is unbounded (`Inventory::cargo_used` is a
-        // display figure, not a cap) and `grant_loot` always lands `qty` in
-        // full. If a hold limit is ever added, both of those become paths
-        // that can take a blank — or destroy a program — and hand back
-        // nothing, and both need a check before the `take`.
-        let etched = ItemId::etched(ability);
-        let player = self.player_entity();
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(blank.clone(), 1);
-        self.note_consumed(&blank, 1, crate::base_ledger::ConsumeSource::Craft);
-        self.grant_loot(etched.clone(), 1, LootSource::Etch);
-        let ability_name = self.ability_display_name(ability);
-        self.log(format!("You burn {ability_name} onto a blank disk."));
-        Ok(())
-    }
-
-    /// Spends one etched disk to write its routine into `entity`'s first
-    /// free slot. The disk is consumed — what is in the slot *is* the disk,
-    /// and `uninstall_routine` does not hand it back.
-    ///
-    /// The second half of the old `install_routine`, and the only way a
-    /// routine ever reaches a slot outside a species' innate kit. That
-    /// single door is what makes the exclusive pool enforceable: there is
-    /// one place to look for how a routine got where it is.
-    ///
-    /// Ordered like `etch_disk` above and `buy_market_offer` beside it —
-    /// every refusal lands before the disk is taken.
-    pub fn install_disk(&mut self, entity: Entity, ability: &str) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        if !self.owns_routine_holder(entity) {
-            return Err("You don't control that program.".into());
-        }
-        // Only the player emulates (`seam:only-the-player-emulates`).
-        // `ability_unavailable` is the gate an already-installed Emulate
-        // would meet at invocation time, but refusing here too means a
-        // companion never carries the routine at all — belt and braces
-        // rather than trusting every future writer of `Routines` to ask
-        // `ability_unavailable` before it fires.
-        if entity != self.player_entity()
-            && self
-                .world
-                .resource::<AbilityDb>()
-                .get(ability)
-                .is_some_and(|def| matches!(def.effect, AbilityEffect::Emulate { .. }))
-        {
-            return Err("Only you can emulate.".into());
-        }
-        // Ahead of the duplicate check: the player already runs the only
-        // permanent routine there is, so without this the sentence they get
-        // for their own spare slot would be "you already run it" — which
-        // reads as a slot problem they could solve by finding another one.
-        if self.routine_is_permanent(ability) {
-            let name = self.ability_display_name(ability);
-            return Err(format!(
-                "{name} runs where it was compiled. It doesn't move."
-            ));
-        }
-        let installed = self
-            .world
-            .get::<Routines>(entity)
-            .map(|r| r.0.clone())
-            .ok_or_else(|| "That can't hold routines.".to_string())?;
-        if installed.iter().any(|id| id == ability) {
-            let name = self.routine_holder_label(entity);
-            let ability_name = self.ability_display_name(ability);
-            return Err(format!("{name} already runs {ability_name}."));
-        }
-        if installed.len() >= self.routine_slots(entity) {
-            return Err("There's no free routine slot — pop one out first.".into());
-        }
-        let etched = ItemId::etched(ability);
-        if self.etched_disks_of(ability) == 0 {
-            return Err(format!("You're not carrying {}.", self.item_name(&etched)));
-        }
-        let player = self.player_entity();
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(etched.clone(), 1);
-        self.note_consumed(&etched, 1, crate::base_ledger::ConsumeSource::Install);
-        let ability_name = self.ability_display_name(ability);
-        self.write_routine(entity, ability);
-        let name = self.routine_holder_label(entity);
-        self.log(format!("{name} now runs {ability_name}."));
-        Ok(())
-    }
-
     /// Writes `ability` into `entity`'s next free slot, and nothing else —
-    /// no ownership check, no disk, no knowledge.
+    /// no ownership check.
     ///
-    /// Every one of those absences is the caller's business. `install_disk`
-    /// above is the door the player comes through and states all three in
-    /// its own vocabulary; `Game::install_innate_routines` fills a freshly
-    /// compiled program's species kit and owes none of them. What the two
-    /// must agree on is what a slot is and how one gets filled, which is the
-    /// whole of what lives here.
+    /// That is the caller's business. `Game::install_built` is the door the
+    /// player comes through and states it in its own vocabulary;
+    /// `Game::install_innate_routines` fills a freshly compiled program's
+    /// species kit and owes none of it. What the two must agree on is what a
+    /// slot is and how one gets filled, which is the whole of what lives
+    /// here.
     ///
     /// Silently does nothing if there is no room. Both callers check first —
     /// this refusing loudly would be a second copy of a rule they each
@@ -547,9 +291,8 @@ impl Game {
         self.world.entity_mut(entity).insert(Routines(installed));
     }
 
-    /// Frees `slot`. The disk that filled it was spent at install and is not
-    /// recoverable, so this hands back nothing — what the player keeps is the
-    /// knowledge, which they never lost.
+    /// Frees `slot`. A built routine pulled out is destroyed, and nothing is
+    /// handed back.
     ///
     /// A permanent routine refuses. The check reads the ability *in the
     /// slot* rather than taking one as an argument, because a slot index is
@@ -665,26 +408,10 @@ impl Game {
     /// one at `index` in `extractable_routines`. Everything else installed
     /// on it is lost with it.
     ///
-    /// What comes out depends on whether the routine can be discovered:
-    ///
-    /// - **Ordinary** — a *discovery*, into `DiscoveredRoutines` rather than
-    ///   `KnownRoutines` (todo #101). No disk comes out, and the routine
-    ///   tree still has to be researched before it can be installed. A
-    ///   routine whose family is already discovered is refused rather than
-    ///   accepted as a no-op, checked before the program is despawned:
-    ///   discovery does not stack, so taking it twice would destroy a
-    ///   program for nothing.
-    /// - **Exclusive** — the *disk*, popped back out intact, and nothing
-    ///   discovered. This is the only way to move an exclusive routine off a
-    ///   program, and it costs the whole program to do it. There is still
-    ///   exactly one copy in the run afterwards, which is the invariant the
-    ///   entire exclusive pool rests on.
-    ///
-    /// The "already familiar" refusal is deliberately not applied to the
-    /// exclusive branch. An exclusive routine's family is never discoverable
-    /// (`routine_tree::gets_node` excludes it), so the check would never
-    /// fire — and if it somehow did, refusing would strand a disk on a
-    /// program forever.
+    /// What comes out is the routine's parts (`parts_of_routine`) — Core and
+    /// every modifier — and nothing else. This is the only way to move an
+    /// exclusive routine off a program, and it costs the whole program to do
+    /// it.
     pub fn extract_routine(&mut self, creature: Entity, index: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -772,9 +499,8 @@ impl Game {
     /// The one place a routine comes off a program — `extract_routine`'s
     /// tamed-program door and `extract_program`'s `Routines`-tool door both
     /// call this. It hands over the routine's parts (ADR 0029) and nothing
-    /// else: no discovery, and never an etched disk, so the exclusive pool
-    /// no longer has a second copy to guard.
+    /// else.
     pub(crate) fn take_routine(&mut self, parts: &[crate::routine_craft::Subroutine]) {
-        self.grant_parts(parts, LootSource::Etch);
+        self.grant_parts(parts, LootSource::Extract);
     }
 }

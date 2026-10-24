@@ -412,7 +412,7 @@ fn gear_and_disks_are_one_row_each() {
     let names: Vec<&str> = view.rows.iter().map(|r| r.name.as_str()).collect();
     assert_eq!(
         names[..4],
-        ["Weapons", "Armor", "Modules", "Etched Disks"],
+        ["Weapons", "Armor", "Modules", "Subroutines"],
         "the four families head the list"
     );
     for row in &view.rows[..4] {
@@ -421,7 +421,7 @@ fn gear_and_disks_are_one_row_each() {
     for row in &view.rows[4..] {
         assert_eq!(row.items.len(), 1, "{} is a single item", row.name);
         let item = &row.items[0];
-        assert!(item.etched_ability().is_none(), "{item:?} is a disk");
+        assert!(item.part_of().is_none(), "{item:?} is a part");
         assert!(
             game.world
                 .resource::<ItemDb>()

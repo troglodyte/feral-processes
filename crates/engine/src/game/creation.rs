@@ -431,7 +431,7 @@ impl CreationCatalogue {
     /// derivation `Game::creation_shelf_rows` calls, so the wizard cannot
     /// offer a row the run would then refuse.
     pub fn shelf_rows(&self) -> Vec<crate::views::StartingItemRow> {
-        self.items.creation_shelf(&self.abilities)
+        self.items.creation_shelf()
     }
 
     /// The perk catalogue as the wizard offers it: every loaded perk, in

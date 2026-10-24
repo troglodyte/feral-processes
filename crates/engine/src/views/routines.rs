@@ -127,41 +127,6 @@ pub struct UpgradeOption {
     pub zone_bump: bool,
 }
 
-/// One row of the etch picker — a routine the player knows. Knowing it is
-/// not enough to put it in a slot: it first has to be burnt onto a blank
-/// Routine Disk (`Game::etch_disk`), which the screen reports separately
-/// through `Game::blank_disks_held`, and only then installed.
-///
-/// An exclusive routine never appears here. Nothing writes one into
-/// `KnownRoutines`, so the list is empty of them by construction rather than
-/// by a filter — see `AbilityDef::exclusive`.
-pub struct KnownRoutineView {
-    pub ability: crate::abilities::AbilityId,
-    pub name: String,
-    pub description: String,
-    /// Etched disks of this routine already in cargo — what the player would
-    /// be adding to rather than starting. Read off `Game::etched_disks_of`,
-    /// which is also what `Game::install_disk` refuses on, so the screen and
-    /// the refusal cannot report different numbers.
-    pub held: u32,
-}
-
-/// One row of the install picker — an etched Routine Disk in cargo, ready to
-/// be spent on a slot.
-///
-/// `qty` is how many of that disk are carried, which is what makes a bought
-/// bundle from a Stack market read as one row rather than six. `exclusive`
-/// is the flag the screen marks a prize with; it is the ability's, not the
-/// disk's, and it is here so no renderer has to reach back into `AbilityDb`
-/// to ask.
-pub struct EtchedDiskView {
-    pub ability: crate::abilities::AbilityId,
-    pub name: String,
-    pub description: String,
-    pub exclusive: bool,
-    pub qty: u32,
-}
-
 /// One row of the extraction picker — a routine installed on the program
 /// about to be broken down.
 pub struct ExtractableRoutineView {

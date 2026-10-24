@@ -3982,14 +3982,8 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(structure_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
-    // After the files, and after `abilities`, because every etched disk is
-    // derived from an ability — this is the one ordering dependency the two
-    // databases have, and the only reason `items` is loaded below
-    // `abilities` rather than beside it.
-    warnings.extend(items.synthesise_etched_disks(&abilities));
     warnings.extend(items.synthesise_parts());
-    // Same ordering dependency as the etched disks just above: every
-    // carrier is derived from a loaded `ToolDef`, and `tools` finished
+    // Every carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));
     warnings.extend(structures.validate_machines(&items));

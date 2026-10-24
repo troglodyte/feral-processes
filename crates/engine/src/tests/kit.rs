@@ -1647,39 +1647,6 @@ mod emulation_tests {
         }
 
         #[test]
-        fn install_disk_refuses_the_emulate_disk_onto_a_companion() {
-            let mut game = game();
-            teach_routine(&mut game, "emulate");
-            give_disks(&mut game, 1);
-            game.etch_disk("emulate").unwrap();
-            let companion = spawn_tamed(&mut game, 30, 6);
-
-            let err = game
-                .install_disk(companion, "emulate")
-                .expect_err("a companion must never take the Emulate disk");
-            assert_eq!(err, "Only you can emulate.");
-            assert!(
-                game.world
-                    .get::<Routines>(companion)
-                    .is_some_and(|r| !r.0.iter().any(|id| id == "emulate")),
-                "the refused install must not have written the routine anyway"
-            );
-        }
-
-        #[test]
-        fn install_disk_still_permits_the_emulate_disk_onto_the_player() {
-            let mut game = game();
-            let player = game.player_entity();
-            teach_routine(&mut game, "emulate");
-            give_disks(&mut game, 1);
-            game.etch_disk("emulate").unwrap();
-            make_room_for_routine(&mut game, player);
-
-            game.install_disk(player, "emulate")
-                .expect("the player must still be able to install Emulate");
-        }
-
-        #[test]
         fn battle_set_action_refuses_emulate_for_a_companion_in_the_group_model() {
             let mut game = game();
             let player = game.player_entity();

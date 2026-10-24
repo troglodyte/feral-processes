@@ -2981,7 +2981,7 @@ fn no_two_shipped_stock_items_share_a_tag() {
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     let mut checked = 0;
     for def in db.all() {
-        if def.id.etched_ability().is_some() || def.id.part_of().is_some() {
+        if def.id.part_of().is_some() {
             continue;
         }
         if !matches!(
@@ -5349,10 +5349,7 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
         !gated.is_empty(),
         "the tree unlocks no recipes at all, so this census proves nothing"
     );
-    let shelf = game
-        .world
-        .resource::<ItemDb>()
-        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
+    let shelf = game.world.resource::<ItemDb>().creation_shelf();
     for row in &shelf {
         assert!(
             !gated.contains(&&row.id),
@@ -5365,23 +5362,21 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
     }
 }
 
-/// The Emulate disk is the one etched disk barred from the creation shelf —
-/// `abilities::ability_disk_shelved` (todo #100 Task 4 decision 9).
-/// `Game::install_disk` never checks `Game::node_researched`, so an
-/// ordinary routine's disk being offered here is accepted, existing
-/// behaviour; this asserts the one exception rather than every disk, since
-/// asserting every disk is barred would be asserting something false.
+/// Emulate's Core is the one part barred from the creation shelf —
+/// `Subroutine::shelf`: unlocking Emulate is what its research gates.
 #[test]
-fn the_creation_shelf_never_offers_the_emulate_disk() {
+fn the_creation_shelf_never_offers_the_emulate_core() {
     let game = Game::new(958, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let shelf = game
-        .world
-        .resource::<ItemDb>()
-        .creation_shelf(game.world.resource::<crate::abilities::AbilityDb>());
-    let emulate_disk = crate::items::ItemId::etched("emulate");
+    let shelf = game.world.resource::<ItemDb>().creation_shelf();
+    let emulate = crate::routine_craft::Subroutine::all()
+        .into_iter()
+        .filter(|p| !crate::routine_craft::Subroutine::shelf().contains(p))
+        .map(|p| crate::items::ItemId::part(&p))
+        .collect::<Vec<_>>();
+    assert!(!emulate.is_empty(), "the shelf bars nothing");
     assert!(
-        shelf.iter().all(|row| row.id != emulate_disk),
-        "the Emulate disk must never be offered on the creation shelf"
+        shelf.iter().all(|row| !emulate.contains(&row.id)),
+        "a barred part must never be offered on the creation shelf"
     );
 }
 

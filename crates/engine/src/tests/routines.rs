@@ -337,220 +337,21 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
 
     // The freed slot must be genuinely usable, not still counted against the
     // cap by a zero_day entry the panel can no longer even show.
-    teach_routine(&mut loaded, "priority_boost");
-    give_disks(&mut loaded, 1);
-    loaded.etch_disk("priority_boost").unwrap();
-    loaded
-        .install_disk(player, "priority_boost")
-        .expect("the slot the zero_day vacated must accept a real routine");
+    install_routine_for_test(&mut loaded, player, "priority_boost");
+    assert!(
+        loaded
+            .actor_abilities(player)
+            .iter()
+            .any(|a| a.id == "priority_boost"),
+        "the slot the zero_day vacated must accept a real routine"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The etch picker has to say what is already in cargo, or a player burns a
-/// blank on a routine they are carrying three disks of. The count comes off
-/// `etched_disks_of` — the same figure `install_disk` refuses on — so the
-/// screen and the refusal cannot disagree about how many you hold.
-#[test]
-fn the_etch_picker_counts_disks_already_held() {
-    let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    teach_routine(&mut game, "sandbox");
-    teach_routine(&mut game, "priority_boost");
-    give_disks(&mut game, 3);
-    game.etch_disk("sandbox").unwrap();
-    game.etch_disk("sandbox").unwrap();
-
-    let rows = game.etchable_routines();
-    let held = |id: &str| {
-        rows.iter()
-            .find(|r| r.ability == id)
-            .unwrap_or_else(|| panic!("{id} is offered"))
-            .held
-    };
-    assert_eq!(held("sandbox"), 2, "two etched disks are two disks held");
-    assert_eq!(
-        held("priority_boost"),
-        0,
-        "a routine you know but hold no disk of reads zero, not one"
-    );
-}
-
-#[test]
-fn a_known_routine_is_offered_with_the_abilitys_own_text() {
-    let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let sandbox = ability(&game, "sandbox");
-    teach_routine(&mut game, &sandbox.id);
-    let row = game
-        .etchable_routines()
-        .into_iter()
-        .find(|r| r.ability == sandbox.id)
-        .expect("a routine the player knows is offered");
-    assert_eq!(row.name, sandbox.name);
-    assert_eq!(
-        row.description, sandbox.description,
-        "the picker reads the ability's own text, never a copy of it"
-    );
-}
-
-#[test]
-fn etching_burns_a_blank_and_installing_burns_the_etched_disk() {
-    let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = spawn_tamed(&mut game, 10, 3);
-    set_level(&mut game, pet, 4); // two slots, one of them free
-    teach_routine(&mut game, "sandbox");
-    give_disks(&mut game, 3);
-
-    game.etch_disk("sandbox").unwrap();
-    assert_eq!(
-        game.blank_disks_held(),
-        2,
-        "etching burns one blank and no more"
-    );
-    assert_eq!(
-        game.etched_disks_of("sandbox"),
-        1,
-        "and the blank comes back as an etched disk, not as nothing"
-    );
-
-    game.install_disk(pet, "sandbox").unwrap();
-    assert_eq!(
-        game.etched_disks_of("sandbox"),
-        0,
-        "installing spends the etched disk"
-    );
-    assert_eq!(
-        game.blank_disks_held(),
-        2,
-        "and touches no blank — that half was paid at the etch"
-    );
-    assert!(
-        game.routine_view(pet)
-            .iter()
-            .any(|s| s.ability.as_deref() == Some("sandbox")),
-        "the routine should occupy a slot"
-    );
-
-    let slot = game
-        .routine_view(pet)
-        .into_iter()
-        .position(|s| s.ability.as_deref() == Some("sandbox"))
-        .unwrap();
-    game.uninstall_routine(pet, slot).unwrap();
-    assert_eq!(
-        game.etched_disks_of("sandbox"),
-        0,
-        "the disk is spent for good — uninstalling hands nothing back"
-    );
-    assert!(
-        game.routine_view(pet)[slot].ability.is_none(),
-        "the slot is free again"
-    );
-    assert!(
-        game.knows_routine("sandbox"),
-        "what the player keeps is the knowledge, which they never spent"
-    );
-}
-
-#[test]
-fn etch_is_refused_unknown_blankless_and_during_battle() {
-    let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-
-    let err = game.etch_disk("sandbox").unwrap_err();
-    assert!(err.contains("don't know"), "never researched it: {err}");
-
-    teach_routine(&mut game, "sandbox");
-    let err = game.etch_disk("sandbox").unwrap_err();
-    assert!(err.contains("Routine Disk"), "no blank held: {err}");
-
-    give_disks(&mut game, 1);
-    start_battle_with_a_wild_program(&mut game);
-    let err = game.etch_disk("sandbox").unwrap_err();
-    assert!(err.contains("right now"), "mid-battle: {err}");
-    assert_eq!(
-        game.blank_disks_held(),
-        1,
-        "no refusal on any path may spend the blank"
-    );
-    assert_eq!(
-        game.etched_disks_of("sandbox"),
-        0,
-        "and none of them may hand back a disk either"
-    );
-}
-
-#[test]
-fn install_is_refused_diskless_slotless_duplicated_and_during_battle() {
-    let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = spawn_tamed(&mut game, 10, 3);
-    // The slotless refusal is what this first leg is about, so the kit is
-    // filled rather than assumed full — a level-1 program has room now.
-    fill_routine_slots(&mut game, pet, 0, &["sandbox"]);
-
-    let err = game.install_disk(pet, "sandbox").unwrap_err();
-    assert!(
-        err.contains("no free routine slot"),
-        "slots full is checked before the disk, so a full slot never eats one: {err}"
-    );
-
-    set_level(&mut game, pet, 4); // free slots, but no disk to fill one from
-    let err = game.install_disk(pet, "sandbox").unwrap_err();
-    assert!(
-        err.contains("not carrying"),
-        "the disk is what an install spends, and there isn't one: {err}"
-    );
-
-    give_etched_disks(&mut game, "sandbox", 2);
-    game.install_disk(pet, "sandbox").unwrap();
-    let err = game.install_disk(pet, "sandbox").unwrap_err();
-    assert!(
-        err.contains("already runs"),
-        "a second copy of the same routine in a second slot is refused: {err}"
-    );
-
-    start_battle_with_a_wild_program(&mut game);
-    let err = game.install_disk(pet, "sandbox").unwrap_err();
-    assert!(err.contains("right now"), "mid-battle: {err}");
-    assert_eq!(
-        game.etched_disks_of("sandbox"),
-        1,
-        "no refusal on any path may spend the disk"
-    );
-}
-
-#[test]
-fn a_popped_innate_routine_replants_only_if_the_player_knows_it() {
-    let (mut game, medic) = game_with_two_ability_companion();
-    let popped = game.routine_view(medic)[0].ability.clone().unwrap();
-    game.uninstall_routine(medic, 0).unwrap();
-    assert!(
-        game.routine_view(medic).iter().all(|s| s.ability.is_none()),
-        "the innate slot should now be empty"
-    );
-
-    let host = spawn_tamed(&mut game, 10, 3);
-    set_level(&mut game, host, 4);
-    give_disks(&mut game, 1);
-    // The refusal moved to the etch with the flow split: knowledge is what
-    // writes a blank, and a slot only ever takes a disk somebody wrote.
-    let err = game.etch_disk(&popped).unwrap_err();
-    assert!(
-        err.contains("don't know"),
-        "an innate routine popped out is gone unless the player learned it: {err}"
-    );
-
-    teach_routine(&mut game, &popped);
-    fit_routine(&mut game, host, &popped);
-    assert!(
-        game.routine_view(host)
-            .iter()
-            .any(|s| s.ability.as_deref() == Some(popped.as_str())),
-        "a foreign species' routine installs fine once it is known"
-    );
-}
-
 /// Regression for M4: a save-loaded wild creature carries `Routines(vec![])`
 /// too (`lifecycle.rs` inserts it in the common creature bundle before the
-/// `if c.tamed` branch), so without an ownership check `install_routine`
+/// `if c.tamed` branch), so without an ownership check `install_built`
 /// and `uninstall_routine` would silently accept an entity no menu ever
 /// offers — unlike `extract_routine` and `sell_companion`, which both
 /// already refuse a program the player doesn't own.
@@ -584,8 +385,7 @@ fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
         ))
         .id();
 
-    give_etched_disks(&mut game, "sandbox", 1);
-    let err = game.install_disk(wild, "sandbox").unwrap_err();
+    let err = game.install_built(wild, "crafted/1").unwrap_err();
     assert!(err.contains("control"), "{err}");
 
     let err = game.uninstall_routine(wild, 0).unwrap_err();
@@ -690,28 +490,6 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     start_battle_with_a_wild_program(&mut game);
     let err = game.extract_routine(pet, 0).unwrap_err();
     assert!(err.contains("right now"), "{err}");
-}
-
-/// Parts stack, so a routine the player already knows is no reason to
-/// refuse: extraction takes the program apart whatever it is carrying.
-#[test]
-fn extracting_a_routine_you_already_know_still_yields_its_parts() {
-    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_an_extraction_bench(&mut game, 30, 30);
-    let pet = spawn_tamed(&mut game, 10, 3);
-    let installed = game.extractable_routines(pet)[0].ability.clone();
-    teach_routine(&mut game, &installed);
-    let parts = game.parts_of_routine(&installed);
-
-    game.extract_routine(pet, 0).unwrap();
-
-    for (part, count) in crate::routine_craft::parts_used(&parts) {
-        assert!(game.parts_held(&part) >= count, "{}", part.label());
-    }
-    assert!(
-        game.world.get::<Stats>(pet).is_none(),
-        "the program is spent"
-    );
 }
 
 /// The tamed door's log line says a routine came apart.
@@ -820,83 +598,6 @@ fn decompile_cannot_be_popped_out_of_the_players_slot() {
         game.routine_view(player)[0].ability.as_deref(),
         Some(crate::abilities::DECOMPILE_ABILITY_ID),
         "and the slot is untouched"
-    );
-}
-
-/// The other half of fixing it in place: nothing may mint a second copy.
-/// A new game does not know it, so the etch would already fail for want of
-/// knowledge — this hands the knowledge over first, standing in for a save
-/// written by a build that seeded `KnownRoutines` with it, so what is
-/// proved is the permanence rule and not the absence of a `KnownRoutines`
-/// entry.
-#[test]
-fn decompile_cannot_be_etched_onto_a_blank_even_when_known() {
-    let mut game = Game::new(56, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    teach_routine(&mut game, crate::abilities::DECOMPILE_ABILITY_ID);
-    give_disks(&mut game, 1);
-
-    game.etch_disk(crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect_err("decompile must not be writable onto a blank");
-    assert_eq!(
-        game.blank_disks_held(),
-        1,
-        "and a refused etch spends nothing"
-    );
-    assert_eq!(
-        game.etched_disks_of(crate::abilities::DECOMPILE_ABILITY_ID),
-        0
-    );
-}
-
-/// The picker that feeds `etch_disk` must not offer the row either — a menu
-/// entry that always refuses is worse than one never drawn. Same
-/// stand-in for an older save's `KnownRoutines` as above; this is the
-/// belt-and-braces filter `etchable_routines` carries beside `exclusive`.
-#[test]
-fn the_etch_picker_never_offers_decompile() {
-    let mut game = Game::new(57, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    teach_routine(&mut game, crate::abilities::DECOMPILE_ABILITY_ID);
-    teach_routine(&mut game, "sandbox");
-
-    let offered = game.etchable_routines();
-    assert!(
-        offered.iter().any(|r| r.ability == "sandbox"),
-        "an ordinary known routine is still on the list"
-    );
-    assert!(
-        !offered
-            .iter()
-            .any(|r| r.ability == crate::abilities::DECOMPILE_ABILITY_ID),
-        "but decompile is not, however it got into KnownRoutines"
-    );
-}
-
-/// And the install door is shut too, so an etched decompile disk left in an
-/// older save's cargo cannot put a second copy in a slot — the player's own
-/// spare slot or a program's.
-#[test]
-fn a_decompile_disk_cannot_be_installed_on_anyone() {
-    let mut game = Game::new(59, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    let companion = spawn_tamed(&mut game, 50, 5);
-    enlist(&mut game, companion);
-    give_etched_disks(&mut game, crate::abilities::DECOMPILE_ABILITY_ID, 2);
-
-    game.install_disk(player, crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect_err("the player already runs it and may not run a second");
-    game.install_disk(companion, crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect_err("and a program may not run it at all");
-    assert!(
-        game.world.get::<Routines>(companion).is_none_or(|r| {
-            !r.0.iter()
-                .any(|id| id == crate::abilities::DECOMPILE_ABILITY_ID)
-        }),
-        "nothing was written"
-    );
-    assert_eq!(
-        game.etched_disks_of(crate::abilities::DECOMPILE_ABILITY_ID),
-        2,
-        "and a refused install spends nothing"
     );
 }
 

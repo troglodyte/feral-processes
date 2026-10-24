@@ -1011,12 +1011,8 @@ pub struct AbilityDef {
     /// converted attack and an authored ability agree on melee-by-default.
     #[serde(default)]
     pub ranged: bool,
-    /// Which species drop this routine's etched disk, each with its own
-    /// 0.0-1.0 chance. Becomes the synthesised disk item's
-    /// `ItemDef::droppable` (see `ItemDb::synthesise_etched_disks`), which
-    /// is why the boss-drop path needs no engine code of its own:
-    /// `Game::equipment_drops_for` already merges every item that names the
-    /// dead species, and `award_loot` already rolls them.
+    /// Which species drop this routine's parts, each with its own 0.0-1.0
+    /// chance — rolled by `Game::pay_boss_routine_parts`.
     ///
     /// Nothing here requires the named species to be a boss. What makes
     /// these boss drops is that only bosses are named — the shipped set is
@@ -1167,22 +1163,6 @@ impl AbilityDef {
 /// pay for, or one charged more than the row quoted.
 pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
     def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
-}
-
-/// Whether `def`'s etched disk may be offered on a shelf that bypasses
-/// research entirely — `ItemDb::creation_shelf` and `Game::
-/// routine_disk_pool`'s shared door (todo #100 Task 4, constraints.md
-/// decision 9).
-///
-/// `Game::install_disk` (`game/routines.rs`) never calls `Game::
-/// node_researched`: it checks ownership, a duplicate, a free slot and a
-/// carried disk, and nothing else, so an ordinary routine's disk being
-/// craftable or purchasable already lets a player skip researching it —
-/// accepted, existing behaviour this predicate does not touch. `Emulate` is
-/// the one exception: unlocking it *is* the feature the routine tree
-/// gates, so a shelf selling its disk would sell straight past that gate.
-pub(crate) fn ability_disk_shelved(def: &AbilityDef) -> bool {
-    !matches!(def.effect, AbilityEffect::Emulate { .. })
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that

@@ -274,8 +274,7 @@ pub const CRAFT_MATERIAL_FRAGMENT: &str = "core_fragment";
 /// See `CRAFT_MATERIAL_BYTECODE`.
 pub const CRAFT_MATERIAL_CELL: &str = "power_cell";
 
-/// What a Subroutine is worth in trade currency: an etched disk's
-/// `ETCHED_DISK_VALUE`, which parts replace in the economy. Above
+/// What a Subroutine is worth in trade currency. Above
 /// `CONTRACT_MAX_DELIVER_VALUE`, so no Requisition asks for twenty of them.
 pub const CRAFT_PART_VALUE: u32 = 20;
 

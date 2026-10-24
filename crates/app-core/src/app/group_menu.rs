@@ -331,22 +331,6 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Its own row rather than only the `[e]` detour off the install
-        // screen: that detour opens from an *empty* slot, so a player whose
-        // slots were all full could not reach the screen that makes disks at
-        // all. It hides while `etchable_routines` is empty, which a run that
-        // took no starter routine and has researched nothing genuinely is —
-        // `decompile` is welded in and never counted.
-        label: "Etch a routine disk",
-        target: Mode::RoutineEtch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.etchable_routines().is_empty())
-        },
-    },
-    GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
         locality: Locality::Anywhere,

@@ -43,7 +43,7 @@ pub const STACK_MARKET_PARTS_ONE: u32 = 1;
 pub const STACK_MARKET_PARTS_PARTY: u32 = 3;
 pub const STACK_MARKET_PARTS_EVERYONE: u32 = 6;
 
-/// The odds a market carries an exclusive routine's etched disk, as
+/// The odds a market carries an exclusive routine's parts, as
 /// `BASE + PER_DEPTH * depth`, clamped to `0.0..=1.0`.
 ///
 /// Climbing with depth is what makes the deep Stack the place these are

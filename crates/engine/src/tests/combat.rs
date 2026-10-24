@@ -843,8 +843,7 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
     // through a verb; the label rule it proves is the row's, and a
     // companion carrying one routine meets it every fight.
     clear_routines(&mut game, player);
-    give_disks(&mut game, 1);
-    fit_routine(&mut game, player, "priority_boost");
+    install_routine_for_test(&mut game, player, "priority_boost");
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 

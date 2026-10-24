@@ -48,6 +48,14 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// Blank Routine Disks in cargo — what crafting a part spends.
+    pub fn blank_disks_held(&self) -> u32 {
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(&ItemId::from(ids::ROUTINE_DISK)))
+            .unwrap_or(0)
+    }
+
     /// Crafts one `part` at the Workbench for one Routine Disk and the
     /// part's material (`routine_craft::material`).
     pub fn craft_subroutine(&mut self, part: Subroutine) -> Result<(), String> {
@@ -78,7 +86,7 @@ impl Game {
         }
         self.note_consumed(&disk, 1, ConsumeSource::Craft);
         self.note_consumed(&material, count, ConsumeSource::Craft);
-        self.grant_loot(ItemId::part(&part), 1, LootSource::Etch);
+        self.grant_loot(ItemId::part(&part), 1, LootSource::Craft);
         self.log(format!("You compile a {} part.", part.label()));
         Ok(())
     }

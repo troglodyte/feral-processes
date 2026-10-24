@@ -22,13 +22,11 @@
 //! what makes these markets ephemeral rather than a shop the party can walk
 //! back to.
 //!
-//! **Everything sold here is a disk, never a slot.** A routine row hands
-//! over etched Routine Disks and asks nothing about who they are for; the
-//! player answers that later, through `Game::install_disk`, wherever they
-//! happen to be. That is what makes a trader one of the two doors an
-//! *exclusive* routine can come through — the other being a boss — since an
-//! exclusive routine has no etch path and can only ever exist as a disk
-//! somebody already wrote.
+//! **Everything sold here is parts, never a slot.** A part row hands over
+//! Subroutines and asks nothing about who they are for; the player builds
+//! them into a routine later, at the Workbench. A trader is one of the two
+//! doors an *exclusive* routine's parts can come through — the other being a
+//! boss.
 
 use super::stack::StackPos;
 use crate::abilities::AbilityDb;
@@ -331,11 +329,9 @@ impl Game {
 
     /// Buys row `index` off the market the party is standing on.
     ///
-    /// A routine row hands over etched disks and asks nothing about who they
-    /// are for — that question is deferred to `Game::install_disk`, whenever
-    /// the player gets round to it. Selling disks rather than writing slots
-    /// is what deleted the target picker, the "nobody has a free slot"
-    /// refusal, and the two helpers that decided who a purchase reached.
+    /// A part row hands over parts and asks nothing about what they are for —
+    /// that question is deferred to the Workbench, whenever the player gets
+    /// round to it.
     ///
     /// **Every refusal lands before anything is spent**, which is this
     /// function's whole ordering and the reason it is worth reading:

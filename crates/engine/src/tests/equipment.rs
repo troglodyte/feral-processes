@@ -452,7 +452,7 @@ fn fuse_item_rejects_non_equipment_and_insufficient_stock() {
 }
 
 /// Both refusals sit above the first `take_copies`, so neither store is
-/// touched — the ordering `install_routine` and `use_symlink` also keep.
+/// touched — the ordering `install_built` and `use_symlink` also keep.
 #[test]
 fn a_refused_fusion_spends_nothing_from_either_store() {
     let core = ItemId::from(ids::OVERCLOCK_CORE);

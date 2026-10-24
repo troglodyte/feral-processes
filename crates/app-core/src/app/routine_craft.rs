@@ -11,7 +11,7 @@ use crate::*;
 use feral_processes_engine::routine_craft::Subroutine;
 
 /// Longest routine name the name field takes.
-pub const ROUTINE_NAME_MAX: usize = 24;
+pub use feral_processes_engine::tuning::CRAFT_NAME_MAX as ROUTINE_NAME_MAX;
 
 /// The build page's cursor rows after the six part slots.
 pub const NAME_ROW: usize = 6;

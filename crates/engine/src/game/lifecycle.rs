@@ -1587,7 +1587,7 @@ impl Game {
         // ability a later load's asset set doesn't have (the file was
         // removed, or is now malformed and got skipped with a warning of
         // its own). Left in place, `routine_view` can't resolve the id and
-        // renders the slot `(empty)` — which then makes `install_routine`
+        // renders the slot `(empty)` — which then makes `install_built`
         // refuse "no free slot" for a slot the panel just told the player
         // was free. Dropped here instead, once, at the only point both the
         // save data and the loaded `AbilityDb` are in hand.

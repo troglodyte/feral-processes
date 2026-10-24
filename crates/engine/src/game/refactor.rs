@@ -111,7 +111,7 @@ impl Game {
     /// Spends one `item` to permanently upgrade `target`.
     ///
     /// The item is taken **last**, once every refusal has had its chance —
-    /// the same ordering `install_routine` states about its Routine Disk and
+    /// the same ordering `install_built` states about its part and
     /// `use_symlink` about dropping the locale. Nothing here may consume the
     /// item on a path that then fails.
     ///

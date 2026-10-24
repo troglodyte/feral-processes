@@ -14,7 +14,7 @@ use crate::views::{BuildSlotRow, PartOption};
 /// Why a build cannot go ahead.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlanError {
-    Name(&'static str),
+    Name(String),
     Build(BuildError),
     /// The parts the player does not hold enough of, with how many short.
     Missing(Vec<(Subroutine, u32)>),
@@ -38,12 +38,12 @@ pub fn check_name(name: &str) -> Result<String, PlanError> {
     let name = name.trim();
     let chars = name.chars().count();
     if chars < CRAFT_NAME_MIN {
-        return Err(PlanError::Name("Give the routine a name."));
+        return Err(PlanError::Name("Give the routine a name.".into()));
     }
     if chars > CRAFT_NAME_MAX {
-        return Err(PlanError::Name(
-            "A routine's name is at most 24 characters.",
-        ));
+        return Err(PlanError::Name(format!(
+            "A routine's name is at most {CRAFT_NAME_MAX} characters."
+        )));
     }
     Ok(name.to_string())
 }

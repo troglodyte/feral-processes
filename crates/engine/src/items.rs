@@ -110,9 +110,9 @@ pub mod ids {
     /// nothing spends one now — the id is kept, and the item still ships,
     /// against deciding what it is for instead.
     pub const ACCESS_SHARD: &str = "access_shard";
-    /// Burnt to install a routine the player knows — see
-    /// `Game::install_routine`. Named from Rust for the same reason
-    /// `ACCESS_SHARD` is: what installing costs is engine content, not a
+    /// Burnt to craft a Subroutine part — see
+    /// `Game::craft_subroutine`. Named from Rust for the same reason
+    /// `ACCESS_SHARD` is: what crafting costs is engine content, not a
     /// data-driven requirement. The item, and the whole chain that makes it,
     /// are still ordinary `.ron` files.
     pub const ROUTINE_DISK: &str = "routine_disk";

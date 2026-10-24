@@ -1843,7 +1843,7 @@ fn a_refused_delivery_leaves_cargo_untouched() {
     let id = deliver_fixture(&mut game, 3);
 
     // No Broker in range: every refusal lands before anything leaves cargo,
-    // the ordering `use_symlink` and `install_routine` follow.
+    // the ordering `use_symlink` and `install_built` follow.
     assert_eq!(
         game.deliver_to_contract(&id, None),
         Err(ContractRefusal::NotOffered)

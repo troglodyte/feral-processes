@@ -1395,9 +1395,7 @@ impl AbilityDef {
         (*duration == 0).then_some("effect: Cloak needs a duration of at least one round")
     }
 
-    /// A `charge` on anything but `Damage`, or a charge of fewer than two
-    /// rounds. Refused at load, like the other mismatches: scaling is defined
-    /// only for a damage band, and a one-round charge is not a wind-up.
+    /// A `HealOverTime` with no rounds, or aimed at a non-ally target.
     fn heal_over_time_mismatch(&self) -> Option<&'static str> {
         let AbilityEffect::HealOverTime { rounds, .. } = &self.effect else {
             return None;
@@ -1409,6 +1407,9 @@ impl AbilityDef {
             .then_some("effect: HealOverTime requires an ally-facing target")
     }
 
+    /// A `charge` on anything but `Damage`, or a charge of fewer than two
+    /// rounds. Refused at load, like the other mismatches: scaling is defined
+    /// only for a damage band, and a one-round charge is not a wind-up.
     fn charge_mismatch(&self) -> Option<&'static str> {
         let spec = self.charge?;
         if !matches!(self.effect, AbilityEffect::Damage { .. }) {

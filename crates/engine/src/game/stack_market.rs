@@ -375,7 +375,7 @@ impl Game {
         }
 
         // The last two refusals, and then the goods — the Credits are taken
-        // *after*, which is `install_routine`'s ordering and for its reason:
+        // *after*, which is `install_built`'s ordering and for its reason:
         // nothing may be spent on a path that can still fail. Everything
         // below the two `?`s is infallible, so there is no state in which
         // the player has paid and holds nothing, and none in which they hold

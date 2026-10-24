@@ -3207,7 +3207,7 @@ impl Game {
     ///
     /// Every refusal runs **before** anything is pushed — the same ordering
     /// argument `use_symlink` makes about `clear_stack` and
-    /// `install_routine` makes about the disk. A refused order leaves the
+    /// `install_built` makes about the part. A refused order leaves the
     /// queue exactly as it was.
     pub fn queue_work_order(&mut self, order: WorkOrder) -> Result<(), String> {
         if order.qty == 0 {

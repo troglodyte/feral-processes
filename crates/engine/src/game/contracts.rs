@@ -1309,7 +1309,7 @@ impl Game {
     /// Takes a contract off the board in front of the player.
     ///
     /// Every refusal is checked before anything is written, the ordering
-    /// `use_symlink` and `install_routine` follow — a refused acceptance must
+    /// `use_symlink` and `install_built` follow — a refused acceptance must
     /// leave the run exactly as it found it.
     pub fn accept_contract(
         &mut self,

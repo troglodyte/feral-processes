@@ -48,6 +48,7 @@ pub mod resources;
 pub mod rock;
 pub mod rooms;
 pub mod routes;
+pub mod routine_craft;
 pub mod routine_tree;
 pub mod save;
 pub mod score;

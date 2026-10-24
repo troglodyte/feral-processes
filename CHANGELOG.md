@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.1
+
+**The Build routine page lists only the parts you have researched.** Before, a slot's list offered every part that fit, including ones you could not yet make. Now a new run's Core list holds just Heal v1.0, and more appear as you research them; a part you hold but have not researched stays in your pack and is not offered until you do. Saves are unaffected.
+
 ## 0.20.0
 
 **Saves from earlier versions no longer load.** Routines are now built from parts, so the routines an older save knew and the disks it etched have nowhere to go. Start a new game.

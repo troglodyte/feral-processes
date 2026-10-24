@@ -376,7 +376,6 @@ pub fn compile(routine: &CraftedRoutine) -> AbilityDef {
         wild_weight: 0,
         research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: s.range.is_some(),
         boss_drop: None,
         triggers: None,

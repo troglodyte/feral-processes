@@ -1300,9 +1300,9 @@ pub enum ManifestTab {
     Score,
 }
 
-/// Which of the character-creation wizard's nine steps is showing. One
+/// Which of the character-creation wizard's steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
-/// being nine modes — see that variant.
+/// being one mode per step — see that variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
@@ -1341,7 +1341,7 @@ pub enum CreationStep {
     Points,
     /// The first perks, bought out of `tuning::CREATION_PERK_POINTS`.
     ///
-    /// **Before Routine, and the one budget that is not a gate.** The Kit
+    /// **The one budget that is not a gate.** The Kit
     /// and Points steps refuse to be left with anything affordable
     /// unspent; this one does not, because a Perk Point is the only one of
     /// the three allowances that survives the door — it is the same point
@@ -1350,7 +1350,6 @@ pub enum CreationStep {
     /// rides `CharacterChoice::perk_points` rather than a constant, which
     /// is what keeps `Game::new`'s default character on zero.
     Perks,
-    Routine,
     /// The character read back whole, and the last screen carrying a
     /// decision — Enter accepts it and `[R]` rerolls everything the player
     /// has not made by hand, which is what makes this the step the roll
@@ -1377,7 +1376,7 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 11] = [
+    pub const ALL: [CreationStep; 10] = [
         CreationStep::Difficulty,
         CreationStep::Profile,
         CreationStep::Class,
@@ -1386,7 +1385,6 @@ impl CreationStep {
         CreationStep::Colour,
         CreationStep::Points,
         CreationStep::Perks,
-        CreationStep::Routine,
         CreationStep::Summary,
         CreationStep::Name,
     ];
@@ -1444,7 +1442,6 @@ impl CreationStep {
             CreationStep::Colour => "Colour",
             CreationStep::Points => "Points",
             CreationStep::Perks => "Perks",
-            CreationStep::Routine => "Starter routine",
             CreationStep::Name => "Name",
             CreationStep::Summary => "Summary",
         }
@@ -1508,7 +1505,6 @@ pub enum CreationRow {
         row: feral_processes_engine::StartingItemRow,
         taken: u32,
     },
-    Routine(feral_processes_engine::StarterRoutineRow),
     /// One perk on the Perks step. `taken` is how many levels the basket
     /// holds of it — the `Item` row's shape, in Perk Points.
     Perk {

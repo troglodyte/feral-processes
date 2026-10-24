@@ -2131,8 +2131,7 @@ mod tests {
                     app.handle_key(feral_processes_app_core::GameKey::Enter);
                 }
                 feral_processes_app_core::CreationStep::Icon
-                | feral_processes_app_core::CreationStep::Colour
-                | feral_processes_app_core::CreationStep::Routine => {
+                | feral_processes_app_core::CreationStep::Colour => {
                     app.handle_key(feral_processes_app_core::GameKey::Char('n'))
                 }
                 feral_processes_app_core::CreationStep::Perks => {

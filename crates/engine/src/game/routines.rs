@@ -1,7 +1,6 @@
 //! Installing, removing and inspecting routines — the abilities that occupy
 //! a party member's slots. Extraction lives here too.
 
-use crate::classes::PlayerClass;
 use crate::components::Routines;
 use crate::*;
 
@@ -86,27 +85,6 @@ impl Game {
     /// the creation wizard prices its routine rows with no `Game` to ask.
     fn routine_effect_label(&self, def: &AbilityDef, level: u32, affinity: f32) -> String {
         crate::abilities::effect_label(def, level, affinity, self.world.resource::<StatusDb>())
-    }
-
-    /// The starter pool for the creation wizard's Routine step — every
-    /// `AbilityDef::starter` ability, id-sorted so the picker's numbering is
-    /// stable, each priced at level 1 through `routine_effect_label` (the
-    /// same formatter `routine_detail` uses) and `abilities::
-    /// routine_power_cost` — the two real doors, not a copy of either.
-    ///
-    /// **`class` prices each row through `Game::player_affinity_for`**,
-    /// `ability_affinity`'s player-arm formula taken as an argument rather
-    /// than read off `PlayerIdentity` — the wizard is pricing a class the
-    /// player has only picked, not yet written to the entity, so
-    /// `ability_affinity` itself (which resolves the entity's own class)
-    /// can't be called here. Every row still reads through the one clamped
-    /// class-plus-perk formula either path uses.
-    pub fn starter_routine_rows(&self, class: Option<PlayerClass>) -> Vec<StarterRoutineRow> {
-        crate::abilities::starter_rows(
-            self.world.resource::<AbilityDb>(),
-            self.world.resource::<StatusDb>(),
-            |kind| self.player_affinity_for(class, kind),
-        )
     }
 
     /// Whether `entity` is a program the player controls — `Tamed`, or the

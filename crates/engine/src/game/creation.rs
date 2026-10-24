@@ -8,11 +8,10 @@
 //! Kit and routine are one-line delegations to `classes::apply_kit` and
 //! `abilities::install_starter`. Those two own their own bodies (Phase 2A
 //! and 2B of the character-creation feature); what makes them load-bearing
-//! *here* is that `CharacterChoice::default()` — no class, no routine — has
+//! *here* is that `CharacterChoice::default()` — no class — has
 //! to keep producing today's player, which is what roughly 1,600 existing
 //! `Game::new` call sites construct.
 
-use crate::abilities::AbilityId;
 use crate::attributes::AttributeId;
 use crate::classes::PlayerClass;
 use crate::items::ItemId;
@@ -51,7 +50,6 @@ pub struct CharacterChoice {
     /// pool points spent: `cost()` prices them, so a per-attribute rate can
     /// return without the stored spend changing meaning.
     pub stats: BTreeMap<AttributeId, u32>,
-    pub routine: Option<AbilityId>,
     /// The starting kit picked off `items_db::creation_shelf`, priced
     /// against `tuning::CREATION_CREDITS`.
     ///
@@ -99,7 +97,7 @@ pub fn creation_credits(bonus: u32) -> u32 {
 }
 
 /// Today's player exactly — no class, the `@` glyph wearing its
-/// `DEFAULT_PLAYER_SPRITE`, no name, no starter routine, every point
+/// `DEFAULT_PLAYER_SPRITE`, no name, every point
 /// unspent. This is what every existing test and every one of the ~1,600
 /// `Game::new` call sites gets, via `Game::new`'s delegation to
 /// `Game::new_with(.., &CharacterChoice::default())`.
@@ -113,7 +111,6 @@ impl Default for CharacterChoice {
             colour: None,
             icon: None,
             stats: BTreeMap::new(),
-            routine: None,
             items: Vec::new(),
             perks: Vec::new(),
             perk_points: 0,
@@ -171,10 +168,7 @@ impl Game {
         self.apply_creation_identity(choice);
         self.apply_creation_stats(choice);
         self.apply_creation_kit(choice);
-        match &choice.routine {
-            Some(_) => crate::abilities::install_starter(self, choice.routine.as_ref()),
-            None => self.grant_starting_routine(),
-        }
+        self.grant_starting_routine();
         self.apply_creation_perks(choice);
     }
 
@@ -362,22 +356,19 @@ fn starting_attributes(
 /// wider: a screen reachable with no run in progress owns the catalogue it
 /// draws from.
 ///
-/// Nothing here derives anything itself. `class_rows` and `starter_rows`
-/// are calls to `classes::class_rows` and `abilities::starter_rows`, the
-/// same two functions `Game::class_rows` and `Game::starter_routine_rows`
-/// call — a preview that disagreed with what the run actually granted would
-/// be worse than no preview.
+/// Nothing here derives anything itself. `class_rows` is a call to
+/// `classes::class_rows`, the same function `Game::class_rows` calls — a
+/// preview that disagreed with what the run actually granted would be worse
+/// than no preview.
 ///
-/// `Default` is the empty catalogue — no classes, no items, no abilities —
+/// `Default` is the empty catalogue — no classes, no items —
 /// which is what a frontend gets if the asset tree will not load at all.
-/// The wizard then offers no class and no starter routine, which is the
+/// The wizard then offers no class, which is the
 /// pre-creation game, rather than refusing to open.
 #[derive(Default)]
 pub struct CreationCatalogue {
     classes: crate::classes::ClassDb,
     items: crate::items_db::ItemDb,
-    abilities: crate::abilities::AbilityDb,
-    statuses: crate::statuses::StatusDb,
     perks: crate::perks::PerkDb,
     attributes: crate::attributes::AttributeDb,
 }
@@ -388,12 +379,10 @@ impl CreationCatalogue {
     /// same files a moment later and replays every one of them into the log,
     /// so reporting here would double each line.
     ///
-    /// Etched disks are deliberately not synthesised — `ItemDb` is read here
-    /// for kit *names* only, and every kit names an authored item.
+    /// Parts are deliberately not synthesised — `ItemDb` is read here for
+    /// kit *names* only, and every kit names an authored item.
     pub fn load(assets_dir: &std::path::Path) -> std::io::Result<Self> {
         let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets_dir.join("abilities"))?;
-        let (statuses, _) = crate::statuses::StatusDb::load_dir(&assets_dir.join("statuses"))?;
-        let (statuses, _) = statuses.with_builtins();
         let (items, _) = crate::items_db::ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
         // Absent-is-silent, `ClassDb`'s own contract: an empty catalogue
         // leaves the class step with no rows, which is the pre-class game.
@@ -404,8 +393,6 @@ impl CreationCatalogue {
         Ok(Self {
             classes,
             items,
-            abilities,
-            statuses,
             perks,
             attributes,
         })
@@ -459,18 +446,5 @@ impl CreationCatalogue {
     /// a frontend never has to hold a `PerkDb` of its own.
     pub fn perk_cost(&self, choice: &CharacterChoice) -> Option<u32> {
         choice.perk_cost(&self.perks)
-    }
-
-    /// The starter pool, priced through `class`'s spread —
-    /// `Game::starter_routine_rows`' own derivation, with no perk term
-    /// because a player being created has no unlocked perks yet.
-    pub fn starter_rows(&self, class: Option<PlayerClass>) -> Vec<crate::views::StarterRoutineRow> {
-        crate::abilities::starter_rows(&self.abilities, &self.statuses, |kind| {
-            crate::classes::affinity_with_perk(
-                crate::classes::class_affinity(&self.classes, class, kind),
-                None,
-                kind,
-            )
-        })
     }
 }

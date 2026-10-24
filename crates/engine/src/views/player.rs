@@ -366,20 +366,6 @@ pub struct StartingPerkRow {
     pub cost: u32,
 }
 
-/// One row of the creation wizard's Routine step — an `AbilityDef::starter`
-/// candidate, priced for the class the player has picked. See
-/// `Game::starter_routine_rows`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StarterRoutineRow {
-    pub id: crate::abilities::AbilityId,
-    pub name: String,
-    pub description: String,
-    /// What it does *for this class* — the magnitude with the class
-    /// affinity already applied. This is the field the step exists for.
-    pub effect: String,
-    pub power_cost: f32,
-}
-
 /// The routine-armed field buff a pending run would replace on one target.
 ///
 /// `Game::arm_field_buff` displaces a running `Routine` buff of the same

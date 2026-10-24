@@ -259,12 +259,6 @@ fn row_line(row: &CreationRow) -> String {
             };
             format!("{:<24} {:>2}p   {held}", row.name, row.cost)
         }
-        CreationRow::Routine(routine) => {
-            format!(
-                "{} - {} ({:.0} Power)",
-                routine.name, routine.effect, routine.power_cost
-            )
-        }
         CreationRow::Look { label, glyph, .. } => format!("{label:<12} {glyph}"),
         CreationRow::Name { typed } => format!("Name: {typed}_"),
         CreationRow::Summary { label, value } => format!("{label:<12} {value}"),
@@ -328,7 +322,6 @@ fn plain_footer(step: CreationStep) -> &'static str {
              Enter: next   Esc: back"
         }
         CreationStep::Colour => "Up/Down picks; [n] or Right skips   Enter: next   Esc: back",
-        CreationStep::Routine => "Up/Down picks; [n] or Right takes none   Enter: next   Esc: back",
         // The last two steps, and the only place the wizard says what
         // *finishes* it — the summary is accepted, the name starts the run.
         CreationStep::Summary => "Left/Right pages   Enter: next   Esc: back",
@@ -597,7 +590,7 @@ pub(in crate::render) mod tests {
             CreationStep::Icon => {
                 draw_an_icon(app);
             }
-            CreationStep::Colour | CreationStep::Routine => app.handle_key(GameKey::Char('n')),
+            CreationStep::Colour => app.handle_key(GameKey::Char('n')),
             CreationStep::Summary | CreationStep::Name => app.handle_key(GameKey::Enter),
         }
     }
@@ -1033,7 +1026,6 @@ pub(in crate::render) mod tests {
         assert_eq!(app.creation_choice().colour, Some(3));
         walk_past(&mut app, CreationStep::Points);
         walk_past(&mut app, CreationStep::Perks);
-        walk_past(&mut app, CreationStep::Routine);
         assert_eq!(app.creation_step(), CreationStep::Summary);
 
         let m = ui_metrics(900.0);

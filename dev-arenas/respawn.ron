@@ -1,11 +1,6 @@
-// Respawn: a Reanimate-carrying player against ordinary wild programs.
+// Respawn: ordinary wild programs, any of which may roll Respawn.
 //
-// The player's own cast never fires here — `model: Tactical` in the bin
-// drives every party body through `PartyTurns::SwingOnly` (see the
-// README's "What the `arena` bin does not measure"), so `character.routine`
-// only proves the fixture stages a Respawn-equipped player without an
-// error. The mechanism this file actually exercises is the **hostile**
-// side: `respawn.ron`'s `wild_weight: 4` means any wild spawn here may roll
+// The mechanism this file exercises is the **hostile** side: `respawn.ron`'s `wild_weight: 4` means any wild spawn here may roll
 // it onto its own `Routines`, and a wild carrier *is* driven by the same
 // `tactical/ai.rs` a played fight uses, routine invocations included. A
 // pair over 50 reps gives enough spawns and enough falls (bodies killed and
@@ -17,7 +12,6 @@
 // finishes with no panic, not a particular win rate.
 (
     player: Fresh(level: 6, zone: 2),
-    character: (routine: Some("respawn")),
     opponents: [(species: "sub_process", count: 2)],
     model: Tactical,
     approach: Some(East),

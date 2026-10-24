@@ -142,13 +142,12 @@ therefore an **error** on a save or template rather than being ignored —
 character: (
     class: Some(Medic),                 // one of the eight PlayerClass variants
     stats: {"parity": 9},               // points bought per attribute id
-    routine: Some("checksum_repair"),   // the starter routine
 ),
 ```
 
-The three character-creation answers that reach a fight. `Fresh` only — a
+The character-creation answers that reach a fight. `Fresh` only — a
 save or a template already carries its own. Every field defaults, so
-omitting `character` entirely is the unaligned, unspent, no-starter player
+omitting `character` entirely is the unaligned, unspent player
 every scenario written before this field described, and still describes.
 
 `stats` is **points bought** per attribute id, never pool points spent:
@@ -176,7 +175,7 @@ nothing else. Below `EXTRA_ATTACK_LEVEL` the old claim still holds and every
 class reports the same floor — which is why the seven `player-class-*.ron`
 files, all at level 5, still do.
 
-`routine` remains invisible to the bin. `stats` lands in `Stats` and both
+`stats` lands in `Stats` and both
 halves see it.
 
 The look — glyph, colour, sprite, name — is deliberately absent. It is what
@@ -478,12 +477,8 @@ format and overwrites a file of that name deliberately.
   row for the player's own kit alone, or swap the species, to reproduce
   `docs/measurements/2026-09-18-emulation-edge.md`'s sweep — the fitting
   scenario for `tuning::EMULATION_EDGE`.
-- **`respawn.ron`** — a Respawn-equipped player against a pair of ordinary
-  wild programs on a battle map. The player's own cast never fires in the
-  bin (`model: Tactical` swings only, per "What the `arena` bin does not
-  measure" below); `character.routine` here proves the fixture stages one
-  without erroring. What the file actually exercises is the **hostile**
-  side: `respawn.ron`'s `wild_weight: 4` lets any wild spawn roll it onto
+- **`respawn.ron`** — a pair of ordinary wild programs on a battle map.
+  What the file exercises is the **hostile** side: `respawn.ron`'s `wild_weight: 4` lets any wild spawn roll it onto
   its own kit, and a wild carrier invokes routines the same as any other
   hostile AI turn — so 50 reps' worth of falls and spawns is what checks
   the mechanism runs end to end without a seed-specific setup. Kept as a

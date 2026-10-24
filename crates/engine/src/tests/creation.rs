@@ -436,10 +436,7 @@ fn the_default_choice_carries_no_icon() {
 /// **The anti-drift gate for the wizard's catalogue.** `CreationCatalogue`
 /// exists because the wizard runs before any `Game` does, and the failure
 /// it opens is a preview that disagrees with the run it is previewing. Both
-/// halves are asserted against the real `assets/` — the class rows *and*
-/// the class-priced starter rows — for every shipped class, because the
-/// pricing is the half a second copy of the formula would silently get
-/// wrong.
+/// halves are asserted against the real `assets/` — the class rows.
 #[test]
 fn the_creation_catalogue_agrees_with_the_game() {
     let catalogue = CreationCatalogue::load(&test_assets_dir()).unwrap();
@@ -456,14 +453,6 @@ fn the_creation_catalogue_agrees_with_the_game() {
         assert_eq!(a.class, b.class);
         assert_eq!(a.name, b.name);
         assert_eq!(a.trade, b.trade, "the trade summary drifted");
-    }
-
-    for class in PlayerClass::ALL.iter().copied().map(Some).chain([None]) {
-        assert_eq!(
-            game.starter_routine_rows(class),
-            catalogue.starter_rows(class),
-            "the starter pool priced differently for {class:?}"
-        );
     }
 }
 

@@ -35,7 +35,6 @@ fn hot_def() -> AbilityDef {
         wild_weight: 0,
         research_zone: 0,
         exclusive: false,
-        starter: false,
         ranged: false,
         boss_drop: None,
         triggers: None,

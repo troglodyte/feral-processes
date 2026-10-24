@@ -16,6 +16,7 @@ use crate::routine_tree::{capacity_node_id, part_node_id};
 use crate::tuning::{
     CRAFT_ID_PREFIX, CRAFT_PART_CAP_MAX, CRAFT_PART_CAP_START, CRAFT_STARTER_NAME,
 };
+use crate::views::{BuildPreview, BuildSlotRow, BuiltRoutineRow, PartOption, SubroutineRow};
 use crate::*;
 
 impl Game {
@@ -219,6 +220,98 @@ impl Game {
         let id = self.mint_built(CRAFT_STARTER_NAME, &[heal]);
         let player = self.player_entity();
         self.write_routine(player, &id);
+    }
+
+    /// The build page's rows for the build `parts` describes.
+    pub fn build_rows(&self, parts: &[Subroutine]) -> Vec<BuildSlotRow> {
+        routine_craft::build_rows(parts)
+    }
+
+    /// The list `slot`'s row opens: the parts that fit the build, each with
+    /// how many are held.
+    pub fn build_part_options(&self, slot: &str, parts: &[Subroutine]) -> Vec<PartOption> {
+        routine_craft::part_options(slot, parts, |p| self.parts_held(p))
+    }
+
+    /// The build page's preview: exactly what `build_routine` would spend
+    /// and refuse for this name and these parts.
+    pub fn build_preview(&self, name: &str, parts: &[Subroutine]) -> BuildPreview {
+        let cap = self.part_cap();
+        // `compile` is only defined for a build that fits its Core, so a
+        // half-made one previews no numbers rather than a wrong one.
+        let (description, power_cost, cooldown) =
+            if routine_craft::validate_build(parts, CRAFT_PART_CAP_MAX).is_ok() {
+                let def = routine_craft::compile(&CraftedRoutine {
+                    id: String::new(),
+                    name: name.to_string(),
+                    parts: parts.to_vec(),
+                });
+                (
+                    def.description.clone(),
+                    crate::abilities::routine_power_cost(&def),
+                    def.cooldown,
+                )
+            } else {
+                (String::new(), 0.0, 0)
+            };
+        let label = |list: Vec<(Subroutine, u32)>| -> Vec<(String, u32)> {
+            list.into_iter().map(|(p, n)| (p.label(), n)).collect()
+        };
+        let blocked = routine_craft::plan_build(name, parts, cap, |p| self.parts_held(p))
+            .err()
+            .map(|e| e.to_string())
+            .or_else(|| self.require_workbench_free().err());
+        BuildPreview {
+            description,
+            power_cost,
+            cooldown,
+            parts_used: label(routine_craft::parts_used(parts)),
+            parts_missing: label(routine_craft::parts_missing(parts, |p| self.parts_held(p))),
+            part_count: parts.len(),
+            part_cap: cap,
+            blocked,
+        }
+    }
+
+    /// The Subroutines page: every part with its slot, how many are held,
+    /// what a craft costs and whether research has unlocked it.
+    pub fn subroutine_rows(&self) -> Vec<SubroutineRow> {
+        Subroutine::all()
+            .into_iter()
+            .map(|part| {
+                let (material, material_count) = routine_craft::material(&part);
+                let known = self.subroutine_known(&part);
+                SubroutineRow {
+                    label: part.label(),
+                    slot: part.slot(),
+                    held: self.parts_held(&part),
+                    material: self.item_name(&material).to_string(),
+                    material_count,
+                    known,
+                    locked: (!known).then_some("locked · research to unlock"),
+                    part,
+                }
+            })
+            .collect()
+    }
+
+    /// The Built routines page: routines waiting for a slot.
+    pub fn built_routine_rows(&self) -> Vec<BuiltRoutineRow> {
+        let crafted = self.world.resource::<CraftedRoutines>();
+        let db = self.world.resource::<AbilityDb>();
+        crafted
+            .unslotted
+            .iter()
+            .filter_map(|id| {
+                let record = crafted.built.iter().find(|r| r.id == *id)?;
+                Some(BuiltRoutineRow {
+                    id: id.clone(),
+                    name: record.name.clone(),
+                    description: db.get(id)?.description.clone(),
+                    parts: record.parts.iter().map(Subroutine::label).collect(),
+                })
+            })
+            .collect()
     }
 
     /// The Workbench pages and the verbs behind them share one gate: nothing

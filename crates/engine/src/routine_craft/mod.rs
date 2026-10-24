@@ -20,7 +20,10 @@ pub use catalogue::{
 pub use compile::compile;
 pub use decompose::decompose;
 pub use describe::describe;
-pub use plan::{PlanError, check_name, parts_missing, parts_used, plan_build};
+pub use plan::{
+    BUILD_SLOTS, PlanError, build_rows, check_name, part_options, parts_missing, parts_used,
+    plan_build,
+};
 
 #[cfg(test)]
 mod tests;

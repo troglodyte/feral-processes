@@ -652,3 +652,172 @@ fn an_uninstalled_routine_is_gone_from_the_save_and_the_crafted_tier() {
         "the counter still only grows across a load"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Task 9: the Workbench pages
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_build_rows_name_why_a_core_takes_no_part_in_a_slot() {
+    let game = bench_game(70_040);
+
+    let rows = game.build_rows(&[]);
+    assert_eq!(
+        rows.iter().map(|r| r.slot).collect::<Vec<_>>(),
+        ["Core", "Range", "Area", "Timing", "Damage type", "Status"]
+    );
+    assert!(rows[0].unavailable.is_none());
+    assert!(rows[1..].iter().all(|r| r.unavailable.is_some()));
+
+    let heal_rows = game.build_rows(&[heal(), Subroutine::Area(AreaKind::Group)]);
+    assert_eq!(heal_rows[0].chosen, vec![heal()]);
+    assert_eq!(heal_rows[2].chosen, vec![Subroutine::Area(AreaKind::Group)]);
+    assert!(heal_rows[1].unavailable.is_none(), "Heal takes a Range");
+    assert!(heal_rows[3].unavailable.is_none(), "and a Trickle");
+    assert_eq!(
+        heal_rows[4].unavailable,
+        Some("only Damage and Drain deal a type"),
+        "the reason replaces the part"
+    );
+    assert!(heal_rows[5].unavailable.is_some());
+
+    let tp = game.build_rows(&[Subroutine::Core(Core::Teleport, Version::V1)]);
+    assert!(tp[1..].iter().all(|r| r.unavailable.is_some()));
+}
+
+#[test]
+fn a_slots_list_offers_only_what_fits_with_the_count_held() {
+    let mut game = bench_game(70_041);
+    let group = Subroutine::Area(AreaKind::Group);
+    stock(&mut game, &group, 3);
+
+    let cores = game.build_part_options("Core", &[]);
+    assert_eq!(
+        cores.len(),
+        Subroutine::all()
+            .iter()
+            .filter(|p| matches!(p, Subroutine::Core(..)))
+            .count()
+    );
+    assert!(
+        game.build_part_options("Area", &[]).is_empty(),
+        "no Core, no list"
+    );
+
+    let areas = game.build_part_options("Area", &[heal()]);
+    assert_eq!(
+        areas.iter().map(|o| o.part).collect::<Vec<_>>(),
+        vec![group],
+        "an ally Core has a Group and never an Everyone"
+    );
+    assert_eq!(areas[0].held, 3);
+
+    let types = game.build_part_options("Damage type", &[damage()]);
+    assert_eq!(types.len(), 5);
+    assert!(types.iter().all(|o| o.held == 0));
+    assert!(game.build_part_options("Damage type", &[heal()]).is_empty());
+}
+
+#[test]
+fn the_preview_quotes_what_the_build_will_run_as() {
+    let mut game = bench_game(70_042);
+    let parts = [heal(), Subroutine::Range(RangeKind::Near)];
+    let empty = game.build_preview("Mender", &[]);
+    assert_eq!(empty.description, "");
+    assert!(empty.blocked.is_some());
+
+    let missing = game.build_preview("Mender", &parts);
+    assert_eq!(missing.parts_missing.len(), 2, "both parts are short");
+    assert!(missing.blocked.as_ref().unwrap().contains("missing"));
+
+    for part in &parts {
+        stock(&mut game, part, 1);
+    }
+    let preview = game.build_preview("Mender", &parts);
+    assert!(preview.parts_missing.is_empty());
+    assert_eq!(preview.blocked, None);
+    assert_eq!((preview.part_count, preview.part_cap), (2, 2));
+    assert_eq!(preview.parts_used.len(), 2);
+
+    let id = game.build_routine("Mender", &parts).unwrap();
+    let def = game.world.resource::<AbilityDb>().get(&id).unwrap().clone();
+    assert_eq!(preview.description, def.description);
+    assert_eq!(preview.cooldown, def.cooldown);
+    assert_eq!(
+        preview.power_cost,
+        crate::abilities::routine_power_cost(&def)
+    );
+    assert!(!preview.description.is_empty());
+}
+
+#[test]
+fn the_preview_says_when_the_cap_or_the_bench_blocks_the_build() {
+    let mut game = Game::new(70_043, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let three = [
+        heal(),
+        Subroutine::Range(RangeKind::Near),
+        Subroutine::Area(AreaKind::Group),
+    ];
+    for part in &three {
+        stock(&mut game, part, 1);
+    }
+    let blocked = game.build_preview("Big", &three).blocked.unwrap();
+    assert!(blocked.contains("at most 2"), "{blocked}");
+
+    let two = &three[..2];
+    let blocked = game.build_preview("Fine", two).blocked.unwrap();
+    assert!(blocked.contains("Workbench"), "{blocked}");
+}
+
+#[test]
+fn the_subroutines_list_marks_the_unresearched_and_counts_what_is_held() {
+    let mut game = bench_game(70_044);
+    stock(&mut game, &damage(), 2);
+    let rows = game.subroutine_rows();
+    assert_eq!(rows.len(), Subroutine::all().len());
+
+    let row = |part: Subroutine| rows.iter().find(|r| r.part == part).unwrap().clone();
+    let healing = row(heal());
+    assert!(healing.known && healing.locked.is_none());
+    assert_eq!(healing.slot, "Core");
+
+    let dmg = row(damage());
+    assert!(!dmg.known);
+    assert_eq!(dmg.locked, Some("locked · research to unlock"));
+    assert_eq!(dmg.held, 2);
+    let (material, count) = crate::routine_craft::material(&damage());
+    assert_eq!(dmg.material, game.item_name(&material));
+    assert_eq!(dmg.material_count, count);
+
+    know(&mut game, &damage());
+    let dmg = game
+        .subroutine_rows()
+        .into_iter()
+        .find(|r| r.part == damage())
+        .unwrap();
+    assert!(dmg.known && dmg.locked.is_none());
+}
+
+#[test]
+fn the_built_page_lists_only_routines_not_in_a_slot() {
+    let mut game = bench_game(70_045);
+    let player = game.player_entity();
+    make_room_for_routine(&mut game, player);
+    let a = build(&mut game, "Mender", &[heal()]);
+    let b = build(&mut game, "Bite", &[damage()]);
+
+    let ids = |game: &Game| -> Vec<String> {
+        game.built_routine_rows()
+            .into_iter()
+            .map(|r| r.id)
+            .collect()
+    };
+    assert_eq!(ids(&game), vec![a.clone(), b.clone()]);
+    let first = &game.built_routine_rows()[0];
+    assert_eq!(first.name, "Mender");
+    assert_eq!(first.parts, vec![heal().label()]);
+    assert!(!first.description.is_empty());
+
+    game.install_built(player, &a).unwrap();
+    assert_eq!(ids(&game), vec![b]);
+}

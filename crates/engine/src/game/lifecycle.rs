@@ -590,17 +590,10 @@ impl Game {
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
         world.insert_resource(crate::resources::ActiveResearch::default());
-        // Empty, decompile included. It used to be seeded here so that
-        // popping decompile out of its starting slot could be undone by
-        // etching a fresh disk — but `Game::routine_is_permanent` closed the
-        // pop-out, and the entry's only remaining effect would be to offer
-        // the run's one unduplicable routine on the etch picker.
-        world.init_resource::<KnownRoutines>();
         // Empty, not the starter tool: the starter is granted straight into
         // the slot below, and knowledge is not what put it there — see
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
-        world.init_resource::<crate::resources::DiscoveredRoutines>();
         world.init_resource::<crate::resources::CraftedRoutines>();
         world.init_resource::<crate::resources::DiscoveredResearch>();
         world.insert_resource(BuybackLedger::default());
@@ -1628,11 +1621,7 @@ impl Game {
         world.insert_resource(crate::resources::DiscoveredResearch(
             data.discovered_research.into_iter().collect(),
         ));
-        world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
-        world.insert_resource(crate::resources::DiscoveredRoutines(
-            data.discovered_routines.into_iter().collect(),
-        ));
         world.insert_resource(crate::resources::CraftedRoutines {
             built: data.crafted_routines,
             unslotted: data.unslotted_routines,
@@ -3518,13 +3507,6 @@ impl Game {
                 .world
                 .resource::<crate::resources::ActiveResearch>()
                 .study,
-            known_routines: self
-                .world
-                .resource::<KnownRoutines>()
-                .0
-                .iter()
-                .cloned()
-                .collect(),
             known_tools: self
                 .world
                 .resource::<KnownTools>()
@@ -3535,13 +3517,6 @@ impl Game {
             emulation_images: self
                 .world
                 .resource::<crate::resources::EmulationImages>()
-                .0
-                .iter()
-                .cloned()
-                .collect(),
-            discovered_routines: self
-                .world
-                .resource::<crate::resources::DiscoveredRoutines>()
                 .0
                 .iter()
                 .cloned()
@@ -4009,13 +3984,8 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // After `affixes`: every research-only affix is a node in the Affixes
     // tree, derived from `AffixDb` (`affix_tree::synthesise_nodes`). Nothing
     // between the old position and this one reads research.
-    let (research, research_warnings) = ResearchDb::load_dir(
-        &assets_dir.join("research"),
-        &structures,
-        &abilities,
-        &tools,
-        &affixes,
-    )?;
+    let (research, research_warnings) =
+        ResearchDb::load_dir(&assets_dir.join("research"), &structures, &tools, &affixes)?;
     warnings.extend(research_warnings);
     warnings.extend(structures.unknown_research_references(&items, &research));
     // A file, not a directory, and an absent one is silent — see

@@ -336,18 +336,11 @@ impl Game {
         Ok(())
     }
 
-    /// Whether `def` is researched. For a **routine** node (`teaches` is
-    /// `Some`) that means its ability is in `KnownRoutines`; for every other
-    /// node it means the node's own id is in `Research`. The one door
-    /// through which "researched" and "known" agree — see spec §1
-    /// "Researched means known" — so `is_researched`,
-    /// `missing_prereqs` and `select_research`'s already-researched
-    /// refusal cannot answer a routine node from two different stores.
+    /// Whether `def` is researched: its id is in `Research`. The one door
+    /// `is_researched`, `missing_prereqs` and `select_research`'s
+    /// already-researched refusal answer through.
     pub fn node_researched(&self, def: &ResearchDef) -> bool {
-        match &def.teaches {
-            Some(ability) => self.knows_routine(ability),
-            None => self.world.resource::<Research>().0.contains(&def.id),
-        }
+        self.world.resource::<Research>().0.contains(&def.id)
     }
 
     pub fn is_researched(&self, id: &str) -> bool {
@@ -357,34 +350,13 @@ impl Game {
         }
     }
 
-    /// Whether prerequisite `id` is satisfied — `missing_prereqs`'s one test
-    /// per entry. A routine prerequisite is satisfied by its own ability
-    /// being known *or* by any higher version at the same scope in its
-    /// family already being known (`routine_tree::rung_satisfied`), so a
-    /// starter routine at Single v2.0 does not strand a Party v1.0 rung
-    /// waiting on a Single v1.0 nobody needs. Every other node reads
-    /// `is_researched` alone.
-    fn prereq_satisfied(&self, id: &str) -> bool {
-        let Some(def) = self.world.resource::<ResearchDb>().get(id) else {
-            return false;
-        };
-        match &def.teaches {
-            Some(ability) => {
-                let abilities = self.world.resource::<AbilityDb>();
-                let known = &self.world.resource::<KnownRoutines>().0;
-                crate::routine_tree::rung_satisfied(abilities, known, ability)
-            }
-            None => self.node_researched(def),
-        }
-    }
-
     /// Display names of `def`'s prerequisites that aren't unlocked yet, in
     /// the order the file lists them.
     pub(crate) fn missing_prereqs(&self, def: &ResearchDef) -> Vec<String> {
         let db = self.world.resource::<ResearchDb>();
         def.requires
             .iter()
-            .filter(|id| !self.prereq_satisfied(id))
+            .filter(|id| !self.is_researched(id))
             .map(|id| {
                 db.get(id)
                     .map(|d| d.name.clone())
@@ -476,36 +448,11 @@ impl Game {
             .unwrap_or_else(|| "the routine tree".to_string())
     }
 
-    /// Whether `family`'s ability is visible in the routine tree *before*
-    /// accounting for whether it is already known — `listed_research`'s own
-    /// visibility half, kept separate so an already-known routine (see that
-    /// function) can bypass it entirely rather than needing to satisfy it
-    /// too.
-    ///
-    /// A **discoverable** family is invisible until discovered, and then
-    /// only its satisfied-prerequisite rungs show — the zone gate never
-    /// hides one, so a family found before its next rung's sector reads as
-    /// `Locked { min_zone }` rather than as nothing (spec §2 "Visibility").
-    /// An **always-visible** family has no discovery step to serve that
-    /// role, so its zone gate does the hiding instead: a node above the
-    /// party's zone is absent rather than `Locked`, and only a node the
-    /// party could in principle see gets marked `Locked` for an unmet
-    /// prerequisite, the same as a base node.
+    /// Whether a routine-tree node is visible: the zone gate is its only
+    /// visibility, so a part above the party's zone is absent rather than
+    /// `Locked`.
     fn routine_node_visible(&self, def: &ResearchDef) -> bool {
-        // A part or capacity node (ADR 0029) teaches no authored routine and
-        // has no family to discover: the zone gate is its only visibility.
-        let Some(ability) = def.teaches.as_deref() else {
-            return def.tree == ResearchTree::Routines && self.research_zone_gate(def).is_none();
-        };
-        let Some(ability_def) = self.world.resource::<AbilityDb>().get(ability) else {
-            return false;
-        };
-        let family = crate::routine_tree::family(ability_def);
-        if self.family_is_discoverable(&family) {
-            self.family_discovered(&family) && def.requires.iter().all(|r| self.prereq_satisfied(r))
-        } else {
-            self.research_zone_gate(def).is_none()
-        }
+        def.tree == ResearchTree::Routines && self.research_zone_gate(def).is_none()
     }
 
     /// Whether `def` is reachable at all once the routine tree is open —
@@ -818,8 +765,6 @@ impl Game {
                     conversions: self.research_conversions(def),
                     unlocks: self.research_unlocks(def),
                     recommended: recommended.contains(&def.id),
-                    #[cfg(test)]
-                    teaches: def.teaches.clone(),
                 }
             })
             .collect();
@@ -929,9 +874,8 @@ impl Game {
         }
     }
 
-    /// What completing a node hands over besides the routine `settle_research`
-    /// already wrote into `KnownRoutines` for a `teaches` node: the tools it
-    /// teaches you to forge.
+    /// What completing a node hands over besides its `Research` entry: the
+    /// tools it teaches you to forge.
     ///
     /// Extracted rather than copied into the project path, because a doc
     /// comment cannot hold two copies of a formula in step and the copy that
@@ -1432,7 +1376,7 @@ impl Game {
             .filter(|d| d.discoverable)
             .filter(|d| !discovered.contains(&d.id))
             .filter(|d| !self.node_researched(d))
-            .filter(|d| d.requires.iter().all(|r| self.prereq_satisfied(r)))
+            .filter(|d| d.requires.iter().all(|r| self.is_researched(r)))
             .filter(|d| self.research_zone_gate(d).is_none())
             .map(|d| d.id.clone())
             .collect()
@@ -1548,23 +1492,10 @@ impl Game {
     /// the active selection when it is this node. `settle_research` and the
     /// dev unlock both call it, so a cheat grants exactly what play does.
     pub(crate) fn grant_research(&mut self, def: &ResearchDef) {
-        // "Researched means known" (spec §1): a routine node writes its
-        // ability into `KnownRoutines` and never touches `Research`, so a
-        // routine node's researched state has exactly one record.
-        match &def.teaches {
-            Some(ability) => {
-                self.world
-                    .resource_mut::<KnownRoutines>()
-                    .0
-                    .insert(ability.clone());
-            }
-            None => {
-                self.world
-                    .resource_mut::<Research>()
-                    .0
-                    .insert(def.id.clone());
-            }
-        }
+        self.world
+            .resource_mut::<Research>()
+            .0
+            .insert(def.id.clone());
         // `log_base`, matching selection and abandonment: completion is a base
         // event now and can fire while the party is four frames down the
         // Stack. A plain `log()` is `MessageKind::Info`, which

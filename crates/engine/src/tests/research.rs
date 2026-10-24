@@ -685,22 +685,19 @@ fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders
     );
 }
 
-/// The shared-helper regression. `settle_research` writes a routine node's
-/// ability straight into `KnownRoutines` (spec §1 "Researched means
-/// known"), and `grant_research_knowledge` — the tool half — is what the
-/// project path calls rather than keeping a copy of either.
+/// `settle_research` writes a part node's id into `Research`, and the part
+/// is then craftable (`subroutine_known`).
 #[test]
-fn completing_a_routine_node_teaches_its_ability() {
+fn completing_a_part_node_marks_it_researched_and_the_part_known() {
     let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // `symlink` is Symlink Party's whole family, with no wild carrier and
-    // no species kit slot (see
-    // `routine_tree::hyperthread_is_discoverable_and_a_field_routine_
-    // family_is_not`), so it is always-visible rather than needing a
-    // discovery first — the one thing this test is not about.
-    let node_id = "routine/symlink".to_string();
-    let ability = "symlink".to_string();
+    let part = crate::routine_craft::Subroutine::Core(
+        crate::routine_craft::Core::Damage,
+        crate::routine_craft::Version::V1,
+    );
+    let node_id = crate::routine_tree::part_node_id(&part);
+    assert!(!game.subroutine_known(&part));
     // Opens the routine tree — `select_research` refuses every routine
-    // node until this is researched (spec §2 "Opening the tree").
+    // node until this is researched.
     unlock_research_chain(&mut game, "routine_fabrication");
     research_prereqs_of(&mut game, &node_id);
     let zone = game
@@ -718,18 +715,8 @@ fn completing_a_routine_node_teaches_its_ability() {
     game.tick();
 
     assert!(game.is_researched(&node_id));
-    assert!(
-        game.world
-            .resource::<crate::resources::KnownRoutines>()
-            .0
-            .contains(&ability),
-        "completing must teach {ability}, not just mark the node"
-    );
-    assert!(
-        !game.world.resource::<Research>().0.contains(&node_id),
-        "a routine node's completion must never touch `Research` — spec §1 \
-         'researched means known' is one record, not two"
-    );
+    assert!(game.world.resource::<Research>().0.contains(&node_id));
+    assert!(game.subroutine_known(&part));
 }
 
 /// Nothing in this feature may shift the seeded stream — a retune of what a
@@ -1212,8 +1199,7 @@ fn no_research_node_is_left_unlocking_nothing() {
                         .any(|p| p.recipe.research.as_deref() == Some(node.id.as_str()))
                 })
                 || !def.unlocks_tools.is_empty()
-                || def.decompiler.is_some()
-                || def.teaches.is_some(),
+                || def.decompiler.is_some(),
             "{} unlocks nothing and is dead weight in the tree",
             node.id
         );

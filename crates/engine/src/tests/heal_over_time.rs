@@ -33,7 +33,6 @@ fn hot_def() -> AbilityDef {
         power_cost: 1.0,
         accuracy: 0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
         ranged: false,
         boss_drop: None,

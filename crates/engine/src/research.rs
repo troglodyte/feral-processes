@@ -11,8 +11,8 @@ use crate::tools::{ToolDb, ToolId};
 pub type ResearchId = String;
 
 /// Which research tree a node belongs to — the base tree, authored in
-/// `.ron`, or the routine tree, synthesised from `AbilityDb` (see
-/// `routine_tree::synthesise_nodes`). `Base` is the default so every
+/// `.ron`, or the routine tree, synthesised from the part catalogue (see
+/// `routine_tree::synthesise_part_nodes`). `Base` is the default so every
 /// existing `.ron` node keeps loading with no file touched.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResearchTree {
@@ -93,18 +93,10 @@ pub struct ResearchDef {
     /// says a `.ron` file may not author this, and `skip` is what makes that
     /// true rather than merely documented — a `tree: Routines` line in a mod
     /// file would otherwise parse and silently mint a base node nobody could
-    /// ever research. Only `routine_tree::synthesise_nodes` sets it, to
+    /// ever research. Only `routine_tree::synthesise_part_nodes` sets it, to
     /// `Routines`.
     #[serde(skip)]
     pub tree: ResearchTree,
-    /// The one routine this node grants, for a synthesised node —
-    /// `Game::node_researched` reads `KnownRoutines` instead of `Research`
-    /// when this is set, and `settle_research` writes there instead.
-    /// `#[serde(skip)]` for `tree`'s own reason: a `.ron` file may not
-    /// author this, only `routine_tree::synthesise_nodes` does, by adding
-    /// an ability.
-    #[serde(skip)]
-    pub teaches: Option<crate::abilities::AbilityId>,
     /// Marks the node that opens the routine tree — set on
     /// `routine_fabrication.ron`. Until a loaded node carrying this is
     /// researched, the routine tree lists nothing and `select_research`
@@ -118,8 +110,8 @@ pub struct ResearchDef {
     /// node with `min_zone >= 2` and by the three zone-1 benches
     /// (`assets/research/README.md`). A
     /// synthesised routine node never sets this: `routine_tree::
-    /// synthesise_nodes` leaves it at its default, so the routine tree keeps
-    /// its own economy rather than gaining a second gate.
+    /// synthesise_part_nodes` leaves it at its default, so the routine tree
+    /// keeps its own economy rather than gaining a second gate.
     #[serde(default)]
     pub requires_subject: bool,
     /// Hidden from the base tree until the base has discovered it — see
@@ -200,7 +192,6 @@ impl ResearchDb {
     pub fn load_dir(
         dir: &Path,
         structures: &StructureDb,
-        abilities: &crate::abilities::AbilityDb,
         tools: &ToolDb,
         affixes: &crate::affixes::AffixDb,
     ) -> std::io::Result<(Self, Vec<String>)> {
@@ -240,14 +231,11 @@ impl ResearchDb {
             }
         }
 
-        // Every routine gets a node here, derived from `abilities` rather
-        // than authored — see `routine_tree::synthesise_nodes`. Appended
-        // before the fixpoint validation loop below so a synthesised node's
-        // `requires` (another synthesised node's id) is validated exactly
-        // like an authored one's.
-        for def in crate::routine_tree::synthesise_nodes(abilities) {
-            db.nodes.insert(def.id.clone(), def);
-        }
+        // Every part and capacity step gets a node here, derived from the
+        // Rust catalogue rather than authored — see
+        // `routine_tree::synthesise_part_nodes`. Appended before the
+        // fixpoint validation loop below so a synthesised node's `requires`
+        // is validated exactly like an authored one's.
         for def in crate::routine_tree::synthesise_part_nodes() {
             db.nodes.insert(def.id.clone(), def);
         }
@@ -330,8 +318,8 @@ impl ResearchDb {
     }
 
     /// Test-only door for a hand-built node, the replacement for authoring
-    /// one through a modded `.ron` fixture now that `tree` and `teaches`
-    /// are `#[serde(skip)]` — a file can no longer set either, so a test
+    /// one through a modded `.ron` fixture now that `tree` is
+    /// `#[serde(skip)]` — a file can no longer set it, so a test
     /// that needs to must construct the `ResearchDef` in Rust and insert it
     /// here instead.
     #[cfg(test)]
@@ -403,13 +391,10 @@ mod tests {
         }
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
-        let (abilities, _) =
-            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
         let result = ResearchDb::load_dir(
             &dir,
             &structures,
-            &abilities,
             &tools,
             &crate::affixes::AffixDb::default(),
         )
@@ -459,8 +444,7 @@ mod tests {
     /// rejected — CLAUDE.md's rule for any unknown field, since nothing in
     /// this parser sets `deny_unknown_fields`. A mod that still names it
     /// (or a stale `dev-saves/` template) does not fail to load; it just
-    /// grants nothing through it any more, because a routine's only door
-    /// in is now a synthesised node's `teaches`.
+    /// grants nothing through it, because a routine is built from parts.
     #[test]
     fn a_node_naming_the_retired_unlocks_abilities_field_still_loads() {
         let node = r#"(
@@ -623,13 +607,10 @@ mod tests {
             .filter(|entry| entry.path().extension().and_then(|e| e.to_str()) == Some("ron"))
             .count();
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
-        let (abilities, _) =
-            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
         let (db, warnings) = ResearchDb::load_dir(
             &research_dir,
             &structures,
-            &abilities,
             &tools,
             &crate::tests::support::shipped_affix_db(),
         )
@@ -645,26 +626,13 @@ mod tests {
         // for naming an unknown prereq or structure disappears just as
         // quietly — both leave the loaded count short of the file count.
         //
-        // `db.all()` also carries one synthesised routine node per
-        // `routine_tree::gets_node`-eligible ability now, so the base-tree
-        // count is filtered to `tree == Base` rather than read off `all()`
-        // directly.
+        // `db.all()` also carries the synthesised part nodes, so the
+        // base-tree count is filtered to `tree == Base` rather than read off
+        // `all()` directly.
         assert_eq!(
             db.all().filter(|d| d.tree == ResearchTree::Base).count(),
             ron_file_count,
             "every .ron file in assets/research should have loaded as a distinct Base node"
-        );
-        let synthesised = db
-            .all()
-            .filter(|d| d.tree == ResearchTree::Routines && d.teaches.is_some())
-            .count();
-        let eligible = abilities
-            .all()
-            .filter(|def| crate::routine_tree::gets_node(&abilities, def))
-            .count();
-        assert_eq!(
-            synthesised, eligible,
-            "one synthesised node per gets_node-eligible ability"
         );
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
@@ -772,13 +740,10 @@ mod tests {
     fn the_shipped_recommendation_starts_somewhere_a_fresh_run_can_reach() {
         let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
-        let (abilities, _) =
-            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
         let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
         let (db, _) = ResearchDb::load_dir(
             &assets.join("research"),
             &structures,
-            &abilities,
             &tools,
             &crate::tests::support::shipped_affix_db(),
         )

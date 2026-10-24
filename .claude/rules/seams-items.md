@@ -121,9 +121,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   that loop drained to completion.**
 - **That constant and `COMPILE_TICKS_PER_SECOND` are read together**, because
   the tick price divided by the bar's rate is the wall-clock wait.
-- **Installing from a disk spends the disk last and refunds nothing on the
-  way out; creation is the second door into a slot and spends no item at
-  all**, `abilities::install_starter`.
+- **A player's slot takes a built routine and nothing else
+  (`Game::install_built`); a species kit goes in through `write_routine`
+  with no ownership check, and popping a built routine out destroys it.**
 - **A hand-compile's ticks drain Power like any others, and a batch
   projected to leave less than `HAND_CRAFT_POWER_FLOOR` is refused whole
   rather than shortened** — `max_craftable` carries the same ceiling.
@@ -148,7 +148,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   helper, which is what makes pulling it recoverable and repairs saves
   already written.
 - **A synthetic item id needs a minted `ItemDef` behind it**,
-  `ItemDb::synthesise_tool_carriers` beside `synthesise_etched_disks` —
+  `ItemDb::synthesise_tool_carriers` beside `synthesise_parts` —
   `item_name`'s raw-id fallback means a missing one is silent.
 - **A tool carrier is sold everywhere and bought nowhere**, filtered through
   `ItemId::tool_id` in `caravan::stock_pool` and `ItemDb::creation_shelf`.
@@ -166,8 +166,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   shared by `extract_routine` (a tamed program) and a `Routines`-category
   tool through `extract_program` (a downed one). The effect is shared; the
   refusals are not — the tamed door needs a bench and an ownership check,
-  the tool door needs neither. The exclusive branch popping the disk
-  instead of teaching is what keeps exactly one copy in a run.
+  the tool door needs neither. It hands over parts, never the routine.
 - **A downed program's routine pool is derived from species and level**, so
   it cannot offer what that individual was actually carrying, and no
   shipped species declares an exclusive routine — the Reader's exclusive

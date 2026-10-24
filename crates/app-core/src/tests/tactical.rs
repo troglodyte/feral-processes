@@ -134,7 +134,7 @@ fn charging_app_in(tactical: bool) -> App {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets).unwrap();
         while game.take_notification().is_some() {}
         app.game = Some(game);
-        install_player_routines(&mut app, &["long_compile"]);
+        install_player_routines(&mut app, &["haymaker"]);
         let mut game = app.game.take().unwrap();
         game.install_profile(app.profile.clone());
         app.game = Some(game);
@@ -179,10 +179,13 @@ fn charging_app_in(tactical: bool) -> App {
         // The lone party body is the player; the other body is the hostile.
         let view = app.game.as_mut().unwrap().tactical_view().unwrap();
         let acting = view.order[view.active.unwrap()].entity;
+        // Haymaker reaches one cell and a fight rarely opens with a hostile
+        // that close, so the wind-up is aimed at the winder's own cell: the
+        // aim locks either way, and this is about the charge, not the hit.
         let Some(cell) = view
             .bodies
             .iter()
-            .find(|b| b.entity != acting)
+            .find(|b| b.entity == acting)
             .map(|b| b.cell)
         else {
             continue;
@@ -1206,7 +1209,7 @@ fn log_kinds(app: &App) -> Vec<MessageKind> {
 fn taken_over_ready_app(start_seed: u32) -> App {
     for seed in start_seed..start_seed + 200 {
         let mut app = app_with_companions_in_the_party(seed, 1);
-        install_player_routines(&mut app, &["heat_injection"]);
+        install_player_routines(&mut app, &["built:inject"]);
         // `fighting_app`'s own toggle, applied last so neither save round
         // trip above undoes it.
         app.profile.tactical_battles = true;
@@ -1294,26 +1297,24 @@ fn a_taken_over_companion_plays_without_a_key() {
             .entity
     };
 
-    app.handle_key(GameKey::Char('s'));
-    assert_eq!(
-        app.mode,
-        Mode::TacticalRoutine,
-        "the player's only routine did not open the picker"
-    );
-    pick_row(&mut app, 0);
-    assert_eq!(
-        app.mode,
-        Mode::TacticalAim,
-        "picking the only routine did not open the aim cursor"
-    );
-    // The cursor opens on the acting body's own cell — the player's — which
-    // is already Heat Injection's self-cast: never on the player, always on
-    // whoever stands beside it.
-    app.handle_key(GameKey::Enter);
-    assert_eq!(
-        app.mode,
-        Mode::TacticalBattle,
-        "Heat Injection aimed at the player's own cell must land"
+    // The player's Inject, aimed at the companion beside them.
+    let companion_cell = app
+        .game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open")
+        .bodies
+        .iter()
+        .find(|b| b.entity == companion)
+        .expect("the companion is seated")
+        .cell;
+    assert!(
+        app.game
+            .as_mut()
+            .expect("the fixture has a game")
+            .tactical_use_routine(0, companion_cell),
+        "Inject aimed at the companion must land"
     );
 
     for _ in 0..64 {
@@ -1470,7 +1471,7 @@ mod teleport {
         for seed in 0..200u32 {
             let mut app = test_app(seed);
             app.profile.tactical_battles = true;
-            install_player_routines(&mut app, &["teleport"]);
+            install_player_routines(&mut app, &["built:teleport"]);
             // `Game::load` never calls `install_profile`, so the toggle has
             // to be re-applied after the round trip or the bump below opens
             // the group model — `emulating_tactical_app`'s own note.

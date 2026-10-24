@@ -20,8 +20,9 @@ fn game(seed: u32) -> Game {
 }
 
 /// The shipped routine this whole feature ships for.
-fn detach(game: &Game) -> AbilityDef {
-    ability(game, "detach")
+fn detach(game: &mut Game) -> AbilityDef {
+    let id = built_core(game, crate::routine_craft::Core::Cloak);
+    ability(game, &id)
 }
 
 /// A hostile standing on the player's tile, in a fight with them.
@@ -238,7 +239,7 @@ fn running_a_debuff_breaks_the_invokers_cloak_though_it_deals_no_damage() {
             power: 1,
             duration: 2,
         },
-        ..detach(&game)
+        ..detach(&mut game)
     };
     game.arm_cloak(player, 5);
     game.use_ability(&debuff, player, "You", &[wild]);
@@ -271,7 +272,7 @@ fn an_area_routine_that_lands_breaks_the_targets_cloak() {
             status: None,
         },
         accuracy: 500,
-        ..detach(&game)
+        ..detach(&mut game)
     };
     game.arm_cloak(a, 5);
     game.arm_cloak(b, 5);
@@ -321,7 +322,7 @@ fn breaking_a_cloak_is_announced_once_and_only_on_the_transition() {
             status: None,
         },
         accuracy: 500,
-        ..detach(&game)
+        ..detach(&mut game)
     };
     game.arm_cloak(player, 5);
     force_the_next_attack_to_land(&mut game);
@@ -533,7 +534,7 @@ fn an_area_shape_still_covers_a_cloaked_cell_and_landing_breaks_it() {
             status: None,
         },
         accuracy: 500,
-        ..detach(&game)
+        ..detach(&mut game)
     };
     force_the_next_attack_to_land(&mut game);
     game.use_ability(&blast, player, "You", &covered);
@@ -874,7 +875,7 @@ fn the_shipped_routine_hides_the_ally_it_is_run_at() {
     enlist(&mut game, pet);
     abstract_fight(&mut game);
 
-    let def = detach(&game);
+    let def = detach(&mut game);
     let AbilityEffect::Cloak { duration } = def.effect else {
         panic!("detach.ron authors a Cloak");
     };

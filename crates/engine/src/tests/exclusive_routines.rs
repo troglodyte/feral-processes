@@ -1,12 +1,10 @@
-//! The exclusive pool: routines nobody can learn, and the two doors they
-//! come through.
+//! The exclusive pool: routines no wild program carries, and the two doors
+//! their parts come through (a boss drop and a Stack trader's rare row).
 //!
-//! The invariant everything here defends is that **an exclusive routine
-//! never enters `KnownRoutines`**. Knowledge is the only thing in this game
-//! that duplicates — you learn a routine once and etch blanks with it
-//! forever — so every one of these tests is ultimately asking the same
-//! question from a different direction: did anything leak one into the
-//! known set?
+//! The invariant everything here defends is that **nothing but a boss or a
+//! trader hands over an exclusive routine's parts**, so every one of these
+//! tests asks the same question from a different direction: did anything
+//! leak one into a species kit or onto the player?
 
 use super::support::*;
 use crate::abilities::{AbilityDb, PassiveTrigger};
@@ -37,32 +35,28 @@ fn exclusive_ids(game: &Game) -> Vec<String> {
 /// the file fails, the pool is still sound; if this fails, nothing else
 /// matters.
 #[test]
-fn nothing_a_new_game_ships_with_teaches_an_exclusive_routine() {
+fn nothing_a_new_game_ships_with_grants_an_exclusive_routine() {
     let game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     let granted: std::collections::HashSet<&str> = game
         .world
-        .resource::<crate::research::ResearchDb>()
+        .resource::<SpeciesDb>()
         .all()
-        .filter_map(|node| node.teaches.as_deref())
-        .chain(
-            game.world
-                .resource::<SpeciesDb>()
-                .all()
-                .flat_map(|s| s.abilities.iter())
-                .map(|a| a.id.as_str()),
-        )
+        .flat_map(|s| s.abilities.iter())
+        .map(|a| a.id.as_str())
         .collect();
 
     for id in exclusive_ids(&game) {
         assert!(
             !granted.contains(id.as_str()),
-            "{id} is granted by a research node or a species kit, which would \
-             teach it — an exclusive routine has no path into KnownRoutines"
+            "{id} is in a species kit, so it would be found in the wild"
         );
         assert!(
-            !game.knows_routine(&id),
-            "{id} is known from the very first turn"
+            !game
+                .actor_abilities(game.player_entity())
+                .iter()
+                .any(|a| a.id == id),
+            "{id} is on the player from the very first turn"
         );
     }
 }
@@ -181,10 +175,6 @@ fn killing_a_boss_can_drop_its_signature_parts() {
             part.label()
         );
     }
-    assert!(
-        !game.knows_routine(&wanted),
-        "a boss drop taught the routine as well as dropping it"
-    );
 }
 
 /// Extraction is the one way an installed exclusive routine can be moved,
@@ -210,10 +200,6 @@ fn extracting_an_exclusive_routine_returns_its_parts_and_teaches_nothing() {
     for (part, count) in crate::routine_craft::parts_used(&parts) {
         assert!(game.parts_held(&part) >= count, "{}", part.label());
     }
-    assert!(
-        !game.knows_routine(&id),
-        "extraction taught an exclusive routine — the duplication hole is open"
-    );
     assert!(
         game.owned_pets().iter().all(|p| p.entity != pet),
         "the program survived an extraction"

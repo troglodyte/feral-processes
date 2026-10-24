@@ -549,10 +549,10 @@ any non-finite `taming_potency`, `consume.power`, or
 )
 ```
 
-There is **no per-ability item**. Routines used to be one item apiece, minted
-at load; they are knowledge now (`resources::KnownRoutines`), and what a
-player spends to write one into a slot is a blank **Routine Disk** —
-`routine_disk`, an ordinary craftable item like any other in this directory.
+There is **no per-ability item**. Routines are not items; the Subroutine parts a
+player builds them from are, minted at load from the Rust catalogue, and what
+a player spends to craft one is a blank **Routine Disk** — `routine_disk`, an
+ordinary craftable item like any other in this directory.
 See `../abilities/README.md`.
 
 The filename doesn't matter to the loader (only the `id` field does), but

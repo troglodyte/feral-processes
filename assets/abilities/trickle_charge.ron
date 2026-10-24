@@ -1,8 +1,0 @@
-(
-    id: "trickle_charge",
-    name: "Trickle Charge Party",
-    description: "+1 Power per turn for 60 turns",
-    target: WholeParty,
-    power_cost: 25.0,
-    effect: FieldBuff(kind: Trickle, power: 1, duration: 600),
-)

@@ -100,7 +100,6 @@
         routines: [
             "decompile",
             "rollback_v3",
-            "repair_loop",
             "cascade_overflow",
         ],
         field_buffs: [],
@@ -6202,20 +6201,6 @@
         "runtime_patching",
         "self_exec",
         "weapon_bench",
-    ],
-    known_routines: [
-        "cascade_overflow",
-        "coolant_flush",
-        "decompile",
-        "deep_scan",
-        "hot_patch",
-        "priority_boost",
-        "repair_loop",
-        "rollback_v3",
-        "salvage_routine",
-        "stealth_protocol",
-        "trace_analysis",
-        "trickle_charge",
     ],
     link_sites: [
         (14, -18),

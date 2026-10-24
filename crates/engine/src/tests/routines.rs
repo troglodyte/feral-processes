@@ -462,14 +462,6 @@ fn extracting_hands_over_the_picked_routines_parts_destroys_the_program_and_lose
         expected.iter().map(|(_, n)| n).sum::<u32>(),
         "everything else on the program is lost with it"
     );
-    assert!(
-        !game
-            .world
-            .resource::<crate::resources::DiscoveredRoutines>()
-            .0
-            .contains(&kept),
-        "extraction no longer discovers anything"
-    );
     assert_eq!(game.blank_disks_held(), 0, "and hands over no blank");
     assert!(
         game.owned_pets().iter().all(|p| p.entity != medic),
@@ -510,41 +502,6 @@ fn extracting_a_routine_logs_that_it_came_apart() {
             .iter()
             .any(|line| line.contains("apart into its parts")),
         "the log should say what was recovered: {recent:?}"
-    );
-}
-
-#[test]
-fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it() {
-    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Read straight off the db, not `research_nodes`: a fresh game's
-    // routine tree is closed and nothing is discovered yet, so nothing is
-    // *listed* — but `unlock_research_chain` below researches straight
-    // through `settle_research`, bypassing `select_research`'s visibility
-    // gate entirely, exactly as it bypasses the zone and prerequisite
-    // gates other callers of this helper rely on.
-    let (node_id, ability) = game
-        .world
-        .resource::<ResearchDb>()
-        .all()
-        .find_map(|d| d.teaches.clone().map(|a| (d.id.clone(), a)))
-        .expect("some shipped node grants an ability");
-
-    unlock_research_chain(&mut game, &node_id);
-
-    assert!(game.knows_routine(&ability), "the node teaches the routine");
-    assert_eq!(
-        game.blank_disks_held(),
-        0,
-        "knowledge is not a disk — the factory is what makes those"
-    );
-    // Not `actor_abilities(..).is_empty()`: the player always starts with
-    // decompile installed now, so the general emptiness check would fail
-    // for a reason unrelated to what this test is pinning down.
-    assert!(
-        game.actor_abilities(game.player_entity())
-            .iter()
-            .all(|a| a.id != ability),
-        "researching does not install — that is a separate act"
     );
 }
 
@@ -600,41 +557,14 @@ fn decompile_cannot_be_popped_out_of_the_players_slot() {
     );
 }
 
-/// The other half of the model: a `KnownRoutines` entry is world state, so
-/// it has to survive the save like `researched` does.
-#[test]
-fn known_routines_survive_a_save_load_round_trip() {
-    let mut game = Game::new(58, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    teach_routine(&mut game, "sandbox");
-    let path =
-        std::env::temp_dir().join(format!("feral_known_routines_{}.bin", std::process::id()));
-    game.save(&path).unwrap();
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-
-    assert!(
-        loaded.knows_routine("sandbox"),
-        "a learned routine is world state, not a held item"
-    );
-    assert!(
-        !loaded.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
-        "and decompile is not knowledge at all — it is fixed in its slot, so \
-         nothing needs the entry that used to make popping it out recoverable"
-    );
-}
-
 /// A species' kit is granted directly at spawn — the disk model prices what
 /// the *player* installs, not what a program is born running.
 #[test]
-fn innate_routines_install_at_spawn_with_no_knowledge_and_no_disk() {
+fn innate_routines_install_at_spawn_with_no_disk() {
     let (game, medic) = game_with_two_ability_companion();
     let installed = &game.world.get::<Routines>(medic).unwrap().0;
     assert!(!installed.is_empty(), "the species kit is installed");
     assert_eq!(game.blank_disks_held(), 0, "and it cost no disk");
-    assert!(
-        installed.iter().all(|id| !game.knows_routine(id)),
-        "nor does the player learn what their program runs"
-    );
 }
 
 #[test]
@@ -928,10 +858,6 @@ fn a_species_ability_displaced_by_a_carried_routine_is_logged_as_lost() {
             .any(|e| e.text.contains(&displaced_name) && e.text.contains("is lost")),
         "the displaced species ability is lost, and the player gets to read that: {:?}",
         game.message_log(10)
-    );
-    assert!(
-        !game.knows_routine(&displaced),
-        "a displaced routine is not a routine the player learned"
     );
 }
 

@@ -14,7 +14,6 @@
     power_cost: 10.0,
     accuracy: 8,
     wild_weight: 8,
-    research_zone: 2,
     charge: Some((rounds: 3)),
     shape: Some(Single),
     range: Some((min: 0, max: 1)),

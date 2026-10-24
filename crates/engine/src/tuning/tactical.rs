@@ -495,11 +495,10 @@ pub const SPAWN_PRIORITY_STAT_PER_LEVEL: f32 = 0.10;
 /// guess of the same shape as the scope step.
 pub const ROUTINE_RESEARCH_COST_BASE: u32 = 15;
 
-/// Added once per rung of `routine_tree::scope_rank` above Single.
+/// Added once per scope rung above Single (a Core is rung 0, a modifier 1, a capacity step 2).
 pub const ROUTINE_RESEARCH_SCOPE_STEP: u32 = 10;
 
-/// Added once per zone above the first (`AbilityDef::research_zone`, where
-/// 0 reads as 1) — see `ROUTINE_RESEARCH_COST_BASE`'s doc for why this axis
+/// Added once per zone above the first — see `ROUTINE_RESEARCH_COST_BASE`'s doc for why this axis
 /// exists at all.
 pub const ROUTINE_RESEARCH_ZONE_STEP: u32 = 50;
 
@@ -508,8 +507,7 @@ pub const ROUTINE_RESEARCH_VERSION_STEP: u32 = 15;
 
 /// A synthesised routine node's Research Data cost — linear in scope,
 /// zone and major version, per CLAUDE.md's "every difficulty curve is
-/// linear." `zone` is the node's own `min_zone` (`AbilityDef::research_zone`
-/// with 0 read as 1), so a gated rung costs more than the same scope and
+/// linear." `zone` is the node's own `min_zone`, so a gated rung costs more than the same scope and
 /// version ungated. No material bill: see
 /// `docs/superpowers/specs/2026-09-16-routine-research-tree-design.md` §2
 /// "Cost" for why a derived node cannot carry one.

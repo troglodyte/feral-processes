@@ -13,6 +13,6 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::research_graph`, and keyed by `ResearchId`** — `views::
   ResearchGraph::step` is the one rule for what an arrow key does, and
   app-core computes no neighbours.
-- **A routine node is synthesised from `AbilityDb`, never authored, and
-  "researched" means `KnownRoutines` contains it** — `Game::node_researched`
-  is the one door every reader of a routine node's state goes through.
+- **A routine-tree node is synthesised from the Rust part catalogue, never
+  authored, and "researched" means `Research` contains its id** — `part/<key>`
+  or `capacity/<n>`; no research grants a finished routine.

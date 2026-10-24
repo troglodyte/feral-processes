@@ -319,14 +319,14 @@ fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
         .collect();
     assert!(
         !ids.is_empty()
-            && ids.iter().all(|id| {
-                id.starts_with("routine/") || id.starts_with("part/") || id.starts_with("capacity/")
-            }),
+            && ids
+                .iter()
+                .all(|id| id.starts_with("part/") || id.starts_with("capacity/")),
         "an open tree must list only routine nodes: {ids:?}"
     );
     assert!(
-        ids.iter().any(|id| id == "routine/symlink"),
-        "Symlink is an always-visible root at zone 1: {ids:?}"
+        ids.iter().any(|id| id.starts_with("part/core.damage")),
+        "a zone-1 Core is listed: {ids:?}"
     );
 
     pick_row(&mut app, 0);
@@ -358,11 +358,7 @@ fn routine_research_graph_stepping_and_enter_stay_in_the_routine_tree() {
     let landed = ids
         .get(app.menu_selected)
         .expect("the graph cursor still indexes a listed routine node");
-    assert!(
-        landed.starts_with("routine/")
-            || landed.starts_with("part/")
-            || landed.starts_with("capacity/")
-    );
+    assert!(landed.starts_with("part/") || landed.starts_with("capacity/"));
 
     app.handle_key(GameKey::Enter);
     assert_eq!(

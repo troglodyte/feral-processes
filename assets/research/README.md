@@ -26,7 +26,7 @@ Core Fragments.
     // Above the description the menu draws one cyan line naming everything
     // the node hands over, by display name: the structures, the results of
     // its recipes, and the tools, in that order. A base-tree node never
-    // grants a routine directly any more — see "Routines are a separate
+    // grants a routine directly — see "Routines are a separate
     // tree" below.
     //
     // Below it, one cyan line per conversion the node makes possible — a
@@ -181,26 +181,23 @@ Core Fragments.
 
 ## Routines are a separate tree, and you cannot author one here
 
-Every non-passive, non-exclusive, non-permanent, non-summon ability gets its
-own research node automatically — one per ability, derived from the ability
-catalogue rather than written as a `.ron` file. See
-`assets/abilities/README.md` for what determines an ability's place in that
-tree (its family, its rung and its zone gate) and `../../docs/superpowers/
-specs/2026-09-16-routine-research-tree-design.md` for the design.
+Every Subroutine part has a research node, and so does every step of the
+routine capacity ladder — derived from the Rust catalogue
+(`routine_craft::Subroutine::all`), not written as a `.ron` file. A Core
+version needs the version below it; a modifier stands alone; each capacity
+node needs the one before and is gated to a later zone. Researching a part
+lets the player *craft* it at a Workbench; a part obtained by extraction can
+be used in a build without it. See `docs/adr/0029-*` and
+`docs/superpowers/specs/2026-10-24-routine-crafting-design.md`.
 
-A synthesised node's id is `"routine/<ability id>"`, which is not a legal id
-to give a file here — you cannot mint one, override one, or make a
-`requires` entry that resolves to one from this directory. Its `tree` field
-reads `Routines`; every node authored in this directory reads `Base`, the
-default, so nothing here has to change to keep meaning what it always meant.
-Its `teaches` field names the one ability it grants; a node in this
-directory never sets it, and a research node granting a routine through any
-means but its own synthesised node is retired — that is what
-`unlocks_abilities` used to do, and the field is gone. An old `.ron` file (or
-a `dev-saves/` template) still naming `unlocks_abilities` keeps loading —
-this parser, like every other in the game, drops an unknown field silently
-rather than refusing the file — it simply grants nothing through it any
-more.
+A synthesised node's id is `"part/<part key>"` or `"capacity/<n>"`, which is
+not a legal id to give a file here — you cannot mint one, override one, or
+make a `requires` entry that resolves to one from this directory. Its `tree`
+field reads `Routines`; every node authored in this directory reads `Base`,
+the default. No research node grants a finished routine: an old `.ron` file
+(or a `dev-saves/` template) still naming `unlocks_abilities` keeps loading —
+this parser, like every other in the game, drops an unknown field silently —
+it simply grants nothing through it.
 
 ## Affixes are a third tree, and you cannot author one here either
 

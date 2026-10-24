@@ -204,7 +204,7 @@ impl Game {
 
     /// Records a new built routine under the next `crafted/<n>` id, which is
     /// never reused.
-    fn mint_built(&mut self, name: &str, parts: &[Subroutine]) -> AbilityId {
+    pub(crate) fn mint_built(&mut self, name: &str, parts: &[Subroutine]) -> AbilityId {
         let mut crafted = self.world.resource_mut::<CraftedRoutines>();
         crafted.next_id += 1;
         let id = format!("{CRAFT_ID_PREFIX}{}", crafted.next_id);

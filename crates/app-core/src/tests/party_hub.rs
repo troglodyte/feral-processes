@@ -267,7 +267,7 @@ fn refactor_and_develop_are_reached_from_programs() {
 #[test]
 fn routine_install_and_extract_return_to_routines_in_page() {
     let mut app = app_owning_a_program_and_an_extractor(31016, &["sandbox"]);
-    teach_player_routines(&mut app, &["sandbox"]);
+    free_a_routine_slot(&mut app);
     for (label, mode) in [
         ("Install a routine", Mode::RoutineTarget),
         ("Extract a routine", Mode::Extract),

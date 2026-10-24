@@ -1062,12 +1062,10 @@ fn research_db_with_tool_unlocks(tag: &str, nodes: &[(&str, &[&str])]) -> Resear
     }
     let assets = test_assets_dir();
     let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
-    let (abilities, _) = AbilityDb::load_dir(&assets.join("abilities")).unwrap();
     let (tool_db, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
     let (db, warnings) = ResearchDb::load_dir(
         &dir,
         &structures,
-        &abilities,
         &tool_db,
         &crate::affixes::AffixDb::default(),
     )
@@ -2426,24 +2424,6 @@ fn a_carried_routine_heads_the_pool_and_never_doubles_the_kit() {
     );
 }
 
-/// Parts stack, so knowing a routine does not take it out of the pool.
-#[test]
-fn a_known_routine_stays_in_the_pool() {
-    let mut game = new_test_game();
-    let program = test_program("scrapper", 30);
-    let before = game.routine_candidates(&program);
-    let first = before
-        .first()
-        .cloned()
-        .expect("the scrapper declares a routine");
-    game.world
-        .resource_mut::<KnownRoutines>()
-        .0
-        .insert(first.clone());
-
-    assert_eq!(game.routine_candidates(&program), before);
-}
-
 /// A **passive** ability (`triggers.is_some()`) is never taken apart, so a
 /// modded species kit naming one must never be offered: it is not run, so
 /// there is nothing to build from it (no shipped species declares a passive
@@ -2516,13 +2496,6 @@ fn a_routine_tool_hands_over_parts_and_consumes_the_program() {
         .map(|p| game.parts_held(p))
         .sum();
     assert!(total > 0, "no part came out of the program");
-    assert!(
-        game.world
-            .resource::<crate::resources::DiscoveredRoutines>()
-            .0
-            .is_empty(),
-        "extraction discovers nothing any more"
-    );
 }
 
 /// The invariant the whole exclusive pool rests on, held the only way this
@@ -2557,7 +2530,6 @@ fn an_exclusive_routine_is_never_in_a_downed_programs_pool() {
 
     assert!(refusal.is_err(), "it should have refused");
     assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
-    assert!(!game.knows_routine(&ability), "an exclusive was learned");
 }
 
 /// The first entry is favoured, not guaranteed — decision 4. Run the draw

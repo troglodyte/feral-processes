@@ -239,7 +239,7 @@ impl Game {
         ids
     }
 
-    /// Whether the player has researched `id` — `knows_routine`'s analog.
+    /// Whether the player has researched `id` — the way the Workbench knows a part.
     /// Every later gate (`forge_tool`) calls this rather than reaching into
     /// `KnownTools` itself.
     pub fn knows_tool(&self, id: &ToolId) -> bool {

@@ -1538,7 +1538,7 @@ fn fusion_depth_survives_a_save_load_round_trip() {
 /// routine back off a program is `extract_routine` at a bench, and that
 /// destroys the program deliberately.
 #[test]
-fn a_companion_killed_in_battle_teaches_none_of_its_routines() {
+fn a_companion_killed_in_battle_yields_none_of_its_routines() {
     let assets = test_assets_dir();
     let mut game = Game::new(5150, DifficultyMode::Forgiving, &assets).unwrap();
     let player = game.player_entity();
@@ -1548,19 +1548,16 @@ fn a_companion_killed_in_battle_teaches_none_of_its_routines() {
         .insert(Routines(vec!["priority_boost".to_string()]));
     enlist(&mut game, companion);
 
-    assert!(
-        !game.knows_routine("priority_boost"),
-        "the fixture must start with the routine unknown for the assert below to mean anything"
-    );
-
     let wild = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![wild]);
     game.apply_damage(companion, 10);
     flee_until_clear(&mut game);
 
     assert!(
-        !game.knows_routine("priority_boost"),
-        "a dead program's routines die with it — only extraction teaches"
+        crate::routine_craft::Subroutine::all()
+            .iter()
+            .all(|p| game.parts_held(p) == 0),
+        "a dead program's routines die with it — only extraction yields parts"
     );
 }
 

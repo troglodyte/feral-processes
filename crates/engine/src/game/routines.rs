@@ -168,50 +168,6 @@ impl Game {
         holders
     }
 
-    /// Whether the player has learned `ability` — by researching a node that
-    /// grants it, or by extracting it out of a program.
-    pub fn knows_routine(&self, ability: &str) -> bool {
-        self.world.resource::<KnownRoutines>().0.contains(ability)
-    }
-
-    /// Whether `family` has been discovered — any of its rungs is in
-    /// `DiscoveredRoutines` **or** `KnownRoutines`.
-    pub fn family_discovered(&self, family: &str) -> bool {
-        let discovered = &self
-            .world
-            .resource::<crate::resources::DiscoveredRoutines>()
-            .0;
-        let known = &self.world.resource::<KnownRoutines>().0;
-        self.world
-            .resource::<AbilityDb>()
-            .all()
-            .filter(|def| crate::routine_tree::family(def) == family)
-            .any(|def| discovered.contains(&def.id) || known.contains(&def.id))
-    }
-
-    /// Whether `family` has a carrier at all — a positive `wild_weight` on
-    /// any of its rungs, or a place in some species' kit.
-    pub fn family_is_discoverable(&self, family: &str) -> bool {
-        let abilities = self.world.resource::<AbilityDb>();
-        let rungs: Vec<&str> = abilities
-            .all()
-            .filter(|def| crate::routine_tree::family(def) == family)
-            .map(|def| def.id.as_str())
-            .collect();
-        if abilities
-            .all()
-            .any(|def| rungs.contains(&def.id.as_str()) && def.wild_weight > 0)
-        {
-            return true;
-        }
-        self.world.resource::<SpeciesDb>().all().any(|species| {
-            species
-                .abilities
-                .iter()
-                .any(|declared| rungs.contains(&declared.id.as_str()))
-        })
-    }
-
     /// Whether `ability` is **fixed** — welded to the slot it is born in.
     /// It can't be moved and can't be popped back out of the slot it
     /// occupies.

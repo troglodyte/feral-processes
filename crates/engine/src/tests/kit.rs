@@ -1617,7 +1617,7 @@ mod emulation_tests {
             let mut game = game();
             let companion = spawn_tamed(&mut game, 30, 6);
             // A mod's talent tree or species kit is the only way a
-            // companion ever carries this — `install_disk` refuses it, so
+            // companion ever carries this — `install_built` refuses it, so
             // this is written directly rather than through that door.
             game.world
                 .entity_mut(companion)

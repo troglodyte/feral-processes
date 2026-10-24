@@ -55,7 +55,6 @@ pub fn synthesise_nodes(affixes: &AffixDb) -> Vec<ResearchDef> {
                 tree: ResearchTree::Affixes,
                 // Researched state is the plain `Research` id set, so
                 // `node_researched` needs no branch for this tree.
-                teaches: None,
                 opens_routine_tree: false,
                 opens_affix_tree: false,
                 decompiler: None,

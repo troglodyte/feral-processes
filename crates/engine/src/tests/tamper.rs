@@ -30,8 +30,38 @@ use crate::tactical::{Decoy, TacticalBattle, reach};
 use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_TEMPERATURE, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
+// The five tamper routines, built in this order after a new game's Patch
+// (`crafted/1`) by `game`.
+const COLD_SAMPLE: &str = "crafted/2";
+const HEAT_INJECTION: &str = "crafted/3";
+const INFERENCE_PROBE: &str = "crafted/4";
+const PROMPT_INJECTION: &str = "crafted/5";
+const HALLUCINATION: &str = "crafted/6";
+
 fn game(seed: u32) -> Game {
-    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    use crate::routine_craft::{AreaKind, Core, Subroutine, Version};
+    use crate::tests::support::{mint_core, mint_parts};
+    for (core, id) in [
+        (Core::ColdSample, COLD_SAMPLE),
+        (Core::HeatInjection, HEAT_INJECTION),
+        (Core::Profile, INFERENCE_PROBE),
+        (Core::Inject, PROMPT_INJECTION),
+    ] {
+        assert_eq!(mint_core(&mut game, core), id);
+    }
+    // Hallucinate takes no routine without an Area.
+    assert_eq!(
+        mint_parts(
+            &mut game,
+            &[
+                Subroutine::Core(Core::Hallucinate, Version::V1),
+                Subroutine::Area(AreaKind::Group),
+            ]
+        ),
+        HALLUCINATION
+    );
+    game
 }
 
 /// A minimal, otherwise-legal Tamper `AbilityDef` — enemy-facing, single
@@ -49,7 +79,6 @@ fn tamper_def(kind: TamperKind, duration: u32) -> AbilityDef {
         power_cost: 1.0,
         accuracy: 0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
         ranged: false,
         boss_drop: None,
@@ -61,41 +90,33 @@ fn tamper_def(kind: TamperKind, duration: u32) -> AbilityDef {
     }
 }
 
-/// Decision 8's price table, verbatim: each id's `TamperKind` and `duration`.
+/// Each Tamper Core's `TamperKind` and `duration`, as compiled.
 #[test]
-fn the_five_tamper_routines_load_with_the_kinds_they_author() {
+fn the_five_tamper_cores_compile_with_their_kinds() {
     let game = game(9500);
     let db = game.world.resource::<AbilityDb>();
-    let cases: [(&str, TamperKind, u32, u32, f32); 5] = [
-        ("cold_sample", TamperKind::Temperature(0.0), 3, 3, 6.0),
-        ("heat_injection", TamperKind::Temperature(2.0), 2, 4, 12.0),
-        ("inference_probe", TamperKind::Profiled, 3, 3, 5.0),
-        ("prompt_injection", TamperKind::Injected, 1, 5, 12.0),
-        (
-            "hallucination",
-            TamperKind::Hallucinating { decoys: 3 },
-            3,
-            5,
-            14.0,
-        ),
+    let cases: [(&str, TamperKind, u32); 5] = [
+        (COLD_SAMPLE, TamperKind::Temperature(0.0), 3),
+        (HEAT_INJECTION, TamperKind::Temperature(2.0), 2),
+        (INFERENCE_PROBE, TamperKind::Profiled, 3),
+        (PROMPT_INJECTION, TamperKind::Injected, 1),
+        (HALLUCINATION, TamperKind::Hallucinating { decoys: 3 }, 3),
     ];
-    for (id, kind, duration, cooldown, power_cost) in cases {
-        let def = db.get(id).unwrap_or_else(|| panic!("{id} ships"));
+    for (id, kind, duration) in cases {
+        let def = db.get(id).unwrap_or_else(|| panic!("{id} compiles"));
         match &def.effect {
             AbilityEffect::Tamper {
                 kind: found_kind,
                 duration: found_duration,
             } => {
-                assert_eq!(*found_kind, kind, "{id} authors the wrong TamperKind");
-                assert_eq!(*found_duration, duration, "{id} authors the wrong duration");
+                assert_eq!(*found_kind, kind, "{id} compiles the wrong TamperKind");
+                assert_eq!(
+                    *found_duration, duration,
+                    "{id} compiles the wrong duration"
+                );
             }
             other => panic!("{id} is not a Tamper effect: {other:?}"),
         }
-        assert_eq!(def.cooldown, cooldown, "{id} authors the wrong cooldown");
-        assert_eq!(
-            def.power_cost, power_cost,
-            "{id} authors the wrong power_cost"
-        );
     }
 }
 
@@ -107,11 +128,11 @@ fn a_tamper_routine_never_runs_on_the_map() {
     let game = game(9501);
     let db = game.world.resource::<AbilityDb>();
     for id in [
-        "cold_sample",
-        "heat_injection",
-        "inference_probe",
-        "prompt_injection",
-        "hallucination",
+        COLD_SAMPLE,
+        HEAT_INJECTION,
+        INFERENCE_PROBE,
+        PROMPT_INJECTION,
+        HALLUCINATION,
     ] {
         let def = db.get(id).unwrap_or_else(|| panic!("{id} ships"));
         assert!(def.effect.tactical_only(), "{id} must be tactical-only");
@@ -124,11 +145,7 @@ fn a_tamper_routine_never_runs_on_the_map() {
     );
 }
 
-/// **Every tactical-only routine says so in its own description**, and so
-/// does its synthesised routine-tree node — trivially, since
-/// `routine_tree::synthesise_nodes` copies a node's description straight off
-/// the ability's own (todo #101 moved these off `model_inspection`, which no
-/// longer teaches anything, into one node per routine).
+/// **Every tactical-only routine says so in its own description.**
 ///
 /// Tactical fights sit behind `profile.tactical_battles`, which a player can
 /// turn off. `Game::battle_special_options` filters a tactical-only routine
@@ -146,7 +163,6 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
     const SENTENCE: &str = "Battle maps only.";
     let game = game(9502);
     let db = game.world.resource::<AbilityDb>();
-    let research = game.world.resource::<crate::research::ResearchDb>();
     let mut checked = 0;
     for def in db.all().filter(|d| d.effect.tactical_only()) {
         assert!(
@@ -155,20 +171,12 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
             def.id,
             def.description
         );
-        let node = research
-            .get(&crate::routine_tree::node_id(&def.id))
-            .unwrap_or_else(|| panic!("{} should have a synthesised node", def.id));
-        assert!(
-            node.description.contains(SENTENCE),
-            "the node that teaches {} must say so too: {:?}",
-            def.id,
-            node.description
-        );
         checked += 1;
     }
     assert_eq!(
-        checked, 8,
-        "the five tamper routines, Teleport, Call Reinforcements and Respawn are what ships today"
+        checked, 1,
+        "Respawn is the one authored tactical-only routine left; built routines describe \
+         themselves through `routine_craft::describe`"
     );
 }
 
@@ -229,7 +237,7 @@ fn no_hostile_readies_a_tamper_routine() {
     let mut game = game(9502);
     let tamperer = game
         .world
-        .spawn(Routines(vec!["cold_sample".to_string()]))
+        .spawn(Routines(vec![COLD_SAMPLE.to_string()]))
         .id();
     assert!(
         game.wild_routine_ready(tamperer).is_none(),
@@ -255,7 +263,7 @@ fn the_group_models_routine_rows_omit_tamper_routines() {
     let enemies = battle_with_a_pack_of(&mut group, 1, 40);
     insert_battle(&mut group, player, enemies);
     group.world.entity_mut(player).insert(Routines(vec![
-        "cold_sample".to_string(),
+        COLD_SAMPLE.to_string(),
         "deadlock".to_string(),
     ]));
     let group_names: Vec<String> = group
@@ -273,7 +281,7 @@ fn the_group_models_routine_rows_omit_tamper_routines() {
     tactical_fight(&mut tactical, 1, 40);
     let player = tactical.player_entity();
     tactical.world.entity_mut(player).insert(Routines(vec![
-        "cold_sample".to_string(),
+        COLD_SAMPLE.to_string(),
         "deadlock".to_string(),
     ]));
     assert!(wait_for_turn(&mut tactical, player));
@@ -283,7 +291,7 @@ fn the_group_models_routine_rows_omit_tamper_routines() {
         .map(|o| o.name)
         .collect();
     assert!(
-        tactical_names.contains(&"Cold Sample Single".to_string()),
+        tactical_names.contains(&"Cold Sample".to_string()),
         "a battle map must still offer the tamper routine: {tactical_names:?}"
     );
     assert!(
@@ -303,7 +311,7 @@ fn a_tamper_routine_is_refused_outside_a_battle_map() {
     let cold_sample = game
         .world
         .resource::<AbilityDb>()
-        .get("cold_sample")
+        .get(COLD_SAMPLE)
         .cloned()
         .expect("cold_sample ships");
 
@@ -331,7 +339,7 @@ fn a_forks_only_tamper_routine_is_never_chosen() {
     let body = game.fork_programs(player, 1, 0)[0];
     game.world
         .entity_mut(body)
-        .insert(Routines(vec!["cold_sample".to_string()]));
+        .insert(Routines(vec![COLD_SAMPLE.to_string()]));
 
     // The fork's slot is left unplanned on purpose — `plan_summons` fills
     // it through `choose_summon_action` when the round resolves. Without
@@ -363,7 +371,7 @@ fn a_dispatched_squads_only_tamper_routine_is_never_run() {
     for &member in &squad {
         game.world
             .entity_mut(member)
-            .insert(Routines(vec!["cold_sample".to_string()]));
+            .insert(Routines(vec![COLD_SAMPLE.to_string()]));
     }
     let total = game.world.resource::<Sorties>().0[0].ticks_total;
     game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
@@ -391,66 +399,6 @@ fn clear_area(game: &mut Game, at: (i32, i32), radius: i32) {
     }
 }
 
-/// Spec test 9's first half: a radius tamper catches a companion and both
-/// hostiles standing beside the player, and skips the player standing beside
-/// them too.
-#[test]
-fn a_tamper_lands_on_every_body_in_its_radius_but_the_player() {
-    let mut game = game(9600);
-    let pack = tactical_fight(&mut game, 2, 40);
-    let player = game.player_entity();
-    assert!(wait_for_turn(&mut game, player));
-    let at = game
-        .world
-        .resource::<TacticalBattle>()
-        .cell_of(player)
-        .expect("the player was not seated");
-    clear_area(&mut game, at, 2);
-
-    let companion = body(&mut game, &generic_species().id);
-    game.world.resource_mut::<Party>().0.push(companion);
-    let beside_hostile_0 = free_neighbour(&game, at);
-    assert!(
-        game.world
-            .resource_mut::<TacticalBattle>()
-            .move_to(pack[0], beside_hostile_0)
-    );
-    let beside_hostile_1 = free_neighbour(&game, at);
-    assert!(
-        game.world
-            .resource_mut::<TacticalBattle>()
-            .move_to(pack[1], beside_hostile_1)
-    );
-    let beside_companion = free_neighbour(&game, at);
-    assert!(
-        game.world
-            .resource_mut::<TacticalBattle>()
-            .place(companion, beside_companion)
-    );
-
-    only_routine(&mut game, player, "heat_injection");
-    assert!(
-        game.tactical_use_routine(0, at),
-        "Heat Injection aimed at the player's own cell must land"
-    );
-
-    assert!(
-        game.world.get::<Tampered>(player).is_none(),
-        "the player must never carry a Tampered entry"
-    );
-    for &caught in &[pack[0], pack[1], companion] {
-        let tampered = game
-            .world
-            .get::<Tampered>(caught)
-            .expect("a body standing in the blast must be tampered");
-        assert_eq!(
-            tampered.temperature(),
-            Some(2.0),
-            "Heat Injection authors Temperature(2.0)"
-        );
-    }
-}
-
 /// Spec test 9's other half: a `Single` tamper aimed at the player is
 /// refused before Power, the cooldown, or the turn are spent.
 #[test]
@@ -458,7 +406,7 @@ fn a_single_tamper_at_the_player_is_refused_before_anything_is_spent() {
     let mut game = game(9601);
     tactical_fight(&mut game, 1, 40);
     let player = game.player_entity();
-    only_routine(&mut game, player, "prompt_injection");
+    only_routine(&mut game, player, PROMPT_INJECTION);
     assert!(wait_for_turn(&mut game, player));
     let at = game
         .world
@@ -504,9 +452,9 @@ fn reapplying_a_kind_refreshes_and_heat_replaces_cold() {
     let hostile = pack[0];
     let player = game.player_entity();
     game.world.entity_mut(player).insert(Routines(vec![
-        "cold_sample".to_string(),
-        "heat_injection".to_string(),
-        "inference_probe".to_string(),
+        COLD_SAMPLE.to_string(),
+        HEAT_INJECTION.to_string(),
+        INFERENCE_PROBE.to_string(),
     ]));
 
     assert!(wait_for_turn(&mut game, player));
@@ -591,7 +539,7 @@ fn a_one_turn_injection_on_a_body_that_has_acted_is_live_on_its_next_turn() {
     game.tactical_end_turn();
 
     assert!(wait_for_turn(&mut game, player));
-    only_routine(&mut game, player, "prompt_injection");
+    only_routine(&mut game, player, PROMPT_INJECTION);
     assert!(
         game.tactical_use_routine(0, at),
         "prompt_injection must land"
@@ -641,7 +589,7 @@ fn a_self_applied_entry_is_not_aged_by_the_turn_that_applied_it() {
         .put(isolated.0, isolated.1, BattleCell::Open);
     place_one(&mut game, companion, isolated);
 
-    only_routine(&mut game, companion, "heat_injection");
+    only_routine(&mut game, companion, HEAT_INJECTION);
     assert!(wait_for_turn(&mut game, companion));
     assert!(
         game.tactical_use_routine(0, isolated),
@@ -721,12 +669,11 @@ fn tampered_is_gone_when_the_fight_ends() {
             .resource_mut::<TacticalBattle>()
             .move_to(companion, n2)
     );
-
-    only_routine(&mut game, player, "heat_injection");
-    assert!(
-        game.tactical_use_routine(0, at),
-        "Heat Injection must catch both neighbours"
-    );
+    for body in [hostile, companion] {
+        let mut tampered = Tampered::default();
+        tampered.apply(TamperKind::Temperature(2.0), 2, false);
+        game.world.entity_mut(body).insert(tampered);
+    }
     assert!(
         game.world.get::<Tampered>(hostile).is_some(),
         "fixture: the hostile must be tampered before it dies"
@@ -1335,7 +1282,7 @@ fn hallucination_places_its_decoys_on_the_nearest_free_cells() {
     let hostile = pack[0];
     let player = game.player_entity();
     open_ground(&mut game, &pack, &[(4, 6)]);
-    only_routine(&mut game, player, "hallucination");
+    only_routine(&mut game, player, HALLUCINATION);
     assert!(wait_for_turn(&mut game, player));
 
     assert!(
@@ -1421,7 +1368,7 @@ fn hallucination_with_no_free_cell_is_refused_before_anything_is_spent() {
     ]);
     // (4, 4) is the player's and (4, 6) the hostile's; every other cell of
     // the radius around the aim cannot be stood on.
-    only_routine(&mut game, player, "hallucination");
+    only_routine(&mut game, player, HALLUCINATION);
     assert!(wait_for_turn(&mut game, player));
     let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
@@ -1455,7 +1402,7 @@ fn hallucination_over_nobody_is_refused_before_anything_is_spent() {
     // and so outside the Radius(2), while the aim itself is two from the
     // player and inside the routine's 0..=5 range.
     open_ground(&mut game, &pack, &[(0, 0)]);
-    only_routine(&mut game, player, "hallucination");
+    only_routine(&mut game, player, HALLUCINATION);
     assert!(wait_for_turn(&mut game, player));
     let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
@@ -1483,7 +1430,7 @@ fn a_hallucination_with_a_cell_and_a_target_still_runs() {
     let hostile = pack[0];
     let player = game.player_entity();
     open_ground(&mut game, &pack, &[(4, 6)]);
-    only_routine(&mut game, player, "hallucination");
+    only_routine(&mut game, player, HALLUCINATION);
     assert!(wait_for_turn(&mut game, player));
 
     assert!(
@@ -1525,7 +1472,7 @@ fn seating_a_hallucination_spends_no_rng_draw() {
         let def = game
             .world
             .resource::<AbilityDb>()
-            .get("hallucination")
+            .get(HALLUCINATION)
             .expect("hallucination ships")
             .clone();
         if run {
@@ -1566,7 +1513,7 @@ fn a_companion_in_the_party_s_own_hallucination_carries_no_entry() {
     let player = game.player_entity();
     open_ground(&mut game, &pack, &[(4, 6)]);
     place_one(&mut game, companion, (5, 6));
-    only_routine(&mut game, player, "hallucination");
+    only_routine(&mut game, player, HALLUCINATION);
     assert!(wait_for_turn(&mut game, player));
 
     assert!(game.tactical_use_routine(0, (4, 6)));
@@ -2484,40 +2431,11 @@ fn the_view_carries_the_decoys() {
     assert_eq!(view.decoys, raw);
 }
 
-/// Content: the routine tree is where the feature actually reaches the
-/// player now, not `model_inspection` directly — todo #101 moved every one
-/// of the eleven abilities that node used to grant into its own synthesised
-/// node, gated at `research_zone: 3` exactly as the node was. Spec 15's own
-/// assertion still holds, just over the whole tree rather than one node:
-/// every `TamperSlot` has a route in, and `model_inspection` keeps both gear
-/// recipes.
+/// `model_inspection` keeps both gear recipes.
 #[test]
-fn the_routine_tree_teaches_every_tamper_kind_and_model_inspection_keeps_both_gear_recipes() {
+fn model_inspection_keeps_both_gear_recipes() {
     let game = game(9900);
     let research = game.world.resource::<crate::research::ResearchDb>();
-    let abilities = game.world.resource::<AbilityDb>();
-
-    let taught_slots: std::collections::BTreeSet<TamperSlot> = research
-        .all()
-        .filter_map(|node| node.teaches.as_deref())
-        .filter_map(|id| abilities.get(id))
-        .filter_map(|def| match &def.effect {
-            AbilityEffect::Tamper { kind, .. } => Some(kind.slot()),
-            _ => None,
-        })
-        .collect();
-    let every_slot: std::collections::BTreeSet<TamperSlot> = [
-        TamperSlot::Temperature,
-        TamperSlot::Profiled,
-        TamperSlot::Injected,
-        TamperSlot::Hallucinating,
-    ]
-    .into_iter()
-    .collect();
-    assert_eq!(
-        taught_slots, every_slot,
-        "the routine tree must teach a routine into every Tampered slot"
-    );
 
     let node = research
         .get("model_inspection")

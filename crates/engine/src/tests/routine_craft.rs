@@ -486,7 +486,7 @@ fn the_tree_has_a_node_for_every_part_and_a_capacity_ladder() {
             .get(&part_node_id(&part))
             .unwrap_or_else(|| panic!("{} has no research node", part.label()));
         assert_eq!(node.tree, ResearchTree::Routines);
-        assert!(node.teaches.is_none() && node.materials.is_empty());
+        assert!(node.materials.is_empty());
         if let Subroutine::Core(core, v) = part
             && v != Version::V1
         {
@@ -562,7 +562,6 @@ fn a_new_game_holds_decompile_and_a_built_patch_and_nothing_else() {
         }]
     );
     assert!(state.unslotted.is_empty());
-    assert!(!game.knows_routine("hot_patch"), "no authored grant");
 }
 
 // ---------------------------------------------------------------------------

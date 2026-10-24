@@ -1,7 +1,7 @@
 # Your character
 
-A run opens on eleven steps: difficulty, achievements, class, kit, icon, colour, points, perks, a
-starter routine, a summary, and a name. Esc walks back one step, and Esc on the first hands you back
+A run opens on ten steps: difficulty, achievements, class, kit, icon, colour, points, perks, a
+summary, and a name. Esc walks back one step, and Esc on the first hands you back
 to the main menu. On the steps that do not spend anything, Left and Right also page back and
 forward. Enter on the name starts the run.
 
@@ -72,12 +72,8 @@ directly. See [attributes](attributes) for what the numbers mean.
 Perks come next: four Perk Points to spend on the first perks, with the same Left, Right, Shift and
 Ctrl keys. This step lets you leave with points in hand, and they arrive with the run.
 
-Your starter routine fills a free slot. You open with two slots, four as an Invoker, and Decompile
-already holds one of them, so this fills another. The pool is not filtered by class — a Medic may
-take a damage routine — and each row is priced through the class you already picked, which is the
-cheapest place in the game to see what an affinity is actually worth. You keep the knowledge as
-well as the install, so the routine can be etched onto a disk later like anything else you know. n
-moves on and leaves the slot empty if you would rather choose later.
+You start with Decompile and a Patch you built from a Heal part. You open with two slots, four as an
+Invoker, and both are full; everything else you build at a Workbench.
 
 The summary reads the whole character back, including the achievement payout, and Enter accepts
 it. The last step is your name, which is what the save list calls the run. A blank name is fine.

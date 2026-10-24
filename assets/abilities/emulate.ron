@@ -15,5 +15,4 @@
     // 2026-09-18-emulation-edge.md`) was about the per-species power ratio
     // at a fixed level, not about when the routine unlocks, and gave no
     // reason to move this.
-    research_zone: 2,
 )

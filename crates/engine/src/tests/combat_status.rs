@@ -1848,7 +1848,6 @@ fn test_ability(
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
         ranged: false,
         boss_drop: None,

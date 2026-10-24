@@ -10,11 +10,6 @@ use crate::stack::{CellKind, Dir};
 use crate::tuning::{STACK_COLLAPSE_RELINK_TILES, STACK_MIN_LINK_TILES};
 use crate::*;
 
-/// The routine that is the way home. Granted by the `routine/symlink`
-/// research node and by nothing else, which is what makes leaving the Stack
-/// something a run earns rather than something it starts with.
-const SYMLINK: &str = "symlink";
-
 fn game() -> Game {
     Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
@@ -559,23 +554,24 @@ fn home_then_descend(game: &mut Game) -> (Entity, Position) {
     (home, Position { x: ax, y: ay })
 }
 
-/// Teaches, etches and installs the Symlink routine, and fills the reserve
-/// it is paid out of. The routine is the whole of the way home now — a
-/// research node grants it, so nothing before that node can leave the Stack
-/// on purpose.
+/// Builds and installs a Symlink routine, and fills the reserve it is paid
+/// out of. The routine is the whole of the way home — nothing before a
+/// Symlink part can leave the Stack on purpose.
 fn arm_symlink(game: &mut Game) {
     let player = game.player_entity();
-    install_routine_for_test(game, player, SYMLINK);
+    let id = built_core(game, crate::routine_craft::Core::Symlink);
+    install_routine_for_test(game, player, &id);
     *game.world.get_mut::<PowerReserve>(player).unwrap() =
         PowerReserve::new(POWER_MAX, crate::components::POWER_MAX);
 }
 
 /// Runs the Symlink routine off the player's own slot.
 fn run_symlink(game: &mut Game) -> Result<(), String> {
+    let id = built_core(game, crate::routine_craft::Core::Symlink);
     let index = game
         .field_routines()
         .iter()
-        .position(|r| r.ability == SYMLINK)
+        .position(|r| r.ability == id)
         .expect("the player has Symlink installed");
     game.run_field_routine(index, FieldRoutineTarget::None)
 }
@@ -4695,6 +4691,44 @@ fn game_at_a_market_selling_an_exclusive_routine() -> Option<(Game, usize, Strin
         }
     }
     None
+}
+
+/// **The census for "no grant site gives the player an authored routine"**
+/// (ADR 0029): the Stack market is the one shop that sells routine-shaped
+/// goods, so buying out its whole shelf — parts, an exclusive routine's
+/// parts, everything but a program — must leave the player's kit untouched.
+/// The other sites are held where they live: research
+/// (`the_routine_tree_holds_only_part_and_capacity_nodes`), creation
+/// (`CreationStep` has no Routine step), a boss drop
+/// (`killing_a_boss_can_drop_its_signature_parts`) and extraction
+/// (`extracting_an_exclusive_routine_returns_its_parts`).
+#[test]
+fn buying_out_a_market_grants_no_routine() {
+    let mut game = game_at_a_market();
+    give_credits(&mut game, 50_000);
+    let player = game.player_entity();
+    let before = game.world.get::<Routines>(player).unwrap().0.clone();
+    let pos = game.stack_pos().unwrap();
+    let rows: Vec<usize> = game
+        .market_offers(pos)
+        .iter()
+        .enumerate()
+        .filter(|(_, offer)| !matches!(offer, MarketOfferKind::Program { .. }))
+        .map(|(index, _)| index)
+        .collect();
+    assert!(!rows.is_empty());
+    for index in rows {
+        game.buy_market_offer(index).unwrap();
+    }
+    assert_eq!(game.world.get::<Routines>(player).unwrap().0, before);
+    assert!(
+        game.world
+            .resource::<crate::resources::CraftedRoutines>()
+            .built
+            .len()
+            == 1,
+        "a shelf built a routine for the player"
+    );
 }
 
 /// What "whatever's sold is gone" means on the shelf. The row leaving is

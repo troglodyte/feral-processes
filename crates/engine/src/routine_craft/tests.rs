@@ -149,10 +149,7 @@ fn decompose_reads_the_modifiers_a_routine_implies() {
         parts("cold_boot"),
         vec![Subroutine::Core(Core::Heal, Version::V3)]
     );
-    assert_eq!(
-        parts("long_compile"),
-        vec![core(Core::Damage), Subroutine::Range(RangeKind::Far)]
-    );
+    assert_eq!(parts("haymaker"), vec![core(Core::Damage)]);
     // A Field Mitigation takes no Area, so the party scope is lost; the
     // routine is the nearest the catalogue has.
     assert_eq!(parts("long_winter"), vec![core(Core::FieldMitigation)]);

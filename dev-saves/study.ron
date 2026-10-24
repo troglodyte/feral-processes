@@ -10144,10 +10144,8 @@
     ],
     active_research: Some("paging"),
     research_progress: [],
-    known_routines: [],
     known_tools: [],
     emulation_images: [],
-    discovered_routines: [],
     link_sites: [
         (11, -13),
         (-5, 0),

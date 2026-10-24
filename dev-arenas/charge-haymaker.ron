@@ -2,7 +2,7 @@
 // aim locked on the first, then one big hit. This is the HOSTILE half of
 // the charge tuning, the half the bin can measure — the bin's party plays
 // All-Attack and never invokes a routine, so it cannot throw the player's
-// own routines; see `charge-long-compile.ron` for the played side.
+// own routines.
 //
 // `opponent_routines` is how a hostile gets a routine here: in play it comes
 // only from the wild roll, never the species kit. Read the win rate against

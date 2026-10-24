@@ -1,9 +1,0 @@
-(
-    id: "deep_scan",
-    name: "Deep Scan Party",
-    description: "+20% capture chance until you rest",
-    target: WholeParty,
-    power_cost: 18.0,
-    effect: FieldBuff(kind: CaptureBoost, power: 20),
-    research_zone: 3,
-)

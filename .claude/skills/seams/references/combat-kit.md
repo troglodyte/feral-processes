@@ -33,8 +33,8 @@
   chooser's own selection loop already call `self.ability_unavailable(actor,
   def)` before acting on the pick? If yes, a same-purpose `!matches!` filter
   beside it is dead. If no, it is the only thing stopping the choice and must
-  stay, with a comment saying so. `install_disk` closes the write side too —
-  the Emulate disk can't be installed onto anyone but the player — and
+  stay, with a comment saying so. `install_built` closes the write side too —
+  an Emulate routine can't be installed onto anyone but the player — and
   `unemulate` clears every `Party` body at teardown, not only the player, as
   defence in depth against a mod or future bug handing one to a companion
   some other way. See `seam:only-the-player-emulates` for the argument.

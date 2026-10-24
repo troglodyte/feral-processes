@@ -9,41 +9,25 @@ non-finite `power_cost` or `effect.status.chance` disqualifies the whole
 file.
 
 An ability is what a party member spends its round on when commanded with
-Special in battle. The two sides of the party get theirs differently: a
-companion's come from its species file — see `../species/README.md` —
-while the player's come from the routine research tree, a node synthesised
-per ability rather than authored — see "The routine research tree" below
-and `../research/README.md`. `decompile` is the one exception: it's
-pre-installed on a new game rather than researched, so the player always
-starts with a way to capture programs even before touching the research
-tree.
+Special in battle. A companion's come from its species file, or from a wild
+carrier it was decompiled off — see `../species/README.md`. The player's are
+**built**, not found: the Workbench compiles a routine from Subroutine parts
+(one Core plus modifiers) into an ability, in Rust, from the catalogue in
+`crates/engine/src/routine_craft/`. A built routine is never a file here —
+see "Player routines are built" below. `decompile` is the one authored
+routine a player runs, welded into the first slot of a new game so they can
+always capture programs.
 
-A routine reaching that tree at all has to be *discovered* first, unless
-nothing in the field ever carries it — see "The routine research tree"
-below for the discoverable/always-visible split. Discovery comes from
-recovering the routine off a downed program with a `Routines` extraction
-tool or the Workbench's teardown, never from research directly.
+Abilities are installed **routines** occupying level-derived slots (two at
+level 1, two more every three levels, twelve at most). A species file names
+what a companion shows up already running. Taking a routine apart — a
+`Routines` extraction tool on a downed program, or the Workbench's teardown —
+yields its **parts** as items, never the routine itself.
 
-Neither path is how the ability *reaches* a party member, though — abilities
-are installed **routines** occupying level-derived slots (one per two
-companion levels, one per ten player levels, six at most either way). What a
-research node hands over is **knowledge**, not an item: it teaches the id.
-
-Getting a known routine into a slot is then **two steps**. Etching burns one
-blank **Routine Disk**, which the base has to manufacture, and produces an
-*etched disk* carrying that routine; installing spends the etched disk on a
-slot. Popping the routine back out later returns nothing — the disk is gone
-at install.
-
-A species file instead names what a companion shows up already running,
-which skips both steps.
-
-You never write an etched disk's item file: one is derived for every ability
-at load (`ItemDb::synthesise_etched_disks`), with the id `etched_<ability
-id>`. So shipping a new ability still means writing a single file here — no
-second file and no per-ability item — and, if you want it reachable through
-normal play, referencing its `id` from a species, a research node, or a
-boss's `boss_drop`.
+Shipping a new ability still means writing a single file here. If you want
+it reachable through normal play, reference its `id` from a species, give it
+a `wild_weight`, or name it in a boss's `boss_drop`; any of those makes its
+parts available to the player through extraction.
 
 **Two abilities are mandatory.** `priority_boost` is the fallback every
 companion falls back on when its species declares no abilities of its own,
@@ -87,7 +71,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of sixteen:
+    // What it does to each recipient. Exactly one of nineteen:
     //
     //   Damage(power: 6, spread: 2)
     //     Direct damage through the same resolution a move uses: an attack
@@ -646,7 +630,7 @@ way deleting the Currency item does.
     // Optional; defaults to 0. How likely this ability is to be found
     // already installed on a wild program you meet in the field — a
     // "carrier". 0 means it never spawns wild, which is why every ability
-    // reachable through a species or a research node leaves this alone.
+    // reachable through a species leaves this alone.
     //
     // Weights are relative within the pool, not probabilities: an ability
     // at 12 turns up twice as often as one at 6. Whether a given wild
@@ -657,14 +641,6 @@ way deleting the Currency item does.
     // A carrier uses its routine against you in battle, and hands it over
     // installed if you decompile it. Killing it destroys the routine.
     wild_weight: 8,
-
-    // Optional; defaults to 0, which reads as zone 1 (ungated). The zone
-    // the party must have reached before this ability's node in the
-    // routine research tree becomes available — see "The routine research
-    // tree" below and `../research/README.md`. Not read anywhere else: a
-    // routine's own field-runnable or battle-legal gating stays
-    // level-based, same as before this field existed.
-    research_zone: 2,
 
     // Optional. Makes this a charge routine: it winds up over `rounds`
     // turns instead of landing at once, and `effect`'s power is the
@@ -716,24 +692,6 @@ by hunt-only files. Adding a version tag to an existing name is fine and
 costs nothing (`sandbox` and `memory_leak` both picked one up when their
 families became ladders); **renaming an `id` is not**, per the rule above.
 
-A third census, `every_battle_ability_family_is_contiguous_from_single_upward`,
-holds a stronger rule over most of the set: a family may not ship a Group or
-wider rung without a cheaper Single one under it, so a player who meets the
-wide version in a species kit or off a wild carrier can always find the
-narrow one too. Field routines are already outside its count (they never
-appear in the battle picker at all, so "cheaper rung" is not a question that
-applies) and so is `exclusive` (it has no cheaper rung anywhere by design —
-a boss drop or a trader shelf, never a species or a research node — so the
-ladder the census protects cannot exist for it). A **tactical-only** effect
-(`AbilityEffect::tactical_only()`, true for `Tamper`, `Teleport` and `Reinforce`) joins them
-for a third reason: it is reachable only by research, never by a species kit
-or the hunt pool, so `Heat Injection Group` and `Hallucination Group` may
-ship with no Single rung at all. `Teleport` is outside the naming scheme for
-the same reason `Summon` and `Emulate` are — its `target:` is not a scope. `Dropout` still needs one — `dropout`
-beside `dropout_group` — because a plain Stun is an ordinary group-model
-effect rather than a tactical-only one, so the census holds it to the same
-rule as `Hard Lock` and every other Stun family: it may not open at Group.
-
 Two more tests in `crates/engine/src/tests/assets.rs` hold the naming scheme
 itself over the shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
 and `no_two_shipped_abilities_share_a_display_name`. Neither looks at
@@ -741,39 +699,25 @@ files outside this repo, so **a mod is free to ignore the scheme**; the
 loader has no opinion about `name` beyond it being a string.
 
 **Do not rename an `id` to match a new display name.** Ids are save
-format: `PlayerSave.known_routines` stores them directly, and each one
-mints a `routine_<id>` item that may be sitting in a player's cargo.
-Renaming one orphans both.
+format: a slot, a companion's kit and a boss's `boss_drop` store them
+directly, and renaming one orphans them.
 
-## The routine research tree
+## Player routines are built
 
-Every ability except an **exclusive** one, `decompile` (welded into the
-player's first slot rather than researched), a **passive**
-(`triggers` set) and a **`Summon`** gets a research node of its own,
-synthesised at load — see `assets/research/README.md`'s "Routines are a
-separate tree" for the node itself. What decides that node's place in the
-tree is read straight off the naming scheme above, so authoring an
-ability's `name` correctly is no longer only a census's opinion:
+The player never learns an authored routine. The routine research tree
+(`../research/README.md`) has one node per Subroutine part and one per
+capacity step, synthesised from the Rust catalogue, and the Workbench builds
+a routine from parts the player holds. `routine_craft::compile` turns the
+parts into an `AbilityDef` that passes the same validators this directory's
+files do, and `routine_craft::decompose` maps an authored ability back to
+the parts that stand for it — Core, Range, Area, Trickle, damage type,
+Status — which is what extraction hands over. A census holds every ability a
+wild program, a species kit or a talent can carry to a valid build.
 
-- **family** and **scope** are exactly the two things "Naming" derives from
-  `name` and `target` above.
-- **version** is the parsed `vN.N` tag, `(1, 0)` for a name with none.
-- The node's **prerequisite** is the next lower version at the same scope,
-  or — for a scope's lowest version — the lowest version at the nearest
-  lower scope the family has any rung at. A family's Single v1.0 (or its
-  lowest existing scope) needs nothing.
-
-A family is **discoverable** if any of its rungs has a carrier — a positive
-`wild_weight`, or a place in some species' kit — and stays invisible in the
-routine tree until the player extracts one of its rungs off a downed
-program. Being battle-map-only (`tactical_only()`) has no bearing on this:
-Respawn is tactical-only *and* discoverable, because it carries a
-`wild_weight` like any other hunt-only routine. A family with **no**
-carrier at all — a field routine or any other family nothing carries — is
-**always visible** instead, gated by `research_zone` alone rather than by
-discovery. This split is computed from the shipped set on every read, never
-authored, so a family with no carrier at all cannot go dead behind a
-discovery gate nothing can ever open.
+The authored files that survive are therefore the ones something other than
+the player uses: species kits, the wild-carrier pool, the boss exclusives,
+gear and talent grants, and `emulate` (the arena reads its duration) and
+`decompile`.
 
 ## Magnitudes scale with level
 
@@ -910,25 +854,24 @@ about groups, the other a distance in cells.
 
 ## The exclusive set
 
-`exclusive: true` marks a routine **nobody can learn**. It never enters
-`KnownRoutines`, no research node or species file may name it, and no blank
-can be etched with it. The only thing that exists is its already-etched
-disk, and there are exactly two places one comes from:
+`exclusive: true` marks a routine **only a boss or a trader hands over**. No
+species file may name it and no wild program carries it, and it is never
+found whole: what exists is its parts, and there are exactly two places they
+come from:
 
 - **A boss drop.** `boss_drop: Some([("wintermute", 0.35)])` names the
-  species that drop it and how often. This becomes the derived disk's
-  `ItemDef::droppable`, so the ordinary loot roll pays it out — there is no
-  separate boss-drop mechanic. Nothing here *requires* the named species to
-  be a boss; the shipped set is held to it by
-  `a_boss_drops_the_disks_its_abilities_claim`.
+  species that drop it and how often. `Game::pay_boss_routine_parts` rolls
+  each routine's chance once and pays every part of it or none. Nothing here
+  *requires* the named species to be a boss; the shipped set is held to it
+  by `a_boss_drops_the_parts_its_abilities_claim`.
 - **A Stack trader's rare shelf row**, drawn from the whole exclusive pool
-  at a chance that climbs with depth.
+  at a chance that climbs with depth, sold whole as every part of one
+  routine.
 
-Six ship: `kernel_shear`, `null_cache` and `deadman` off Wintermute;
-`hard_fault`, `long_winter` and `watchdog` off the Overseer. Extraction at a
-Workbench pops an exclusive routine's *disk* back out rather than teaching
-it, which is the only way to move one — and it still costs the whole
-program.
+Seven ship: `kernel_shear`, `null_cache`, `deadman` and `bus_snoop` off
+Wintermute; `hard_fault`, `long_winter` and `watchdog` off the Overseer.
+Extraction at a Workbench hands back an exclusive routine's parts like any
+other, and still costs the whole program.
 
 `exclusive` and a non-zero `wild_weight` together are refused at load: both
 claim to name the routine's only source, and they name different ones.
@@ -996,8 +939,8 @@ anything a player *chooses* to carry — an item's `grants` especially —
 
 ## The hunt-only set
 
-Thirty-five shipped abilities carry a non-zero `wild_weight` and are named by
-no species file and no research node: `kernel_panic`, `stack_smash`,
+Shipped abilities carry a non-zero `wild_weight` and are named by no species
+file: `kernel_panic`, `stack_smash`,
 `pipeline_stall`, `branch_hazard`, `fork_bomb`, `pid_exhaustion`,
 `packet_shred`, `bus_fault`, `hard_lock`, `heap_corruption`,
 `race_condition`, `bit_rot`, `hyperthread`, `bastion`, `clock_gate`,
@@ -1009,60 +952,6 @@ no species file and no research node: `kernel_panic`, `stack_smash`,
 
 The only way to get one is to find a wild program carrying it and decompile
 that program. Killing the carrier destroys the routine. Adding any of these
-to a species or research file would defeat the point, and a test
-(`assets::no_species_or_research_file_grants_a_wild_only_ability`) fails if
+to a species file would defeat the point, and a test
+(`assets::no_species_file_grants_a_wild_only_ability`) fails if
 you do — a mod is of course free to.
-
-## The starter set
-
-`starter: true` offers a routine in the character-creation wizard's Routine
-step, as one of the choices for the free slot every new game opens with —
-`tuning::PLAYER_ROUTINE_SLOT_BASE` is 2, `decompile` already occupies one,
-and this fills the other. Optional; defaults to `false`, the same opt-in
-idiom `exclusive` and `wild_weight` use: the pool is whatever files ask to
-be in it, not a list this module keeps.
-
-Picking one grants **knowledge and the install** —
-`abilities::install_starter` puts the id in `KnownRoutines` as well as the
-slot, so it can be etched onto a blank disk later like anything else the
-player knows. Picking none, the default, leaves the slot empty exactly as
-every game did before this existed.
-
-Not filtered by class: the wizard shows every starter's numbers priced
-through the chosen class's affinity, so a class that damps an axis reads
-honestly weaker on a routine from that axis rather than being hidden from
-choosing it at all.
-
-Not refused at load — no starter shape is invalid RON — but held to shape by
-four censuses in `tests/assets.rs`, the way the hunt-only set above is held
-to its own rule:
-
-- **Single-target.** `target` must be `OneAlly` or `OneEnemyGroupFront`. A
-  starter is chosen for one person and installed for free; a routine that
-  lands on a whole party or a whole hostile group would be an odd first gift,
-  and the wizard has no picker for "which ally" beyond the player.
-- **Not `exclusive`.** An exclusive routine can never enter `KnownRoutines`
-  by any door — a research node, a species file, an etch — and creation
-  granting knowledge is a door too, so a starter that was also exclusive
-  would silently defeat that rule.
-- **At least one per affinity axis.** `there_is_a_starter_for_every_
-  affinity_axis` walks the real shipped files rather than trusting the
-  field is used anywhere: `AbilityEffect::Damage::spread` shipped exactly
-  this way — documented, read by the engine, authored in 0 of 77 files —
-  and stayed invisible until someone went looking.
-- **A magnitude an affinity can actually move.** `every_starter_reads_
-  differently_through_a_class_that_raises_its_axis` prints each starter's
-  row at `AFFINITY_NEUTRAL` and again at the highest spread any shipped
-  class gives its axis, and fails if the two read the same. Covering an axis
-  is not the same as teaching it: `hard_lock` was the Debuff starter and its
-  magnitude was `power: 0`, so its row read `Inflicts Stun (0) for 2 rounds`
-  identically for all five classes and a Saboteur's 1.3 bought nothing on
-  the one starter aimed at their own axis.
-
-Five ship, one per axis: `stack_smash` (Damage), `checksum_repair` (Heal),
-`hyperthread` (Buff), `bit_rot_v2` (Debuff), `siphon_cycles` (Drain). Four
-are also members of the hunt-only set above, which is not a conflict — only
-`exclusive` and a non-zero `wild_weight` disagree about a routine's *only*
-source, and a starter is reachable by knowledge from the moment the run
-begins either way. `bit_rot_v2` is neither: it is granted by
-`assets/species/trojan.ron`, which a starter is equally free to be.

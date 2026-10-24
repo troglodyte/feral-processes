@@ -1839,19 +1839,9 @@ pub struct SaveData {
     /// `discovered_research`'s reason.
     #[serde(default)]
     pub study_progress: u32,
-    /// Which routines the player has learned — see `resources::KnownRoutines`.
-    /// Sorted on write for the reason `researched` is: the encoded bytes must
-    /// not depend on set iteration order.
-    ///
-    /// `#[serde(default)]` does nothing for bincode (see
-    /// `SAVE_FORMAT_VERSION`); it is here so an existing `dev-saves/` RON
-    /// template keeps parsing without being re-captured, exactly as `trace`
-    /// documents below.
-    #[serde(default)]
-    pub known_routines: Vec<crate::abilities::AbilityId>,
     /// Which tools the player has researched — see
     /// `resources::KnownTools`. Sorted on write for the reason `researched`
-    /// is. Unlike `known_routines` above, this field was born after the
+    /// is. This field was born after the
     /// save became field-named RON (`SAVE_FORMAT_VERSION` 29), so
     /// `#[serde(default)]` genuinely means what it says here: a save
     /// written before this field existed loads with an empty set, and
@@ -1865,12 +1855,6 @@ pub struct SaveData {
     /// loads with an empty set and costs no version bump.
     #[serde(default)]
     pub emulation_images: Vec<crate::species::SpeciesId>,
-    /// Which routine families the player has discovered — see
-    /// `resources::DiscoveredRoutines`. `#[serde(default)]` so a save
-    /// written before todo #101 loads with an empty set: nothing was
-    /// discovered before there was anything to discover.
-    #[serde(default)]
-    pub discovered_routines: Vec<crate::abilities::AbilityId>,
     /// Every routine the player has built, slotted or not — see
     /// `resources::CraftedRoutines`. Part items ride in the inventory.
     #[serde(default)]
@@ -2522,10 +2506,8 @@ mod tests {
             research_progress: Vec::new(),
             discovered_research: Vec::new(),
             study_progress: 0,
-            known_routines: Vec::new(),
             known_tools: Vec::new(),
             emulation_images: Vec::new(),
-            discovered_routines: Vec::new(),
             crafted_routines: Vec::new(),
             unslotted_routines: Vec::new(),
             next_crafted_id: 0,

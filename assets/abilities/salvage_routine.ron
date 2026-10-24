@@ -1,9 +1,0 @@
-(
-    id: "salvage_routine",
-    name: "Salvage Routine Party",
-    description: "+20% drop chance until you rest",
-    target: WholeParty,
-    power_cost: 18.0,
-    effect: FieldBuff(kind: DropBoost, power: 20),
-    research_zone: 3,
-)

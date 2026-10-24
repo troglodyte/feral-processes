@@ -2724,16 +2724,6 @@ pub(super) fn give(game: &mut Game, item: &ItemId, qty: u32) {
         .add(item.clone(), qty);
 }
 
-/// Teaches the player `ability` without the research node that normally
-/// would — see `resources::KnownRoutines`. Half of what an install needs;
-/// `disks` is the other half.
-pub(super) fn teach_routine(game: &mut Game, ability: &str) {
-    game.world
-        .resource_mut::<KnownRoutines>()
-        .0
-        .insert(ability.to_string());
-}
-
 /// Writes `ability` into `entity`'s next free slot, making room first. Most
 /// tests want a routine sitting in a slot rather than the chain that got it
 /// there; the player's real door is `Game::install_built`, which only takes
@@ -2741,6 +2731,47 @@ pub(super) fn teach_routine(game: &mut Game, ability: &str) {
 pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability: &str) {
     make_room_for_routine(game, entity);
     game.write_routine(entity, ability);
+}
+
+/// Mints a built routine out of `core` at version 1.0 and returns its
+/// `crafted/<n>` id, without installing it — a fixture that needs a
+/// particular authored-style effect on a player builds it the way the game
+/// would. Ids are sequential from a new game's Patch (`crafted/1`), so a
+/// fixture that mints in a fixed order may name the ids.
+pub(super) fn mint_core(game: &mut Game, core: crate::routine_craft::Core) -> String {
+    game.mint_built(
+        core.name(),
+        &[crate::routine_craft::Subroutine::Core(
+            core,
+            crate::routine_craft::Version::V1,
+        )],
+    )
+}
+
+/// Mints a built routine out of exactly `parts`, for a fixture that needs a
+/// routine of a particular shape (a Core plus an Area, say).
+pub(super) fn mint_parts(game: &mut Game, parts: &[crate::routine_craft::Subroutine]) -> String {
+    game.mint_built("Test routine", parts)
+}
+
+/// The id of the built routine made from `core` alone, minting it the first
+/// time it is asked for. The tests that once read a shipped routine by id
+/// (Teleport, Symlink, Detach...) read the routine the game would compile.
+pub(super) fn built_core(game: &mut Game, core: crate::routine_craft::Core) -> String {
+    let existing = game
+        .world
+        .resource::<crate::resources::CraftedRoutines>()
+        .built
+        .iter()
+        .find(|r| {
+            r.parts
+                == [crate::routine_craft::Subroutine::Core(
+                    core,
+                    crate::routine_craft::Version::V1,
+                )]
+        })
+        .map(|r| r.id.clone());
+    existing.unwrap_or_else(|| mint_core(game, core))
 }
 
 /// Frees a slot on a full `entity` by destroying the first built routine it

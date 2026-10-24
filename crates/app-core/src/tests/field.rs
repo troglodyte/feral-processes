@@ -13,7 +13,7 @@ fn a_from_playing_opens_field_routine() {
 
 #[test]
 fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
-    let mut app = app_with_player_routines(71, &["trace_analysis"], 100.0);
+    let mut app = app_with_player_routines(71, &["built:field_mitigation+group"], 100.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     pick_row(&mut app, 0);
@@ -26,14 +26,14 @@ fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Trace Analysis Party"),
+        buffs.iter().any(|b| b.name == "field_mitigation+group"),
         "the buff should now be running"
     );
 }
 
 #[test]
 fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
-    let mut app = app_with_player_routines(72, &["hardened_shell"], 100.0);
+    let mut app = app_with_player_routines(72, &["built:field_mitigation"], 100.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     pick_row(&mut app, 0);
@@ -55,14 +55,14 @@ fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Hardened Shell Single"),
+        buffs.iter().any(|b| b.name == "field_mitigation"),
         "the buff should now be running on the player"
     );
 }
 
 #[test]
 fn escape_backs_out_of_field_routine_without_casting_anything() {
-    let mut app = app_with_player_routines(73, &["trace_analysis"], 100.0);
+    let mut app = app_with_player_routines(73, &["built:field_mitigation+group"], 100.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Esc);
@@ -74,7 +74,7 @@ fn escape_backs_out_of_field_routine_without_casting_anything() {
 
 #[test]
 fn escape_backs_out_of_the_ally_picker_to_field_routine_without_casting_anything() {
-    let mut app = app_with_player_routines(74, &["hardened_shell"], 100.0);
+    let mut app = app_with_player_routines(74, &["built:field_mitigation"], 100.0);
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::FieldRoutineAlly);
@@ -96,8 +96,8 @@ fn escape_backs_out_of_the_ally_picker_to_field_routine_without_casting_anything
 
 #[test]
 fn an_unaffordable_routine_is_refused_and_does_not_change_mode() {
-    // hardened_shell costs 14.0 Power; 5.0 Hunger can't cover it.
-    let mut app = app_with_player_routines(75, &["hardened_shell"], 5.0);
+    // A Field Mitigation costs more Power than 5.0 covers.
+    let mut app = app_with_player_routines(75, &["built:field_mitigation"], 5.0);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     pick_row(&mut app, 0);
@@ -115,7 +115,7 @@ fn an_unaffordable_routine_is_refused_and_does_not_change_mode() {
 
 #[test]
 fn the_ally_picker_offers_only_the_player_and_the_active_party() {
-    let mut app = app_with_owned_and_wild_neighbors(76, &["hardened_shell"]);
+    let mut app = app_with_owned_and_wild_neighbors(76, &["built:field_mitigation"]);
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::FieldRoutineAlly);
@@ -181,7 +181,7 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
     assert!(
-        buffs.iter().any(|b| b.name == "Hardened Shell Single"),
+        buffs.iter().any(|b| b.name == "field_mitigation"),
         "the buff should now be running on the player"
     );
 }
@@ -190,7 +190,7 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
 /// `FieldRoutineView::second_pick` asks for one.
 #[test]
 fn only_a_cell_routine_opens_the_cell_picker() {
-    let mut app = app_underground_with_routines(90, &["wild_jump"]);
+    let mut app = app_underground_with_routines(90, &["built:jump"]);
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::FieldRoutine);
     pick_row(&mut app, 0);
@@ -203,7 +203,7 @@ fn only_a_cell_routine_opens_the_cell_picker() {
     );
 
     // Buffer Overrun needs no second pick and commits from the list.
-    let mut app = app_underground_with_routines(91, &["buffer_overrun"]);
+    let mut app = app_underground_with_routines(91, &["built:phase"]);
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Playing);
@@ -215,7 +215,7 @@ fn only_a_cell_routine_opens_the_cell_picker() {
 /// one in the first place.
 #[test]
 fn the_cursor_clamps_to_the_frame_bounds() {
-    let mut app = app_underground_with_routines(92, &["wild_jump"]);
+    let mut app = app_underground_with_routines(92, &["built:jump"]);
     let (w, h) = app.game.as_ref().unwrap().frame_bounds().unwrap();
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
@@ -236,7 +236,7 @@ fn the_cursor_clamps_to_the_frame_bounds() {
 /// Esc backs out spending nothing, matching every other second pick.
 #[test]
 fn esc_backs_out_of_the_cell_picker_spending_nothing() {
-    let mut app = app_underground_with_routines(93, &["wild_jump"]);
+    let mut app = app_underground_with_routines(93, &["built:jump"]);
     let before = app.game.as_ref().unwrap().stack_pos_xy();
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
@@ -258,7 +258,7 @@ fn esc_backs_out_of_the_cell_picker_spending_nothing() {
 /// *plumbing* rather than any of the engine's landing rules.
 #[test]
 fn enter_commits_the_jump_the_cursor_is_aimed_at() {
-    let mut app = app_underground_with_routines(94, &["wild_jump"]);
+    let mut app = app_underground_with_routines(94, &["built:jump"]);
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
@@ -277,7 +277,7 @@ fn enter_commits_the_jump_the_cursor_is_aimed_at() {
 /// engine wrote, and picking one says so rather than running.
 #[test]
 fn the_movement_routines_are_greyed_on_the_surface() {
-    let mut app = app_with_player_routines(95, &["wild_jump"], 100.0);
+    let mut app = app_with_player_routines(95, &["built:jump"], 100.0);
     app.handle_key(GameKey::Char('a'));
     pick_row(&mut app, 0);
     assert_eq!(
@@ -287,6 +287,6 @@ fn the_movement_routines_are_greyed_on_the_surface() {
     );
     assert_eq!(
         app.status_line.as_deref(),
-        Some("Can't run Wild Jump Party — only in the Stack.")
+        Some("Can't run jump — only in the Stack.")
     );
 }

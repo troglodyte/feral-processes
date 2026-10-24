@@ -374,7 +374,6 @@ pub fn compile(routine: &CraftedRoutine) -> AbilityDef {
         power_cost: power_cost(&s),
         accuracy: accuracy(&s),
         wild_weight: 0,
-        research_zone: 0,
         exclusive: false,
         ranged: s.range.is_some(),
         boss_drop: None,

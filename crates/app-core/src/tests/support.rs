@@ -2202,14 +2202,53 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
 }
 
-/// Teaches the player `routines` on an existing fixture, through the save
-/// the way `stand_in_base_at` does.
-///
-/// A new game knows nothing at all — the creation wizard's starter pick is
-/// what normally fills `KnownRoutines` first, and `Game::new` takes
-/// `CharacterChoice::default()` — so a test about the etch screen has to
-/// say what the player knows before it can open it.
-pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
+/// The routine ids a fixture's save should carry for `tokens`. A plain token
+/// is an authored ability id and passes through; `built:<core>[+<part>...]`
+/// (`built:field_mitigation+group`) adds a routine built from those parts to
+/// the save's crafted record and names its `crafted/<n>` id, the way a
+/// player's Workbench would.
+fn expand_routines(data: &mut save::SaveData, tokens: &[&str]) -> Vec<String> {
+    use feral_processes_engine::routine_craft::{
+        AreaKind, Core, CraftedRoutine, RangeKind, Subroutine, Version,
+    };
+    tokens
+        .iter()
+        .map(|token| {
+            let Some(spec) = token.strip_prefix("built:") else {
+                return token.to_string();
+            };
+            let parts: Vec<Subroutine> = spec
+                .split('+')
+                .map(|word| match word {
+                    "group" => Subroutine::Area(AreaKind::Group),
+                    "everyone" => Subroutine::Area(AreaKind::Everyone),
+                    "near" => Subroutine::Range(RangeKind::Near),
+                    "far" => Subroutine::Range(RangeKind::Far),
+                    core => Subroutine::Core(
+                        *Core::ALL
+                            .iter()
+                            .find(|c| c.key() == core)
+                            .unwrap_or_else(|| panic!("no Core called {core}")),
+                        Version::V1,
+                    ),
+                })
+                .collect();
+            data.next_crafted_id += 1;
+            let id = format!("crafted/{}", data.next_crafted_id);
+            data.crafted_routines.push(CraftedRoutine {
+                id: id.clone(),
+                name: spec.to_string(),
+                parts,
+            });
+            id
+        })
+        .collect()
+}
+
+/// Frees the player's second routine slot on an existing fixture, through
+/// the save the way `stand_in_base_at` does: a new game's built Patch fills
+/// it, and the install screens are about installing into it.
+pub(crate) fn free_a_routine_slot(app: &mut App) {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -2220,9 +2259,6 @@ pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.known_routines = routines.iter().map(|r| r.to_string()).collect();
-    // A new game's built Patch fills the one free slot; these screens are
-    // about installing into it.
     data.player.routines.retain(|r| !r.starts_with("crafted/"));
     data.crafted_routines.clear();
     save::save_to_file(&path, &data).unwrap();
@@ -2232,8 +2268,7 @@ pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
 
 /// Installs `routines` into the player's own slots on an existing fixture —
 /// `player.routines`, the *equipped* set a fight can actually run, rather
-/// than `teach_player_routines`'s `known_routines` catalogue an Install
-/// screen offers. For a test that needs a companion already in the party
+/// than a built routine an Install screen offers. For a test that needs a companion already in the party
 /// (`app_with_companions_in_the_party`) standing beside a player who can run
 /// a tactical routine, since `app_with_player_routines` builds its own fresh
 /// fixture rather than editing one that already carries other state.
@@ -2247,7 +2282,7 @@ pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.routines = expand_routines(&mut data, routines);
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
@@ -2311,7 +2346,7 @@ pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.routines = expand_routines(&mut data, routines);
     data.player.power = hunger;
     save::save_to_file(&path, &data).unwrap();
 
@@ -2335,7 +2370,7 @@ pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App
     app.game.as_mut().unwrap().save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.routines = expand_routines(&mut data, routines);
     data.locale = feral_processes_engine::resources::Locale::Stack {
         depth: 1,
         frames: 2,
@@ -2374,7 +2409,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    data.player.routines = expand_routines(&mut data, routines);
     data.player.power = 100.0;
     let (px, py) = data.player.position;
     for (offset, tamed) in [(1, true), (2, false)] {

@@ -11725,10 +11725,8 @@
     research_progress: [],
     discovered_research: [],
     study_progress: 0,
-    known_routines: [],
     known_tools: [],
     emulation_images: [],
-    discovered_routines: [],
     link_sites: [
         (11, -13),
         (-5, 0),

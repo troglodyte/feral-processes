@@ -1919,13 +1919,18 @@ impl Game {
                     self.log(format!("{name} detaches {on} from the scheduler."));
                 }
                 AbilityEffect::Cleanse => {
-                    let had_status = self
+                    let afflictions: Vec<StatusId> = self
                         .world
                         .get::<StatusEffects>(recipient)
-                        .is_some_and(|s| !s.active.is_empty());
-                    if had_status {
+                        .map(|s| s.active.iter().map(|a| a.id.clone()).collect())
+                        .unwrap_or_default();
+                    let afflictions: Vec<StatusId> = afflictions
+                        .into_iter()
+                        .filter(|id| !self.is_boon(id))
+                        .collect();
+                    if !afflictions.is_empty() {
                         if let Some(mut statuses) = self.world.get_mut::<StatusEffects>(recipient) {
-                            statuses.active.clear();
+                            statuses.active.retain(|a| !afflictions.contains(&a.id));
                         }
                         self.log(format!("{name} flushes the corruption from {on}."));
                     }

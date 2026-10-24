@@ -68,6 +68,15 @@ impl Game {
         }
     }
 
+    /// Whether `id` is a beneficial status (a heal over time), which
+    /// resistance does not shorten and a Cleanse does not strip.
+    pub(crate) fn is_boon(&self, id: &StatusId) -> bool {
+        self.world
+            .resource::<StatusDb>()
+            .get(id)
+            .is_some_and(|def| def.has_behaviour(|b| matches!(b, StatusBehaviour::HealPerRound)))
+    }
+
     /// Arms status `id` on `entity` for `duration` rounds and marks it as
     /// landed this round, except a re-dose of a `Stack` entry. An id the
     /// `StatusDb` does not define is a silent no-op, since loading already
@@ -92,11 +101,7 @@ impl Game {
         }
         // A boon is not resisted: a holder who shrugs conditions off should
         // not also shorten the repair routine it was given.
-        let boon = self
-            .world
-            .resource::<StatusDb>()
-            .get(id)
-            .is_some_and(|def| def.has_behaviour(|b| matches!(b, StatusBehaviour::HealPerRound)));
+        let boon = self.is_boon(id);
         let resist = if boon {
             0
         } else {
@@ -126,7 +131,14 @@ impl Game {
                     _ => {
                         held.remaining = held.remaining.max(remaining);
                         held.power = held.power.max(power);
-                        held.landed_this_round = true;
+                        // A recast boon that already ticked keeps its place,
+                        // so it heals at the next upkeep rather than
+                        // spending a round on the recast. A condition is
+                        // re-flagged: a refreshed stun must outlast the
+                        // round it landed in.
+                        if !boon {
+                            held.landed_this_round = true;
+                        }
                     }
                 }
             }
@@ -251,8 +263,12 @@ impl Game {
                     self.snapshot_roster();
                 }
             }
+            // A fallen body stays in `Party` until `end_battle`, and
+            // `restore_hp` has no dead check: healing it here would skip
+            // `bench_or_dissolve`.
             if let Some(def) = &def
                 && def.has_behaviour(|b| matches!(b, StatusBehaviour::HealPerRound))
+                && self.creature_alive(entity)
             {
                 let n = entry.power * entry.stacks as i32;
                 let restored = self.restore_hp(entity, n);

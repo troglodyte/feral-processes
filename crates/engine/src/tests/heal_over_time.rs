@@ -3,12 +3,13 @@
 //! combat models. Its out-of-battle counterpart, the Field Regen Core, is a
 //! `FieldBuff` and never touches this path.
 
-use super::support::{battle_with_a_pack_of, test_assets_dir};
+use super::support::{battle_with_a_pack_of, game_with_two_ability_companion, test_assets_dir};
 use super::tactical::tactical_fight;
 use crate::Game;
 use crate::abilities::{AbilityDef, AbilityEffect, AbilityTarget};
-use crate::components::{Derived, Stats, StatusEffects};
+use crate::components::{ActiveStatus, Derived, Stats, StatusEffects};
 use crate::resources::DifficultyMode;
+use crate::statuses::StatusId;
 use crate::tuning::AFFINITY_NEUTRAL;
 
 const PER_ROUND: i32 = 7;
@@ -149,4 +150,83 @@ fn a_routine_with_no_rounds_is_refused_at_load() {
     };
     assert!(crate::abilities::validate(&def).is_err());
     assert!(crate::abilities::validate(&hot_def()).is_ok());
+}
+
+fn hp_of(game: &Game, e: bevy_ecs::entity::Entity) -> i32 {
+    game.world.get::<Stats>(e).unwrap().hp
+}
+
+/// A fallen companion stays in `Party` until the fight closes, and a
+/// regeneration it carried must not stand it back up past `bench_or_dissolve`.
+fn assert_dead_body_stays_down(mut game: Game, medic: bevy_ecs::entity::Entity, upkeep: Upkeep) {
+    game.world.get_mut::<Stats>(medic).unwrap().hp = 0;
+    game.world.entity_mut(medic).insert(StatusEffects {
+        active: vec![ActiveStatus {
+            id: StatusId::from(crate::tuning::REGEN_STATUS),
+            remaining: 3,
+            power: 5,
+            stacks: 1,
+            landed_this_round: false,
+        }],
+    });
+    upkeep(&mut game);
+    assert_eq!(hp_of(&game, medic), 0, "a dead body is not healed");
+}
+
+#[test]
+fn a_group_fight_does_not_revive_a_dead_companion() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    battle_with_a_pack_of(&mut game, 1, 1000);
+    assert_dead_body_stays_down(game, medic, |g| {
+        let player = g.player_entity();
+        g.tick_combatant_upkeep(player);
+    });
+}
+
+#[test]
+fn a_battle_map_does_not_revive_a_dead_companion() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    tactical_fight(&mut game, 1, 1000);
+    assert_dead_body_stays_down(game, medic, |g| {
+        let player = g.player_entity();
+        g.tick_combatant_upkeep(player);
+    });
+}
+
+#[test]
+fn a_recast_heals_at_the_next_upkeep() {
+    let mut game = game(41005);
+    battle_with_a_pack_of(&mut game, 1, 1000);
+    let start = hurt_player(&mut game);
+    let player = game.player_entity();
+    game.use_ability(&hot_def(), player, "TestBot", &[player]);
+    game.tick_round_status_effects(player); // landing round
+    game.use_ability(&hot_def(), player, "TestBot", &[player]); // recast
+    game.tick_round_status_effects(player);
+    assert_eq!(
+        hp(&game),
+        start + per_round(&game),
+        "a recast does not cost the round it was cast in"
+    );
+}
+
+#[test]
+fn cleanse_leaves_a_regeneration_in_place() {
+    let mut game = game(41006);
+    battle_with_a_pack_of(&mut game, 1, 1000);
+    let player = game.player_entity();
+    game.use_ability(&hot_def(), player, "TestBot", &[player]);
+    game.arm_status(player, &"bleed".into(), 3, 2);
+    let mut cleanse = hot_def();
+    cleanse.effect = AbilityEffect::Cleanse;
+    game.use_ability(&cleanse, player, "TestBot", &[player]);
+    let held: Vec<_> = game
+        .world
+        .get::<StatusEffects>(player)
+        .unwrap()
+        .active
+        .iter()
+        .map(|a| a.id.0.clone())
+        .collect();
+    assert_eq!(held, vec![crate::tuning::REGEN_STATUS.to_string()]);
 }

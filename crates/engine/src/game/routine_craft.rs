@@ -235,10 +235,15 @@ impl Game {
         routine_craft::build_rows(parts)
     }
 
-    /// The list `slot`'s row opens: the parts that fit the build, each with
-    /// how many are held.
+    /// The list `slot`'s row opens: the researched parts that fit the
+    /// build, each with how many are held.
     pub fn build_part_options(&self, slot: &str, parts: &[Subroutine]) -> Vec<PartOption> {
-        routine_craft::part_options(slot, parts, |p| self.parts_held(p))
+        routine_craft::part_options(
+            slot,
+            parts,
+            |p| self.subroutine_known(p),
+            |p| self.parts_held(p),
+        )
     }
 
     /// The build page's preview: exactly what `build_routine` would spend

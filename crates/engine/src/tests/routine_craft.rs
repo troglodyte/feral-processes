@@ -689,6 +689,9 @@ fn a_slots_list_offers_only_what_fits_with_the_count_held() {
     let mut game = bench_game(70_041);
     let group = Subroutine::Area(AreaKind::Group);
     stock(&mut game, &group, 3);
+    for part in Subroutine::all() {
+        know(&mut game, &part);
+    }
 
     let cores = game.build_part_options("Core", &[]);
     assert_eq!(
@@ -715,6 +718,40 @@ fn a_slots_list_offers_only_what_fits_with_the_count_held() {
     assert_eq!(types.len(), 5);
     assert!(types.iter().all(|o| o.held == 0));
     assert!(game.build_part_options("Damage type", &[heal()]).is_empty());
+}
+
+#[test]
+fn a_slots_list_shows_only_researched_parts() {
+    let mut game = bench_game(70_043);
+    let group = Subroutine::Area(AreaKind::Group);
+    // Held but unresearched: holding a part is not knowing it.
+    stock(&mut game, &group, 1);
+    stock(&mut game, &damage(), 1);
+
+    let cores: Vec<_> = game
+        .build_part_options("Core", &[])
+        .into_iter()
+        .map(|o| o.part)
+        .collect();
+    assert_eq!(cores, vec![heal()], "a new run knows only Heal v1.0");
+    assert!(game.build_part_options("Area", &[heal()]).is_empty());
+
+    know(&mut game, &damage());
+    know(&mut game, &group);
+    let cores: Vec<_> = game
+        .build_part_options("Core", &[])
+        .into_iter()
+        .map(|o| o.part)
+        .collect();
+    assert!(cores.contains(&damage()) && cores.contains(&heal()));
+    assert_eq!(cores.len(), 2);
+    assert_eq!(
+        game.build_part_options("Area", &[heal()])
+            .into_iter()
+            .map(|o| o.part)
+            .collect::<Vec<_>>(),
+        vec![group]
+    );
 }
 
 #[test]

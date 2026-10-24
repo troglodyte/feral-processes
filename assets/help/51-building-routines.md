@@ -12,7 +12,8 @@ it, and the Build routine page says why when a row is closed.
 - Subroutines page. Every part, with how many you hold and what one costs: a blank Routine Disk and
   some of one material. A Core costs more material at a higher version. Type to filter the list and
   press Enter to compile one. A part you have not researched says so on its row.
-- Build routine page. Press Enter on a row to see the parts that fit it and how many you hold. The
+- Build routine page. Press Enter on a row to see the researched parts that fit it and how many you
+  hold; a part you have not researched is not listed, even if you hold one. The
   preview underneath reads out what the routine will do, its Power cost and how long before it can run
   again, which parts it uses and which you are missing. Name it, then choose Compile. Building uses up the
   parts.

@@ -138,17 +138,19 @@ pub fn build_rows(parts: &[Subroutine]) -> Vec<BuildSlotRow> {
 }
 
 /// The parts a slot's list offers for the build `parts` describes: every
-/// part of that slot the Core takes, each with how many the player holds.
-/// Empty for a slot the Core takes nothing in.
+/// researched part of that slot the Core takes, each with how many the
+/// player holds. Empty for a slot the Core takes nothing in. A part held
+/// but not researched stays hidden: the list is what research has opened.
 pub fn part_options(
     slot: &str,
     parts: &[Subroutine],
+    known: impl Fn(&Subroutine) -> bool,
     held: impl Fn(&Subroutine) -> u32,
 ) -> Vec<PartOption> {
     let core = core_of(parts);
     Subroutine::all()
         .into_iter()
-        .filter(|p| p.slot() == slot)
+        .filter(|p| p.slot() == slot && known(p))
         .filter(|p| match (slot, core) {
             ("Core", _) => true,
             (_, Some(core)) => fits(core, p).is_ok(),

@@ -820,3 +820,50 @@ fn the_built_page_lists_only_routines_not_in_a_slot() {
     game.install_built(player, &a).unwrap();
     assert_eq!(ids(&game), vec![b]);
 }
+
+#[test]
+fn a_malformed_build_is_dropped_on_load_with_its_slot_and_listing() {
+    let mut game = bench_game(70_026);
+    let player = game.player_entity();
+    make_room_for_routine(&mut game, player);
+    let good = build(&mut game, "Mender", &[heal()]);
+    game.install_built(player, &good).unwrap();
+    // A Core-less record, as a hand-edited or corrupted save would carry.
+    let bad = "crafted/99".to_string();
+    {
+        let mut state = game.world.resource_mut::<CraftedRoutines>();
+        state.built.push(CraftedRoutine {
+            id: bad.clone(),
+            name: "Broken".into(),
+            parts: vec![Subroutine::Range(RangeKind::Near)],
+        });
+        state.unslotted.push(bad.clone());
+    }
+    game.world
+        .get_mut::<Routines>(player)
+        .unwrap()
+        .0
+        .push(bad.clone());
+
+    let loaded = round_trip(&mut game, "craft_malformed");
+
+    let state = crafted(&loaded);
+    assert!(state.built.iter().all(|r| r.id != bad));
+    assert!(!state.unslotted.contains(&bad));
+    assert!(!held_ids(&loaded, loaded.player_entity()).contains(&bad));
+    assert!(held_ids(&loaded, loaded.player_entity()).contains(&good));
+}
+
+#[test]
+fn a_lost_counter_is_lifted_past_the_highest_saved_id() {
+    let mut game = bench_game(70_027);
+    let id = build(&mut game, "Mender", &[heal()]);
+    let n: u32 = id.strip_prefix("crafted/").unwrap().parse().unwrap();
+    game.world.resource_mut::<CraftedRoutines>().next_id = 0;
+
+    let mut loaded = round_trip(&mut game, "craft_counter");
+
+    assert!(crafted(&loaded).next_id >= n);
+    let fresh = loaded.mint_built("Next", &[heal()]);
+    assert_ne!(fresh, id, "a new build never reuses a saved id");
+}

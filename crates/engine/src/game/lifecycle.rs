@@ -9,8 +9,11 @@ use crate::abilities::AbilityId;
 use crate::components::{Needs, Tools};
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
+use crate::routine_craft::{CraftedRoutine, validate_build};
 use crate::tools::ToolId;
-use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID};
+use crate::tuning::{
+    CRAFT_ID_PREFIX, CRAFT_PART_CAP_MAX, NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID,
+};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -23,6 +26,39 @@ use crate::*;
 /// uninstallable.
 fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Vec<AbilityId>) {
     ids.iter().cloned().partition(|id| db.get(id).is_some())
+}
+
+/// The built routines a save may keep: a record that fails `validate_build`
+/// (a Core-less one would panic `compile`) is dropped with a warning, and the
+/// slots that named it empty themselves through `recognized_routines`.
+///
+/// The counter is raised past every id the save holds, so a save whose
+/// counter was lost or defaulted cannot mint an id a routine still names.
+fn sound_crafted_routines(
+    saved: Vec<CraftedRoutine>,
+    saved_unslotted: Vec<AbilityId>,
+    saved_next_id: u32,
+    warnings: &mut Vec<String>,
+) -> (Vec<CraftedRoutine>, Vec<AbilityId>, u32) {
+    let highest_used = saved
+        .iter()
+        .filter_map(|r| r.id.strip_prefix(CRAFT_ID_PREFIX)?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+    let (kept, dropped): (Vec<CraftedRoutine>, Vec<CraftedRoutine>) = saved
+        .into_iter()
+        .partition(|r| validate_build(&r.parts, CRAFT_PART_CAP_MAX).is_ok());
+    for routine in &dropped {
+        warnings.push(format!(
+            "Built routine {} ({}) is malformed and was dropped.",
+            routine.name, routine.id
+        ));
+    }
+    let unslotted = saved_unslotted
+        .into_iter()
+        .filter(|id| kept.iter().any(|r| r.id == *id))
+        .collect();
+    (kept, unslotted, saved_next_id.max(highest_used))
 }
 
 /// The save's flat worn-item fields back into the live nested form, `None`
@@ -1559,7 +1595,13 @@ impl Game {
         let player_perk_levels = data.player.unlocked_perks.len() as u32;
         // Before any slot is recognised: a `crafted/<n>` id resolves only
         // once the crafted tier holds it.
-        ability_db.set_crafted(&data.crafted_routines);
+        let (crafted_routines, unslotted_routines, next_crafted_id) = sound_crafted_routines(
+            data.crafted_routines,
+            data.unslotted_routines,
+            data.next_crafted_id,
+            &mut load_warnings,
+        );
+        ability_db.set_crafted(&crafted_routines);
         let (player_routines, dropped_player_routines) =
             recognized_routines(&data.player.routines, &ability_db);
 
@@ -1623,9 +1665,9 @@ impl Game {
         ));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
         world.insert_resource(crate::resources::CraftedRoutines {
-            built: data.crafted_routines,
-            unslotted: data.unslotted_routines,
-            next_id: data.next_crafted_id,
+            built: crafted_routines,
+            unslotted: unslotted_routines,
+            next_id: next_crafted_id,
         });
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here

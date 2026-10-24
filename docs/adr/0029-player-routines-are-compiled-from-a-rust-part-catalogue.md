@@ -28,6 +28,8 @@ A pure `routine_craft::compile(&CraftedRoutine) -> AbilityDef` produces the def,
 Compiled defs are registered in `AbilityDb` under ids of the form `crafted/<n>` through one door, `AbilityDb::set_crafted`, called whenever the crafted set changes and on load.
 `AbilityDb::get` answers for both authored and crafted ids, so the existing lookup sites, slots (`Routines`), battle resolution and the save's routine id lists work unchanged.
 
+**Heal gains an in-battle over-time form**, built only by `compile`: no authored file uses or gains a field for it.
+
 **Extraction runs the other way.** A pure `routine_craft::decompose(&AbilityDef) -> Vec<Subroutine>` maps an authored routine to the parts it hands out when extracted.
 
 ## Alternatives considered

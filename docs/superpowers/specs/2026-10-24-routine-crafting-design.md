@@ -5,8 +5,8 @@
 is Proposed alongside it. No code until the user approves both; the work then
 follows the spec-and-plan pipeline with one release at the end.
 
-Builder check run; its questions are answered below or listed under "Open for
-the user".
+Builder check run; its questions are answered below, and the three that were
+the user's are under "Decided by the user".
 
 Clickable mockup of the Workbench screens:
 <https://claude.ai/artifact/9CaSbxtTHm77yxx9sSNgfv> (layout and flow only; its
@@ -120,7 +120,7 @@ Decompile is not a Core. It stays pre-installed and permanent, as today.
 | Core | Range | Area | Trickle | Damage type | Status |
 |---|---|---|---|---|---|
 | Damage | ✓ | ✓ | — | ✓ | ✓ (rider) |
-| Heal | ✓ | ✓ | ✓ (see open question 1) | — | — |
+| Heal | ✓ | ✓ | ✓ (heal each round, in battle) | — | — |
 | Drain | ✓ | ✓ | — | ✓ | — |
 | Boost / Sap | ✓ | ✓ | ✓ (+rounds) | — | — |
 | Debuff | ✓ | ✓ | ✓ (+rounds) | — | required |
@@ -158,7 +158,7 @@ per capacity research node, to **6** (my call).
   page) or in one slot of the player or one companion.
 - It is destroyed when uninstalled, and also when its holder leaves for good:
   a companion released, sold, fused away or torn down at the Workbench takes
-  its built routines with it (my call, see open question 3). A companion that
+  its built routines with it (the user's call). A companion that
   is downed, posted to the base or sent on a sortie keeps them.
 - Emulate does not touch slots (it swaps the kit through `kit_of`), so it
   destroys nothing.
@@ -344,18 +344,19 @@ stays and now yields parts.
 6. Workbench pages gated on `extracts_routines`.
 7. Delete the 31 player-only ability files.
 
-## Open for the user
+## Decided by the user after the builder check
 
-1. **Heal + Trickle in battle.** No in-battle heal over time exists today;
-   the out-of-battle Field Regen does. Either Heal + Trickle becomes a new
-   in-battle regeneration status (new mechanic, more work), or Trickle is not
-   offered on Heal and players use the Field Regen Core.
-2. **Boss-drop routines.** Seven exclusive routines (Bus Snoop, Deadman, Hard
-   Fault, Kernel Shear, Long Winter, Null Cache, Watchdog) drop today as etched
-   disks for the player. They are authored player routines, so under this
-   design they must either drop as Subroutines (their decomposed parts) or be
-   removed as drops.
-3. **Losing a companion loses its built routines.** Releasing, selling,
-   fusing or tearing down a companion destroys the built routines installed on
-   it, consistent with uninstall destroying them. The alternative is that they
-   drop back to the Built routines page.
+1. **Heal + Trickle heals each round inside battle.** This is a new in-battle
+   heal-over-time mechanic: each Trickle adds rounds, and the per-round amount
+   is a share of the Core's heal (tuning). It must work in both battle models
+   (the group fight and the battle map) and keep its existing out-of-battle
+   counterpart, the Field Regen Core, separate. How it is represented (an
+   over-time form of `AbilityEffect::Heal`, or a regeneration status) is the
+   builder's call within ADR 0029: Rust only, no authored file gains a field.
+2. **Bosses drop the parts of their routine.** The seven exclusive routines
+   (Bus Snoop, Deadman, Hard Fault, Kernel Shear, Long Winter, Null Cache,
+   Watchdog) drop as their `decompose`d Subroutines instead of an etched disk,
+   at today's `boss_drop` odds. Their Cores must exist in the catalogue; where
+   one does not fit a Core above, the builder raises it before inventing one.
+3. **A companion that leaves for good takes its built routines with it.**
+   Released, sold, fused away or torn down: they are destroyed.

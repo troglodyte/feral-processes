@@ -150,5 +150,8 @@ fn only_the_field_recipes_compile_without_a_workbench() {
         .map(|r| r.result.to_string())
         .collect();
     field.sort();
-    assert_eq!(field, ["ice_breaker", "outlet", "outpost_kit", "power_cell"]);
+    assert_eq!(
+        field,
+        ["ice_breaker", "outlet", "outpost_kit", "power_cell"]
+    );
 }

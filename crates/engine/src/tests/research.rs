@@ -251,12 +251,12 @@ fn a_save_round_trip_preserves_unlocked_research() {
     );
 }
 
-/// Everything compilable from turn one: the three consumable starters plus
-/// the Scavenged gear tier, which declares a `craftable` with no
-/// `requires_structure`. Anything else must be gated behind research, a
+/// Everything compilable from turn one: the three consumable starters. The
+/// Scavenged gear tier needs a Workbench. Anything else must be gated behind
+/// research, a
 /// bench, or both — so this set is pinned rather than counted.
 #[test]
-fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
+fn only_the_starters_need_no_research_or_bench() {
     let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut results: Vec<String> = game
         .craft_recipes()
@@ -266,17 +266,7 @@ fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
     results.sort();
     assert_eq!(
         results,
-        [
-            "handshake_forge",
-            "ice_breaker",
-            "kinetic_edge",
-            "outlet",
-            "packet_buffer",
-            "power_cell",
-            "probe_service",
-            "scrap_ward",
-            "shiv_routine",
-        ],
+        ["ice_breaker", "outlet", "power_cell"],
         "nothing else is free"
     );
 }

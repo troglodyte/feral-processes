@@ -548,11 +548,11 @@ fn standard_and_premium_gear_is_made_from_intermediates() {
         ) {
             continue;
         }
-        // No bench means the scavenged tier, which is the other test's job.
+        // Fragment-only is the scavenged tier, which is the other test's job.
         let Some(craftable) = def
             .craftable
             .as_ref()
-            .filter(|c| c.requires_structure.is_some())
+            .filter(|c| c.requires_structure.is_some() && !is_fragment_only(c))
         else {
             continue;
         };
@@ -572,13 +572,19 @@ fn standard_and_premium_gear_is_made_from_intermediates() {
     );
 }
 
-/// The other side of that policy, and the one it could destroy by accident:
-/// scavenged gear stays craftable with no base standing at all. It is what a
-/// fresh run — or a run whose base was raided flat — equips out of, so an
-/// intermediate creeping into one of these recipes locks gear behind the very
-/// thing the player has just lost.
+/// The scavenged tier is the recipes paid in raw fragments alone.
+fn is_fragment_only(c: &crate::items_db::CraftableDef) -> bool {
+    c.cost
+        .iter()
+        .all(|(id, _)| id.as_str() == ids::CORE_FRAGMENT)
+}
+
+/// The other side of that policy: scavenged gear is paid in raw fragments
+/// alone and needs only a Workbench, never a production line. An
+/// intermediate creeping into one of these recipes locks the cheap tier
+/// behind a line the player may have just lost.
 #[test]
-fn scavenged_gear_stays_benchless_and_fragment_only() {
+fn scavenged_gear_is_fragment_only() {
     let game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structures = game.structure_defs();
     let factory_made = assembled_items(&structures);
@@ -594,11 +600,7 @@ fn scavenged_gear_stays_benchless_and_fragment_only() {
         ) {
             continue;
         }
-        let Some(craftable) = def
-            .craftable
-            .as_ref()
-            .filter(|c| c.requires_structure.is_none())
-        else {
+        let Some(craftable) = def.craftable.as_ref().filter(|c| is_fragment_only(c)) else {
             continue;
         };
         for (id, _) in &craftable.cost {

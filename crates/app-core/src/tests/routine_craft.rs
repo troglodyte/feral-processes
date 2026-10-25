@@ -219,3 +219,21 @@ fn the_install_list_offers_built_routines_and_installs_one() {
     );
     assert!(game.built_routine_rows().is_empty());
 }
+
+#[test]
+fn the_part_list_and_name_field_keep_the_workbench_hub_open() {
+    let mut app = app_at_a_workbench(80_010);
+    open_page(&mut app, Mode::RoutineBuild);
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::RoutineBuildPick);
+    assert!(app.structure_hub.is_some(), "the list keeps the hub");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::RoutineBuild);
+    assert!(app.hub_at().is_some(), "back on a live hub page");
+
+    pick_row(&mut app, NAME_ROW);
+    assert_eq!(app.mode, Mode::RoutineBuildName);
+    assert!(app.structure_hub.is_some(), "the name field keeps the hub");
+    app.handle_key(GameKey::Enter);
+    assert!(app.hub_at().is_some(), "back on a live hub page");
+}

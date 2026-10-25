@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.3
+
+**The Workbench has a Compile page, and six pieces of gear can only be compiled there.** Scrap Ward, Shiv Routine, Packet Buffer, Kinetic Edge, Probe Service and Handshake Forge now need you standing beside a Workbench; the base menu's compile list keeps only what needs no bench (Breach Kit, Power Outlet, Power Cell, and Outpost Kit once researched). Compiling from the Workbench returns you to its Compile page when the batch finishes or is stopped, and if the Workbench is lost mid-batch the piece in progress is refunded. Saves are unaffected.
+
 ## 0.20.2
 
 **Choosing a part or typing a name on the Build routine page no longer freezes the game.** Before, opening a slot's part list or the name field closed the Workbench screen behind it, so when the list shut there was nothing drawn and no key did anything. Now both open over the Workbench screen and return to it. Saves are unaffected.

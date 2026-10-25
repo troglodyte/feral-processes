@@ -55,7 +55,7 @@ the same kind and list it here.
 
 ## 0.20.1
 
-**The Build routine page lists only the parts you have researched.** Before, a slot's list offered every part that fit, including ones you could not yet make. Now a new run's Core list holds just Heal v1.0, and more appear as you research them; a part you hold but have not researched stays in your pack and is not offered until you do. Saves are unaffected.
+**The Build routine page lists only the parts you have researched or are holding.** Before, a slot's list offered every part that fit, including ones you could not make and did not have. Now a new run's Core list holds just Heal v1.0, more appear as you research them, and a part you hold from an extraction, a boss or a market is listed and usable even before you research it. Saves are unaffected.
 
 ## 0.20.0
 

@@ -481,10 +481,11 @@ impl App {
             self.hub_last[hub.slot()] = Some(self.mode);
         }
         // The structure hub is only open while a mode of its own is up; any
-        // other mode (the map after an action, a popup) means it was left.
+        // other mode (the map after an action) means it was left. A popup
+        // over one of its pages is still inside it.
         if self.structure_hub.is_some()
             && self.hub_at().is_none()
-            && self.mode != Mode::MachineRecipeConfirm
+            && base_popup_parent(self.mode).is_none()
         {
             self.structure_hub = None;
         }

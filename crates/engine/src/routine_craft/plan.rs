@@ -138,9 +138,10 @@ pub fn build_rows(parts: &[Subroutine]) -> Vec<BuildSlotRow> {
 }
 
 /// The parts a slot's list offers for the build `parts` describes: every
-/// researched part of that slot the Core takes, each with how many the
-/// player holds. Empty for a slot the Core takes nothing in. A part held
-/// but not researched stays hidden: the list is what research has opened.
+/// part of that slot the Core takes that is researched or held, each with
+/// how many the player holds. Empty for a slot the Core takes nothing in.
+/// A held part needs no research: one from an extraction or a boss drop is
+/// usable as it is, and research is what lets you craft more.
 pub fn part_options(
     slot: &str,
     parts: &[Subroutine],
@@ -150,7 +151,7 @@ pub fn part_options(
     let core = core_of(parts);
     Subroutine::all()
         .into_iter()
-        .filter(|p| p.slot() == slot && known(p))
+        .filter(|p| p.slot() == slot && (known(p) || held(p) > 0))
         .filter(|p| match (slot, core) {
             ("Core", _) => true,
             (_, Some(core)) => fits(core, p).is_ok(),

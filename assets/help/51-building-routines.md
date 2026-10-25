@@ -1,7 +1,7 @@
 # Building routines
 
 Routines you run are built, not found. At a Workbench you compile Subroutines, then combine them into
-a routine and give it a name. Stand beside the Workbench and press c; its pages are Build routine,
+a routine and give it a name. Stand beside the Workbench and press c; its pages are Compile, Build routine,
 Subroutines and Built routines.
 
 A Subroutine is one part. Every routine has exactly one Core, which is what it does: Heal, Damage,
@@ -9,6 +9,9 @@ Drain and so on. Modifiers change how it is delivered: a Range, an Area, a Trick
 over more rounds, a damage type, or a status. A Core takes only the modifiers that make sense for
 it, and the Build routine page says why when a row is closed.
 
+- Compile page. Everything you can compile from your own recipes, including the gear that needs a bench
+  (Scrap Ward, Shiv Routine, Packet Buffer, Kinetic Edge, Probe Service and Handshake Forge). Away from a
+  Workbench you only see the field recipes.
 - Subroutines page. Every part, with how many you hold and what one costs: a blank Routine Disk and
   some of one material. A Core costs more material at a higher version. Type to filter the list and
   press Enter to compile one. A part you have not researched says so on its row.

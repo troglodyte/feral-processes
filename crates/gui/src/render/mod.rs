@@ -1203,6 +1203,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let hub_frame = base_report::HubFrame::of(app, app.mode);
     let popup_parent = base_popup_parent(app.mode).and_then(|p| base_report::HubFrame::of(app, p));
     let on_rail = app.hub_on_rail;
+    let craft_at_bench = app.craft_at_bench();
     // Read ahead of `game` for the reason the rows above are. The two dev
     // pickers' rows are views off `&App`, taken only on their own modes.
     let dev_console = app.dev_console_enabled();
@@ -1240,6 +1241,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         )),
         Mode::RigTool => Some((rig_tool::page_rows(rig_tool.as_ref(), selected), None)),
         Mode::Siphon => Some((building::siphon_page_rows(game, siphon, selected), None)),
+        Mode::Craft => Some((
+            crafting::craft_page_rows(game, craft_at_bench, &list_filter, selected),
+            None,
+        )),
         Mode::RoutineBuild => Some((
             routine_craft::build_page_rows(game, &routine_draft, selected),
             None,
@@ -1327,17 +1332,31 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::FarmRecipe => draw_farm_recipe(&farm_recipe, selected, refusal, painter, m),
         Mode::PutDown => draw_put_down(&put_down, &list_filter, selected, refusal, painter, m),
         Mode::SpliceRig => draw_splice_rig(splice_rig.as_ref(), selected, refusal, painter, m),
-        Mode::Craft => draw_craft_menu(game, &list_filter, selected, refusal, painter, m),
-        Mode::CraftQuantity => draw_craft_quantity(
+        Mode::Craft => draw_craft_menu(
             game,
-            app.pending_craft.clone(),
-            craft_quantity,
-            app.careful_craft,
+            craft_at_bench,
+            &list_filter,
+            selected,
             refusal,
             painter,
             m,
         ),
-        Mode::Compiling => draw_compiling(game, app.compile_progress.as_ref(), refusal, painter, m),
+        Mode::CraftQuantity => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            draw_craft_quantity(
+                game,
+                app.pending_craft.clone(),
+                craft_quantity,
+                app.careful_craft,
+                refusal,
+                painter,
+                m,
+            )
+        }
+        Mode::Compiling => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            draw_compiling(game, app.compile_progress.as_ref(), refusal, painter, m)
+        }
         Mode::EraseQuantity => draw_erase_quantity(
             game,
             app.pending_erase.clone(),

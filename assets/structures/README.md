@@ -154,8 +154,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // This flag says one thing only: a hauler may empty into it. The shipped
     // shelves are also free to build, but that is not this flag saying so —
-    // a build costs a program only when the structure runs a job (`work`,
-    // `machine` or `strips`), and a shelf runs none.
+    // a build costs a program only when the structure runs a job (`work` or
+    // `machine`; a Teardown Rig is exempt), and a shelf runs none.
     stores: true,
 
     // An `Assemble` machine (see `machine` above) builds its item out of
@@ -791,14 +791,15 @@ name it after the structure for readability, e.g. `data_cache.ron`.
 
 Filing a build order commits one tamed program — the body goes into the
 machine and does not come back. **A structure costs one exactly when it runs
-a job**, which is when it declares `work`, `machine` or `strips`: a program
-is spent on the thing a program will afterwards be posted to. Everything
-else is free of it. A Shield, a Patch Node, a Relay, a Data Cache, a shelf
+a job**, which is when it declares `work` or `machine`: a program is spent
+on the thing a program will afterwards be posted to. A Teardown Rig
+(`strips`) is staffed too but free, because it is where downed programs go
+to be stripped. Everything else is free of it. A Shield, a Patch Node, a Relay, a Data Cache, a shelf
 and the Zone Portal all cost materials, crew and ticks like any other build,
 and no body at all.
 
 There is no field for this and nothing to author — the rule is read off the
-three above. The Home is free a second time over, by being the Home, so a
+fields above. The Home is free a second time over, by being the Home, so a
 mod that edits `home.ron` can never leave a fresh run (which owns zero
 programs) unable to found a base.
 

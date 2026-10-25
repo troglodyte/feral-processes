@@ -33,7 +33,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   hands finish.**
 - **A build costs a tamed program exactly when the structure runs a job**, so
   a Shield, a shelf and the Zone Portal are free of it for one reason rather
-  than each for its own.
+  than each for its own; a Teardown Rig (`strips`) is the one exempt job.
 - **The Home is free, and the anchor lands on the tile the party founded
   from while the Home itself still stands on `BASE_EXIT_CELL`** —
   `Game::move_anchor_to` is the one writer, and founding is its only caller

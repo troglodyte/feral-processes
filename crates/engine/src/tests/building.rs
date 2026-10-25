@@ -2951,22 +2951,16 @@ fn the_home_a_shelf_and_a_portal_need_no_program() {
 }
 
 /// **A body is spent on a machine that will take a body.** The program cost
-/// follows `StructureDef::runs_a_job` — an extractor, an assembler or a rig
-/// — so everything a program never stands at is free of it: a Shield, a
-/// Patch Node, a Repair Bay, a Relay, a shelf, the doorway out of the
-/// sector. Asserted over the shipped ids rather than by re-deriving the
+/// follows `StructureDef::runs_a_job` — an extractor or an assembler — so
+/// everything a program never stands at is free of it: a Shield, a Patch
+/// Node, a Repair Bay, a Relay, a shelf, the doorway out of the sector. A
+/// Teardown Rig is free too although it is staffed: it is where bodies go. Asserted over the shipped ids rather than by re-deriving the
 /// predicate, because the point of the rule is what the *content* costs.
 #[test]
 fn only_a_machine_that_runs_a_job_costs_a_program() {
     let game = Game::new(20260911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    for id in [
-        "extractor",
-        "research_node",
-        "factory",
-        "printer",
-        "teardown_rig",
-    ] {
+    for id in ["extractor", "research_node", "factory", "printer"] {
         assert!(
             game.structure_needs_program(&id.into()),
             "{id} runs a job, so a program is what it is staffed with"
@@ -2984,6 +2978,7 @@ fn only_a_machine_that_runs_a_job_costs_a_program() {
         "line_driver",
         "market",
         "contract_broker",
+        "teardown_rig",
     ] {
         assert!(
             !game.structure_needs_program(&id.into()),

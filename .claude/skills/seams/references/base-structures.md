@@ -95,10 +95,13 @@
 
 - **A build costs a tamed program exactly when the structure runs a job**,
   and both exemptions fall out of that one rule. `StructureDef::needs_program`
-  is `runs_a_job()` — `work`, a configurable `machine` or `strips` — so a body is spent on
-  the thing a body will afterwards be posted to, and a Shield, a Patch Node, a
-  Relay, a Data Cache, a shelf and the Zone Portal are all free for the same
-  reason rather than each for its own. The Home is exempt a second time by
+  is `runs_a_job()` — `work`, a configurable `machine` or `strips` — minus
+  `strips`, so a body is spent on the thing a body will afterwards be posted
+  to, and a Shield, a Patch Node, a Relay, a Data Cache, a shelf and the Zone
+  Portal are all free for the same reason rather than each for its own. The
+  Teardown Rig is staffed but free by user decision (2026-10-25): it is where
+  downed programs go, so a body to build one is the body it would strip; the
+  exemption reads off `strips`, never an authored flag. The Home is exempt a second time by
   `category()`, so an edited `home.ron` declaring `work:` can never leave a
   fresh run — zero programs owned — unable to found a base.
   `Game::structure_needs_program` is the id-shaped door onto it and app-core's

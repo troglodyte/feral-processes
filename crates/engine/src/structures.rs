@@ -1063,8 +1063,12 @@ impl StructureDef {
     /// Whether raising or upgrading this structure costs a tamed program.
     ///
     /// **A body is spent on a machine that will take a body** — the cost
-    /// follows `runs_a_job` exactly, so an extractor, an assembler and a rig
-    /// charge one and nothing else does. A Shield, a Patch Node, a Relay, a
+    /// follows `runs_a_job`, so an extractor and an assembler charge one.
+    /// A Teardown Rig (`strips`) is the one job exempt: it is where a downed
+    /// program goes to be stripped, and charging a body to build the thing
+    /// that turns bodies into parts made the first rig cost the very program
+    /// it exists to pay for. The exemption reads off `strips` rather than an
+    /// authored flag for the reason below. A Shield, a Patch Node, a Relay, a
     /// shelf and the Zone Portal are all free, and they are free for one
     /// reason rather than each for its own: there is nothing at them for a
     /// committed program to stand at. That replaced an authored
@@ -1081,7 +1085,7 @@ impl StructureDef {
     /// drifts. `Game::structure_needs_program` is the id-shaped door onto
     /// this one, and calls it.
     pub fn needs_program(&self) -> bool {
-        self.category() != StructureCategory::Home && self.runs_a_job()
+        self.category() != StructureCategory::Home && self.runs_a_job() && self.strips.is_none()
     }
 
     /// Which group this structure lists under. Checked in this order because

@@ -2980,8 +2980,9 @@ fn every_shipped_need_has_a_shipped_amenity() {
 /// `StructureDef::runs_a_job`, so the census is written the other way round
 /// — over the fields a structure authors for some *other* purpose — and it
 /// is a real statement about content rather than a re-derivation: a shelf, a
-/// rack, the doorway out of the sector, anything that defends, repairs,
-/// services a need or trades costs nobody, and every producer costs one. A
+/// rack, a Teardown Rig, the doorway out of the sector, anything that
+/// defends, repairs, services a need or trades costs nobody, and every
+/// producer costs one. A
 /// Shield that grew a `machine:` line would fail both arms at once.
 ///
 /// Deliberately a census over *shipped assets* and not a rule in
@@ -2999,6 +3000,7 @@ fn the_shipped_program_cost_follows_the_job() {
             continue;
         }
         let idle = def.stores
+            || def.strips.is_some()
             || def.racks.is_some()
             || def.zone_portal
             || def.raid_defense > 0
@@ -3014,7 +3016,7 @@ fn the_shipped_program_cost_follows_the_job() {
                 def.id
             );
         }
-        if def.work.is_some() || def.machine.is_some() || def.strips.is_some() {
+        if def.work.is_some() || def.machine.is_some() {
             costed += 1;
             assert!(
                 def.needs_program(),

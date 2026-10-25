@@ -5,6 +5,6 @@
     description: "Scavenged armor. Absorbs the first shock of an incoming packet.",
     value: Some(7),
     equipment: Some((Armor, (mitigation: 6))),
-    craftable: Some((cost: [("core_fragment", 7)])),
+    craftable: Some((cost: [("core_fragment", 7)], requires_structure: Some("workbench"))),
     droppable: Some([("drone", 0.1), ("sub_process", 0.08)]),
 )

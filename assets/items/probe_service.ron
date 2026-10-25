@@ -5,7 +5,7 @@
     description: "Scavenged module. A small edge on decompile odds.",
     value: Some(5),
     equipment: Some((Module, (decompiler: 1))),
-    craftable: Some((cost: [("core_fragment", 5)])),
+    craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("workbench"))),
     droppable: Some([("sprite", 0.09), ("glitch", 0.07)]),
     cache_drop: Some(0.12),
 )

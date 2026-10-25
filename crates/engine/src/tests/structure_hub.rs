@@ -123,3 +123,32 @@ fn nothing_is_offered_in_a_battle_or_outside_the_base() {
     game.world.insert_resource(Locale::Surface);
     assert!(game.adjacent_structures().is_empty());
 }
+
+#[test]
+fn a_workbench_offers_build_subroutines_built_compile_then_info() {
+    let mut game = fresh();
+    stand_an_extraction_bench(&mut game, 1, 0);
+    assert_eq!(
+        game.adjacent_structures()[0].pages,
+        vec![Build, Subroutines, Built, Compile, Info]
+    );
+}
+
+#[test]
+fn only_the_field_recipes_compile_without_a_workbench() {
+    let mut game = fresh();
+    touch_a_workbench(&mut game);
+    let ids: Vec<String> = game.research_defs().iter().map(|d| d.id.clone()).collect();
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .extend(ids);
+    let mut field: Vec<String> = game
+        .craft_recipes()
+        .into_iter()
+        .filter(|r| r.requires_structure.is_none())
+        .map(|r| r.result.to_string())
+        .collect();
+    field.sort();
+    assert_eq!(field, ["ice_breaker", "outlet", "outpost_kit", "power_cell"]);
+}

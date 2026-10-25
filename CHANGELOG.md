@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.2
+
+**Choosing a part or typing a name on the Build routine page no longer freezes the game.** Before, opening a slot's part list or the name field closed the Workbench screen behind it, so when the list shut there was nothing drawn and no key did anything. Now both open over the Workbench screen and return to it. Saves are unaffected.
+
 ## 0.20.1
 
 **The Build routine page lists only the parts you have researched or are holding.** Before, a slot's list offered every part that fit, including ones you could not make and did not have. Now a new run's Core list holds just Heal v1.0, more appear as you research them, and a part you hold from an extraction, a boss or a market is listed and usable even before you research it. Saves are unaffected.

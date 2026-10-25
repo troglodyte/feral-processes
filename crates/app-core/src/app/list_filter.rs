@@ -163,6 +163,7 @@ impl App {
     fn filtered_len(&mut self) -> Option<usize> {
         let filter = self.filter_text().to_owned();
         let structure = self.pending_trade_structure;
+        let at_bench = self.craft_at_bench();
         let game = self.game.as_mut()?;
         match self.mode {
             Mode::TradeAction => Some(trade_visible(game, structure?, &filter).total()),
@@ -172,7 +173,7 @@ impl App {
             }
             Mode::Inventory => Some(INVENTORY_SLOT_ROWS + inventory_visible(game, &filter).len()),
             Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
-            Mode::Craft => Some(craft_visible(game, &filter).len()),
+            Mode::Craft => Some(craft_visible(at_bench, game, &filter).len()),
             Mode::Subroutines => Some(subroutines_visible(game, &filter).len()),
             Mode::PutDown => Some(put_down_visible(&game.put_down_options(), &filter).len()),
             Mode::TacticalItem => Some(tactical_items_visible(game, &filter).len()),

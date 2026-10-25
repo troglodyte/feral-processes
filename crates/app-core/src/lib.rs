@@ -16,7 +16,7 @@ pub use app::building::{
     roster_rows,
 };
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
-pub use app::crafting::craft_visible;
+pub use app::crafting::{craft_list, craft_visible};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
@@ -2798,6 +2798,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::StructureAssign => Some(Mode::Structures),
         Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
         Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
+        Mode::CraftQuantity | Mode::Compiling => Some(Mode::Craft),
         _ => None,
     }
 }

@@ -25,12 +25,12 @@ fn filtered_craft(seed: u32) -> (App, ItemId, usize) {
     open_command(&mut app, "Compile an item");
     assert_eq!(app.mode, Mode::Craft);
     let game = app.game.as_ref().unwrap();
-    let recipes = game.craft_recipes();
+    let recipes = craft_list(false, game);
     let last = recipes.last().unwrap().result.clone();
     let name = typeable(game.item_name(&last));
     type_text(&mut app, &name);
     let game = app.game.as_ref().unwrap();
-    let visible = craft_visible(game, app.filter_text());
+    let visible = craft_visible(false, game, app.filter_text());
     assert!(visible.len() < recipes.len(), "a real subset: {name:?}");
     let pos = visible
         .iter()

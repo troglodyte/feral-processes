@@ -249,7 +249,7 @@ const COMPILE_ROWS: &[GroupEntry] = &[
         available: |app| {
             app.game
                 .as_ref()
-                .is_some_and(|g| !g.craft_recipes().is_empty())
+                .is_some_and(|g| !craft_list(false, g).is_empty())
         },
     },
     GroupEntry {

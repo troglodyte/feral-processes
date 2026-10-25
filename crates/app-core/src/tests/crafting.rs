@@ -25,11 +25,12 @@ pub(crate) fn drain_compile(app: &mut App) {
     while app.mode == Mode::Notification {
         app.handle_key(GameKey::Esc);
     }
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "a drained compile should have returned to Mode::Playing"
-    );
+    let home = if app.structure_hub.is_some() {
+        Mode::Craft
+    } else {
+        Mode::Playing
+    };
+    assert_eq!(app.mode, home, "a drained compile should have gone home");
 }
 
 /// An app with a base founded and enough material to compile a batch.
@@ -113,10 +114,13 @@ fn every_commit_path_charges_the_careful_price() {
 
     let edge = ItemId::from("kinetic_edge");
     for key in [GameKey::Enter, GameKey::Char('f'), GameKey::Char('m')] {
-        let mut plain = stocked_app(702);
-        let mut careful = stocked_app(702);
-        open_compile_of(&mut plain, "kinetic_edge");
-        open_compile_of(&mut careful, "kinetic_edge");
+        let mut plain = app_at_a_stocked_bench(702);
+        let mut careful = app_at_a_stocked_bench(702);
+        for app in [&mut plain, &mut careful] {
+            open_bench_compile(app);
+            let row = picks_in_bench_list(app, "kinetic_edge");
+            pick_row(app, row);
+        }
         careful.handle_key(GameKey::Char('c'));
 
         let before = ledger(&plain, &edge);
@@ -477,4 +481,141 @@ fn compiling_the_most_with_a_flat_reserve_names_power_not_materials() {
     assert!(said.contains("Power"), "should name the reserve: {said:?}");
     assert!(!said.contains("resources"), "and not the pack: {said:?}");
     assert_eq!(app.mode, Mode::Playing);
+}
+
+/// The six gear recipes that name a Workbench, and the four that do not.
+const BENCH_ONLY: [&str; 6] = [
+    "scrap_ward",
+    "shiv_routine",
+    "packet_buffer",
+    "kinetic_edge",
+    "probe_service",
+    "handshake_forge",
+];
+/// The field recipes (`outpost_kit` among them, behind research this fixture
+/// has not done).
+const FIELD: [&str; 3] = ["ice_breaker", "outlet", "power_cell"];
+
+/// A Workbench beside the party and material to spend.
+fn app_at_a_stocked_bench(seed: u32) -> App {
+    let mut app = app_at_a_workbench(seed);
+    let game = app.game.as_mut().unwrap();
+    game.dev_give_item(&ItemId::from("core_fragment"), 200)
+        .unwrap();
+    app
+}
+
+/// `c`, down the rail to the Compile page, and Right onto it.
+fn open_bench_compile(app: &mut App) {
+    app.handle_key(GameKey::Char('c'));
+    for _ in 0..12 {
+        if app.mode == Mode::Craft {
+            break;
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::Craft, "the rail reaches the Compile page");
+    app.handle_key(GameKey::Right);
+}
+
+fn picks_in_bench_list(app: &App, item: &str) -> usize {
+    let game = app.game.as_ref().unwrap();
+    craft_list(true, game)
+        .iter()
+        .position(|r| r.result == ItemId::from(item))
+        .unwrap_or_else(|| panic!("{item} should be offered at the bench"))
+}
+
+#[test]
+fn the_base_menu_beside_a_workbench_lists_only_field_recipes() {
+    let mut app = app_at_a_stocked_bench(710);
+    open_command(&mut app, "Compile an item");
+    let game = app.game.as_ref().unwrap();
+    let listed: Vec<String> = craft_list(app.craft_at_bench(), game)
+        .iter()
+        .map(|r| r.result.to_string())
+        .collect();
+    for item in BENCH_ONLY {
+        assert!(!listed.iter().any(|l| l == item), "{item} in {listed:?}");
+    }
+    for item in FIELD {
+        assert!(listed.iter().any(|l| l == item), "{item} in {listed:?}");
+    }
+    assert_eq!(
+        craft_visible(false, game, "").len(),
+        listed.len(),
+        "the handler and the screen read one list"
+    );
+}
+
+#[test]
+fn the_bench_page_lists_the_bench_recipes_too() {
+    let mut app = app_at_a_stocked_bench(711);
+    open_bench_compile(&mut app);
+    for item in BENCH_ONLY {
+        picks_in_bench_list(&app, item);
+    }
+}
+
+#[test]
+fn craft_outside_any_hub_is_not_a_hub_screen() {
+    let mut app = stocked_app(712);
+    open_command(&mut app, "Compile an item");
+    assert_eq!(app.mode, Mode::Craft);
+    assert!(app.structure_hub.is_none());
+    assert_eq!(app.hub_at(), None);
+}
+
+#[test]
+fn compiling_from_the_bench_page_returns_to_the_page_not_the_map() {
+    let mut app = app_at_a_stocked_bench(713);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "kinetic_edge");
+    pick_row(&mut app, row);
+    assert_eq!(app.mode, Mode::CraftQuantity);
+    assert_eq!(base_popup_parent(Mode::CraftQuantity), Some(Mode::Craft));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling);
+    assert_eq!(base_popup_parent(Mode::Compiling), Some(Mode::Craft));
+    app.advance_compile(3600.0);
+    while app.mode == Mode::Notification {
+        app.handle_key(GameKey::Esc);
+    }
+    assert_eq!(app.mode, Mode::Craft);
+    assert!(app.structure_hub.is_some(), "the hub stays open");
+}
+
+#[test]
+fn aborting_a_bench_compile_returns_to_the_page() {
+    let mut app = app_at_a_stocked_bench(714);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "kinetic_edge");
+    pick_row(&mut app, row);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling);
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(app.mode, Mode::Craft);
+    assert!(app.structure_hub.is_some());
+}
+
+#[test]
+fn a_zero_or_refused_bench_compile_returns_to_the_page() {
+    // Zero is a silent no-op.
+    let mut app = app_at_a_stocked_bench(715);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "kinetic_edge");
+    pick_row(&mut app, row);
+    app.handle_key(GameKey::Char('0'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Craft);
+    assert!(app.structure_hub.is_some());
+
+    // No material: the engine refuses to arm the batch.
+    let mut app = app_at_a_workbench(716);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "kinetic_edge");
+    pick_row(&mut app, row);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Craft);
+    assert!(app.structure_hub.is_some());
 }

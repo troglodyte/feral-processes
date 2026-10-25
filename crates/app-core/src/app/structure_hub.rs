@@ -51,6 +51,10 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Build routine",
             screens: &[Mode::RoutineBuild],
         },
+        StructurePage::Compile => &HubPage {
+            title: "Compile",
+            screens: &[Mode::Craft],
+        },
         StructurePage::Subroutines => &HubPage {
             title: "Subroutines",
             screens: &[Mode::Subroutines],
@@ -223,6 +227,7 @@ impl App {
                 self.mode = Mode::BuildProgram;
             }
             StructurePage::Build => self.mode = Mode::RoutineBuild,
+            StructurePage::Compile => self.mode = Mode::Craft,
             StructurePage::Subroutines => self.mode = Mode::Subroutines,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,
             StructurePage::Info => {

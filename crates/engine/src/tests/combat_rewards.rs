@@ -737,12 +737,13 @@ fn a_material_drop_spends_no_rarity_roll() {
 #[test]
 fn crafted_gear_is_never_rare() {
     let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let player = game.player_entity();
     let recipe = game
         .craft_recipes()
         .into_iter()
         .find(|r| game.equipment_of(&r.result).is_some())
-        .expect("some equippable is craftable with no bench");
+        .expect("some equippable is craftable with a bare workbench");
 
     for (item, qty) in &recipe.cost {
         game.world

@@ -655,7 +655,7 @@ impl App {
                 // mode should not still be open, but never spin here on a
                 // resource that is gone.
                 self.compile_progress = None;
-                self.mode = Mode::Playing;
+                self.mode = self.compile_exit_mode();
                 break;
             };
             self.compile_ticks_carry -= 1.0;
@@ -687,7 +687,7 @@ impl App {
     /// mode; `close_hand_craft` has already refunded the unit in flight by
     /// the time either runs.
     fn finish_compile(&mut self) {
-        self.mode = Mode::Playing;
+        self.mode = self.compile_exit_mode();
         self.after_world_action(true, false, 0);
     }
 

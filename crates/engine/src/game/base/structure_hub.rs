@@ -24,6 +24,9 @@ pub enum StructurePage {
     Build,
     Subroutines,
     Built,
+    /// The Workbench's recipe list: the same Compile screen `[b]` opens,
+    /// with the bench-only recipes in it.
+    Compile,
     Info,
 }
 
@@ -114,6 +117,7 @@ impl Game {
         page(bench, StructurePage::Build);
         page(bench, StructurePage::Subroutines);
         page(bench, StructurePage::Built);
+        page(bench, StructurePage::Compile);
         pages.push(StructurePage::Info);
         pages
     }

@@ -2166,6 +2166,15 @@ pub(crate) fn stand_beside_the_extractor(app: &mut App) {
     stand_in_base_at(app, 1, 0);
 }
 
+/// A base with a Workbench beside the party and Automation researched.
+pub(crate) fn app_at_a_workbench(seed: u32) -> App {
+    let mut app = app_owning_a_program_and_a_station_of("routine_craft", "workbench", seed);
+    stand_beside_the_extractor(&mut app);
+    let game = app.game.as_mut().unwrap();
+    let _ = game.dev_unlock_research(&"automation".to_string());
+    app
+}
+
 /// Deletes the `.sav` it was built from when it drops, unwind included —
 /// `save`, `load_from_file`, `save_to_file` and `Game::load` all sit
 /// between this guard's construction and the plain `remove_file` a

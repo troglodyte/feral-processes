@@ -419,7 +419,7 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
     use crate::tuning::{QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS};
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
-    let benchless = recipe_for(&mut game, "kinetic_edge");
+    let benchless = recipe_for(&mut game, ids::ICE_BREAKER);
     let bare = game.player_craft_order(&benchless, false);
     assert_eq!(
         game.craft_quality_floor(&bare),
@@ -488,6 +488,7 @@ fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
 #[test]
 fn careful_compiling_costs_half_again_of_the_discounted_price() {
     let mut game = Game::new(47, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let player = game.player_entity();
     let edge = ItemId::from("kinetic_edge");
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
@@ -525,6 +526,7 @@ fn careful_compiling_costs_half_again_of_the_discounted_price() {
 #[test]
 fn a_careful_batch_is_smaller_and_can_be_refused_outright() {
     let mut game = Game::new(48, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let edge = ItemId::from("kinetic_edge");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 21)]);
 
@@ -580,6 +582,7 @@ fn compiled_copies(game: &Game, item: &str) -> Vec<GearCopy> {
 fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
     use crate::tuning::{QUALITY_BASE, QUALITY_SPREAD};
     let mut game = Game::new(49, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let edge = ItemId::from("kinetic_edge");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7)]);
 
@@ -618,6 +621,7 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
 #[test]
 fn a_batch_compiles_copies_that_differ_from_each_other() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let edge = ItemId::from("kinetic_edge");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 5)]);
 
@@ -695,6 +699,7 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
 fn only_gear_spends_a_quality_roll() {
     fn fixture() -> Game {
         let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        touch_a_workbench(&mut game);
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
         game
     }
@@ -738,6 +743,7 @@ fn only_gear_spends_a_quality_roll() {
 fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
     use crate::tuning::{QUALITY_BASE, QUALITY_PERK_PER_LEVEL, QUALITY_SPREAD};
     let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    touch_a_workbench(&mut game);
     let player = game.player_entity();
     let edge = ItemId::from("kinetic_edge");
 
@@ -1160,6 +1166,7 @@ fn a_compile_refused_for_power_spends_nothing() {
 fn the_quoted_maximum_is_a_batch_the_compile_accepts() {
     for item in [ids::ICE_BREAKER, "kinetic_edge"] {
         let mut game = Game::new(324, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        touch_a_workbench(&mut game);
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
         let id = ItemId::from(item);
 

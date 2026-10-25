@@ -5,7 +5,7 @@
     description: "Scavenged armor. Thin plating bolted over the worst of the gaps.",
     value: Some(4),
     equipment: Some((Armor, (mitigation: 1, evasion: 3))),
-    craftable: Some((cost: [("core_fragment", 4)])),
+    craftable: Some((cost: [("core_fragment", 4)], requires_structure: Some("workbench"))),
     droppable: Some([("glitch", 0.1), ("sprite", 0.08)]),
     cache_drop: Some(0.12),
 )

@@ -4,20 +4,33 @@ use super::bars::*;
 use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::craft_visible;
+use feral_processes_app_core::{craft_list, craft_visible};
 use feral_processes_engine::HandCraftProgress;
 use feral_processes_engine::tuning::{QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT};
 
 pub(super) fn draw_craft_menu(
     game: &mut Game,
+    at_bench: bool,
     filter: &str,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
+    let rows = craft_page_rows(game, at_bench, filter, selected);
+    draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The Compile list's rows, shared by the popup and the Workbench hub's
+/// Compile page so the two cannot list different recipes.
+pub(super) fn craft_page_rows(
+    game: &Game,
+    at_bench: bool,
+    filter: &str,
+    selected: usize,
+) -> Vec<Row> {
     let status = game.player_status();
-    let recipes = game.craft_recipes();
+    let recipes = craft_list(at_bench, game);
     let mut rows = vec![
         text_row(
             "Type to filter; Esc to cancel (clears a filter first); Up/Down + Enter also work",
@@ -27,7 +40,7 @@ pub(super) fn draw_craft_menu(
     rows.extend(filter_line(filter));
     // Positions in the filtered list, resolved by the handler through the
     // same call.
-    let visible = craft_visible(game, filter);
+    let visible = craft_visible(at_bench, game, filter);
     if visible.is_empty() && !filter.is_empty() {
         rows.push(no_match_row(filter));
     }
@@ -52,7 +65,7 @@ pub(super) fn draw_craft_menu(
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
-    draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
+    rows
 }
 
 /// What a wrapped cost line is indented by: the width of `"MOD  "`, so the
@@ -520,7 +533,7 @@ mod tests {
     fn every_compile_row_leads_with_its_items_category() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
-        let recipes = game.craft_recipes();
+        let recipes = craft_list(false, &game);
         let status = game.player_status();
         assert!(!recipes.is_empty(), "a fresh game can compile something");
 
@@ -674,7 +687,7 @@ mod tests {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let status = game.player_status();
-        for recipe in game.craft_recipes().iter() {
+        for recipe in craft_list(false, &game).iter() {
             let lines = drawn_craft_lines(&game, recipe, &status.inventory);
             assert_eq!(
                 lines.len(),

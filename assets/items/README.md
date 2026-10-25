@@ -118,9 +118,9 @@ any non-finite `taming_potency`, `consume.power`, or
     // are paid for in refined goods rather than raw fragments, so rule 1 is
     // checked against the intermediate's value and not a fragment count.
     // `standard_and_premium_gear_is_made_from_intermediates` holds that
-    // policy, and `scavenged_gear_stays_benchless_and_fragment_only` holds
-    // the other half — the cheap tier stays craftable with no base standing,
-    // which is what a fresh run, or one just swept flat, equips out of.
+    // policy, and `scavenged_gear_is_fragment_only` holds the other
+    // half — the cheap tier is paid in raw fragments alone, so a Workbench
+    // is all it needs, never a production line.
     value: Some(90),
 
     // Optional; can be left out entirely (defaults to no economy role). If

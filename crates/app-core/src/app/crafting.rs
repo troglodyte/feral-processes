@@ -3,18 +3,31 @@
 use crate::app::basket::halve;
 use crate::app::list_filter::filter_matches;
 use crate::*;
+use feral_processes_engine::CraftRecipe;
 
 /// The most a compile may be asked for, matching the four-digit ceiling the
 /// typed buffer already has. An arrow that walked past what the player can
 /// type would leave the page in a state Backspace could not get back out of.
 const CRAFT_QUANTITY_MAX: u32 = 9999;
 
-/// Indices into `Game::craft_recipes` that `filter` leaves, by the result's
-/// name — the head of the row the screen draws. The handler and the gui both
-/// read the list through it.
-pub fn craft_visible(game: &Game, filter: &str) -> Vec<usize> {
-    let names: Vec<String> = game
-        .craft_recipes()
+/// The recipes the Compile list offers: everything `Game::craft_recipes`
+/// holds at a bench (the structure hub's Compile page), and only the
+/// field recipes — those naming no bench — anywhere else. **Every reader of
+/// the list goes through this**, so the row a key picks is the row the
+/// screen draws and the count the filter reports.
+pub fn craft_list(at_bench: bool, game: &Game) -> Vec<CraftRecipe> {
+    let mut recipes = game.craft_recipes();
+    if !at_bench {
+        recipes.retain(|r| r.requires_structure.is_none());
+    }
+    recipes
+}
+
+/// Indices into `craft_list` that `filter` leaves, by the result's name — the
+/// head of the row the screen draws. The handler and the gui both read the
+/// list through it.
+pub fn craft_visible(at_bench: bool, game: &Game, filter: &str) -> Vec<usize> {
+    let names: Vec<String> = craft_list(at_bench, game)
         .iter()
         .map(|r| game.item_name(&r.result).to_string())
         .collect();
@@ -22,6 +35,22 @@ pub fn craft_visible(game: &Game, filter: &str) -> Vec<usize> {
 }
 
 impl App {
+    /// Where the compile flow lands when it ends or is refused: the bench
+    /// page it was opened from, else the map.
+    pub(crate) fn compile_exit_mode(&self) -> Mode {
+        if self.structure_hub.is_some() {
+            Mode::Craft
+        } else {
+            Mode::Playing
+        }
+    }
+
+    /// Whether the Compile list is the Workbench page's: the structure hub
+    /// is the only way to stand at a bench.
+    pub fn craft_at_bench(&self) -> bool {
+        self.structure_hub.is_some()
+    }
+
     pub(crate) fn handle_craft_key(&mut self, key: GameKey) {
         if self.take_filter_key(key) {
             return;
@@ -30,9 +59,10 @@ impl App {
             self.close_screen();
             return;
         }
+        let at_bench = self.craft_at_bench();
         let Some(game) = &self.game else { return };
-        let recipes = game.craft_recipes();
-        let visible = craft_visible(game, self.filter_text());
+        let recipes = craft_list(at_bench, game);
+        let visible = craft_visible(at_bench, game, self.filter_text());
         if let Some(pos) = self.selected_index(key, visible.len()) {
             self.pending_craft = Some(recipes[visible[pos]].result.clone());
             self.craft_quantity_input.clear();
@@ -95,7 +125,7 @@ impl App {
             }
             GameKey::Char('f') | GameKey::Char('F') => {
                 let Some(result) = self.pending_craft.take() else {
-                    self.mode = Mode::Playing;
+                    self.mode = self.compile_exit_mode();
                     return;
                 };
                 self.craft_quantity_input.clear();
@@ -103,12 +133,12 @@ impl App {
             }
             GameKey::Char('m') | GameKey::Char('M') => {
                 let Some(result) = self.pending_craft.take() else {
-                    self.mode = Mode::Playing;
+                    self.mode = self.compile_exit_mode();
                     return;
                 };
                 self.craft_quantity_input.clear();
                 let Some(game) = &self.game else {
-                    self.mode = Mode::Playing;
+                    self.mode = self.compile_exit_mode();
                     return;
                 };
                 // Nothing affordable still commits one, so the refusal is
@@ -119,7 +149,7 @@ impl App {
             }
             GameKey::Enter => {
                 let Some(result) = self.pending_craft.take() else {
-                    self.mode = Mode::Playing;
+                    self.mode = self.compile_exit_mode();
                     return;
                 };
                 let quantity = self.craft_quantity();
@@ -168,11 +198,11 @@ impl App {
     /// and "spend a frame of it."
     fn commit_craft(&mut self, result: ItemId, quantity: u32) {
         if quantity == 0 {
-            self.mode = Mode::Playing;
+            self.mode = self.compile_exit_mode();
             return;
         }
         let Some(game) = &mut self.game else {
-            self.mode = Mode::Playing;
+            self.mode = self.compile_exit_mode();
             return;
         };
         let outcome = game.begin_hand_craft(&result, quantity, self.careful_craft);
@@ -183,7 +213,7 @@ impl App {
             self.compile_ticks_carry = 0.0;
             self.mode = Mode::Compiling;
         } else {
-            self.mode = Mode::Playing;
+            self.mode = self.compile_exit_mode();
         }
     }
 
@@ -193,11 +223,17 @@ impl App {
     /// there is no separate Esc case. `Game::abort_hand_craft` keeps every
     /// unit already finished and refunds the one in flight.
     pub(crate) fn handle_compiling_key(&mut self, _key: GameKey) {
+        self.abort_compile();
+        self.mode = self.compile_exit_mode();
+    }
+
+    /// Disarms the batch and its screen state, refunding the unit in flight.
+    /// Shared by the abort key and by a hub that changes under the batch.
+    pub(crate) fn abort_compile(&mut self) {
         if let Some(game) = &mut self.game {
             game.abort_hand_craft();
         }
         self.compile_progress = None;
         self.compile_ticks_carry = 0.0;
-        self.mode = Mode::Playing;
     }
 }

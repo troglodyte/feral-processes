@@ -14,15 +14,6 @@ fn group() -> Subroutine {
     Subroutine::Area(AreaKind::Group)
 }
 
-/// A base with a Workbench beside the party and Automation researched.
-fn app_at_a_workbench(seed: u32) -> App {
-    let mut app = app_owning_a_program_and_a_station_of("routine_craft", "workbench", seed);
-    stand_beside_the_extractor(&mut app);
-    let game = app.game.as_mut().unwrap();
-    let _ = game.dev_unlock_research(&"automation".to_string());
-    app
-}
-
 fn know(app: &mut App, part: &Subroutine) {
     let game = app.game.as_mut().unwrap();
     let _ = game.dev_unlock_research(&part_node_id(part));

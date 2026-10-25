@@ -27,7 +27,7 @@ Your menus and stores:
   the left: Overview, then four command pages, then the report pages below. Build holds deploy,
   work a structure yourself, upgrade and demolish. Research holds research, routine and affix
   research, study a program and hold a program. Trade holds contracts, caravan and dispatch.
-  Compile holds compile an item and recipes. Pick a row with Up/Down and Enter.
+  Compile holds the field recipes and Recipes. Gear that needs a bench is compiled at a Workbench instead (stand beside it and press c). Pick a row with Up/Down and Enter.
   The rest of the rail is Staff, Production, Stock, Work orders, Staffing, Build orders and
   Alerts, each a page of the report beside it. One highlight moves through both: Up and Down
   walk the rail, Right (or Enter) steps onto the page's rows, and Right again walks on through

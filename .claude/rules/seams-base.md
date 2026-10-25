@@ -279,8 +279,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   research never touches the player's pack.
 - **A rig holds its own tool and the player holds theirs** —
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
-  strip resolves against `ToolDb`, and a rig with nothing fitted runs
-  nothing.
+  strip resolves against `ToolDb`, and a rig with nothing fitted runs on
+  the starter tool, derived by `Game::rig_tool` and never stored.
 - **The rig's tool screen is the Tool page of the structure hub, never a map
   key**, and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
@@ -289,7 +289,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   (`Game::is_rack_carrier`), and the scheduler's forced edge holds exactly
   that out of the posting pool, never a rig's posted fetcher** — a re-matched
   fetcher becomes a rack carrier and `drop_load` shelters its kill, whereas
-  holding it would pin it to a rig that lost its tool, went dark or filled.
+  holding it would pin it to a rig that went dark or filled.
 - **Racking ranks in `drift_idle_staff` as two arms: delivery (a body already
   holding a program) above the `OffShift` and respite arms, the pick-up above
   clearing** — and a carrier that has not left its tile for

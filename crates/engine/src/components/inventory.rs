@@ -80,9 +80,9 @@ pub struct Hopper {
     /// programs and knows nothing about tools, so a crew fetch would have
     /// nowhere to get one from.
     ///
-    /// `None` on a rig nobody has hand-loaded yet, which is what makes the
-    /// hand-load worth keeping: it is the one gesture that *names* a tool,
-    /// and removing it would need a screen invented to replace it. Never a
+    /// `None` on a rig nobody has fitted, which runs on the starter tool
+    /// (`Game::rig_tool`) — derived rather than stored, so pulling a tool
+    /// can never hand back a starter carrier nobody paid for. Never a
     /// `Routines` or `Gear` tool — `load_teardown_rig` refuses both before
     /// it writes this.
     pub standing_tool: Option<crate::tools::ToolId>,

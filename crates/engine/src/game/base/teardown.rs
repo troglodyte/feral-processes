@@ -98,27 +98,19 @@ impl Game {
             return;
         };
 
-        // **The rig's own tool, never the player's slots.** Resolved
-        // against `ToolDb` and gated on the rig still having one fitted:
-        // read off `installed_tools()` instead — which it was, before a rig
-        // held its own — pulling a tool out of the *player's* slot silently
-        // starved every rig in the base that had been loaded with it, and
-        // nothing named the rig or the slot in the log.
-        let fitted = self
+        // **The rig's own tool, never the player's slots.** Read off
+        // `installed_tools()` instead — which it was, before a rig held its
+        // own — pulling a tool out of the *player's* slot silently starved
+        // every rig in the base that had been loaded with it, and nothing
+        // named the rig or the slot in the log.
+        let Some(tool) = self
             .world
-            .get::<Hopper>(rig)
-            .and_then(|h| h.standing_tool.clone());
-        let Some(tool) = fitted.and_then(|_| {
-            self.world
-                .resource::<crate::tools::ToolDb>()
-                .get(entry.tool.as_str())
-                .cloned()
-        }) else {
-            // Either nothing is fitted (the player pulled it, so the rig has
-            // nothing to work with and the programs already fetched stay put)
-            // or the tool file itself is gone from a modded install. Both are
-            // the same shape as an empty hopper rather than a program that
-            // vanished.
+            .resource::<crate::tools::ToolDb>()
+            .get(entry.tool.as_str())
+            .cloned()
+        else {
+            // The tool file is gone from a modded install: the same shape
+            // as an empty hopper rather than a program that vanished.
             self.set_rig_status(rig, MachineStatus::Starved);
             return;
         };
@@ -206,11 +198,8 @@ impl Game {
     /// passes with a schedule between them. Both routes into a hopper go
     /// through `Game::hopper_room`.
     ///
-    /// **A rig with no standing tool does not fetch**, and falls through to
-    /// the `Starved` its empty hopper already writes: nothing is feeding it,
-    /// and what the player has to do about that is hand it a tool once.
-    /// `Hopper::standing_tool` is the only thing that can name one, since
-    /// nobody is standing at the rig when a carrier arrives this way.
+    /// The carrier is stamped with `Game::rig_tool` — the starter on a rig
+    /// nobody has fitted, the player's own default.
     fn step_carrier_fetch(&mut self, rig: Entity, worker: Entity) {
         if let Some(held) = self
             .world
@@ -223,18 +212,7 @@ impl Game {
                 // chewed through what it has.
                 return;
             }
-            let Some(tool) = self
-                .world
-                .get::<Hopper>(rig)
-                .and_then(|h| h.standing_tool.clone())
-            else {
-                // Unlike a full hopper, a missing tool does not clear by
-                // itself: the player must fit one. Waiting would hold the
-                // kill (and the body) until then, so it goes back through
-                // the shelter chain.
-                self.return_carried_program(worker);
-                return;
-            };
+            let tool = self.rig_tool(rig);
             let label = self.downed_program_label(&held);
             if let Some(mut hopper) = self.world.get_mut::<Hopper>(rig) {
                 hopper.queue.push(crate::components::HopperEntry {
@@ -254,14 +232,6 @@ impl Game {
             .get::<Hopper>(rig)
             .is_some_and(|h| h.queue.is_empty());
         if !empty || self.hopper_room(rig) == 0 {
-            return;
-        }
-        if self
-            .world
-            .get::<Hopper>(rig)
-            .and_then(|h| h.standing_tool.clone())
-            .is_none()
-        {
             return;
         }
         let Some(rack) = self.stocked_rack_in_reach(worker) else {

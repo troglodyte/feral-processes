@@ -523,16 +523,16 @@ pub struct ToolRow {
 /// reason: a base may stand two rigs against one cell and the player has to
 /// be told which one they are fitting.
 ///
-/// `queued` is what the hopper is holding, drawn because pulling the tool
-/// stops the rig dead — a removal with work already fetched is worth seeing
-/// before it is made.
+/// `installed` is the tool the rig strips with, and `built_in` says it is
+/// the starter running on a rig nobody has fitted (`Game::rig_tool`) — no
+/// carrier stands behind it, so there is nothing to pull.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RigToolView {
     pub tile: (i32, i32),
     pub name: String,
     pub installed: Option<RigToolRow>,
     pub candidates: Vec<RigToolRow>,
-    pub queued: usize,
+    pub built_in: bool,
 }
 
 /// One tool as the rig screen names it — `ToolRow` without the player's

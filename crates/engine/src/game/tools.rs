@@ -208,6 +208,17 @@ impl Game {
         self.world.resource::<ToolDb>().all().cloned().collect()
     }
 
+    /// The tool `rig` strips with: the one fitted, else the starter. The
+    /// starter is derived, never stored in `Hopper::standing_tool`, the
+    /// player's own rule (`knows_tool`): storing it would hand a free
+    /// carrier back on every pull.
+    pub(crate) fn rig_tool(&self, rig: Entity) -> ToolId {
+        self.world
+            .get::<Hopper>(rig)
+            .and_then(|h| h.standing_tool.clone())
+            .unwrap_or_else(|| ToolId(crate::tuning::STARTER_TOOL_ID.to_string()))
+    }
+
     /// The rig's own tool screen — `Game::depot_filter_view`'s shape and its
     /// self-closing rule: `None` the moment `rig` stops being a standing rig
     /// beside the party, so a machine demolished or walked away from under
@@ -231,9 +242,8 @@ impl Game {
             .unwrap_or_else(|| kind.clone());
         let pos = self.world.get::<Position>(rig)?;
         let tile = (pos.x, pos.y);
-        let hopper = self.world.get::<Hopper>(rig)?;
-        let standing = hopper.standing_tool.clone();
-        let queued = hopper.queue.len();
+        let built_in = self.world.get::<Hopper>(rig)?.standing_tool.is_none();
+        let running = self.rig_tool(rig);
         let player = self.player_entity();
         let inventory = self.world.get::<Inventory>(player);
         let row = |def: &crate::tools::ToolDef| crate::views::RigToolRow {
@@ -247,14 +257,11 @@ impl Game {
                 .unwrap_or(0),
         };
         let db = self.world.resource::<ToolDb>();
-        let installed = standing
-            .as_ref()
-            .and_then(|id| db.get(id.as_str()))
-            .map(row);
+        let installed = db.get(running.as_str()).map(row);
         let candidates = db
             .all()
             .filter(|def| self.rig_runs(def).is_ok())
-            .filter(|def| standing.as_ref() != Some(&def.id))
+            .filter(|def| def.id != running)
             .filter(|def| {
                 inventory
                     .map(|inv| inv.count(&ItemId::tool(&def.id)) > 0)
@@ -267,7 +274,7 @@ impl Game {
             name,
             installed,
             candidates,
-            queued,
+            built_in,
         })
     }
 
@@ -360,12 +367,12 @@ impl Game {
     }
 
     /// Pulls the tool back out of `rig` and hands the carrier over. The rig
-    /// runs nothing until another is fitted — `run_teardown_rigs` gates on
-    /// `standing_tool` being set, so the programs already in the hopper stay
-    /// put rather than draining on the tool that has left the building.
+    /// falls back to the starter, and the hopper is re-stamped with it for
+    /// `install_rig_tool`'s reason.
     ///
     /// Refusals, in order, all before anything is spent: game-over or an
-    /// active battle, no such rig beside the party, nothing fitted.
+    /// active battle, no such rig beside the party, nothing fitted — the
+    /// starter has no carrier to pull.
     pub fn remove_rig_tool(&mut self, rig: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -379,7 +386,14 @@ impl Game {
             .and_then(|h| h.standing_tool.clone())
             .ok_or_else(|| "There is no tool fitted to it.".to_string())?;
 
-        self.world.get_mut::<Hopper>(rig).unwrap().standing_tool = None;
+        let starter = ToolId(crate::tuning::STARTER_TOOL_ID.to_string());
+        {
+            let mut hopper = self.world.get_mut::<Hopper>(rig).unwrap();
+            hopper.standing_tool = None;
+            for entry in hopper.queue.iter_mut() {
+                entry.tool = starter.clone();
+            }
+        }
         self.hand_back_rig_tool(&fitted);
         let name = self.tool_display_name(fitted.as_str());
         self.log_base(format!("You pull the {name} out of the rig."));

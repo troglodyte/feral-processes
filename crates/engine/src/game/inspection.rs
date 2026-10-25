@@ -1731,7 +1731,7 @@ impl Game {
                     standing_tool: self
                         .world
                         .get::<crate::components::Hopper>(entity)
-                        .and_then(|h| h.standing_tool.clone())
+                        .map(|_| self.rig_tool(entity))
                         .map(|id| {
                             // An id `ToolDb` cannot resolve — a mod's file
                             // removed since the save — falls back to the raw

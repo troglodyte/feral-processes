@@ -313,25 +313,7 @@ fn a_re_matched_fetchers_kill_ends_up_kept() {
     assert_eq!(pack_programs(&game), 0, "research never uses the pack");
 }
 
-/// The rig loses its tool after the pickup and another job is waiting: the
-/// posted fetcher must not be pinned to a rig that can never take the
-/// program.
-#[test]
-fn a_fetcher_whose_rig_lost_its_tool_is_freed_and_its_kill_sheltered() {
-    let (mut game, rig, rack, worker) = super::racks::a_rig_beside_a_stocked_rack(1);
-    game.tick();
-    assert!(game.world.get::<CarryingProgram>(worker).is_some());
-    game.remove_rig_tool(rig).unwrap();
-    wanted_job(&mut game);
-
-    for _ in 0..200 {
-        game.tick();
-    }
-    assert!(game.world.get::<CarryingProgram>(worker).is_none());
-    assert_eq!(racked_levels(&game, rack), vec![201], "the kill is kept");
-}
-
-/// The same pin by a full hopper rather than a missing tool: the fetcher
+/// A full hopper pins a posted fetcher: it
 /// waits at the rig, and a waiting body is still re-matched when other work
 /// is wanted.
 #[test]

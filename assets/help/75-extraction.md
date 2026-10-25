@@ -62,10 +62,11 @@ Two things are worth knowing before you spend a body.
   for a tool to work on afterward.
 
 Research Teardown and you can build a Teardown Rig, which does the same work while you are
-somewhere else. **The rig holds its own tool.** Stand beside it, press c and open its Tool page to fit one out of your
-pack; it runs on that tool and not on anything in your own slots, and the figures on that screen
-are what it will pay. Fit another there to swap the tool — the one it replaces comes back to you —
-or press R to pull it out entirely, which stops the rig until something else is fitted.
+somewhere else. **The rig holds its own tool.** A new rig runs on a built-in Salvage Clamp, the
+same tool you start with. Stand beside it, press c and open its Tool page to fit a better one out of
+your pack; it runs on that tool and not on anything in your own slots, and the figures on that
+screen are what it will pay. Fit another there to swap the tool — the one it replaces comes back to
+you — or press R to pull it out, and the rig goes back to its built-in Salvage Clamp.
 
 - It is a machine like any other. Post a program to it, keep it on the grid, and it strips what is
   in its hopper one body at a time. Nothing moves while it is dark, while nobody is at it, or while

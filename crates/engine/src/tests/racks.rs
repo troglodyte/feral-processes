@@ -303,22 +303,20 @@ fn a_rack_out_of_reach_produces_no_fetch() {
     assert_eq!(shelf_of(&game, rack).len(), 1);
 }
 
-/// A rig nobody has hand-loaded has no tool to strip with, so it does not
-/// fetch — and falls through to the `Starved` an empty hopper already
-/// writes, on the transition `set_machine_status` speaks on.
+/// A rig with nothing fitted runs on the starter tool, as the player does,
+/// so it fetches like any other and stamps the carrier with the starter.
 #[test]
-fn a_rig_with_no_standing_tool_does_not_fetch() {
+fn a_rig_with_nothing_fitted_fetches_with_the_starter_tool() {
     let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
     game.world.get_mut::<Hopper>(rig).unwrap().standing_tool = None;
 
     game.tick();
-    assert!(game.world.get::<CarryingProgram>(worker).is_none());
-    assert_eq!(shelf_of(&game, rack).len(), 1, "the rack keeps it");
-    assert_eq!(
-        game.world.get::<crate::components::MachineStatus>(rig),
-        Some(&crate::components::MachineStatus::Starved),
-        "nothing is feeding it, and hand-loading it once is the fix"
-    );
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    game.tick();
+    assert!(shelf_of(&game, rack).is_empty(), "the rack gave it up");
+    let hopper = game.world.get::<Hopper>(rig).unwrap();
+    assert_eq!(hopper.queue.len(), 1);
+    assert_eq!(hopper.queue[0].tool.0, crate::tuning::STARTER_TOOL_ID);
 }
 
 /// **The first of the two silent rules.** Freeing a body mid-trip destroys
@@ -430,25 +428,4 @@ fn a_put_into_room_promised_to_a_carried_program_is_refused() {
 
     assert_eq!(pack_of(&game), vec![1], "the pack is untouched");
     assert_eq!(shelf_of(&game, rack), before, "and so is the shelf");
-}
-
-/// A fetcher whose rig lost its tool after the pickup has nowhere to put
-/// the program, and with no other work wanted nothing re-matches it: it must
-/// hand the kill back rather than stand holding it for ever.
-#[test]
-fn a_fetcher_at_a_rig_with_no_tool_shelters_its_program() {
-    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
-    game.tick();
-    assert!(game.world.get::<CarryingProgram>(worker).is_some());
-    game.remove_rig_tool(rig).unwrap();
-
-    for _ in 0..5 {
-        game.tick();
-    }
-    assert!(game.world.get::<CarryingProgram>(worker).is_none());
-    assert_eq!(
-        shelf_of(&game, rack),
-        vec![201],
-        "the kill is back on a rack"
-    );
 }

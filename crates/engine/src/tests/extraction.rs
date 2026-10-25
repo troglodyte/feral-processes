@@ -3977,7 +3977,7 @@ fn a_rig_refuses_an_image_tool() {
 }
 
 #[test]
-fn the_rigs_report_names_its_standing_tool_and_is_silent_without_one() {
+fn the_rigs_report_names_its_standing_tool_and_the_starter_without_one() {
     let (mut game, rig) = player_beside_a_rig_holding(1);
     let rig_row = |game: &mut Game| {
         game.structure_report()
@@ -3985,12 +3985,17 @@ fn the_rigs_report_names_its_standing_tool_and_is_silent_without_one() {
             .find(|r| r.kind == "teardown_rig")
             .expect("the rig is in range of the roster")
     };
-    assert_eq!(rig_row(&mut game).standing_tool, None);
+    assert_eq!(
+        rig_row(&mut game).standing_tool.as_deref(),
+        Some("Salvage Clamp"),
+        "an unfitted rig runs on the starter"
+    );
 
-    fit_and_load(&mut game, rig, "salvage_clamp", 1);
+    install_tool_for_test(&mut game, "core_tap");
+    fit_and_load(&mut game, rig, "core_tap", 1);
     let named = rig_row(&mut game).standing_tool.expect("it is set up now");
     assert!(
-        !named.is_empty() && named != "salvage_clamp",
+        !named.is_empty() && named != "core_tap",
         "the report carries the display name, not the id: {named}"
     );
 }

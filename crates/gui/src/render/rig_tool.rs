@@ -48,29 +48,26 @@ fn body_rows(screen: &RigToolScreen, selected: usize) -> Vec<Row> {
     let mut body = vec![text_row(format!("{} at ({x}, {y})", view.name))];
     match &view.installed {
         Some(row) => body.push(text_row(format!(
-            "Fitted: {} — {}, tier {}, {} ticks a program",
+            "{}: {} — {}, tier {}, {} ticks a program",
+            if view.built_in { "Built in" } else { "Fitted" },
             row.name,
             row.category.as_str(),
             row.tier,
             row.ticks
         ))),
+        // Only a modded install that dropped the starter's file.
         None => body.push(text_row(
             "Nothing fitted — the rig runs nothing until it has a tool",
         )),
     }
-    // Said only when there is something to lose: pulling the tool leaves
-    // what a body has already fetched sitting in the hopper, and that is
-    // worth knowing before the key is pressed rather than after.
-    if view.queued > 0 {
-        body.push(text_row(format!(
-            "{} in the hopper — pulling the tool stops the rig, and they stay put",
-            view.queued
-        )));
-    }
     body.extend([
         text_row(""),
         text_row("Pick a row to fit it; the tool it replaces comes back to your pack"),
-        text_row("[R] pull the fitted tool  Esc to go back"),
+        text_row(if view.built_in {
+            "Esc to go back"
+        } else {
+            "[R] pull the fitted tool (the rig falls back to its built-in one)  Esc to go back"
+        }),
         text_row(""),
     ]);
     if view.candidates.is_empty() {
@@ -182,7 +179,7 @@ mod tests {
                 name: "Teardown Rig".to_string(),
                 installed: candidates.first().cloned(),
                 candidates,
-                queued: 0,
+                built_in: false,
             },
         }
     }
@@ -240,13 +237,20 @@ mod tests {
     fn the_page_says_what_it_has_to_in_every_state() {
         let game = shipped_game();
         let mut screen = widest_screen(&game);
-        screen.view.queued = 6;
-        let loud = body_rows(&screen, 0);
+        screen.view.built_in = true;
+        let built_in = body_rows(&screen, 0);
         assert!(
-            loud.iter().any(|r| row_label_text(r).contains("hopper")),
-            "a loaded rig warns that pulling the tool strands the queue"
+            built_in
+                .iter()
+                .any(|r| row_label_text(r).starts_with("Built in:")),
+            "an unfitted rig names the starter it runs on"
+        );
+        assert!(
+            !built_in.iter().any(|r| row_label_text(r).contains("[R]")),
+            "and offers no pull, since there is no carrier behind it"
         );
 
+        screen.view.built_in = false;
         screen.view.candidates.clear();
         screen.view.installed = None;
         let empty = body_rows(&screen, 0);

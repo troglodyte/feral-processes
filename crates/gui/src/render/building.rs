@@ -1854,9 +1854,7 @@ pub(super) fn structure_detail_lines(
     if let Some(line) = buffer_line("out", &s.output, Some(s.output_capacity)) {
         lines.push((line, TEXT_DIM));
     }
-    // A rig's standing tool. Drawn even when unset, and in yellow when it
-    // is: a rig nobody has hand-loaded is the one that will not fetch from a
-    // rack, and that is a thing the player can walk over and fix.
+    // The tool a rig strips with — the starter on one nobody has fitted.
     if let Some(tool) = &s.standing_tool {
         lines.push((format!("  set up with the {tool}"), TEXT_DIM));
     }

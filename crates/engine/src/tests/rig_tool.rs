@@ -185,12 +185,11 @@ fn swapping_retools_what_is_already_in_the_hopper() {
     );
 }
 
-/// Pulling the tool stops the rig dead — the programs already fetched stay
-/// where they are rather than draining on a tool that has left the base.
+/// A rig never fitted strips with the starter tool and spends no carrier —
+/// the player's own starter rule, derived rather than stored.
 #[test]
-fn pulling_the_tool_stalls_a_loaded_rig_without_losing_the_queue() {
-    let (mut game, rig) = player_beside_a_rig_carrying(&["salvage_clamp"]);
-    game.install_rig_tool(rig, &tool("salvage_clamp")).unwrap();
+fn an_unfitted_rig_strips_with_the_starter_tool() {
+    let (mut game, rig) = player_beside_a_rig_carrying(&[]);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
@@ -204,24 +203,47 @@ fn pulling_the_tool_stalls_a_loaded_rig_without_losing_the_queue() {
         .queue
         .push(HopperEntry {
             program: program(5),
-            tool: tool("salvage_clamp"),
+            tool: tool(crate::tuning::STARTER_TOOL_ID),
         });
     stand_ample_grid_supply(&mut game);
 
-    game.remove_rig_tool(rig).unwrap();
-    for _ in 0..50 {
+    for _ in 0..200 {
         game.tick();
+        if game.world.get::<Hopper>(rig).unwrap().queue.is_empty() {
+            break;
+        }
     }
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+    let output: u32 = game.world.get::<Stock>(rig).unwrap().output.values().sum();
+    assert!(output > 0, "and paid out into its own buffer");
+    assert_eq!(fitted(&game, rig), None, "nothing was stored to get it");
+}
+
+/// Pulling a fitted tool drops the rig back to the starter: the queue is
+/// re-stamped and keeps draining rather than waiting on a tool that left.
+#[test]
+fn pulling_the_tool_falls_back_to_the_starter() {
+    let (mut game, rig) = player_beside_a_rig_carrying(&["core_tap"]);
+    game.install_rig_tool(rig, &tool("core_tap")).unwrap();
+    game.world
+        .get_mut::<Hopper>(rig)
+        .unwrap()
+        .queue
+        .push(HopperEntry {
+            program: program(5),
+            tool: tool("core_tap"),
+        });
+
+    game.remove_rig_tool(rig).unwrap();
 
     assert_eq!(
-        game.world.get::<Hopper>(rig).unwrap().queue.len(),
-        1,
-        "the program stays in the hopper"
+        game.world.get::<Hopper>(rig).unwrap().queue[0].tool,
+        tool(crate::tuning::STARTER_TOOL_ID)
     );
+    let view = game.rig_tool_view(rig).unwrap();
     assert_eq!(
-        game.world.get::<crate::components::MachineStatus>(rig),
-        Some(&crate::components::MachineStatus::Starved),
-        "and the rig says it has nothing to work with"
+        view.installed.map(|r| r.id),
+        Some(tool(crate::tuning::STARTER_TOOL_ID))
     );
 }
 
@@ -295,6 +317,8 @@ fn fitting_during_a_battle_refuses_and_spends_nothing() {
     });
 }
 
+/// The starter is derived, so there is no carrier to hand back — pulling it
+/// would mint one.
 #[test]
 fn pulling_from_an_untooled_rig_refuses_and_spends_nothing() {
     let (mut game, rig) = player_beside_a_rig_carrying(&["salvage_clamp"]);

@@ -1501,8 +1501,8 @@ pub struct StructureSave {
     #[serde(default)]
     pub hopper_progress: u64,
     /// The rig's standing tool — see `components::Hopper::standing_tool`.
-    /// Defaulted, so a save written before it existed loads with a rig that
-    /// has not been hand-loaded yet.
+    /// Defaulted, so a save written before it existed loads with a rig on
+    /// the starter tool.
     #[serde(default)]
     pub standing_tool: Option<crate::tools::ToolId>,
     /// A Quarantine Rack's shelf — see `components::Racked`. `DownedProgram`

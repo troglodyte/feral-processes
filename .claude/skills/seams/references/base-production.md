@@ -517,7 +517,12 @@
   unbounded `Vec` and `add` saturates only against `u32`, so the refusal
   cannot fire; that is the whole difference from `return_carried_program`,
   whose third rung exists because `DownedPrograms` is capped.
-  `HopperEntry::tool` is re-stamped on every fit and so can never differ
+  **A rig nobody has fitted runs on the starter, derived by
+  `Game::rig_tool` and never written into `standing_tool`** — the player's
+  own starter rule (`knows_tool`): stored, every pull would hand back a
+  Salvage Clamp carrier nobody paid for. So `remove_rig_tool` still refuses
+  on an unfitted rig, and a pull re-stamps the queue with the starter.
+  `HopperEntry::tool` is re-stamped on every fit and pull, so it can never differ
   from the rig's tool — kept rather than deleted only because it is a save
   field, and a field *removed* is the one case field-named RON does not
   excuse from a `SAVE_FORMAT_VERSION` bump.
@@ -571,7 +576,7 @@
   hands the kill back through `drop_load`, so nothing is lost. Widening the
   edge to every `CarryingProgram` holder (an earlier fix, on the false belief
   that such a body was uncounted and undelivered) instead pinned a fetcher to
-  a rig that had lost its tool, gone dark or filled, for ever, with other work
+  a rig that had gone dark or filled, for ever, with other work
   waiting. In `drift_idle_staff` the delivery arm ranks above `OffShift`
   and respite (`is_on_shift` keeps a carrier on shift whatever it is marked,
   so the amenity walk would otherwise march the kill to a Bay); the pick-up

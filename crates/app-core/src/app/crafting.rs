@@ -223,11 +223,17 @@ impl App {
     /// there is no separate Esc case. `Game::abort_hand_craft` keeps every
     /// unit already finished and refunds the one in flight.
     pub(crate) fn handle_compiling_key(&mut self, _key: GameKey) {
+        self.abort_compile();
+        self.mode = self.compile_exit_mode();
+    }
+
+    /// Disarms the batch and its screen state, refunding the unit in flight.
+    /// Shared by the abort key and by a hub that changes under the batch.
+    pub(crate) fn abort_compile(&mut self) {
         if let Some(game) = &mut self.game {
             game.abort_hand_craft();
         }
         self.compile_progress = None;
         self.compile_ticks_carry = 0.0;
-        self.mode = self.compile_exit_mode();
     }
 }

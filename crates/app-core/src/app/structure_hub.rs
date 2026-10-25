@@ -276,6 +276,7 @@ impl App {
             .map(|g| g.adjacent_structures())
             .unwrap_or_default();
         if cycle.is_empty() {
+            self.abort_compile_if_compiling();
             self.close_structure_hub();
             return;
         }
@@ -289,7 +290,16 @@ impl App {
             && page.is_none_or(|p| self.structure_hub.as_ref().is_some_and(|h| page_kept(h, p)));
         self.structure_hub = Some(StructureHub { cycle, at });
         if !keep {
+            self.abort_compile_if_compiling();
             self.enter_structure_page(0);
+        }
+    }
+
+    /// A hub that closes or re-pages under a running batch would strand the
+    /// armed `HandCraft`, losing the unit in flight.
+    fn abort_compile_if_compiling(&mut self) {
+        if self.mode == Mode::Compiling {
+            self.abort_compile();
         }
     }
 

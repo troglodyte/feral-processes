@@ -483,7 +483,7 @@ fn compiling_the_most_with_a_flat_reserve_names_power_not_materials() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// The six gear recipes that name a Workbench, and the four that do not.
+/// The six gear recipes that name a Workbench.
 const BENCH_ONLY: [&str; 6] = [
     "scrap_ward",
     "shiv_routine",
@@ -596,6 +596,31 @@ fn aborting_a_bench_compile_returns_to_the_page() {
     app.handle_key(GameKey::Char('x'));
     assert_eq!(app.mode, Mode::Craft);
     assert!(app.structure_hub.is_some());
+}
+
+/// `refresh_structure_hub` runs inside `after_tick` while compiling; a bench
+/// that leaves the cycle must not strand the armed batch, whose in-flight
+/// unit's material would otherwise be lost to the next arm.
+#[test]
+fn losing_the_bench_mid_compile_aborts_the_batch() {
+    let mut app = app_at_a_stocked_bench(717);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "kinetic_edge");
+    pick_row(&mut app, row);
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling);
+    assert!(app.game.as_ref().unwrap().hand_craft_in_progress());
+
+    let bench = app.structure_hub.as_ref().unwrap().current().entity;
+    app.game.as_mut().unwrap().remove_structure(bench).unwrap();
+    app.advance_compile(1.0);
+
+    assert_ne!(app.mode, Mode::Compiling, "the hub closed under the batch");
+    assert!(
+        !app.game.as_ref().unwrap().hand_craft_in_progress(),
+        "leaving Compiling must disarm the batch and refund the unit in flight"
+    );
 }
 
 #[test]

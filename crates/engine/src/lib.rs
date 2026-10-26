@@ -27,6 +27,7 @@ pub mod duties;
 pub mod environment;
 pub mod floors;
 mod game;
+pub mod gear_craft;
 pub mod handles;
 pub mod help;
 pub mod icon;

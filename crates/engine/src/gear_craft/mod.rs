@@ -113,6 +113,16 @@ pub enum GearCraftRefusal {
     NoSuchDesign(u32),
     /// A copy of the design still exists.
     InUse(DesignHolder),
+    /// The Weapons tree is closed: no weapon is made or taken apart before
+    /// `weapon_bench`.
+    WeaponTreeClosed,
+    /// The copy is not in the pack, so there is nothing to take apart.
+    NoCopyHeld,
+    /// Not an authored weapon with a frame to map to; a built weapon is
+    /// never salvaged, or a build could be run backwards for parts.
+    NotSalvageable,
+    /// A part that only salvage hands out (a granted routine).
+    SalvageOnly(WeaponPart),
 }
 
 /// The player's name for a design, trimmed, or why it will not do.

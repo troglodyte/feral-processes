@@ -107,6 +107,9 @@ impl Game {
     /// Crafts one `part` at the Workbench for its material bill.
     pub fn craft_weapon_part(&mut self, part: WeaponPart) -> Result<(), GearCraftRefusal> {
         self.require_forge_free()?;
+        if matches!(part, WeaponPart::Proc(_)) {
+            return Err(GearCraftRefusal::SalvageOnly(part));
+        }
         if !self.weapon_part_known(part) {
             return Err(GearCraftRefusal::PartNotResearched(part));
         }
@@ -115,6 +118,43 @@ impl Game {
         self.grant_loot(ItemId::weapon_part(part), 1, LootSource::Craft);
         self.log(format!("You compile a {} part.", part.label()));
         Ok(())
+    }
+
+    /// Takes an authored weapon copy from the pack apart: it is consumed,
+    /// the parts `decompose` maps it to are handed out and their research
+    /// nodes discovered, and the affixes it carried become known to the
+    /// design picker. The only source of a Proc part.
+    ///
+    /// Gather, decide, apply: every refusal lands before the copy moves.
+    pub fn salvage_weapon(&mut self, copy: &GearCopy) -> Result<Vec<WeaponPart>, GearCraftRefusal> {
+        self.require_forge_free()?;
+        if !self.weapon_tree_open() {
+            return Err(GearCraftRefusal::WeaponTreeClosed);
+        }
+        if self.count_copies(copy) == 0 {
+            return Err(GearCraftRefusal::NoCopyHeld);
+        }
+        let parts = match copy.item.crafted_gear_of() {
+            Some(_) => None,
+            None => self
+                .world
+                .resource::<ItemDb>()
+                .get(copy.item.as_str())
+                .and_then(gear_craft::weapon::decompose),
+        }
+        .ok_or(GearCraftRefusal::NotSalvageable)?;
+        self.take_copies(copy, 1);
+        for part in &parts {
+            self.grant_loot(ItemId::weapon_part(*part), 1, LootSource::Salvage);
+            self.discover_research(&part.node_id());
+        }
+        self.world
+            .resource_mut::<KnownAffixes>()
+            .0
+            .extend(copy.affixes.iter().cloned());
+        let name = self.item_name(&copy.item).to_string();
+        self.log(format!("You take {name} apart for its parts."));
+        Ok(parts)
     }
 
     /// Saves a weapon design named `name` from `parts`, returning its id.

@@ -7,6 +7,7 @@ use crate::gear_craft::weapon::{Category, Frame, WeaponPart, frame_bill};
 use crate::gear_craft::{DesignHolder, FitError, GearCraftRefusal, GearPart};
 use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
 use crate::routine_craft::{StatusKind, Version};
+use crate::tuning::QUALITY_DEFAULT;
 use crate::*;
 
 fn edge() -> WeaponPart {
@@ -642,4 +643,97 @@ fn the_part_rows_list_every_part_locked_until_researched() {
     assert!(row.known);
     assert_eq!(row.held, 2);
     assert_eq!(row.material_count, crate::tuning::GEAR_MODIFIER_PART_COST);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: salvage
+// ---------------------------------------------------------------------------
+
+fn open_weapon_tree(game: &mut Game) {
+    unlock_research_chain(game, "weapon_bench");
+}
+
+fn ragged_copy(game: &mut Game, affixes: Vec<AffixId>) -> GearCopy {
+    let copy = GearCopy::with_affixes(
+        ItemId::from("ragged_edge"),
+        Rarity::Ordinary,
+        0,
+        affixes,
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&copy, 1);
+    copy
+}
+
+#[test]
+fn salvage_consumes_the_copy_hands_out_parts_discovers_nodes_and_learns_affixes() {
+    let mut game = bench_game(72_101);
+    open_weapon_tree(&mut game);
+    let honed = AffixId::from("honed");
+    let copy = ragged_copy(&mut game, vec![honed.clone()]);
+    let parts = game.salvage_weapon(&copy).unwrap();
+    assert!(
+        parts.contains(&WeaponPart::Proc(
+            crate::gear_craft::weapon::Proc::ClockSkew
+        )),
+        "ragged_edge grants clock_skew: {parts:?}"
+    );
+    assert_eq!(game.count_copies(&copy), 0, "the copy is consumed");
+    let discovered = &game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0;
+    for part in &parts {
+        assert!(game.weapon_parts_held(*part) >= 1, "{part:?} handed out");
+        assert!(discovered.contains(&part.node_id()), "{part:?} discovered");
+    }
+    assert!(game.world.resource::<KnownAffixes>().0.contains(&honed));
+    assert!(game.affix_known(&honed));
+}
+
+#[test]
+fn salvage_refuses_before_anything_is_spent() {
+    let mut game = bench_game(72_102);
+    let copy = ragged_copy(&mut game, vec![]);
+    assert_eq!(
+        game.salvage_weapon(&copy),
+        Err(GearCraftRefusal::WeaponTreeClosed)
+    );
+    assert_eq!(game.count_copies(&copy), 1);
+
+    open_weapon_tree(&mut game);
+    let absent = GearCopy::plain(ItemId::from("arc_lance"));
+    assert_eq!(
+        game.salvage_weapon(&absent),
+        Err(GearCraftRefusal::NoCopyHeld)
+    );
+    let module = GearCopy::plain(ItemId::from("trace_sniffer"));
+    give(&mut game, &module.item, 1);
+    assert_eq!(
+        game.salvage_weapon(&module),
+        Err(GearCraftRefusal::NotSalvageable)
+    );
+    assert_eq!(game.count_copies(&module), 1);
+
+    know(&mut game, edge());
+    let id = game.create_design("Mine", parts(&[edge()])).unwrap();
+    let built = built(&mut game, id);
+    assert_eq!(
+        game.salvage_weapon(&built),
+        Err(GearCraftRefusal::NotSalvageable)
+    );
+    assert_eq!(game.count_copies(&built), 1);
+}
+
+#[test]
+fn a_proc_part_can_never_be_crafted_only_salvaged() {
+    let mut game = bench_game(72_103);
+    let proc = WeaponPart::Proc(crate::gear_craft::weapon::Proc::CoreDump);
+    know(&mut game, proc);
+    give(&mut game, &ItemId::from("core_fragment"), 50);
+    assert_eq!(
+        game.craft_weapon_part(proc),
+        Err(GearCraftRefusal::SalvageOnly(proc))
+    );
+    assert_eq!(game.weapon_parts_held(proc), 0);
 }

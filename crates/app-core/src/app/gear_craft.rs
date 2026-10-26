@@ -127,6 +127,8 @@ fn holder_line(holder: DesignHolder) -> &'static str {
         DesignHolder::Companion => "A weapon built from it is still worn by a companion.",
         DesignHolder::Buyback => "A weapon built from it is still on a trader's buyback shelf.",
         DesignHolder::Floor => "A weapon built from it is still lying on the floor.",
+        DesignHolder::Stored => "A weapon built from it is still in a Depot or machine buffer.",
+        DesignHolder::Carried => "A weapon built from it is still being carried.",
     }
 }
 

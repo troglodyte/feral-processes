@@ -237,7 +237,8 @@ impl Game {
 
     /// Where a copy of design `id`'s weapon is, if one is anywhere: the
     /// pack or gear ledger, worn by the player, worn by a companion, a
-    /// trader's buyback shelf, or set down on a floor tile.
+    /// trader's buyback shelf, set down on a floor tile, in a Depot or
+    /// machine buffer, or in a body's hands.
     pub fn design_holder(&self, id: u32) -> Option<DesignHolder> {
         let item = gear_craft::weapon::item_id(id);
         let player = self.player_entity();
@@ -288,7 +289,25 @@ impl Game {
                 FloorThing::Gear(copy) => copy.item == item,
                 FloorThing::Program(_) => false,
             });
-        on_floor.then_some(DesignHolder::Floor)
+        if on_floor {
+            return Some(DesignHolder::Floor);
+        }
+        // `hauling::pickup_errand` moves a floor copy into any unfiltered
+        // Depot, and a raider or hauler holds one in `Carrying` mid-trip.
+        let stored = self.world.iter_entities().any(|e| {
+            e.get::<Stock>()
+                .is_some_and(|s| s.output.contains_key(&item) || s.input.contains_key(&item))
+        });
+        if stored {
+            return Some(DesignHolder::Stored);
+        }
+        self.world
+            .iter_entities()
+            .any(|e| {
+                e.get::<Carrying>()
+                    .is_some_and(|c| c.item == item && c.qty > 0)
+            })
+            .then_some(DesignHolder::Carried)
     }
 
     /// Why `copy` cannot be fused, if it cannot: fusion is for drops only.

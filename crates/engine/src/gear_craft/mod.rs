@@ -83,6 +83,10 @@ pub enum DesignHolder {
     Buyback,
     /// Set down on a floor or stockpile tile.
     Floor,
+    /// In a Depot or machine buffer.
+    Stored,
+    /// In the hands of a program or a raider.
+    Carried,
 }
 
 /// Why a design verb was turned down. Typed per ADR 0027: a screen words it.

@@ -475,6 +475,40 @@ fn delete_is_refused_while_a_copy_lies_on_a_floor_tile() {
     );
 }
 
+#[test]
+fn delete_is_refused_while_a_copy_sits_in_a_depot() {
+    let mut game = bench_game(71_027);
+    let id = designed(&mut game);
+    let copy = built(&mut game, id);
+    game.take_copies(&copy, 1);
+    let depot = spawn_machine_at(&mut game, "depot", 4, 0);
+    let mut stock = game.world.get_mut::<components::Stock>(depot).unwrap();
+    *stock.output.entry(copy.item.clone()).or_default() += 1;
+    assert_eq!(
+        game.delete_design(id),
+        Err(GearCraftRefusal::InUse(DesignHolder::Stored))
+    );
+}
+
+#[test]
+fn delete_is_refused_while_a_body_carries_a_copy() {
+    let mut game = bench_game(71_028);
+    let id = designed(&mut game);
+    let copy = built(&mut game, id);
+    game.take_copies(&copy, 1);
+    let hauler = game
+        .adopt_program("scrapper", 4, 4, 1.0)
+        .expect("a shipped species");
+    game.world.entity_mut(hauler).insert(components::Carrying {
+        item: copy.item.clone(),
+        qty: 1,
+    });
+    assert_eq!(
+        game.delete_design(id),
+        Err(GearCraftRefusal::InUse(DesignHolder::Carried))
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Task 5: the save
 // ---------------------------------------------------------------------------

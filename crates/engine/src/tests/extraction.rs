@@ -3870,9 +3870,11 @@ fn a_rig_that_cannot_hold_the_whole_yield_holds_the_program() {
         Some(capacity - 1),
         "nothing should have been added"
     );
+    // A rig that cannot pay out has nothing for a body to do, so it lets its
+    // worker go like any machine that cannot progress, and reads as one.
     assert_eq!(
         game.world.get::<MachineStatus>(rig).unwrap(),
-        &MachineStatus::Clogged
+        &MachineStatus::Idle
     );
 }
 

@@ -180,9 +180,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Optional; can be left out entirely (defaults to stripping nothing).
     // If set, the structure is a Teardown Rig: the player standing beside it
     // hands it downed programs out of their pack, and it strips them into
-    // its own output buffer over ticks while they are elsewhere. Like
-    // an assembling machine, it needs a program posted to it via the cronjob menu and
-    // power on the grid.
+    // its own output buffer over ticks while they are elsewhere. It needs
+    // power on the grid and a program posted to it, which the base does on
+    // its own while a downed program waits in its hopper or a Quarantine
+    // Rack — no standing job needed.
     //
     // `hopper` is how many downed programs the queue holds before the rig
     // refuses a deposit — a program count, not an item count. Authored per

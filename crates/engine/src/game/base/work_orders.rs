@@ -581,6 +581,13 @@ pub(crate) fn supply_top_up_due(def: &crate::structures::StructureDef, held: u32
 /// useful. That is how "work the deepest requirement until it is made, then
 /// move on" falls out without the scheduler sequencing any phases.
 pub(crate) fn can_progress(game: &Game, machine: Entity) -> bool {
+    if game
+        .world
+        .get::<crate::components::Hopper>(machine)
+        .is_some()
+    {
+        return game.rig_has_work(machine);
+    }
     let Some(stock) = game.world.get::<Stock>(machine) else {
         return false;
     };
@@ -1187,6 +1194,15 @@ impl Game {
             }
             wanted.push((structure, kind));
         }
+        // **A Teardown Rig staffs itself**, at a standing job's priority:
+        // a program in its hopper or a rack is the instruction, so the
+        // player never has to set one, and `can_progress` lets the body go
+        // when the racks run dry.
+        for rig in self.teardown_rigs() {
+            if !wanted.iter().any(|&(e, _)| e == rig) && can_progress(self, rig) {
+                wanted.push((rig, TaskKind::GatherResource));
+            }
+        }
         // Dig jobs, appended after the standing jobs and therefore last of
         // all — **the priority is the position in this list**, since the
         // matching below fills wants in list order. A spare body
@@ -1582,10 +1598,21 @@ impl Game {
                     .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
                     .is_some_and(|def| def.spends_supply().is_some())
         });
+        // **And so is a body on a Teardown Rig**, for the burner's reason: a
+        // rig's want vanishes the moment its racks run dry, and the guard
+        // would leave the body there for the rest of the run.
+        let a_rig_holds_a_body = posted.iter().any(|&(target, kind)| {
+            kind == TaskKind::GatherResource
+                && self
+                    .world
+                    .get::<crate::components::Hopper>(target)
+                    .is_some()
+        });
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
             && !any_dig_marked
-            && !a_burner_holds_a_body;
+            && !a_burner_holds_a_body
+            && !a_rig_holds_a_body;
         // **A body standing at a post it is no longer allowed to hold is
         // work to do**, even when the queue is empty and every want is
         // already covered. Without this term the pass returns above the free

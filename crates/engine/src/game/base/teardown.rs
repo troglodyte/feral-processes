@@ -15,9 +15,11 @@
 use crate::alerts::AlertBoard;
 use crate::base_grid::BaseGrid;
 use crate::components::{CarryingProgram, Hopper, MachineStatus, Position, Stock, Structure, Task};
+use crate::items::DownedProgram;
 use crate::resources::{BattleTelemetry, GameClock, MessageKind, MessageLog, PowerGrid};
 use crate::structures::StructureDb;
 use crate::systems::{StallSite, set_machine_status};
+use crate::tools::ToolDef;
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
@@ -28,7 +30,7 @@ impl Game {
     /// Sorted for `run_repair_bays`' and `assembler_system`'s shared
     /// reason: bevy's iteration order is not stable, and two rigs finishing
     /// in a different order between runs would reorder their log lines.
-    fn teardown_rigs(&mut self) -> Vec<Entity> {
+    pub(crate) fn teardown_rigs(&self) -> Vec<Entity> {
         let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
@@ -123,17 +125,7 @@ impl Game {
         // Gated on the band's *top* count, because the roll happens only at
         // completion — rolling here would spend a `GameRng` draw every tick
         // and gate on a payout the program then does not pay.
-        let band = self.extraction_band(&entry.program, &tool);
-        let total: u32 = self
-            .extraction_yield(&entry.program, &tool, band.max)
-            .iter()
-            .map(|(_, qty)| *qty)
-            .sum();
-        if !self
-            .world
-            .get::<Stock>(rig)
-            .is_some_and(|s| s.fits_payout(total))
-        {
+        if !self.payout_fits(rig, &entry.program, &tool) {
             self.set_rig_status(rig, MachineStatus::Clogged);
             return;
         }
@@ -180,6 +172,77 @@ impl Game {
             format!("The rig strips {label}: {}.", parts.join(", "))
         };
         self.log_base_kind(MessageKind::Loot, line);
+    }
+
+    /// Whether `rig`'s output has room for the most `program` could pay
+    /// stripped with `tool` — the strip's completion gate, and the
+    /// scheduler's reason to staff it.
+    fn payout_fits(&self, rig: Entity, program: &DownedProgram, tool: &ToolDef) -> bool {
+        let band = self.extraction_band(program, tool);
+        let total: u32 = self
+            .extraction_yield(program, tool, band.max)
+            .iter()
+            .map(|(_, qty)| *qty)
+            .sum();
+        self.world
+            .get::<Stock>(rig)
+            .is_some_and(|s| s.fits_payout(total))
+    }
+
+    /// Whether a body posted to `rig` would strip something: the next
+    /// program it would take — the hopper's front, else the one its fetcher
+    /// is walking over, else the first racked carrier, the last two stamped
+    /// with `Game::rig_tool` as the delivery stamps them — and room for its
+    /// whole payout. The carried one keeps a fetcher posted through the trip
+    /// that emptied the last rack, which freed would shelter it straight
+    /// back. This is `can_progress` for a rig, so a rig
+    /// staffs itself with no standing job and lets the body go when the
+    /// racks run dry.
+    ///
+    /// Any stocked rack counts, reachable or not: the walk is
+    /// `stocked_rack_in_reach`'s question and it needs the body, which the
+    /// scheduler has not chosen yet.
+    pub(crate) fn rig_has_work(&self, rig: Entity) -> bool {
+        let Some(hopper) = self.world.get::<Hopper>(rig) else {
+            return false;
+        };
+        let next = match hopper.queue.first() {
+            Some(entry) => Some((entry.program.clone(), entry.tool.clone())),
+            None if self.hopper_room(rig) > 0 => self
+                .fetcher_load(rig)
+                .or_else(|| {
+                    self.quarantine_racks()
+                        .into_iter()
+                        .find_map(|(_, _, rack)| {
+                            self.world
+                                .get::<crate::components::Racked>(rack)?
+                                .0
+                                .first()
+                                .cloned()
+                        })
+                })
+                .map(|program| (program, self.rig_tool(rig))),
+            None => None,
+        };
+        let Some((program, tool_id)) = next else {
+            return false;
+        };
+        let tools = self.world.resource::<crate::tools::ToolDb>();
+        tools
+            .get(tool_id.as_str())
+            .is_some_and(|tool| self.payout_fits(rig, &program, tool))
+    }
+
+    /// The program `rig`'s posted body is carrying over, if it is mid-trip.
+    fn fetcher_load(&self, rig: Entity) -> Option<DownedProgram> {
+        let tasks = self
+            .world
+            .iter_entities()
+            .filter_map(|e| e.get::<Task>().map(|t| (e.id(), t)));
+        let worker = crate::systems::worker_of(tasks, rig)?;
+        self.world
+            .get::<CarryingProgram>(worker)
+            .map(|c| c.0.clone())
     }
 
     /// One beat of a posted body's trip to a Quarantine Rack: the delivery

@@ -277,6 +277,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   that is not a queue** — the fourth is a Research Station's `StudyYield`,
   where a finished study's program waits for a body to rack it, and
   research never touches the player's pack.
+- **A Teardown Rig staffs itself — `can_progress` for a rig is
+  `Game::rig_has_work`, which counts a fetcher's carried program, and the
+  empty-queue guard's `a_rig_holds_a_body` is what lets the body go.**
 - **A rig holds its own tool and the player holds theirs** —
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs on

@@ -429,3 +429,110 @@ fn a_put_into_room_promised_to_a_carried_program_is_refused() {
     assert_eq!(pack_of(&game), vec![1], "the pack is untouched");
     assert_eq!(shelf_of(&game, rack), before, "and so is the shelf");
 }
+
+// ---------------------------------------------------------------------------
+// A rig staffs itself: it is a want whenever it has a program to strip, with
+// no standing job set.
+// ---------------------------------------------------------------------------
+
+/// A lit, unstaffed rig at (3,3) and a rack at (3,2) holding `racked`
+/// carriers, with one idle body on the roster. Returns `(game, rig, rack,
+/// body)`.
+fn an_unstaffed_rig_beside_a_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
+    let mut game = Game::new(4230, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", 3, 2);
+    for level in 1..=racked {
+        game.world
+            .get_mut::<Racked>(rack)
+            .unwrap()
+            .0
+            .push(program(200 + level));
+    }
+    stand_ample_grid_supply(&mut game);
+    let body = spawn_tamed(&mut game, 500, 3);
+    (game, rig, rack, body)
+}
+
+fn post_of(game: &Game, body: Entity) -> Option<(Entity, TaskKind)> {
+    game.world.get::<Task>(body).map(|t| (t.target, t.kind))
+}
+
+#[test]
+fn a_rig_with_a_stocked_rack_is_staffed_with_no_standing_job() {
+    let (mut game, rig, _rack, body) = an_unstaffed_rig_beside_a_rack(1);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), Some((rig, TaskKind::GatherResource)));
+}
+
+#[test]
+fn a_rig_with_a_loaded_hopper_is_staffed_with_no_standing_job() {
+    let (mut game, rig, _rack, body) = an_unstaffed_rig_beside_a_rack(0);
+    game.world
+        .get_mut::<Hopper>(rig)
+        .unwrap()
+        .queue
+        .push(crate::components::HopperEntry {
+            program: program(5),
+            tool: crate::tools::ToolId(crate::tuning::STARTER_TOOL_ID.to_string()),
+        });
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), Some((rig, TaskKind::GatherResource)));
+}
+
+#[test]
+fn a_rig_with_nothing_to_strip_is_not_staffed() {
+    let (mut game, _rig, _rack, body) = an_unstaffed_rig_beside_a_rack(0);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+/// The worker goes back to the pool once the rack and the hopper are empty.
+#[test]
+fn a_rig_lets_its_worker_go_once_the_work_is_done() {
+    let (mut game, rig, rack, body) = an_unstaffed_rig_beside_a_rack(1);
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), Some((rig, TaskKind::GatherResource)));
+
+    game.world.get_mut::<Racked>(rack).unwrap().0.clear();
+    game.schedule_base_labour();
+
+    assert_ne!(post_of(&game, body).map(|(t, _)| t), Some(rig));
+}
+
+/// A program the rig cannot pay out in full is held, so a clogged rig has
+/// nothing for a body to do and asks for none.
+#[test]
+fn a_clogged_rig_is_not_staffed() {
+    let (mut game, rig, _rack, body) = an_unstaffed_rig_beside_a_rack(1);
+    let capacity = game.world.get::<Stock>(rig).unwrap().capacity;
+    game.world
+        .get_mut::<Stock>(rig)
+        .unwrap()
+        .output
+        .insert(ItemId::from("core_fragment"), capacity);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+/// A standing job on a rig keeps meaning what it means on any machine:
+/// "keep this running", which a rig with work already gets.
+#[test]
+fn a_standing_job_on_a_rig_with_work_staffs_it() {
+    let (mut game, rig, _rack, body) = an_unstaffed_rig_beside_a_rack(1);
+    game.set_standing_job(rig, true, false).unwrap();
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), Some((rig, TaskKind::GatherResource)));
+}

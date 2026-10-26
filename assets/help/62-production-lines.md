@@ -25,7 +25,8 @@ keep the Depot stocked and in reach.
 item, and the machine on its other side pulls the item out. A Depot never joins a line, so each
 side keeps its own worker.
 - If the line is stuck on such an ingredient, its row says which machine needs what.
-- Teardown Rigs always stand alone. A rig is never part of a line, even when it touches one.
+- Teardown Rigs always stand alone. A rig is never part of a line, even when it touches one, and
+it needs no standing job: the base staffs it whenever a downed program is waiting for it.
 
 One worker per line is slower than one worker per machine. The trade is that the rest of your crew
 stays free for other work. Splitting a line in two by leaving a gap between the machines gives each

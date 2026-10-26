@@ -501,6 +501,16 @@
   **owned** data. Direction needs no field. Both destruction paths must drop
   `Carrying` with the `Task` by hand.
 
+- **A Teardown Rig staffs itself: `can_progress` for a rig is
+  `Game::rig_has_work`, and `base_wants` appends every rig with work at a
+  standing job's priority.** Two traps. `assign_base_labour`'s empty-queue
+  guard returns before the free loop, so a rig's vanished want needs
+  `a_rig_holds_a_body` beside `a_burner_holds_a_body` or its body stays posted
+  for good. And the program a posted fetcher is carrying counts as work
+  (`fetcher_load`): without it the trip that empties the last rack makes the
+  rig wantless mid-carry, the fetcher is freed, and the program is sheltered
+  straight back onto the rack.
+
 - **A rig holds its own tool and the player holds theirs.**
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool` and
   the strip resolves against `ToolDb`, never `installed_tools()`. Read off

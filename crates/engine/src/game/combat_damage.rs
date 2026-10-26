@@ -12,6 +12,13 @@ use crate::game::kit::Kit;
 use crate::tactical::TacticalBattle;
 use crate::*;
 
+/// What a worn crafted weapon adds to one swing.
+#[derive(Default)]
+struct WeaponEdge {
+    rider: Option<crate::items_db::WeaponRider>,
+    exploit: Option<crate::items_db::WeaponExploit>,
+}
+
 impl Game {
     /// The player's own fumble, second person. One rung, one line.
     ///
@@ -326,6 +333,15 @@ impl Game {
             self.break_cloak(attacker);
             return outcome;
         }
+        // A crafted weapon's exploit lands in the swing's own damage, before
+        // the one damage path sees it: `apply_damage*` know no weapon.
+        let weapon = self.weapon_edge(attacker, swing);
+        let rolled = match &weapon.exploit {
+            Some(exploit) if self.carries_status(defender, &exploit.status) => {
+                crate::gear_craft::weapon::exploited(rolled, exploit.percent)
+            }
+            _ => rolled,
+        };
         // Both reads are `&self` and draw nothing, taken before the damage
         // lands so the figure is what resistance (`type_resistances`)
         // stopped of *this* hit.
@@ -347,6 +363,19 @@ impl Game {
         let landed = self.apply_damage_typed(defender, rolled, swing.damage_type);
         if let Some(ty) = swing.damage_type {
             self.type_side_effect(defender, ty, landed, side);
+        }
+        // The weapon's rider goes through `apply_status_effect`, the same
+        // roll-and-arm path a move's status rider takes, on a landed hit.
+        if let Some(rider) = &weapon.rider
+            && landed > 0
+            && self.creature_alive(defender)
+        {
+            let label = self.status_target_label(defender);
+            let kind = match self.is_hostile(attacker) {
+                true => MessageKind::EnemyAttack,
+                false => MessageKind::PartyDamage,
+            };
+            self.apply_status_effect(defender, rider, &label, kind);
         }
         // The one place a creature-versus-creature blow is both landed and
         // attributable — see `Game::note_maul` for why the memory hooks here
@@ -371,6 +400,47 @@ impl Game {
         }
     }
 
+    /// How a status line names `defender`: "You" for the player.
+    fn status_target_label(&self, defender: Entity) -> String {
+        if defender == self.player_entity() {
+            "You".to_string()
+        } else {
+            self.creature_label(defender)
+        }
+    }
+
+    /// The rider and exploit of `attacker`'s worn weapon when `swing` is that
+    /// weapon's own, nothing otherwise. Only a crafted weapon carries either
+    /// (`gear_craft::compile` sets them; no authored weapon does), so every
+    /// other swing reads `WeaponEdge::default()` and draws nothing extra.
+    fn weapon_edge(&self, attacker: Entity, swing: battle::Swing) -> WeaponEdge {
+        if !swing.weapon {
+            return WeaponEdge::default();
+        }
+        let Some(worn) = self
+            .world
+            .get::<Equipment>(attacker)
+            .and_then(|e| e.weapon.as_ref())
+        else {
+            return WeaponEdge::default();
+        };
+        self.world
+            .resource::<ItemDb>()
+            .get(worn.copy.item.as_str())
+            .map(|def| WeaponEdge {
+                rider: def.on_hit_rider.clone(),
+                exploit: def.exploit.clone(),
+            })
+            .unwrap_or_default()
+    }
+
+    /// Whether `entity` is carrying status `id` right now.
+    pub(crate) fn carries_status(&self, entity: Entity, id: &StatusId) -> bool {
+        self.world
+            .get::<StatusEffects>(entity)
+            .is_some_and(|s| s.active.iter().any(|a| a.id == *id))
+    }
+
     /// The side effect of a typed hit that landed `landed` on `defender`:
     /// decided by `damage::side_effect` from `type_resistances`, then
     /// armed and worded here. Nothing for a hit that did nothing or killed,
@@ -392,11 +462,7 @@ impl Game {
         match damage::side_effect(ty, resist) {
             Some(damage::SideEffect::Arm { id, rounds, power }) => {
                 let id = StatusId::from(id);
-                let label = if defender == self.player_entity() {
-                    "You".to_string()
-                } else {
-                    self.creature_label(defender)
-                };
+                let label = self.status_target_label(defender);
                 self.arm_status(defender, &id, rounds, power);
                 self.log_status_landing(&id, &label, None);
             }

@@ -284,7 +284,9 @@ impl Game {
         let outcome = self.resolve_and_apply_attack(
             wild,
             target,
-            battle::Swing::plain(profile.range).with_type(profile.damage_type),
+            battle::Swing::plain(profile.range)
+                .with_type(profile.damage_type)
+                .with_weapon(profile.weapon),
         );
         let dmg = outcome.damage_to_defender();
         // A missed swing lands no rider. The gate below already dropped it

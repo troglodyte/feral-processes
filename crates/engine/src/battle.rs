@@ -103,6 +103,10 @@ pub struct Swing {
     /// it cuts the hit in `Game::apply_damage_typed`. `None` is ordinary
     /// damage that no resistance touches.
     pub damage_type: Option<crate::damage::DamageType>,
+    /// Whether the attacker's worn weapon supplied this swing's band, so the
+    /// weapon's rider and exploit apply to it. `false` for every routine and
+    /// every natural attack, which is what a `Swing::default()` answers.
+    pub weapon: bool,
 }
 
 impl Swing {
@@ -115,7 +119,13 @@ impl Swing {
             free: false,
             cover_ignored: false,
             damage_type: None,
+            weapon: false,
         }
+    }
+
+    /// This swing, marked as the worn weapon's own (see `Swing::weapon`).
+    pub fn with_weapon(self, weapon: bool) -> Self {
+        Swing { weapon, ..self }
     }
 
     /// This swing, dealing `damage_type`.

@@ -7,6 +7,7 @@ mod compile;
 mod decompose;
 mod fit;
 mod names;
+mod strike;
 
 pub use bill::{frame_bill, part_bill};
 pub use catalogue::{Category, Frame, Proc, Tilt, WeaponPart};
@@ -15,3 +16,4 @@ pub(crate) use compile::exact_band_of;
 pub use compile::{compile, item_id};
 pub use decompose::decompose;
 pub use fit::{FitError, all_designs_up_to_cap, check, frame_of};
+pub use strike::exploited;

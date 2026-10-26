@@ -125,7 +125,7 @@ New structure-hub pages beside the routine ones: **Forge** (designs list, highli
 
 ## What changes for authored weapons
 
-They stay as drops and enemy gear. Their `craftable` blocks (8 of the 15 weapons have one, including the no-research `shiv_routine` and `kinetic_edge`) are removed: making a weapon now means designing one, and before `weapon_bench` there's no way to make one. Tests that pin the craftable gear tiers (`standard_and_premium_gear_is_made_from_intermediates` and its fragment-only sibling) are updated to drop weapons from their sets, not deleted. Check that `shiv_routine` and `kinetic_edge` can still be found early (a drop table or a starting shelf): if neither is, the early game has no weapon source, and the plan must add one. `weapon_bench` keeps its research role and now opens the Weapons tree.
+They stay as drops and enemy gear. Their `craftable` blocks (8 of the 15 weapons have one, including the no-research `shiv_routine` and `kinetic_edge`) are removed: making a weapon now means designing one, and before `weapon_bench` there's no way to make one. Tests that pin the craftable gear tiers (`standard_and_premium_gear_is_made_from_intermediates` and its fragment-only sibling) are updated to drop weapons from their sets, not deleted. Both still drop early: `shiv_routine` from sprite and drone, `kinetic_edge` from sub_process and glitch. The plan should confirm those species appear before `weapon_bench` is reachable. `weapon_bench` keeps its research role and now opens the Weapons tree.
 
 ## Save
 

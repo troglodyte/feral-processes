@@ -89,20 +89,27 @@ impl Game {
     }
 
     /// Pays `bill` from reach, refusing the whole thing, with the line that
-    /// is short, before a unit moves.
-    fn pay_gear_bill(&mut self, bill: &[(ItemId, u32)]) -> Result<(), GearCraftRefusal> {
-        for (item, need) in bill {
+    /// is short, before a unit moves. Lines naming one item are summed first,
+    /// as `pay_from_reach` sums them, so the two cannot disagree on a bill.
+    pub(crate) fn pay_gear_bill(&mut self, bill: &[(ItemId, u32)]) -> Result<(), GearCraftRefusal> {
+        let mut need: std::collections::BTreeMap<&ItemId, u32> = std::collections::BTreeMap::new();
+        for (item, qty) in bill {
+            *need.entry(item).or_default() += qty;
+        }
+        for (item, need) in &need {
             let held = self.held_in_reach(item);
             if held < *need {
                 return Err(GearCraftRefusal::ShortOf {
-                    item: item.clone(),
+                    item: (*item).clone(),
                     need: *need,
                     held,
                 });
             }
         }
+        // Checked above, so the payment cannot find a line short.
         self.pay_from_reach(bill)
-            .map_err(|_| GearCraftRefusal::Busy)
+            .expect("the whole bill was checked against reach");
+        Ok(())
     }
 
     /// Crafts one `part` at the Workbench for its material bill.

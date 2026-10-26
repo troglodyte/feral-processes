@@ -784,3 +784,21 @@ fn salvage_rows_list_authored_weapons_in_the_pack_with_their_parts() {
     assert_eq!(rows[0].copy, copy);
     assert!(!rows[0].parts.is_empty());
 }
+
+/// A bill naming one item on two lines is checked as the sum, so a short one
+/// is refused with the item and not as a busy forge.
+#[test]
+fn a_bill_short_only_in_sum_names_the_item() {
+    let mut game = bench_game(71_040);
+    let item = ItemId::from(ids::CORE_FRAGMENT);
+    empty_of(&mut game, &item);
+    give(&mut game, &item, 4);
+    assert_eq!(
+        game.pay_gear_bill(&[(item.clone(), 3), (item.clone(), 3)]),
+        Err(GearCraftRefusal::ShortOf {
+            item,
+            need: 6,
+            held: 4
+        })
+    );
+}

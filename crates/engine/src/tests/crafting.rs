@@ -436,7 +436,7 @@ fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
 
     touch_a_workbench(&mut game);
     unlock_research_chain(&mut game, "weapon_bench");
-    let benched = recipe_for(&mut game, "arc_lance");
+    let benched = recipe_for(&mut game, "packet_buffer");
     let tier_one = game.player_craft_order(&benched, false);
     assert_eq!(
         game.craft_quality_floor(&tier_one),
@@ -466,7 +466,7 @@ fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
     let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(9_000));
 
-    let recipe = recipe_for(&mut game, "arc_lance");
+    let recipe = recipe_for(&mut game, "packet_buffer");
     let order = game.player_craft_order(&recipe, true);
     let floor = game.craft_quality_floor(&order);
 
@@ -490,7 +490,7 @@ fn careful_compiling_costs_half_again_of_the_discounted_price() {
     let mut game = Game::new(47, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     touch_a_workbench(&mut game);
     let player = game.player_entity();
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
 
     assert_eq!(
@@ -527,7 +527,7 @@ fn careful_compiling_costs_half_again_of_the_discounted_price() {
 fn a_careful_batch_is_smaller_and_can_be_refused_outright() {
     let mut game = Game::new(48, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     touch_a_workbench(&mut game);
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 21)]);
 
     assert_eq!(game.max_craftable(&edge, false), 3, "three at seven each");
@@ -583,12 +583,12 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
     use crate::tuning::{QUALITY_BASE, QUALITY_SPREAD};
     let mut game = Game::new(49, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     touch_a_workbench(&mut game);
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7)]);
 
     game.craft(&edge, 1, false).unwrap();
 
-    let copies = compiled_copies(&game, "kinetic_edge");
+    let copies = compiled_copies(&game, "packet_buffer");
     assert_eq!(copies.len(), 1, "one compile, one copy");
     assert_eq!(
         copies[0].rarity,
@@ -622,12 +622,12 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
 fn a_batch_compiles_copies_that_differ_from_each_other() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     touch_a_workbench(&mut game);
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 5)]);
 
     game.craft(&edge, 5, false).unwrap();
 
-    let mut seen: Vec<u8> = compiled_copies(&game, "kinetic_edge")
+    let mut seen: Vec<u8> = compiled_copies(&game, "packet_buffer")
         .iter()
         .map(|c| c.quality)
         .collect();
@@ -653,13 +653,13 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
         QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_SPREAD,
     };
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let lance = ItemId::from("arc_lance");
+    let lance = ItemId::from("packet_buffer");
     touch_a_workbench(&mut game);
     unlock_research_chain(&mut game, "weapon_bench");
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 5)]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 5)]);
 
     game.craft(&lance, 5, false).unwrap();
-    let bare = compiled_copies(&game, "arc_lance");
+    let bare = compiled_copies(&game, "packet_buffer");
     assert!(
         bare.iter()
             .all(|c| c.quality <= QUALITY_BASE + QUALITY_SPREAD),
@@ -669,12 +669,12 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
 
     let bench = find_structure_by_kind(&mut game, "workbench").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(5));
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 5)]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 11 * 5)]);
     fill_power(&mut game);
     game.craft(&lance, 5, true).unwrap();
 
     let floor = QUALITY_BASE + 4 * QUALITY_BENCH_PER_TIER + QUALITY_CAREFUL_BONUS;
-    let developed: Vec<u8> = compiled_copies(&game, "arc_lance")
+    let developed: Vec<u8> = compiled_copies(&game, "packet_buffer")
         .iter()
         .map(|c| c.quality)
         .filter(|q| *q >= floor)
@@ -725,8 +725,8 @@ fn only_gear_spends_a_quality_roll() {
         "a material compiles off the ticks alone and spends no draw of its own"
     );
     assert_ne!(
-        stream_after_compiling("kinetic_edge", 1),
-        stream_after_ticks(unit_ticks("kinetic_edge")),
+        stream_after_compiling("packet_buffer", 1),
+        stream_after_ticks(unit_ticks("packet_buffer")),
         "gear rolls its quality, so one unit is one draw past the ticks"
     );
 }
@@ -745,9 +745,9 @@ fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
     let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     touch_a_workbench(&mut game);
     let player = game.player_entity();
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
 
-    let recipe = recipe_for(&mut game, "kinetic_edge");
+    let recipe = recipe_for(&mut game, "packet_buffer");
     let unperked = game.player_craft_order(&recipe, false);
     assert_eq!(
         game.craft_quality_floor(&unperked),
@@ -771,7 +771,7 @@ fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 6)]);
     game.craft(&edge, 6, false).unwrap();
     let floor = QUALITY_BASE + 2 * QUALITY_PERK_PER_LEVEL;
-    let rolled: Vec<u8> = compiled_copies(&game, "kinetic_edge")
+    let rolled: Vec<u8> = compiled_copies(&game, "packet_buffer")
         .iter()
         .map(|c| c.quality)
         .collect();
@@ -835,7 +835,7 @@ fn a_hand_compile_with_no_machine_takes_the_default_cycle() {
     let game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert_eq!(
-        game.hand_craft_ticks(&ItemId::from("kinetic_edge")),
+        game.hand_craft_ticks(&ItemId::from("packet_buffer")),
         crate::tuning::HAND_CRAFT_TICK_MULT * crate::tuning::HAND_CRAFT_DEFAULT_CYCLE,
     );
 }
@@ -1164,7 +1164,7 @@ fn a_compile_refused_for_power_spends_nothing() {
 /// maximum the compile refuses reads as the key doing nothing.
 #[test]
 fn the_quoted_maximum_is_a_batch_the_compile_accepts() {
-    for item in [ids::ICE_BREAKER, "kinetic_edge"] {
+    for item in [ids::ICE_BREAKER, "packet_buffer"] {
         let mut game = Game::new(324, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         touch_a_workbench(&mut game);
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);

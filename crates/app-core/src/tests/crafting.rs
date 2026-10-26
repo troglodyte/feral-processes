@@ -112,13 +112,13 @@ fn every_commit_path_charges_the_careful_price() {
         (of(&ItemId::from("core_fragment")), of(item))
     }
 
-    let edge = ItemId::from("kinetic_edge");
+    let edge = ItemId::from("packet_buffer");
     for key in [GameKey::Enter, GameKey::Char('f'), GameKey::Char('m')] {
         let mut plain = app_at_a_stocked_bench(702);
         let mut careful = app_at_a_stocked_bench(702);
         for app in [&mut plain, &mut careful] {
             open_bench_compile(app);
-            let row = picks_in_bench_list(app, "kinetic_edge");
+            let row = picks_in_bench_list(app, "packet_buffer");
             pick_row(app, row);
         }
         careful.handle_key(GameKey::Char('c'));
@@ -483,12 +483,11 @@ fn compiling_the_most_with_a_flat_reserve_names_power_not_materials() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// The six gear recipes that name a Workbench.
-const BENCH_ONLY: [&str; 6] = [
+/// The four gear recipes that name a Workbench (weapons are designed, not
+/// recipes).
+const BENCH_ONLY: [&str; 4] = [
     "scrap_ward",
-    "shiv_routine",
     "packet_buffer",
-    "kinetic_edge",
     "probe_service",
     "handshake_forge",
 ];
@@ -570,7 +569,7 @@ fn craft_outside_any_hub_is_not_a_hub_screen() {
 fn compiling_from_the_bench_page_returns_to_the_page_not_the_map() {
     let mut app = app_at_a_stocked_bench(713);
     open_bench_compile(&mut app);
-    let row = picks_in_bench_list(&app, "kinetic_edge");
+    let row = picks_in_bench_list(&app, "packet_buffer");
     pick_row(&mut app, row);
     assert_eq!(app.mode, Mode::CraftQuantity);
     assert_eq!(base_popup_parent(Mode::CraftQuantity), Some(Mode::Craft));
@@ -589,7 +588,7 @@ fn compiling_from_the_bench_page_returns_to_the_page_not_the_map() {
 fn aborting_a_bench_compile_returns_to_the_page() {
     let mut app = app_at_a_stocked_bench(714);
     open_bench_compile(&mut app);
-    let row = picks_in_bench_list(&app, "kinetic_edge");
+    let row = picks_in_bench_list(&app, "packet_buffer");
     pick_row(&mut app, row);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Compiling);
@@ -605,7 +604,7 @@ fn aborting_a_bench_compile_returns_to_the_page() {
 fn losing_the_bench_mid_compile_aborts_the_batch() {
     let mut app = app_at_a_stocked_bench(717);
     open_bench_compile(&mut app);
-    let row = picks_in_bench_list(&app, "kinetic_edge");
+    let row = picks_in_bench_list(&app, "packet_buffer");
     pick_row(&mut app, row);
     app.handle_key(GameKey::Char('3'));
     app.handle_key(GameKey::Enter);
@@ -628,7 +627,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     // Zero is a silent no-op.
     let mut app = app_at_a_stocked_bench(715);
     open_bench_compile(&mut app);
-    let row = picks_in_bench_list(&app, "kinetic_edge");
+    let row = picks_in_bench_list(&app, "packet_buffer");
     pick_row(&mut app, row);
     app.handle_key(GameKey::Char('0'));
     app.handle_key(GameKey::Enter);
@@ -638,7 +637,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     // No material: the engine refuses to arm the batch.
     let mut app = app_at_a_workbench(716);
     open_bench_compile(&mut app);
-    let row = picks_in_bench_list(&app, "kinetic_edge");
+    let row = picks_in_bench_list(&app, "packet_buffer");
     pick_row(&mut app, row);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Craft);

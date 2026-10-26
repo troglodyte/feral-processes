@@ -315,6 +315,12 @@ any non-finite `taming_potency`, `consume.power`, or
     // pattern: hand-crafting then reads as the manual fallback for a machine
     // you already own, rather than a way around building it.
     //
+    // **Weapons are designed, not crafted.** No `Weapon` item carries a
+    // `craftable` block: a weapon is a drop, an enemy's gear or a trader's
+    // stock, and the only way to make one is the Forge's design flow
+    // (`weapon_bench`). `no_authored_weapon_is_craftable` holds the shipped
+    // set to it. Armour and modules keep their recipes.
+    //
     // For an item with an `equipment` def, the named bench decides more than
     // whether the recipe is offered: each tier the player has upgraded it to
     // raises the quality floor every copy compiled there rolls off. Quality

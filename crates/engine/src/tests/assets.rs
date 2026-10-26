@@ -619,6 +619,31 @@ fn scavenged_gear_is_fragment_only() {
     );
 }
 
+/// Weapons are designed at the Forge, never built from a fixed recipe, so an
+/// authored weapon is a drop, an enemy's gear or a trader's stock. A
+/// `craftable` block on one would be a second way to make a weapon that
+/// bypasses `weapon_bench` and the design cap.
+#[test]
+fn no_authored_weapon_is_craftable() {
+    let game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.item_defs() {
+        let Some((crate::items::EquipmentSlot::Weapon, _)) = &def.equipment else {
+            continue;
+        };
+        assert!(
+            def.craftable.is_none(),
+            "{} is an authored weapon with a craftable recipe; weapons are designed, not crafted",
+            def.id.as_str()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 15,
+        "expected the fifteen authored weapons, scanned {checked}"
+    );
+}
+
 /// `cache_drop` is rolled once per cache for every item that declares one,
 /// so the expected haul is the *sum* across the item set, not a pick from a
 /// list — which means any one item's number is a change to what every cache
@@ -1617,18 +1642,11 @@ fn every_bench_recipe_moved_to_the_workbench_keeps_its_gate() {
         ),
         (
             &[
-                "arc_lance",
-                "black_ice_pick",
                 "entropy_damper",
                 "kernel_key",
                 "logic_probe",
                 "oracle_core",
-                "plasma_router",
-                "recursion_blade",
                 "reinitialization_protocol",
-                "scatter_lance",
-                "shim_blade",
-                "siege_compiler",
                 "singularity_matrix",
                 "sync_governor",
                 "trace_sniffer",
@@ -1655,7 +1673,7 @@ fn every_bench_recipe_moved_to_the_workbench_keeps_its_gate() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 33);
+    assert_eq!(checked, 26);
 }
 
 #[test]

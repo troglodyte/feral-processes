@@ -8,5 +8,4 @@
     equipment: Some((Weapon, (atk: 2, damage: (min: 3, max: 6), accuracy: 1, damage_type: Some(Noise)))),
     reach: Some((target: WholeEnemyGroup, recharge: 2)),
     range: Some(2),
-    craftable: Some((cost: [("core_fragment", 20)], requires_structure: Some("workbench"), research: Some("weapon_bench"))),
 )

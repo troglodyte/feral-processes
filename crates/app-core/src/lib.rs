@@ -27,7 +27,7 @@ pub use app::floor_hands::put_down_visible;
 pub use app::gear_craft::{
     DESIGN_AFFIX_ROW, DESIGN_NAME_MAX, DESIGN_NAME_ROW, DESIGN_PAGE_ROWS, DESIGN_SAVE_ROW,
     DesignDraft, DesignPicking, affix_label, design_pick_labels, design_pick_visible,
-    design_row_category, fusion_refusal_line, gear_craft_refusal_line,
+    design_row_category, gear_craft_refusal_line,
 };
 pub use app::group_menu::GroupMenuRow;
 pub use app::hub::{Hub, HubKind, HubPage, hub_of};

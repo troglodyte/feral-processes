@@ -9,7 +9,6 @@
 
 use crate::app::list_filter::filter_matches;
 use crate::*;
-use feral_processes_engine::FusionRefusal;
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::gear_craft::weapon::{self, Category, WeaponPart};
 use feral_processes_engine::gear_craft::{
@@ -175,15 +174,6 @@ pub fn gear_craft_refusal_line(game: &Game, why: &GearCraftRefusal) -> String {
                 "{} can't be compiled; it only comes from taking a weapon apart.",
                 part.label()
             )
-        }
-    }
-}
-
-/// Why a copy cannot be fused, in a sentence.
-pub fn fusion_refusal_line(why: FusionRefusal) -> String {
-    match why {
-        FusionRefusal::CraftedGear => {
-            "Built at the Workbench; only found gear can be fused.".to_string()
         }
     }
 }

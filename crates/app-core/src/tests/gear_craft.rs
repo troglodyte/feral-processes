@@ -277,7 +277,6 @@ fn every_refusal_has_a_plain_sentence() {
         assert!(line.ends_with('.'), "{r:?} -> {line}");
         assert!(!line.to_lowercase().contains("tick"), "{line}");
     }
-    assert!(fusion_refusal_line(feral_processes_engine::FusionRefusal::CraftedGear).ends_with('.'));
 }
 
 #[test]

@@ -413,6 +413,16 @@ impl Game {
         self.is_researched(crate::tuning::WEAPON_TREE_OPENER)
     }
 
+    /// The display name of the node that opens the Weapons tree, so a screen
+    /// telling the player what to research names it as the research menu does.
+    pub fn weapon_tree_opener_name(&self) -> String {
+        let id = crate::tuning::WEAPON_TREE_OPENER;
+        self.world
+            .resource::<ResearchDb>()
+            .get(id)
+            .map_or_else(|| id.to_string(), |d| d.name.clone())
+    }
+
     /// Whether `affix` has been researched — the one door apply goes
     /// through. An affix node is an ordinary node in the `Research` set, so
     /// this is `is_researched` over the synthesised id; it is false for an

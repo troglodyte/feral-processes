@@ -495,8 +495,7 @@ pub(super) fn draw_research_menu(
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The Weapons tree's rows, or the line saying why there are none: closed
-/// and open-but-nothing-found call for different actions.
+/// The Weapons tree's rows, or the line saying the tree is closed.
 fn weapon_research_rows(
     game: &Game,
     nodes: &[ResearchStatus],
@@ -508,11 +507,12 @@ fn weapon_research_rows(
     if !nodes.is_empty() {
         return research_menu_rows(nodes, selected, currency, active, dev_unlock);
     }
-    vec![text_row(if game.weapon_tree_open() {
-        "No weapon parts discovered yet. Study programs to find some."
-    } else {
-        "Research Weapon Fabrication to open weapon research."
-    })]
+    // An open tree always lists its first frames, so an empty list is the
+    // closed tree.
+    vec![text_row(format!(
+        "Research {} to open weapon research.",
+        game.weapon_tree_opener_name()
+    ))]
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent

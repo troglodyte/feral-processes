@@ -145,3 +145,14 @@ fn capacity_research_raises_the_design_cap_step_by_step() {
     );
     assert_eq!(game.gear_part_cap(), crate::tuning::GEAR_PART_CAP_START + 1);
 }
+
+#[test]
+fn the_opener_is_named_from_its_research_node() {
+    let game = game_in_base(72_010);
+    let def = game
+        .research_defs()
+        .into_iter()
+        .find(|d| d.id == crate::tuning::WEAPON_TREE_OPENER)
+        .expect("the opener ships as a base node");
+    assert_eq!(game.weapon_tree_opener_name(), def.name);
+}

@@ -20,7 +20,8 @@ use crate::items::FloorThing;
 use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
 use crate::tuning::{GEAR_PART_CAP_MAX, GEAR_PART_CAP_START};
 use crate::views::{
-    DesignAffixOption, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow, WeaponPartRow,
+    DesignAffixOption, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow, SalvageRow,
+    WeaponPartRow,
 };
 use crate::*;
 
@@ -476,6 +477,28 @@ impl Game {
             part_cap: cap,
             blocked,
         }
+    }
+
+    /// The Salvage page: the authored weapons in the pack, each with what
+    /// taking it apart hands out. A built weapon is not listed.
+    pub fn salvage_rows(&self) -> Vec<SalvageRow> {
+        let items = self.world.resource::<ItemDb>();
+        self.player_status()
+            .inventory
+            .into_iter()
+            .filter(|row| row.copy.item.crafted_gear_of().is_none())
+            .filter_map(|row| {
+                let parts = items
+                    .get(row.copy.item.as_str())
+                    .and_then(gear_craft::weapon::decompose)?;
+                Some(SalvageRow {
+                    name: self.copy_name(&row.copy),
+                    qty: row.qty,
+                    parts: parts.iter().map(|p| p.label()).collect(),
+                    copy: row.copy,
+                })
+            })
+            .collect()
     }
 
     /// The Weapon parts page: every part, locked ones greyed, with what is

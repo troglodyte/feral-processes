@@ -6,7 +6,7 @@
 use crate::affixes::AffixId;
 use crate::gear_craft::weapon::Category;
 use crate::gear_craft::{GearCraftRefusal, WeaponPart};
-use crate::items::EquipmentStats;
+use crate::items::{EquipmentStats, GearCopy};
 
 /// One row of the Forge's designs list.
 #[derive(Clone, Debug, PartialEq)]
@@ -85,4 +85,14 @@ pub struct WeaponPartRow {
     pub affordable: bool,
     /// Whether the part's research is done; a locked part is listed, greyed.
     pub known: bool,
+}
+
+/// One row of the Salvage page: a pack copy that can be taken apart.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SalvageRow {
+    pub copy: GearCopy,
+    pub name: String,
+    pub qty: u32,
+    /// What taking one apart hands out, labelled.
+    pub parts: Vec<String>,
 }

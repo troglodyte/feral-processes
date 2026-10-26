@@ -737,3 +737,16 @@ fn a_proc_part_can_never_be_crafted_only_salvaged() {
     );
     assert_eq!(game.weapon_parts_held(proc), 0);
 }
+
+#[test]
+fn salvage_rows_list_authored_weapons_in_the_pack_with_their_parts() {
+    let mut game = bench_game(72_150);
+    assert!(game.salvage_rows().is_empty());
+    let copy = ragged_copy(&mut game, vec![]);
+    let id = designed(&mut game);
+    built(&mut game, id);
+    let rows = game.salvage_rows();
+    assert_eq!(rows.len(), 1, "the built weapon is not listed: {rows:?}");
+    assert_eq!(rows[0].copy, copy);
+    assert!(!rows[0].parts.is_empty());
+}

@@ -700,6 +700,39 @@ impl EquipmentStats {
             || damage.max > 0
     }
 
+    /// This bonus with one affix's stats added, before any scaling — the one
+    /// step `Game::copy_bonus` and `gear_craft::compile` both fold an affix
+    /// in by, so a crafted weapon's affix enters at the same point a
+    /// dropped one's does.
+    pub(crate) fn plus_affix(self, affix: EquipmentStats) -> EquipmentStats {
+        EquipmentStats {
+            atk: self.atk + affix.atk,
+            mitigation: self.mitigation + affix.mitigation,
+            decompiler: self.decompiler + affix.decompiler,
+            damage: crate::battle::DamageRange {
+                min: self.damage.min + affix.damage.min,
+                max: self.damage.max + affix.damage.max,
+            },
+            accuracy: self.accuracy + affix.accuracy,
+            evasion: self.evasion + affix.evasion,
+            deflection: self.deflection + affix.deflection,
+            // An affix never sets a type (the loader refuses it), so the
+            // base's survives.
+            damage_type: self.damage_type,
+            resist: self.resist + affix.resist,
+        }
+    }
+
+    /// This (already affixed) bonus put through `copy`'s own three axes at
+    /// `level`. **The one place the axis order is written down** — see
+    /// `Game::copy_bonus` for why it is load-bearing.
+    pub(crate) fn for_copy(self, level: u32, copy: &GearCopy) -> EquipmentStats {
+        self.scaled_for_level(level)
+            .for_quality(copy.quality)
+            .fused_for_tier(copy.tier)
+            .for_rarity(copy.rarity)
+    }
+
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
     /// Each component is rounded independently to the nearest whole point.
     pub(crate) fn scaled_for_level(self, level: u32) -> EquipmentStats {

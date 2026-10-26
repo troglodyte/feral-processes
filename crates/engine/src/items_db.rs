@@ -286,6 +286,28 @@ pub struct ItemDef {
     /// reads it. `#[serde(default)]`, absent meaning the renderer's default.
     #[serde(default)]
     pub fx: Option<String>,
+    /// A status this weapon may arm on a landed hit. **Runtime only**: set
+    /// by `gear_craft::compile` on a crafted weapon and never authored or
+    /// saved, so no `.ron` field and no save field exists (ADR 0031). A load
+    /// re-derives it from the design.
+    #[serde(skip)]
+    pub on_hit_rider: Option<WeaponRider>,
+    /// A payoff against a target already carrying a status. Runtime only,
+    /// like `on_hit_rider`.
+    #[serde(skip)]
+    pub exploit: Option<WeaponExploit>,
+}
+
+/// What a weapon's rider arms, in the shape a move's status effect already
+/// has so combat arms it through the one existing path.
+pub type WeaponRider = crate::species::MoveEffect;
+
+/// Extra damage a weapon does to a target carrying `status`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeaponExploit {
+    pub status: crate::statuses::StatusId,
+    /// Added percentage of the swing's damage, before mitigation.
+    pub percent: u32,
 }
 
 impl ItemDef {
@@ -360,6 +382,20 @@ impl ItemDef {
             return ItemCategory::Currency;
         }
         ItemCategory::Material
+    }
+
+    /// Why this item could not be loaded as an authored item, if it
+    /// couldn't — every check `ItemDb::load_dir` makes on a parsed def, in
+    /// the order it makes them. `gear_craft::compile` output is held to the
+    /// same list, so a crafted weapon cannot be one the loader would have
+    /// refused.
+    pub(crate) fn load_fault(&self, abilities: &crate::abilities::AbilityDb) -> Option<String> {
+        if let Some(field) = self.non_finite_field() {
+            return Some(format!("{field} is not a finite number"));
+        }
+        self.ungrantable_ability(abilities)
+            .or_else(|| self.unreachable_reach())
+            .or_else(|| self.unreachable_range())
     }
 
     /// Names the first field whose value is not usable, if any. RON accepts
@@ -512,21 +548,7 @@ impl ItemDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ItemDef>(&text) {
                 Ok(def) => {
-                    if let Some(field) = def.non_finite_field() {
-                        warnings.push(format!(
-                            "skipped invalid item file {path:?}: {field} is not a finite number"
-                        ));
-                        continue;
-                    }
-                    if let Some(reason) = def.ungrantable_ability(abilities) {
-                        warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.unreachable_reach() {
-                        warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
-                        continue;
-                    }
-                    if let Some(reason) = def.unreachable_range() {
+                    if let Some(reason) = def.load_fault(abilities) {
                         warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
                         continue;
                     }
@@ -635,6 +657,8 @@ impl ItemDb {
                     // One shared mark: no `ToolDef` field to author one from.
                     glyph: Some(','),
                     fx: None,
+                    on_hit_rider: None,
+                    exploit: None,
                 },
             );
         }
@@ -695,6 +719,8 @@ impl ItemDb {
                     abbrev: None,
                     glyph: Some(','),
                     fx: None,
+                    on_hit_rider: None,
+                    exploit: None,
                 },
             );
         }

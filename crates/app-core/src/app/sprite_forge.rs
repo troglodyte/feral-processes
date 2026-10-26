@@ -8,7 +8,7 @@
 //! editor leaves unhandled, the write cue, and the mouse entry point.
 //! Drawing is `Mode::SpriteEditor`'s Task 7, not this module's.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
@@ -107,6 +107,9 @@ pub struct SpriteSubject {
     /// or structure's.
     pub tint: SubjectTint,
     pub art: SpriteArt,
+    /// The player's own folder holds a file for this name, so `r` can
+    /// revert it to the shipped art.
+    pub edited: bool,
 }
 
 /// A sprite the frontend found on disk: its frames and which file variant
@@ -216,9 +219,22 @@ impl App {
         &mut self,
         enabled: HashMap<String, InstalledSprite>,
         disabled: HashMap<String, InstalledSprite>,
+        edited: HashSet<String>,
     ) {
         self.sprite_library = enabled;
         self.sprite_disabled = disabled;
+        self.sprite_edited = edited;
+    }
+
+    /// A write the frontend could not land, told to the player through the
+    /// one refusal door.
+    pub fn report_sprite_write_failure(&mut self, message: String) {
+        self.refuse(message);
+    }
+
+    /// The subject a revert is waiting on confirmation for, for the prompt.
+    pub fn sprite_revert_pending(&self) -> Option<&str> {
+        self.pending_sprite_revert.as_deref()
     }
 
     /// The one door into `Mode::SpritePicker`, from the game menu's Sprites
@@ -232,6 +248,7 @@ impl App {
         self.status_line = None;
         self.menu_origin = Some(Mode::SpriteOptions);
         self.menu_selected = 0;
+        self.pending_sprite_revert = None;
         self.mode = Mode::SpritePicker;
     }
 
@@ -286,6 +303,7 @@ impl App {
                     glyph: *glyph,
                     tint: *tint,
                     art,
+                    edited: self.sprite_edited.contains(name),
                 }
             })
             .collect()
@@ -394,11 +412,19 @@ impl App {
     /// `selected_index` is what both Enter and the arrows go through, so
     /// there is one place that owns the highlight.
     pub(crate) fn handle_sprite_picker_key(&mut self, key: GameKey) {
+        if self.pending_sprite_revert.is_some() {
+            self.answer_sprite_revert(key);
+            return;
+        }
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
         let subjects = self.sprite_subjects();
+        if key == GameKey::Char('r') {
+            self.ask_sprite_revert(&subjects);
+            return;
+        }
         if key == GameKey::Char('t') {
             if let Some(subject) = subjects.get(self.menu_selected) {
                 let op = match subject.art {
@@ -421,6 +447,35 @@ impl App {
         }
         if let Some(idx) = self.selected_index(key, subjects.len()) {
             self.open_sprite_subject(&subjects[idx].name);
+        }
+    }
+
+    /// `r`: asks before deleting the player's edits to the highlighted row.
+    fn ask_sprite_revert(&mut self, subjects: &[SpriteSubject]) {
+        let Some(subject) = subjects.get(self.menu_selected) else {
+            return;
+        };
+        if subject.edited {
+            self.pending_sprite_revert = Some(subject.name.clone());
+        } else {
+            self.refuse(format!("`{}` has no edits to revert.", subject.label));
+        }
+    }
+
+    /// While a revert is pending only `y` confirms; `n` and `Esc` cancel and
+    /// every other key is swallowed, so `Esc` cannot also leave the picker.
+    fn answer_sprite_revert(&mut self, key: GameKey) {
+        match key {
+            GameKey::Char('y') => {
+                if let Some(name) = self.pending_sprite_revert.take() {
+                    self.pending_sprite_writes.push(SpriteWrite {
+                        name,
+                        op: SpriteOp::Revert,
+                    });
+                }
+            }
+            GameKey::Char('n') | GameKey::Esc => self.pending_sprite_revert = None,
+            _ => {}
         }
     }
 
@@ -541,6 +596,9 @@ impl App {
         let PointerHit::Subject(index) = hit else {
             return;
         };
+        if self.pending_sprite_revert.is_some() {
+            return;
+        }
         if button != PointerButton::Primary {
             return;
         }

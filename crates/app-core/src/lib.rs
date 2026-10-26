@@ -109,7 +109,7 @@ pub enum TransferSource {
 use app::arena::{ArenaPickKind, ArenaSession};
 use app::travel::Walk;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -3545,6 +3545,12 @@ pub struct App {
     /// the picker already tells the player the art survives the toggle, and
     /// the only tool that can read it back was the one place that didn't.
     sprite_disabled: HashMap<String, InstalledSprite>,
+    /// Names the player's own sprite folder holds art for —
+    /// `App::install_sprite_library`'s `edited` half, which marks a picker
+    /// row and is what makes `r` (revert) meaningful.
+    sprite_edited: HashSet<String>,
+    /// The subject a pressed `r` is waiting on a `y`/`n` for.
+    pending_sprite_revert: Option<String>,
     /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
     /// tint)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
     /// `assets/structures`/`assets/floors` once and kept for the rest of the

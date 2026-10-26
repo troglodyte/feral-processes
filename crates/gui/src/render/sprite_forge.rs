@@ -54,8 +54,11 @@ use feral_processes_app_core::{
 const PICKER_COLUMNS: usize = 4;
 
 const PICKER_TITLE: &str = "Sprite Forge";
-const PICKER_HELP_TEXT: &str =
-    "Up/Down or click: move   Enter or double-click: edit   t: toggle art   Esc: back to menu";
+const PICKER_HELP_TEXT: &str = "Up/Down or click: move   Enter or double-click: edit   t: toggle art   r: revert   Esc: back to menu";
+
+/// Marks a row the player has redrawn. Short on purpose: the row census
+/// holds the longest label plus this against its column.
+const EDITED_MARK: &str = " (edited)";
 
 struct PickerGeometry {
     header_y: f32,
@@ -110,7 +113,18 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
     let g = picker_geometry(painter.screen_w(), m, subjects.len());
 
     centered_ui(painter, PICKER_TITLE, g.header_y, m.title(), TEXT);
-    centered_ui(painter, PICKER_HELP_TEXT, g.help_y, m.small(), TEXT_DIM);
+    match app.sprite_revert_pending().and_then(|name| {
+        subjects
+            .iter()
+            .find(|s| s.name == name)
+            .map(|s| s.label.clone())
+    }) {
+        Some(label) => {
+            let ask = format!("Revert `{label}` to the original art? (y/n)");
+            centered_ui(painter, &ask, g.help_y, m.small(), TEXT);
+        }
+        None => centered_ui(painter, PICKER_HELP_TEXT, g.help_y, m.small(), TEXT_DIM),
+    }
 
     for (i, subject) in subjects.iter().enumerate() {
         let (col, row) = picker_slot(i, g.rows_per_column);
@@ -118,6 +132,10 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
         let y = g.grid_top + row as f32 * m.line_height;
         draw_subject_row(painter, x, y, subject, i == selected, m);
     }
+}
+
+fn edited_mark(subject: &SpriteSubject) -> &'static str {
+    if subject.edited { EDITED_MARK } else { "" }
 }
 
 fn art_label(art: SpriteArt) -> &'static str {
@@ -162,7 +180,12 @@ fn draw_subject_row(
     m: &Metrics,
 ) {
     let prefix = if selected { "> " } else { "  " };
-    let tail = format!(" {} ({})", subject.label, art_label(subject.art));
+    let tail = format!(
+        " {} ({}){}",
+        subject.label,
+        art_label(subject.art),
+        edited_mark(subject)
+    );
     painter.ui_runs(
         &[
             TextRun {
@@ -195,10 +218,11 @@ fn draw_subject_row(
 fn subject_row_text(subject: &SpriteSubject, selected: bool) -> String {
     let prefix = if selected { "> " } else { "  " };
     format!(
-        "{prefix}{} {} ({})",
+        "{prefix}{} {} ({}){}",
         subject.glyph,
         subject.label,
-        art_label(subject.art)
+        art_label(subject.art),
+        edited_mark(subject)
     )
 }
 
@@ -940,7 +964,12 @@ mod tests {
             for (i, subject) in subjects.iter().enumerate() {
                 let (col, _) = picker_slot(i, g.rows_per_column);
                 let x = m.pad + col as f32 * g.column_width;
-                let text = subject_row_text(subject, false);
+                // Worst case: every row carries the edited mark.
+                let marked = SpriteSubject {
+                    edited: true,
+                    ..subject.clone()
+                };
+                let text = subject_row_text(&marked, false);
                 let width = p.measure_ui_advance(&text, m.font_size);
                 assert!(
                     x + width <= CENSUS_W,
@@ -1302,7 +1331,7 @@ mod tests {
                 full_colour: true,
             },
         );
-        app.install_sprite_library(enabled, Default::default());
+        app.install_sprite_library(enabled, Default::default(), Default::default());
         let index = app
             .sprite_subjects()
             .iter()

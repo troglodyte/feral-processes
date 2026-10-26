@@ -273,7 +273,7 @@ pub fn load(
 /// the first save.
 pub fn install_library(app: &mut feral_processes_app_core::App) {
     let library = layers_of(app).library();
-    app.install_sprite_library(library.enabled, library.disabled);
+    app.install_sprite_library(library.enabled, library.disabled, library.edited);
 }
 
 /// The two sprite folders as the app currently knows them.
@@ -379,14 +379,13 @@ pub fn drain_writes(
                     queue_load(&asset_server, &mut sprites, key.stem);
                 }
             }
-            // Task 3 turns this into the status line.
-            WriteOutcome::Failed(_) => {}
+            WriteOutcome::Failed(message) => frontend.app.report_sprite_write_failure(message),
         }
     }
     let library = layers.library();
     frontend
         .app
-        .install_sprite_library(library.enabled, library.disabled);
+        .install_sprite_library(library.enabled, library.disabled, library.edited);
 }
 
 /// Hands each sprite to egui once its pixels have actually arrived.

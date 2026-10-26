@@ -203,6 +203,8 @@ impl App {
             user_sprite_dir: None,
             sprite_library: HashMap::new(),
             sprite_disabled: HashMap::new(),
+            sprite_edited: HashSet::new(),
+            pending_sprite_revert: None,
             sprite_static_subjects: None,
             sprite_editor: None,
             pending_sprite_writes: Vec::new(),

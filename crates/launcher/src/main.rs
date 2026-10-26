@@ -134,16 +134,10 @@ fn main() {
         names: dev_template::list(),
         resolve: dev_template::resolve,
     });
-    // Only inside a checkout — `paths.dev` is `None` in an installed build,
-    // which is the other half of `App::sprite_forge_enabled`'s gate:
-    // `FERAL_DEV_SPRITES` alone must not be enough to offer a screen whose
-    // whole purpose is writing into a source tree that build does not have.
-    if paths.dev.is_some() {
-        app.install_sprite_dir();
-        // Before the scripted keys below: they can open the forge, whose
-        // editor loads its art from this library as it opens.
-        feral_processes_gui::install_sprite_library(&mut app);
-    }
+    app.set_user_sprite_dir(paths::user_sprites_dir());
+    // Before the scripted keys below: they can open the forge, whose
+    // editor loads its art from this library as it opens.
+    feral_processes_gui::install_sprite_library(&mut app);
     // Generated into an expendable copy under `saves/`, never opened on the
     // `dev-saves/` source — the game autosaves, so playing the fixture
     // directly would rewrite it into a record of this session.

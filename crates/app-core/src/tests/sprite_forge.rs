@@ -1,12 +1,8 @@
-//! `Mode::SpritePicker` and `Mode::SpriteEditor` — the subject list, both
-//! gates, the editing screen, the write cue and the pointer entry point.
-//!
-//! Both gates are fields read once in `App::new` (or set by
-//! `install_sprite_dir`), not a live env lookup, so a test can open them
-//! without touching an environment the parallel suite shares — the same
-//! reasoning `dev_arena_enabled` records.
+//! `Mode::SpriteOptions`, `Mode::SpritePicker` and `Mode::SpriteEditor` — the
+//! rail entry, the subject list, the editing screen, the write cue and the
+//! pointer entry point.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use feral_processes_engine::icon::Canvas;
 
@@ -29,72 +25,49 @@ fn colour(canvas: Canvas) -> InstalledSprite {
     }
 }
 
-/// An app sitting on the main menu with both gates open — the flag and a
-/// sprite dir installed.
+/// An app sitting on the main menu with no run behind it.
 fn app_with_sprite_forge(seed: u32) -> App {
     let mut app = test_app(seed);
     app.game = None;
     app.mode = Mode::MainMenu;
-    app.sprite_forge_flag = true;
-    app.install_sprite_dir();
     app
 }
 
 #[test]
-fn neither_gate_open_leaves_the_row_absent_and_the_mode_unreachable() {
+fn the_game_menu_rail_offers_sprites_before_save_and_quit() {
     let mut app = test_app(1);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    // The default `test_app` state, made explicit: no flag, no dir.
-    app.sprite_forge_flag = false;
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-
+    app.open_game_menu(true);
+    let titles: Vec<_> = Hub::GameMenu
+        .kind()
+        .pages(&app)
+        .iter()
+        .map(|p| p.title)
+        .collect();
     assert_eq!(
-        app.mode,
-        Mode::MainMenu,
-        "the row must not be reachable with neither gate open"
+        titles,
+        ["Gameplay", "Audio", "Graphics", "Sprites", "Save & quit"]
     );
 }
 
 #[test]
-fn the_flag_alone_is_not_enough_without_a_checkout() {
-    let mut app = test_app(2);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    app.sprite_forge_flag = true;
-    // No `install_sprite_dir` call — an installed build's whole story:
-    // there is no repo to write art into, so the row must stay off even
-    // with the flag set.
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-    assert_eq!(app.mode, Mode::MainMenu);
-}
-
-#[test]
-fn a_dir_alone_is_not_enough_without_the_flag() {
-    let mut app = test_app(3);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    app.install_sprite_dir();
-    // `sprite_forge_flag` left false.
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-    assert_eq!(app.mode, Mode::MainMenu);
-}
-
-#[test]
-fn both_gates_open_d_opens_the_picker_and_esc_returns() {
+fn enter_on_the_sprites_rail_entry_opens_the_picker_and_esc_returns_to_the_rail() {
     let mut app = app_with_sprite_forge(4);
-    assert!(app.sprite_forge_enabled());
-
-    app.handle_key(GameKey::Char('d'));
+    app.open_game_menu(false);
+    for _ in 0..3 {
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::SpriteOptions);
+    app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::SpritePicker);
-
     app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::SpriteOptions);
+    assert!(app.hub_on_rail);
+}
+
+#[test]
+fn the_main_menu_has_no_sprite_forge_row() {
+    let mut app = app_with_sprite_forge(2);
+    app.handle_key(GameKey::Char('d'));
     assert_eq!(app.mode, Mode::MainMenu);
 }
 
@@ -217,7 +190,7 @@ fn sprite_subjects_reads_art_state_off_the_installed_library() {
     enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
     disabled.insert("player".to_string(), plain(Canvas::new(16)));
-    app.install_sprite_library(enabled, disabled);
+    app.install_sprite_library(enabled, disabled, HashSet::new());
 
     let subjects = app.sprite_subjects();
     let by_name = |name: &str| subjects.iter().find(|s| s.name == name).unwrap();
@@ -251,7 +224,7 @@ fn the_static_list_is_cached_but_art_state_stays_live() {
     // get wrong.
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
 
     let third = app.sprite_subjects();
     assert_eq!(
@@ -318,7 +291,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
     art.set(0, 0, 5);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), plain(art));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
 
     let subjects = app.sprite_subjects();
     let blank_name = subjects
@@ -358,7 +331,7 @@ fn entering_an_off_subject_reopens_its_disabled_art_not_a_blank_canvas() {
     art.set(3, 4, 9);
     let mut disabled = HashMap::new();
     disabled.insert("anchor".to_string(), plain(art.clone()));
-    app.install_sprite_library(HashMap::new(), disabled);
+    app.install_sprite_library(HashMap::new(), disabled, HashSet::new());
 
     let subjects = app.sprite_subjects();
     let anchor = subjects.iter().find(|s| s.name == "anchor").unwrap();
@@ -430,7 +403,7 @@ fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
     enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
     let mut disabled = HashMap::new();
     disabled.insert("player".to_string(), plain(Canvas::new(16)));
-    app.install_sprite_library(enabled, disabled);
+    app.install_sprite_library(enabled, disabled, HashSet::new());
 
     let subjects = app.sprite_subjects();
     let anchor_idx = subjects.iter().position(|s| s.name == "anchor").unwrap();
@@ -646,132 +619,6 @@ fn a_pointer_event_outside_the_sprite_editor_changes_nothing() {
     assert!(app.take_sprite_writes().is_empty());
 }
 
-/// The console's own gate plus both of the forge's, on a live run — the
-/// second door's fixture, where `app_with_sprite_forge` is the first
-/// door's and deliberately has no game at all.
-fn open_the_dev_gates(app: &mut App) {
-    app.enable_dev_console_for_test();
-    app.sprite_forge_flag = true;
-    app.install_sprite_dir();
-}
-
-/// Where the forge sits in the keypad. Read off the table rather than
-/// written as a number, `every_console_row_has_a_label_and_the_selection_
-/// stays_in_range`'s rule: the table is the one source of both the label
-/// and the action, so a test that hardcoded `6` would start firing a raid
-/// the day a row is inserted above it.
-fn forge_row() -> usize {
-    App::dev_console_rows()
-        .iter()
-        .position(|row| row.action == DevAction::OpenSpriteForge)
-        .expect("the keypad carries the forge's second door")
-}
-
-/// The whole of what the second door is for: the map is the same
-/// `Mode::Playing` on the open grid, inside base space and down a Stack
-/// frame, and the console key is bound in `handle_playing_key`'s top match
-/// — above the hand-off to `handle_stack_key` — so one arm reaches all
-/// three. Asserted per locale anyway, because "one arm reaches all three"
-/// is a property of where that arm sits and nothing makes it fail to
-/// compile if it moves below the hand-off.
-#[test]
-fn the_console_opens_the_forge_in_every_locale() {
-    let field = {
-        let mut app = test_app(30);
-        open_the_dev_gates(&mut app);
-        app
-    };
-    let based = {
-        let mut app = test_app(31);
-        super::support::found_the_base(&mut app);
-        super::support::stand_in_base(&mut app);
-        open_the_dev_gates(&mut app);
-        app
-    };
-    let stack = {
-        let mut app = super::support::app_underground(32);
-        open_the_dev_gates(&mut app);
-        app
-    };
-
-    for (locale, mut app) in [
-        ("the field", field),
-        ("base space", based),
-        ("the Stack", stack),
-    ] {
-        assert_eq!(
-            app.mode,
-            Mode::Playing,
-            "{locale}: the fixture starts on the map"
-        );
-
-        app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-        assert_eq!(app.mode, Mode::DevConsole, "{locale}: the keypad opens");
-
-        app.menu_selected = forge_row();
-        app.handle_key(GameKey::Enter);
-        assert_eq!(
-            app.mode,
-            Mode::SpritePicker,
-            "{locale}: the forge must open mid-run"
-        );
-
-        app.handle_key(GameKey::Esc);
-        assert_eq!(
-            app.mode,
-            Mode::DevConsole,
-            "{locale}: Esc leaves by the door it came through"
-        );
-    }
-}
-
-/// Opening a screen is not provoking an event: every other row ends in
-/// `after_world_action` and spends a tick, and this one must not — the
-/// forge is reached mid-fight-free but the world should stand exactly where
-/// it was while you draw.
-#[test]
-fn opening_the_forge_spends_no_tick() {
-    let mut app = test_app(33);
-    open_the_dev_gates(&mut app);
-    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-    let before = app.game.as_ref().unwrap().current_tick();
-
-    app.menu_selected = forge_row();
-    app.handle_key(GameKey::Enter);
-
-    assert_eq!(app.mode, Mode::SpritePicker);
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        before,
-        "opening a screen must not age the world"
-    );
-}
-
-/// `FERAL_DEV_CONSOLE=1` alone, or an installed build with no checkout to
-/// write art into. The row is still drawn — the keypad hides none of its
-/// rows on purpose — so the press has to say why rather than doing
-/// nothing, which is indistinguishable from the key not being bound.
-#[test]
-fn the_forge_row_refuses_when_the_forge_is_shut() {
-    let mut app = test_app(34);
-    app.enable_dev_console_for_test();
-    assert!(!app.sprite_forge_enabled());
-
-    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-    app.menu_selected = forge_row();
-    app.handle_key(GameKey::Enter);
-
-    assert_eq!(
-        app.mode,
-        Mode::DevConsole,
-        "a row this build cannot honour must not open the screen"
-    );
-    assert!(
-        app.status_line.is_some(),
-        "and it must say why rather than doing nothing"
-    );
-}
-
 // ---- the variant rule ---------------------------------------------------
 
 /// Index 9 is the lightest grey, 10 the first hue: the grey ramp is `1..=9`.
@@ -839,7 +686,7 @@ fn loaded_colour_art_stays_colour_after_a_grey_only_edit() {
     let mut app = app_with_sprite_forge(72);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(&mut app, "anchor");
     paint_cursor_cell(&mut app, 2);
     assert!(saved_variant(&mut app).1);
@@ -850,7 +697,7 @@ fn loaded_plain_art_stays_plain_after_a_hued_edit() {
     let mut app = app_with_sprite_forge(73);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(&mut app, "anchor");
     paint_cursor_cell(&mut app, FIRST_HUE);
     assert!(!saved_variant(&mut app).1);
@@ -861,7 +708,7 @@ fn the_view_reports_the_variant_the_art_will_save_as() {
     let mut app = app_with_sprite_forge(74);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(&mut app, "anchor");
     assert!(app.sprite_editor_view().unwrap().full_colour);
     open_editor(&mut app, "player");
@@ -880,7 +727,7 @@ fn picker_t_carries_the_installed_variant() {
     enabled.insert("anchor".to_string(), colour(Canvas::new(16)));
     let mut disabled = HashMap::new();
     disabled.insert("player".to_string(), colour(Canvas::new(16)));
-    app.install_sprite_library(enabled, disabled);
+    app.install_sprite_library(enabled, disabled, HashSet::new());
     let subjects = app.sprite_subjects();
     app.mode = Mode::SpritePicker;
     for name in ["anchor", "player"] {
@@ -912,7 +759,7 @@ fn open_on_a_ring(app: &mut App) {
     }
     let mut enabled = HashMap::new();
     enabled.insert("cipher".to_string(), plain(art));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(app, "cipher");
 }
 
@@ -1267,7 +1114,7 @@ fn each_button_names_the_key_the_footer_documents() {
 
 fn on_the_picker(seed: u32) -> App {
     let mut app = app_with_sprite_forge(seed);
-    app.handle_key(GameKey::Char('d'));
+    app.open_sprite_forge();
     assert_eq!(app.mode, Mode::SpritePicker);
     app
 }
@@ -1297,7 +1144,7 @@ fn a_double_click_on_the_selected_subject_opens_it_with_its_art_and_variant() {
     art.set(3, 3, 12);
     let mut enabled = HashMap::new();
     enabled.insert("cipher".to_string(), colour(art.clone()));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
 
     subject_pointer(&mut app, index, PointerPhase::Down);
     subject_pointer(&mut app, index, PointerPhase::DoubleClick);
@@ -1571,7 +1418,13 @@ fn a_hue_used_only_on_frame_two_picks_the_colour_variant() {
     app.handle_key(GameKey::Char('1'));
     assert!(app.sprite_editor_view().unwrap().full_colour);
     app.handle_key(GameKey::Char('s'));
-    assert!(app.take_sprite_writes()[0].op.full_colour());
+    assert!(matches!(
+        app.take_sprite_writes()[0].op,
+        SpriteOp::Save {
+            full_colour: true,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -1579,7 +1432,7 @@ fn a_pinned_variant_survives_a_hue_only_on_frame_two() {
     let mut app = app_with_sprite_forge(314);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(&mut app, "anchor");
     app.handle_key(GameKey::Char('2'));
     paint_cursor_cell(&mut app, FIRST_HUE);
@@ -1600,9 +1453,139 @@ fn an_installed_two_frame_sprite_opens_with_both_frames_and_its_speed() {
             full_colour: false,
         },
     );
-    app.install_sprite_library(enabled, HashMap::new());
+    app.install_sprite_library(enabled, HashMap::new(), HashSet::new());
     open_editor(&mut app, "anchor");
     let view = app.sprite_editor_view().unwrap();
     assert_eq!((view.frames, view.active_frame, view.frame_ms), (2, 0, 900));
     assert_eq!(view_cells(&app, 1)[2 * 16 + 2], 4);
+}
+
+fn picker_on(app: &mut App, name: &str) {
+    let idx = app
+        .sprite_subjects()
+        .iter()
+        .position(|s| s.name == name)
+        .unwrap_or_else(|| panic!("no subject named {name}"));
+    app.mode = Mode::SpritePicker;
+    app.menu_selected = idx;
+}
+
+fn app_with_edited_anchor(seed: u32) -> App {
+    let mut app = app_with_sprite_forge(seed);
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), plain(Canvas::new(16)));
+    app.install_sprite_library(
+        enabled,
+        HashMap::new(),
+        HashSet::from(["anchor".to_string()]),
+    );
+    app
+}
+
+#[test]
+fn edited_subjects_are_marked() {
+    let mut app = app_with_edited_anchor(41);
+
+    let subjects = app.sprite_subjects();
+
+    for subject in &subjects {
+        assert_eq!(subject.edited, subject.name == "anchor", "{}", subject.name);
+    }
+}
+
+#[test]
+fn r_then_y_queues_a_revert() {
+    let mut app = app_with_edited_anchor(42);
+    picker_on(&mut app, "anchor");
+
+    app.handle_key(GameKey::Char('r'));
+    assert_eq!(app.sprite_revert_pending(), Some("anchor"));
+    assert!(app.take_sprite_writes().is_empty());
+
+    app.handle_key(GameKey::Char('y'));
+    assert_eq!(
+        app.take_sprite_writes(),
+        vec![SpriteWrite {
+            name: "anchor".to_string(),
+            op: SpriteOp::Revert
+        }]
+    );
+    assert_eq!(app.sprite_revert_pending(), None);
+}
+
+#[test]
+fn r_then_n_or_esc_queues_nothing_and_stays_on_the_picker() {
+    for cancel in [GameKey::Char('n'), GameKey::Esc] {
+        let mut app = app_with_edited_anchor(43);
+        picker_on(&mut app, "anchor");
+        app.handle_key(GameKey::Char('r'));
+
+        app.handle_key(cancel);
+
+        assert_eq!(app.sprite_revert_pending(), None, "{cancel:?}");
+        assert!(app.take_sprite_writes().is_empty(), "{cancel:?}");
+        assert_eq!(app.mode, Mode::SpritePicker, "{cancel:?}");
+    }
+}
+
+#[test]
+fn other_keys_are_ignored_while_a_revert_is_pending() {
+    let mut app = app_with_edited_anchor(44);
+    picker_on(&mut app, "anchor");
+    let selected = app.menu_selected;
+    app.handle_key(GameKey::Char('r'));
+
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('t'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.menu_selected, selected);
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert_eq!(app.sprite_revert_pending(), Some("anchor"));
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
+fn a_picker_click_is_ignored_while_a_revert_is_pending() {
+    let mut app = app_with_edited_anchor(46);
+    picker_on(&mut app, "anchor");
+    let selected = app.menu_selected;
+    app.handle_key(GameKey::Char('r'));
+    let other = (selected + 1) % app.sprite_subjects().len();
+
+    subject_pointer(&mut app, other, PointerPhase::Down);
+    subject_pointer(&mut app, other, PointerPhase::DoubleClick);
+
+    assert_eq!(app.menu_selected, selected);
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert_eq!(app.sprite_revert_pending(), Some("anchor"));
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
+fn r_on_an_unedited_row_is_refused() {
+    let mut app = app_with_edited_anchor(45);
+    picker_on(&mut app, "player");
+
+    app.handle_key(GameKey::Char('r'));
+
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("no edits to revert")),
+        "{:?}",
+        app.status_line
+    );
+    assert_eq!(app.sprite_revert_pending(), None);
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
+fn failed_write_reaches_the_status_line() {
+    let mut app = app_with_sprite_forge(46);
+    let message = "Couldn't save sprite `x`: denied".to_string();
+
+    app.report_sprite_write_failure(message.clone());
+
+    assert_eq!(app.status_line, Some(message));
 }

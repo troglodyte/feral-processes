@@ -109,7 +109,7 @@ pub enum TransferSource {
 use app::arena::{ArenaPickKind, ArenaSession};
 use app::travel::Walk;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -2414,16 +2414,17 @@ pub enum Mode {
     ArenaResult,
     /// Every name the map can draw a sprite for — see
     /// `App::sprite_subjects`. Reached from the main menu when
-    /// `App::sprite_forge_enabled` is true (`FERAL_DEV_SPRITES` *and* a
-    /// checkout behind this build); never reachable in a player's build.
-    /// Esc returns to the main menu.
+    /// `Mode::SpriteOptions`' rail entry. Esc returns to that page.
     SpritePicker,
     /// Drawing a sprite for one subject picked off `Mode::SpritePicker` —
     /// see `App::sprite_editor_view`. `[g]` toggles the brush, `[s]` queues
     /// a save (`App::take_sprite_writes`), `Esc` returns to the picker
     /// without queueing anything. Never reachable except through
-    /// `Mode::SpritePicker`, so it inherits that mode's whole gate.
+    /// `Mode::SpritePicker`.
     SpriteEditor,
+    /// The game menu's Sprites page: what the Sprite Forge is, with Enter on
+    /// the rail opening `Mode::SpritePicker`.
+    SpriteOptions,
 }
 
 impl Mode {
@@ -2656,8 +2657,9 @@ impl Mode {
             | Mode::ArenaSave
             | Mode::ArenaPick
             | Mode::ArenaResult
-            // Opened from the main menu, so it never layers over a fight —
+            // Opened from the game menu, so it never layers over a fight —
             // and so is the picker's `SpriteEditor`, reachable only from it.
+            | Mode::SpriteOptions
             | Mode::SpritePicker
             | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers
@@ -3528,21 +3530,10 @@ pub struct App {
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
     creation_icon_seeded: bool,
-    /// Whether `FERAL_DEV_SPRITES` was set when this `App` was built. Read
-    /// once, in `App::new`, for `arena_enabled`'s reason: a field lets the
-    /// parallel test suite open the gate without writing to a
-    /// process-global environment every other case in flight can see.
-    sprite_forge_flag: bool,
-    /// Whether the launcher installed a sprite dir (`App::
-    /// install_sprite_dir`), which it only does inside a checkout — the
-    /// other half of `sprite_forge_enabled`'s gate. A bare flag rather than
-    /// the path itself: nothing ever read the path back (M1, final review)
-    /// — every real read/write derives `assets_dir().join("sprites")`
-    /// afresh (`crates/gui/src/sprites.rs`'s `load`/`install_library`/
-    /// `drain_writes`), so a stored path could disagree with the directory
-    /// actually used with no test able to see it, e.g. under `--assets
-    /// <override>`.
-    sprite_dir_installed: bool,
+    /// Where the player's own sprites live, `None` in tests and the arena
+    /// (user layer absent). app-core does no file I/O; the frontend reads and
+    /// writes it.
+    user_sprite_dir: Option<PathBuf>,
     /// The frontend's decoded, quantised sprite library, keyed by sprite
     /// name — `App::install_sprite_library`'s `enabled` half. Empty until
     /// installed, which is every non-dev session's whole life.
@@ -3554,6 +3545,12 @@ pub struct App {
     /// the picker already tells the player the art survives the toggle, and
     /// the only tool that can read it back was the one place that didn't.
     sprite_disabled: HashMap<String, InstalledSprite>,
+    /// Names the player's own sprite folder holds art for —
+    /// `App::install_sprite_library`'s `edited` half, which marks a picker
+    /// row and is what makes `r` (revert) meaningful.
+    sprite_edited: HashSet<String>,
+    /// The subject a pressed `r` is waiting on a `y`/`n` for.
+    pending_sprite_revert: Option<String>,
     /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
     /// tint)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
     /// `assets/structures`/`assets/floors` once and kept for the rest of the

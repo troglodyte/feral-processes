@@ -24,6 +24,10 @@ const GRAPHICS: HubPage = HubPage {
     title: "Graphics",
     screens: &[Mode::GraphicsOptions],
 };
+const SPRITES: HubPage = HubPage {
+    title: "Sprites",
+    screens: &[Mode::SpriteOptions],
+};
 const SAVE_AND_QUIT: HubPage = HubPage {
     title: "Save & quit",
     screens: &[Mode::QuitRunConfirm],
@@ -38,7 +42,7 @@ impl HubKind for GameMenu {
 
     /// The Save & quit page exists only while there is a run to save.
     fn pages(&self, app: &App) -> Vec<&'static HubPage> {
-        let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS];
+        let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS, &SPRITES];
         if app.game_menu_in_run {
             pages.push(&SAVE_AND_QUIT);
         }
@@ -57,8 +61,22 @@ impl HubKind for GameMenu {
         match (app.mode, app.hub_on_rail, app.quit_unsaved_pending) {
             (Mode::QuitRunConfirm, false, true) => vec![("y", "quit"), ("n", "stay")],
             (Mode::QuitRunConfirm, false, false) => vec![("Enter", "pick")],
+            (Mode::SpriteOptions, true, _) => vec![("Enter", "open")],
             _ => Vec::new(),
         }
+    }
+
+    /// Enter or Right on the Sprites rail entry opens the picker, instead
+    /// of stepping onto a page with nothing to select.
+    fn key(&self, app: &mut App, key: GameKey) -> bool {
+        if app.mode == Mode::SpriteOptions
+            && app.hub_on_rail
+            && matches!(key, GameKey::Enter | GameKey::Right)
+        {
+            app.open_sprite_forge();
+            return true;
+        }
+        false
     }
 
     /// Back to wherever the menu was opened from.

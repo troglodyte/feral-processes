@@ -132,15 +132,18 @@ change to that scan at all — it never reaches the asset server, and the
 entity it was drawn for falls back to its glyph exactly as if the file were
 absent.
 
-The dev-only sprite editor (`FERAL_DEV_SPRITES`, a checkout-only screen —
-see `crates/gui/src/render/sprite_forge.rs`) is what writes `.png` and
-`.colour.png` files into this directory and what renames them to and from
-`.png.off` and `.colour.png.off` (each variant has its own pair); nothing
-else in the game does either. It is invisible in an installed build and to
-a player, so this directory's population is still meant to change only by
-someone dropping in a file — a stray `.png.off` sitting next to an enabled
-sprite is normal, not a leftover to clean up, and is exactly how a piece of
-art gets shelved without losing it.
+The sprite editor (Game Menu, Sprites; `crates/gui/src/render/sprite_forge.rs`)
+is available to every player and never writes into this directory. Its saves,
+on/off switches and reverts go to the player's own folder,
+`<data dir>/feral-processes/sprites/` (`paths::user_sprites_dir`), which is
+read over this one. The rule is per name: if the player's folder holds any file
+for a name (`<name>.png`, `<name>.colour.png`, either `.png.off`, or
+`<name>.anim.ron`), only the player's folder decides that name, so a switched-off
+or unreadable player file hides the shipped art too instead of letting it show
+through. Revert deletes the player's files for the name and the shipped art
+returns. A stray `.png.off` sitting next to an enabled sprite in this
+directory is still normal: it is how a piece of art gets shelved without losing
+it.
 
 The editor edits two-frame sheets too: `[2]` makes frame 2 as a copy of
 frame 1, `[1]` goes back, `[D]` deletes frame 2, and `[-]`/`[=]` step the
@@ -150,16 +153,15 @@ removes any `.anim.ron` left beside it.
 
 ## A save quantises the file, irreversibly
 
-The dev-only sprite editor reads any 16x16 PNG in this directory back onto
+The sprite editor reads any 16x16 PNG (shipped or the player's own) back onto
 its own 63-colour `SPRITE_PALETTE` (a nine-step grey ramp plus nine hue
 families of six shades), snapping every pixel to the nearest colour. The
 palette is fitted to the shipped art, so shipped sprites snap by at most
 about 72 in RGB distance (mean 13), but hand-authored art with other colours
-still changes, and pressing `[s]` writes back that quantised copy with no
-warning and no backup kept anywhere. There is no undo for this once the file
-is overwritten (the editor's own `[u]` only reaches back through the
-session's own strokes). If you want to keep the original, copy it elsewhere
-first.
+still changes, and pressing `[s]` writes the quantised copy into the player's folder. Shipped
+files are never touched, but a player's own file is overwritten with no
+backup (the editor's own `[u]` only reaches back through the session's own
+strokes). If you want to keep the original, copy it elsewhere first.
 
 ## Ground tiles
 

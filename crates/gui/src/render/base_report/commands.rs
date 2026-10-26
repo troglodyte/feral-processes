@@ -58,6 +58,7 @@ mod tests {
         "Research",
         "Routine research",
         "Affix research",
+        "Weapon research",
         "Study a program",
         "Hold a program",
         "Contracts",

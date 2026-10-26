@@ -772,7 +772,12 @@ fn each_command_page_lists_its_table_in_base_space() {
     );
     assert_eq!(
         command_labels(&mut app, Mode::BaseResearch),
-        ["Research", "Routine research", "Affix research"]
+        [
+            "Research",
+            "Routine research",
+            "Affix research",
+            "Weapon research"
+        ]
     );
     assert_eq!(
         command_labels(&mut app, Mode::BaseTrade),

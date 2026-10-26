@@ -4118,3 +4118,15 @@ pub(crate) fn type_text(app: &mut App, text: &str) {
         app.handle_key(GameKey::Char(c));
     }
 }
+
+/// Puts `qty` of a plain `item` into the pack by editing the save, for gear
+/// that `Game::dev_give_item` refuses.
+pub(crate) fn put_in_pack(app: &mut App, item: &str, qty: u32) {
+    let path = scratch_path("put_in_pack", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.inventory.push((ItemId::from(item), qty));
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+}

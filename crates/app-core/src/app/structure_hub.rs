@@ -51,6 +51,22 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Build routine",
             screens: &[Mode::RoutineBuild],
         },
+        StructurePage::Forge => &HubPage {
+            title: "Forge",
+            screens: &[Mode::Forge],
+        },
+        StructurePage::NewDesign => &HubPage {
+            title: "New design",
+            screens: &[Mode::NewDesign],
+        },
+        StructurePage::WeaponParts => &HubPage {
+            title: "Weapon parts",
+            screens: &[Mode::WeaponParts],
+        },
+        StructurePage::Salvage => &HubPage {
+            title: "Salvage",
+            screens: &[Mode::WeaponSalvage],
+        },
         StructurePage::Compile => &HubPage {
             title: "Compile",
             screens: &[Mode::Craft],
@@ -227,6 +243,10 @@ impl App {
                 self.mode = Mode::BuildProgram;
             }
             StructurePage::Build => self.mode = Mode::RoutineBuild,
+            StructurePage::Forge => self.mode = Mode::Forge,
+            StructurePage::NewDesign => self.mode = Mode::NewDesign,
+            StructurePage::WeaponParts => self.mode = Mode::WeaponParts,
+            StructurePage::Salvage => self.mode = Mode::WeaponSalvage,
             StructurePage::Compile => self.mode = Mode::Craft,
             StructurePage::Subroutines => self.mode = Mode::Subroutines,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,
@@ -315,6 +335,7 @@ impl App {
         self.pending_plot = None;
         self.pending_structure_manifest = None;
         self.drop_routine_craft_state();
+        self.drop_gear_craft_state();
         if matches!(self.pending_build, Some(PendingBuild::Rebuild { .. })) {
             self.pending_build = None;
         }

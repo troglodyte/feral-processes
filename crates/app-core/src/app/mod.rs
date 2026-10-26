@@ -25,6 +25,7 @@ mod extraction;
 mod field;
 pub(crate) mod floor_hands;
 pub(crate) mod game_menu;
+pub(crate) mod gear_craft;
 pub(crate) mod group_menu;
 mod hover;
 pub(crate) mod hub;

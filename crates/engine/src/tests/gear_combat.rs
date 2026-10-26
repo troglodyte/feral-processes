@@ -228,3 +228,52 @@ fn an_exploit_works_on_the_battle_map_too() {
         .expect("a stream that lands");
     assert!(on_map(true, stream) > on_map(false, stream));
 }
+
+/// The target's hp lost to one Damage routine used by the wielder of
+/// `list`, and whether bleed ended up on it.
+fn routine_strike(list: &[WeaponPart], poisoned: bool, stream: u64) -> (i32, bool) {
+    let (mut game, target, player) = armed(73_004, list);
+    let routine = built_core(&mut game, crate::routine_craft::Core::Damage);
+    let ability = game
+        .world
+        .resource::<AbilityDb>()
+        .get(&routine)
+        .cloned()
+        .unwrap();
+    if poisoned {
+        game.arm_status(target, &StatusKind::Poison.id(), 3, 0);
+    }
+    reseed_rng(&mut game, stream);
+    let before = hp(&game, target);
+    game.use_ability(&ability, player, "You", &[target]);
+    (
+        before - hp(&game, target),
+        carries(&game, target, &bleed_id()),
+    )
+}
+
+/// The weapon's rider and exploit ride the weapon's own swing
+/// (`Swing::weapon`); a Damage routine used by the same wielder is not it.
+#[test]
+fn a_routine_swing_gets_neither_the_weapons_rider_nor_its_exploit() {
+    let both = [
+        edge(),
+        WeaponPart::Rider(StatusKind::Bleed),
+        WeaponPart::Exploit(StatusKind::Poison),
+    ];
+    let mut landed = 0;
+    for stream in 0..200u64 {
+        let (cold, bled_cold) = routine_strike(&both, false, stream);
+        let (warm, bled_warm) = routine_strike(&both, true, stream);
+        assert!(
+            !bled_cold && !bled_warm,
+            "stream {stream}: a routine armed the rider"
+        );
+        assert_eq!(
+            warm, cold,
+            "stream {stream}: a routine got the exploit bonus"
+        );
+        landed += i32::from(cold > 0);
+    }
+    assert!(landed > 0, "no stream landed, so the test proved nothing");
+}

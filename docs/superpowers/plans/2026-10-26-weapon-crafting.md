@@ -13,8 +13,8 @@ shaped so armour and modules add only a part enum and a `compile`.
 source of truth for every table (frames, modifier categories, fits, cap,
 sources, research). Phase files cite its section names; they do not restate
 them.
-**ADR:** `docs/adr/0031-…` — **Proposed. No phase starts until the user marks
-it Agreed** and answers the spec's "My calls (check these)".
+**ADR:** `docs/adr/0031-…` — **Agreed** (2026-10-26); the spec's calls are all
+answered under "Decided by the user".
 **Model to copy:** `crates/engine/src/routine_craft/` + `game/routine_craft.rs`
 (ADR 0029). When unsure how to shape something, do what routine crafting did.
 

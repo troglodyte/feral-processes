@@ -25,7 +25,7 @@ The code is written so armour and modules can follow with the same machinery. On
 - Modifiers cover: range, reach (group or everyone), damage type, an on-hit status rider, an exploit payoff, a trade-off tilt (accuracy vs band), capture (decompiler), a granted proc routine, and affixes. No armour (mitigation) on crafted weapons, by the user's decision.
 - Setters and payoffs use the same six statuses routines apply (`routine_craft::StatusKind`), so weapon and routine builds can feed each other.
 - Weapon parts are unlocked through a Weapons research tree, and some are found rather than bought.
-- Every built weapon is an ordinary item afterwards: equip, wear, fusion, Mod Bench affixes, selling.
+- Every built weapon is an ordinary item afterwards: equip, wear, Mod Bench affixes, selling. Crafted weapons do not fuse; fusion is for drops.
 - The generic layer (design value, registration door, tree synthesis, screens, affix category) is shaped so armour and modules add a part enum and a `compile`, and nothing else.
 
 ## Non-goals
@@ -87,7 +87,7 @@ Versions scale the band like routine versions (`CRAFT_VERSION_MAGNITUDE` shape),
 1. Researched or held weapon parts appear at the Workbench's **Forge** pages.
 2. The player starts a design, picks a frame, adds modifiers by category, sees a live preview (the same numbers `gear_detail` will show), and names it (1–24 chars).
 3. **Build** pays the design's parts from reach (`pay_from_reach`) plus a material bill from the frame (core_fragment / portal_fragment as authored weapons cost today), and mints one Ordinary, tier-0 `GearCopy` of `crafted_gear/<n>`.
-4. The design stays. Building again needs a fresh set of parts. Two copies of one design share an item id, so they fuse.
+4. The design stays. Building again needs a fresh set of parts. Two copies of one design share an item id. Fusion refuses a crafted copy with a typed reason.
 5. A design can be deleted only when no copy of it exists anywhere (inventory, worn, companions' gear, a trader's buyback shelf — `BuybackLedger`); otherwise the delete is refused with a typed reason (ADR 0027).
 
 ## How parts become numbers
@@ -137,25 +137,21 @@ They stay as drops and enemy gear. Their `craftable` blocks (8 of the 15 weapons
 - **Ceiling census:** no compiled design's `design_power` exceeds `GEAR_FRAME_CEILING[frame][version]`. `design_power` is `copy_power` plus a tuned flat value per rider, exploit and proc (`copy_power` cannot see those runtime-only fields, so without the term the riskiest parts would read as *weaker*). The no-dominance test uses the same measure.
 - **No-dominance test:** for each pair of modifier sets of the same frame and size, neither is better on every axis.
 - Rider and exploit: battle-level tests that a rider arms its status on a landed hit (seeded) and that an exploit raises damage only when the status is present.
-- Save→load round-trip with a design, a worn built copy, a fused one and a salvaged known affix.
+- Save→load round-trip with a design, a worn built copy and a salvaged known affix.
 - `balance_sim` unchanged and green.
 
 ## Left to the builder
 
 Exact figures, the order rows appear in, the part item glyph and name prefix ("Weapon part · X"), how the preview lays out, `tuning` constant names.
 
-## My calls (check these)
-
-- Workbench hosts the Forge, not the Mod Bench (the Mod Bench is late research).
-- Proc offers only the routines authored weapons grant today, not crafted routines.
-- Design affixes are folded into the weapon's base stats and count against the cap, not against `affix_slots`.
-- Designs persist and can be rebuilt. Same design = same item id = fusable.
-- Authored weapons lose their `craftable` blocks.
-- Payoff parts stay off shelves.
-- Radiation becomes available on a weapon (none ships today); the census rule that a typed weapon needs a resisting armour must be checked.
-
 ## Decided by the user
 
+- Workbench hosts the Forge, not the Mod Bench. Proc offers only the routines authored weapons grant today (2026-10-26).
+- Design affixes fold into the weapon's base stats and count against the cap, not `affix_slots` (2026-10-26).
+- Designs persist and can be rebuilt, but crafted weapons never fuse: fusion is for drops only, refused with a typed reason (2026-10-26).
+- Authored weapons lose their `craftable` blocks (2026-10-26).
+- Exploit (payoff) parts stay off shelves (2026-10-26).
+- Radiation becomes available on a weapon; the census rule that a typed weapon needs a resisting armour must be checked (2026-10-26).
 - Weapons don't use routine parts. They have their own catalogue, research tree and discoverable effects (2026-10-26).
 - Affixes are a category you pick from while designing (2026-10-26).
 - Make what can be shared generic, so armour and modules can follow (2026-10-26).

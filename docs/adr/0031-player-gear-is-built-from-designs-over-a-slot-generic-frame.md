@@ -1,7 +1,7 @@
 # 0031 Player gear is built from designs over a slot-generic frame
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: the user, 2026-10-26
 - Date: 2026-10-26
 - Pattern: Builder (parts compiled into a value), as 0029; the slot split is Strategy (one `compile` per slot behind one recipe type)
 - Depends on: [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md), [0019](0019-content-defaults-to-rust.md), [0023](0023-saves-are-field-named-ron.md), [0017](0017-game-is-the-entire-api.md)
@@ -23,7 +23,7 @@ The design in `docs/superpowers/specs/2026-10-26-weapon-crafting-design.md` want
 
 **A design is a recipe, saved; its `ItemDef` is derived.**
 Compiled defs register in `ItemDb` under `crafted_gear/<n>` through one door, `ItemDb::set_crafted_gear`, called whenever the design set changes and on load, before any inventory or equipment is restored.
-`ItemDb::get` answers for authored and crafted ids, so a built weapon is an ordinary item from then on: `GearCopy`, equip, wear, fusion, traders and `copy_bonus` all work unchanged.
+`ItemDb::get` answers for authored and crafted ids, so a built weapon is an ordinary item from then on: `GearCopy`, equip, wear, traders and `copy_bonus` all work unchanged. Fusion is the exception: it refuses a crafted copy (the user's call — fusion is for drops).
 
 **Runtime-only weapon behaviour.** The on-hit rider and the exploit payoff are new `ItemDef` fields marked `#[serde(skip)]`, set only by `compile`. No authored file can set them, and no `.ron` field is added (the same move 0029 made for heal-over-time).
 
@@ -41,7 +41,7 @@ Compiled defs register in `ItemDb` under `crafted_gear/<n>` through one door, `I
 
 Retuning a part moves every weapon built from it on the next load.
 `ItemDb` gains a mutable tier beside `AbilityDb`'s. 0004, if agreed, moves both.
-Two builds of one design share an item id, so they fuse.
+Two builds of one design share an item id; fusion refuses them with a typed reason.
 The save gains `gear_designs`, `next_gear_design_id` and `known_affixes`, additive and `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump. A save→load test is required.
 `balance_sim` keeps its hard-picked authored weapon. A census test holds every compiled weapon under a per-frame ceiling instead.
 

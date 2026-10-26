@@ -29,11 +29,12 @@ Read first: plan index; spec "Life of a design and a build", "Save";
 ## Tasks (a commit per green step)
 
 - [ ] 1. Crafted tier + door; a crafted id resolves via `get`, equips, wears,
-  fuses (two builds of one design), sells.
+  sells; `fuse_item`/`fuse_all_items` refuse a crafted copy with a typed reason
+  (the user's call: fusion is for drops only).
 - [ ] 2. Part items; census: every catalogue part has an item.
 - [ ] 3. Create / build / cap enforced; build consumes parts + bill.
 - [ ] 4. Delete refused per holder site (one test each), allowed when none.
-- [ ] 5. Save→load: design + worn built copy + fused copy + known affix →
+- [ ] 5. Save→load: design + worn built copy + known affix →
   **load** → resolvable, rider/exploit present. Delete removes from save and
   tier.
 - [ ] 6. Views, unit-tested.

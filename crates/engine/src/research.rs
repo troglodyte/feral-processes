@@ -22,6 +22,10 @@ pub enum ResearchTree {
     /// Synthesised from `AffixDb`, one node per research-only affix (see
     /// `affix_tree::synthesise_nodes`).
     Affixes,
+    /// Synthesised from the weapon part catalogue (see
+    /// `weapon_tree::synthesise_nodes`), open once `weapon_bench` is
+    /// researched.
+    Weapons,
 }
 
 /// A craft recipe a research node unlocks. Recipe *data* lives in the
@@ -243,6 +247,11 @@ impl ResearchDb {
         // the fixpoint, so a node's `requires` (another affix node) is
         // validated, and a cycle among them is caught by the Kahn pass.
         for def in crate::affix_tree::synthesise_nodes(affixes) {
+            db.nodes.insert(def.id.clone(), def);
+        }
+
+        // Weapon parts and capacity steps, on the same terms.
+        for def in crate::weapon_tree::synthesise_nodes() {
             db.nodes.insert(def.id.clone(), def);
         }
 

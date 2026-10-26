@@ -480,8 +480,39 @@ pub(super) fn draw_research_menu(
             "Affix research",
             research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
         ),
+        ResearchTree::Weapons => (
+            "Weapon research",
+            weapon_research_rows(
+                game,
+                &nodes,
+                selected,
+                &currency,
+                active.as_ref(),
+                dev_unlock,
+            ),
+        ),
     };
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The Weapons tree's rows, or the line saying why there are none: closed
+/// and open-but-nothing-found call for different actions.
+fn weapon_research_rows(
+    game: &Game,
+    nodes: &[ResearchStatus],
+    selected: usize,
+    currency: &str,
+    active: Option<&(String, u32, u32)>,
+    dev_unlock: bool,
+) -> Vec<Row> {
+    if !nodes.is_empty() {
+        return research_menu_rows(nodes, selected, currency, active, dev_unlock);
+    }
+    vec![text_row(if game.weapon_tree_open() {
+        "No weapon parts discovered yet. Study programs to find some."
+    } else {
+        "Research Weapon Fabrication to open weapon research."
+    })]
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent

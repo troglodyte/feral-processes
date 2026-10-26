@@ -405,6 +405,14 @@ impl Game {
         self.capability_unlocked(|d| d.opens_affix_tree)
     }
 
+    /// Whether the Weapons research tree is open: `weapon_bench` researched.
+    /// Strict where the other trees are lenient, because the opener is a
+    /// Rust id and not an authored flag: until the player has it, no weapon
+    /// is crafted at all (ADR 0031).
+    pub fn weapon_tree_open(&self) -> bool {
+        self.is_researched(crate::tuning::WEAPON_TREE_OPENER)
+    }
+
     /// Whether `affix` has been researched — the one door apply goes
     /// through. An affix node is an ordinary node in the `Research` set, so
     /// this is `is_researched` over the synthesised id; it is false for an
@@ -503,6 +511,12 @@ impl Game {
         self.affix_tree_open() && self.base_node_visible(def)
     }
 
+    /// A weapon node is listed, and buyable, only with its tree open and the
+    /// base having found it — the affix tree's rule for the same reason.
+    fn weapon_node_visible(&self, def: &ResearchDef) -> bool {
+        self.weapon_tree_open() && self.base_node_visible(def)
+    }
+
     fn listed_research(&self, tree: ResearchTree) -> Vec<&ResearchDef> {
         let db = self.world.resource::<ResearchDb>();
         if tree == ResearchTree::Base {
@@ -519,6 +533,13 @@ impl Game {
                 .all()
                 .filter(|d| d.tree == ResearchTree::Affixes)
                 .filter(|d| self.affix_node_visible(d))
+                .collect();
+        }
+        if tree == ResearchTree::Weapons {
+            return db
+                .all()
+                .filter(|d| d.tree == ResearchTree::Weapons)
+                .filter(|d| self.weapon_node_visible(d))
                 .collect();
         }
         let tree_open = self.routine_tree_open();
@@ -1106,6 +1127,9 @@ impl Game {
         if def.tree == ResearchTree::Affixes && !self.affix_node_visible(&def) {
             return Err("Unknown research.".to_string());
         }
+        if def.tree == ResearchTree::Weapons && !self.weapon_node_visible(&def) {
+            return Err("Unknown research.".to_string());
+        }
         if self.is_researched(id) {
             return Err(format!("{} is already researched.", def.name));
         }
@@ -1365,13 +1389,19 @@ impl Game {
         // the Mod Bench is researched the pool — and every seeded study roll
         // indexing into it — is exactly what it was without them.
         let affixes_open = self.affix_tree_open();
+        // And the Weapons tree's, for the same reason: `discoverable` alone
+        // does not admit a new tree.
+        let weapons_open = self.weapon_tree_open();
         let discovered = &self
             .world
             .resource::<crate::resources::DiscoveredResearch>()
             .0;
         db.all()
-            .filter(|d| {
-                d.tree == ResearchTree::Base || (d.tree == ResearchTree::Affixes && affixes_open)
+            .filter(|d| match d.tree {
+                ResearchTree::Base => true,
+                ResearchTree::Affixes => affixes_open,
+                ResearchTree::Weapons => weapons_open,
+                ResearchTree::Routines => false,
             })
             .filter(|d| d.discoverable)
             .filter(|d| !discovered.contains(&d.id))

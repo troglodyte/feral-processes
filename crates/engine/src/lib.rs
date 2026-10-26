@@ -71,6 +71,7 @@ pub mod text;
 pub mod tools;
 pub mod tuning;
 pub mod views;
+pub mod weapon_tree;
 pub mod world;
 
 use crate::tuning::{

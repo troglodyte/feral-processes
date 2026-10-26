@@ -181,3 +181,35 @@ pub const GEAR_PART_MATERIAL: &str = "core_fragment";
 pub const GEAR_FRAME_PART_COST: [u32; 3] = [3, 6, 9];
 /// What crafting one modifier part spends.
 pub const GEAR_MODIFIER_PART_COST: u32 = 4;
+
+// ---------------------------------------------------------------------------
+// Research (the Weapons tree)
+// ---------------------------------------------------------------------------
+
+/// The base-tree node whose research opens the Weapons tree. A Rust id, not
+/// an `opens_*` field: no weapon is crafted before it (spec "Research").
+pub const WEAPON_TREE_OPENER: &str = "weapon_bench";
+
+/// Research Data a weapon node costs before its scope, zone and version
+/// terms, the routine tree's shape (`routine_research_cost`).
+pub const GEAR_RESEARCH_COST_BASE: u32 = 15;
+/// Added once per scope rung: a frame is rung 0, a modifier 1, a payoff
+/// (Exploit) or a capacity step 2.
+pub const GEAR_RESEARCH_SCOPE_STEP: u32 = 10;
+/// Added once per zone above the first.
+pub const GEAR_RESEARCH_ZONE_STEP: u32 = 50;
+/// Added once per frame version above the first.
+pub const GEAR_RESEARCH_VERSION_STEP: u32 = 15;
+
+/// The zone the first weapon capacity node (one more modifier) opens in;
+/// each later one opens a zone after.
+pub const GEAR_CAPACITY_FIRST_ZONE: u32 = 1;
+
+/// A weapon node's Research Data cost: linear in scope, zone and version,
+/// like every difficulty curve here. `zone` is the node's own `min_zone`.
+pub fn weapon_research_cost(scope_rank: u8, version: u32, zone: u32) -> u32 {
+    GEAR_RESEARCH_COST_BASE
+        + GEAR_RESEARCH_SCOPE_STEP * scope_rank as u32
+        + GEAR_RESEARCH_ZONE_STEP * (zone.max(1) - 1)
+        + GEAR_RESEARCH_VERSION_STEP * version.saturating_sub(1)
+}

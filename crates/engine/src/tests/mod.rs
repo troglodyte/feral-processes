@@ -160,6 +160,7 @@ mod turn;
 mod walls;
 mod watch;
 mod weapon_reach;
+mod weapon_tree;
 mod wear;
 mod wielded;
 mod wild_density_probe;

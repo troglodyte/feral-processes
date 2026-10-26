@@ -5107,6 +5107,9 @@ fn exactly_the_named_research_nodes_are_discoverable() {
         .resource::<crate::research::ResearchDb>()
         .all()
         .filter(|d| d.discoverable)
+        // The Weapons tree is synthesised from the part catalogue and every
+        // node is discoverable by construction (`tests/weapon_tree.rs`).
+        .filter(|d| d.tree != crate::research::ResearchTree::Weapons)
         .map(|d| d.id.as_str())
         .collect();
     found.sort();

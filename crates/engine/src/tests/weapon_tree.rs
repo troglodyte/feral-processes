@@ -29,15 +29,24 @@ fn edge_v1() -> WeaponPart {
 fn the_tree_is_closed_before_weapon_bench_and_open_after() {
     let mut game = game_in_base(72_001);
     assert!(!game.weapon_tree_open());
-    game.discover_research(&edge_v1().node_id());
     assert!(listed(&game).is_empty(), "a closed tree lists nothing");
     let err = game.select_research(&edge_v1().node_id()).unwrap_err();
     assert_eq!(err, "Unknown research.");
 
     unlock_research_chain(&mut game, "weapon_bench");
     assert!(game.weapon_tree_open());
-    game.discover_research(&edge_v1().node_id());
-    assert_eq!(listed(&game), vec![edge_v1().node_id()]);
+    let bleed = WeaponPart::Rider(StatusKind::Bleed).node_id();
+    let open_with = listed(&game);
+    assert!(
+        open_with.contains(&edge_v1().node_id()),
+        "an opened tree shows its v1 frames without a study"
+    );
+    assert!(
+        !open_with.contains(&bleed),
+        "a modifier waits for a study, a salvage or a shelf"
+    );
+    game.discover_research(&bleed);
+    assert!(listed(&game).contains(&bleed));
 }
 
 #[test]
@@ -56,7 +65,17 @@ fn every_weapon_part_and_capacity_step_has_exactly_one_node() {
         expected.insert(capacity_node_id(cap));
     }
     assert_eq!(ids, expected);
-    assert!(nodes.iter().all(|d| d.discoverable));
+    // The first frames and the capacity steps are the tree's front door;
+    // every other node is found through study, salvage or shelves.
+    let v1_frames: std::collections::BTreeSet<String> = WeaponPart::all()
+        .into_iter()
+        .filter(|p| matches!(p, WeaponPart::Frame(_, Version::V1)))
+        .map(|p| p.node_id())
+        .collect();
+    for d in &nodes {
+        let front_door = d.id.starts_with("weapon_capacity/") || v1_frames.contains(&d.id);
+        assert_eq!(d.discoverable, !front_door, "{}", d.id);
+    }
 }
 
 #[test]
@@ -96,7 +115,14 @@ fn a_study_discovers_weapon_nodes_only_when_the_tree_is_open() {
     assert!(weapon_ids(&game).is_empty());
     unlock_research_chain(&mut game, "weapon_bench");
     let pool = weapon_ids(&game);
-    assert!(pool.contains(&edge_v1().node_id()), "{pool:?}");
+    assert!(
+        pool.contains(&WeaponPart::Rider(StatusKind::Bleed).node_id()),
+        "{pool:?}"
+    );
+    assert!(
+        !pool.contains(&edge_v1().node_id()),
+        "a v1 frame is visible from the start, so there is nothing to find"
+    );
     assert!(
         !pool.contains(&WeaponPart::Frame(Frame::Edge, Version::V2).node_id()),
         "a frame's second version waits on its first"

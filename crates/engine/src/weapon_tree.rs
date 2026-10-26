@@ -20,6 +20,7 @@ fn scope_rank(part: WeaponPart) -> u8 {
 
 fn node(
     id: String,
+    discoverable: bool,
     name: String,
     description: String,
     cost: u32,
@@ -41,8 +42,7 @@ fn node(
         tree: ResearchTree::Weapons,
         opens_routine_tree: false,
         requires_subject: false,
-        // Hidden until a study or a salvage finds it, as a base bench is.
-        discoverable: true,
+        discoverable,
         unlocks_fusion: false,
         opens_affix_tree: false,
         decompiler: None,
@@ -73,7 +73,7 @@ fn requires(part: WeaponPart) -> Vec<String> {
 }
 
 /// One node per part and one per capacity step. Visibility is the zone gate
-/// and the discovery gate; the cost's zone term shares the zone.
+/// and the discovery gate (v1 frames and capacity steps skip the latter); the cost's zone term shares the zone.
 pub fn synthesise_nodes() -> Vec<ResearchDef> {
     let mut nodes: Vec<ResearchDef> = WeaponPart::all()
         .into_iter()
@@ -84,6 +84,9 @@ pub fn synthesise_nodes() -> Vec<ResearchDef> {
             };
             node(
                 part.node_id(),
+                // The first frames show when the tree opens; every other
+                // part is found by a study, a salvage or a shelf.
+                !matches!(part, WeaponPart::Frame(_, Version::V1)),
                 part.label(),
                 format!(
                     "Learn to craft the {} part for weapons designed at the Workbench.",
@@ -101,6 +104,7 @@ pub fn synthesise_nodes() -> Vec<ResearchDef> {
         let zone = crate::tuning::GEAR_CAPACITY_FIRST_ZONE + step - 1;
         nodes.push(node(
             capacity_node_id(cap),
+            false,
             format!("Weapon capacity {cap}"),
             format!("A weapon design may hold {cap} modifiers."),
             crate::tuning::weapon_research_cost(2, 1, zone),

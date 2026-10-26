@@ -157,3 +157,5 @@ Exact figures, the order rows appear in, the part item glyph and name prefix ("W
 - Make what can be shared generic, so armour and modules can follow (2026-10-26).
 - No crafted weapons before `weapon_bench`: early weapons are drops and traders only (2026-10-26).
 - Crafted weapons may carry decompiler (Capture) and a granted routine (Proc), not armour (2026-10-26).
+- Crafted reach weapons may out-damage authored ones against groups; design_power doesn't model reach and that is accepted (2026-10-26).
+- When the Weapons tree opens, frame v1 nodes and the `weapon_capacity/<n>` cap nodes are visible; every other weapon node stays discoverable through study, salvage or shelves (2026-10-26).

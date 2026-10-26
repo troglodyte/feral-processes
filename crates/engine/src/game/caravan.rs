@@ -254,7 +254,7 @@ impl Game {
             })
             .collect();
 
-        kinds
+        let mut offers: Vec<views::CaravanOffer> = kinds
             .into_iter()
             .enumerate()
             .map(|(index, kind)| {
@@ -266,7 +266,26 @@ impl Game {
                 };
                 self.caravan_row(index, kind, qty)
             })
-            .collect()
+            .collect();
+        if let Some(item) = self.shelf_weapon_part(&mut rng) {
+            let index = offers.len();
+            offers.push(self.caravan_row(index, views::CaravanOfferKind::Material(item), 1));
+        }
+        offers
+    }
+
+    /// The one extra weapon part row a trader's shelf may carry: a frame or
+    /// a modifier from `WeaponPart::shelf`, never a payoff or a granted
+    /// routine. **Dealt after every other draw on the shelf**, and both
+    /// draws are taken whether or not the row is listed, so no earlier row
+    /// moves and opening the Weapons tree only appends one. It rides
+    /// `Material`, a plain stack of cargo, because a weapon part is held and
+    /// hauled like one.
+    pub(crate) fn shelf_weapon_part(&self, rng: &mut StdRng) -> Option<ItemId> {
+        let roll = rng.random_bool(crate::tuning::GEAR_SHELF_PART_CHANCE);
+        let shelf = crate::gear_craft::WeaponPart::shelf();
+        let pick = rng.random_range(0..shelf.len());
+        (roll && self.weapon_tree_open()).then(|| ItemId::weapon_part(shelf[pick]))
     }
 
     /// Draws `rows` shelf slots from the four pools, weighted by `weights`
@@ -320,7 +339,10 @@ impl Game {
         // the *sell* side (`caravan_sell_rows`), so a spare or unwanted
         // carrier still converts back to Credits like any other held cargo.
         let mut materials = self.stock_pool(|d| {
-            d.equipment.is_none() && d.id.part_of().is_none() && d.id.tool_id().is_none()
+            d.equipment.is_none()
+                && d.id.part_of().is_none()
+                && d.id.weapon_part_of().is_none()
+                && d.id.tool_id().is_none()
         });
         let mut programs: Vec<String> = self
             .world

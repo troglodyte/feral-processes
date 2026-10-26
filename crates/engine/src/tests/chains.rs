@@ -1399,19 +1399,19 @@ fn a_machine_assembles_catalysts_out_of_an_adjacent_extractor() {
     );
 }
 
-/// A modded assembler for an item priced entirely in a drop, so the "input
+/// A modded assembler for an item priced partly in a drop, so the "input
 /// that nothing at all produces" case is reachable — no shipped structure
 /// assembles one of the Portal Fragment recipes.
 const ROUTER_STRUCTURE: &str = r#"(
     id: "router_press",
     name: "Router Press",
-    description: "A modded assembler for an item made from salvage, for tests.",
+    description: "A modded assembler for an item made partly from salvage, for tests.",
     glyph: 'R',
     color: Red,
     build_cost: [],
     work: None,
     capacity: 20,
-    machine: Some((role: Assemble, recipes: [(produces: "plasma_router", ticks_per_unit: 3)])),
+    machine: Some((role: Assemble, recipes: [(produces: "phase_carapace", ticks_per_unit: 3)])),
 )"#;
 
 /// The Recipes screen's whole job is telling the player what to build, so an
@@ -1500,7 +1500,7 @@ fn an_input_nothing_produces_names_no_tap() {
     let chains = game.recipe_chains();
     let router = chains
         .iter()
-        .find(|c| c.product == "Plasma Router")
+        .find(|c| c.product == "Phase Carapace")
         .expect("the modded press assembles one");
 
     assert_eq!(
@@ -1508,6 +1508,7 @@ fn an_input_nothing_produces_names_no_tap() {
             .steps
             .iter()
             .flat_map(|s| &s.inputs)
+            .filter(|i| i.item == "Portal Fragment")
             .map(|i| (i.item.as_str(), i.source.as_deref()))
             .collect::<Vec<_>>(),
         vec![("Portal Fragment", None)],

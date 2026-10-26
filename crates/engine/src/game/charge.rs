@@ -257,6 +257,7 @@ impl Game {
             free: false,
             range: band,
             accuracy: def.accuracy,
+            weapon: false,
             cover_ignored: def.tactical_shape().ignores_cover(),
             damage_type: None,
         };

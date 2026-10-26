@@ -583,8 +583,11 @@ impl Game {
             range: natural,
             damage_type: natural_type,
         } = self.swing_move(entity);
-        let AttackProfile { range, damage_type } =
-            self.attack_profile(entity, natural, natural_type);
+        let AttackProfile {
+            range,
+            damage_type,
+            weapon,
+        } = self.attack_profile(entity, natural, natural_type);
 
         // The recipient list is built **once**, before anything is swung at,
         // and the front is first and never dropped from it: a blast centred
@@ -632,7 +635,9 @@ impl Game {
             let outcome = self.resolve_and_apply_attack(
                 entity,
                 body,
-                battle::Swing::plain(range).with_type(damage_type),
+                battle::Swing::plain(range)
+                    .with_type(damage_type)
+                    .with_weapon(weapon),
             );
             let line = self.party_swing_line(entity, &move_name, outcome);
             self.log_swing(MessageKind::PartyDamage, outcome, body, line);
@@ -1832,6 +1837,7 @@ impl Game {
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
                             damage_type: *damage_type,
+                            weapon: false,
                         },
                     );
                     let line = match outcome {
@@ -1877,6 +1883,7 @@ impl Game {
                             accuracy: ability.accuracy,
                             cover_ignored: blast,
                             damage_type: *damage_type,
+                            weapon: false,
                         },
                     );
                     let dmg = outcome.damage_to_defender();

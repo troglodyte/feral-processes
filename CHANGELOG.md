@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Once Weapon Fabrication is researched, you design your own weapons at a Workbench: one Frame (Edge, Lance, Whip or Launcher) plus modifiers for range, reach, damage type, a status on hit, extra damage against a target already carrying a status, an accuracy-for-damage trade, capture, a granted routine, and affixes.** The Forge, New design, Weapon parts and Salvage pages appear on the Workbench. A design is saved, so you can build it again from a fresh set of parts; the preview shows what the weapon will do before you spend anything. Higher Frame versions hit harder.
+
+**Weapon parts come from a new Weapons research tree, from taking apart weapons you found, and from traders.** Salvaging a found weapon gives you its parts and teaches you its affixes. The Stack market, caravans and towns can carry frames and most modifiers; the part that exploits a status and the part that grants a routine are only found or researched.
+
+**Weapons can no longer be crafted from a fixed recipe.** The weapons that had one still drop from programs and sell at traders. A weapon you built never fuses; fusion is for weapons you found.
+
+**A design can't be deleted while a weapon built from it is anywhere: in your pack, worn, on a companion, on a trader's buyback shelf, on the floor, in a Depot, or in a hauler's hands.**
+
 ## 0.20.7
 
 **Redraw any sprite in the game.** The Game Menu has a new Sprites page that opens the sprite editor for every player; before, it was a developer tool. Your drawings are saved in your data folder (`sprites/` beside your saves) and replace the built-in art, one name at a time. The list marks what you have edited, and `r` reverts a sprite to the original. A sprite that can't be saved says so on the status line. The built-in art is never changed. Saves are unaffected.

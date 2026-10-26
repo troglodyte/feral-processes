@@ -134,7 +134,7 @@ impl Game {
             .collect();
 
         let temperament = def.temperament;
-        kinds
+        let mut offers: Vec<views::CaravanOffer> = kinds
             .into_iter()
             .enumerate()
             .map(|(index, kind)| {
@@ -146,7 +146,13 @@ impl Game {
                 };
                 self.settlement_row(index, kind, qty, temperament)
             })
-            .collect()
+            .collect();
+        if let Some(item) = self.shelf_weapon_part(&mut rng) {
+            let index = offers.len();
+            let kind = views::CaravanOfferKind::Material(item);
+            offers.push(self.settlement_row(index, kind, 1, temperament));
+        }
+        offers
     }
 
     /// One settlement shelf row, worded and priced — `Game::caravan_row`'s

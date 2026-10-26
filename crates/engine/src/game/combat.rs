@@ -77,6 +77,9 @@ impl std::fmt::Display for RoutineRefusal {
 pub(crate) struct AttackProfile {
     pub range: battle::DamageRange,
     pub damage_type: Option<DamageType>,
+    /// The worn weapon supplied the band, so its rider and exploit ride the
+    /// swing (`battle::Swing::weapon`).
+    pub weapon: bool,
 }
 
 impl Game {
@@ -119,11 +122,13 @@ impl Game {
             AttackProfile {
                 range: natural,
                 damage_type: natural_type,
+                weapon: false,
             }
         } else {
             AttackProfile {
                 range: worn,
                 damage_type: self.weapon_damage_type(entity),
+                weapon: true,
             }
         }
     }

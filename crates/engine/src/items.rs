@@ -40,6 +40,31 @@ impl ItemId {
         crate::routine_craft::Subroutine::from_key(self.0.strip_prefix(PART_ITEM_PREFIX)?)
     }
 
+    /// The id of the item that is one weapon part — what
+    /// `ItemDb::synthesise_weapon_parts` derives for it.
+    pub fn weapon_part(part: crate::gear_craft::WeaponPart) -> Self {
+        ItemId(format!(
+            "{}{}",
+            crate::tuning::GEAR_PART_ID_PREFIX,
+            part.key()
+        ))
+    }
+
+    /// The weapon part this item is — the inverse of `weapon_part`.
+    pub fn weapon_part_of(&self) -> Option<crate::gear_craft::WeaponPart> {
+        crate::gear_craft::WeaponPart::from_key(
+            self.0.strip_prefix(crate::tuning::GEAR_PART_ID_PREFIX)?,
+        )
+    }
+
+    /// The design this item is the compiled weapon of, if it is one.
+    pub fn crafted_gear_of(&self) -> Option<u32> {
+        self.0
+            .strip_prefix(crate::tuning::GEAR_ID_PREFIX)?
+            .parse()
+            .ok()
+    }
+
     /// The id of the carrier item holding `tool`'s knowledge — the item
     /// `Game::forge_tool` grants and `Game::install_tool` spends.
     /// A synthetic id with no `.ron` behind it, so a tool needs no item file
@@ -698,6 +723,39 @@ impl EquipmentStats {
                 .iter()
                 .any(|&t| resist.get(t) > 0)
             || damage.max > 0
+    }
+
+    /// This bonus with one affix's stats added, before any scaling — the one
+    /// step `Game::copy_bonus` and `gear_craft::compile` both fold an affix
+    /// in by, so a crafted weapon's affix enters at the same point a
+    /// dropped one's does.
+    pub(crate) fn plus_affix(self, affix: EquipmentStats) -> EquipmentStats {
+        EquipmentStats {
+            atk: self.atk + affix.atk,
+            mitigation: self.mitigation + affix.mitigation,
+            decompiler: self.decompiler + affix.decompiler,
+            damage: crate::battle::DamageRange {
+                min: self.damage.min + affix.damage.min,
+                max: self.damage.max + affix.damage.max,
+            },
+            accuracy: self.accuracy + affix.accuracy,
+            evasion: self.evasion + affix.evasion,
+            deflection: self.deflection + affix.deflection,
+            // An affix never sets a type (the loader refuses it), so the
+            // base's survives.
+            damage_type: self.damage_type,
+            resist: self.resist + affix.resist,
+        }
+    }
+
+    /// This (already affixed) bonus put through `copy`'s own three axes at
+    /// `level`. **The one place the axis order is written down** — see
+    /// `Game::copy_bonus` for why it is load-bearing.
+    pub(crate) fn for_copy(self, level: u32, copy: &GearCopy) -> EquipmentStats {
+        self.scaled_for_level(level)
+            .for_quality(copy.quality)
+            .fused_for_tier(copy.tier)
+            .for_rarity(copy.rarity)
     }
 
     /// This item's bonus scaled up for `level` (1 = base, no scaling).

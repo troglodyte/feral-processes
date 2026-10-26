@@ -37,6 +37,9 @@ pub enum MarketOfferKind {
     /// A program, adopted through the same `Game::adopt_program` an orphan
     /// goes through.
     Program { species: String },
+    /// One weapon part, for designing weapons at the Workbench. Only from
+    /// `WeaponPart::shelf`, and only once the Weapons tree is open.
+    WeaponPart { part: crate::gear_craft::WeaponPart },
 }
 
 /// One row of a Stack market's shelf, already priced — see

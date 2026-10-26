@@ -24,6 +24,11 @@ pub use app::dev_item_picker::dev_item_visible;
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::floor_hands::put_down_visible;
+pub use app::gear_craft::{
+    DESIGN_AFFIX_ROW, DESIGN_NAME_MAX, DESIGN_NAME_ROW, DESIGN_PAGE_ROWS, DESIGN_SAVE_ROW,
+    DesignDraft, DesignPicking, affix_label, design_pick_labels, design_pick_visible,
+    design_row_category, gear_craft_refusal_line,
+};
 pub use app::group_menu::GroupMenuRow;
 pub use app::hub::{Hub, HubKind, HubPage, hub_of};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
@@ -1721,6 +1726,21 @@ pub enum Mode {
     Subroutines,
     /// The Workbench's Built routines page: routines waiting for a slot.
     BuiltRoutines,
+    /// The Workbench's Forge page: the saved weapon designs. Enter builds
+    /// one, `D` deletes it.
+    Forge,
+    /// The Workbench's New design page: the Frame and modifier rows, the
+    /// affixes, the name field and Save. The draft lives in
+    /// `App::design_draft`.
+    NewDesign,
+    /// The parts that fit one new-design row. Type to filter.
+    DesignPick,
+    /// Typing the design's name.
+    DesignName,
+    /// The Workbench's Weapon parts page: craft a part.
+    WeaponParts,
+    /// The Workbench's Salvage page: take an authored weapon apart.
+    WeaponSalvage,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -2170,6 +2190,9 @@ pub enum Mode {
     /// `Game::has_research_tree(Affixes)`, as Routines' is, so the closed-tree
     /// line is what tells the player the tree exists.
     AffixResearch,
+    /// The weapon research tree — `Mode::Research`'s screen for
+    /// `ResearchTree::Weapons`, its row gated on `has_research_tree`.
+    WeaponResearch,
     /// Contracts: what the run is holding, then what a Broker in range is
     /// offering. Stays open after each verb so several can be taken in one
     /// visit, as `Mode::Research` does.
@@ -2495,6 +2518,12 @@ impl Mode {
             | Mode::RoutineBuildName
             | Mode::Subroutines
             | Mode::BuiltRoutines
+            | Mode::Forge
+            | Mode::NewDesign
+            | Mode::DesignPick
+            | Mode::DesignName
+            | Mode::WeaponParts
+            | Mode::WeaponSalvage
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
@@ -2606,6 +2635,7 @@ impl Mode {
             | Mode::Research
             | Mode::RoutineResearch
             | Mode::AffixResearch
+            | Mode::WeaponResearch
             | Mode::ModCopy
             | Mode::RefitCopy
             | Mode::ModPickAffix
@@ -2800,6 +2830,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::StructureAssign => Some(Mode::Structures),
         Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
         Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
+        Mode::DesignPick | Mode::DesignName => Some(Mode::NewDesign),
         Mode::CraftQuantity | Mode::Compiling => Some(Mode::Craft),
         _ => None,
     }
@@ -3263,6 +3294,8 @@ pub struct App {
     pub siphon: Option<Entity>,
     /// The routine the Workbench's build page is designing.
     pub routine_draft: RoutineDraft,
+    /// The weapon the Workbench's new-design page is designing.
+    pub design_draft: DesignDraft,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

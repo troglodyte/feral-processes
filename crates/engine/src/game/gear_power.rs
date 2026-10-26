@@ -162,15 +162,39 @@ impl Game {
         // is the zone (`Game::equip` caps it there), and rating a copy at a
         // level no copy can ever reach would flatter every piece equally.
         let mods = self.copy_bonus(copy, POWER_REFERENCE_ZONE)?;
-        let median =
-            crate::balance_sim::median_ordinary_species(self.world.resource::<SpeciesDb>());
-        rate(
+        rate_against(
             mods,
-            crate::battle::accuracy_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
-            crate::battle::evasion_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
-            reference_foe_hit(median),
+            &ReferenceFoe::median(self.world.resource::<SpeciesDb>()),
         )
     }
+}
+
+/// The nominal hostile `rate` prices a copy against: the median ordinary
+/// species at `POWER_REFERENCE_ZONE`. Built once from a `SpeciesDb` so a
+/// census rating thousands of designs does not walk the roster for each.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ReferenceFoe {
+    accuracy: f64,
+    evasion: f64,
+    hit: i32,
+}
+
+impl ReferenceFoe {
+    pub(crate) fn median(species: &SpeciesDb) -> Self {
+        let median = crate::balance_sim::median_ordinary_species(species);
+        ReferenceFoe {
+            accuracy: crate::battle::accuracy_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
+            evasion: crate::battle::evasion_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
+            hit: reference_foe_hit(median),
+        }
+    }
+}
+
+/// `rate` against the reference foe — the one call `Game::copy_power` and
+/// `gear_craft::design_power` both make, so a design and a built copy of it
+/// cannot be priced by different matchups.
+pub(crate) fn rate_against(mods: EquipmentStats, foe: &ReferenceFoe) -> Option<ItemPower> {
+    rate(mods, foe.accuracy, foe.evasion, foe.hit)
 }
 
 #[cfg(test)]

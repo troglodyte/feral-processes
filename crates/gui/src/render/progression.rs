@@ -480,8 +480,39 @@ pub(super) fn draw_research_menu(
             "Affix research",
             research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
         ),
+        ResearchTree::Weapons => (
+            "Weapon research",
+            weapon_research_rows(
+                game,
+                &nodes,
+                selected,
+                &currency,
+                active.as_ref(),
+                dev_unlock,
+            ),
+        ),
     };
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The Weapons tree's rows, or the line saying the tree is closed.
+fn weapon_research_rows(
+    game: &Game,
+    nodes: &[ResearchStatus],
+    selected: usize,
+    currency: &str,
+    active: Option<&(String, u32, u32)>,
+    dev_unlock: bool,
+) -> Vec<Row> {
+    if !nodes.is_empty() {
+        return research_menu_rows(nodes, selected, currency, active, dev_unlock);
+    }
+    // An open tree always lists its first frames, so an empty list is the
+    // closed tree.
+    vec![text_row(format!(
+        "Research {} to open weapon research.",
+        game.weapon_tree_opener_name()
+    ))]
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent

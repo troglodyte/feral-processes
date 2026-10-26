@@ -27,6 +27,7 @@ pub mod duties;
 pub mod environment;
 pub mod floors;
 mod game;
+pub mod gear_craft;
 pub mod handles;
 pub mod help;
 pub mod icon;
@@ -70,6 +71,7 @@ pub mod text;
 pub mod tools;
 pub mod tuning;
 pub mod views;
+pub mod weapon_tree;
 pub mod world;
 
 use crate::tuning::{
@@ -125,6 +127,7 @@ pub use game::creation::{
     CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE, creation_credits,
 };
 pub use game::environment::TerrainRow;
+pub use game::gear_craft::FusionRefusal;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};

@@ -2204,3 +2204,30 @@ fn no_shelf_ever_offers_a_hybrid_program() {
     }
     assert!(programs > 0, "the loop drew no programs, so proved nothing");
 }
+
+/// A wagon may carry one weapon part once the Weapons tree is open, drawn
+/// from `WeaponPart::shelf`, appended after the rest of the shelf so every
+/// other row is exactly what it was.
+#[test]
+fn an_open_weapons_tree_appends_a_weapon_part_row_and_moves_no_other() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    let closed: Vec<Vec<CaravanOffer>> = (0..40).map(|v| shelf(&mut game, v)).collect();
+    unlock_research_chain(&mut game, "weapon_bench");
+    let allowed = crate::gear_craft::WeaponPart::shelf();
+    let mut seen = 0;
+    for (visit, before) in closed.iter().enumerate() {
+        let after = shelf(&mut game, visit as u64);
+        assert_eq!(&after[..before.len()], &before[..], "visit {visit}");
+        for extra in &after[before.len()..] {
+            seen += 1;
+            let CaravanOfferKind::Material(item) = &extra.kind else {
+                panic!("the extra row is a plain stack");
+            };
+            let part = item.weapon_part_of().expect("a weapon part");
+            assert!(allowed.contains(&part), "{part:?} is not on the shelf");
+        }
+    }
+    assert!(seen > 0, "no shelf carried a weapon part");
+}

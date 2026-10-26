@@ -36,6 +36,7 @@ pub(crate) mod ending;
 pub(crate) mod environment;
 pub(crate) mod extraction;
 pub(crate) mod field;
+pub(crate) mod gear_craft;
 pub(crate) mod gear_power;
 pub(crate) mod implants;
 pub(crate) mod inspection;

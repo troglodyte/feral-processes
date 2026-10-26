@@ -112,6 +112,13 @@ impl Game {
                     .unwrap_or_default(),
                 STACK_MARKET_EXCLUSIVE_PRICE,
             ),
+            MarketOfferKind::WeaponPart { part } => (
+                part.label(),
+                self.item_description(&ItemId::weapon_part(*part))
+                    .unwrap_or_default()
+                    .to_string(),
+                crate::tuning::GEAR_MARKET_PART_PRICE,
+            ),
             MarketOfferKind::Program { species } => {
                 let def = self.world.resource::<SpeciesDb>().get(species).cloned();
                 let name = def
@@ -227,6 +234,17 @@ impl Game {
                     ability: pool[rng.random_range(0..pool.len())].clone(),
                 });
             }
+        }
+        // Rolled last of all, the exclusive row's own reason. Both draws are
+        // taken whether or not the row is listed, so opening the Weapons
+        // tree adds a row without moving any other.
+        let weapon_roll = rng.random_bool(crate::tuning::GEAR_MARKET_PART_CHANCE);
+        let shelf = crate::gear_craft::WeaponPart::shelf();
+        let weapon_pick = rng.random_range(0..shelf.len());
+        if weapon_roll && self.weapon_tree_open() {
+            offers.push(MarketOfferKind::WeaponPart {
+                part: shelf[weapon_pick],
+            });
         }
         offers
     }
@@ -361,6 +379,7 @@ impl Game {
             MarketOfferKind::Part { scope, .. } => scope.price(),
             MarketOfferKind::ExclusiveRoutine { .. } => STACK_MARKET_EXCLUSIVE_PRICE,
             MarketOfferKind::Program { species } => self.market_program_price(species),
+            MarketOfferKind::WeaponPart { .. } => crate::tuning::GEAR_MARKET_PART_PRICE,
         };
         let currency = self.trade_currency();
         let money = self.item_name(&currency).to_string();
@@ -387,6 +406,12 @@ impl Game {
                 let name = self.item_name(&item).to_string();
                 self.grant_loot(item, qty, LootSource::Trade);
                 format!("{qty} × {name} goes in the pack")
+            }
+            MarketOfferKind::WeaponPart { part } => {
+                let item = ItemId::weapon_part(*part);
+                let name = self.item_name(&item).to_string();
+                self.grant_loot(item, 1, LootSource::Trade);
+                format!("a {name} goes in the pack")
             }
             MarketOfferKind::ExclusiveRoutine { ability } => {
                 let name = self.ability_display_name(ability);

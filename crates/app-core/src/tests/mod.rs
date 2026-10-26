@@ -26,6 +26,7 @@ mod farms;
 mod field;
 mod floor_hands;
 mod fusion;
+mod gear_craft;
 mod gear_inspect;
 mod group_menus;
 mod hover;

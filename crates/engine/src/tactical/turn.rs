@@ -536,7 +536,9 @@ impl Game {
             let outcome = self.resolve_and_apply_attack(
                 reactor,
                 mover,
-                crate::battle::Swing::reaction(profile.range).with_type(profile.damage_type),
+                crate::battle::Swing::reaction(profile.range)
+                    .with_type(profile.damage_type)
+                    .with_weapon(profile.weapon),
             );
             // **Through the model's own line builder**, so a reaction that
             // misses reads as a miss. A line written here would be a second
@@ -692,8 +694,11 @@ impl Game {
         let round_before = self.world.resource::<TacticalBattle>().round;
         let rolled = self.swing_move_at(actor, Some(reach::distance(from, at)));
         let move_name = rolled.name;
-        let crate::game::combat::AttackProfile { range, damage_type } =
-            self.attack_profile(actor, rolled.range, rolled.damage_type);
+        let crate::game::combat::AttackProfile {
+            range,
+            damage_type,
+            weapon,
+        } = self.attack_profile(actor, rolled.range, rolled.damage_type);
 
         // A reach weapon sweeps its shape, converted by this model's own
         // converter: `reach::recipients` reads the aim as a *destination*
@@ -764,7 +769,9 @@ impl Game {
             let outcome = self.resolve_and_apply_attack(
                 actor,
                 body,
-                crate::battle::Swing::plain(range).with_type(damage_type),
+                crate::battle::Swing::plain(range)
+                    .with_type(damage_type)
+                    .with_weapon(weapon),
             );
             let line = self.party_swing_line(actor, &move_name, outcome);
             self.log_swing(

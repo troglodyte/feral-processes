@@ -894,37 +894,16 @@ impl Game {
         // Every affix is summed, so a copy fused from two carrying the same
         // one is worth it twice — the duplicate is the feature, not a row
         // to dedupe.
-        let affixed =
-            self.affixes_of(copy)
-                .into_iter()
-                .fold(base, |acc, affix| items::EquipmentStats {
-                    atk: acc.atk + affix.stats.atk,
-                    mitigation: acc.mitigation + affix.stats.mitigation,
-                    decompiler: acc.decompiler + affix.stats.decompiler,
-                    damage: crate::battle::DamageRange {
-                        min: acc.damage.min + affix.stats.damage.min,
-                        max: acc.damage.max + affix.stats.damage.max,
-                    },
-                    accuracy: acc.accuracy + affix.stats.accuracy,
-                    evasion: acc.evasion + affix.stats.evasion,
-                    deflection: acc.deflection + affix.stats.deflection,
-                    // An affix never sets a type (the loader refuses it), so
-                    // the base's survives.
-                    damage_type: acc.damage_type,
-                    resist: acc.resist + affix.stats.resist,
-                });
+        let affixed = self
+            .affixes_of(copy)
+            .into_iter()
+            .fold(base, |acc, affix| acc.plus_affix(affix.stats));
         // A spent copy stays worn and inert: zero, not absent, so the
         // equip/unequip delta stays exact whether or not it is broken.
         if self.is_broken(copy) {
             return Some(items::EquipmentStats::default());
         }
-        Some(
-            affixed
-                .scaled_for_level(level)
-                .for_quality(copy.quality)
-                .fused_for_tier(copy.tier)
-                .for_rarity(copy.rarity),
-        )
+        Some(affixed.for_copy(level, copy))
     }
 
     /// What one *worn* item is worth — `copy_bonus` at the level the copy
@@ -1215,6 +1194,11 @@ impl Game {
             return Err(format!("{} can't be fused.", self.item_name(item)));
         };
         let name = self.item_name(item).to_string();
+        if let Some(FusionRefusal::CraftedGear) = self.fusion_refusal(copy) {
+            return Err(format!(
+                "{name} was built at the Workbench — only found gear can be fused."
+            ));
+        }
         let fused_tier = copy.tier + 1;
         if fused_tier > crate::tuning::MAX_FUSIONS {
             return Err(format!(

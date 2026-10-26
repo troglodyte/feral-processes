@@ -9,6 +9,7 @@
 use crate::app::crafting::craft_visible;
 use crate::app::dev_item_picker::dev_item_visible;
 use crate::app::floor_hands::put_down_visible;
+use crate::app::gear_craft::design_pick_visible;
 use crate::app::inventory::{INVENTORY_SLOT_ROWS, inventory_visible};
 use crate::app::routine_craft::subroutines_visible;
 use crate::app::stack_market::market_visible;
@@ -48,6 +49,7 @@ fn is_filter_home(mode: Mode) -> bool {
             | Mode::StackMarket
             | Mode::Craft
             | Mode::Subroutines
+            | Mode::DesignPick
             | Mode::PutDown
             | Mode::TacticalItem
     )
@@ -175,6 +177,9 @@ impl App {
             Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
             Mode::Craft => Some(craft_visible(at_bench, game, &filter).len()),
             Mode::Subroutines => Some(subroutines_visible(game, &filter).len()),
+            Mode::DesignPick => {
+                Some(design_pick_visible(game, &self.design_draft, &filter).len() + 1)
+            }
             Mode::PutDown => Some(put_down_visible(&game.put_down_options(), &filter).len()),
             Mode::TacticalItem => Some(tactical_items_visible(game, &filter).len()),
             _ => None,

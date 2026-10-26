@@ -98,6 +98,7 @@ Do not duplicate between them; point instead.
 | [0028](0028-announcements-fire-on-a-crossing.md) | Announcements fire on a crossing | Proposed | Claude — proposed, awaiting the user | Edge trigger |
 | [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | Player routines are compiled from a Rust part catalogue | Accepted (0.20.0) | the user, 2026-10-24 | Builder |
 | [0030](0030-player-sprites-override-shipped-art-per-name.md) | Player sprites override shipped art, per name, from the data folder | Accepted | user, on Claude's proposal | Layered lookup |
+| [0031](0031-player-gear-is-built-from-designs-over-a-slot-generic-frame.md) | Player gear is built from designs over a slot-generic frame | Accepted | the user, 2026-10-26 | Builder; Strategy per slot |
 
 ## Pattern index
 

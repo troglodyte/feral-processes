@@ -27,6 +27,7 @@ use bevy_ecs::prelude::Entity;
 
 mod base;
 mod battle;
+mod gear_craft;
 mod manifest;
 mod map;
 mod market;
@@ -40,6 +41,7 @@ mod work;
 
 pub use base::*;
 pub use battle::*;
+pub use gear_craft::*;
 pub use manifest::*;
 pub use map::*;
 pub use market::*;

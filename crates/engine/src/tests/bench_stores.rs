@@ -149,9 +149,9 @@ fn a_depot_is_out_of_reach_outside_base_space() {
 fn a_bench_recipe_compiles_from_a_depot() {
     let mut game = at_the_workbench(7105);
     unlock_research_chain(&mut game, "weapon_bench");
-    let lance = ItemId::from("arc_lance");
+    let lance = ItemId::from("logic_probe");
     let cost = game.craft_cost(&lance, false);
-    assert!(!cost.is_empty(), "arc_lance should be compilable here");
+    assert!(!cost.is_empty(), "logic_probe should be compilable here");
     let bill: Vec<_> = cost.iter().map(|(i, q)| (i.clone(), q * 2)).collect();
     let store = depot(&mut game, 9, 9, &bill);
     assert_eq!(game.max_craftable(&lance, false), 2);

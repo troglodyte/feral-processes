@@ -251,8 +251,27 @@ impl ActiveResearch {
 pub struct CraftedRoutines {
     pub built: Vec<crate::routine_craft::CraftedRoutine>,
     pub unslotted: Vec<crate::abilities::AbilityId>,
+    /// The last id minted; the next design is `next_id + 1`.
     pub next_id: u32,
 }
+
+/// The weapon designs the player has made (ADR 0031).
+///
+/// `designs` is every design that exists; `Game::sync_crafted_gear` rebuilds
+/// `ItemDb`'s crafted tier from it after every change and on load, so no
+/// def outlives its design. `next_id` only grows: a `crafted_gear/<n>` id is
+/// never reused for a different design.
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct GearDesigns {
+    pub designs: Vec<crate::gear_craft::GearDesign>,
+    pub next_id: u32,
+}
+
+/// Affixes the player may put in a design without having researched them:
+/// the ones salvaged off a copy that carried them. A `BTreeSet` so the save
+/// writes them in a stable order.
+#[derive(Resource, Default, Clone, Debug, PartialEq)]
+pub struct KnownAffixes(pub BTreeSet<crate::affixes::AffixId>);
 
 /// Which tools the player has researched and may forge — `KnownRoutines`'
 /// own rung of the tool acquisition chain (spec decision 6). Written by

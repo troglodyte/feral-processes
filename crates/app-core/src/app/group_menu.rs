@@ -159,6 +159,16 @@ const RESEARCH_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        label: "Weapon research",
+        target: Mode::WeaponResearch,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Weapons))
+        },
+    },
+    GroupEntry {
         // **One row, not two.** It reads as unpin when a subject is already
         // pinned — `render::draw_pin_subject` is what decides that, off
         // `Game::pinned_subject` — because "at most one subject per

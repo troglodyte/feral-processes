@@ -135,6 +135,27 @@ fn a_workbench_offers_build_subroutines_built_compile_then_info() {
 }
 
 #[test]
+fn a_workbench_adds_the_forge_pages_once_weapon_bench_is_researched() {
+    let mut game = fresh();
+    stand_an_extraction_bench(&mut game, 1, 0);
+    unlock_research_chain(&mut game, "weapon_bench");
+    assert_eq!(
+        game.adjacent_structures()[0].pages,
+        vec![
+            Build,
+            Subroutines,
+            Built,
+            Forge,
+            NewDesign,
+            WeaponParts,
+            Salvage,
+            Compile,
+            Info
+        ]
+    );
+}
+
+#[test]
 fn only_the_field_recipes_compile_without_a_workbench() {
     let mut game = fresh();
     touch_a_workbench(&mut game);

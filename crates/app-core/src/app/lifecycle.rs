@@ -43,6 +43,7 @@ impl App {
             splice_rig: None,
             siphon: None,
             routine_draft: RoutineDraft::default(),
+            design_draft: DesignDraft::default(),
             mode: Mode::MainMenu,
             game: None,
             status_line: profile_warning,

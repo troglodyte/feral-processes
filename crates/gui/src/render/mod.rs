@@ -53,6 +53,7 @@ mod extraction;
 mod farm_recipe;
 mod field;
 mod frame_map;
+mod gear_craft;
 mod group_menu;
 mod help;
 mod history;
@@ -1050,6 +1051,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     };
     let siphon = app.siphon;
     let routine_draft = app.routine_draft.clone();
+    let design_draft = app.design_draft.clone();
     let splice_rig = match app.mode {
         Mode::SpliceRig => app.splice_rig.clone(),
         _ => None,
@@ -1255,6 +1257,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             None,
         )),
         Mode::BuiltRoutines => Some((routine_craft::built_page_rows(game, selected), None)),
+        Mode::Forge => Some((gear_craft::forge_page_rows(game, selected), None)),
+        Mode::NewDesign => Some((
+            gear_craft::new_design_page_rows(game, &design_draft, selected),
+            None,
+        )),
+        Mode::WeaponParts => Some((gear_craft::parts_page_rows(game, selected), None)),
+        Mode::WeaponSalvage => Some((gear_craft::salvage_page_rows(game, selected), None)),
         Mode::SpliceRig => Some((splice_rig::page_rows(splice_rig.as_ref(), selected), None)),
         Mode::FarmRecipe => Some((farm_recipe::body_rows(&farm_recipe, selected), None)),
         Mode::BuildProgram => Some(building::build_program_page(
@@ -1309,6 +1318,22 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RoutineBuildName => {
             base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             routine_craft::draw_name(&routine_draft, refusal, painter, m)
+        }
+        Mode::DesignPick => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            gear_craft::draw_pick(
+                game,
+                &design_draft,
+                &list_filter,
+                selected,
+                refusal,
+                painter,
+                m,
+            )
+        }
+        Mode::DesignName => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            gear_craft::draw_name(&design_draft, refusal, painter, m)
         }
         Mode::Transfer => draw_transfer(
             &transfer_entries,
@@ -1754,6 +1779,24 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
             dev_console,
         ),
+        Mode::WeaponResearch if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Weapons,
+            selected,
+            refusal,
+            painter,
+            m,
+            dev_console,
+        ),
+        Mode::WeaponResearch => draw_research_menu(
+            game,
+            ResearchTree::Weapons,
+            selected,
+            refusal,
+            painter,
+            m,
+            dev_console,
+        ),
         Mode::ModCopy => draw_mod_copy(game, mod_copy.clone(), selected, refusal, painter, m),
         Mode::ModPickAffix => {
             draw_mod_pick_affix(game, mod_copy.clone(), selected, refusal, painter, m)
@@ -1933,7 +1976,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 165] = [
+    const ALL_MODES: [Mode; 172] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -1970,6 +2013,12 @@ mod tests {
         Mode::RoutineBuildName,
         Mode::Subroutines,
         Mode::BuiltRoutines,
+        Mode::Forge,
+        Mode::NewDesign,
+        Mode::DesignPick,
+        Mode::DesignName,
+        Mode::WeaponParts,
+        Mode::WeaponSalvage,
         Mode::DevConsole,
         Mode::DevItemPicker,
         Mode::DevZonePicker,
@@ -2049,6 +2098,7 @@ mod tests {
         Mode::Research,
         Mode::RoutineResearch,
         Mode::AffixResearch,
+        Mode::WeaponResearch,
         Mode::ModCopy,
         Mode::ModPickAffix,
         Mode::RefitCopy,
@@ -2190,12 +2240,16 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 32] = [
+    const NEEDS_PENDING_STATE: [Mode; 36] = [
         // The Workbench pages are drawn only inside the structure hub frame,
         // which the census app never opens.
         Mode::RoutineBuild,
         Mode::Subroutines,
         Mode::BuiltRoutines,
+        Mode::Forge,
+        Mode::NewDesign,
+        Mode::WeaponParts,
+        Mode::WeaponSalvage,
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,
         Mode::ModPickAffix,

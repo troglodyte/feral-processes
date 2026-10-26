@@ -322,10 +322,10 @@ fn a_built_bench_alone_does_not_unlock_its_recipe() {
 fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let arc_lance = ItemId::from("arc_lance");
+    let probe = ItemId::from("logic_probe");
 
     assert!(
-        !game.craft_recipes().iter().any(|r| r.result == arc_lance),
+        !game.craft_recipes().iter().any(|r| r.result == probe),
         "a bench-gated item recipe must not be free from turn one"
     );
 
@@ -341,7 +341,7 @@ fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
     place_now(&mut game, "workbench", 0, 1).unwrap();
 
     assert!(
-        game.craft_recipes().iter().any(|r| r.result == arc_lance),
+        game.craft_recipes().iter().any(|r| r.result == probe),
         "standing the bench should be enough — no research node names this recipe"
     );
 }
@@ -2209,7 +2209,7 @@ fn a_research_node_reports_everything_it_hands_over() {
         "a structure is named by its own display name, then the machine recipes it gates: {weapon_bench}"
     );
     assert!(
-        weapon_bench.contains(", Arc Lance"),
+        weapon_bench.contains(", Logic Probe"),
         "and the hand-compiled items it gates: {weapon_bench}"
     );
     assert_eq!(

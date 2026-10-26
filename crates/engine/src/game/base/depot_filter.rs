@@ -296,7 +296,7 @@ fn filter_groups() -> [&'static str; 4] {
 /// a field saying so. The part test comes first: it is the id that marks the
 /// family, whatever the def's category reads.
 fn filter_group(def: &ItemDef) -> Option<&'static str> {
-    if def.id.part_of().is_some() {
+    if def.id.part_of().is_some() || def.id.weapon_part_of().is_some() {
         return Some(SUBROUTINES);
     }
     match def.category() {

@@ -24,6 +24,12 @@ pub enum StructurePage {
     Build,
     Subroutines,
     Built,
+    /// The Workbench's weapon-crafting pages (ADR 0031), shown once
+    /// `weapon_bench` is researched.
+    Forge,
+    NewDesign,
+    WeaponParts,
+    Salvage,
     /// The Workbench's recipe list: the same Compile screen `[b]` opens,
     /// with the bench-only recipes in it.
     Compile,
@@ -117,6 +123,11 @@ impl Game {
         page(bench, StructurePage::Build);
         page(bench, StructurePage::Subroutines);
         page(bench, StructurePage::Built);
+        let forge = bench && self.weapon_tree_open();
+        page(forge, StructurePage::Forge);
+        page(forge, StructurePage::NewDesign);
+        page(forge, StructurePage::WeaponParts);
+        page(forge, StructurePage::Salvage);
         page(bench, StructurePage::Compile);
         pages.push(StructurePage::Info);
         pages

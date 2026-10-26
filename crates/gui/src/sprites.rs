@@ -26,7 +26,7 @@ use feral_processes_engine::icon::{Canvas, FULL_COLOUR_SUFFIX, quantise, sprite_
 use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
-use crate::sprite_layers::{SpriteLayers, WriteOutcome};
+use crate::sprite_layers::{Layer, LoadKey, SpriteLayers, WriteOutcome};
 
 /// Every PNG's file stem under `dir`, sorted for a deterministic load order.
 ///
@@ -145,9 +145,10 @@ pub const DRAWN_ICON_KEY: &str = "@drawn";
 /// Where the loaded sprites live between the asset server and the renderer.
 #[derive(Resource, Default)]
 pub struct Sprites {
-    /// Still loading, or waiting to be handed to egui. Owned names because
-    /// they come off a directory scan rather than a `&'static str` list.
-    pending: Vec<(String, Handle<Image>)>,
+    /// Still loading, or waiting to be handed to egui. Keyed by folder and
+    /// stem because they come off a directory scan, and because `register`
+    /// reads the pace from the folder the art came from.
+    pending: Vec<(LoadKey, Handle<Image>)>,
     /// What the renderer draws from. Refcounted so the per-frame `Painter`
     /// costs one atomic bump rather than a copy.
     table: Arc<SpriteTable>,
@@ -259,9 +260,11 @@ pub fn load(
     asset_server: Res<AssetServer>,
     frontend: Res<crate::Frontend>,
     mut sprites: ResMut<Sprites>,
+    mut images: ResMut<Assets<Image>>,
 ) {
-    for key in layers_of(&frontend.app).load_list() {
-        queue_load(&asset_server, &mut sprites, key.stem);
+    let layers = layers_of(&frontend.app);
+    for key in layers.load_list() {
+        queue_load(&asset_server, &mut images, &layers, &mut sprites, key);
     }
 }
 
@@ -330,14 +333,75 @@ fn frames_in(width: u32, height: u32) -> Option<usize> {
     (1..=MAX_SPRITE_FRAMES).contains(&frames).then_some(frames)
 }
 
-fn queue_load(asset_server: &AssetServer, sprites: &mut Sprites, stem: String) {
-    let handle = asset_server
-        .load_builder()
-        .with_settings(|settings: &mut ImageLoaderSettings| {
-            settings.sampler = ImageSampler::nearest();
-        })
-        .load(format!("sprites/{stem}.png"));
-    sprites.pending.push((stem, handle));
+/// Where one sprite's pixels come from.
+#[derive(Debug, PartialEq)]
+enum Route {
+    /// The asset server, under the shipped `assets/` root.
+    Asset(String),
+    /// A file in the player's folder, read straight off the disk.
+    File(PathBuf),
+}
+
+fn route(layers: &SpriteLayers, key: &LoadKey) -> Option<Route> {
+    match key.layer {
+        Layer::Shipped => Some(Route::Asset(format!("sprites/{}.png", key.stem))),
+        Layer::User => layers
+            .dir(Layer::User)
+            .map(|dir| Route::File(dir.join(format!("{}.png", key.stem)))),
+    }
+}
+
+/// A user-folder PNG as a nearest-sampled image, or the reason it is not one.
+fn read_user_image(path: &Path) -> Result<Image, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    Image::from_buffer(
+        &bytes,
+        bevy::image::ImageType::Extension("png"),
+        bevy::image::CompressedImageFormats::NONE,
+        true,
+        ImageSampler::nearest(),
+        RenderAssetUsages::default(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Starts one sprite on its way to `register`.
+///
+/// The player's folder is read directly instead of through the asset server.
+/// The server dedups by path while any handle to it lives, and the egui
+/// registration keeps one, so a second save of the same name would get the
+/// old, already-loaded handle back and redraw the old pixels. (`reload` is no
+/// better: it leaves the load state at `Loaded` while the new bytes are in
+/// flight.) A fresh `Assets::add` is a fresh handle every time. The shipped
+/// art never changes at runtime, so it keeps the server's cache.
+fn queue_load(
+    asset_server: &AssetServer,
+    images: &mut Assets<Image>,
+    layers: &SpriteLayers,
+    sprites: &mut Sprites,
+    key: LoadKey,
+) {
+    let handle = match route(layers, &key) {
+        Some(Route::Asset(path)) => asset_server
+            .load_builder()
+            .with_settings(|settings: &mut ImageLoaderSettings| {
+                settings.sampler = ImageSampler::nearest();
+            })
+            .load(path),
+        Some(Route::File(path)) => match read_user_image(&path) {
+            Ok(image) => images.add(image),
+            // The user file still owns the name, so no fallback to shipped art.
+            Err(e) => {
+                warn!(
+                    "sprite `{}` did not load, falling back to its glyph: {e}",
+                    key.stem
+                );
+                return;
+            }
+        },
+        None => return,
+    };
+    sprites.pending.push((key, handle));
 }
 
 /// Drains `App::take_sprite_writes`, performs each one through
@@ -359,6 +423,7 @@ pub fn drain_writes(
     asset_server: Res<AssetServer>,
     mut frontend: ResMut<crate::Frontend>,
     mut sprites: ResMut<Sprites>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     let writes = frontend.app.take_sprite_writes();
     if writes.is_empty() {
@@ -371,12 +436,12 @@ pub fn drain_writes(
                 // `Arc::make_mut` for `register`'s reason: the renderer may
                 // be holding a clone of the old table from this frame.
                 Arc::make_mut(&mut sprites.table).remove(&write.name);
-                queue_load(&asset_server, &mut sprites, key.stem);
+                queue_load(&asset_server, &mut images, &layers, &mut sprites, key);
             }
             WriteOutcome::Remove { name, then_load } => {
                 Arc::make_mut(&mut sprites.table).remove(&name);
                 for key in then_load {
-                    queue_load(&asset_server, &mut sprites, key.stem);
+                    queue_load(&asset_server, &mut images, &layers, &mut sprites, key);
                 }
             }
             WriteOutcome::Failed(message) => frontend.app.report_sprite_write_failure(message),
@@ -410,14 +475,23 @@ pub fn register(
         return;
     }
     let mut ready = Vec::new();
-    sprites.pending.retain(|(name, handle)| {
+    sprites.pending.retain(|(key, handle)| {
         match asset_server.get_load_state(handle) {
             Some(LoadState::Loaded) => {
-                ready.push((name.clone(), handle.clone()));
+                ready.push((key.clone(), handle.clone()));
                 false
             }
             Some(LoadState::Failed(e)) => {
-                warn!("sprite `{name}` did not load, falling back to its glyph: {e}");
+                warn!(
+                    "sprite `{}` did not load, falling back to its glyph: {e}",
+                    key.stem
+                );
+                false
+            }
+            // A player's sprite was added to `Assets` directly, so the
+            // server has no state for it: the pixels are already here.
+            None if images.contains(handle) => {
+                ready.push((key.clone(), handle.clone()));
                 false
             }
             // Still in flight, or the server has not seen it yet.
@@ -429,9 +503,10 @@ pub fn register(
     }
     // `Arc::make_mut` rather than rebuilding: the renderer may be holding a
     // clone of the old table from this frame, and this leaves that one alone.
-    let dir = frontend.app.assets_dir().join("sprites");
+    let layers = layers_of(&frontend.app);
     let table = Arc::make_mut(&mut sprites.table);
-    for (name, handle) in ready {
+    for (key, handle) in ready {
+        let name = key.stem;
         let frames = images
             .get(&handle)
             .and_then(|image| frames_in(image.width(), image.height()));
@@ -443,7 +518,12 @@ pub fn register(
         };
         let id = textures.add_image(EguiTextureHandle::Strong(handle));
         let pace = name.strip_suffix(FULL_COLOUR_SUFFIX).unwrap_or(&name);
-        table.insert(name.as_str(), id, frames, read_frame_ms(&dir, pace));
+        // The pace lives beside the art it describes: the folder that owns
+        // the name, not always the shipped one.
+        let pace_ms = layers
+            .dir(key.layer)
+            .map_or(DEFAULT_SPRITE_FRAME_MS, |dir| read_frame_ms(dir, pace));
+        table.insert(name.as_str(), id, frames, pace_ms);
     }
 }
 
@@ -736,6 +816,48 @@ pub(crate) mod tests {
     /// Deleting `assets/sprites/` must restore the glyph map exactly — the
     /// property the whole sprite seam rests on. A missing directory is not
     /// an error the scan may propagate.
+    #[test]
+    fn pending_keys_route_by_layer() {
+        let layers = SpriteLayers {
+            shipped: PathBuf::from("/shipped/sprites"),
+            user: Some(PathBuf::from("/data/sprites")),
+        };
+        let key = |layer, stem: &str| LoadKey {
+            layer,
+            stem: stem.to_string(),
+        };
+        assert_eq!(
+            route(&layers, &key(Layer::Shipped, "x.colour")),
+            Some(Route::Asset("sprites/x.colour.png".to_string()))
+        );
+        assert_eq!(
+            route(&layers, &key(Layer::User, "x")),
+            Some(Route::File(PathBuf::from("/data/sprites/x.png")))
+        );
+        let none = SpriteLayers {
+            user: None,
+            ..layers
+        };
+        assert_eq!(route(&none, &key(Layer::User, "x")), None);
+    }
+
+    #[test]
+    fn a_user_png_reads_nearest_sampled_and_a_corrupt_one_errs() {
+        let dir = codec_test_dir("user_image");
+        let good = dir.join("g.png");
+        frames_to_png(&[a_sprite_canvas()], &good).unwrap();
+        let image = read_user_image(&good).unwrap();
+        assert_eq!((image.width(), image.height()), (16, 16));
+        assert!(matches!(
+            image.sampler,
+            ImageSampler::Descriptor(ref d) if d.mag_filter == bevy::image::ImageFilterMode::Nearest
+        ));
+        let bad = dir.join("b.png");
+        std::fs::write(&bad, b"nope").unwrap();
+        assert!(read_user_image(&bad).is_err());
+        assert!(read_user_image(&dir.join("missing.png")).is_err());
+    }
+
     #[test]
     fn a_missing_sprite_directory_scans_empty_without_panicking() {
         let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

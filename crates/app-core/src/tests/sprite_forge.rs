@@ -1418,7 +1418,13 @@ fn a_hue_used_only_on_frame_two_picks_the_colour_variant() {
     app.handle_key(GameKey::Char('1'));
     assert!(app.sprite_editor_view().unwrap().full_colour);
     app.handle_key(GameKey::Char('s'));
-    assert!(app.take_sprite_writes()[0].op.full_colour());
+    assert!(matches!(
+        app.take_sprite_writes()[0].op,
+        SpriteOp::Save {
+            full_colour: true,
+            ..
+        }
+    ));
 }
 
 #[test]

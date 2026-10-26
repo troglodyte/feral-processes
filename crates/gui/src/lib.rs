@@ -24,6 +24,7 @@ mod paint;
 mod perf;
 mod render;
 mod sounds;
+mod sprite_layers;
 mod sprites;
 mod text;
 mod wildlife;

@@ -171,7 +171,7 @@ pub struct SpriteWrite {
 /// What a queued `SpriteWrite` asks the frontend to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SpriteOp {
-    /// Write `assets/sprites/<name>.png` (`<name>.colour.png` when
+    /// Write `<name>.png` into the player's sprite folder (`<name>.colour.png` when
     /// `full_colour`) from these frames side by side, replacing whatever was
     /// there. `frame_ms` is only written for two or more frames.
     Save {
@@ -183,16 +183,9 @@ pub enum SpriteOp {
     Enable { full_colour: bool },
     /// Rename `<name>.png` to `<name>.png.off` (or the colour pair).
     Disable { full_colour: bool },
-}
-
-impl SpriteOp {
-    pub fn full_colour(&self) -> bool {
-        match self {
-            SpriteOp::Save { full_colour, .. }
-            | SpriteOp::Enable { full_colour }
-            | SpriteOp::Disable { full_colour } => *full_colour,
-        }
-    }
+    /// Delete every file the player's folder holds for this name, so the
+    /// shipped art (or the glyph) draws again.
+    Revert,
 }
 
 /// The Forge's key line: the editor's own keys, then the dev tool's save and

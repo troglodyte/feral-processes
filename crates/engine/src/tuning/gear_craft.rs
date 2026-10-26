@@ -143,3 +143,41 @@ pub const GEAR_PROC_POWER: [i32; 3] = [3, 3, 3];
 /// weapon never makes the drops pointless.
 pub const GEAR_FRAME_CEILING: [[i32; 3]; 4] =
     [[35, 42, 54], [37, 47, 62], [37, 49, 64], [35, 50, 64]];
+
+/// Item id prefix of a design's compiled weapon (`crafted_gear/<n>`).
+pub const GEAR_ID_PREFIX: &str = "crafted_gear/";
+/// Item id prefix of a weapon part (`weapon_part/<key>`), also its research
+/// node's id.
+pub const GEAR_PART_ID_PREFIX: &str = "weapon_part/";
+
+/// A design's name length, in characters.
+pub const GEAR_NAME_MIN: usize = 1;
+/// See `GEAR_NAME_MIN`.
+pub const GEAR_NAME_MAX: usize = 24;
+
+/// What a weapon part is worth in trade currency: above the material it
+/// costs, so a part is never a cheaper way to a Credit than the bench.
+pub const GEAR_PART_VALUE: u32 = 6;
+
+/// The material a part's craft and a frame's build spend, by frame
+/// (Edge, Lance, Whip, Launcher): the two a shipped weapon is made of.
+pub const GEAR_FRAME_MATERIAL: [&str; 4] = [
+    "core_fragment",
+    "core_fragment",
+    "portal_fragment",
+    "portal_fragment",
+];
+
+/// What building a design spends beside its parts, per frame and version,
+/// lifted from the shipped bills (`shiv_routine` 4 and `kinetic_edge` 7
+/// core fragments; `plasma_router` 16 and `siege_compiler` 18 portal
+/// fragments). The built weapon is priced at this bill, so it is worth less
+/// than everything the build consumed.
+pub const GEAR_FRAME_BILL: [[u32; 3]; 4] = [[4, 8, 14], [8, 14, 22], [8, 12, 18], [12, 16, 22]];
+
+/// The material every other part's craft spends.
+pub const GEAR_PART_MATERIAL: &str = "core_fragment";
+/// What crafting one frame part spends, per version.
+pub const GEAR_FRAME_PART_COST: [u32; 3] = [3, 6, 9];
+/// What crafting one modifier part spends.
+pub const GEAR_MODIFIER_PART_COST: u32 = 4;

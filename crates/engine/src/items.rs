@@ -40,6 +40,31 @@ impl ItemId {
         crate::routine_craft::Subroutine::from_key(self.0.strip_prefix(PART_ITEM_PREFIX)?)
     }
 
+    /// The id of the item that is one weapon part — what
+    /// `ItemDb::synthesise_weapon_parts` derives for it.
+    pub fn weapon_part(part: crate::gear_craft::WeaponPart) -> Self {
+        ItemId(format!(
+            "{}{}",
+            crate::tuning::GEAR_PART_ID_PREFIX,
+            part.key()
+        ))
+    }
+
+    /// The weapon part this item is — the inverse of `weapon_part`.
+    pub fn weapon_part_of(&self) -> Option<crate::gear_craft::WeaponPart> {
+        crate::gear_craft::WeaponPart::from_key(
+            self.0.strip_prefix(crate::tuning::GEAR_PART_ID_PREFIX)?,
+        )
+    }
+
+    /// The design this item is the compiled weapon of, if it is one.
+    pub fn crafted_gear_of(&self) -> Option<u32> {
+        self.0
+            .strip_prefix(crate::tuning::GEAR_ID_PREFIX)?
+            .parse()
+            .ok()
+    }
+
     /// The id of the carrier item holding `tool`'s knowledge — the item
     /// `Game::forge_tool` grants and `Game::install_tool` spends.
     /// A synthetic id with no `.ron` behind it, so a tool needs no item file

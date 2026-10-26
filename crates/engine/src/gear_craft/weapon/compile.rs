@@ -95,7 +95,7 @@ fn reach_index(kind: AreaKind) -> usize {
 
 /// The item id a design's weapon is registered under.
 pub fn item_id(design_id: u32) -> ItemId {
-    ItemId(format!("crafted_gear/{design_id}"))
+    ItemId(format!("{}{design_id}", t::GEAR_ID_PREFIX))
 }
 
 /// The band before it is rounded to whole points. The rounding is a display

@@ -517,6 +517,11 @@ impl ItemDef {
 #[derive(Resource, Default)]
 pub struct ItemDb {
     items: HashMap<String, ItemDef>,
+    /// The player's designs, compiled (`crafted_gear/<n>`). Rebuilt from the
+    /// surviving designs by `set_crafted_gear` after every change and on
+    /// load. `get` answers it; `all` and every other catalogue walk do not,
+    /// because a built weapon is not content to be found.
+    crafted: HashMap<String, ItemDef>,
     currency: Option<ItemId>,
     research_currency: Option<ItemId>,
     craft_currency: Option<ItemId>,
@@ -727,6 +732,57 @@ impl ItemDb {
         warnings
     }
 
+    /// Mints one item per weapon part (ADR 0031), `weapon_part/<key>`, the
+    /// same arrangement as `synthesise_parts`: no `craftable` (the Workbench
+    /// verb `Game::craft_weapon_part` is the one door, because the bill and
+    /// the research gate are per part) and no `droppable`.
+    pub fn synthesise_weapon_parts(&mut self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for part in crate::gear_craft::WeaponPart::all() {
+            let id = ItemId::weapon_part(part);
+            if self.items.contains_key(id.as_str()) {
+                warnings.push(format!(
+                    "item file {} shadows the part item derived for {}; the file wins",
+                    id.as_str(),
+                    part.label()
+                ));
+                continue;
+            }
+            self.items.insert(
+                id.0.clone(),
+                ItemDef {
+                    id,
+                    name: format!("Weapon part · {}", part.label()),
+                    description: "A part for a weapon designed at the Workbench.".into(),
+                    banked: false,
+                    value: Some(crate::tuning::GEAR_PART_VALUE),
+                    role: None,
+                    equipment: None,
+                    durability: None,
+                    taming_potency: None,
+                    consume: None,
+                    craftable: None,
+                    droppable: None,
+                    cache_drop: None,
+                    grid_fuel: None,
+                    grants: None,
+                    reach: None,
+                    range: None,
+                    upgrade: None,
+                    enables_rest: false,
+                    implant: None,
+                    trap: None,
+                    abbrev: None,
+                    glyph: Some(','),
+                    fx: None,
+                    on_hit_rider: None,
+                    exploit: None,
+                },
+            );
+        }
+        warnings
+    }
+
     /// Replaces one def, for a test that needs a weapon the shipped
     /// catalogue does not carry — `AbilityDb::insert`'s reason.
     #[cfg(test)]
@@ -734,8 +790,48 @@ impl ItemDb {
         self.items.insert(def.id.0.clone(), def);
     }
 
+    /// Either tier: an authored or synthesised item, or a design's weapon.
     pub fn get(&self, id: &str) -> Option<&ItemDef> {
-        self.items.get(id)
+        self.items.get(id).or_else(|| self.crafted.get(id))
+    }
+
+    /// Replaces the crafted tier with `designs`, compiled and priced at the
+    /// frame's material bill (a build also spends parts, so the weapon is
+    /// worth less than everything it consumed). A design that no longer
+    /// compiles is left out with a warning rather than failing the load.
+    pub fn set_crafted_gear(
+        &mut self,
+        designs: &[crate::gear_craft::GearDesign],
+        affixes: &crate::affixes::AffixDb,
+    ) -> Vec<String> {
+        let mut warnings = Vec::new();
+        self.crafted.clear();
+        for design in designs {
+            match crate::gear_craft::compile(design, affixes) {
+                Ok(mut def) => {
+                    def.value = Some(self.bill_value(design));
+                    self.crafted.insert(def.id.0.clone(), def);
+                }
+                Err(e) => warnings.push(format!(
+                    "design {} ({}) does not compile: {e:?}",
+                    design.id, design.name
+                )),
+            }
+        }
+        warnings
+    }
+
+    /// What the frame's material bill is worth, the price of its weapon.
+    fn bill_value(&self, design: &crate::gear_craft::GearDesign) -> u32 {
+        let Some((frame, version)) = design.frame() else {
+            return crate::tuning::DEFAULT_ITEM_VALUE;
+        };
+        let (material, count) = crate::gear_craft::weapon::frame_bill(frame, version);
+        let each = self
+            .items
+            .get(material.as_str())
+            .map_or(crate::tuning::DEFAULT_ITEM_VALUE, ItemDb::value_of);
+        each * count
     }
 
     /// What one unit of `def` is worth in trade currency, before any
@@ -788,6 +884,7 @@ impl ItemDb {
             Some(id) == self.trade_currency()
                 || Some(id) == self.craft_currency()
                 || id.tool_id().is_some()
+                || id.weapon_part_of().is_some()
                 || id
                     .part_of()
                     .is_some_and(|part| !crate::routine_craft::Subroutine::shelf().contains(&part))
@@ -812,6 +909,10 @@ impl ItemDb {
         rows
     }
 
+    /// Every authored and synthesised item, id-sorted. **Not** the crafted
+    /// tier: every walk of this is a walk of content (drop tables, shelves,
+    /// recipe and research validation, the catalogue view), and a player's
+    /// weapon is none of those.
     pub fn all(&self) -> impl Iterator<Item = &ItemDef> {
         let mut defs: Vec<&ItemDef> = self.items.values().collect();
         defs.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));

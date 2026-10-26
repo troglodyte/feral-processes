@@ -1194,6 +1194,11 @@ impl Game {
             return Err(format!("{} can't be fused.", self.item_name(item)));
         };
         let name = self.item_name(item).to_string();
+        if let Some(FusionRefusal::CraftedGear) = self.fusion_refusal(copy) {
+            return Err(format!(
+                "{name} was built at the Workbench — only found gear can be fused."
+            ));
+        }
         let fused_tier = copy.tier + 1;
         if fused_tier > crate::tuning::MAX_FUSIONS {
             return Err(format!(

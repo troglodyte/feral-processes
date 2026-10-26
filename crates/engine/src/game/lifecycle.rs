@@ -631,6 +631,8 @@ impl Game {
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
         world.init_resource::<crate::resources::CraftedRoutines>();
+        world.init_resource::<crate::resources::GearDesigns>();
+        world.init_resource::<crate::resources::KnownAffixes>();
         world.init_resource::<crate::resources::DiscoveredResearch>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
@@ -1563,7 +1565,7 @@ impl Game {
             species: species_db,
             structures: structure_db,
             research: research_db,
-            items: item_db,
+            items: mut item_db,
             perks: perk_db,
             talents: talent_db,
             affixes: affix_db,
@@ -1607,7 +1609,14 @@ impl Game {
         // A dropped built routine was already reported by name above; its
         // raw id means nothing to the player.
         dropped_player_routines.retain(|id| !id.starts_with(CRAFT_ID_PREFIX));
-
+        // Before inventory, equipment, companions and shelves restore: a
+        // `crafted_gear/<n>` id resolves only once the crafted tier holds it.
+        load_warnings.extend(item_db.set_crafted_gear(&data.gear_designs, &affix_db));
+        let next_gear_design_id = data
+            .gear_designs
+            .iter()
+            .map(|d| d.id)
+            .fold(data.next_gear_design_id, u32::max);
         let mut world = World::new();
         world.insert_resource(ability_db);
         world.insert_resource(tool_db);
@@ -1667,6 +1676,13 @@ impl Game {
             data.discovered_research.into_iter().collect(),
         ));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
+        world.insert_resource(crate::resources::GearDesigns {
+            designs: data.gear_designs,
+            next_id: next_gear_design_id,
+        });
+        world.insert_resource(crate::resources::KnownAffixes(
+            data.known_affixes.into_iter().collect(),
+        ));
         world.insert_resource(crate::resources::CraftedRoutines {
             built: crafted_routines,
             unslotted: unslotted_routines,
@@ -3581,6 +3597,22 @@ impl Game {
                 .world
                 .resource::<crate::resources::CraftedRoutines>()
                 .next_id,
+            gear_designs: self
+                .world
+                .resource::<crate::resources::GearDesigns>()
+                .designs
+                .clone(),
+            next_gear_design_id: self
+                .world
+                .resource::<crate::resources::GearDesigns>()
+                .next_id,
+            known_affixes: self
+                .world
+                .resource::<crate::resources::KnownAffixes>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
             link_sites: {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
@@ -4004,6 +4036,7 @@ pub(crate) fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
     warnings.extend(items.synthesise_parts());
+    warnings.extend(items.synthesise_weapon_parts());
     // Every carrier is derived from a loaded `ToolDef`, and `tools` finished
     // loading before `items` did.
     warnings.extend(items.synthesise_tool_carriers(&tools));

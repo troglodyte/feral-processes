@@ -67,6 +67,7 @@ mod extraction;
 mod farms;
 mod field;
 mod floor;
+mod gear_craft;
 mod gear_detail;
 mod gear_passives;
 mod hauling;

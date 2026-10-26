@@ -1865,6 +1865,16 @@ pub struct SaveData {
     /// The counter the next `crafted/<n>` id is minted from.
     #[serde(default)]
     pub next_crafted_id: u32,
+    /// The weapon designs the player has made (ADR 0031). Their items are
+    /// derived on load by `ItemDb::set_crafted_gear`, never saved.
+    #[serde(default)]
+    pub gear_designs: Vec<crate::gear_craft::GearDesign>,
+    /// The counter the next design id is minted from; never reused.
+    #[serde(default)]
+    pub next_gear_design_id: u32,
+    /// Affixes the player may pick in a design beyond researched ones.
+    #[serde(default)]
+    pub known_affixes: Vec<crate::affixes::AffixId>,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -2511,6 +2521,9 @@ mod tests {
             crafted_routines: Vec::new(),
             unslotted_routines: Vec::new(),
             next_crafted_id: 0,
+            gear_designs: Vec::new(),
+            next_gear_design_id: 0,
+            known_affixes: Vec::new(),
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),

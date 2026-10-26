@@ -126,6 +126,7 @@ pub use game::creation::{
     CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE, creation_credits,
 };
 pub use game::environment::TerrainRow;
+pub use game::gear_craft::FusionRefusal;
 pub use game::kit::EmulationOption;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};

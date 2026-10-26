@@ -69,9 +69,10 @@ the base's stores or your pack; it runs on that tool and not on anything in your
 screen are what it will pay. Fit another there to swap the tool — the one it replaces comes back to
 you — or press R to pull it out, and the rig goes back to its built-in Salvage Clamp.
 
-- It is a machine like any other. Post a program to it, keep it on the grid, and it strips what is
-  in its hopper one body at a time. Nothing moves while it is dark, while nobody is at it, or while
-  it has no tool.
+- It is a machine like any other: keep it on the grid and it strips what is in its hopper one body
+  at a time. You do not have to set it a standing job. While a program waits in its hopper or in a
+  Quarantine Rack and its buffer has room, the base posts one of your crew to it, and lets them go
+  again once there is nothing left to strip. Nothing moves while it is dark or while nobody is at it.
 - You do not load it by hand. Put your downed programs in a Quarantine Rack and a posted body
   fetches them across one at a time, so a rig, a rack and a tool are what a working teardown line
   takes.

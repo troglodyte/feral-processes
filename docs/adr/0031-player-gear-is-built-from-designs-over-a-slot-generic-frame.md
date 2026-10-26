@@ -1,6 +1,6 @@
 # 0031 Player gear is built from designs over a slot-generic frame
 
-- Status: Agreed
+- Status: Accepted
 - Decided by: the user, 2026-10-26
 - Date: 2026-10-26
 - Pattern: Builder (parts compiled into a value), as 0029; the slot split is Strategy (one `compile` per slot behind one recipe type)

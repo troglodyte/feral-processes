@@ -107,7 +107,7 @@ Combat reads the rider in `resolve_and_apply_attack`, beside its `type_side_effe
 
 - **Craft** at the Workbench once the part's research node (`weapon_part/<key>`) is researched, for a material bill (mirrors `craft_subroutine`).
 - **Salvage** an authored weapon at the Workbench: `gear_craft::weapon::decompose(&ItemDef)` hands out the parts it maps to and *discovers* their research nodes. The copy is consumed. Decompiler maps to Capture, `grants` maps to Proc(that routine), and mitigation maps to nothing. Proc parts come **only** from salvage, which makes them the clearest "found it" moment.
-- **Study discovery:** weapon-tree nodes are `discoverable`, and `eligible_discoveries` gains an explicit `Weapons`-when-open branch beside its `Affixes` one (`discoverable` alone does not admit a new tree).
+- **Study discovery:** weapon-tree nodes are `discoverable` except frame v1 and the `weapon_capacity/<n>` steps, which show as soon as the tree opens, and `eligible_discoveries` gains an explicit `Weapons`-when-open branch beside its `Affixes` one (`discoverable` alone does not admit a new tree).
 - **Shelves:** Stack market and caravans may sell frames and modifiers (one `shelf()` door, as `Subroutine::shelf`). Payoff parts stay off shelves; they are found or researched.
 
 **Affixes in a design:** the player may pick an affix whose `affix:<id>` node is researched, or one they have salvaged off a copy that carried it (salvage records it in `KnownAffixes`, saved — see Save).

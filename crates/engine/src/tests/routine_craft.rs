@@ -817,32 +817,24 @@ fn the_preview_says_when_the_cap_or_the_bench_blocks_the_build() {
 }
 
 #[test]
-fn the_subroutines_list_marks_the_unresearched_and_counts_what_is_held() {
+fn the_subroutines_list_hides_the_unresearched_and_counts_what_is_held() {
     let mut game = bench_game(70_044);
     stock(&mut game, &damage(), 2);
-    let rows = game.subroutine_rows();
-    assert_eq!(rows.len(), Subroutine::all().len());
-
-    let row = |part: Subroutine| rows.iter().find(|r| r.part == part).unwrap().clone();
-    let healing = row(heal());
-    assert!(healing.known && healing.locked.is_none());
+    let find =
+        |game: &Game, part: Subroutine| game.subroutine_rows().into_iter().find(|r| r.part == part);
+    let healing = find(&game, heal()).expect("Heal v1.0 is known from a new game");
     assert_eq!(healing.slot, "Core");
+    assert!(
+        find(&game, damage()).is_none(),
+        "an unresearched part is hidden even when held"
+    );
 
-    let dmg = row(damage());
-    assert!(!dmg.known);
-    assert_eq!(dmg.locked, Some("locked · research to unlock"));
+    know(&mut game, &damage());
+    let dmg = find(&game, damage()).expect("researching it lists it");
     assert_eq!(dmg.held, 2);
     let (material, count) = crate::routine_craft::material(&damage());
     assert_eq!(dmg.material, game.item_name(&material));
     assert_eq!(dmg.material_count, count);
-
-    know(&mut game, &damage());
-    let dmg = game
-        .subroutine_rows()
-        .into_iter()
-        .find(|r| r.part == damage())
-        .unwrap();
-    assert!(dmg.known && dmg.locked.is_none());
 }
 
 #[test]

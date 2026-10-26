@@ -286,22 +286,21 @@ impl Game {
         }
     }
 
-    /// The Subroutines page: every part with its slot, how many are held,
-    /// what a craft costs and whether research has unlocked it.
+    /// The Subroutines page: every researched part with its slot, how many
+    /// are held and what a craft costs. An unresearched part stays off the
+    /// list, held or not, so the page shows what research has taught.
     pub fn subroutine_rows(&self) -> Vec<SubroutineRow> {
         Subroutine::all()
             .into_iter()
+            .filter(|part| self.subroutine_known(part))
             .map(|part| {
                 let (material, material_count) = routine_craft::material(&part);
-                let known = self.subroutine_known(&part);
                 SubroutineRow {
                     label: part.label(),
                     slot: part.slot(),
                     held: self.parts_held(&part),
                     material: self.item_name(&material).to_string(),
                     material_count,
-                    known,
-                    locked: (!known).then_some("locked · research to unlock"),
                     part,
                 }
             })

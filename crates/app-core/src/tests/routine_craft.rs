@@ -163,12 +163,12 @@ fn the_subroutines_page_filters_by_typing_and_enter_crafts() {
 }
 
 #[test]
-fn a_locked_part_refuses_to_craft() {
+fn an_unresearched_part_is_not_listed() {
     let mut app = app_at_a_workbench(80_007);
     open_page(&mut app, Mode::Subroutines);
     type_text(&mut app, "area");
-    app.handle_key(GameKey::Enter);
-    assert!(app.status_line.is_some());
+    let visible = subroutines_visible(app.game.as_ref().unwrap(), app.filter_text());
+    assert!(visible.is_empty());
 }
 
 #[test]

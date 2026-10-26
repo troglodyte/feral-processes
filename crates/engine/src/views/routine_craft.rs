@@ -62,9 +62,6 @@ pub struct SubroutineRow {
     /// The material a craft spends beside a Routine Disk, and how many.
     pub material: String,
     pub material_count: u32,
-    pub known: bool,
-    /// "locked · research to unlock" for an unresearched part.
-    pub locked: Option<&'static str>,
 }
 
 /// One row of the Built routines list: a routine waiting for a slot.

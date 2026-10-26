@@ -181,7 +181,7 @@ pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
     ]
 }
 
-/// The Subroutines page: every part, crafted with Enter, filtered by typing.
+/// The Subroutines page: every researched part, crafted with Enter, filtered by typing.
 pub(super) fn subroutine_page_rows(game: &Game, filter: &str, selected: usize) -> Vec<Row> {
     let all = game.subroutine_rows();
     let mut rows = vec![text_row(
@@ -193,21 +193,15 @@ pub(super) fn subroutine_page_rows(game: &Game, filter: &str, selected: usize) -
         rows.push(no_match_row(filter));
     }
     for (i, row) in visible.iter().map(|&src| &all[src]).enumerate() {
-        let (note, color) = match row.locked {
-            Some(locked) => (locked.to_string(), TEXT_DIM),
-            None => (
-                format!(
-                    "held {} · 1 Routine Disk + {} {}",
-                    row.held, row.material_count, row.material
-                ),
-                TEXT,
-            ),
-        };
+        let note = format!(
+            "held {} · 1 Routine Disk + {} {}",
+            row.held, row.material_count, row.material
+        );
         rows.push(annotated_item_row(
             format!("{} ({})", row.label, row.slot),
             Some(note),
             i == selected,
-            color,
+            TEXT,
         ));
     }
     rows

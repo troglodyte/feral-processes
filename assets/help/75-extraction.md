@@ -32,7 +32,8 @@ What a body is worth is a property of the body. Its level, the rarity it rolled 
 went down all feed the same figure, so a Prismatic taken at full health is worth more through the
 same tool than an Ordinary you barely left standing.
 
-The Tools page of your inventory (i) is where you forge, install and pull. The store's own screen is
+The Tools page of your inventory (i) is where you forge, install and pull. Forging in the base takes
+its materials from the base's stores before your pack. The store's own screen is
 where you spend a program: pick the body, and every installed tool is listed with what it would
 draw out before you commit to one. Material tools quote units. The Routine Extractor names the pool it would
 draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually
@@ -64,7 +65,7 @@ Two things are worth knowing before you spend a body.
 Research Teardown and you can build a Teardown Rig, which does the same work while you are
 somewhere else. **The rig holds its own tool.** A new rig runs on a built-in Salvage Clamp, the
 same tool you start with. Stand beside it, press c and open its Tool page to fit a better one out of
-your pack; it runs on that tool and not on anything in your own slots, and the figures on that
+the base's stores or your pack; it runs on that tool and not on anything in your own slots, and the figures on that
 screen are what it will pay. Fit another there to swap the tool — the one it replaces comes back to
 you — or press R to pull it out, and the rig goes back to its built-in Salvage Clamp.
 

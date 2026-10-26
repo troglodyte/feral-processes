@@ -23,6 +23,7 @@ mod battle_impact;
 mod battle_portrait;
 mod battle_timeline;
 mod behaviours;
+mod bench_stores;
 mod bonds;
 mod breeding;
 mod building;

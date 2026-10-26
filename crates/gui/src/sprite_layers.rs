@@ -250,13 +250,14 @@ impl SpriteLayers {
     /// that, disable, edit, save, disable lost the original art.
     pub fn apply(&self, name: &str, op: SpriteOp) -> WriteOutcome {
         let Some(user) = self.dir(Layer::User) else {
-            return failed(name, "there is no folder for your sprites");
+            return failed(name, op_verb(&op), "there is no folder for your sprites");
         };
+        let verb = op_verb(&op);
         match self.apply_in(user, name, op) {
             Ok(outcome) => outcome,
             Err(e) => {
                 warn!("sprite `{name}` write failed: {e}");
-                failed(name, &e.to_string())
+                failed(name, verb, &e.to_string())
             }
         }
     }
@@ -286,11 +287,13 @@ impl SpriteLayers {
             // Switching off shipped art: the player's folder gets an `.off`
             // copy, which by the whole-name rule hides it.
             std::fs::create_dir_all(user)?;
-            std::fs::copy(sprite_path(&self.shipped, name, full_colour, false), &off)?;
+            // The `.anim.ron` goes first: the `.off` is what hides the name,
+            // so a failure between the two leaves the shipped art showing.
             let anim = anim_path(&self.shipped, name);
             if anim.exists() {
                 std::fs::copy(&anim, anim_path(user, name))?;
             }
+            std::fs::copy(sprite_path(&self.shipped, name, full_colour, false), &off)?;
         }
         let plain_remains = full_colour && sprite_path(user, name, false, false).exists();
         Ok(WriteOutcome::Remove {
@@ -373,8 +376,18 @@ fn user_key(stem: String) -> LoadKey {
     }
 }
 
-fn failed(name: &str, cause: &str) -> WriteOutcome {
-    WriteOutcome::Failed(format!("Couldn't save sprite `{name}`: {cause}"))
+/// What the player was doing, for the failure line: "Couldn't <verb> sprite".
+fn op_verb(op: &SpriteOp) -> &'static str {
+    match op {
+        SpriteOp::Save { .. } => "save",
+        SpriteOp::Enable { .. } => "turn on",
+        SpriteOp::Disable { .. } => "turn off",
+        SpriteOp::Revert => "revert",
+    }
+}
+
+fn failed(name: &str, verb: &str, cause: &str) -> WriteOutcome {
+    WriteOutcome::Failed(format!("Couldn't {verb} sprite `{name}`: {cause}"))
 }
 
 #[cfg(test)]
@@ -572,12 +585,33 @@ mod tests {
     #[test]
     fn revert_then_save_leaves_no_leftovers() {
         let (root, layers) = layers("revert_save");
+        // A disabled colour sheet: its `.off` is one leftover. The two-frame
+        // plain save after it is saved last because a one-frame save clears
+        // the `.anim.ron`, and that file is the other.
+        layers.apply(
+            "x",
+            SpriteOp::Save {
+                frames: vec![dot(2)],
+                frame_ms: DEFAULT_SPRITE_FRAME_MS,
+                full_colour: true,
+            },
+        );
+        layers.apply("x", SpriteOp::Disable { full_colour: true });
         layers.apply("x", two_frame_save(900));
+        let before = user_files(&layers);
+
         layers.apply("x", SpriteOp::Revert);
+        let reverted = user_files(&layers);
         layers.apply("x", save(dot(4), false));
 
         let files = user_files(&layers);
         std::fs::remove_dir_all(&root).ok();
+        assert!(before.contains(&"x.anim.ron".to_string()), "{before:?}");
+        assert!(
+            before.contains(&"x.colour.png.off".to_string()),
+            "{before:?}"
+        );
+        assert!(reverted.is_empty(), "{reverted:?}");
         assert_eq!(files, vec!["x.png".to_string()]);
     }
 
@@ -638,16 +672,16 @@ mod tests {
         );
     }
 
-    /// `scan_library` reads the disabled *art* off a `.png.off` rename, and
-    /// the same file must be invisible to `scan_sprite_dir` — the loader's
-    /// own scan — without that scan needing to know `.off` exists at all:
-    /// its plain `extension() == "png"` filter already excludes it.
+    /// `scan_dir` reads the disabled *art* off a `.png.off` rename, and the
+    /// same file must be invisible to `scan_sprite_dir` — the loader's own
+    /// scan — without that scan needing to know `.off` exists at all: its
+    /// plain `extension() == "png"` filter already excludes it.
     ///
-    /// The `.off` file is a real PNG renamed, not garbage bytes — I2's fix
-    /// means `scan_library` now decodes it (through `png_to_canvas`'s
-    /// guessed-format read, since the real extension no longer says `png`),
-    /// so this pins the decoded pixels match what was written, not just
-    /// that the name was noticed.
+    /// The `.off` file is a real PNG renamed, not garbage bytes, and
+    /// `scan_dir` decodes it (through `png_to_canvas`'s guessed-format read,
+    /// since the real extension no longer says `png`), so this pins that the
+    /// decoded pixels match what was written, not just that the name was
+    /// noticed.
     #[test]
     fn a_disabled_file_is_absent_from_the_loader_scan_and_present_in_the_librarys_disabled_set() {
         let dir = codec_test_dir("disabled");
@@ -718,9 +752,8 @@ mod tests {
         assert_eq!((img.width(), img.height()), (16, 16));
     }
 
-    /// **I1 + I2, the exact sequence the final review's I1 finding walks
-    /// through: `t` (disable), Enter (open), draw, `s` (save), `t` (disable
-    /// again).** Before this task's fix that sequence destroyed the
+    /// **`t` (disable), Enter (open), draw, `s` (save), `t` (disable
+    /// again).** Without the I1/I2 guards that sequence destroyed the
     /// original art: Enter opened a blank canvas instead of the disabled
     /// art (I2), so the player's `s` wrote a fresh file *beside* the still-
     /// present `.png.off` backup, and the final `t` clobbered that backup
@@ -728,7 +761,7 @@ mod tests {
     /// gone with no warning and no way back, on a screen whose entire
     /// subject is unbacked-up work.
     ///
-    /// This test drives `apply_sprite_write` and `scan_library` through the
+    /// This test drives `SpriteLayers::apply` and `scan_dir` through the
     /// same steps a player's keystrokes produce (`App::handle_sprite_
     /// picker_key`'s `t`/`Enter`, `App::handle_sprite_editor_key`'s `s`) and
     /// checks the property that actually matters at each one: Enter's
@@ -752,7 +785,7 @@ mod tests {
 
         // Enter: `handle_sprite_picker_key`'s real fallback is `sprite_
         // library.get(name).or_else(|| sprite_disabled.get(name))` —
-        // `scan_library`'s `disabled` map is what feeds that second half,
+        // `scan_dir`'s `disabled` map is what feeds that second half,
         // so reading it back here is the same lookup the picker makes.
         // I2's fix is that this is `original`, not a blank canvas.
         let (_, disabled) = scan_dir(&dir);
@@ -793,7 +826,7 @@ mod tests {
         assert!(
             !dir.join("subject.png.off").exists(),
             "I1: saving an enabled copy must retire the stale disabled backup, \
-             or scan_library reports this name in both maps"
+             or the library reports this name in both maps"
         );
 
         // `t`: disable again. With the invariant held, there is nothing

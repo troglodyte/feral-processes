@@ -1546,6 +1546,23 @@ fn other_keys_are_ignored_while_a_revert_is_pending() {
 }
 
 #[test]
+fn a_picker_click_is_ignored_while_a_revert_is_pending() {
+    let mut app = app_with_edited_anchor(46);
+    picker_on(&mut app, "anchor");
+    let selected = app.menu_selected;
+    app.handle_key(GameKey::Char('r'));
+    let other = (selected + 1) % app.sprite_subjects().len();
+
+    subject_pointer(&mut app, other, PointerPhase::Down);
+    subject_pointer(&mut app, other, PointerPhase::DoubleClick);
+
+    assert_eq!(app.menu_selected, selected);
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert_eq!(app.sprite_revert_pending(), Some("anchor"));
+    assert!(app.take_sprite_writes().is_empty());
+}
+
+#[test]
 fn r_on_an_unedited_row_is_refused() {
     let mut app = app_with_edited_anchor(45);
     picker_on(&mut app, "player");

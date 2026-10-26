@@ -1,7 +1,7 @@
 //! `Mode::SpritePicker` and `Mode::SpriteEditor` — every name the map can
-//! draw a sprite for, both gates that keep the whole dev sprite editor out
-//! of a player's build, and the editing screen itself. See
-//! `docs/superpowers/specs/2026-09-04-dev-sprite-editor-design.md`.
+//! draw a sprite for, and the editing screen itself, open to every player
+//! from the game menu's Sprites page. See
+//! `docs/superpowers/specs/2026-10-26-player-sprite-editor-design.md`.
 //!
 //! The Forge is a host of `sprite_editor::SpriteEditor`: what is this
 //! sink's own is which subject it opened for, the `[s]`/`Esc` keys the
@@ -60,12 +60,13 @@ const PROP_SPRITE_GLYPH: char = '%';
 
 /// Whether a subject in `App::sprite_subjects` has art, and if so whether
 /// the map draws it. `Off` is not `None`: the art is still on disk, and the
-/// picker's toggle is a rename (`<name>.png` <-> `<name>.png.off`), never a
-/// delete — see `assets/sprites/README.md`'s naming rule and the design
-/// doc's "Turning art off is a rename, not a delete".
+/// picker's toggle keeps the art: the player's own file is renamed
+/// (`<name>.png` <-> `<name>.png.off`), and shipped art is copied into the
+/// player's folder as an `.off`, so nothing is ever deleted — see
+/// `assets/sprites/README.md`'s naming rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpriteArt {
-    /// `assets/sprites/<name>.png` has never been drawn.
+    /// No `<name>.png` has been drawn, shipped or by the player.
     None,
     /// Art exists and the map draws it.
     On,
@@ -191,7 +192,7 @@ pub enum SpriteOp {
     Revert,
 }
 
-/// The Forge's key line: the editor's own keys, then the dev tool's save and
+/// The Forge's key line: the editor's own keys, then the Forge's save and
 /// leave.
 const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
     Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
@@ -211,8 +212,8 @@ impl App {
     /// The frontend's decoded, quantised sprite library — `SpriteArt::On`
     /// for a name in `enabled`, `SpriteArt::Off` for one in `disabled`,
     /// `SpriteArt::None` for neither. app-core does no file I/O of its own;
-    /// a real frontend fills both maps by scanning `assets/sprites/` (Task
-    /// 8's job, not this one's). `disabled` is decoded pixels, not bare
+    /// a real frontend fills both maps by scanning the shipped and
+    /// player sprite folders. `disabled` is decoded pixels, not bare
     /// names, so `Enter` on an `Off` subject can reopen the art itself — see
     /// `sprite_disabled`'s own doc comment.
     pub fn install_sprite_library(
@@ -266,7 +267,7 @@ impl App {
     /// asset directories that often would be dozens of `.ron` files loaded
     /// per second for as long as the picker stays up. `art`, in contrast,
     /// must stay live: it is what `SpriteEditor`'s save and toggle change,
-    /// and Task 8's whole point is the map updating without a restart, so
+    /// and the map must update without a restart, so
     /// it is looked up in `sprite_library`/`sprite_disabled` fresh on every
     /// call. The cache still starts empty and is filled only on first use,
     /// so a session that never opens the picker parses nothing at all —
@@ -397,9 +398,8 @@ impl App {
             .collect()
     }
 
-    /// `Esc` backs out through `close_screen`, which is the main menu for
-    /// the `[D]` row and the dev keypad for the console's — see
-    /// `open_sprite_forge`. `[t]` toggles a
+    /// `Esc` backs out through `close_screen` to the Sprites options page
+    /// it was opened from — see `open_sprite_forge`. `[t]` toggles a
     /// subject with art between `On` and `Off` (queuing the rename cue) and
     /// does nothing on one with none to toggle. `Enter` opens
     /// `Mode::SpriteEditor` on the highlighted subject — loading its
@@ -525,7 +525,7 @@ impl App {
 
     /// Drains every `SpriteWrite` queued since the last call —
     /// `App::take_sounds`'s seam: app-core queues and forgets, the frontend
-    /// (Task 8) drains, performs the write or rename, and re-installs the
+    /// drains, performs the write or rename, and re-installs the
     /// library so the map updates without a restart.
     pub fn take_sprite_writes(&mut self) -> Vec<SpriteWrite> {
         std::mem::take(&mut self.pending_sprite_writes)

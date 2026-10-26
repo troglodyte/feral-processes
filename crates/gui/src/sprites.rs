@@ -13,6 +13,7 @@
 //! supported way deleting `assets/settlements/` restores a world with no
 //! towns in it.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -88,8 +89,8 @@ pub fn frames_to_png(frames: &[Canvas], path: &Path) -> std::io::Result<()> {
 /// `SPRITE_PALETTE` through `quantise` — the codec's other half.
 ///
 /// **The format is guessed from the bytes, not the extension.** A disabled
-/// sprite's real PNG data sits behind a `.png.off` path (`scan_library`'s own
-/// naming rule), and `image::open`'s extension-based dispatch cannot decode
+/// sprite's real PNG data sits behind a `.png.off` path (the `.off` naming
+/// rule in `sprite_layers`), and `image::open`'s extension-based dispatch cannot decode
 /// that; `ImageReader::with_guessed_format` sniffs the magic bytes instead,
 /// so this one function reads both an enabled sprite and its disabled
 /// counterpart identically.
@@ -157,11 +158,35 @@ pub struct Sprites {
     /// answer "has this changed?" by value, and the handle is kept so the
     /// old registration can be taken back before a new one replaces it.
     drawn: Option<(PlayerIcon, Handle<Image>)>,
+    /// The handle each table stem was registered under. Every `Assets::add`
+    /// reload mints a new image, and `EguiUserTextures` holds it strongly,
+    /// so a name leaving the table must hand its handle back too.
+    handles: HashMap<String, Handle<Image>>,
 }
 
 impl Sprites {
     pub fn table(&self) -> Arc<SpriteTable> {
         Arc::clone(&self.table)
+    }
+
+    /// Takes `name` out of the table, frees the textures it was drawn from,
+    /// and forgets any load still queued for it — a late load for the old
+    /// art must not land over what the caller is about to queue.
+    fn drop_name(&mut self, name: &str, textures: &mut EguiUserTextures) {
+        // `Arc::make_mut` for `register`'s reason: the renderer may be
+        // holding a clone of the old table from this frame.
+        Arc::make_mut(&mut self.table).remove(name);
+        self.pending.retain(|(key, _)| {
+            key.stem
+                .strip_suffix(FULL_COLOUR_SUFFIX)
+                .unwrap_or(&key.stem)
+                != name
+        });
+        for stem in [name.to_string(), format!("{name}{FULL_COLOUR_SUFFIX}")] {
+            if let Some(handle) = self.handles.remove(&stem) {
+                textures.remove_image(&handle);
+            }
+        }
     }
 
     /// Puts the player's drawn icon on the GPU, or takes it back off.
@@ -424,6 +449,7 @@ pub fn drain_writes(
     mut frontend: ResMut<crate::Frontend>,
     mut sprites: ResMut<Sprites>,
     mut images: ResMut<Assets<Image>>,
+    mut textures: ResMut<EguiUserTextures>,
 ) {
     let writes = frontend.app.take_sprite_writes();
     if writes.is_empty() {
@@ -433,13 +459,11 @@ pub fn drain_writes(
     for write in writes {
         match layers.apply(&write.name, write.op) {
             WriteOutcome::Load(key) => {
-                // `Arc::make_mut` for `register`'s reason: the renderer may
-                // be holding a clone of the old table from this frame.
-                Arc::make_mut(&mut sprites.table).remove(&write.name);
+                sprites.drop_name(&write.name, &mut textures);
                 queue_load(&asset_server, &mut images, &layers, &mut sprites, key);
             }
             WriteOutcome::Remove { name, then_load } => {
-                Arc::make_mut(&mut sprites.table).remove(&name);
+                sprites.drop_name(&name, &mut textures);
                 for key in then_load {
                     queue_load(&asset_server, &mut images, &layers, &mut sprites, key);
                 }
@@ -451,6 +475,18 @@ pub fn drain_writes(
     frontend
         .app
         .install_sprite_library(library.enabled, library.disabled, library.edited);
+}
+
+/// The pace for the sheet `key` names. It lives beside the art it describes:
+/// the folder that owns the name, not always the shipped one.
+fn pace_for(layers: &SpriteLayers, key: &LoadKey) -> u32 {
+    let name = key
+        .stem
+        .strip_suffix(FULL_COLOUR_SUFFIX)
+        .unwrap_or(&key.stem);
+    layers
+        .dir(key.layer)
+        .map_or(DEFAULT_SPRITE_FRAME_MS, |dir| read_frame_ms(dir, name))
 }
 
 /// Hands each sprite to egui once its pixels have actually arrived.
@@ -504,9 +540,8 @@ pub fn register(
     // `Arc::make_mut` rather than rebuilding: the renderer may be holding a
     // clone of the old table from this frame, and this leaves that one alone.
     let layers = layers_of(&frontend.app);
-    let table = Arc::make_mut(&mut sprites.table);
     for (key, handle) in ready {
-        let name = key.stem;
+        let name = key.stem.clone();
         let frames = images
             .get(&handle)
             .and_then(|image| frames_in(image.width(), image.height()));
@@ -516,14 +551,12 @@ pub fn register(
             );
             continue;
         };
-        let id = textures.add_image(EguiTextureHandle::Strong(handle));
-        let pace = name.strip_suffix(FULL_COLOUR_SUFFIX).unwrap_or(&name);
-        // The pace lives beside the art it describes: the folder that owns
-        // the name, not always the shipped one.
-        let pace_ms = layers
-            .dir(key.layer)
-            .map_or(DEFAULT_SPRITE_FRAME_MS, |dir| read_frame_ms(dir, pace));
-        table.insert(name.as_str(), id, frames, pace_ms);
+        let id = textures.add_image(EguiTextureHandle::Strong(handle.clone()));
+        let pace_ms = pace_for(&layers, &key);
+        Arc::make_mut(&mut sprites.table).insert(name.as_str(), id, frames, pace_ms);
+        if let Some(old) = sprites.handles.insert(name, handle) {
+            textures.remove_image(&old);
+        }
     }
 }
 
@@ -839,6 +872,41 @@ pub(crate) mod tests {
             ..layers
         };
         assert_eq!(route(&none, &key(Layer::User, "x")), None);
+    }
+
+    #[test]
+    fn pace_is_read_from_the_folder_that_owns_the_key() {
+        let root = codec_test_dir("pace_for");
+        let (shipped, user) = (root.join("shipped"), root.join("user"));
+        std::fs::create_dir_all(&shipped).unwrap();
+        std::fs::create_dir_all(&user).unwrap();
+        std::fs::write(anim_path(&shipped, "x"), "(frame_ms: 400)").unwrap();
+        std::fs::write(anim_path(&user, "x"), "(frame_ms: 250)").unwrap();
+        let layers = SpriteLayers {
+            shipped,
+            user: Some(user),
+        };
+        let key = |layer, stem: &str| LoadKey {
+            layer,
+            stem: stem.to_string(),
+        };
+
+        let from_user = pace_for(&layers, &key(Layer::User, "x"));
+        let from_user_colour = pace_for(&layers, &key(Layer::User, "x.colour"));
+        let from_shipped = pace_for(&layers, &key(Layer::Shipped, "x"));
+        let no_user = pace_for(
+            &SpriteLayers {
+                user: None,
+                ..layers
+            },
+            &key(Layer::User, "x"),
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+        assert_eq!(from_user, 250);
+        assert_eq!(from_user_colour, 250);
+        assert_eq!(from_shipped, 400);
+        assert_eq!(no_user, DEFAULT_SPRITE_FRAME_MS);
     }
 
     #[test]

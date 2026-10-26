@@ -14,7 +14,7 @@ use feral_processes_engine::routine_craft::Subroutine;
 use feral_processes_engine::views::BuildPreview;
 
 /// A description or note, wrapped dim under the row it belongs to.
-fn dim_lines(text: &str) -> Vec<Row> {
+pub(super) fn dim_lines(text: &str) -> Vec<Row> {
     continuation_lines_within(text, HUB_WRAP_COLUMNS)
         .into_iter()
         .map(|line| colored_item_row(line, false, TEXT_DIM))
@@ -23,14 +23,14 @@ fn dim_lines(text: &str) -> Vec<Row> {
 
 /// A plain wrapped line of the preview. `Row::Text` so the block after the
 /// last item is the pinned footer.
-fn text_lines(text: &str) -> Vec<Row> {
+pub(super) fn text_lines(text: &str) -> Vec<Row> {
     wrap_text(text, HUB_WRAP_COLUMNS)
         .into_iter()
         .map(text_row)
         .collect()
 }
 
-fn count_label(counted: &[(String, u32)]) -> String {
+pub(super) fn count_label(counted: &[(String, u32)]) -> String {
     counted
         .iter()
         .map(|(label, n)| {

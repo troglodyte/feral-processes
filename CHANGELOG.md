@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.7
+
+**Redraw any sprite in the game.** The Game Menu has a new Sprites page that opens the sprite editor for every player; before, it was a developer tool. Your drawings are saved in your data folder (`sprites/` beside your saves) and replace the built-in art, one name at a time. The list marks what you have edited, and `r` reverts a sprite to the original. A sprite that can't be saved says so on the status line. The built-in art is never changed. Saves are unaffected.
+
 ## 0.20.6
 
 **Every base structure has its own picture on the map.** Factories, extractors, the benches, rigs, walls, doors and the rest draw as a small icon instead of a letter, so a base reads at a glance. Before, only the Depot and the Home had art; everything else showed its glyph. Each icon still takes the colour its letter had, and walls join up into one brick surface. Saves are unaffected.

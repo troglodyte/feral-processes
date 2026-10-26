@@ -97,7 +97,7 @@ Do not duplicate between them; point instead.
 | [0027](0027-refusals-are-typed-per-feature.md) | Refusals are typed per feature | Proposed | Claude — proposed, awaiting the user | Refusal enum |
 | [0028](0028-announcements-fire-on-a-crossing.md) | Announcements fire on a crossing | Proposed | Claude — proposed, awaiting the user | Edge trigger |
 | [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | Player routines are compiled from a Rust part catalogue | Accepted (0.20.0) | the user, 2026-10-24 | Builder |
-| [0030](0030-player-sprites-override-shipped-art-per-name.md) | Player sprites override shipped art, per name, from the data folder | Agreed | user, on Claude's proposal | Layered lookup |
+| [0030](0030-player-sprites-override-shipped-art-per-name.md) | Player sprites override shipped art, per name, from the data folder | Accepted | user, on Claude's proposal | Layered lookup |
 
 ## Pattern index
 
@@ -125,4 +125,4 @@ A pattern not listed here, or listed only as (Proposed), is not yet agreed: it n
 | Refusal enum (Proposed) | [0027](0027-refusals-are-typed-per-feature.md) | `SortieRefusal`, `ContractRefusal` |
 | Edge trigger (Proposed) | [0028](0028-announcements-fire-on-a-crossing.md) | `Outpost::announced` (latch form) |
 | Builder, parts compiled into a value | [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | none yet (proposed `routine_craft::compile`) |
-| Layered lookup (user over shipped, per name) | [0030](0030-player-sprites-override-shipped-art-per-name.md) | none yet (proposed user sprite layer in `crates/gui/src/sprites.rs`) |
+| Layered lookup (user over shipped, per name) | [0030](0030-player-sprites-override-shipped-art-per-name.md) | `crates/gui/src/sprite_layers.rs` |

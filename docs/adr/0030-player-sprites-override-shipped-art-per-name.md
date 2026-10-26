@@ -1,6 +1,6 @@
 # 0030 — Player sprites override shipped art, per name, from the data folder
 
-- Status: Agreed
+- Status: Accepted
 - Decided by: user, on Claude's proposal
 - Date: 2026-10-26
 - Pattern: Layered lookup (user layer over shipped layer)

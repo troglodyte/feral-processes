@@ -9,7 +9,7 @@
 //! Drawing is `Mode::SpriteEditor`'s Task 7, not this module's.
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
@@ -57,15 +57,6 @@ const FLOOR_SPRITE_GLYPH: char = '_';
 
 /// The glyph a prop subject previews against, `draw_prop`'s breakable class.
 const PROP_SPRITE_GLYPH: char = '%';
-
-/// Whether `FERAL_DEV_SPRITES` — or the `FERAL_DEV` master switch — was set
-/// when this `App` was built. Same predicate as `dev_arena_enabled` and
-/// `dev_console_enabled` — one answer to "is a dev tool on" is the rule
-/// `dev_console::dev_tool_flag`'s doc comment records, and two answers is
-/// drift this repo has already caught.
-pub(crate) fn dev_sprite_forge_flag() -> bool {
-    super::dev_console::dev_tool_flag("FERAL_DEV_SPRITES")
-}
 
 /// Whether a subject in `App::sprite_subjects` has art, and if so whether
 /// the map draws it. `Off` is not `None`: the art is still on disk, and the
@@ -210,22 +201,15 @@ const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
     Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
 
 impl App {
-    /// Marks that a sprite dir exists for this build to read and write
-    /// PNGs through — installed by the launcher unconditionally within a
-    /// checkout, mirroring `install_dev_templates`: the flag alone decides
-    /// visibility from there, so installing this only when
-    /// `FERAL_DEV_SPRITES` is set would make one flag mean two things. An
-    /// installed build has no checkout to resolve this from at all, which
-    /// is the other half of the gate — see `sprite_forge_enabled`.
-    ///
-    /// **Takes no path** (M1, final review): the real directory every
-    /// read/write actually uses is `assets_dir().join("sprites")`, derived
-    /// fresh at each site in `crates/gui/src/sprites.rs` — a path stored
-    /// here was never read back as one, only tested with `.is_some()`, so
-    /// it could silently name a different directory than the one really in
-    /// use (e.g. under `--assets <override>`) with nothing to catch it.
-    pub fn install_sprite_dir(&mut self) {
-        self.sprite_dir_installed = true;
+    /// Tells the app where the player's own sprites live. The launcher
+    /// derives it; the frontend reads and writes it.
+    pub fn set_user_sprite_dir(&mut self, dir: PathBuf) {
+        self.user_sprite_dir = Some(dir);
+    }
+
+    /// The player's sprite folder, `None` in tests and the arena.
+    pub fn user_sprite_dir(&self) -> Option<&Path> {
+        self.user_sprite_dir.as_deref()
     }
 
     /// The frontend's decoded, quantised sprite library — `SpriteArt::On`
@@ -244,36 +228,17 @@ impl App {
         self.sprite_disabled = disabled;
     }
 
-    /// Whether the main menu offers the sprite picker at all — the flag
-    /// *and* a sprite dir installed, so a shipped build (no checkout, so no
-    /// `install_sprite_dir` call ever lands) cannot offer a screen whose
-    /// entire purpose is writing into a source tree it does not have.
-    pub fn sprite_forge_enabled(&self) -> bool {
-        self.sprite_forge_flag && self.sprite_dir_installed
-    }
-
-    /// The one door into `Mode::SpritePicker`, shared by the main menu's
-    /// `[D]` row and the dev console's `Open Sprite Forge` row.
+    /// The one door into `Mode::SpritePicker`, from the game menu's Sprites
+    /// rail entry.
     ///
     /// **`menu_origin` is what tells Esc which door it came through** —
-    /// `handle_group_menu_key`'s seam, reused rather than a second slot,
-    /// because the two doors stand on opposite sides of a run: the menu
-    /// door has no game behind it and the console door has a map the player
-    /// is standing on. Written here rather than at each caller so the
-    /// picker's Esc has exactly one rule to follow.
-    ///
-    /// The refusal is reachable only through the console: the main menu
-    /// builds its key list off `sprite_forge_enabled` and never offers the
-    /// row, where the keypad hides no row at all (see `DEV_ROWS`).
+    /// `handle_group_menu_key`'s seam, reused rather than a second slot.
+    /// Written here rather than at the caller so the picker's Esc has
+    /// exactly one rule to follow.
     pub(crate) fn open_sprite_forge(&mut self) {
-        if !self.sprite_forge_enabled() {
-            self.refuse(
-                "Sprite Forge is off: set FERAL_DEV_SPRITES and run from a checkout.".to_string(),
-            );
-            return;
-        }
         self.status_line = None;
-        self.menu_origin = Some(self.mode);
+        self.menu_origin = Some(Mode::SpriteOptions);
+        self.menu_selected = 0;
         self.mode = Mode::SpritePicker;
     }
 

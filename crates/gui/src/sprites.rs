@@ -349,15 +349,7 @@ pub fn load(
 /// picker's art column and the editor's opening canvas answer "what's
 /// installed" correctly from the very first frame rather than only after
 /// the first save.
-///
-/// Gated on `sprite_forge_enabled()` — the picker and editor are the only
-/// readers of this state, and both are unreachable without the flag *and*
-/// a checkout, so decoding every shipped sprite into a `Canvas` here would
-/// be pure cost with no reader on every other build and every ordinary run.
 pub fn install_library(app: &mut feral_processes_app_core::App) {
-    if !app.sprite_forge_enabled() {
-        return;
-    }
     let dir = app.assets_dir().join("sprites");
     let (enabled, disabled) = scan_library(&dir);
     app.install_sprite_library(enabled, disabled);

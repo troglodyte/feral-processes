@@ -52,13 +52,6 @@ pub enum DevAction {
     GiveItem,
     /// Opens `Mode::DevZonePicker`.
     WarpZone,
-    /// The one row that opens a screen instead of provoking an event —
-    /// `Mode::SpritePicker`. It lives on the keypad rather than on a key of
-    /// its own because the keypad is already the map's dev door and is
-    /// already bound above the hand-off to `handle_stack_key`, so the forge
-    /// reaches the open grid, base space and a Stack frame through an arm
-    /// that was written once.
-    OpenSpriteForge,
 }
 
 pub struct DevConsoleRow {
@@ -139,16 +132,6 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Warp to zone",
         action: DevAction::WarpZone,
-    },
-    // Below the triggers, being the one row that provokes nothing: it opens
-    // the Sprite Forge over whatever the map is showing. Kept here rather
-    // than hidden when `FERAL_DEV_SPRITES` is unset, per this table's
-    // no-row-is-ever-hidden rule — the press refuses with a sentence
-    // instead, which a silent no-op could not be told apart from an unbound
-    // key.
-    DevConsoleRow {
-        label: "Open Sprite Forge",
-        action: DevAction::OpenSpriteForge,
     },
 ];
 
@@ -267,10 +250,6 @@ impl App {
         // this row opens a screen, which spends no tick and needs no world
         // to act on. Every arm below it does both.
         match action {
-            DevAction::OpenSpriteForge => {
-                self.open_sprite_forge();
-                return;
-            }
             DevAction::GiveItem => return self.open_dev_picker(Mode::DevItemPicker),
             DevAction::WarpZone => return self.open_dev_picker(Mode::DevZonePicker),
             _ => {}
@@ -327,8 +306,7 @@ impl App {
             // `use_ability`'s `Tamper` arm's pattern, so a row that opens a
             // screen cannot quietly acquire a tick by being added to this
             // match instead.
-            DevAction::OpenSpriteForge
-            | DevAction::GiveItem
+            DevAction::GiveItem
             | DevAction::WarpZone
             | DevAction::ToggleFreeBuild
             | DevAction::SpawnCompanion => unreachable!("handled above"),

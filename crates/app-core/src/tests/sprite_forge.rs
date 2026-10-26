@@ -1,10 +1,6 @@
-//! `Mode::SpritePicker` and `Mode::SpriteEditor` — the subject list, both
-//! gates, the editing screen, the write cue and the pointer entry point.
-//!
-//! Both gates are fields read once in `App::new` (or set by
-//! `install_sprite_dir`), not a live env lookup, so a test can open them
-//! without touching an environment the parallel suite shares — the same
-//! reasoning `dev_arena_enabled` records.
+//! `Mode::SpriteOptions`, `Mode::SpritePicker` and `Mode::SpriteEditor` — the
+//! rail entry, the subject list, the editing screen, the write cue and the
+//! pointer entry point.
 
 use std::collections::HashMap;
 
@@ -29,72 +25,49 @@ fn colour(canvas: Canvas) -> InstalledSprite {
     }
 }
 
-/// An app sitting on the main menu with both gates open — the flag and a
-/// sprite dir installed.
+/// An app sitting on the main menu with no run behind it.
 fn app_with_sprite_forge(seed: u32) -> App {
     let mut app = test_app(seed);
     app.game = None;
     app.mode = Mode::MainMenu;
-    app.sprite_forge_flag = true;
-    app.install_sprite_dir();
     app
 }
 
 #[test]
-fn neither_gate_open_leaves_the_row_absent_and_the_mode_unreachable() {
+fn the_game_menu_rail_offers_sprites_before_save_and_quit() {
     let mut app = test_app(1);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    // The default `test_app` state, made explicit: no flag, no dir.
-    app.sprite_forge_flag = false;
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-
+    app.open_game_menu(true);
+    let titles: Vec<_> = Hub::GameMenu
+        .kind()
+        .pages(&app)
+        .iter()
+        .map(|p| p.title)
+        .collect();
     assert_eq!(
-        app.mode,
-        Mode::MainMenu,
-        "the row must not be reachable with neither gate open"
+        titles,
+        ["Gameplay", "Audio", "Graphics", "Sprites", "Save & quit"]
     );
 }
 
 #[test]
-fn the_flag_alone_is_not_enough_without_a_checkout() {
-    let mut app = test_app(2);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    app.sprite_forge_flag = true;
-    // No `install_sprite_dir` call — an installed build's whole story:
-    // there is no repo to write art into, so the row must stay off even
-    // with the flag set.
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-    assert_eq!(app.mode, Mode::MainMenu);
-}
-
-#[test]
-fn a_dir_alone_is_not_enough_without_the_flag() {
-    let mut app = test_app(3);
-    app.game = None;
-    app.mode = Mode::MainMenu;
-    app.install_sprite_dir();
-    // `sprite_forge_flag` left false.
-
-    assert!(!app.sprite_forge_enabled());
-    app.handle_key(GameKey::Char('d'));
-    assert_eq!(app.mode, Mode::MainMenu);
-}
-
-#[test]
-fn both_gates_open_d_opens_the_picker_and_esc_returns() {
+fn enter_on_the_sprites_rail_entry_opens_the_picker_and_esc_returns_to_the_rail() {
     let mut app = app_with_sprite_forge(4);
-    assert!(app.sprite_forge_enabled());
-
-    app.handle_key(GameKey::Char('d'));
+    app.open_game_menu(false);
+    for _ in 0..3 {
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::SpriteOptions);
+    app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::SpritePicker);
-
     app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::SpriteOptions);
+    assert!(app.hub_on_rail);
+}
+
+#[test]
+fn the_main_menu_has_no_sprite_forge_row() {
+    let mut app = app_with_sprite_forge(2);
+    app.handle_key(GameKey::Char('d'));
     assert_eq!(app.mode, Mode::MainMenu);
 }
 
@@ -646,132 +619,6 @@ fn a_pointer_event_outside_the_sprite_editor_changes_nothing() {
     assert!(app.take_sprite_writes().is_empty());
 }
 
-/// The console's own gate plus both of the forge's, on a live run — the
-/// second door's fixture, where `app_with_sprite_forge` is the first
-/// door's and deliberately has no game at all.
-fn open_the_dev_gates(app: &mut App) {
-    app.enable_dev_console_for_test();
-    app.sprite_forge_flag = true;
-    app.install_sprite_dir();
-}
-
-/// Where the forge sits in the keypad. Read off the table rather than
-/// written as a number, `every_console_row_has_a_label_and_the_selection_
-/// stays_in_range`'s rule: the table is the one source of both the label
-/// and the action, so a test that hardcoded `6` would start firing a raid
-/// the day a row is inserted above it.
-fn forge_row() -> usize {
-    App::dev_console_rows()
-        .iter()
-        .position(|row| row.action == DevAction::OpenSpriteForge)
-        .expect("the keypad carries the forge's second door")
-}
-
-/// The whole of what the second door is for: the map is the same
-/// `Mode::Playing` on the open grid, inside base space and down a Stack
-/// frame, and the console key is bound in `handle_playing_key`'s top match
-/// — above the hand-off to `handle_stack_key` — so one arm reaches all
-/// three. Asserted per locale anyway, because "one arm reaches all three"
-/// is a property of where that arm sits and nothing makes it fail to
-/// compile if it moves below the hand-off.
-#[test]
-fn the_console_opens_the_forge_in_every_locale() {
-    let field = {
-        let mut app = test_app(30);
-        open_the_dev_gates(&mut app);
-        app
-    };
-    let based = {
-        let mut app = test_app(31);
-        super::support::found_the_base(&mut app);
-        super::support::stand_in_base(&mut app);
-        open_the_dev_gates(&mut app);
-        app
-    };
-    let stack = {
-        let mut app = super::support::app_underground(32);
-        open_the_dev_gates(&mut app);
-        app
-    };
-
-    for (locale, mut app) in [
-        ("the field", field),
-        ("base space", based),
-        ("the Stack", stack),
-    ] {
-        assert_eq!(
-            app.mode,
-            Mode::Playing,
-            "{locale}: the fixture starts on the map"
-        );
-
-        app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-        assert_eq!(app.mode, Mode::DevConsole, "{locale}: the keypad opens");
-
-        app.menu_selected = forge_row();
-        app.handle_key(GameKey::Enter);
-        assert_eq!(
-            app.mode,
-            Mode::SpritePicker,
-            "{locale}: the forge must open mid-run"
-        );
-
-        app.handle_key(GameKey::Esc);
-        assert_eq!(
-            app.mode,
-            Mode::DevConsole,
-            "{locale}: Esc leaves by the door it came through"
-        );
-    }
-}
-
-/// Opening a screen is not provoking an event: every other row ends in
-/// `after_world_action` and spends a tick, and this one must not — the
-/// forge is reached mid-fight-free but the world should stand exactly where
-/// it was while you draw.
-#[test]
-fn opening_the_forge_spends_no_tick() {
-    let mut app = test_app(33);
-    open_the_dev_gates(&mut app);
-    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-    let before = app.game.as_ref().unwrap().current_tick();
-
-    app.menu_selected = forge_row();
-    app.handle_key(GameKey::Enter);
-
-    assert_eq!(app.mode, Mode::SpritePicker);
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        before,
-        "opening a screen must not age the world"
-    );
-}
-
-/// `FERAL_DEV_CONSOLE=1` alone, or an installed build with no checkout to
-/// write art into. The row is still drawn — the keypad hides none of its
-/// rows on purpose — so the press has to say why rather than doing
-/// nothing, which is indistinguishable from the key not being bound.
-#[test]
-fn the_forge_row_refuses_when_the_forge_is_shut() {
-    let mut app = test_app(34);
-    app.enable_dev_console_for_test();
-    assert!(!app.sprite_forge_enabled());
-
-    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
-    app.menu_selected = forge_row();
-    app.handle_key(GameKey::Enter);
-
-    assert_eq!(
-        app.mode,
-        Mode::DevConsole,
-        "a row this build cannot honour must not open the screen"
-    );
-    assert!(
-        app.status_line.is_some(),
-        "and it must say why rather than doing nothing"
-    );
-}
-
 // ---- the variant rule ---------------------------------------------------
 
 /// Index 9 is the lightest grey, 10 the first hue: the grey ramp is `1..=9`.
@@ -1267,7 +1114,7 @@ fn each_button_names_the_key_the_footer_documents() {
 
 fn on_the_picker(seed: u32) -> App {
     let mut app = app_with_sprite_forge(seed);
-    app.handle_key(GameKey::Char('d'));
+    app.open_sprite_forge();
     assert_eq!(app.mode, Mode::SpritePicker);
     app
 }

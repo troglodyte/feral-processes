@@ -650,6 +650,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         Mode::GameplayOptions
         | Mode::AudioOptions
         | Mode::GraphicsOptions
+        | Mode::SpriteOptions
         | Mode::QuitRunConfirm => draw_game_menu_page(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
@@ -1932,7 +1933,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 164] = [
+    const ALL_MODES: [Mode; 165] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -2079,6 +2080,7 @@ mod tests {
         Mode::GameplayOptions,
         Mode::AudioOptions,
         Mode::GraphicsOptions,
+        Mode::SpriteOptions,
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
@@ -2772,6 +2774,7 @@ mod tests {
             Mode::GameplayOptions,
             Mode::AudioOptions,
             Mode::GraphicsOptions,
+            Mode::SpriteOptions,
             Mode::QuitRunConfirm,
         ]
         .into_iter()

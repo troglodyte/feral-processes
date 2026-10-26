@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.4
+
+**Benches use what the base is storing, not just what you carry.** In the base, the Workbench (making Subroutines, building routines, and compiling the gear that needs a bench), the Mod Bench, forging a tool and fitting a Teardown Rig now draw on every Depot, machine output and stockpile, taking from the base before your pack. Recipes that need no bench, and anything done away from the base, still use your pack alone. A Teardown Rig no longer costs a program to build, and a rig with no tool fitted now runs on the Salvage Clamp instead of sitting idle. The Workbench's Subroutines page lists only the parts you have researched. Saves are unaffected.
+
 ## 0.20.3
 
 **The Workbench has a Compile page, and six pieces of gear can only be compiled there.** Scrap Ward, Shiv Routine, Packet Buffer, Kinetic Edge, Probe Service and Handshake Forge now need you standing beside a Workbench; the base menu's compile list keeps only what needs no bench (Breach Kit, Power Outlet, Power Cell, and Outpost Kit once researched). Compiling from the Workbench returns you to its Compile page when the batch finishes or is stopped, and if the Workbench is lost mid-batch the piece in progress is refunded. Saves are unaffected.

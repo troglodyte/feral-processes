@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.5
+
+**A Teardown Rig staffs itself.** While a downed program is waiting in a rig's hopper or in a Quarantine Rack, and the rig has room for what it will pay, the base posts one of your crew to it without a standing job, and lets them go once there is nothing left to strip. A standing job on a rig now keeps it staffed too; before, only posting a program by hand did. A rig too full to take its next payout lets its worker go and shows Idle, as other machines do. Saves are unaffected.
+
 ## 0.20.4
 
 **Benches use what the base is storing, not just what you carry.** In the base, the Workbench (making Subroutines, building routines, and compiling the gear that needs a bench), the Mod Bench, forging a tool and fitting a Teardown Rig now draw on every Depot, machine output and stockpile, taking from the base before your pack. Recipes that need no bench, and anything done away from the base, still use your pack alone. A Teardown Rig no longer costs a program to build, and a rig with no tool fitted now runs on the Salvage Clamp instead of sitting idle. The Workbench's Subroutines page lists only the parts you have researched. Saves are unaffected.

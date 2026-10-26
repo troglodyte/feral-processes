@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.6
+
+**Every base structure has its own picture on the map.** Factories, extractors, the benches, rigs, walls, doors and the rest draw as a small icon instead of a letter, so a base reads at a glance. Before, only the Depot and the Home had art; everything else showed its glyph. Each icon still takes the colour its letter had, and walls join up into one brick surface. Saves are unaffected.
+
 ## 0.20.5
 
 **A Teardown Rig staffs itself.** While a downed program is waiting in a rig's hopper or in a Quarantine Rack, and the rig has room for what it will pay, the base posts one of your crew to it without a standing job, and lets them go once there is nothing left to strip. A standing job on a rig now keeps it staffed too; before, only posting a program by hand did. A rig too full to take its next payout lets its worker go and shows Idle, as other machines do. Saves are unaffected.

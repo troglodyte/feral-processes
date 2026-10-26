@@ -4380,14 +4380,21 @@ use crate::views::{MarketOfferKind, RoutineScope};
 /// also what stops a retune of that constant turning every market test into
 /// a mystery `None`.
 fn game_at_a_market() -> Game {
+    game_at_a_market_where(|_| {}, |_| true)
+}
+
+/// `game_at_a_market` for the first seed whose market `accept`s, after
+/// `prepare` (which may open research) has run on the fresh game.
+fn game_at_a_market_where(prepare: impl Fn(&mut Game), accept: impl Fn(&mut Game) -> bool) -> Game {
     for seed in 0..60 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        prepare(&mut game);
         descend(&mut game);
         if stand_facing(&mut game, CellKind::Market).is_some() {
             step_forward_clear(&mut game);
             // The step can be interrupted by an ambush the flee walked the
             // party back out of, so confirm rather than assume.
-            if game.stack_market().is_some() {
+            if game.stack_market().is_some() && accept(&mut game) {
                 return game;
             }
         }
@@ -4524,6 +4531,40 @@ fn a_market_stocks_weapon_parts_only_from_the_shelf_and_only_once_the_tree_is_op
     assert!(!found.is_empty(), "no shelf listed a weapon part");
     let shelf = crate::gear_craft::WeaponPart::shelf();
     assert!(found.iter().all(|p| shelf.contains(p)), "{found:?}");
+}
+
+/// A weapon-part row hands over the part, takes its price in Credits and is
+/// marked spent.
+#[test]
+fn buying_a_weapon_part_row_grants_the_part_and_spends_the_row() {
+    let mut game = game_at_a_market_where(
+        |g| unlock_research_chain(g, "weapon_bench"),
+        |g| first_offer(g, |o| matches!(o, MarketOfferKind::WeaponPart { .. })).is_some(),
+    );
+    give_credits(&mut game, 5_000);
+    let before = credits(&game);
+    let index = first_offer(&mut game, |o| {
+        matches!(o, MarketOfferKind::WeaponPart { .. })
+    })
+    .unwrap();
+    let pos = game.stack_pos().unwrap();
+    let MarketOfferKind::WeaponPart { part } = game.market_offers(pos)[index].clone() else {
+        unreachable!()
+    };
+    let item = ItemId::weapon_part(part);
+    let held = game.held_in_reach(&item);
+
+    game.buy_market_offer(index).unwrap();
+
+    assert_eq!(game.held_in_reach(&item), held + 1);
+    assert_eq!(
+        credits(&game),
+        before - crate::tuning::GEAR_MARKET_PART_PRICE
+    );
+    assert_eq!(
+        game.buy_market_offer(index),
+        Err("That's already been sold.".to_string())
+    );
 }
 
 /// Buying the narrowest rung hands over that rung's parts and spends its

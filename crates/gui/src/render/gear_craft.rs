@@ -15,6 +15,7 @@ use feral_processes_app_core::{
     DESIGN_AFFIX_ROW, DESIGN_NAME_ROW, DESIGN_SAVE_ROW, DesignDraft, DesignPicking, affix_label,
     design_pick_visible, design_row_category, gear_craft_refusal_line,
 };
+use feral_processes_engine::gear_craft::GearCraftRefusal;
 use feral_processes_engine::views::DesignPreview;
 
 /// The Forge: every saved design, Enter builds one and `D` deletes it.
@@ -149,7 +150,10 @@ pub(super) fn pick_rows(
             for (i, &src) in visible.iter().enumerate() {
                 let option = &options[src];
                 let (note, color) = match (&option.unavailable, option.held) {
-                    (Some(_), _) => ("greyed".to_string(), TEXT_DIM),
+                    (Some(GearCraftRefusal::PartNotResearched(_)), _) => {
+                        ("not researched".to_string(), TEXT_DIM)
+                    }
+                    (Some(_), _) => ("does not fit".to_string(), TEXT_DIM),
                     (None, 0) => ("none held".to_string(), TEXT_DIM),
                     (None, held) => (format!("{held} held"), TEXT),
                 };
@@ -159,7 +163,11 @@ pub(super) fn pick_rows(
                     i == selected,
                     color,
                 ));
-                if let Some(why) = &option.unavailable {
+                if let Some(why) = option
+                    .unavailable
+                    .as_ref()
+                    .filter(|w| !matches!(w, GearCraftRefusal::PartNotResearched(_)))
+                {
                     rows.extend(dim_lines(&gear_craft_refusal_line(game, why)));
                 }
             }

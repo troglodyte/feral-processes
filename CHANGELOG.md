@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.20.8
 
 **Once Weapon Fabrication is researched, you design your own weapons at a Workbench: one Frame (Edge, Lance, Whip or Launcher) plus modifiers for range, reach, damage type, a status on hit, extra damage against a target already carrying a status, an accuracy-for-damage trade, capture, a granted routine, and affixes.** The Forge, New design, Weapon parts and Salvage pages appear on the Workbench. A design is saved, so you can build it again from a fresh set of parts; the preview shows what the weapon will do before you spend anything. Higher Frame versions hit harder.
 

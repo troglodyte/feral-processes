@@ -213,3 +213,17 @@ pub fn weapon_research_cost(scope_rank: u8, version: u32, zone: u32) -> u32 {
         + GEAR_RESEARCH_ZONE_STEP * (zone.max(1) - 1)
         + GEAR_RESEARCH_VERSION_STEP * version.saturating_sub(1)
 }
+
+// ---------------------------------------------------------------------------
+// Shelves
+// ---------------------------------------------------------------------------
+
+/// The odds a Stack market carries one weapon part, rolled after every
+/// other row so adding it shifts no earlier draw.
+pub const GEAR_MARKET_PART_CHANCE: f64 = 0.5;
+/// What a Stack market charges for one weapon part: the routine part's
+/// single-part rung, `STACK_MARKET_ROUTINE_PRICE_ONE`.
+pub const GEAR_MARKET_PART_PRICE: u32 = 150;
+/// The odds a caravan or settlement shelf carries one extra weapon part
+/// row, drawn after the shelf is dealt for the same reason.
+pub const GEAR_SHELF_PART_CHANCE: f64 = 0.5;

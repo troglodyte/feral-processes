@@ -4495,6 +4495,37 @@ fn a_market_never_lists_a_hybrid_program() {
     );
 }
 
+/// A market sells weapon parts from `WeaponPart::shelf()` and never a payoff
+/// or a granted routine, and not at all before the Weapons tree opens.
+#[test]
+fn a_market_stocks_weapon_parts_only_from_the_shelf_and_only_once_the_tree_is_open() {
+    let mut game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+    let weapon_rows = |game: &Game| -> Vec<crate::gear_craft::WeaponPart> {
+        let mut found = Vec::new();
+        for depth in 1..=40 {
+            for frames in 0..10 {
+                for offer in game.market_offers(StackPos {
+                    depth,
+                    frames,
+                    ..pos
+                }) {
+                    if let MarketOfferKind::WeaponPart { part } = offer {
+                        found.push(part);
+                    }
+                }
+            }
+        }
+        found
+    };
+    assert!(weapon_rows(&game).is_empty(), "the tree is closed");
+    unlock_research_chain(&mut game, "weapon_bench");
+    let found = weapon_rows(&game);
+    assert!(!found.is_empty(), "no shelf listed a weapon part");
+    let shelf = crate::gear_craft::WeaponPart::shelf();
+    assert!(found.iter().all(|p| shelf.contains(p)), "{found:?}");
+}
+
 /// Buying the narrowest rung hands over that rung's parts and spends its
 /// price. The parts land in cargo rather than anywhere that asks who they
 /// are for.

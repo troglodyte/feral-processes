@@ -143,7 +143,8 @@
   bounded above by what flooring the cell costs.
 
 - **A cost the *base* incurs is walked to and carried; a cost the *player*
-  incurs is paid from their pack.** The crew's tile is fetched off a shelf
+  incurs is paid from their pack — except at a bench in base space, which
+  pays through `Game::pay_from_reach` (base stores first, then the pack).** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
   hauler uses, over the same buffers the stock strip counts. Depot-only was
   rejected for the draw (it makes the strip a lie about what the base can

@@ -36,7 +36,8 @@ needs the weapon and armor benches first, then build one for 18 Core Fragments. 
 anywhere in the base is enough, and you do not have to be beside it. Open a weapon or armor in your
 pack and press M to modify its affixes. A piece has one affix slot, plus one for each time it has
 been fused. Enter on an empty slot lists the affixes you have researched for that kind of gear, and
-fitting one is paid in materials from your pack. R strips the highlighted affix for free, and the
+fitting one is paid in materials, from the base's stores first while you are in the base and
+then your pack. R strips the highlighted affix for free, and the
 affix is destroyed, whether you found it or fitted it. The Mod Bench research also opens the
 Affixes research tree, whose nodes stay hidden until a study attempt finds them. Some affixes can
 only be had this way and never drop.

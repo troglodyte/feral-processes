@@ -24,7 +24,8 @@ impl Game {
     /// Every refusal lands before anything is spent: game-over or an
     /// active battle, an id `ToolDb` cannot resolve, a tool the player
     /// hasn't researched, an already-installed tool, then a cost they
-    /// cannot pay.
+    /// cannot pay. In base space the cost is paid off the base's stores
+    /// first (`pay_from_reach`); elsewhere from the pack.
     pub fn forge_tool(&mut self, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -59,27 +60,19 @@ impl Game {
         for (item, qty) in &def.forge_cost {
             *cost.entry(item).or_insert(0) += qty;
         }
+        if let Some((item, qty)) = cost
+            .iter()
+            .find(|(item, qty)| self.held_in_reach(item) < **qty)
         {
-            let inventory = self.world.get::<Inventory>(player).unwrap();
-            if let Some((item, qty)) = cost
-                .iter()
-                .find(|(item, qty)| inventory.count(item) < **qty)
-            {
-                return Err(format!(
-                    "Not enough {} ({}/{}).",
-                    self.item_name(item),
-                    inventory.count(item),
-                    qty
-                ));
-            }
+            return Err(format!(
+                "Not enough {} ({}/{}).",
+                self.item_name(item),
+                self.held_in_reach(item),
+                qty
+            ));
         }
-        for (item, qty) in &cost {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .take((*item).clone(), *qty);
-            self.note_consumed(item, *qty, crate::base_ledger::ConsumeSource::Craft);
-        }
+        let bill: Vec<_> = cost.into_iter().map(|(i, q)| (i.clone(), q)).collect();
+        self.pay_from_reach(&bill)?;
         self.grant_loot(ItemId::tool(tool), 1, LootSource::Forge);
         self.log(format!("You forge a {}.", def.name));
         Ok(())
@@ -224,8 +217,9 @@ impl Game {
     /// beside the party, so a machine demolished or walked away from under
     /// the screen closes it rather than drawing a row that acts on nothing.
     ///
-    /// Candidates are the tools the player is *carrying a carrier for*, not
-    /// the tools they know: fitting one is a physical handover, and a row
+    /// Candidates are the tools with a carrier *in reach* — the pack or the
+    /// base's stores (`held_in_reach`) — not the tools they know: fitting
+    /// one is a physical handover, and a row
     /// offering a tool with nothing behind it is a row whose only outcome is
     /// a refusal. `Routines` and `Gear` are filtered out here for the same
     /// reason `install_rig_tool` refuses them — a rig cannot run either.
@@ -244,17 +238,13 @@ impl Game {
         let tile = (pos.x, pos.y);
         let built_in = self.world.get::<Hopper>(rig)?.standing_tool.is_none();
         let running = self.rig_tool(rig);
-        let player = self.player_entity();
-        let inventory = self.world.get::<Inventory>(player);
         let row = |def: &crate::tools::ToolDef| crate::views::RigToolRow {
             id: def.id.clone(),
             name: def.name.clone(),
             category: def.category,
             tier: def.tier,
             ticks: self.extraction_ticks(def),
-            carriers_held: inventory
-                .map(|inv| inv.count(&ItemId::tool(&def.id)))
-                .unwrap_or(0),
+            carriers_held: self.held_in_reach(&ItemId::tool(&def.id)),
         };
         let db = self.world.resource::<ToolDb>();
         let installed = db.get(running.as_str()).map(row);
@@ -262,11 +252,7 @@ impl Game {
             .all()
             .filter(|def| self.rig_runs(def).is_ok())
             .filter(|def| def.id != running)
-            .filter(|def| {
-                inventory
-                    .map(|inv| inv.count(&ItemId::tool(&def.id)) > 0)
-                    .unwrap_or(false)
-            })
+            .filter(|def| self.held_in_reach(&ItemId::tool(&def.id)) > 0)
             .map(row)
             .collect();
         Some(crate::views::RigToolView {
@@ -311,7 +297,7 @@ impl Game {
     /// Refusals, in order, all before anything is spent: game-over or an
     /// active battle, no such rig beside the party, an id `ToolDb` cannot
     /// resolve, a category the rig cannot run, the tool already fitted, no
-    /// carrier held.
+    /// carrier in the base's stores or the pack (base stores spent first).
     pub fn install_rig_tool(&mut self, rig: Entity, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -333,21 +319,10 @@ impl Game {
         if fitted.as_ref() == Some(tool) {
             return Err(format!("{} is already fitted.", def.name));
         }
-        let player = self.player_entity();
         let carrier = ItemId::tool(tool);
-        if self
-            .world
-            .get::<Inventory>(player)
-            .is_none_or(|inv| inv.count(&carrier) == 0)
-        {
-            return Err(format!("You're not carrying {}.", self.item_name(&carrier)));
+        if !self.spend_from_stores(&carrier, 1, crate::base_ledger::ConsumeSource::Install) {
+            return Err(format!("You have no {}.", self.item_name(&carrier)));
         }
-
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(carrier.clone(), 1);
-        self.note_consumed(&carrier, 1, crate::base_ledger::ConsumeSource::Install);
         if let Some(old) = fitted {
             self.hand_back_rig_tool(&old);
         }

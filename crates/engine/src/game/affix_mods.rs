@@ -53,7 +53,8 @@ impl Game {
         found
     }
 
-    /// Fits `affix` to `copy`, paying its `apply_cost` from the pack.
+    /// Fits `affix` to `copy`, paying its `apply_cost` from what is in
+    /// reach (`pay_from_reach`).
     /// Returns the copy's new key and the log line.
     ///
     /// Every refusal sits above the payment, so a refused apply spends
@@ -92,7 +93,7 @@ impl Game {
                 self.copy_name(copy)
             ));
         }
-        self.pay_items(&cost)?;
+        self.pay_from_reach(&cost)?;
 
         let mut affixes = copy.affixes.clone();
         affixes.push(affix.clone());

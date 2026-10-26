@@ -325,7 +325,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `attack_nest`'s reason: rock cannot dodge and identical swings must land
   identical damage.
 - **A cost the *base* incurs is walked to and carried; a cost the *player*
-  incurs is paid from their pack.** The crew's tile is fetched off a shelf
+  incurs is paid from their pack — except at a bench in base space, which
+  pays through `Game::pay_from_reach` (base stores first, then the pack).** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
   hauler uses, over the same buffers the stock block counts.
 - **A dry dig job is not a want either — `build_wants`' deadlock rule

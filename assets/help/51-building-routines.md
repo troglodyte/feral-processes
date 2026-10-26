@@ -2,7 +2,8 @@
 
 Routines you run are built, not found. At a Workbench you compile Subroutines, then combine them into
 a routine and give it a name. Stand beside the Workbench and press c; its pages are Compile, Build routine,
-Subroutines and Built routines.
+Subroutines and Built routines. The Workbench uses what the base is storing as well as what you
+carry, taking from the base first, so you do not have to bring materials to it.
 
 A Subroutine is one part. Every routine has exactly one Core, which is what it does: Heal, Damage,
 Drain and so on. Modifiers change how it is delivered: a Range, an Area, a Trickle that stretches it

@@ -1,4 +1,4 @@
-//! Routine crafting (ADR 0029): the verbs between the player's pack and a
+//! Routine crafting (ADR 0029): the verbs between the materials in reach and a
 //! routine in a slot. Crafting spends a Routine Disk and a material for a
 //! part; a build spends parts for a routine; installing writes that routine
 //! into a slot; uninstalling or losing the holder destroys it.
@@ -8,7 +8,7 @@
 //! what these refuse and spend.
 
 use crate::abilities::AbilityId;
-use crate::base_ledger::{ConsumeSource, LootSource};
+use crate::base_ledger::LootSource;
 use crate::components::Routines;
 use crate::resources::{CraftedRoutines, Research};
 use crate::routine_craft::{self, CraftedRoutine, PlanError, Subroutine, Version};
@@ -40,20 +40,15 @@ impl Game {
             .contains(&part_node_id(part))
     }
 
-    /// How many of `part` the player holds.
+    /// How many of `part` the Workbench can draw on — the pack, and the
+    /// base's stores while in base space (`held_in_reach`).
     pub fn parts_held(&self, part: &Subroutine) -> u32 {
-        self.world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&ItemId::part(part)))
-            .unwrap_or(0)
+        self.held_in_reach(&ItemId::part(part))
     }
 
-    /// Blank Routine Disks in cargo — what crafting a part spends.
+    /// Blank Routine Disks in reach — what crafting a part spends.
     pub fn blank_disks_held(&self) -> u32 {
-        self.world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&ItemId::from(ids::ROUTINE_DISK)))
-            .unwrap_or(0)
+        self.held_in_reach(&ItemId::from(ids::ROUTINE_DISK))
     }
 
     /// Crafts one `part` at the Workbench for one Routine Disk and the
@@ -65,11 +60,7 @@ impl Game {
         }
         let disk = ItemId::from(ids::ROUTINE_DISK);
         let (material, count) = routine_craft::material(&part);
-        let player = self.player_entity();
-        let (disks, mats) = {
-            let inv = self.world.get::<Inventory>(player).ok_or("No pack.")?;
-            (inv.count(&disk), inv.count(&material))
-        };
+        let (disks, mats) = (self.held_in_reach(&disk), self.held_in_reach(&material));
         if disks == 0 {
             return Err(format!("You need a blank {}.", self.item_name(&disk)));
         }
@@ -79,13 +70,7 @@ impl Game {
                 self.item_name(&material)
             ));
         }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            inv.take(disk.clone(), 1);
-            inv.take(material.clone(), count);
-        }
-        self.note_consumed(&disk, 1, ConsumeSource::Craft);
-        self.note_consumed(&material, count, ConsumeSource::Craft);
+        self.pay_from_reach(&[(disk, 1), (material, count)])?;
         self.grant_loot(ItemId::part(&part), 1, LootSource::Craft);
         self.log(format!("You compile a {} part.", part.label()));
         Ok(())
@@ -99,15 +84,11 @@ impl Game {
         let cap = self.part_cap();
         let (name, used) = routine_craft::plan_build(name, parts, cap, |p| self.parts_held(p))
             .map_err(|e: PlanError| e.to_string())?;
-        let player = self.player_entity();
-        for (part, count) in &used {
-            let item = ItemId::part(part);
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .take(item.clone(), *count);
-            self.note_consumed(&item, *count, ConsumeSource::Craft);
-        }
+        let bill: Vec<_> = used
+            .iter()
+            .map(|(part, count)| (ItemId::part(part), *count))
+            .collect();
+        self.pay_from_reach(&bill)?;
         let id = self.mint_built(&name, parts);
         self.world
             .resource_mut::<CraftedRoutines>()

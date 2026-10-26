@@ -191,7 +191,8 @@ impl Game {
     }
 
     /// The most whole units of `result` the player can compile right now:
-    /// what the pack affords at `craft_cost` (already
+    /// what is in reach affords at `craft_cost` (the pack, plus the base's
+    /// stores for a bench recipe in base space; already
     /// Lean-Compiler-adjusted, and carrying the careful surcharge when
     /// `careful`), and what the reserve can carry at
     /// `hand_craft_power_cost`, whichever runs out first. 0 if `result` has
@@ -208,13 +209,11 @@ impl Game {
             return 0;
         }
         let player = self.player_entity();
-        let by_pack = {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            cost.iter()
-                .map(|(item, qty)| inv.count(item) / (*qty).max(1))
-                .min()
-                .unwrap_or(0)
-        };
+        let by_pack = cost
+            .iter()
+            .map(|(item, qty)| self.held_for_compile(result, item) / (*qty).max(1))
+            .min()
+            .unwrap_or(0);
         let per_unit = self.hand_craft_power_cost(result, 1);
         if per_unit <= 0.0 {
             return by_pack;
@@ -376,9 +375,8 @@ impl Game {
         let player = self.player_entity();
         let cost = self.craft_cost(result, careful);
         {
-            let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &cost {
-                if inv.count(item) < *qty * quantity {
+                if self.held_for_compile(result, item) < *qty * quantity {
                     return Err(format!(
                         "Compiling {} {} needs {} {}.",
                         quantity,
@@ -557,10 +555,82 @@ impl Game {
         Ok(())
     }
 
-    /// Takes one unit's ingredients out of the pack, or reports that the
-    /// pack can no longer cover them.
+    /// How many of `item` a bench can draw on: the pack, plus every store
+    /// the base holds while the party stands in base space. Out in a zone
+    /// the base is not in reach, so a bench verb used there sees the pack
+    /// alone.
+    pub(crate) fn held_in_reach(&self, item: &ItemId) -> u32 {
+        if self.base_pos().is_some() {
+            return self.stores_hold(item);
+        }
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
+    }
+
+    /// `pay_items` for a bench: the whole bill is checked against
+    /// `held_in_reach` before a unit moves, then each line is spent base
+    /// stock first (`spend_from_stores`), so what the player carries stays
+    /// on them for the field. Outside base space it is `pay_items`.
+    pub(crate) fn pay_from_reach(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
+        if self.base_pos().is_none() {
+            return self.pay_items(cost);
+        }
+        let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();
+        for (item, qty) in cost {
+            *need.entry(item).or_default() += qty;
+        }
+        let short: Vec<String> = need
+            .iter()
+            .filter(|(item, qty)| self.held_in_reach(item) < **qty)
+            .map(|(item, qty)| {
+                format!(
+                    "{qty} {} (have {})",
+                    self.item_name(item),
+                    self.held_in_reach(item)
+                )
+            })
+            .collect();
+        if !short.is_empty() {
+            return Err(format!("Need {}.", short.join(", ")));
+        }
+        for (item, qty) in need {
+            let paid = self.spend_from_stores(item, qty, crate::base_ledger::ConsumeSource::Craft);
+            debug_assert!(paid, "the whole bill was checked before a unit moved");
+        }
+        Ok(())
+    }
+
+    /// Whether compiling `item` pays through `pay_from_reach`: a recipe
+    /// that needs a bench is compiled standing at one, and the base's
+    /// stores are what a bench draws on. A no-bench recipe is the
+    /// player's own hands, paid from the pack wherever they are.
+    fn compiles_at_bench(&self, item: &ItemId) -> bool {
+        self.craft_recipes()
+            .into_iter()
+            .find(|r| &r.result == item)
+            .is_some_and(|r| r.requires_structure.is_some())
+    }
+
+    /// How many of `item` a compile of `result` can draw on.
+    fn held_for_compile(&self, result: &ItemId, item: &ItemId) -> u32 {
+        if self.compiles_at_bench(result) {
+            return self.held_in_reach(item);
+        }
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
+    }
+
+    /// Takes one unit's ingredients, or reports that what is in reach can
+    /// no longer cover them.
     fn take_hand_craft_unit(&mut self, item: &ItemId, careful: bool) -> bool {
         let cost = self.craft_cost(item, careful);
+        if self.compiles_at_bench(item) {
+            return self.pay_from_reach(&cost).is_ok();
+        }
         self.pay_items(&cost).is_ok()
     }
 

@@ -121,6 +121,45 @@ fn apply_pays_exactly_the_apply_cost_and_rekeys_the_copy() {
     assert!(msg.contains("Plated"), "{msg}");
 }
 
+/// In base space the bench pays off a Depot before the pack.
+#[test]
+fn apply_pays_off_a_depot_first_in_base_space() {
+    let mut game = bench_game("mods_depot", 9411);
+    crate::tests::support::stand_in_base_at(&mut game, 3, 4);
+    let mut stock = crate::components::Stock::new(100);
+    stock.output.insert(ItemId::from("core_fragment"), 2);
+    let depot = game
+        .world
+        .spawn((
+            crate::components::Structure {
+                kind: "depot".to_string(),
+            },
+            crate::components::Position { x: 9, y: 9 },
+            stock,
+        ))
+        .id();
+    let copy = tiered(1, &[]);
+    carry(&mut game, &copy);
+    let (core, wafer) = (pack(&game, "core_fragment"), pack(&game, "logic_wafer"));
+    game.apply_affix(&copy, &"t_plate".into()).unwrap();
+    let shelf = &game
+        .world
+        .get::<crate::components::Stock>(depot)
+        .unwrap()
+        .output;
+    assert!(!shelf.contains_key(&ItemId::from("core_fragment")));
+    assert_eq!(
+        pack(&game, "core_fragment"),
+        core,
+        "the pack's fragments stay"
+    );
+    assert_eq!(
+        pack(&game, "logic_wafer"),
+        wafer - 1,
+        "the pack covers the rest"
+    );
+}
+
 fn refused(game: &mut Game, copy: &GearCopy, affix: &str) -> String {
     let before = (pack(game, "core_fragment"), pack(game, "logic_wafer"));
     let err = game.apply_affix(copy, &affix.into()).unwrap_err();

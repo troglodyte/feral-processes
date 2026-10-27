@@ -17,7 +17,7 @@ pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter
     for (i, opt) in options.iter().enumerate() {
         rows.push(item_row(opt.clone(), i == app.menu_selected));
     }
-    draw_popup("Main Menu", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Main menu", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The main menu's rows, in the order `App::handle_main_menu_key` builds
@@ -195,7 +195,7 @@ pub(super) fn draw_load_game(app: &App, refusal: Option<&str>, painter: &Painter
     }
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&["Enter open", "Esc back"])));
-    draw_popup("Load Game", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Load game", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
@@ -243,7 +243,7 @@ pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Pai
     let card = app.game.as_mut().map(|g| g.score_card());
     let rows = game_over_rows(&summary, card.as_ref());
     draw_popup(
-        "Session Terminated",
+        "Session terminated",
         PopupSize::Large,
         &rows,
         refusal,

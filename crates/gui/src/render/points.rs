@@ -146,8 +146,8 @@ fn allocation_owner(app: &App) -> Option<String> {
 /// nothing extra for the player's own.
 pub(super) fn allocate_stats_title(app: &App) -> String {
     match allocation_owner(app) {
-        Some(name) => format!("Spend Stat Points - {name}"),
-        None => "Spend Stat Points".to_string(),
+        Some(name) => format!("Spend stat points - {name}"),
+        None => "Spend stat points".to_string(),
     }
 }
 
@@ -373,7 +373,7 @@ mod tests {
             let rows = allocate_stats_rows(app);
             let m = ui_metrics(900.0);
             let (_, shapes) =
-                with_painter(|p| draw_allocate_stats("Spend Stat Points", &rows, None, p, &m));
+                with_painter(|p| draw_allocate_stats("Spend stat points", &rows, None, p, &m));
             crate::paint::painted_text(&shapes).join(" | ")
         };
         let fresh = text(&app);

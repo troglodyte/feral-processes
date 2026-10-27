@@ -1428,7 +1428,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         // the whole of the screen the player decides on: the list this
         // replaced carried that sentence above its rows.
         Mode::UpgradeDirection => draw_direction_prompt(
-            "Upgrade Direction",
+            "Upgrade direction",
             "Upgrade which neighbour? Your crew fetches the parts and does \
              the work.",
             refusal,
@@ -1436,7 +1436,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::InspectDirection => draw_direction_prompt(
-            "Inspect Direction",
+            "Inspect direction",
             "Choose a direction to inspect",
             refusal,
             painter,
@@ -1446,14 +1446,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         // reaches Home in one keypress, so the warning cannot wait for the
         // confirmation screen to be the first mention of it.
         Mode::RemoveDirection => draw_direction_prompt(
-            "Demolish Direction",
+            "Demolish direction",
             "Demolish which neighbour? Removing Home destroys the whole base.",
             refusal,
             painter,
             m,
         ),
         Mode::TrapDirection => draw_direction_prompt(
-            "Place Direction",
+            "Place direction",
             "Place the honeypot which way?",
             refusal,
             painter,

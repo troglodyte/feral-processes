@@ -62,7 +62,7 @@ pub(super) fn draw_companion_equip(
     });
     let (Some(program), Some(name)) = (program, name) else {
         draw_popup(
-            "Program Gear",
+            "Program gear",
             PopupSize::Small,
             &[text_row("That program is gone.")],
             refusal,
@@ -91,7 +91,7 @@ pub(super) fn draw_companion_equip(
         "[I] inspect",
         "Esc back",
     ])));
-    draw_popup("Program Gear", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Program gear", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// What one program remembers — `R` from the roster.

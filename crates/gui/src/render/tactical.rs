@@ -1715,7 +1715,7 @@ pub(super) fn draw_tactical_items(
         rows.push(item_row(game.item_name(item).to_string(), i == selected));
     }
     push_key_footer(&mut rows, &["Type to filter", "Enter use", "Esc cancel"]);
-    draw_popup("Use an Item", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Use an item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The routine picker, drawn as a popup over the battle map.
@@ -1744,7 +1744,7 @@ pub(super) fn draw_tactical_routines(
     }
     push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
-        "Run a Routine",
+        "Run a routine",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1774,7 +1774,7 @@ pub(super) fn draw_tactical_emulate(
     }
     push_key_footer(&mut rows, &["Enter invoke", "Esc cancel"]);
     draw_popup(
-        "Invoke an Image",
+        "Invoke an image",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1792,7 +1792,7 @@ pub(super) fn draw_tactical_result(
     m: &Metrics,
 ) {
     draw_popup(
-        "Fight Over",
+        "Fight over",
         PopupSize::Large,
         &tactical_result_rows(outcomes),
         refusal,
@@ -2384,7 +2384,7 @@ mod tests {
         let painted = painted_text(&shapes);
 
         assert!(
-            painted.iter().any(|t| t == "Fight Over"),
+            painted.iter().any(|t| t == "Fight over"),
             "no results popup was drawn"
         );
         assert!(

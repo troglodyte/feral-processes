@@ -56,7 +56,7 @@ pub(super) fn draw_arena_load(
     painter: &Painter,
     m: &Metrics,
 ) {
-    draw_id_list("Load Scenario", rows, selected, refusal, painter, m);
+    draw_id_list("Load scenario", rows, selected, refusal, painter, m);
 }
 
 /// The two id lists differ only in their title, so they are one function
@@ -94,7 +94,7 @@ pub(super) fn draw_arena_save(input: &str, refusal: Option<&str>, painter: &Pain
         text_row(key_hints(&["Enter write", "Esc cancel"])),
     ];
     draw_popup(
-        "Save Scenario",
+        "Save scenario",
         PopupSize::Small,
         &body,
         refusal,
@@ -143,7 +143,7 @@ pub(super) fn draw_arena_result(
         "Up/Down scroll",
         "Esc back",
     ])));
-    draw_popup("Arena Result", PopupSize::Large, &body, refusal, painter, m);
+    draw_popup("Arena result", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// What was fielded, or `None` for a fight that was never staged. Split out

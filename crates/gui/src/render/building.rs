@@ -363,7 +363,7 @@ pub(super) fn draw_build_direction(
         ],
     };
     draw_popup(
-        "Deploy Direction",
+        "Deploy direction",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1083,7 +1083,7 @@ pub(super) fn draw_staffing_menu(
     ));
     push_key_footer(&mut rows, &["Enter choose", "Esc back"]);
     draw_popup(
-        "Standing Orders",
+        "Standing orders",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1261,7 +1261,7 @@ pub(super) fn draw_work_order_pick(
     }
     push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup(
-        "New Work Order",
+        "New work order",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1297,7 +1297,7 @@ pub(super) fn draw_work_order_quantity(
         .map(text_row)
         .collect();
     draw_popup(
-        "Order Quantity",
+        "Order quantity",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1617,7 +1617,7 @@ pub(super) fn draw_remove_menu(
     }
     push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup(
-        "Demolish Structure",
+        "Demolish structure",
         PopupSize::Large,
         &rows,
         refusal,
@@ -1646,7 +1646,7 @@ pub(super) fn draw_remove_confirm(
         item_row("[n] No, cancel", selected == 1),
     ];
     draw_popup(
-        "Confirm Demolish Home",
+        "Confirm demolish Home",
         PopupSize::Small,
         &rows,
         refusal,

@@ -23,7 +23,7 @@ pub(super) fn draw_dev_console(
         out.push(item_row(label.to_string(), i == selected));
     }
     push_key_footer(&mut out, &["Enter choose", "Esc back"]);
-    draw_popup("Dev Console", PopupSize::Large, &out, refusal, painter, m);
+    draw_popup("Dev console", PopupSize::Large, &out, refusal, painter, m);
 }
 
 /// One `[a] Label` command row: the hub's command pages

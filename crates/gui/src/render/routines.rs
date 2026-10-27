@@ -104,7 +104,7 @@ pub(super) fn draw_routine_install(
     let mut rows = routine_install_rows(&game.built_routine_rows(), selected);
     push_key_footer(&mut rows, &["Enter install", "Esc cancel"]);
     draw_popup(
-        "Install Routine",
+        "Install routine",
         PopupSize::Large,
         &rows,
         refusal,

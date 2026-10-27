@@ -47,7 +47,7 @@ pub(super) fn draw_create_character(
     let step = app.creation_step();
     let drawn = step_rows(app, step);
     let title = format!(
-        "New Game — {} ({}/{})",
+        "New game — {} ({}/{})",
         step.title(),
         step.index() + 1,
         CreationStep::ALL.len()

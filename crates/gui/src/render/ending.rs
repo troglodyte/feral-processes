@@ -146,7 +146,7 @@ pub(super) fn draw_basin_exit_confirm(
         text_row(""),
         text_row(key_hints(&["[Y] step through", "[N] or Esc cancel"])),
     ];
-    draw_popup("Basin Exit", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Basin exit", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

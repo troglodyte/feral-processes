@@ -241,7 +241,7 @@ pub(super) fn draw_field_routine(
     }
     push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
-        "Run a Routine",
+        "Run a routine",
         PopupSize::Large,
         &rows,
         refusal,
@@ -287,7 +287,7 @@ pub(super) fn draw_field_routine_ally(
     }
     push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
-        "Run a Routine",
+        "Run a routine",
         PopupSize::Large,
         &rows,
         refusal,

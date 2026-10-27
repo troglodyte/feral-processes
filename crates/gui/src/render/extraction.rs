@@ -164,7 +164,7 @@ pub(super) fn draw_extraction_options(
 ) {
     let rows = extraction_options_rows(game, index, selected);
     draw_popup(
-        "Downed Programs",
+        "Downed programs",
         PopupSize::Large,
         &rows,
         refusal,

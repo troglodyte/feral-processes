@@ -493,4 +493,82 @@ impl Game {
             ));
         }
     }
+
+    /// The research screen's study line, or `None` once a study has nothing
+    /// left to find here — `eligible_discoveries` is the one answer to that,
+    /// so the line cannot promise a find `settle_study` would never make.
+    pub fn study_hint(&self) -> Option<String> {
+        if self.eligible_discoveries().is_empty() {
+            return None;
+        }
+        let currency = self.item_name(&self.research_currency()).to_string();
+        Some(study_hint_line(&self.study_state(), &currency))
+    }
+
+    fn study_state(&self) -> StudyState {
+        let Some(station) = self.study_station() else {
+            let station = self
+                .world
+                .resource::<StructureDb>()
+                .all()
+                .find(|d| d.studies)
+                .map_or_else(|| "research station".to_string(), |d| d.name.clone());
+            return StudyState::NoStation { station };
+        };
+        let research = self.world.resource::<ActiveResearch>();
+        if research.id.is_some() {
+            return StudyState::Paused;
+        }
+        if self.pinned_subject().is_none() {
+            let station = self
+                .structure_def_of(station)
+                .map_or_else(|| "research station".to_string(), |d| d.name.clone());
+            return StudyState::EmptyPen { station };
+        }
+        StudyState::Studying {
+            banked: research.study,
+        }
+    }
+}
+
+/// Where the study stands, for the research screen's hint line — gathered
+/// by `Game::study_state`, worded by `study_hint_line`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum StudyState {
+    /// No `studies` structure stands; `station` names the one to build.
+    NoStation {
+        station: String,
+    },
+    /// A project is selected, so `systems::deliver_payout` feeds it and the
+    /// study bar never moves.
+    Paused,
+    EmptyPen {
+        station: String,
+    },
+    Studying {
+        banked: u32,
+    },
+}
+
+/// The one sentence the research screen shows for `state`.
+///
+/// **`Paused` names the cure and that it is safe.** Nothing else says a
+/// selected project starves the study, so a player who always has one
+/// running never finds a hidden node — Weapon Fabrication among them.
+pub(crate) fn study_hint_line(state: &StudyState, currency: &str) -> String {
+    match state {
+        StudyState::NoStation { station } => format!(
+            "Hidden research is found by study: build a {station} and pin a program in its pen."
+        ),
+        StudyState::Paused => "Study is paused while a project runs. Abandon it (A) to look \
+                               for hidden research; its progress is kept."
+            .to_string(),
+        StudyState::EmptyPen { station } => {
+            format!("Pin a program in the {station}'s pen to study it for hidden research.")
+        }
+        StudyState::Studying { banked } => format!(
+            "Studying for hidden research: {banked}/{} {currency} to the next attempt.",
+            crate::tuning::STUDY_ATTEMPT_DATA
+        ),
+    }
 }

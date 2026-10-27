@@ -146,13 +146,41 @@ fn capacity_research_raises_the_design_cap_step_by_step() {
     assert_eq!(game.gear_part_cap(), crate::tuning::GEAR_PART_CAP_START + 1);
 }
 
+/// The hint follows the opener from hidden to listed to researched, and
+/// never tells the player to research a node no menu shows.
 #[test]
-fn the_opener_is_named_from_its_research_node() {
-    let game = game_in_base(72_010);
+fn the_weapon_tree_hint_says_how_to_reach_the_opener() {
+    let mut game = game_in_base(72_010);
+    let opener = crate::tuning::WEAPON_TREE_OPENER;
     let def = game
         .research_defs()
         .into_iter()
-        .find(|d| d.id == crate::tuning::WEAPON_TREE_OPENER)
+        .find(|d| d.id == opener)
         .expect("the opener ships as a base node");
-    assert_eq!(game.weapon_tree_opener_name(), def.name);
+    assert!(def.discoverable, "the fixture is vacuous if it is listed");
+
+    let hint = game.weapon_tree_hint().unwrap();
+    assert!(
+        hint.starts_with(&format!("{} is hidden research", def.name))
+            && hint.contains("Routine Fabrication"),
+        "a hidden opener with a prerequisite unmet names it: {hint}"
+    );
+
+    unlock_research_chain(&mut game, "routine_fabrication");
+    assert_eq!(
+        game.weapon_tree_hint().unwrap(),
+        format!(
+            "{} is hidden research: study a program with no project running to find it.",
+            def.name
+        )
+    );
+
+    assert!(game.discover_research(opener));
+    assert_eq!(
+        game.weapon_tree_hint().unwrap(),
+        format!("Research {} to design weapons at a Workbench.", def.name)
+    );
+
+    unlock_research_chain(&mut game, opener);
+    assert_eq!(game.weapon_tree_hint(), None);
 }

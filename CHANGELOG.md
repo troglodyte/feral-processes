@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**The Research screen now tells you how hidden research is found.** While there is still something for a study to find, a line under the header says what is in the way: no Research Station, nobody pinned in its pen, or a project running. Study only moves while no project is selected, and nothing used to say so. Once a study is running, the line shows how close the next attempt is.
+
+**The Workbench's Compile page and the Weapons research tab say how to reach weapon crafting.** Before, the Weapons tab told you to research Weapon Fabrication even when a study hadn't found it yet, so it was on no menu.
+
 ## 0.20.9
 
 **New `fred` dev template, and a new gameplay image in the README.** `cargo run -- --template fred` opens a real zone-1, level-6 run with a played-in base. The landing-page screenshots are now taken from it.

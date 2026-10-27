@@ -650,8 +650,9 @@ pub(crate) fn resolve_gather_cycle(
 /// moves. With no project selected it banks toward a study attempt instead —
 /// `ActiveResearch::study`, spent by `Game::settle_study` — and still returns
 /// 0, the same "landed nothing" figure a full `Stock` answers with, and
-/// silent by design: the node reads `Idle` in every case but a hand-posted
-/// `StandingJob`, which is the player's own instruction.
+/// silent by design: the node is only worked here when a pinned subject
+/// (`Game::study_wants`) or a hand-posted `StandingJob` asks for it — both
+/// the player's own instruction.
 pub(crate) fn deliver_payout(
     resource: &ItemId,
     payout: u32,

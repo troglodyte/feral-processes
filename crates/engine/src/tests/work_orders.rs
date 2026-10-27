@@ -3600,6 +3600,53 @@ fn no_project_staffs_no_research_node() {
     );
 }
 
+/// A pinned subject is the player asking for a study, so with no project the
+/// station holding it is worked — the study banks the data nothing else will.
+#[test]
+fn a_pinned_subject_staffs_its_station_with_no_project() {
+    let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    unlock_research_chain(&mut game, "automation");
+    let subject = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, subject, node);
+    let worker = spawn_tamed(&mut game, 10, 3);
+
+    game.tick();
+
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "the one free body goes to study the pinned program"
+    );
+}
+
+/// `research_wants`' saturation gate, for the study: with nothing left a study
+/// could uncover the data lands nowhere, so the body is not parked there.
+#[test]
+fn a_pinned_subject_with_nothing_to_discover_staffs_no_station() {
+    let mut game = Game::new(47, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    unlock_research_chain(&mut game, "automation");
+    let subject = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, subject, node);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    let pool = game.eligible_discoveries();
+    assert!(!pool.is_empty(), "the fixture has something to discover");
+    game.world
+        .resource_mut::<crate::resources::DiscoveredResearch>()
+        .0
+        .extend(pool);
+
+    game.tick();
+
+    assert!(
+        game.world
+            .get::<Task>(worker)
+            .is_none_or(|t| t.target != node),
+        "nobody studies a subject with nothing left to find"
+    );
+}
+
 /// The priority *is* the position in `schedule_base_labour`'s list: the player
 /// picked this node by hand, so it outranks the queue they filed and forgot.
 #[test]

@@ -277,7 +277,7 @@ fn footer(app: &App, step: CreationStep) -> String {
         CreationStep::Kit => key_hints(&[
             &format!("{}c left", app.creation_credits_left()),
             "Left/Right take (Shift/Ctrl bigger steps)",
-            "[R] reroll",
+            "[r] reroll",
             "Enter next once spent",
             "Esc back",
         ]),
@@ -330,13 +330,13 @@ fn plain_footer(step: CreationStep) -> String {
         CreationStep::Icon => key_hints(&[
             "Up/Down pick",
             "Draw your own opens the editor",
-            "[N] or Right skips",
+            "[n] or Right skips",
             "Enter next",
             "Esc back",
         ]),
         CreationStep::Colour => key_hints(&[
             "Up/Down pick",
-            "[N] or Right skips",
+            "[n] or Right skips",
             "Enter next",
             "Esc back",
         ]),

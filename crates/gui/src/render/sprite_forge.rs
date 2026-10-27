@@ -54,7 +54,7 @@ use feral_processes_app_core::{
 const PICKER_COLUMNS: usize = 4;
 
 const PICKER_TITLE: &str = "Sprite Forge";
-const PICKER_HELP_TEXT: &str = "Up/Down or click move  ·  Enter or double-click edit  ·  [T] toggle art  ·  [R] revert  ·  Esc back";
+const PICKER_HELP_TEXT: &str = "Up/Down or click move  ·  Enter or double-click edit  ·  [t] toggle art  ·  [r] revert  ·  Esc back";
 
 /// Marks a row the player has redrawn. Short on purpose: the row census
 /// holds the longest label plus this against its column.
@@ -122,7 +122,7 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
         Some(label) => {
             let ask = format!(
                 "Revert `{label}` to the original art?  ·  {}",
-                super::popup::key_hints(&["[Y] revert", "[N] or Esc cancel"])
+                super::popup::key_hints(&["[y] revert", "[n] or Esc cancel"])
             );
             centered_ui(painter, &ask, g.help_y, m.small(), TEXT);
         }
@@ -416,13 +416,13 @@ fn button_size(painter: &Painter, m: &Metrics) -> (f32, f32, f32) {
 /// current mode.
 fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
     match button {
-        EditorButton::Save => "[S] save".to_string(),
-        EditorButton::Undo => "[U] undo".to_string(),
-        EditorButton::Clear => "[X] clear".to_string(),
-        EditorButton::Brush => format!("[G] brush {}", view.canvas.brush),
+        EditorButton::Save => "[s] save".to_string(),
+        EditorButton::Undo => "[u] undo".to_string(),
+        EditorButton::Clear => "[x] clear".to_string(),
+        EditorButton::Brush => format!("[g] brush {}", view.canvas.brush),
         EditorButton::Tool => match view.tool {
-            Tool::Paint => "[F] paint".to_string(),
-            Tool::Fill => "[F] fill".to_string(),
+            Tool::Paint => "[f] paint".to_string(),
+            Tool::Fill => "[f] fill".to_string(),
         },
         EditorButton::Back => "Esc back".to_string(),
         EditorButton::Keep => "Enter keep".to_string(),
@@ -1290,7 +1290,7 @@ mod tests {
             "the key line names Enter: {drawn}"
         );
         assert!(!drawn.contains("Sprite Forge"), "{drawn}");
-        assert!(!drawn.contains("[S] save"), "{drawn}");
+        assert!(!drawn.contains("[s] save"), "{drawn}");
     }
 
     #[test]
@@ -1381,12 +1381,12 @@ mod tests {
             "Arrows",
             "Space",
             "Backspace",
-            "[U]",
-            "[X]",
-            "[G]",
-            "[F]",
-            "[I]",
-            "[S]",
+            "[u]",
+            "[x]",
+            "[g]",
+            "[f]",
+            "[i]",
+            "[s]",
             "Esc",
         ] {
             assert!(
@@ -1701,11 +1701,11 @@ mod tests {
         let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         for label in [
-            "[S] save",
-            "[U] undo",
-            "[X] clear",
-            "[G] brush 1",
-            "[F] paint",
+            "[s] save",
+            "[u] undo",
+            "[x] clear",
+            "[g] brush 1",
+            "[f] paint",
             "Esc back",
             "[1] frame 1",
             "[2] frame 2",

@@ -30,9 +30,9 @@ pub(super) fn draw_arena_builder(
         "Left/Right adjust",
         "Enter pick",
         "Backspace remove",
-        "[F] fight",
-        "[L] load",
-        "[S] save",
+        "[f] fight",
+        "[l] load",
+        "[s] save",
         "Esc back",
     ])));
     draw_popup("Arena", PopupSize::Large, &body, refusal, painter, m);
@@ -138,8 +138,8 @@ pub(super) fn draw_arena_result(
     }
     body.push(text_row(""));
     body.push(text_row(key_hints(&[
-        "[R] refight",
-        "[N] next seed",
+        "[r] refight",
+        "[n] next seed",
         "Up/Down scroll",
         "Esc back",
     ])));

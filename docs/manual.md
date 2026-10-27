@@ -3,7 +3,7 @@
 The complete reference: every control, table, stat, recipe, and species.
 The short overview is in [the README](../README.md).
 
-![feral-processes gameplay screenshot](../pics/gameplay.png)
+![feral-processes gameplay screenshot](../pics/base.png)
 
 A Neuromancer/Tron-flavored game blending Pokemon (tame and battle rogue
 programs), Palworld (compiled programs work your base for you), and Dwarf

@@ -227,15 +227,21 @@ pub(super) fn draw_extract_confirm(
         .filter(|(i, _)| *i != index)
         .map(|(_, a)| a.name.as_str())
         .collect();
-    let mut rows = vec![
-        text_row(format!(
-            "Take the Subroutines of {} and destroy the program?",
-            kept.name
-        )),
-        text_row(""),
-    ];
+    let rows = extract_confirm_rows(&kept.name, &lost, selected);
+    draw_popup("Extract", PopupSize::Small, &rows, refusal, painter, m);
+}
+
+fn extract_confirm_rows(kept: &str, lost: &[&str], selected: usize) -> Vec<Row> {
+    let mut rows = wrapped_text_rows(
+        &format!("Take the Subroutines of {kept} and destroy the program?"),
+        PopupSize::Small,
+    );
+    rows.push(text_row(""));
     if !lost.is_empty() {
-        rows.push(text_row(format!("This loses: {}.", lost.join(", "))));
+        rows.extend(wrapped_text_rows(
+            &format!("This loses: {}.", lost.join(", ")),
+            PopupSize::Small,
+        ));
     }
     rows.push(text_row(""));
     rows.push(item_row("[Y] destroy it", selected == 0));
@@ -245,11 +251,42 @@ pub(super) fn draw_extract_confirm(
         "[Y] destroy it",
         "[N] or Esc cancel",
     ])));
-    draw_popup("Extract", PopupSize::Small, &rows, refusal, painter, m);
+    rows
 }
 
 #[cfg(test)]
 mod tests {
+    /// The longest name the shipped items and abilities carry, so the worst
+    /// realistic prompt is measured rather than a literal that drifts.
+    fn longest_shipped_names() -> (String, String) {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (abilities, _) =
+            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
+                .expect("the abilities load");
+        let (items, _) =
+            feral_processes_engine::items_db::ItemDb::load_dir(&assets.join("items"), &abilities)
+                .expect("the items load");
+        let longest = |names: Vec<String>| {
+            names
+                .into_iter()
+                .max_by_key(|n| n.chars().count())
+                .expect("a shipped name")
+        };
+        (
+            longest(abilities.all().map(|a| a.name.clone()).collect()),
+            longest(items.all().map(|d| d.name.clone()).collect()),
+        )
+    }
+
+    #[test]
+    fn the_extract_confirm_fits_its_small_popup_with_the_longest_names() {
+        let (routine, _) = longest_shipped_names();
+        let program = "Overclocked Quiet Handshake of the Basin";
+        let lost = [routine.as_str(), routine.as_str(), routine.as_str()];
+        assert_rows_fit(&extract_confirm_rows(program, &lost, 0), PopupSize::Small);
+        assert_rows_fit(&extract_confirm_rows(program, &[], 1), PopupSize::Small);
+    }
+
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;

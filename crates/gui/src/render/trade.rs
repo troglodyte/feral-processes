@@ -226,20 +226,31 @@ pub(super) fn draw_trade_program_confirm(
     m: &Metrics,
 ) {
     let Some(option) = option else { return };
-    let mut rows = vec![
-        text_row(format!(
+    let rows = sale_confirm_rows(option, money, selected);
+    draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);
+}
+
+fn sale_confirm_rows(option: &ProgramSaleOption, money: &str, selected: usize) -> Vec<Row> {
+    let mut rows = wrapped_text_rows(
+        &format!(
             "Sell {} (Lv {}, power {}) for {} {money}?",
             option.name, option.level, option.power, option.payout
-        )),
-        Row::TextColored(
-            "This erases the program for good. It cannot be undone.".to_string(),
-            RED,
         ),
-    ];
+        PopupSize::Small,
+    );
+    rows.extend(wrapped_colored_rows(
+        "This erases the program for good. It cannot be undone.",
+        RED,
+        PopupSize::Small,
+    ));
     if !option.detaches.is_empty() {
         rows.push(text_row(""));
         for detached in &option.detaches {
-            rows.push(Row::TextColored(format!("It {detached}."), ORANGE));
+            rows.extend(wrapped_colored_rows(
+                &format!("It {detached}."),
+                ORANGE,
+                PopupSize::Small,
+            ));
         }
     }
     rows.push(text_row(""));
@@ -247,7 +258,7 @@ pub(super) fn draw_trade_program_confirm(
     rows.push(item_row("[N] keep it", selected == 1));
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&["[Y] sell", "[N] or Esc cancel"])));
-    draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);
+    rows
 }
 
 pub(super) fn draw_trade_quantity_menu(
@@ -314,4 +325,32 @@ pub(super) fn draw_trade_quantity_menu(
         ])),
     ];
     draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feral_processes_engine::components::Rarity;
+
+    #[test]
+    fn the_sale_confirm_fits_its_small_popup_with_the_longest_detachments() {
+        let option = ProgramSaleOption {
+            entity: Entity::PLACEHOLDER,
+            name: "Overclocked Quiet Handshake of the Basin".to_string(),
+            level: 99,
+            power: 99999,
+            payout: 999999,
+            fusions: 9,
+            rarity: Rarity::Ordinary,
+            activity: String::new(),
+            detaches: vec![
+                "leaves your battle party".to_string(),
+                "stops working the Extractor beside the Phase-Manifold Basin".to_string(),
+            ],
+        };
+        assert_rows_fit(
+            &sale_confirm_rows(&option, "Privilege Rings", 0),
+            PopupSize::Small,
+        );
+    }
 }

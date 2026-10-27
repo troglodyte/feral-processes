@@ -1632,22 +1632,7 @@ pub(super) fn draw_remove_confirm(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = vec![
-        text_row("Demolish Home?"),
-        Row::TextColored(
-            "Removing Home destroys every other structure in this base and refunds".to_string(),
-            ORANGE,
-        ),
-        Row::TextColored(
-            "30% of each one's materials. This can't be undone.".to_string(),
-            ORANGE,
-        ),
-        text_row(""),
-        item_row("[Y] demolish everything", selected == 0),
-        item_row("[N] keep the base", selected == 1),
-        text_row(""),
-        text_row(key_hints(&["[Y] demolish", "[N] or Esc cancel"])),
-    ];
+    let rows = demolish_home_rows(selected);
     draw_popup(
         "Confirm demolish Home",
         PopupSize::Small,
@@ -1656,6 +1641,21 @@ pub(super) fn draw_remove_confirm(
         painter,
         m,
     );
+}
+
+fn demolish_home_rows(selected: usize) -> Vec<Row> {
+    let mut rows = vec![text_row("Demolish Home?")];
+    rows.extend(wrapped_colored_rows(
+        "Removing Home destroys every other structure in this base and refunds 30% of each one's materials. This can't be undone.",
+        ORANGE,
+        PopupSize::Small,
+    ));
+    rows.push(text_row(""));
+    rows.push(item_row("[Y] demolish everything", selected == 0));
+    rows.push(item_row("[N] keep the base", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row(key_hints(&["[Y] demolish", "[N] or Esc cancel"])));
+    rows
 }
 
 /// The structure roster: everything standing in the zone and every program
@@ -2117,6 +2117,11 @@ fn spark_line(values: &[u32]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_demolish_home_confirm_fits_its_small_popup() {
+        assert_rows_fit(&demolish_home_rows(0), PopupSize::Small);
+    }
+
     use super::*;
     use feral_processes_engine::structures::StructureDb;
 

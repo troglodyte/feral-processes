@@ -34,6 +34,16 @@ pub(super) fn page_rows(screen: Option<&MachineRecipeScreen>, selected: usize) -
     }
 }
 
+fn confirm_rows(prompt: &str, selected: usize) -> Vec<Row> {
+    let mut rows = wrapped_text_rows(prompt, PopupSize::Small);
+    rows.push(text_row(""));
+    rows.push(item_row("[Y] switch", selected == 0));
+    rows.push(item_row("[N] keep the current recipe", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row(key_hints(&["[Y] switch", "[N] or Esc cancel"])));
+    rows
+}
+
 pub(super) fn draw_machine_recipe_confirm(
     screen: Option<&MachineRecipeScreen>,
     selected: usize,
@@ -42,14 +52,7 @@ pub(super) fn draw_machine_recipe_confirm(
     m: &Metrics,
 ) {
     let body = match screen.and_then(|s| s.confirm_prompt()) {
-        Some(prompt) => vec![
-            text_row(prompt),
-            text_row(""),
-            item_row("[Y] switch", selected == 0),
-            item_row("[N] keep the current recipe", selected == 1),
-            text_row(""),
-            text_row(key_hints(&["[Y] switch", "[N] or Esc cancel"])),
-        ],
+        Some(prompt) => confirm_rows(&prompt, selected),
         None => vec![text_row("There is nothing to confirm.")],
     };
     draw_popup(
@@ -104,6 +107,37 @@ fn row_text(row: &MachineRecipeRow) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The longest name the shipped items and abilities carry, so the worst
+    /// realistic prompt is measured rather than a literal that drifts.
+    fn longest_shipped_names() -> (String, String) {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (abilities, _) =
+            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
+                .expect("the abilities load");
+        let (items, _) =
+            feral_processes_engine::items_db::ItemDb::load_dir(&assets.join("items"), &abilities)
+                .expect("the items load");
+        let longest = |names: Vec<String>| {
+            names
+                .into_iter()
+                .max_by_key(|n| n.chars().count())
+                .expect("a shipped name")
+        };
+        (
+            longest(abilities.all().map(|a| a.name.clone()).collect()),
+            longest(items.all().map(|d| d.name.clone()).collect()),
+        )
+    }
+
+    #[test]
+    fn the_switch_confirm_fits_its_small_popup_with_the_longest_prompt() {
+        let (_, item) = longest_shipped_names();
+        let prompt = format!(
+            "Switch the Printer to {item}? It empties 9999 units to the Depots or the floor beside it."
+        );
+        assert_rows_fit(&confirm_rows(&prompt, 0), PopupSize::Small);
+    }
+
     use super::*;
     use crate::paint::with_painter;
     use feral_processes_engine::{DifficultyMode, Game, MachineRecipeView, RecipePace};

@@ -340,6 +340,24 @@ pub(super) fn key_hints(chips: &[&str]) -> String {
     chips.join("  ·  ")
 }
 
+/// A prompt as text rows wrapped to `size`'s popup width. Text rows are never
+/// wrapped by `draw_popup`, so a prompt that grows with a name or a count has
+/// to be broken here or it runs off the right edge of a `Small` box.
+pub(super) fn wrapped_text_rows(text: &str, size: PopupSize) -> Vec<Row> {
+    wrap_text(text, status_wrap_columns(size))
+        .into_iter()
+        .map(text_row)
+        .collect()
+}
+
+/// `wrapped_text_rows` in a colour.
+pub(super) fn wrapped_colored_rows(text: &str, color: Color, size: PopupSize) -> Vec<Row> {
+    wrap_text(text, status_wrap_columns(size))
+        .into_iter()
+        .map(|line| Row::TextColored(line, color))
+        .collect()
+}
+
 /// Appends the blank spacer and the hint line: trailing text rows after the
 /// last item are what `popup_layout` pins as the footer.
 pub(super) fn push_key_footer(rows: &mut Vec<Row>, chips: &[&str]) {
@@ -931,6 +949,23 @@ pub(super) fn row_label_text(row: &Row) -> String {
 /// How much width a row of `size`'s popup has for its own text at
 /// `screen_w`, one pad in from each edge — `popup_max_rows`' counterpart,
 /// and one derivation rather than a fraction restated per width census.
+#[cfg(test)]
+pub(super) fn assert_rows_fit(rows: &[Row], size: PopupSize) {
+    crate::paint::with_painter(|p| {
+        let m = crate::text::ui_metrics(900.0);
+        let room = popup_body_width(1440.0, size, &m);
+        for row in rows {
+            let line = row_label_text(row);
+            let drawn = p.measure_ui_advance(&line, m.font_size);
+            assert!(
+                drawn <= room,
+                "a row overflows its popup by {:.0}px ({drawn:.0} drawn into {room:.0}):\n{line}",
+                drawn - room
+            );
+        }
+    });
+}
+
 #[cfg(test)]
 pub(super) fn popup_body_width(screen_w: f32, size: PopupSize, m: &Metrics) -> f32 {
     screen_w * popup_fractions(size).0 - m.pad * 2.0

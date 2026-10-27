@@ -553,7 +553,7 @@ pub(super) fn draw_respec_confirm(
     ));
     if let Some(why) = &quote.refusal {
         rows.push(text_row(""));
-        rows.push(Row::TextColored(why.clone(), RED));
+        rows.extend(wrapped_colored_rows(why, RED, PopupSize::Small));
     }
     rows.push(text_row(""));
     rows.push(item_row("[Y] refund", selected == 0));

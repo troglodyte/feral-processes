@@ -243,8 +243,8 @@ pub(super) fn draw_trade_program_confirm(
         }
     }
     rows.push(text_row(""));
-    rows.push(item_row("[y] Yes, sell it", selected == 0));
-    rows.push(item_row("[n] No, keep it", selected == 1));
+    rows.push(item_row("[Y] sell it", selected == 0));
+    rows.push(item_row("[N] keep it", selected == 1));
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&["[Y] sell", "[N] or Esc cancel"])));
     draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);

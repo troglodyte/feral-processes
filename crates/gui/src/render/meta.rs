@@ -92,8 +92,10 @@ pub(super) fn save_and_quit_rows(app: &App) -> Vec<Row> {
             text_row("Quit without saving?"),
             text_row("Progress since the last autosave is lost."),
             text_row(""),
-            item_row("[Y] Yes, quit".to_string(), selected == 0),
-            item_row("[N] No, keep playing".to_string(), selected == 1),
+            item_row("[Y] quit".to_string(), selected == 0),
+            item_row("[N] keep playing".to_string(), selected == 1),
+            text_row(""),
+            text_row(key_hints(&["[Y] quit", "[N] or Esc cancel"])),
         ];
     }
     vec![
@@ -280,12 +282,12 @@ pub(super) fn draw_quit_app_confirm(
     let rows = vec![
         text_row("Close feral-processes?"),
         text_row(""),
-        item_row("[Y] Yes, quit".to_string(), selected == 0),
-        item_row("[N] No, stay".to_string(), selected == 1),
+        item_row("[Y] quit".to_string(), selected == 0),
+        item_row("[N] keep playing".to_string(), selected == 1),
         text_row(""),
         text_row(key_hints(&["[Y] quit", "[N] or Esc cancel"])),
     ];
-    draw_popup("Quit", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Quit", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

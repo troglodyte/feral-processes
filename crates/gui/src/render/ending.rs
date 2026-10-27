@@ -141,12 +141,12 @@ pub(super) fn draw_basin_exit_confirm(
         text_row("Leave the Phase-Manifold Basin?"),
         text_row("(The game continues afterward.)"),
         text_row(""),
-        item_row("[y] Yes, step through".to_string(), selected == 0),
-        item_row("[n] No, stay".to_string(), selected == 1),
+        item_row("[Y] step through".to_string(), selected == 0),
+        item_row("[N] stay".to_string(), selected == 1),
         text_row(""),
         text_row(key_hints(&["[Y] step through", "[N] or Esc cancel"])),
     ];
-    draw_popup("Basin exit", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Basin exit", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

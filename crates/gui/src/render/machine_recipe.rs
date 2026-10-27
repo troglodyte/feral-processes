@@ -45,14 +45,16 @@ pub(super) fn draw_machine_recipe_confirm(
         Some(prompt) => vec![
             text_row(prompt),
             text_row(""),
-            item_row("[y] Yes", selected == 0),
-            item_row("[n] No", selected == 1),
+            item_row("[Y] switch", selected == 0),
+            item_row("[N] keep the current recipe", selected == 1),
+            text_row(""),
+            text_row(key_hints(&["[Y] switch", "[N] or Esc cancel"])),
         ],
         None => vec![text_row("There is nothing to confirm.")],
     };
     draw_popup(
         "Switch recipe",
-        PopupSize::Large,
+        PopupSize::Small,
         &body,
         refusal,
         painter,

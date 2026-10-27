@@ -1633,6 +1633,7 @@ pub(super) fn draw_remove_confirm(
     m: &Metrics,
 ) {
     let rows = vec![
+        text_row("Demolish Home?"),
         Row::TextColored(
             "Removing Home destroys every other structure in this base and refunds".to_string(),
             ORANGE,
@@ -1642,8 +1643,10 @@ pub(super) fn draw_remove_confirm(
             ORANGE,
         ),
         text_row(""),
-        item_row("[y] Yes, demolish everything", selected == 0),
-        item_row("[n] No, cancel", selected == 1),
+        item_row("[Y] demolish everything", selected == 0),
+        item_row("[N] keep the base", selected == 1),
+        text_row(""),
+        text_row(key_hints(&["[Y] demolish", "[N] or Esc cancel"])),
     ];
     draw_popup(
         "Confirm demolish Home",

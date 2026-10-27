@@ -556,8 +556,8 @@ pub(super) fn draw_respec_confirm(
         rows.push(Row::TextColored(why.clone(), RED));
     }
     rows.push(text_row(""));
-    rows.push(item_row("[y] Yes, refund", selected == 0));
-    rows.push(item_row("[n] No, keep them", selected == 1));
+    rows.push(item_row("[Y] refund", selected == 0));
+    rows.push(item_row("[N] keep them", selected == 1));
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&["[Y] refund", "[N] or Esc cancel"])));
     draw_popup(

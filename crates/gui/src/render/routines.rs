@@ -238,14 +238,14 @@ pub(super) fn draw_extract_confirm(
         rows.push(text_row(format!("This loses: {}.", lost.join(", "))));
     }
     rows.push(text_row(""));
-    rows.push(item_row("[y] Yes, destroy it", selected == 0));
-    rows.push(item_row("[n] No, keep it", selected == 1));
+    rows.push(item_row("[Y] destroy it", selected == 0));
+    rows.push(item_row("[N] keep it", selected == 1));
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&[
         "[Y] destroy it",
         "[N] or Esc cancel",
     ])));
-    draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
+    draw_popup("Extract", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

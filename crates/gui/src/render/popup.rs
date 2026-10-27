@@ -334,15 +334,13 @@ pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
     }
 }
 
-/// The one separator between chips; app-core owns it because its own key
-/// lines (the sprite editor's) are built there.
-pub(super) const KEY_SEP: &str = feral_processes_app_core::KEY_HINT_SEP;
-
-/// Joins chips into a hint line with `KEY_SEP`. A line a `const` has to hold
+/// Joins chips into a hint line with app-core's `KEY_HINT_SEP` — app-core
+/// owns the separator because its own key lines (the sprite editor's) are
+/// built there. A line a `const` has to hold
 /// is kept as a chip list and passed through here where it is drawn, so no
 /// screen hand-copies the separator.
 pub(super) fn key_hints(chips: &[&str]) -> String {
-    chips.join(KEY_SEP)
+    chips.join(feral_processes_app_core::KEY_HINT_SEP)
 }
 
 /// A prompt as text rows wrapped to `size`'s popup width. Text rows are never
@@ -954,26 +952,32 @@ pub(super) fn row_label_text(row: &Row) -> String {
     }
 }
 
-/// How much width a row of `size`'s popup has for its own text at
-/// `screen_w`, one pad in from each edge — `popup_max_rows`' counterpart,
-/// and one derivation rather than a fraction restated per width census.
+/// Asserts every row fits `size`'s popup at the two windows the width
+/// censuses hold the game to. The font scales with height and the wrap budget
+/// is a fixed column count (`ROW_WRAP_COLUMNS`, calibrated near 16:9), so the
+/// smallest window is the tightest; a 5:4 one overflows every popup alike.
 #[cfg(test)]
 pub(super) fn assert_rows_fit(rows: &[Row], size: PopupSize) {
     crate::paint::with_painter(|p| {
-        let m = crate::text::ui_metrics(900.0);
-        let room = popup_body_width(1440.0, size, &m);
-        for row in rows {
-            let line = row_label_text(row);
-            let drawn = p.measure_ui_advance(&line, m.font_size);
-            assert!(
-                drawn <= room,
-                "a row overflows its popup by {:.0}px ({drawn:.0} drawn into {room:.0}):\n{line}",
-                drawn - room
-            );
+        for (screen_w, screen_h) in [(1280.0, 720.0), (1440.0, 900.0)] {
+            let m = crate::text::ui_metrics(screen_h);
+            let room = popup_body_width(screen_w, size, &m);
+            for row in rows {
+                let line = row_label_text(row);
+                let drawn = p.measure_ui_advance(&line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a row overflows its popup at {screen_w}x{screen_h} by {:.0}px ({drawn:.0} drawn into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
         }
     });
 }
 
+/// How much width a row of `size`'s popup has for its own text at
+/// `screen_w`, one pad in from each edge — `popup_max_rows`' counterpart,
+/// and one derivation rather than a fraction restated per width census.
 #[cfg(test)]
 pub(super) fn popup_body_width(screen_w: f32, size: PopupSize, m: &Metrics) -> f32 {
     screen_w * popup_fractions(size).0 - m.pad * 2.0

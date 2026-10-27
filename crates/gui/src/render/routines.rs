@@ -256,40 +256,20 @@ fn extract_confirm_rows(kept: &str, lost: &[&str], selected: usize) -> Vec<Row> 
 
 #[cfg(test)]
 mod tests {
-    /// The longest name the shipped items and abilities carry, so the worst
-    /// realistic prompt is measured rather than a literal that drifts.
-    fn longest_shipped_names() -> (String, String) {
-        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let (abilities, _) =
-            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
-                .expect("the abilities load");
-        let (items, _) =
-            feral_processes_engine::items_db::ItemDb::load_dir(&assets.join("items"), &abilities)
-                .expect("the items load");
-        let longest = |names: Vec<String>| {
-            names
-                .into_iter()
-                .max_by_key(|n| n.chars().count())
-                .expect("a shipped name")
-        };
-        (
-            longest(abilities.all().map(|a| a.name.clone()).collect()),
-            longest(items.all().map(|d| d.name.clone()).collect()),
-        )
-    }
-
-    #[test]
-    fn the_extract_confirm_fits_its_small_popup_with_the_longest_names() {
-        let (routine, _) = longest_shipped_names();
-        let program = "Overclocked Quiet Handshake of the Basin";
-        let lost = [routine.as_str(), routine.as_str(), routine.as_str()];
-        assert_rows_fit(&extract_confirm_rows(program, &lost, 0), PopupSize::Small);
-        assert_rows_fit(&extract_confirm_rows(program, &[], 1), PopupSize::Small);
-    }
-
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
+
+    /// Every name the prompt carries — the routine kept and the ones lost —
+    /// is the longest shipped ability. The lost list wraps, so its length
+    /// adds rows rather than width; three is enough to make it wrap.
+    #[test]
+    fn the_extract_confirm_fits_its_small_popup_with_the_longest_names() {
+        let routine = crate::render::test_support::longest_ability_name();
+        let lost = [routine.as_str(), routine.as_str(), routine.as_str()];
+        assert_rows_fit(&extract_confirm_rows(&routine, &lost, 0), PopupSize::Small);
+        assert_rows_fit(&extract_confirm_rows(&routine, &[], 1), PopupSize::Small);
+    }
 
     fn offered(name: &str) -> ExtractableRoutineView {
         ExtractableRoutineView {

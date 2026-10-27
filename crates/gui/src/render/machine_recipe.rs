@@ -107,40 +107,42 @@ fn row_text(row: &MachineRecipeRow) -> String {
 
 #[cfg(test)]
 mod tests {
-    /// The longest name the shipped items and abilities carry, so the worst
-    /// realistic prompt is measured rather than a literal that drifts.
-    fn longest_shipped_names() -> (String, String) {
-        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
-        let (abilities, _) =
-            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
-                .expect("the abilities load");
-        let (items, _) =
-            feral_processes_engine::items_db::ItemDb::load_dir(&assets.join("items"), &abilities)
-                .expect("the items load");
-        let longest = |names: Vec<String>| {
-            names
-                .into_iter()
-                .max_by_key(|n| n.chars().count())
-                .expect("a shipped name")
-        };
-        (
-            longest(abilities.all().map(|a| a.name.clone()).collect()),
-            longest(items.all().map(|d| d.name.clone()).collect()),
-        )
-    }
-
-    #[test]
-    fn the_switch_confirm_fits_its_small_popup_with_the_longest_prompt() {
-        let (_, item) = longest_shipped_names();
-        let prompt = format!(
-            "Switch the Printer to {item}? It empties 9999 units to the Depots or the floor beside it."
-        );
-        assert_rows_fit(&confirm_rows(&prompt, 0), PopupSize::Small);
-    }
-
     use super::*;
     use crate::paint::with_painter;
     use feral_processes_engine::{DifficultyMode, Game, MachineRecipeView, RecipePace};
+
+    /// The prompt is app-core's own `confirm_prompt`, asked of the longest
+    /// shipped machine name switching to the longest recipe it could list,
+    /// so a longer sentence there or a longer name in the assets fails here.
+    #[test]
+    fn the_switch_confirm_fits_its_small_popup_with_the_longest_prompt() {
+        let game = shipped_game();
+        let machine = game
+            .structure_defs()
+            .iter()
+            .filter(|d| d.machine.is_some())
+            .map(|d| d.name.clone())
+            .max_by_key(|n| n.chars().count())
+            .expect("a shipped machine");
+        let rows = shipped_rows(&game);
+        let longest = rows
+            .iter()
+            .max_by_key(|r| r.name.chars().count())
+            .expect("a shipped recipe");
+        let screen = MachineRecipeScreen {
+            machine: Entity::PLACEHOLDER,
+            pending: Some(longest.item.clone()),
+            view: MachineRecipeView {
+                tile: (0, 0),
+                name: machine,
+                current: None,
+                held: 9999,
+                rows: rows.clone(),
+            },
+        };
+        let prompt = screen.confirm_prompt().expect("a row is pending");
+        assert_rows_fit(&confirm_rows(&prompt, 0), PopupSize::Small);
+    }
 
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));

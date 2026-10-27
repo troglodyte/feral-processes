@@ -26,6 +26,20 @@ pub(super) fn test_assets_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
+/// The longest name any shipped ability carries, so a width census measures
+/// the catalogue rather than a literal that drifts from it.
+pub(super) fn longest_ability_name() -> String {
+    let (abilities, _) = feral_processes_engine::abilities::AbilityDb::load_dir(
+        &test_assets_dir().join("abilities"),
+    )
+    .expect("the abilities load");
+    abilities
+        .all()
+        .map(|a| a.name.clone())
+        .max_by_key(|n| n.chars().count())
+        .expect("a shipped ability")
+}
+
 pub(super) fn arenas_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../dev-arenas")
 }

@@ -1383,7 +1383,7 @@ mod tests {
     }
 
     /// A `.colour` file is looked up under its stem with the suffix
-    /// dropped, so `depot.colour.png` answers every def naming `depot`.
+    /// dropped, so a `depot.colour.png` would answer every def naming `depot`.
     #[test]
     fn a_colour_file_is_keyed_without_its_suffix() {
         let mut table = SpriteTable::default();

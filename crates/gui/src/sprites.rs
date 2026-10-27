@@ -785,7 +785,7 @@ pub(crate) mod tests {
     /// Worst allowed RGB distance from any opaque shipped pixel to its
     /// nearest `SPRITE_PALETTE` entry. Measured over every opaque pixel in
     /// `assets/sprites/` (alpha >= `SPRITE_ALPHA_THRESHOLD`, euclidean RGB):
-    /// max 71.8 (`(0,255,204)` in `depot.colour.png`), mean 13.06. A palette
+    /// max 66.0 (`(254,240,138)` in `scrapper.colour.png`), mean 11.52. A palette
     /// edit that makes shipped art snap worse fails here.
     const SPRITE_SNAP_BOUND: f64 = 72.0;
 

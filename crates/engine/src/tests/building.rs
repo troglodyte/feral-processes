@@ -1845,13 +1845,6 @@ fn worked_node_at(
     node
 }
 
-fn base_log_hits(game: &Game, needle: &str) -> usize {
-    game.message_log(usize::MAX)
-        .into_iter()
-        .filter(|e| e.text.contains(needle))
-        .count()
-}
-
 /// The largest felt change in the whole design: fragments stop appearing in
 /// your pocket while you are away. You come home and harvest. It is also the
 /// only thing that makes clogging real — a node that pays straight into the
@@ -1885,9 +1878,9 @@ fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
     );
 }
 
-/// A stalled base must not flood the log pane — the whole point of tracking
-/// status is that a machine says so on the way *into* a state, not every
-/// tick it spends there.
+/// A stalled base must not flood the alert board — the whole point of
+/// tracking status is that a machine says so on the way *into* a state, not
+/// every tick it spends there.
 #[test]
 fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
     let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1908,14 +1901,14 @@ fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
         "production stops at the buffer's capacity"
     );
     assert_eq!(
-        base_log_hits(&game, "clogged"),
+        stall_alerts(&game, MachineStatus::Clogged),
         1,
         "entering the state is news; staying in it is not"
     );
 }
 
 /// The clog is not a dead end — it is a prompt. Emptying the buffer starts
-/// the node again, and that resumption is worth a line of its own.
+/// the node again.
 #[test]
 fn collecting_from_a_clogged_node_lets_it_resume() {
     let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -329,13 +329,6 @@ fn status_of(game: &Game, machine: Entity) -> Option<MachineStatus> {
     game.world.get::<MachineStatus>(machine).copied()
 }
 
-fn log_hits(game: &Game, needle: &str) -> usize {
-    game.message_log(usize::MAX)
-        .into_iter()
-        .filter(|e| e.text.contains(needle))
-        .count()
-}
-
 /// The two-machine line, end to end: an extractor feeding an assembler that
 /// turns its output into something else. This is the smallest thing the
 /// design has to make worth building.
@@ -431,7 +424,7 @@ fn a_clogged_machine_does_not_consume_its_input() {
     );
 }
 
-/// A stalled base must not flood the log pane.
+/// A stalled base must not flood the alert board.
 #[test]
 fn a_machine_stalled_for_twenty_ticks_says_so_once() {
     let mut game = game_with_assembler("chain_once", 1010);
@@ -443,16 +436,15 @@ fn a_machine_stalled_for_twenty_ticks_says_so_once() {
 
     assert_eq!(status_of(&game, machine), Some(MachineStatus::Starved));
     assert_eq!(
-        log_hits(&game, "is starved"),
+        stall_alerts(&game, MachineStatus::Starved),
         1,
         "entering the state is news; staying in it is not"
     );
 }
 
-/// The stall clears when its cause does, and the recovery is worth a line —
-/// otherwise the player has no way to know their trip home fixed anything.
+/// The stall clears when its cause does.
 #[test]
-fn feeding_a_starved_machine_resumes_it_and_says_so() {
+fn feeding_a_starved_machine_resumes_it() {
     let mut game = game_with_assembler("chain_resume", 1011);
     let batch = per_batch(&game);
     let machine = assembler_at(&mut game, 40, 40, true);
@@ -473,7 +465,6 @@ fn feeding_a_starved_machine_resumes_it_and_says_so() {
     }
 
     assert_eq!(status_of(&game, machine), Some(MachineStatus::Running));
-    assert_eq!(log_hits(&game, "resumes"), 1);
 }
 
 /// Two modded programs alike in every way the base economy has ever read —

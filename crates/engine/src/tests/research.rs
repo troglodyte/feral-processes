@@ -2069,61 +2069,6 @@ fn save_format_version_is_unchanged_by_research_projects() {
     );
 }
 
-/// A cycle that landed nothing because there was nowhere to put it says
-/// nothing, where a *clogged* ordinary node still says so — the clog figure is
-/// the only signal a buffer is full.
-///
-/// The case: a hand-posted standing job on a Research Node with no project
-/// selected. "Your subroutine extracted 0 Research Data", every fourteen ticks
-/// for the rest of the run, reads as the node being broken; the attention row
-/// already says what to do about it, and the player's own instruction is not
-/// news.
-#[test]
-fn a_research_cycle_with_nowhere_to_land_is_not_announced() {
-    let mut game = Game::new(740, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let node = base_with_a_research_node(&mut game);
-    let worker = spawn_tamed(&mut game, 10, 3);
-    park_at_post(&mut game, worker, node);
-    game.set_standing_job(node, true, false).unwrap();
-
-    for _ in 0..600 {
-        game.tick();
-    }
-
-    let said = game
-        .message_history(500)
-        .iter()
-        .filter(|l| l.text.contains("Research Data"))
-        .map(|l| l.text.clone())
-        .collect::<Vec<_>>();
-    assert!(
-        said.is_empty(),
-        "a cycle that landed nothing must not announce a payout: {said:?}"
-    );
-}
-
-/// The contrast that makes the rule above mean something: with a project
-/// running, the same node's cycles *are* announced.
-#[test]
-fn a_research_cycle_that_lands_is_still_announced() {
-    let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let node = base_with_a_research_node(&mut game);
-    let worker = spawn_tamed(&mut game, 10, 3);
-    game.select_research("automation").unwrap();
-    park_at_post(&mut game, worker, node);
-
-    for _ in 0..200 {
-        game.tick();
-    }
-
-    assert!(
-        game.message_history(500)
-            .iter()
-            .any(|l| l.text.contains("Research Data")),
-        "a cycle that fed the project has to say so"
-    );
-}
-
 /// A project with its progress in and its bill short has one surface and this
 /// is it. The bill's work order is *removed* when it completes, so a line
 /// consumed before the project settled leaves nothing in the queue for the

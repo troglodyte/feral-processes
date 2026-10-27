@@ -696,32 +696,6 @@ pub(crate) fn deliver_payout(
     landed
 }
 
-/// The cycle line a completed extract announces, or `None` when the cycle
-/// landed nothing that the player could do anything about.
-///
-/// **A zero landing means two different things and they need different lines.**
-/// An ordinary node that landed nothing is clogged, and saying so is the only
-/// signal the player gets that a buffer is full — `deliver_payout` clamps
-/// against `output_room` and the difference is a number nothing else records.
-/// A Research Node that landed nothing has nowhere to *put* its yield: either
-/// the project it was feeding is already at its cost, or the player hand-posted
-/// a standing job with no project selected at all. "Your subroutine extracted 0
-/// Research Data", every fourteen ticks for the rest of the run, reads as the
-/// node being broken; `Game::attention` already carries the row that says what
-/// to do about it, and the base's own instruction is not news.
-fn cycle_line(
-    subject: &str,
-    landed: u32,
-    resource: &ItemId,
-    name: &str,
-    items: &ItemDb,
-) -> Option<String> {
-    if landed == 0 && items.research_currency() == Some(resource) {
-        return None;
-    }
-    Some(format!("{subject} {landed} {name}."))
-}
-
 /// A machine's identity for a record: its `StructureDef` id, its base-space
 /// tile and its tier. Extracted because three seams want the same three
 /// figures out of the same optional components, and a hand-written copy at
@@ -886,14 +860,6 @@ pub(crate) fn feeds(
     feeds_ingredient(a, b, items) || feeds_fuel(a, b)
 }
 
-/// Moves a machine to `next`, announcing it to the base feed only when the
-/// state actually changes.
-///
-/// **Entering a state is news; staying in it is not.** A base with four
-/// stalled machines would otherwise put four lines in the pane every tick it
-/// stayed stalled, which is the fastest way to make the log useless. Shared
-/// by every producer rather than each wording its own transition check, so
-/// the "log once" property cannot hold in one system and lapse in another.
 /// What an instrument needs to name the machine a stall happened to, which
 /// its `MachineStatus` cannot say on its own.
 ///
@@ -913,11 +879,23 @@ pub(crate) struct StallSite<'a> {
     pub kind: &'a str,
 }
 
+/// Moves a machine to `next`, posting a stall to the alert board only when
+/// the state actually changes.
+///
+/// **Entering a state is news; staying in it is not.** A base with four
+/// stalled machines would otherwise bump four alerts every tick it stayed
+/// stalled. Shared by every producer rather than each wording its own
+/// transition check, so the "post once" property cannot hold in one system
+/// and lapse in another.
+///
+/// **The board, never the message log.** A busy base changes machine status
+/// thousands of times a session, and every stall worth acting on is already
+/// on the board with its unread badge; a log line per transition only buried
+/// the news that isn't. `Running` and `Idle` reach neither.
 pub(crate) fn set_machine_status(
     status: &mut MachineStatus,
     next: MachineStatus,
     name: &str,
-    log: &mut MessageLog,
     board: &mut AlertBoard,
     site: StallSite<'_>,
 ) {
@@ -925,10 +903,10 @@ pub(crate) fn set_machine_status(
         return;
     }
     *status = next;
-    // Hung on the one door that already logs **only on transition**, which
+    // Hung on the one door that already posts **only on transition**, which
     // is what makes the edges free: there is no duplicate suppression here
-    // to write, and no second site can start reporting a stall the log never
-    // announced.
+    // to write, and no second site can start reporting a stall the board
+    // never carried.
     crate::base_ledger::record_in_system(site.telemetry, || {
         crate::telemetry::Record::MachineStall {
             tick: site.tick,
@@ -937,8 +915,6 @@ pub(crate) fn set_machine_status(
             status: next.as_str().to_string(),
         }
     });
-    // Built once and passed to both the log and the board, so the two never
-    // word the same transition differently.
     let text = match next {
         MachineStatus::Running => format!("The {name} resumes."),
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
@@ -957,11 +933,10 @@ pub(crate) fn set_machine_status(
         // needs is a stocked buffer on one of its four orthogonal
         // neighbours — see `game::base::power::is_fuelled`.
         //
-        // **Once, on the edge, and then silent.** This door only logs on
+        // **Once, on the edge, and then silent.** This door only posts on
         // transition, so a base left dry says this a single time rather than
         // once a tick forever. The standing signal is the status bar's
-        // `[GRID]` readout and the supplier's own red glyph, neither of which
-        // costs the log a line.
+        // `[GRID]` readout and the supplier's own red glyph.
         MachineStatus::Dry => {
             format!("The {name} is out of fuel — no Power Cells beside it.")
         }
@@ -972,8 +947,7 @@ pub(crate) fn set_machine_status(
             format!("The {name} has nothing set to make — stand beside it and press R.")
         }
     };
-    log.push_base(text.clone());
-    // Only the six stall states reach the board — `Running` and `Idle` are
+    // Only the stall states reach the board — `Running` and `Idle` are
     // not blockers, and posting them would put a resolved-machine entry on
     // a list that a stall's own resolution never removes. An exhaustive
     // match rather than `matches!` with a fixed list, `cell_mark`'s rule: a
@@ -1221,26 +1195,23 @@ fn burn_grid_upkeep(world: &mut World) {
             .map(|s| s.kind.clone())
             .unwrap_or_default();
         let tick_now = world.resource::<GameClock>().tick;
-        // `resource_scope` rather than two `resource_mut` calls: the log and
-        // the telemetry buffer are both resources and an exclusive system
+        // `resource_scope` rather than two `resource_mut` calls: the board
+        // and the telemetry buffer are both resources and an exclusive system
         // cannot hold two mutable borrows of the world at once.
-        world.resource_scope::<MessageLog, _>(|world, mut log| {
-            world.resource_scope::<AlertBoard, _>(|world, mut board| {
-                let mut telemetry = world.resource_mut::<BattleTelemetry>();
-                set_machine_status(
-                    &mut status,
-                    next,
-                    &name,
-                    &mut log,
-                    &mut board,
-                    StallSite {
-                        telemetry: &mut telemetry,
-                        tick: tick_now,
-                        machine: tile,
-                        kind: &kind,
-                    },
-                );
-            });
+        world.resource_scope::<AlertBoard, _>(|world, mut board| {
+            let mut telemetry = world.resource_mut::<BattleTelemetry>();
+            set_machine_status(
+                &mut status,
+                next,
+                &name,
+                &mut board,
+                StallSite {
+                    telemetry: &mut telemetry,
+                    tick: tick_now,
+                    machine: tile,
+                    kind: &kind,
+                },
+            );
         });
         if let Some(mut current) = world.get_mut::<MachineStatus>(burner) {
             *current = status;
@@ -1299,7 +1270,6 @@ pub fn idle_machine_system(
     item_db: Res<ItemDb>,
     grid: Res<PowerGrid>,
     clock: Res<GameClock>,
-    mut log: ResMut<MessageLog>,
     mut telemetry: ResMut<BattleTelemetry>,
     mut board: ResMut<AlertBoard>,
 ) {
@@ -1315,7 +1285,6 @@ pub fn idle_machine_system(
                 &mut status,
                 MachineStatus::Unpowered,
                 name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut telemetry,
@@ -1344,7 +1313,6 @@ pub fn idle_machine_system(
                     &mut status,
                     next,
                     name,
-                    &mut log,
                     &mut board,
                     StallSite {
                         telemetry: &mut telemetry,
@@ -1361,7 +1329,6 @@ pub fn idle_machine_system(
                 &mut status,
                 MachineStatus::Unconfigured,
                 name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut telemetry,
@@ -1379,7 +1346,6 @@ pub fn idle_machine_system(
             &mut status,
             MachineStatus::Idle,
             name,
-            &mut log,
             &mut board,
             StallSite {
                 telemetry: &mut telemetry,
@@ -1605,7 +1571,6 @@ pub fn task_progress_system(
                 &mut status,
                 away,
                 &machine_name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
@@ -1628,7 +1593,6 @@ pub fn task_progress_system(
                 &mut status,
                 MachineStatus::Running,
                 &machine_name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
@@ -1656,7 +1620,6 @@ pub fn task_progress_system(
                 &mut status,
                 held,
                 &machine_name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
@@ -1734,13 +1697,8 @@ pub fn task_progress_system(
                     event,
                 )
             });
-            log.push_base("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
-        let resource_name = item_db
-            .get(resource.as_str())
-            .map(|d| d.name.as_str())
-            .unwrap_or(resource.as_str());
         let landed = deliver_payout(
             &resource,
             payout,
@@ -1776,7 +1734,6 @@ pub fn task_progress_system(
             &mut status,
             MachineStatus::Running,
             &machine_name,
-            &mut log,
             &mut board,
             StallSite {
                 telemetry: &mut instruments.telemetry,
@@ -1816,15 +1773,6 @@ pub fn task_progress_system(
         } else {
             LevelGain::default()
         };
-        if let Some(line) = cycle_line(
-            "Your subroutine extracted",
-            landed,
-            &resource,
-            resource_name,
-            &item_db,
-        ) {
-            log.push_base_kind(MessageKind::Loot, line);
-        }
         // Its own `LevelUp` line rather than a tail on the payout above, so a
         // base level-up draws and prunes like the two field ones. Named by the
         // machine because this is a bevy system with no `Game` to ask
@@ -1895,7 +1843,6 @@ pub fn player_gather_system(
     mut player: Query<PlayerGatherRow, With<Player>>,
     mut nodes: Query<WorkedNode>,
     db: PlayerGatherLookups,
-    mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
     mut instruments: crate::base_ledger::Instruments,
     mut board: ResMut<AlertBoard>,
@@ -1964,7 +1911,6 @@ pub fn player_gather_system(
                 &mut status,
                 MachineStatus::Clogged,
                 &machine_name,
-                &mut log,
                 &mut board,
                 StallSite {
                     telemetry: &mut instruments.telemetry,
@@ -2020,13 +1966,8 @@ pub fn player_gather_system(
             instruments.emit(tick_now, zone_now, &fizzle, move |event| {
                 extract_record(tick_now, zone_now, tile, kind, tier_level, None, event)
             });
-            log.push_base("Your extraction attempt fails to compile.".to_string());
             continue;
         };
-        let resource_name = item_db
-            .get(resource.as_str())
-            .map(|d| d.name.as_str())
-            .unwrap_or(resource.as_str());
         let landed = deliver_payout(
             &resource,
             payout,
@@ -2058,7 +1999,6 @@ pub fn player_gather_system(
             &mut status,
             MachineStatus::Running,
             &machine_name,
-            &mut log,
             &mut board,
             StallSite {
                 telemetry: &mut instruments.telemetry,
@@ -2067,9 +2007,6 @@ pub fn player_gather_system(
                 kind: machine_kind,
             },
         );
-        if let Some(line) = cycle_line("You extract", landed, &resource, resource_name, &item_db) {
-            log.push_base_kind(MessageKind::Loot, line);
-        }
     }
 }
 
@@ -2212,7 +2149,6 @@ pub fn assembler_system(
     mut statuses: Query<&mut MachineStatus>,
     mut tasks: Query<(Entity, &mut Task)>,
     db: AssemblerLookups,
-    mut log: ResMut<MessageLog>,
     mut instruments: crate::base_ledger::Instruments,
 ) {
     let AssemblerLookups {
@@ -2260,7 +2196,6 @@ pub fn assembler_system(
         // capturing it would hold that borrow across every later use of
         // `instruments` in the same loop.
         let announce = |statuses: &mut Query<&mut MachineStatus>,
-                        log: &mut MessageLog,
                         telemetry: &mut BattleTelemetry,
                         board: &mut AlertBoard,
                         next: MachineStatus| {
@@ -2269,7 +2204,6 @@ pub fn assembler_system(
                     &mut status,
                     next,
                     &label,
-                    log,
                     board,
                     StallSite {
                         telemetry,
@@ -2364,7 +2298,6 @@ pub fn assembler_system(
         if !fed {
             announce(
                 &mut statuses,
-                &mut log,
                 &mut instruments.telemetry,
                 &mut board,
                 MachineStatus::Starved,
@@ -2374,7 +2307,6 @@ pub fn assembler_system(
         if !roomy {
             announce(
                 &mut statuses,
-                &mut log,
                 &mut instruments.telemetry,
                 &mut board,
                 MachineStatus::Clogged,
@@ -2383,7 +2315,6 @@ pub fn assembler_system(
         }
         announce(
             &mut statuses,
-            &mut log,
             &mut instruments.telemetry,
             &mut board,
             MachineStatus::Running,

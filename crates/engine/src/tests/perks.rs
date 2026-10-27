@@ -608,6 +608,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
 
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, None);
     keep_the_sweep_off(&mut game, node);
+    record_extractions(&mut game);
 
     game.work_structure(node)
         .expect("a deployed node is workable");
@@ -615,22 +616,14 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
         game.wait();
     }
 
-    let log = game.message_log(MESSAGE_LOG_CAP);
-    let extractions = log
-        .iter()
-        .filter(|e| e.text.starts_with("You extract"))
-        .count();
-    let fizzles = log
-        .iter()
-        .filter(|e| e.text.contains("fails to compile"))
-        .count();
+    let (extractions, fizzles) = extraction_cycles(&game);
     assert!(
         extractions > 0,
-        "the job should have completed cycles to measure: {log:?}"
+        "the job should have completed cycles to measure"
     );
     assert_eq!(
         fizzles, 0,
-        "a roll the perk has capped at a certainty must never fizzle: {log:?}"
+        "a roll the perk has capped at a certainty must never fizzle"
     );
 }
 
@@ -667,24 +660,19 @@ fn extraction_reaches_the_roll_when_you_work_a_node_yourself() {
             .get_mut::<crate::components::Derived>(player)
             .unwrap()
             .extraction = extraction;
+        record_extractions(&mut game);
 
         game.work_structure(node)
             .expect("a deployed node is workable");
         for _ in 0..1000 {
             game.wait();
         }
-        let log = game.message_log(MESSAGE_LOG_CAP);
-        let extractions = log
-            .iter()
-            .filter(|e| e.text.starts_with("You extract"))
-            .count();
+        let (extractions, fizzles) = extraction_cycles(&game);
         assert!(
             extractions >= 15,
             "too few cycles to measure: {extractions}"
         );
-        log.iter()
-            .filter(|e| e.text.contains("fails to compile"))
-            .count()
+        fizzles
     }
 
     // Seeds, not one run: a node's buffer clogs after about twenty cycles, so
@@ -719,28 +707,103 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     park_at_post(&mut game, worker, node);
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, Some(worker));
     keep_the_sweep_off(&mut game, node);
+    record_extractions(&mut game);
 
     for _ in 0..60 {
         game.wait();
     }
 
-    let log = game.message_log(MESSAGE_LOG_CAP);
-    let extractions = log
-        .iter()
-        .filter(|e| e.text.starts_with("Your subroutine extracted"))
-        .count();
-    let fizzles = log
-        .iter()
-        .filter(|e| e.text.contains("fails to compile"))
-        .count();
+    let (extractions, fizzles) = extraction_cycles(&game);
     assert!(
         extractions > 0,
-        "the cronjob should have completed cycles to measure: {log:?}"
+        "the cronjob should have completed cycles to measure"
     );
-    assert_eq!(
-        fizzles, 0,
-        "the perk has to reach the worker's roll too: {log:?}"
+    assert_eq!(fizzles, 0, "the perk has to reach the worker's roll too");
+}
+
+/// A cycle's payout or fizzle is not news. An Extractor finishes one every
+/// few ticks for the whole run, so a line per cycle — a posted program's or
+/// the player's own — was most of what a session logged, and none of it asks
+/// the player to do anything.
+#[test]
+fn an_extraction_cycle_is_never_logged() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    keep_the_sweep_off(&mut game, node);
+    record_extractions(&mut game);
+
+    for _ in 0..120 {
+        game.wait();
+    }
+
+    let (extractions, fizzles) = extraction_cycles(&game);
+    assert!(
+        extractions + fizzles > 0,
+        "the cronjob should have completed cycles to measure"
     );
+    let said: Vec<String> = game
+        .message_log(MESSAGE_LOG_CAP)
+        .iter()
+        .map(|e| e.text.clone())
+        .filter(|t| t.contains("extract") || t.contains("fails to compile"))
+        .collect();
+    assert!(said.is_empty(), "{said:?}");
+}
+
+/// The player's own cycles likewise: the node's buffer filling is the
+/// feedback, and a line per cycle buried everything else in the pane.
+#[test]
+fn extracting_by_hand_is_never_logged() {
+    let mut game = Game::new(4212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    keep_the_sweep_off(&mut game, node);
+    record_extractions(&mut game);
+
+    game.work_structure(node)
+        .expect("a deployed node is workable");
+    for _ in 0..120 {
+        game.wait();
+    }
+
+    let (extractions, fizzles) = extraction_cycles(&game);
+    assert!(
+        extractions + fizzles > 0,
+        "the job should have completed cycles to measure"
+    );
+    let said: Vec<String> = game
+        .message_log(MESSAGE_LOG_CAP)
+        .iter()
+        .map(|e| e.text.clone())
+        .filter(|t| t.contains("extract") || t.contains("fails to compile"))
+        .collect();
+    assert!(said.is_empty(), "{said:?}");
+}
+
+/// Arms the telemetry these tests count extraction cycles from — the log no
+/// longer carries them.
+fn record_extractions(game: &mut Game) {
+    game.world
+        .resource_mut::<crate::resources::BattleTelemetry>()
+        .on = true;
+}
+
+/// `(landed, fizzled)` extraction cycles recorded since
+/// `record_extractions`.
+fn extraction_cycles(game: &Game) -> (usize, usize) {
+    game.world
+        .resource::<crate::resources::BattleTelemetry>()
+        .records
+        .iter()
+        .fold((0, 0), |(ok, fizzled), r| match r {
+            crate::telemetry::Record::Extract { ok: true, .. } => (ok + 1, fizzled),
+            crate::telemetry::Record::Extract { ok: false, .. } => (ok, fizzled + 1),
+            _ => (ok, fizzled),
+        })
 }
 
 // ---- Overflow XP ------------------------------------------------------

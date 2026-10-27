@@ -639,8 +639,10 @@ fn a_posted_tenders_manifest_row_names_the_plot_cell() {
     assert_eq!(game.program_activity(worker), "tending Farm Plot (-3, 2)");
 }
 
+/// A farm brings in a crop every few hundred ticks for the whole run, and the
+/// cell on the floor is the whole of the news.
 #[test]
-fn a_harvest_log_line_carries_no_coordinates_so_repeats_condense() {
+fn a_harvest_is_not_logged() {
     let mut game = farm_base(59);
     let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
     set_growth(&mut game, tile, CropGrowth::Ripe);
@@ -649,15 +651,18 @@ fn a_harvest_log_line_carries_no_coordinates_so_repeats_condense() {
 
     game.run_farm_crew();
 
+    assert_ne!(
+        game.world.get::<FarmTile>(tile).unwrap().growth,
+        CropGrowth::Ripe,
+        "the harvest landed"
+    );
     let lines: Vec<String> = game
         .message_log(500)
         .iter()
         .skip(before)
         .map(|l| l.text.clone())
-        .filter(|t| t.contains("harvest"))
         .collect();
-    assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(!lines[0].contains('('), "{}", lines[0]);
+    assert!(lines.is_empty(), "{lines:?}");
 }
 
 #[test]

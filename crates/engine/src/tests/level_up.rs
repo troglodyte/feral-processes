@@ -154,11 +154,6 @@ fn a_posted_worker_levels_up_in_the_base_log_beside_its_machine() {
         header.text
     );
     assert!(
-        !log.iter()
-            .any(|e| e.text.starts_with("Your subroutine extracted") && e.text.contains("levels")),
-        "the level-up is its own line now, not a tail on the payout: {log:?}"
-    );
-    assert!(
         stat_lines(&game).iter().any(|l| l.starts_with("  Max HP ")),
         "the base block reports growth like the two field ones: {log:?}"
     );

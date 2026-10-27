@@ -242,9 +242,13 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   will not fix it.** The two systems split by writer: `haul_step_system`
   marks the *worker*, `task_progress_system` stays the only writer of a
   machine's status.
-- **`set_machine_status` is the one place a stall is announced, and it logs
-  only on transition.** Three callers, so "entering a state is news, staying
-  in it is not" cannot lapse in one of them.
+- **`set_machine_status` is the one place a stall is announced, and it
+  posts to the alert board only on transition — never to the message log.**
+  Three callers, so "entering a state is news, staying in it is not" cannot
+  lapse in one of them.
+- **A production cycle is never logged** — not an extraction, a fizzle or a
+  harvest, a posted program's or the player's own; the ledger and telemetry
+  count them. The log is for what the player should act on.
 - **"Nobody is posted here" is one pass over every machine**,
   `idle_machine_system`.
 - **A banked resource can never clog, so a Research Node has no "full"

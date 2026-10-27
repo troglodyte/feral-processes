@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.17
+
+**On the transfer screen, `+` puts items into storage and `-` takes them out.** It was the other way round, which fought the keyboard: `-` sits left of `+`, and Shift/Ctrl+Left already took while Shift/Ctrl+Right put. `=` still works as `+` without Shift.
+
 ## 0.20.16
 
 **Clicking on the map walks straight toward where you clicked.** A diagonal step counts the same as a straight one, so many routes are equally short, and the walk used to pick one that bent up a row and back down. It now takes the step pointing most directly at the destination, while still walking around anything in the way.

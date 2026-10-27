@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.11
+
+**The README's Stack screenshot shows the current screen.** The old one was taken before the interface was redrawn.
+
 ## 0.20.10
 
 **The Research screen now tells you how hidden research is found.** While there is still something for a study to find, a line under the header says what is in the way: no Research Station, nobody pinned in its pen, or a project running. Study only moves while no project is selected, and nothing used to say so. Once a study is running, the line shows how close the next attempt is.

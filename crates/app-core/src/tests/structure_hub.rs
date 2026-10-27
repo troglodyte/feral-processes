@@ -96,17 +96,16 @@ fn esc_goes_page_then_rail_then_map() {
 fn plus_and_minus_on_inventory_move_stock_and_left_is_the_rail() {
     let mut app = app_beside_depots(2605, 1, 0, &[("power_cell", 3)]);
     open_structure_page(&mut app);
-    app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('+'));
     assert!(
         app.basket_amounts.contains(&-2),
-        "- puts a unit into the depot"
+        "+ puts a unit into the depot"
     );
-    app.handle_key(GameKey::Char('+'));
-    assert!(app.basket_amounts.contains(&-1), "+ takes one back");
-    app.handle_key(GameKey::Char('='));
-    assert!(app.basket_amounts.iter().all(|n| *n == 0), "and so does =");
     app.handle_key(GameKey::Char('-'));
+    assert!(app.basket_amounts.contains(&-1), "- takes one back");
+    app.handle_key(GameKey::Char('='));
+    assert!(app.basket_amounts.contains(&-2), "= is + without Shift");
     let staged = app.basket_amounts.clone();
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail, "Left goes to the rail");
@@ -222,7 +221,7 @@ fn a_basket_left_by_tab_is_discarded() {
     give_player_items(&mut app, &[("power_cell", 3)]);
     open_structure_page(&mut app);
     app.handle_key(GameKey::Tab);
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
     assert!(
         app.basket_amounts.iter().any(|n| *n != 0),
         "something staged"

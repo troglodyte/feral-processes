@@ -333,7 +333,7 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
         ],
         Mode::Transfer => vec![
             keycap("↑/↓", "select"),
-            keycap("+/-", "take/put"),
+            keycap("-/+", "take/put"),
             keycap("Enter", "transfer"),
         ],
         Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],

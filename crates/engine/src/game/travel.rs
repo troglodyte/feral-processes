@@ -123,15 +123,22 @@ impl Game {
             })
         };
 
-        // The player's own neighbour with the lowest field value, ties
-        // broken by `NEIGHBOURS` order — `Iterator::min_by_key` keeps the
-        // first of an equal run, which is exactly that order since the map
-        // above walks `NEIGHBOURS` itself.
+        // The player's own neighbour with the lowest field value. Chebyshev
+        // distance prices a diagonal like a straight step, so most moves
+        // tie three ways; the tie goes to the step pointing most directly
+        // at the goal, or the walk bows a row off the line and back.
+        // Exact ties (two diagonals either side of a straight goal) keep
+        // `NEIGHBOURS` order — `min_by` keeps the first of an equal run.
         NEIGHBOURS
             .iter()
             .map(|(dx, dy)| (current.0 + dx, current.1 + dy))
             .filter_map(|n| field.get(&n).map(|&cost| (n, cost)))
-            .min_by_key(|&(_, cost)| cost)
+            .min_by(|&(a, cost_a), &(b, cost_b)| {
+                cost_a.cmp(&cost_b).then_with(|| {
+                    let step = |n: (i32, i32)| (n.0 - current.0, n.1 - current.1);
+                    heading_fit(step(b), delta).total_cmp(&heading_fit(step(a), delta))
+                })
+            })
             .map_or(TravelStep::NoRoute, |(n, _)| {
                 TravelStep::Toward(n.0 - current.0, n.1 - current.1)
             })
@@ -168,4 +175,12 @@ impl Game {
             }
         }
     }
+}
+
+/// How closely `step` points along `toward`, larger is closer: the cosine
+/// of the angle between them, scaled by `toward`'s length, which every
+/// step compared in one call shares.
+fn heading_fit(step: (i32, i32), toward: (i32, i32)) -> f64 {
+    let dot = f64::from(step.0 * toward.0 + step.1 * toward.1);
+    dot / f64::from(step.0 * step.0 + step.1 * step.1).sqrt()
 }

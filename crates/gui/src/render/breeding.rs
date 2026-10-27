@@ -163,11 +163,11 @@ pub(super) fn incubation_lines(slots: &[IncubationView]) -> Vec<String> {
 
 /// The sheet's closing line: `[B]` is offered only while a slot is free,
 /// which is the same test `App` applies before opening the pages.
-pub(super) fn bay_footer(slots: &[IncubationView]) -> &'static str {
+pub(super) fn bay_footer(slots: &[IncubationView]) -> String {
     if slots.iter().any(|s| s.child.is_none()) {
-        "[B] breed  ·  Any other key back"
+        key_hints(&["[B] breed", "Any other key back"])
     } else {
-        "Any key back"
+        "Any key back".to_string()
     }
 }
 
@@ -280,7 +280,7 @@ mod tests {
             }),
         };
         let mut lines = incubation_lines(&[held.clone(), IncubationView { child: None }]);
-        lines.push(bay_footer(&[IncubationView { child: None }]).to_string());
+        lines.push(bay_footer(&[IncubationView { child: None }]));
         assert_fits(&lines, PopupSize::Small);
     }
 

@@ -1029,8 +1029,19 @@ impl App {
 }
 
 /// Enter and Esc here are the wizard's, not the Forge's save and back.
-const CREATION_SPRITE_KEYS: &str = "Tab switch panel  ·  Arrows move  ·  Space paint  ·  \
-    Backspace erase  ·  [u] undo  ·  [x] clear  ·  [g] brush size  ·  [f] fill  ·  [i] pick colour  ·  Enter keep  ·  Esc discard";
+const CREATION_SPRITE_KEYS: [&str; 11] = [
+    "Tab switch panel",
+    "Arrows move",
+    "Space paint",
+    "Backspace erase",
+    "[u] undo",
+    "[x] clear",
+    "[g] brush size",
+    "[f] fill",
+    "[i] pick colour",
+    "Enter keep",
+    "Esc discard",
+];
 
 impl App {
     /// What the Icon step's editor draws, or `None` while it is not open.
@@ -1039,7 +1050,7 @@ impl App {
         self.creation_icon_editor.as_ref().map(|editor| {
             editor.view(EditorChrome {
                 title: "Draw your avatar".to_string(),
-                keys: CREATION_SPRITE_KEYS.to_string(),
+                keys: CREATION_SPRITE_KEYS.join(crate::KEY_HINT_SEP),
                 buttons: WIZARD_BUTTONS.to_vec(),
                 tint: None,
                 full_colour: false,

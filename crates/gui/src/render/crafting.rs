@@ -146,13 +146,23 @@ fn craft_rows(
 /// A named constant so the width test measures the string the screen
 /// actually prints: `draw_row` clips a row vertically and never
 /// horizontally, so a footer past the popup body is lost in silence.
-const CRAFT_QUANTITY_KEYS: &str = "Type digits  ·  [C] careful  ·  [F] compile 5  ·  [M] compile max  ·  Enter compile  ·  Esc cancel";
+const CRAFT_QUANTITY_KEYS: &[&str] = &[
+    "Type digits",
+    "[C] careful",
+    "[F] compile 5",
+    "[M] compile max",
+    "Enter compile",
+    "Esc cancel",
+];
 
 /// The arrow line, named for `CRAFT_QUANTITY_KEYS`' reason — it is the only
 /// other row on this page that can grow by a word, and the width test
 /// measures both.
-const CRAFT_QUANTITY_ARROWS: &str =
-    "Left/Right adjust  ·  Shift+Left/Right to the end  ·  Ctrl+Left/Right halves the gap";
+const CRAFT_QUANTITY_ARROWS: &[&str] = &[
+    "Left/Right adjust",
+    "Shift+Left/Right to the end",
+    "Ctrl+Left/Right halves the gap",
+];
 
 /// The quantity prompt, and the careful-compile toggle that decides what
 /// the batch is worth.
@@ -196,8 +206,8 @@ pub(super) fn draw_craft_quantity(
         QUALITY_CAREFUL_COST_PERCENT
     )));
     rows.push(text_row(""));
-    rows.push(text_row(CRAFT_QUANTITY_ARROWS));
-    rows.push(text_row(CRAFT_QUANTITY_KEYS));
+    rows.push(text_row(key_hints(CRAFT_QUANTITY_ARROWS)));
+    rows.push(text_row(key_hints(CRAFT_QUANTITY_KEYS)));
     draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -646,8 +656,11 @@ mod tests {
         with_painter(|p| {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for line in [CRAFT_QUANTITY_KEYS, CRAFT_QUANTITY_ARROWS] {
-                let drawn = p.measure_ui_advance(line, m.font_size);
+            for line in [
+                key_hints(CRAFT_QUANTITY_KEYS),
+                key_hints(CRAFT_QUANTITY_ARROWS),
+            ] {
+                let drawn = p.measure_ui_advance(&line, m.font_size);
                 assert!(
                     drawn <= room,
                     "a key line overflows by {:.0}px ({drawn:.0} into \

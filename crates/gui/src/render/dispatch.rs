@@ -261,7 +261,7 @@ pub(super) fn route_cargo_rows(basket: &RouteCargoBasket, selected: usize) -> Ve
         ));
     }
     rows.push(text_row(""));
-    rows.push(text_row(BASKET_STEP_KEYS));
+    rows.push(text_row(key_hints(BASKET_STEP_KEYS)));
     rows.push(text_row(key_hints(&[
         "[T] toggle standing",
         "[N] clear",

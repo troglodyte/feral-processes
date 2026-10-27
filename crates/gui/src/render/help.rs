@@ -24,9 +24,9 @@ pub(super) fn draw_help_index(app: &App, refusal: Option<&str>, painter: &Painte
     draw_popup("Help", PopupSize::Large, &out, refusal, painter, m);
 }
 
-const FOOTER_SCROLLING: &str = "Up/Down scroll  ·  Esc back";
-const FOOTER_WITH_LINKS: &str = "Up/Down scroll  ·  Tab links  ·  Esc back";
-const FOOTER_ON_LINKS: &str = "Up/Down select  ·  Enter read on  ·  Tab scroll  ·  Esc back";
+const FOOTER_SCROLLING: &[&str] = &["Up/Down scroll", "Esc back"];
+const FOOTER_WITH_LINKS: &[&str] = &["Up/Down scroll", "Tab links", "Esc back"];
+const FOOTER_ON_LINKS: &[&str] = &["Up/Down select", "Enter read on", "Tab scroll", "Esc back"];
 
 /// The pinned further-reading block: a heading that names the focus, then a
 /// row per link, the highlighted one marked only while the links have focus.
@@ -50,12 +50,12 @@ fn link_lines(view: &HelpPageView, focused: bool, selected: usize) -> Vec<String
     out
 }
 
-fn footer(view: &HelpPageView, focused: bool) -> &'static str {
-    match (view.links.is_empty(), focused) {
+fn footer(view: &HelpPageView, focused: bool) -> String {
+    key_hints(match (view.links.is_empty(), focused) {
         (true, _) => FOOTER_SCROLLING,
         (false, false) => FOOTER_WITH_LINKS,
         (false, true) => FOOTER_ON_LINKS,
-    }
+    })
 }
 
 /// One page. The prose is the scrollable body — every row an `Item` so
@@ -160,7 +160,7 @@ mod tests {
         let db = help_db();
         let mut lines: Vec<String> = [FOOTER_ON_LINKS, FOOTER_SCROLLING, FOOTER_WITH_LINKS]
             .iter()
-            .map(|s| s.to_string())
+            .map(|chips| crate::render::popup::key_hints(chips))
             .collect();
         for page in db.pages() {
             lines.extend(page.links.iter().map(|l| format!("> {}", l.label)));

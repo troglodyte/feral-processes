@@ -334,10 +334,15 @@ pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
     }
 }
 
-/// One separator for every key-hint line, so the chips read the same on every
-/// screen and a width census measures the real string.
+/// The one separator between chips; app-core owns it because its own key
+/// lines (the sprite editor's) are built there.
+pub(super) const KEY_SEP: &str = feral_processes_app_core::KEY_HINT_SEP;
+
+/// Joins chips into a hint line with `KEY_SEP`. A line a `const` has to hold
+/// is kept as a chip list and passed through here where it is drawn, so no
+/// screen hand-copies the separator.
 pub(super) fn key_hints(chips: &[&str]) -> String {
-    chips.join("  ·  ")
+    chips.join(KEY_SEP)
 }
 
 /// A prompt as text rows wrapped to `size`'s popup width. Text rows are never
@@ -367,12 +372,15 @@ pub(super) fn push_key_footer(rows: &mut Vec<Row>, chips: &[&str]) {
 
 /// The first footer line of every basket screen (caravan, market, dispatch);
 /// the second line carries the screen's own actions.
-pub(super) const BASKET_STEP_KEYS: &str =
-    "Left/Right set a row  ·  Shift+Left/Right to the end  ·  Ctrl+Left/Right halves the gap";
+pub(super) const BASKET_STEP_KEYS: &[&str] = &[
+    "Left/Right set a row",
+    "Shift+Left/Right to the end",
+    "Ctrl+Left/Right halves the gap",
+];
 
 /// The footer of every "which way?" prompt; the handler reads the arrows and
 /// hjkl alike.
-pub(super) const DIRECTION_KEYS: &str = "Arrows/hjkl pick  ·  Esc cancel";
+pub(super) const DIRECTION_KEYS: &[&str] = &["Arrows/hjkl pick", "Esc cancel"];
 
 pub(super) fn text_row(s: impl Into<String>) -> Row {
     Row::Text(s.into())
@@ -1332,8 +1340,12 @@ mod tests {
     /// the key hint line, when it has one. Anything pinned beyond that is a
     /// description torn off the list.
     fn key_footer_rows(rows: &[Row]) -> usize {
-        match rows.last() {
-            Some(Row::Text(t)) if t.contains("Esc ") => 2,
+        match rows {
+            [.., Row::Text(spacer), Row::Text(hint)]
+                if spacer.is_empty() && hint.contains("Esc ") =>
+            {
+                2
+            }
             _ => 0,
         }
     }

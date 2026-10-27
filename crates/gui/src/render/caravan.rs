@@ -217,7 +217,7 @@ pub(super) fn caravan_page_rows(
         idx += 1;
     }
     rows.push(text_row(""));
-    rows.push(text_row(BASKET_STEP_KEYS));
+    rows.push(text_row(key_hints(BASKET_STEP_KEYS)));
     rows.push(text_row(key_hints(&[
         "[A] all your cargo",
         "[N] clear",

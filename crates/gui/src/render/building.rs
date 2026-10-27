@@ -308,7 +308,7 @@ pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String
         text_row(""),
         text_row(DIRECTION_PROMPT),
         text_row(""),
-        text_row(DIRECTION_KEYS),
+        text_row(key_hints(DIRECTION_KEYS)),
     ]);
     rows
 }
@@ -359,7 +359,7 @@ pub(super) fn draw_build_direction(
         None => vec![
             text_row(DIRECTION_PROMPT),
             text_row(""),
-            text_row(DIRECTION_KEYS),
+            text_row(key_hints(DIRECTION_KEYS)),
         ],
     };
     draw_popup(
@@ -1270,8 +1270,12 @@ pub(super) fn draw_work_order_pick(
     );
 }
 
-const WORK_ORDER_QUANTITY_KEYS: &str =
-    "Type digits  ·  [S] standing order  ·  Enter order  ·  Esc cancel";
+const WORK_ORDER_QUANTITY_KEYS: &[&str] = &[
+    "Type digits",
+    "[S] standing order",
+    "Enter order",
+    "Esc cancel",
+];
 
 /// How many of it. The same two-page shape the compile flow uses.
 ///
@@ -1329,7 +1333,7 @@ fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<Str
         // carrying forty of the thing still reads 0/20 on the queue screen.
         "The target is what the base holds. What you are carrying is yours.".to_string(),
         String::new(),
-        WORK_ORDER_QUANTITY_KEYS.to_string(),
+        key_hints(WORK_ORDER_QUANTITY_KEYS),
     ]
 }
 
@@ -2497,7 +2501,10 @@ mod tests {
             "the cost carries the have/need figures the refusal would otherwise be the first news of: {text:?}"
         );
         assert!(text.contains(&DIRECTION_PROMPT), "{text:?}");
-        assert!(text.contains(&DIRECTION_KEYS), "{text:?}");
+        assert!(
+            text.contains(&key_hints(DIRECTION_KEYS).as_str()),
+            "{text:?}"
+        );
     }
 
     /// A waived bill has no rows to join, and both screens that quote one

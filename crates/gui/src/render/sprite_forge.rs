@@ -54,7 +54,13 @@ use feral_processes_app_core::{
 const PICKER_COLUMNS: usize = 4;
 
 const PICKER_TITLE: &str = "Sprite Forge";
-const PICKER_HELP_TEXT: &str = "Up/Down or click move  ·  Enter or double-click edit  ·  [t] toggle art  ·  [r] revert  ·  Esc back";
+const PICKER_HELP: &[&str] = &[
+    "Up/Down or click move",
+    "Enter or double-click edit",
+    "[t] toggle art",
+    "[r] revert",
+    "Esc back",
+];
 
 /// Marks a row the player has redrawn. Short on purpose: the row census
 /// holds the longest label plus this against its column.
@@ -120,13 +126,20 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
             .map(|s| s.label.clone())
     }) {
         Some(label) => {
-            let ask = format!(
-                "Revert `{label}` to the original art?  ·  {}",
-                super::popup::key_hints(&["[y] revert", "[n] or Esc cancel"])
-            );
+            let ask = super::popup::key_hints(&[
+                &format!("Revert `{label}` to the original art?"),
+                "[y] revert",
+                "[n] or Esc cancel",
+            ]);
             centered_ui(painter, &ask, g.help_y, m.small(), TEXT);
         }
-        None => centered_ui(painter, PICKER_HELP_TEXT, g.help_y, m.small(), TEXT_DIM),
+        None => centered_ui(
+            painter,
+            &super::popup::key_hints(PICKER_HELP),
+            g.help_y,
+            m.small(),
+            TEXT_DIM,
+        ),
     }
 
     for (i, subject) in subjects.iter().enumerate() {
@@ -489,7 +502,7 @@ pub(super) fn draw_sprite_editor(app: &App, painter: &Painter, m: &Metrics) {
         // of, so this still names the way back rather than drawing nothing.
         None => centered_ui(
             painter,
-            "No sprite selected  ·  Esc back",
+            &super::popup::key_hints(&["No sprite selected", "Esc back"]),
             m.pad + m.line_height,
             m.title(),
             TEXT_DIM,

@@ -160,7 +160,7 @@ use party::{
     draw_companion_equip, draw_companion_memories, draw_fuse_menu, draw_fuse_name_menu,
     draw_fuse_second_menu, draw_refactor, draw_refactor_item, draw_rename_menu,
 };
-use popup::{DIRECTION_KEYS, PopupSize, Row, counted_item_row, draw_popup, text_row};
+use popup::{DIRECTION_KEYS, PopupSize, Row, counted_item_row, draw_popup, key_hints, text_row};
 use progression::{draw_research_menu, draw_respec_confirm};
 use put_down::draw_put_down;
 use refit_copy::draw_refit_copy;
@@ -1853,7 +1853,11 @@ fn draw_direction_prompt(
     draw_popup(
         title,
         PopupSize::Small,
-        &[text_row(body), text_row(""), text_row(DIRECTION_KEYS)],
+        &[
+            text_row(body),
+            text_row(""),
+            text_row(key_hints(DIRECTION_KEYS)),
+        ],
         refusal,
         painter,
         m,

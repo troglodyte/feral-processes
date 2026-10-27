@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.14
+
+**The Depot looks like the other structures.** It is drawn as crates on a pallet and takes the map's colour like every other machine, instead of the orange shelving that stood out on every base.
+
 ## 0.20.13
 
 **The manual's top image shows again.** It still linked the file 0.20.12 renamed.

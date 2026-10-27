@@ -145,22 +145,52 @@ fn a_hostile_goal_answers_last_when_adjacent() {
     );
 }
 
-/// Ties in the field are broken by `NEIGHBOURS` order, deterministically:
-/// three of the player's neighbours are equally close to the goal here
-/// (Chebyshev distance treats a diagonal step as cheap as a straight one),
-/// and `(1, -1)` is first among them in `world::NEIGHBOURS`.
+/// Ties in the field go to the step pointing most directly at the goal:
+/// `(1, -1)`, `(1, 0)` and `(1, 1)` are all Chebyshev distance 4 from
+/// `(5, 0)`, and only `(1, 0)` keeps the walk on the line a player drew by
+/// clicking. Broken by `NEIGHBOURS` order instead, the walk bowed up a row
+/// and back down.
 #[test]
-fn first_step_breaks_a_tie_by_neighbours_order() {
+fn first_step_breaks_a_tie_toward_the_goal() {
     let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     open_ground(&mut game, -3..=8, -4..=4);
     clear_bump_ladder_entities(&mut game, -3..=8, -4..=4);
     stand_player_at(&mut game, 0, 0);
     assert_eq!(
         game.travel_step(TravelGoal::Tile(5, 0)),
-        TravelStep::Toward(1, -1),
-        "(1, -1), (1, 0) and (1, 1) are all Chebyshev distance 4 from the goal; \
-         NEIGHBOURS lists (1, -1) first"
+        TravelStep::Toward(1, 0)
     );
+}
+
+/// A walk to a goal straight along a row never leaves that row.
+#[test]
+fn a_walk_along_a_row_stays_on_it() {
+    let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_ground(&mut game, -3..=13, -4..=4);
+    clear_bump_ladder_entities(&mut game, -3..=13, -4..=4);
+    stand_player_at(&mut game, 0, 0);
+    let (visited, terminal) = walk_route(&mut game, TravelGoal::Tile(10, 0), false);
+    assert_eq!(terminal, TravelStep::Last(1, 0));
+    assert!(visited.iter().all(|&(_, y)| y == 0), "{visited:?}");
+}
+
+/// A walk to an off-axis goal climbs toward it and never overshoots or
+/// doubles back: every row it passes through lies between start and goal,
+/// and it spreads its diagonals along the way rather than spending them
+/// all at one end.
+#[test]
+fn an_off_axis_walk_never_bows_away_from_the_goal() {
+    let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_ground(&mut game, -3..=13, -4..=8);
+    clear_bump_ladder_entities(&mut game, -3..=13, -4..=8);
+    stand_player_at(&mut game, 0, 0);
+    let (visited, _) = walk_route(&mut game, TravelGoal::Tile(10, 4), false);
+    let ys: Vec<i32> = visited.iter().map(|&(_, y)| y).collect();
+    assert!(ys.windows(2).all(|w| w[1] >= w[0]), "{visited:?}");
+    assert!(ys.iter().all(|&y| (0..=4).contains(&y)), "{visited:?}");
+    // The straight line from (0, 0) to (10, 4) passes y = 2 at x = 5.
+    let mid = visited.iter().find(|&&(x, _)| x == 5).unwrap();
+    assert!((1..=3).contains(&mid.1), "{visited:?}");
 }
 
 /// The regression this feature exists for: a route must never cross a tile
@@ -172,11 +202,11 @@ fn first_step_breaks_a_tie_by_neighbours_order() {
 /// obstacle costs nothing extra (a diagonal step keeps making horizontal
 /// progress), so a test that only checks the obstacle's tile is absent from
 /// the final path can pass by coincidence — the tie-break alone might
-/// dodge it, obstacle or not, exactly as `first_step_breaks_a_tie_by_
-/// neighbours_order` computes. Planting the hostile *at* that computed tie
-/// winner and asserting the runner-up closes that hole: without `bump_tiles`
-/// in the cost function, this would answer `Toward(1, -1)` instead, onto
-/// the hostile.
+/// dodge it, obstacle or not, exactly as `first_step_breaks_a_tie_toward_
+/// the_goal` computes. Planting the hostile *at* that computed tie winner
+/// and asserting the runner-up closes that hole: without `bump_tiles` in
+/// the cost function, this would answer `Toward(1, 0)` instead, onto the
+/// hostile.
 #[test]
 fn a_route_never_steps_onto_a_hostile_blocking_the_favoured_cell() {
     let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -184,12 +214,13 @@ fn a_route_never_steps_onto_a_hostile_blocking_the_favoured_cell() {
     clear_bump_ladder_entities(&mut game, -3..=13, -6..=6);
     stand_player_at(&mut game, 0, 0);
     // (1, -1), (1, 0) and (1, 1) are the three-way tie toward goal (5, 0);
-    // NEIGHBOURS order favours (1, -1) — see the tie-break test above.
-    spawn_wild_without_routine(&mut game, "scrapper", 1, -1);
+    // the straight step wins it — see the tie-break test above. The two
+    // diagonals left tie exactly, so `NEIGHBOURS` order takes (1, -1).
+    spawn_wild_without_routine(&mut game, "scrapper", 1, 0);
 
     assert_eq!(
         game.travel_step(TravelGoal::Tile(5, 0)),
-        TravelStep::Toward(1, 0),
+        TravelStep::Toward(1, -1),
         "the route must fall through to the tie's runner-up rather than \
          stepping onto the hostile occupying the favoured cell"
     );
@@ -207,11 +238,11 @@ fn a_route_never_steps_onto_a_settlement_blocking_the_favoured_cell() {
     open_ground(&mut game, -3..=13, -6..=6);
     clear_bump_ladder_entities(&mut game, -3..=13, -6..=6);
     stand_player_at(&mut game, 0, 0);
-    place_settlement(&mut game, SettlementKey { rx: 0, ry: 0 }, 1, -1);
+    place_settlement(&mut game, SettlementKey { rx: 0, ry: 0 }, 1, 0);
 
     assert_eq!(
         game.travel_step(TravelGoal::Tile(5, 0)),
-        TravelStep::Toward(1, 0),
+        TravelStep::Toward(1, -1),
         "the route must fall through to the tie's runner-up rather than \
          stepping onto the settlement occupying the favoured cell"
     );

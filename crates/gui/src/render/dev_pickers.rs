@@ -20,7 +20,14 @@ pub(super) fn item_picker_rows(rows: &[(String, u32)], filter: &str, selected: u
             .enumerate()
             .map(|(i, (name, held))| item_row(format!("{name}  x{held}"), i == selected)),
     );
-    push_key_footer(&mut out, &["Type to filter", "Enter give", "Esc back"]);
+    push_key_footer(
+        &mut out,
+        &[
+            "Type to filter",
+            "Enter give",
+            "Esc back (clears the filter first)",
+        ],
+    );
     out
 }
 

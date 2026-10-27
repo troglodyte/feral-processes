@@ -207,7 +207,14 @@ pub(super) fn pick_rows(
         DesignPicking::Category(_) => "Enter choose",
         DesignPicking::Affixes => "Enter add or remove",
     };
-    push_key_footer(&mut rows, &["Type to filter", enter, "Esc back"]);
+    push_key_footer(
+        &mut rows,
+        &[
+            "Type to filter",
+            enter,
+            "Esc back (clears the filter first)",
+        ],
+    );
     rows
 }
 
@@ -217,7 +224,7 @@ pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
         text_row(""),
         text_row(format!("> {}_", draft.name)),
         text_row(""),
-        text_row(key_hints(&["Type a name", "Enter finish", "Esc back"])),
+        text_row(key_hints(&["Type a name", "Enter or Esc finish"])),
     ]
 }
 

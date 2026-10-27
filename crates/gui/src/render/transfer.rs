@@ -115,6 +115,7 @@ pub(super) fn body_rows(
     body.push(text_row(key_hints(&[
         "Up/Down select",
         "Type digits",
+        "Backspace erase",
         "- take",
         "+ put",
     ])));

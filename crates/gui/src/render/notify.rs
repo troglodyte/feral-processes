@@ -27,7 +27,7 @@ const PANEL_FRACTION: f32 = 0.75;
 /// than a comfortable paragraph.
 const BODY_WIDTH_FRACTION: f32 = 0.84;
 
-const HINT: &str = "Enter continue  ·  Esc back";
+const HINT: &str = "Enter or Esc continue";
 
 /// The panel for a `w` x `h` window, centred.
 pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
@@ -556,7 +556,7 @@ mod tests {
         // text this fixture draws with no detail set.
         assert_eq!(
             texts,
-            vec![">", "T", "B", "Enter continue  ·  Esc back"],
+            vec![">", "T", "B", "Enter or Esc continue"],
             "an absent detail must draw nothing beyond the glyph, title, body and hint"
         );
     }

@@ -210,8 +210,8 @@ pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Paint
     let rows = vec![
         Row::TextColored(name, TEXT),
         text_row(""),
-        item_row("[L] Load".to_string(), app.menu_selected == 0),
-        item_row("[X] Delete".to_string(), app.menu_selected == 1),
+        item_row("[L] load".to_string(), app.menu_selected == 0),
+        item_row("[X] delete".to_string(), app.menu_selected == 1),
         text_row(""),
         text_row(key_hints(&["Enter choose", "Esc cancel"])),
     ];
@@ -232,7 +232,7 @@ fn game_over_rows(summary: &str, card: Option<&ScoreCard>) -> Vec<Row> {
         rows.extend(score::popup_rows(card));
         rows.push(text_row(""));
     }
-    rows.push(text_row("Any key main menu"));
+    rows.push(text_row("Any key returns to the main menu"));
     rows
 }
 

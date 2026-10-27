@@ -37,7 +37,14 @@ fn body_rows(rows: &[PutDownOption], filter: &str, selected: usize) -> Vec<Row> 
             .enumerate()
             .map(|(i, row)| item_row(row.label.to_string(), i == selected)),
     );
-    push_key_footer(&mut body, &["Type to filter", "Enter put down", "Esc back"]);
+    push_key_footer(
+        &mut body,
+        &[
+            "Type to filter",
+            "Enter put down",
+            "Esc back (clears the filter first)",
+        ],
+    );
     body
 }
 

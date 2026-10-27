@@ -1714,7 +1714,14 @@ pub(super) fn draw_tactical_items(
     for (i, item) in visible.iter().map(|&src| &items[src]).enumerate() {
         rows.push(item_row(game.item_name(item).to_string(), i == selected));
     }
-    push_key_footer(&mut rows, &["Type to filter", "Enter use", "Esc cancel"]);
+    push_key_footer(
+        &mut rows,
+        &[
+            "Type to filter",
+            "Enter use",
+            "Esc cancel (clears the filter first)",
+        ],
+    );
     draw_popup("Use an item", PopupSize::Large, &rows, refusal, painter, m);
 }
 

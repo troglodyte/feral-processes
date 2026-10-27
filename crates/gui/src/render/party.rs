@@ -87,7 +87,7 @@ pub(super) fn draw_companion_equip(
     }
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&[
-        "Enter swap",
+        "Enter swap or unequip",
         "[I] inspect",
         "Esc back",
     ])));

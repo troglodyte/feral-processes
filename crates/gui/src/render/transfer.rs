@@ -105,7 +105,7 @@ pub(super) fn body_rows(
     }
     body.extend([
         text_row("Up/Down pick a row; digits and Backspace type an amount"),
-        text_row("+ takes, - puts; Shift+Left/Right to that end, Ctrl halves the gap"),
+        text_row("- takes, + puts; Shift+Left/Right to that end, Ctrl halves the gap"),
         text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
     ]);
     body.push(text_row(""));

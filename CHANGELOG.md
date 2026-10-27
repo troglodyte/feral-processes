@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.13
+
+**The manual's top image shows again.** It still linked the file 0.20.12 renamed.
+
 ## 0.20.12
 
 **The README's top image is a base from a played run**, renamed to `pics/base.png` so a cached copy of the old one cannot show in its place.

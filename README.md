@@ -24,17 +24,17 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 | image | how it was taken |
 |---|---|
 | `hero.png` | `--template siege` |
-| `base.png` | `--template chains` |
-| `staff.png` | `--template chains --keys "b Down Down Down Down Down Down Down Down Down Enter"` (base report, Staffing page) |
-| `research.png` | `--template chains --keys "b Down Down Enter"` (base report, Research page) |
-| `social.png` | `--template bonds --keys "i Down Down Down Down Enter M Tab"` (Companions page, manifest Social face) |
-| `manifest.png` | `--template bonds --keys "i Down Down Down Down Enter M"` (Companions page, manifest) |
-| `report-overview.png` | `--template chains --keys "B"` |
-| `memories.png` | `--template bonds --keys "i Down Down Down Down Enter R"` (Companions page, memories) |
-| `roster.png` | `--template bonds --keys "i Down Down Down Down Enter"` (inventory, Companions page) |
-| `downed.png` | `--template bonds --keys "D"` (inventory, Downed programs page) |
-| `inventory.png` | `--template bonds --keys "i Right"` (inventory, Items page) |
-| `list-filter.png` | `--template bonds --keys "i Right p l a t Down"` (Items page filtered by "plat") |
+| `base.png` | `--template fred` |
+| `staff.png` | `--template fred --keys "b Down Down Down Down Down Down Down Down Down Enter"` (base report, Staffing page) |
+| `research.png` | `--template fred --keys "b Down Down Enter Enter"` (base report, Research page, the chart) |
+| `social.png` | `--template fred --keys "i Down Down Down Down Enter M Tab"` (Companions page, manifest Social face) |
+| `manifest.png` | `--template fred --keys "i Down Down Down Down Enter M"` (Companions page, manifest) |
+| `report-overview.png` | `--template fred --keys "b Enter"` |
+| `memories.png` | `--template fred --keys "i Down Down Down Down Enter R"` (Companions page, memories) |
+| `roster.png` | `--template fred --keys "i Down Down Down Down Enter"` (inventory, Companions page) |
+| `downed.png` | `--template fred --keys "D"` (inventory, Downed programs page) |
+| `inventory.png` | `--template fred --keys "i Right"` (inventory, Items page) |
+| `list-filter.png` | `--template fred --keys "i Right s h i v Down"` (Items page filtered by "shiv") |
 | `towns.png` | `--template settlements` |
 | `world-map.png` | `--template world-map --keys "g"` |
 | `stack.png` | `--template stack` |

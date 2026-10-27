@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.19
+
+**The message log no longer fills with base chatter: machines starting, stopping, idling or stalling, every extraction cycle (yours or a posted program's), and every crop harvest.** These came in by the thousand over a session and buried the lines that needed you. A stalled machine still appears on the alert board (`N`) the moment it stalls, which is where you act on it; level-ups from base work still appear in the log.
+
 ## 0.20.18
 
 **Every menu and dialog now ends with one key line in one style — `[A] take everything  ·  Enter transfer  ·  Esc back` — and Esc always says `back` or `cancel`.** The hints had drifted into half a dozen formats with ten words for Esc, sat at the top of some popups and the bottom of others, and many still said "Up/Down + Enter also work" from when digits picked rows. Popup titles are now sentence case, and the yes/no confirms share one small layout with `[Y]`/`[N]` rows and a key line, their long questions wrapping instead of running off the edge.

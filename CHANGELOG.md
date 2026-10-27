@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.16
+
+**Clicking on the map walks straight toward where you clicked.** A diagonal step counts the same as a straight one, so many routes are equally short, and the walk used to pick one that bent up a row and back down. It now takes the step pointing most directly at the destination, while still walking around anything in the way.
+
 ## 0.20.15
 
 **The Quarantine Rack is cyan, like the Depot.** Both storage buildings now read as one family on the map, and the rack is no longer the one orange block on a base.

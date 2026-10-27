@@ -23,8 +23,8 @@ cargo run -- --template <name> --keys "<keys>" --screenshot out.png
 
 | image | how it was taken |
 |---|---|
-| `hero.png` | `--template siege` |
-| `base.png` | `--template fred` |
+| `hero.png` | `--template fred` |
+| `base.png` | `--template fred --keys "b Down Down Down Down Down Down Enter"` (base report, Production page) |
 | `staff.png` | `--template fred --keys "b Down Down Down Down Down Down Down Down Down Enter"` (base report, Staffing page) |
 | `research.png` | `--template fred --keys "b Down Down Enter Enter"` (base report, Research page, the chart) |
 | `social.png` | `--template fred --keys "i Down Down Down Down Enter M Tab"` (Companions page, manifest Social face) |

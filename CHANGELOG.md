@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.15
+
+**The Quarantine Rack is cyan, like the Depot.** Both storage buildings now read as one family on the map, and the rack is no longer the one orange block on a base.
+
 ## 0.20.14
 
 **The Depot looks like the other structures.** It is drawn as crates on a pallet and takes the map's colour like every other machine, instead of the orange shelving that stood out on every base.

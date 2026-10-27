@@ -1,6 +1,6 @@
 # feral-processes
 
-![feral-processes gameplay screenshot](pics/gameplay.png)
+![A base inside its walls: rows of extractors and factories, programs working among them, and the base panel listing each machine and who runs it](pics/base.png)
 
 A Neuromancer/Tron-flavored game blending Pokemon (tame and battle rogue
 programs), Palworld (compiled programs work your base for you), and Dwarf

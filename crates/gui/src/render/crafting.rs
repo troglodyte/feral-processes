@@ -37,6 +37,16 @@ pub(super) fn craft_page_rows(
         ),
         text_row(""),
     ];
+    // Weapons had recipes on this list until they became designs, so this
+    // is where a player comes looking for them before the Forge opens.
+    if at_bench && let Some(hint) = game.weapon_tree_hint() {
+        rows.extend(
+            wrap_text(&format!("Weapons: {hint}"), DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(|line| Row::TextColored(line, super::progression::LOCKED_BY_PREREQ)),
+        );
+        rows.push(text_row(""));
+    }
     rows.extend(filter_line(filter));
     // Positions in the filtered list, resolved by the handler through the
     // same call.
@@ -431,6 +441,31 @@ mod tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::{DifficultyMode, RecipeInput};
+
+    /// Weapons left this list for the Forge, so the Workbench's Compile page
+    /// says how to reach it — and the `[b]` popup, which never had them,
+    /// says nothing.
+    #[test]
+    fn the_bench_compile_page_says_how_to_reach_weapon_crafting() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let hint = game.weapon_tree_hint().expect("a new run has no Forge");
+        let texts = |at_bench| -> String {
+            craft_page_rows(&game, at_bench, "", 0)
+                .iter()
+                .filter_map(|r| match r {
+                    Row::TextColored(t, _) => Some(t.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert_eq!(
+            texts(true),
+            wrap_text(&format!("Weapons: {hint}"), DESCRIBE_WRAP_COLUMNS).join(" ")
+        );
+        assert_eq!(texts(false), "");
+    }
 
     /// The chain says how to make the thing; the description is the only
     /// line saying why you would want one. Asserted as `wrap_text`'s own

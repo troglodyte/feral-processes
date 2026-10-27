@@ -448,10 +448,18 @@ pub(super) fn draw_research_menu(
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
     let (title, rows) = match tree {
-        ResearchTree::Base => (
-            "Research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
-        ),
+        ResearchTree::Base => {
+            let mut rows =
+                research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock);
+            // Under the key line, so `hint_of`'s row stays the keys.
+            let study = game.study_hint().into_iter().flat_map(|hint| {
+                wrap_text(&hint, DESCRIBE_WRAP_COLUMNS)
+                    .into_iter()
+                    .map(|line| Row::TextColored(line, LOCKED_BY_PREREQ))
+            });
+            rows.splice(2..2, study);
+            ("Research", rows)
+        }
         // The routine tree's own empty line: nothing is discovered and
         // nothing is visible, so there is nothing to number — a header and
         // an instruction line with no rows under them would read as a
@@ -509,10 +517,7 @@ fn weapon_research_rows(
     }
     // An open tree always lists its first frames, so an empty list is the
     // closed tree.
-    vec![text_row(format!(
-        "Research {} to open weapon research.",
-        game.weapon_tree_opener_name()
-    ))]
+    vec![text_row(game.weapon_tree_hint().unwrap_or_default())]
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent

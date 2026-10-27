@@ -3790,3 +3790,55 @@ fn a_decompiler_node_reports_its_reach_or_area() {
         Some("Decompile area: radius 1")
     );
 }
+
+/// The research screen's study line walks the four states a player can be
+/// in, and goes quiet when a study has nothing to find.
+#[test]
+fn the_study_hint_names_what_stands_between_the_player_and_a_find() {
+    let mut bare = Game::new(4470, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut bare);
+    unlock_research_chain(&mut bare, "automation");
+    assert_eq!(
+        bare.study_hint().as_deref(),
+        Some(
+            "Hidden research is found by study: build a Research Station and pin a program in its pen."
+        )
+    );
+
+    let mut game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    assert!(
+        game.eligible_discoveries().is_empty(),
+        "the fixture is vacuous if the pool is already open"
+    );
+    assert_eq!(game.study_hint(), None, "nothing to find, nothing to say");
+
+    unlock_research_chain(&mut game, "automation");
+    assert_eq!(
+        game.study_hint().as_deref(),
+        Some("Pin a program in the Research Station's pen to study it for hidden research.")
+    );
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, program, node);
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = 2;
+    assert_eq!(
+        game.study_hint(),
+        Some(format!(
+            "Studying for hidden research: 2/{} Research Data to the next attempt.",
+            crate::tuning::STUDY_ATTEMPT_DATA
+        ))
+    );
+
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .id = Some("commerce".to_string());
+    assert_eq!(
+        game.study_hint().as_deref(),
+        Some(
+            "Study is paused while a project runs. Abandon it (A) to look for hidden research; its progress is kept."
+        )
+    );
+}

@@ -413,14 +413,43 @@ impl Game {
         self.is_researched(crate::tuning::WEAPON_TREE_OPENER)
     }
 
-    /// The display name of the node that opens the Weapons tree, so a screen
-    /// telling the player what to research names it as the research menu does.
-    pub fn weapon_tree_opener_name(&self) -> String {
+    /// What stands between the player and weapon crafting, as one sentence
+    /// for the Weapons research tab and the Workbench's Compile page, or
+    /// `None` once the tree is open.
+    ///
+    /// **The opener is `discoverable`, so "research it" is not always
+    /// advice the player can take.** Until a study finds it the node is on
+    /// no menu, and a line naming it sent the player looking for a row that
+    /// isn't there — so the hidden case says how it is found instead.
+    pub fn weapon_tree_hint(&self) -> Option<String> {
+        if self.weapon_tree_open() {
+            return None;
+        }
+        let db = self.world.resource::<ResearchDb>();
         let id = crate::tuning::WEAPON_TREE_OPENER;
-        self.world
-            .resource::<ResearchDb>()
-            .get(id)
-            .map_or_else(|| id.to_string(), |d| d.name.clone())
+        let Some(def) = db.get(id) else {
+            return Some(format!("Research {id} to design weapons at a Workbench."));
+        };
+        let name = &def.name;
+        if self.base_node_visible(def) {
+            return Some(format!("Research {name} to design weapons at a Workbench."));
+        }
+        let missing: Vec<&str> = def
+            .requires
+            .iter()
+            .filter(|r| !self.is_researched(r))
+            .map(|r| db.get(r).map_or(r.as_str(), |d| d.name.as_str()))
+            .collect();
+        Some(if missing.is_empty() {
+            format!(
+                "{name} is hidden research: study a program with no project running to find it."
+            )
+        } else {
+            format!(
+                "{name} is hidden research: once {} is researched, study a program with no project running to find it.",
+                missing.join(" and ")
+            )
+        })
     }
 
     /// Whether `affix` has been researched — the one door apply goes

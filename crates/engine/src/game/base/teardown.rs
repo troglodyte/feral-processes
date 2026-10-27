@@ -16,7 +16,7 @@ use crate::alerts::AlertBoard;
 use crate::base_grid::BaseGrid;
 use crate::components::{CarryingProgram, Hopper, MachineStatus, Position, Stock, Structure, Task};
 use crate::items::DownedProgram;
-use crate::resources::{BattleTelemetry, GameClock, MessageKind, MessageLog, PowerGrid};
+use crate::resources::{BattleTelemetry, GameClock, MessageKind, PowerGrid};
 use crate::structures::StructureDb;
 use crate::systems::{StallSite, set_machine_status};
 use crate::tools::ToolDef;
@@ -358,7 +358,7 @@ impl Game {
 
     /// `assembler_system`'s `announce` closure in a `&mut Game` pass: the
     /// same `set_machine_status` door, reached through `resource_scope`
-    /// because the log and the telemetry buffer are resources this world
+    /// because the board and the telemetry buffer are resources this world
     /// also holds the status component in.
     pub(crate) fn set_rig_status(&mut self, rig: Entity, next: MachineStatus) {
         let Some(kind) = self.world.get::<Structure>(rig).map(|s| s.kind.clone()) else {
@@ -377,29 +377,26 @@ impl Game {
         };
         let tick = self.world.resource::<GameClock>().tick;
         self.world
-            .resource_scope(|world, mut log: bevy_ecs::prelude::Mut<MessageLog>| {
-                world.resource_scope(|world, mut board: bevy_ecs::prelude::Mut<AlertBoard>| {
-                    world.resource_scope(
-                        |world, mut telemetry: bevy_ecs::prelude::Mut<BattleTelemetry>| {
-                            let Some(mut status) = world.get_mut::<MachineStatus>(rig) else {
-                                return;
-                            };
-                            set_machine_status(
-                                &mut status,
-                                next,
-                                &name,
-                                &mut log,
-                                &mut board,
-                                StallSite {
-                                    telemetry: &mut telemetry,
-                                    tick,
-                                    machine: tile,
-                                    kind: &kind,
-                                },
-                            );
-                        },
-                    );
-                });
+            .resource_scope(|world, mut board: bevy_ecs::prelude::Mut<AlertBoard>| {
+                world.resource_scope(
+                    |world, mut telemetry: bevy_ecs::prelude::Mut<BattleTelemetry>| {
+                        let Some(mut status) = world.get_mut::<MachineStatus>(rig) else {
+                            return;
+                        };
+                        set_machine_status(
+                            &mut status,
+                            next,
+                            &name,
+                            &mut board,
+                            StallSite {
+                                telemetry: &mut telemetry,
+                                tick,
+                                machine: tile,
+                                kind: &kind,
+                            },
+                        );
+                    },
+                );
             });
     }
 }

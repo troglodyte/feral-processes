@@ -315,10 +315,6 @@ impl Game {
                 if let Some(mut t) = self.world.get_mut::<FarmTile>(tile) {
                     t.growth = CropGrowth::Fallow;
                 }
-                let name = self.item_name(&crop.produces).to_string();
-                // No cell and no article: repeats condense in the history, and
-                // a modded crop's name may start with a vowel.
-                self.log_base(format!("Your crew brings in a harvest: {name}."));
             }
         }
     }

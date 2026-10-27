@@ -21,8 +21,8 @@ use bevy_ecs::prelude::*;
 use super::support::{
     ScratchAssets, assets_dir_with_extra_structure, copy_shipped_assets, find_structure_by_kind,
     give, node_output, park_at_post, place_machine, place_now, scratch_assets_dir,
-    spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at,
-    stand_player_at_post, test_assets_dir,
+    spawn_machine_at, spawn_structure_at, spawn_tamed, stall_alerts, stand_in_base,
+    stand_in_base_at, stand_player_at_post, test_assets_dir,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -700,7 +700,7 @@ fn hand_working_a_dark_machine_yields_nothing() {
          logging the design refused"
     );
     assert_eq!(
-        log_hits(&game, "is dark — the grid can't power it."),
+        stall_alerts(&game, MachineStatus::Unpowered),
         1,
         "and going dark is still news exactly once across all six ticks"
     );
@@ -727,21 +727,21 @@ fn a_dark_and_unstaffed_machine_reports_unpowered_not_idle() {
 }
 
 #[test]
-fn going_dark_and_coming_back_each_log_exactly_once() {
+fn going_dark_and_coming_back_post_once_and_never_log() {
     // The regression guarding the refused ordering. A power system running
     // *last* would have `idle_machine_system` write `Idle` and the power
     // system overwrite it with `Unpowered` on every tick, and
-    // `set_machine_status` logs on every transition — so the dark line would
-    // land four times below, not once.
+    // `set_machine_status` posts on every transition — so the dark alert
+    // would be bumped four times below, not once.
     let mut game = game_on_a_short_grid("power_log_once", 4004);
-    spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
 
     for _ in 0..4 {
         game.tick();
     }
 
     assert_eq!(
-        log_hits(&game, "is dark — the grid can't power it."),
+        stall_alerts(&game, MachineStatus::Unpowered),
         1,
         "going dark is news once, not once per tick"
     );
@@ -752,15 +752,23 @@ fn going_dark_and_coming_back_each_log_exactly_once() {
     }
 
     assert_eq!(
-        log_hits(&game, "is dark — the grid can't power it."),
+        stall_alerts(&game, MachineStatus::Unpowered),
         1,
         "and standing up supply must not re-announce the state it left"
     );
+    assert_eq!(status_of(&game, node), Some(MachineStatus::Idle));
+    // A busy base changes machine status thousands of times a session; the
+    // board already carries every stall worth acting on, so a log line per
+    // transition only buries the news that isn't on the board.
     assert_eq!(
-        log_hits(&game, "sits idle — no program is assigned."),
-        1,
-        "coming back is news exactly once too — the machine is unstaffed, so \
-         it lands on Idle and says so a single time"
+        log_hits(&game, "is dark"),
+        0,
+        "a stall belongs on the board, not in the log"
+    );
+    assert_eq!(
+        log_hits(&game, "sits idle"),
+        0,
+        "and an idle machine is not news at all"
     );
 }
 
@@ -1074,10 +1082,8 @@ fn a_dry_supplier_is_announced_out_of_fuel_exactly_once() {
         game.tick();
     }
 
-    // `Game::message_log` is the raw log, uncondensed, so this really is a
-    // count of lines pushed rather than of rows a screen would draw.
     assert_eq!(
-        log_hits(&game, "Recharger Node is out of fuel"),
+        stall_alerts(&game, MachineStatus::Dry),
         1,
         "entering the state is news; staying in it is not"
     );
@@ -1085,7 +1091,7 @@ fn a_dry_supplier_is_announced_out_of_fuel_exactly_once() {
     // buffer and no program, so "nothing is feeding it" names two things it
     // does not have and sends the player looking for both.
     assert_eq!(
-        log_hits(&game, "is starved"),
+        stall_alerts(&game, MachineStatus::Starved),
         0,
         "a dry supplier is not starved — see MachineStatus::Dry"
     );
@@ -1111,7 +1117,7 @@ fn a_dry_supplier_reports_dry_rather_than_starved() {
 }
 
 /// The other edge of the same door. A supplier that finds fuel again comes
-/// back to `Running`, which is what makes the log's once-on-transition rule
+/// back to `Running`, which is what makes the board's once-on-transition rule
 /// safe to lean on: without this the state would latch and a refuelled node
 /// would keep reading dry forever.
 #[test]
@@ -1135,11 +1141,6 @@ fn a_refuelled_supplier_leaves_the_dry_state() {
         status_of(&game, recharger),
         Some(MachineStatus::Running),
         "a cell landed beside it and it bought one"
-    );
-    assert_eq!(
-        log_hits(&game, "Recharger Node resumes"),
-        1,
-        "coming back is news too, and exactly once"
     );
 }
 

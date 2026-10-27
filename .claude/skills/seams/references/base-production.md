@@ -13,7 +13,7 @@
   component**, so absence reads as dry: loud when a writer forgets, where
   the lenient direction would be a supplier on free power forever.
   `idle_machine_system` skips a structure that runs no job, or the supplier
-  flips `Starved`↔`Idle` every tick and `set_machine_status` logs both. The
+  flips `Starved`↔`Idle` every tick and `set_machine_status` records both. The
   spend and the refuel live **inside `power_grid_system`, before it calls
   `ledger`** — decrement, then refuel on reaching zero, so a supplier that
   can pay never leaves the grid for a tick — and `Starved` is the existing
@@ -469,9 +469,20 @@
   episode. Tend's `clogged` gate counts `Stranded` too, or an attached machine
   flaps back to `Clogged` and the marker is cleared every other tick.
 
-- **`set_machine_status` is the one place a stall is announced, and it logs
-  only on transition.** Three callers, so "entering a state is news, staying
-  in it is not" cannot lapse in one of them.
+- **`set_machine_status` is the one place a stall is announced, and it
+  posts to the alert board only on transition — never to the message log.**
+  Three callers, so "entering a state is news, staying in it is not" cannot
+  lapse in one of them. It used to log every transition too, `Running` and
+  `Idle` included: measured over every `dev-saves/` template idled 3,000
+  ticks, machine-status lines and per-cycle extraction lines were ~3,700 of
+  4,394 logged lines, all of it either a repeat of a board alert or nothing
+  to act on (2026-10-27).
+
+- **A production cycle is never logged.** A posted program's extraction or
+  fizzle, the player's own at a node, a crew harvest: each fires every few
+  ticks for the whole run. `base_ledger` and telemetry (`Record::Extract`'s
+  `ok`) count them; a test measuring cycles arms telemetry rather than
+  reading the log. Level-ups are still logged — they are their own line.
 
 - **"Nobody is posted here" is one pass over every machine**,
   `idle_machine_system`. It was the assembler's branch, which visits only

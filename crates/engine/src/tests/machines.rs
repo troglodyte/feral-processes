@@ -814,26 +814,28 @@ fn an_unset_machine_reads_as_its_kind_and_is_flagged() {
 }
 
 #[test]
-fn a_stall_line_names_the_product() {
+fn a_stall_alert_names_the_product() {
     let mut game = bare_game();
     let (factory, _worker) = staffed_full_factory(&mut game);
     let capacity = game.world.get::<Stock>(factory).unwrap().capacity;
     fill(&mut game, factory, 8, capacity);
     game.tick();
+    let alerts = game.alerts();
     assert!(
-        game.world
-            .resource::<MessageLog>()
-            .lines
+        alerts
             .iter()
-            .any(|l| l.text
+            .any(|a| a.text
                 == "The Factory (Bytecode Block) is clogged — its output buffer is full."),
-        "{:?}",
-        game.world
+        "{alerts:?}"
+    );
+    assert!(
+        !game
+            .world
             .resource::<MessageLog>()
             .lines
             .iter()
-            .map(|l| &l.text)
-            .collect::<Vec<_>>()
+            .any(|l| l.text.contains("is clogged")),
+        "the board carries the stall; the log does not repeat it"
     );
 }
 

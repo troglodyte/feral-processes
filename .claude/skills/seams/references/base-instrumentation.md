@@ -31,7 +31,7 @@
 
 - **A stall hangs on `set_machine_status`, which already speaks only on
   transition** — so the edges are free, there is no duplicate suppression to
-  write, and no site can report a stall the base log never announced. What B4
+  write, and no site can report a stall the alert board never carried. What B4
   needs is transitions to `Clogged` per 1,000 ticks rising with zone, which
   is an edge count and not a state dump. `StallSite` is a bundle of plain
   borrows and **deliberately not a `SystemParam`**: `power_grid_system` is

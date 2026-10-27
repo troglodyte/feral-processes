@@ -1838,6 +1838,17 @@ pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// How many times a stall into `status` reached the alert board, summed
+/// across machines. The board is where a stall is news; the log never
+/// carries one.
+pub(super) fn stall_alerts(game: &Game, status: MachineStatus) -> u32 {
+    game.alerts()
+        .iter()
+        .filter(|a| a.kind == crate::alerts::AlertKind::MachineStalled(status))
+        .map(|a| a.count)
+        .sum()
+}
+
 /// Deploys the run's first Home, which lands on base space's own origin and
 /// lays the starting pocket around it — `place_structure` refuses anything
 /// else until a Home exists, so most structure-placement tests need this

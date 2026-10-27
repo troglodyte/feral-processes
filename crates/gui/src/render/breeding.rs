@@ -70,6 +70,7 @@ pub(super) fn draw_breed_menu(
         rows.push(text_row("(you have no compiled programs)"));
     }
     push_parent_rows(&mut rows, game, &candidates, selected);
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Breed", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -102,6 +103,7 @@ pub(super) fn draw_breed_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     push_parent_rows(&mut rows, game, &candidates, selected);
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Breed", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -129,7 +131,7 @@ pub(super) fn draw_breed_confirm_menu(
     rows.push(text_row(seed_line(game.breeding_seeds_held())));
     rows.push(text_row("Both parents rest for a while afterwards."));
     rows.push(text_row(""));
-    rows.push(text_row("Enter to breed, Esc to go back"));
+    rows.push(text_row(key_hints(&["Enter breed", "Esc back"])));
     draw_popup("Breed", PopupSize::Small, &rows, refusal, painter, m);
 }
 
@@ -163,9 +165,9 @@ pub(super) fn incubation_lines(slots: &[IncubationView]) -> Vec<String> {
 /// which is the same test `App` applies before opening the pages.
 pub(super) fn bay_footer(slots: &[IncubationView]) -> &'static str {
     if slots.iter().any(|s| s.child.is_none()) {
-        "[B] Breed   Any other key to close."
+        "[B] breed  ·  Any other key back"
     } else {
-        "Any key to close."
+        "Any key back"
     }
 }
 
@@ -257,7 +259,7 @@ mod tests {
             breed_title(&name, &name)[1].clone(),
             seed_line(99_999),
             "Both parents rest for a while afterwards.".to_string(),
-            "Enter to breed, Esc to go back".to_string(),
+            key_hints(&["Enter breed", "Esc back"]),
             "Breed which program? Pick the first of two.".to_string(),
         ];
         assert_fits(&lines, PopupSize::Small);
@@ -292,7 +294,7 @@ mod tests {
                 held: false,
             }),
         };
-        assert_eq!(bay_footer(std::slice::from_ref(&full)), "Any key to close.");
+        assert_eq!(bay_footer(std::slice::from_ref(&full)), "Any key back");
         assert!(bay_footer(&[full, IncubationView { child: None }]).starts_with("[B]"));
     }
 

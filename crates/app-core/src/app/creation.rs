@@ -1029,8 +1029,8 @@ impl App {
 }
 
 /// Enter and Esc here are the wizard's, not the Forge's save and back.
-const CREATION_SPRITE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   Enter: keep   Esc: discard";
+const CREATION_SPRITE_KEYS: &str = "Tab switch panel  ·  Arrows move  ·  Space paint  ·  \
+    Backspace erase  ·  [U] undo  ·  [X] clear  ·  [G] brush size  ·  [F] fill  ·  [I] pick colour  ·  Enter keep  ·  Esc discard";
 
 impl App {
     /// What the Icon step's editor draws, or `None` while it is not open.

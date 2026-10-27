@@ -204,12 +204,13 @@ pub(super) fn draw_trade_action_menu(
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "[S] sell one, [B] buy one — no quantity page; type to filter; Esc to cancel (clears a filter first); Up/Down + Enter also work",
-    ));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
+    rows.push(text_row(key_hints(&[
+        "[S] sell one",
+        "[B] buy one",
+        "Type to filter",
+        "[I] inspect",
+        "Esc back (clears the filter first)",
+    ])));
     draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -245,7 +246,7 @@ pub(super) fn draw_trade_program_confirm(
     rows.push(item_row("[y] Yes, sell it", selected == 0));
     rows.push(item_row("[n] No, keep it", selected == 1));
     rows.push(text_row(""));
-    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
+    rows.push(text_row(key_hints(&["[Y] sell", "[N] or Esc cancel"])));
     draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);
 }
 
@@ -306,10 +307,11 @@ pub(super) fn draw_trade_quantity_menu(
         text_row(""),
         text_row(format!("Quantity: {shown}")),
         text_row(""),
-        text_row(format!(
-            "Type digits, Enter to {}, Esc to go back",
-            verb.to_lowercase()
-        )),
+        text_row(key_hints(&[
+            "Type digits",
+            &format!("Enter {}", verb.to_lowercase()),
+            "Esc cancel",
+        ])),
     ];
     draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
 }

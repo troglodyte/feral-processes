@@ -117,16 +117,18 @@ pub(super) fn dispatch_hub_rows(
     }
 
     rows.push(text_row(""));
-    rows.extend(dispatch_hub_footer().into_iter().map(text_row));
+    rows.push(text_row(dispatch_hub_footer()));
     rows
 }
 
 /// Split out for the census below, `board_footer`'s reason.
-fn dispatch_hub_footer() -> [&'static str; 2] {
-    [
-        "[S] send a squad  ·  [C] send cargo  ·  [X] cut a standing route",
-        "Esc to go back",
-    ]
+fn dispatch_hub_footer() -> String {
+    key_hints(&[
+        "[S] send a squad",
+        "[C] send cargo",
+        "[X] cut a standing route",
+        "Esc back",
+    ])
 }
 
 /// The squad picker, opened with `[S]` on the hub for one sortie site.
@@ -192,9 +194,11 @@ pub(super) fn sortie_squad_rows(
         rows.push(text_row(format!("Provisioning: {line}")));
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "[X] toggle the highlighted program  ·  Enter to dispatch  ·  Esc to go back",
-    ));
+    rows.push(text_row(key_hints(&[
+        "[X] toggle the highlighted program",
+        "Enter dispatch",
+        "Esc back",
+    ])));
     rows
 }
 
@@ -234,9 +238,11 @@ pub(super) fn route_cargo_rows(basket: &RouteCargoBasket, selected: usize) -> Ve
     if let Some(cap) = basket.outpost_carry_cap {
         rows.push(text_row(format!("Hauls up to {cap} units per trip.")));
         rows.push(text_row(""));
-        rows.push(text_row(
-            "[T] toggle standing  ·  Enter to dispatch  ·  Esc to step away",
-        ));
+        rows.push(text_row(key_hints(&[
+            "[T] toggle standing",
+            "Enter dispatch",
+            "Esc back",
+        ])));
         return rows;
     }
     rows.push(text_row(format!(
@@ -255,12 +261,13 @@ pub(super) fn route_cargo_rows(basket: &RouteCargoBasket, selected: usize) -> Ve
         ));
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "Left/Right set a row  ·  Shift jumps to the end  ·  Ctrl halves the gap",
-    ));
-    rows.push(text_row(
-        "[T] toggle standing  ·  [N] clear  ·  Enter to dispatch  ·  Esc to step away",
-    ));
+    rows.push(text_row(BASKET_STEP_KEYS));
+    rows.push(text_row(key_hints(&[
+        "[T] toggle standing",
+        "[N] clear",
+        "Enter dispatch",
+        "Esc back",
+    ])));
     rows
 }
 

@@ -21,9 +21,7 @@ use feral_processes_engine::views::DesignPreview;
 /// The Forge: every saved design, Enter builds one and `D` deletes it.
 pub(super) fn forge_page_rows(game: &Game, selected: usize) -> Vec<Row> {
     let designs = game.design_rows();
-    let mut rows = vec![text_row(
-        "Enter builds a weapon from a design. D deletes a design.",
-    )];
+    let mut rows = Vec::new();
     if designs.is_empty() {
         rows.push(text_row(
             "(no designs yet - make one on the New design page)",
@@ -40,6 +38,10 @@ pub(super) fn forge_page_rows(game: &Game, selected: usize) -> Vec<Row> {
             rows.extend(dim_lines(&gear_craft_refusal_line(game, why)));
         }
     }
+    push_key_footer(
+        &mut rows,
+        &["Enter build a weapon", "[D] delete a design", "Esc back"],
+    );
     rows
 }
 
@@ -138,10 +140,7 @@ pub(super) fn pick_rows(
     let mut rows = Vec::new();
     match picking {
         DesignPicking::Category(category) => {
-            rows.push(text_row(format!(
-                "Choose a {}. Type to filter.",
-                category.label()
-            )));
+            rows.push(text_row(format!("Choose a {}.", category.label())));
             rows.extend(filter_line(filter));
             if visible.is_empty() && !filter.is_empty() {
                 rows.push(no_match_row(filter));
@@ -178,7 +177,7 @@ pub(super) fn pick_rows(
             ));
         }
         DesignPicking::Affixes => {
-            rows.push(text_row("Enter adds or removes an affix. Type to filter."));
+            rows.push(text_row("Choose affixes."));
             rows.extend(filter_line(filter));
             if visible.is_empty() && !filter.is_empty() {
                 rows.push(no_match_row(filter));
@@ -204,14 +203,21 @@ pub(super) fn pick_rows(
             ));
         }
     }
+    let enter = match picking {
+        DesignPicking::Category(_) => "Enter choose",
+        DesignPicking::Affixes => "Enter add or remove",
+    };
+    push_key_footer(&mut rows, &["Type to filter", enter, "Esc back"]);
     rows
 }
 
 pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
     vec![
-        text_row("Name the design (1-24 characters). Enter or Esc to finish."),
+        text_row("Name the design (1-24 characters)"),
         text_row(""),
         text_row(format!("> {}_", draft.name)),
+        text_row(""),
+        text_row(key_hints(&["Type a name", "Enter finish", "Esc back"])),
     ]
 }
 

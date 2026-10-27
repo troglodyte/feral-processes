@@ -23,6 +23,7 @@ pub(super) fn draw_routine_target(
             glyph_color(h.color),
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc back"]);
     draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -70,7 +71,8 @@ pub(super) fn draw_routines(
     m: &Metrics,
 ) {
     let Some(holder) = holder else { return };
-    let rows = routine_slot_rows(&game.routine_view(holder), selected);
+    let mut rows = routine_slot_rows(&game.routine_view(holder), selected);
+    push_key_footer(&mut rows, &["Enter choose", "Esc back"]);
     draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -99,7 +101,8 @@ pub(super) fn draw_routine_install(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = routine_install_rows(&game.built_routine_rows(), selected);
+    let mut rows = routine_install_rows(&game.built_routine_rows(), selected);
+    push_key_footer(&mut rows, &["Enter install", "Esc cancel"]);
     draw_popup(
         "Install Routine",
         PopupSize::Large,
@@ -173,6 +176,7 @@ pub(super) fn draw_extract(
         let routines = game.extractable_routines(p.entity);
         push_extract_candidate(&mut rows, &routines, p, i == selected);
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -196,7 +200,8 @@ pub(super) fn draw_extract_pick(
     m: &Metrics,
 ) {
     let Some(program) = program else { return };
-    let rows = extract_pick_rows(&game.extractable_routines(program), selected);
+    let mut rows = extract_pick_rows(&game.extractable_routines(program), selected);
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -236,7 +241,10 @@ pub(super) fn draw_extract_confirm(
     rows.push(item_row("[y] Yes, destroy it", selected == 0));
     rows.push(item_row("[n] No, keep it", selected == 1));
     rows.push(text_row(""));
-    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
+    rows.push(text_row(key_hints(&[
+        "[Y] destroy it",
+        "[N] or Esc cancel",
+    ])));
     draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 

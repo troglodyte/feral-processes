@@ -102,16 +102,11 @@ fn body_rows(screen: &SpliceRigScreen, selected: usize) -> Vec<Row> {
                 ),
                 ORANGE,
             ),
-            text_row("[Y] splice it anyway   [N] or Esc to think again"),
+            text_row(key_hints(&["[Y] splice it anyway", "[N] or Esc cancel"])),
         ]);
         return body;
     }
 
-    body.push(text_row(
-        "[I] install the highlighted pack implant  [R] remove an installed one",
-    ));
-    body.push(text_row("Esc to go back"));
-    body.push(text_row(""));
     body.push(text_row("Installed"));
     if view.installed.is_empty() {
         body.push(text_row("  nothing built in yet"));
@@ -148,6 +143,14 @@ fn body_rows(screen: &SpliceRigScreen, selected: usize) -> Vec<Row> {
         body.push(text_row(""));
         body.push(text_row(description));
     }
+    push_key_footer(
+        &mut body,
+        &[
+            "[I] install the highlighted pack implant",
+            "[R] remove an installed one",
+            "Esc back",
+        ],
+    );
     body
 }
 

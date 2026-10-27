@@ -392,11 +392,6 @@ pub(super) fn research_menu_rows(
 ) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(research_header(active), CYAN),
-        text_row(if dev_unlock {
-            "Enter works the highlighted row. A to abandon. U to unlock. G for the tree. Esc to close"
-        } else {
-            "Enter works the highlighted row. A to abandon. G for the tree. Esc to close"
-        }),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
@@ -432,6 +427,12 @@ pub(super) fn research_menu_rows(
             DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
         ));
     }
+    let mut chips = vec!["Enter work the row", "[A] abandon", "[G] tree view"];
+    if dev_unlock {
+        chips.push("[U] unlock");
+    }
+    chips.push("Esc back");
+    push_key_footer(&mut rows, &chips);
     rows
 }
 
@@ -451,13 +452,13 @@ pub(super) fn draw_research_menu(
         ResearchTree::Base => {
             let mut rows =
                 research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock);
-            // Under the key line, so `hint_of`'s row stays the keys.
+            // Under the header, above the list.
             let study = game.study_hint().into_iter().flat_map(|hint| {
                 wrap_text(&hint, DESCRIBE_WRAP_COLUMNS)
                     .into_iter()
                     .map(|line| Row::TextColored(line, LOCKED_BY_PREREQ))
             });
-            rows.splice(2..2, study);
+            rows.splice(1..1, study);
             ("Research", rows)
         }
         // The routine tree's own empty line: nothing is discovered and
@@ -558,7 +559,7 @@ pub(super) fn draw_respec_confirm(
     rows.push(item_row("[y] Yes, refund", selected == 0));
     rows.push(item_row("[n] No, keep them", selected == 1));
     rows.push(text_row(""));
-    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
+    rows.push(text_row(key_hints(&["[Y] refund", "[N] or Esc cancel"])));
     draw_popup(
         "Confirm refund",
         PopupSize::Small,
@@ -576,9 +577,9 @@ mod tests {
     use feral_processes_engine::DifficultyMode;
 
     fn hint_of(rows: &[Row]) -> &str {
-        match &rows[1] {
-            Row::Text(t) => t,
-            _ => panic!("row 1 is the hint"),
+        match rows.last() {
+            Some(Row::Text(t)) => t,
+            _ => panic!("the last row is the hint"),
         }
     }
 
@@ -587,8 +588,8 @@ mod tests {
     fn the_research_hint_names_u_only_with_the_dev_console() {
         let off = research_menu_rows(&[], 0, "Research Data", None, false);
         let on = research_menu_rows(&[], 0, "Research Data", None, true);
-        assert!(!hint_of(&off).contains("U to unlock"));
-        assert!(hint_of(&on).contains("U to unlock"));
+        assert!(!hint_of(&off).contains("[U] unlock"));
+        assert!(hint_of(&on).contains("[U] unlock"));
     }
 
     /// The three questions a playtest of this screen would ask, answered

@@ -50,8 +50,12 @@ pub(super) fn draw_erase_quantity(
             status.inventory_used
         )),
         text_row(""),
-        text_row("Type digits, Enter to erase"),
-        text_row("[A] Erase all   Esc to go back"),
+        text_row(key_hints(&[
+            "Type digits",
+            "[A] erase all",
+            "Enter erase",
+            "Esc cancel",
+        ])),
     ];
     draw_popup("Erase", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -515,15 +519,12 @@ pub(super) fn draw_equip_swap(
     rows.push(text_row(
         "Rating is the piece outright; middle is what you'd get; right is the change",
     ));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
+    let mut chips = vec!["Type to filter", "[I] inspect"];
     if target.is_none() && wearing {
-        rows.push(text_row("[R] refit what you are wearing, at a Refit Bench"));
+        chips.push("[R] refit what you wear");
     }
-    rows.push(text_row(
-        "Esc to go back (clears a typed filter first); Up/Down + Enter also work; type to filter",
-    ));
+    chips.extend(["Enter equip", "Esc back (clears the filter first)"]);
+    rows.push(text_row(key_hints(&chips)));
     draw_popup(
         &format!("Replace {}", slot.label()),
         PopupSize::Large,
@@ -737,7 +738,7 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
     }
 
     rows.push(text_row(""));
-    rows.push(text_row("Any key to go back"));
+    rows.push(text_row("Any key back"));
     rows
 }
 
@@ -809,7 +810,7 @@ pub(super) fn draw_inventory_item_action(
         rows.push(item_row(label.clone(), i == selected));
     }
     rows.push(text_row(""));
-    rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
+    rows.push(text_row(key_hints(&["Enter choose", "Esc cancel"])));
     draw_popup("Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -173,15 +173,13 @@ pub(super) fn draw_achievements(app: &App, refusal: Option<&str>, painter: &Pain
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    rows.push(text_row(key_hints(&["Up/Down scroll", "Esc back"])));
     draw_popup("Achievements", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_load_game(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let saves = app.list_saves();
-    let mut rows = vec![text_row(
-        "Pick a save (Esc to cancel; Up/Down + Enter also work)",
-    )];
+    let mut rows = vec![text_row("Pick a save")];
     if saves.is_empty() {
         rows.push(text_row("(no saves found)"));
     }
@@ -195,6 +193,8 @@ pub(super) fn draw_load_game(app: &App, refusal: Option<&str>, painter: &Painter
             i == app.menu_selected,
         ));
     }
+    rows.push(text_row(""));
+    rows.push(text_row(key_hints(&["Enter open", "Esc back"])));
     draw_popup("Load Game", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -208,10 +208,10 @@ pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Paint
     let rows = vec![
         Row::TextColored(name, TEXT),
         text_row(""),
-        item_row("[L]oad".to_string(), app.menu_selected == 0),
+        item_row("[L] Load".to_string(), app.menu_selected == 0),
         item_row("[X] Delete".to_string(), app.menu_selected == 1),
         text_row(""),
-        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(key_hints(&["Enter choose", "Esc cancel"])),
     ];
     draw_popup("Save", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -230,7 +230,7 @@ fn game_over_rows(summary: &str, card: Option<&ScoreCard>) -> Vec<Row> {
         rows.extend(score::popup_rows(card));
         rows.push(text_row(""));
     }
-    rows.push(text_row("Press any key to return to the main menu"));
+    rows.push(text_row("Any key main menu"));
     rows
 }
 
@@ -265,7 +265,7 @@ pub(super) fn draw_escaped(app: &mut App, refusal: Option<&str>, painter: &Paint
         app.profile().lifetime_score
     )));
     rows.push(text_row(""));
-    rows.push(text_row("Enter or Esc to keep playing"));
+    rows.push(text_row(key_hints(&["Enter keep playing", "Esc back"])));
     draw_popup("Escaped", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -283,7 +283,7 @@ pub(super) fn draw_quit_app_confirm(
         item_row("[Y] Yes, quit".to_string(), selected == 0),
         item_row("[N] No, stay".to_string(), selected == 1),
         text_row(""),
-        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(key_hints(&["[Y] quit", "[N] or Esc cancel"])),
     ];
     draw_popup("Quit", PopupSize::Large, &rows, refusal, painter, m);
 }

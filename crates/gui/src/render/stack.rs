@@ -484,7 +484,7 @@ fn cell_describe_rows(text: Option<&str>) -> Vec<Row> {
         None => rows.push(text_row("Nothing to say about that.")),
     }
     rows.push(text_row(""));
-    rows.push(text_row("Any key to go back"));
+    rows.push(text_row("Any key back"));
     rows
 }
 
@@ -1093,7 +1093,7 @@ mod tests {
             expected.iter().map(String::as_str).collect::<Vec<_>>(),
             "the popup's rows are not wrap_text's output"
         );
-        assert_eq!(text.last(), Some(&"Any key to go back"));
+        assert_eq!(text.last(), Some(&"Any key back"));
     }
 
     /// `describe_view_direction` always answers on the engine side, but the
@@ -1104,7 +1104,7 @@ mod tests {
         let rows = cell_describe_rows(None);
         let text: Vec<&str> = rows.iter().map(row_text).collect();
         assert!(text.contains(&"Nothing to say about that."));
-        assert_eq!(text.last(), Some(&"Any key to go back"));
+        assert_eq!(text.last(), Some(&"Any key back"));
     }
 
     /// The full paint call still has to survive both shapes without

@@ -1,5 +1,6 @@
 //! The message log history screen (`Mode::History`).
 
+use super::popup::key_hints;
 use super::*;
 
 /// The message log in full — everything the pane at the bottom of the map
@@ -23,7 +24,7 @@ pub(super) fn draw_history(
     rows.push(text_row(format!(
         "The last {MESSAGE_LOG_CAP} lines, repeats folded. A finished intrusion keeps its results, not its blow-by-blow."
     )));
-    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    rows.push(text_row(key_hints(&["Up/Down scroll", "Esc back"])));
     draw_popup("History", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -24,10 +24,15 @@ const CUT_MARK: &str = "...";
 
 fn hint(page: usize, pages: usize) -> String {
     let next = match page + 1 < pages {
-        true => "Enter/Right: next",
-        false => "Enter/Right: continue",
+        true => "Enter/Right next",
+        false => "Enter/Right continue",
     };
-    format!("{}/{}   {next}   Left: back   Esc: skip", page + 1, pages)
+    key_hints(&[
+        &format!("{}/{}", page + 1, pages),
+        next,
+        "Left back",
+        "Esc skip",
+    ])
 }
 
 /// Paragraphs wrapped to `columns`, a blank line between them. `text::wrap`
@@ -139,7 +144,7 @@ pub(super) fn draw_basin_exit_confirm(
         item_row("[y] Yes, step through".to_string(), selected == 0),
         item_row("[n] No, stay".to_string(), selected == 1),
         text_row(""),
-        text_row("Esc to cancel; Up/Down + Enter also work"),
+        text_row(key_hints(&["[Y] step through", "[N] or Esc cancel"])),
     ];
     draw_popup("Basin Exit", PopupSize::Large, &rows, refusal, painter, m);
 }

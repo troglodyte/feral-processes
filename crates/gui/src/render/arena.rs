@@ -26,8 +26,15 @@ pub(super) fn draw_arena_builder(
         .map(|(i, row)| item_row(row.label.clone(), i == selected))
         .collect();
     body.push(text_row(""));
-    body.push(text_row("Left/Right adjust  Enter pick  Backspace remove"));
-    body.push(text_row("[F]ight  [L]oad  [S]ave  Esc back"));
+    body.push(text_row(key_hints(&[
+        "Left/Right adjust",
+        "Enter pick",
+        "Backspace remove",
+        "[F] fight",
+        "[L] load",
+        "[S] save",
+        "Esc back",
+    ])));
     draw_popup("Arena", PopupSize::Large, &body, refusal, painter, m);
 }
 
@@ -70,7 +77,7 @@ fn draw_id_list(
         body.push(item_row(row.to_string(), i == selected));
     }
     body.push(text_row(""));
-    body.push(text_row("Enter to choose, Esc to go back."));
+    body.push(text_row(key_hints(&["Enter choose", "Esc back"])));
     draw_popup(title, PopupSize::Large, &body, refusal, painter, m);
 }
 
@@ -84,7 +91,7 @@ pub(super) fn draw_arena_save(input: &str, refusal: Option<&str>, painter: &Pain
         item_row(format!("{input}_"), true),
         text_row(""),
         text_row("An existing file of that name is overwritten."),
-        text_row("Enter to write, Esc to cancel."),
+        text_row(key_hints(&["Enter write", "Esc cancel"])),
     ];
     draw_popup(
         "Save Scenario",
@@ -130,9 +137,12 @@ pub(super) fn draw_arena_result(
         body.push(item_row(line.clone(), i == selected));
     }
     body.push(text_row(""));
-    body.push(text_row(
-        "[R]efight this seed  [N]ext seed  Up/Down scroll  Esc back",
-    ));
+    body.push(text_row(key_hints(&[
+        "[R] refight",
+        "[N] next seed",
+        "Up/Down scroll",
+        "Esc back",
+    ])));
     draw_popup("Arena Result", PopupSize::Large, &body, refusal, painter, m);
 }
 

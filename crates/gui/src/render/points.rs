@@ -9,7 +9,9 @@ use feral_processes_engine::StatOwner;
 use feral_processes_engine::attributes::DerivedStat;
 
 use super::level_up::{duel_heading, duel_lines};
-use super::popup::{PopupSize, ROW_WRAP_COLUMNS, Row, draw_popup, item_row, row_prefix, text_row};
+use super::popup::{
+    PopupSize, ROW_WRAP_COLUMNS, Row, draw_popup, item_row, key_hints, row_prefix, text_row,
+};
 use super::*;
 
 /// One stat's before -> after, in the units the player reads it in.
@@ -99,15 +101,20 @@ pub(super) fn attribute_lines(row: &CreationRow, bar_pool: Option<u32>) -> Optio
 /// points are banked and leaving keeps them.
 pub(super) fn footer(pool: u32, left: u32, spends_pool: bool, owner: Option<&str>) -> String {
     let whose = owner.map(|name| format!(" for {name}")).unwrap_or_default();
-    let keys = "Left/Right spends (Shift: all, Ctrl: half)";
+    let spend = "Left/Right spend (Shift all, Ctrl half)";
     match spends_pool {
-        true => format!(
-            "{}/{pool} points spent, {left} left - {keys}; Enter: next once it is spent   Esc: back",
-            pool - left
-        ),
-        false => format!(
-            "{left} of {pool} points left{whose} - {keys}; Enter confirms, Esc keeps the rest banked"
-        ),
+        true => key_hints(&[
+            &format!("{}/{pool} points spent, {left} left", pool - left),
+            spend,
+            "Enter next once spent",
+            "Esc back",
+        ]),
+        false => key_hints(&[
+            &format!("{left} of {pool} points left{whose}"),
+            spend,
+            "Enter confirm",
+            "Esc back (rest banked)",
+        ]),
     }
 }
 

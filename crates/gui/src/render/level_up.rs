@@ -20,9 +20,9 @@ use crate::paint::{Painter, Rect};
 const PANEL_W_FRACTION: f32 = 0.5;
 const PANEL_H_FRACTION: f32 = 0.62;
 
-const ESC_HINT: &str = "[Esc] Close";
-const PERKS_HINT: &str = "[P] Perks";
-const POINTS_HINT: &str = "[Enter] Spend points";
+const ESC_HINT: &str = "Esc back";
+const PERKS_HINT: &str = "[P] perks";
+const POINTS_HINT: &str = "Enter spend points";
 
 pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
     let (pw, ph) = (w * PANEL_W_FRACTION, h * PANEL_H_FRACTION);

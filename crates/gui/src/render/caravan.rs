@@ -217,15 +217,14 @@ pub(super) fn caravan_page_rows(
         idx += 1;
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "Left/Right set a row  ·  Shift jumps to the end  ·  Ctrl halves the gap",
-    ));
-    rows.push(text_row(
-        "[A] all your cargo  ·  [N] clear  ·  Enter to trade  ·  Esc to step away",
-    ));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
+    rows.push(text_row(BASKET_STEP_KEYS));
+    rows.push(text_row(key_hints(&[
+        "[A] all your cargo",
+        "[N] clear",
+        "[I] inspect",
+        "Enter trade",
+        "Esc back",
+    ])));
     rows
 }
 

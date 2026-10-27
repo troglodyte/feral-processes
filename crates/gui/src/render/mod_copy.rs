@@ -71,9 +71,11 @@ pub(super) fn mod_copy_rows(game: &Game, copy: &GearCopy, selected: usize) -> Ve
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "Select a slot; R strips an affix, Enter on an empty slot fits one. Esc to leave.",
-    ));
+    rows.push(text_row(key_hints(&[
+        "[R] strip an affix",
+        "Enter fit one on an empty slot",
+        "Esc back",
+    ])));
     rows
 }
 
@@ -100,7 +102,7 @@ pub(super) fn mod_pick_rows(game: &Game, copy: &GearCopy, selected: usize) -> Ve
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row("Esc to go back."));
+    rows.push(text_row(key_hints(&["Enter fit", "Esc back"])));
     rows
 }
 

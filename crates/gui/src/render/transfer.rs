@@ -103,12 +103,6 @@ pub(super) fn body_rows(
         let remaining = room.saturating_sub(given);
         body.push(text_row(format!("Depot room remaining: {remaining}")));
     }
-    body.extend([
-        text_row("Up/Down pick a row; digits and Backspace type an amount"),
-        text_row("- takes, + puts; Shift+Left/Right to that end, Ctrl halves the gap"),
-        text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
-    ]);
-    body.push(text_row(""));
     let cols = Columns::of(entries);
     body.push(text_row(cols.header()));
     for (i, (name, amount, carried, on_shelves)) in entries.iter().enumerate() {
@@ -117,6 +111,23 @@ pub(super) fn body_rows(
             i == selected,
         ));
     }
+    body.push(text_row(""));
+    body.push(text_row(key_hints(&[
+        "Up/Down select",
+        "Type digits",
+        "- take",
+        "+ put",
+    ])));
+    body.push(text_row(key_hints(&[
+        "Shift+Left/Right to the end",
+        "Ctrl+Left/Right halves the gap",
+    ])));
+    body.push(text_row(key_hints(&[
+        "[A] take everything",
+        "[N] clear",
+        "Enter transfer",
+        "Esc back",
+    ])));
     body
 }
 

@@ -28,7 +28,11 @@ pub(super) fn draw_structure_manifest(
         None => draw_popup(
             "Structure",
             PopupSize::Small,
-            &[text_row("That structure is gone. Esc to go back.")],
+            &[
+                text_row("That structure is gone."),
+                text_row(""),
+                text_row("Esc back"),
+            ],
             refusal,
             painter,
             m,

@@ -175,9 +175,11 @@ pub(super) fn pick_rows(game: &Game, draft: &RoutineDraft, selected: usize) -> V
 /// The name field's popup.
 pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
     vec![
-        text_row("Name the routine (1-24 characters). Enter or Esc to finish."),
+        text_row("Name the routine (1-24 characters)"),
         text_row(""),
         text_row(format!("> {}_", draft.name)),
+        text_row(""),
+        text_row(key_hints(&["Type a name", "Enter finish", "Esc back"])),
     ]
 }
 

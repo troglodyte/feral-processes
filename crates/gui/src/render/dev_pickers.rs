@@ -7,10 +7,10 @@ use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
 
-const HINT: &str = "Dev build only. Up/Down choose, Enter picks. Type to filter. Esc to go back.";
+const HEADER: &str = "Dev build only";
 
 pub(super) fn item_picker_rows(rows: &[(String, u32)], filter: &str, selected: usize) -> Vec<Row> {
-    let mut out = vec![text_row(HINT)];
+    let mut out = vec![text_row(HEADER)];
     out.extend(filter_line(filter));
     if rows.is_empty() {
         out.push(no_match_row(filter));
@@ -20,16 +20,18 @@ pub(super) fn item_picker_rows(rows: &[(String, u32)], filter: &str, selected: u
             .enumerate()
             .map(|(i, (name, held))| item_row(format!("{name}  x{held}"), i == selected)),
     );
+    push_key_footer(&mut out, &["Type to filter", "Enter give", "Esc back"]);
     out
 }
 
 pub(super) fn zone_picker_rows(rows: &[u32], selected: usize) -> Vec<Row> {
-    let mut out = vec![text_row(HINT)];
+    let mut out = vec![text_row(HEADER)];
     out.extend(
         rows.iter()
             .enumerate()
             .map(|(i, zone)| item_row(format!("Zone {zone}"), i == selected)),
     );
+    push_key_footer(&mut out, &["Enter warp", "Esc back"]);
     out
 }
 
@@ -99,7 +101,9 @@ mod tests {
             .max_by_key(|n| n.chars().count())
             .unwrap();
         let rows = item_picker_rows(&[(widest, 99_999)], "", 0);
-        let Some(Row::Item { text: label, .. }) = rows.last() else {
+        let Some(Row::Item { text: label, .. }) =
+            rows.iter().rfind(|r| matches!(r, Row::Item { .. }))
+        else {
             panic!("the last row is the item");
         };
         with_painter(|p| {

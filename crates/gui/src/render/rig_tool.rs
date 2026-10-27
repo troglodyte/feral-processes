@@ -63,27 +63,33 @@ fn body_rows(screen: &RigToolScreen, selected: usize) -> Vec<Row> {
     body.extend([
         text_row(""),
         text_row("Pick a row to fit it; the tool it replaces comes back to your pack"),
-        text_row(if view.built_in {
-            "Esc to go back"
-        } else {
-            "[R] pull the fitted tool (the rig falls back to its built-in one)  Esc to go back"
-        }),
-        text_row(""),
     ]);
+    if !view.built_in {
+        body.push(text_row(
+            "Pulling the fitted tool makes the rig fall back to its built-in one",
+        ));
+    }
+    body.push(text_row(""));
     if view.candidates.is_empty() {
         body.push(text_row(
             "You are carrying no tool this rig can run. Forge one, or take one out of a rig.",
         ));
-        return body;
+    } else {
+        let cols = Columns::of(screen);
+        body.push(text_row(cols.header()));
+        for (i, row) in view.candidates.iter().enumerate() {
+            body.push(item_row(
+                cols.row(&row.name, row.category.as_str(), row.tier, row.ticks),
+                i == selected,
+            ));
+        }
     }
-    let cols = Columns::of(screen);
-    body.push(text_row(cols.header()));
-    for (i, row) in view.candidates.iter().enumerate() {
-        body.push(item_row(
-            cols.row(&row.name, row.category.as_str(), row.tier, row.ticks),
-            i == selected,
-        ));
+    let mut chips = Vec::new();
+    if !view.built_in {
+        chips.push("[R] pull the fitted tool");
     }
+    chips.extend(["Enter fit", "Esc back"]);
+    push_key_footer(&mut body, &chips);
     body
 }
 

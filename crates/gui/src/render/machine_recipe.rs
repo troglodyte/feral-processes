@@ -68,17 +68,16 @@ fn body_rows(screen: &MachineRecipeScreen, selected: usize) -> Vec<Row> {
         Some(_) => "Pick a row to switch; a switch empties what the machine holds",
         None => "Nothing set yet — the machine makes nothing until you pick a row",
     }));
-    body.push(text_row("Esc to go back"));
     body.push(text_row(""));
     if view.rows.is_empty() {
         body.push(text_row(
             "You have not researched anything this machine makes.",
         ));
-        return body;
     }
     for (i, row) in view.rows.iter().enumerate() {
         body.push(item_row(row_text(row), i == selected));
     }
+    push_key_footer(&mut body, &["Enter choose", "Esc back"]);
     body
 }
 

@@ -20,8 +20,8 @@
 //! own doc comment.
 
 use super::popup::{
-    PopupSize, Row, colored_item_row, description_rows, draw_popup, item_row, popup_rect, text_row,
-    with_icon,
+    PopupSize, Row, colored_item_row, description_rows, draw_popup, item_row, key_hints,
+    popup_rect, text_row, with_icon,
 };
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
@@ -274,11 +274,13 @@ fn row_line(row: &CreationRow) -> String {
 /// the pool, so the bars never add up to how much is left.
 fn footer(app: &App, step: CreationStep) -> String {
     match step {
-        CreationStep::Kit => format!(
-            "{}c left - Left/Right takes (Shift/Ctrl); [r] rerolls the basket; \
-             Enter: next once it is spent   Esc: back",
-            app.creation_credits_left()
-        ),
+        CreationStep::Kit => key_hints(&[
+            &format!("{}c left", app.creation_credits_left()),
+            "Left/Right take (Shift/Ctrl bigger steps)",
+            "[R] reroll",
+            "Enter next once spent",
+            "Esc back",
+        ]),
         CreationStep::Points => {
             points::footer(CREATION_STAT_POINTS, app.creation_points_left(), true, None)
         }
@@ -291,41 +293,57 @@ fn footer(app: &App, step: CreationStep) -> String {
                 0 => String::new(),
                 n => format!(", +{n} later from your profile"),
             };
-            format!(
-                "{} of {CREATION_PERK_POINTS} Perk Points{earned} - Left/Right buys; \
-                 Enter: next, rest carries over   Esc: back",
-                app.creation_perk_points_left()
-            )
+            key_hints(&[
+                &format!(
+                    "{} of {CREATION_PERK_POINTS} Perk Points{earned}",
+                    app.creation_perk_points_left()
+                ),
+                "Left/Right buy",
+                "Enter next (rest carries over)",
+                "Esc back",
+            ])
         }
-        _ => plain_footer(step).to_string(),
+        _ => plain_footer(step),
     }
 }
 
 /// The seven steps whose keys never change.
-fn plain_footer(step: CreationStep) -> &'static str {
+fn plain_footer(step: CreationStep) -> String {
     match step {
         CreationStep::Difficulty => {
-            "[p]/[f] or Up/Down picks   Enter: next   Esc: back to the menu"
+            key_hints(&["[P]/[F] or Up/Down pick", "Enter next", "Esc back"])
         }
-        CreationStep::Profile => {
-            "Bonuses from past achievements, granted when this run starts - \
-             Left/Right pages   Enter: next   Esc: back"
+        CreationStep::Profile => key_hints(&[
+            "Bonuses from past achievements, granted when this run starts",
+            "Left/Right pages",
+            "Enter next",
+            "Esc back",
+        ]),
+        CreationStep::Class => {
+            key_hints(&["Up/Down pick", "Left/Right pages", "Enter next", "Esc back"])
         }
-        CreationStep::Class => "Up/Down picks; Left/Right pages   Enter: next   Esc: back",
         // Written by `footer` above, which is the only caller — every
         // step `CreationStep::spends` names carries a live figure.
-        CreationStep::Kit | CreationStep::Points | CreationStep::Perks => "",
+        CreationStep::Kit | CreationStep::Points | CreationStep::Perks => String::new(),
         // The sixth Icon row is "Draw your own": Enter on it opens the
         // editor rather than picking, and the footer is where that is said.
-        CreationStep::Icon => {
-            "Up/Down picks; Draw your own opens the editor; [n] or Right skips   \
-             Enter: next   Esc: back"
-        }
-        CreationStep::Colour => "Up/Down picks; [n] or Right skips   Enter: next   Esc: back",
+        CreationStep::Icon => key_hints(&[
+            "Up/Down pick",
+            "Draw your own opens the editor",
+            "[N] or Right skips",
+            "Enter next",
+            "Esc back",
+        ]),
+        CreationStep::Colour => key_hints(&[
+            "Up/Down pick",
+            "[N] or Right skips",
+            "Enter next",
+            "Esc back",
+        ]),
         // The last two steps, and the only place the wizard says what
         // *finishes* it — the summary is accepted, the name starts the run.
-        CreationStep::Summary => "Left/Right pages   Enter: next   Esc: back",
-        CreationStep::Name => "Type a name   Enter: start the run   Esc: back",
+        CreationStep::Summary => key_hints(&["Left/Right pages", "Enter next", "Esc back"]),
+        CreationStep::Name => key_hints(&["Type a name", "Enter start the run", "Esc back"]),
     }
 }
 

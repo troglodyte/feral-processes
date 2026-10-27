@@ -17,7 +17,7 @@ use super::level_up::{duel_heading, duel_lines, duel_moved, panel_rect, stat_lin
 use super::{BORDER, Metrics, PANEL_BG, SCRIM, TEXT, TEXT_DIM};
 use crate::paint::{Painter, Rect};
 
-const HINT: &str = "[Enter] Back to perks";
+const HINT: &str = "Enter back to perks  ·  Esc back";
 
 fn title(report: &PerkReport) -> String {
     format!(

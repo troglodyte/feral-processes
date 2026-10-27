@@ -211,7 +211,13 @@ pub(super) fn outpost_page_rows(report: &OutpostReport, selected: usize) -> Vec<
         rows.push(text_row(format!("  {next}")));
     }
     rows.push(text_row(""));
-    rows.push(text_row("[P] Post  [U] Recall  [R] Repair  [C] Take stock"));
+    rows.push(text_row(key_hints(&[
+        "[P] post",
+        "[U] recall",
+        "[R] repair",
+        "[C] take stock",
+        "Esc back",
+    ])));
     rows
 }
 
@@ -232,6 +238,7 @@ pub(super) fn draw_outpost_post(
     for (i, row) in candidates.iter().enumerate() {
         rows.push(item_row(row.name.clone(), i == selected));
     }
+    push_key_footer(&mut rows, &["Enter post", "Esc back"]);
     draw_popup("Post", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -85,9 +85,12 @@ pub(super) fn draw_compass(
         "Somewhere you have been gives its name; somewhere only recorded is \
          still a heading and a distance away.",
     ));
-    rows.push(text_row(
-        "Up/Down to scroll, Enter to point the compass, X to point it home, Esc to close.",
-    ));
+    rows.push(text_row(key_hints(&[
+        "Up/Down scroll",
+        "Enter point the compass",
+        "[X] point it home",
+        "Esc back",
+    ])));
     draw_popup("Compass", PopupSize::Large, &rows, refusal, painter, m);
 }
 

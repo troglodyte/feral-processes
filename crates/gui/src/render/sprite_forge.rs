@@ -54,7 +54,7 @@ use feral_processes_app_core::{
 const PICKER_COLUMNS: usize = 4;
 
 const PICKER_TITLE: &str = "Sprite Forge";
-const PICKER_HELP_TEXT: &str = "Up/Down or click: move   Enter or double-click: edit   t: toggle art   r: revert   Esc: back to menu";
+const PICKER_HELP_TEXT: &str = "Up/Down or click move  ·  Enter or double-click edit  ·  [T] toggle art  ·  [R] revert  ·  Esc back";
 
 /// Marks a row the player has redrawn. Short on purpose: the row census
 /// holds the longest label plus this against its column.
@@ -120,7 +120,10 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
             .map(|s| s.label.clone())
     }) {
         Some(label) => {
-            let ask = format!("Revert `{label}` to the original art? (y/n)");
+            let ask = format!(
+                "Revert `{label}` to the original art?  ·  {}",
+                super::popup::key_hints(&["[Y] revert", "[N] or Esc cancel"])
+            );
             centered_ui(painter, &ask, g.help_y, m.small(), TEXT);
         }
         None => centered_ui(painter, PICKER_HELP_TEXT, g.help_y, m.small(), TEXT_DIM),
@@ -413,22 +416,22 @@ fn button_size(painter: &Painter, m: &Metrics) -> (f32, f32, f32) {
 /// current mode.
 fn button_label(button: EditorButton, view: &SpriteEditorView) -> String {
     match button {
-        EditorButton::Save => "[s] Save".to_string(),
-        EditorButton::Undo => "[u] Undo".to_string(),
-        EditorButton::Clear => "[x] Clear".to_string(),
-        EditorButton::Brush => format!("[g] Brush {}", view.canvas.brush),
+        EditorButton::Save => "[S] save".to_string(),
+        EditorButton::Undo => "[U] undo".to_string(),
+        EditorButton::Clear => "[X] clear".to_string(),
+        EditorButton::Brush => format!("[G] brush {}", view.canvas.brush),
         EditorButton::Tool => match view.tool {
-            Tool::Paint => "[f] Paint".to_string(),
-            Tool::Fill => "[f] Fill".to_string(),
+            Tool::Paint => "[F] paint".to_string(),
+            Tool::Fill => "[F] fill".to_string(),
         },
-        EditorButton::Back => "[Esc] Back".to_string(),
-        EditorButton::Keep => "[Enter] Keep".to_string(),
-        EditorButton::Discard => "[Esc] Discard".to_string(),
-        EditorButton::Frame1 => "[1] Frame 1".to_string(),
-        EditorButton::Frame2 => "[2] Frame 2".to_string(),
-        EditorButton::DeleteFrame => "[D] Delete 2".to_string(),
-        EditorButton::Slower => "[-] Slower".to_string(),
-        EditorButton::Faster => "[=] Faster".to_string(),
+        EditorButton::Back => "Esc back".to_string(),
+        EditorButton::Keep => "Enter keep".to_string(),
+        EditorButton::Discard => "Esc discard".to_string(),
+        EditorButton::Frame1 => "[1] frame 1".to_string(),
+        EditorButton::Frame2 => "[2] frame 2".to_string(),
+        EditorButton::DeleteFrame => "[D] delete 2".to_string(),
+        EditorButton::Slower => "[-] slower".to_string(),
+        EditorButton::Faster => "[=] faster".to_string(),
     }
 }
 
@@ -486,7 +489,7 @@ pub(super) fn draw_sprite_editor(app: &App, painter: &Painter, m: &Metrics) {
         // of, so this still names the way back rather than drawing nothing.
         None => centered_ui(
             painter,
-            "No sprite selected. Esc to go back.",
+            "No sprite selected  ·  Esc back",
             m.pad + m.line_height,
             m.title(),
             TEXT_DIM,
@@ -1281,13 +1284,13 @@ mod tests {
             crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes).join("\n");
         assert!(drawn.contains("Draw your avatar"), "{drawn}");
-        assert!(drawn.contains("[Enter] Keep"), "{drawn}");
+        assert!(drawn.contains("Enter keep"), "{drawn}");
         assert!(
-            drawn.contains("Enter: keep"),
+            drawn.contains("Enter keep · Esc discard"),
             "the key line names Enter: {drawn}"
         );
         assert!(!drawn.contains("Sprite Forge"), "{drawn}");
-        assert!(!drawn.contains("s: save"), "{drawn}");
+        assert!(!drawn.contains("[S] save"), "{drawn}");
     }
 
     #[test]
@@ -1378,12 +1381,12 @@ mod tests {
             "Arrows",
             "Space",
             "Backspace",
-            "u",
-            "x",
-            "g",
-            "f",
-            "i",
-            "s",
+            "[U]",
+            "[X]",
+            "[G]",
+            "[F]",
+            "[I]",
+            "[S]",
             "Esc",
         ] {
             assert!(
@@ -1698,17 +1701,17 @@ mod tests {
         let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
         for label in [
-            "[s] Save",
-            "[u] Undo",
-            "[x] Clear",
-            "[g] Brush 1",
-            "[f] Paint",
-            "[Esc] Back",
-            "[1] Frame 1",
-            "[2] Frame 2",
-            "[D] Delete 2",
-            "[-] Slower",
-            "[=] Faster",
+            "[S] save",
+            "[U] undo",
+            "[X] clear",
+            "[G] brush 1",
+            "[F] paint",
+            "Esc back",
+            "[1] frame 1",
+            "[2] frame 2",
+            "[D] delete 2",
+            "[-] slower",
+            "[=] faster",
         ] {
             assert!(
                 drawn.iter().any(|t| t == label),
@@ -1800,7 +1803,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_editor(&app, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
-        for label in ["[1] Frame 1", "[2] Frame 2", "600 ms"] {
+        for label in ["[1] frame 1", "[2] frame 2", "600 ms"] {
             assert!(drawn.iter().any(|t| t.contains(label)), "{label:?}");
         }
     }
@@ -1818,7 +1821,7 @@ mod tests {
             crate::paint::painted_runs_in(&shapes, TEXT_OFF, false)
         };
         let one = dim_texts(false);
-        for want in ["[-] Slower", "[=] Faster", "600 ms"] {
+        for want in ["[-] slower", "[=] faster", "600 ms"] {
             assert!(
                 one.iter().any(|t| t.contains(want)),
                 "{want:?} not dim: {one:?}"

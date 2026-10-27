@@ -35,7 +35,7 @@ pub(super) fn refit_rows(game: &Game, copy: &GearCopy) -> Vec<Row> {
         )));
     }
     rows.push(text_row(""));
-    rows.push(text_row("Enter refits it. Esc to leave."));
+    rows.push(text_row(key_hints(&["Enter refit", "Esc back"])));
     rows
 }
 

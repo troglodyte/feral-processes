@@ -89,18 +89,14 @@ pub(super) fn board_rows(
     }
 
     rows.push(text_row(""));
-    rows.extend(board_footer().into_iter().map(text_row));
+    rows.push(text_row(board_footer()));
     rows
 }
 
-/// `contract_footer`'s two lines, worded for a counter you walked to.
-/// Split out for its reason: a test measures exactly the strings the screen
-/// pushes.
-fn board_footer() -> [&'static str; 2] {
-    [
-        "Enter takes the highlighted job, or hands over a held job's cargo.",
-        "[A] gives back the highlighted job.        Esc to go back.",
-    ]
+/// `contract_footer`, worded for a counter you walked to. Split out for its
+/// reason: a test measures exactly the string the screen pushes.
+fn board_footer() -> String {
+    key_hints(&["Enter take or hand over", "[A] give back", "Esc back"])
 }
 
 #[cfg(test)]

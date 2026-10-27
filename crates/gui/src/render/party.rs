@@ -73,7 +73,7 @@ pub(super) fn draw_companion_equip(
     };
     let mut rows = vec![
         Row::TextColored(format!("{name}'s gear"), CYAN),
-        text_row("Enter to swap or unequip. Gear comes out of your cargo and goes back to it."),
+        text_row("Gear comes out of your cargo and goes back to it."),
         text_row("A Decompiler bonus does nothing on a program - only you attempt a capture."),
         text_row(""),
     ];
@@ -86,10 +86,11 @@ pub(super) fn draw_companion_equip(
         ));
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
-    rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
+    rows.push(text_row(key_hints(&[
+        "Enter swap",
+        "[I] inspect",
+        "Esc back",
+    ])));
     draw_popup("Program Gear", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -209,7 +210,7 @@ pub(super) fn memory_page_rows(
     }
 
     rows.push(text_row(""));
-    rows.push(text_row("Up/Down to scroll, Esc to go back"));
+    rows.push(text_row(key_hints(&["Up/Down scroll", "Esc back"])));
     rows
 }
 
@@ -488,6 +489,7 @@ pub(super) fn draw_fuse_menu(
     for (i, p) in candidates.iter().enumerate() {
         push_fuse_candidate(&mut rows, game, p, i == selected);
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -516,6 +518,7 @@ pub(super) fn draw_fuse_second_menu(
     for (i, p) in candidates.iter().enumerate() {
         push_fuse_candidate(&mut rows, game, p, i == selected);
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -569,10 +572,12 @@ pub(super) fn draw_fuse_name_menu(
         )));
         rows.push(text_row(""));
     }
-    rows.push(text_row(
-        "Type a name, Enter to fuse (blank keeps the default name)",
-    ));
-    rows.push(text_row("Esc to go back and re-pick the second program"));
+    rows.push(text_row("A blank name keeps the default."));
+    rows.push(text_row(key_hints(&[
+        "Type a name",
+        "Enter fuse",
+        "Esc back",
+    ])));
     draw_popup("Fuse", PopupSize::Small, &rows, refusal, painter, m);
 }
 
@@ -580,10 +585,10 @@ pub(super) fn draw_fuse_name_menu(
 /// `the_rename_footer_fits_its_popup` can measure them — this page is
 /// `PopupSize::Small`, which is half the window, and these are the widest
 /// thing on it by a wide margin.
-fn rename_help() -> [&'static str; 2] {
+fn rename_help() -> [String; 2] {
     [
-        "Enter to confirm; clear the field to go back to the species name",
-        "Esc to leave the name as it is",
+        "Clear the field to go back to the species name.".to_string(),
+        key_hints(&["Enter confirm", "Esc cancel"]),
     ]
 }
 
@@ -619,7 +624,7 @@ pub(super) fn draw_rename_menu(
         ),
         text_row(""),
     ];
-    rows.extend(rename_help().into_iter().map(text_row));
+    rows.extend(rename_help().map(text_row));
     draw_popup("Rename", PopupSize::Small, &rows, refusal, painter, m);
 }
 
@@ -660,6 +665,7 @@ pub(super) fn draw_refactor(
             glyph_color(p.color),
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -706,6 +712,7 @@ pub(super) fn draw_refactor_item(
         ));
         rows.push(text_row(format!("    {}", u.description)));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -829,7 +836,7 @@ mod tests {
             // geometry `ui_metrics` is calibrated against.
             let room = 1440.0 * 0.5 - m.pad * 2.0;
             for line in rename_help() {
-                let drawn = p.measure_ui_advance(line, m.font_size);
+                let drawn = p.measure_ui_advance(&line, m.font_size);
                 assert!(
                     drawn <= room,
                     "the rename footer overflows its popup by {:.0}px \

@@ -30,7 +30,9 @@ use super::hud::palette;
 use super::lighting::{Lighting, Lit};
 use super::marks;
 use super::marks::draw_rarity_bar;
-use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_row};
+use super::popup::{
+    PopupSize, Row, draw_popup, item_row, push_key_footer, spent_item_row, text_row,
+};
 use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
@@ -1703,9 +1705,7 @@ pub(super) fn draw_tactical_items(
     m: &Metrics,
 ) {
     let items = game.battle_usable_items();
-    let mut rows = vec![text_row(
-        "Use which item? It costs this body its action. Type to filter.",
-    )];
+    let mut rows = vec![text_row("Use which item? It costs this body its action.")];
     rows.extend(super::list_filter::filter_line(filter));
     let visible = tactical_items_visible(game, filter);
     if visible.is_empty() && !filter.is_empty() {
@@ -1714,6 +1714,7 @@ pub(super) fn draw_tactical_items(
     for (i, item) in visible.iter().map(|&src| &items[src]).enumerate() {
         rows.push(item_row(game.item_name(item).to_string(), i == selected));
     }
+    push_key_footer(&mut rows, &["Type to filter", "Enter use", "Esc cancel"]);
     draw_popup("Use an Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -1741,6 +1742,7 @@ pub(super) fn draw_tactical_routines(
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
         });
     }
+    push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
         "Run a Routine",
         PopupSize::Large,
@@ -1770,6 +1772,7 @@ pub(super) fn draw_tactical_emulate(
             i == selected,
         ));
     }
+    push_key_footer(&mut rows, &["Enter invoke", "Esc cancel"]);
     draw_popup(
         "Invoke an Image",
         PopupSize::Large,
@@ -1813,7 +1816,7 @@ pub(super) fn tactical_result_rows(outcomes: &[LogEntry]) -> Vec<Row> {
         history_rows(outcomes, usize::MAX)
     };
     rows.push(text_row(""));
-    rows.push(text_row("[any key] continue"));
+    rows.push(text_row("Any key continue"));
     rows
 }
 

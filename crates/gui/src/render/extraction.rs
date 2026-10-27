@@ -150,7 +150,7 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
     }
 
     rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
+    rows.push(text_row(key_hints(&["Enter extract", "Esc back"])));
     rows
 }
 

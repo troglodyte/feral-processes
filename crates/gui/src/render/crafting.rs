@@ -31,12 +31,7 @@ pub(super) fn craft_page_rows(
 ) -> Vec<Row> {
     let status = game.player_status();
     let recipes = craft_list(at_bench, game);
-    let mut rows = vec![
-        text_row(
-            "Type to filter; Esc to cancel (clears a filter first); Up/Down + Enter also work",
-        ),
-        text_row(""),
-    ];
+    let mut rows = Vec::new();
     // Weapons had recipes on this list until they became designs, so this
     // is where a player comes looking for them before the Forge opens.
     if at_bench && let Some(hint) = game.weapon_tree_hint() {
@@ -75,6 +70,14 @@ pub(super) fn craft_page_rows(
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
+    push_key_footer(
+        &mut rows,
+        &[
+            "Type to filter",
+            "Enter compile",
+            "Esc back (clears the filter first)",
+        ],
+    );
     rows
 }
 
@@ -143,14 +146,13 @@ fn craft_rows(
 /// A named constant so the width test measures the string the screen
 /// actually prints: `draw_row` clips a row vertically and never
 /// horizontally, so a footer past the popup body is lost in silence.
-const CRAFT_QUANTITY_KEYS: &str =
-    "[C] Careful   [F] Compile 5   [M] Compile max affordable   Esc to go back";
+const CRAFT_QUANTITY_KEYS: &str = "Type digits  ·  [C] careful  ·  [F] compile 5  ·  [M] compile max  ·  Enter compile  ·  Esc cancel";
 
 /// The arrow line, named for `CRAFT_QUANTITY_KEYS`' reason — it is the only
 /// other row on this page that can grow by a word, and the width test
 /// measures both.
 const CRAFT_QUANTITY_ARROWS: &str =
-    "Left/Right adjust  ·  Shift jumps to the end  ·  Ctrl halves the gap";
+    "Left/Right adjust  ·  Shift+Left/Right to the end  ·  Ctrl+Left/Right halves the gap";
 
 /// The quantity prompt, and the careful-compile toggle that decides what
 /// the batch is worth.
@@ -195,7 +197,6 @@ pub(super) fn draw_craft_quantity(
     )));
     rows.push(text_row(""));
     rows.push(text_row(CRAFT_QUANTITY_ARROWS));
-    rows.push(text_row("Type digits, Enter to compile"));
     rows.push(text_row(CRAFT_QUANTITY_KEYS));
     draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -203,7 +204,7 @@ pub(super) fn draw_craft_quantity(
 /// `Mode::Compiling`'s footer — the only thing this screen has to teach,
 /// since there is nothing to page through. Named so a width test measures
 /// the string the screen actually prints, `CRAFT_QUANTITY_KEYS`' reason.
-const COMPILING_KEYS: &str = "Any key stops — finished units kept, the current one refunded.";
+const COMPILING_KEYS: &str = "Any key stops — finished units kept, the current one refunded";
 
 /// How big `Mode::Compiling`'s box is. A progress bar and two lines of text
 /// over whatever the player was doing: at `Large` it covered the map for a
@@ -313,7 +314,7 @@ pub(super) fn draw_recipes(
         }
         rows.push(colored_item_row("", false, TEXT_DIM));
     }
-    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    rows.push(text_row(key_hints(&["Up/Down scroll", "Esc back"])));
     draw_popup("Recipes", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -194,8 +194,8 @@ pub enum SpriteOp {
 
 /// The Forge's key line: the editor's own keys, then the Forge's save and
 /// leave.
-const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
+const FORGE_KEYS: &str = "Tab switch panel  ·  Arrows move  ·  Space paint  ·  \
+    Backspace erase  ·  [U] undo  ·  [X] clear  ·  [G] brush size  ·  [F] fill  ·  [I] pick colour  ·  [S] save  ·  Esc back";
 
 impl App {
     /// Tells the app where the player's own sprites live. The launcher

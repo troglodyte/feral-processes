@@ -27,10 +27,7 @@ pub(super) fn draw_put_down(
 
 /// `rows` is already what the filter leaves (`App::put_down_rows`).
 fn body_rows(rows: &[PutDownOption], filter: &str, selected: usize) -> Vec<Row> {
-    let mut body = vec![
-        text_row("Pick what to set on the floor. Type to filter; Esc to go back."),
-        text_row(""),
-    ];
+    let mut body = vec![text_row("Pick what to set on the floor."), text_row("")];
     body.extend(filter_line(filter));
     if rows.is_empty() && !filter.is_empty() {
         body.push(no_match_row(filter));
@@ -40,6 +37,7 @@ fn body_rows(rows: &[PutDownOption], filter: &str, selected: usize) -> Vec<Row> 
             .enumerate()
             .map(|(i, row)| item_row(row.label.to_string(), i == selected)),
     );
+    push_key_footer(&mut body, &["Type to filter", "Enter put down", "Esc back"]);
     body
 }
 

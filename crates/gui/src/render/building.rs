@@ -67,8 +67,8 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
 /// The build menu's rows, pure so the layout invariant below can be tested
 /// without a `Game` or a `Painter`.
 ///
-/// **Every row after the first is a `Row::Item`, including the headings and
-/// the descriptions.** `popup_layout` ends the scrollable body at the *last*
+/// **Every row between the shortfall line and the key footer is a
+/// `Row::Item`, including the headings and the descriptions.** `popup_layout` ends the scrollable body at the *last*
 /// `Row::Item` and pins whatever follows as a footer — so a description
 /// emitted as `Row::Text` would slice the final structure's description off
 /// the bottom of the list and strand it under the scroll indicator, detached
@@ -125,13 +125,13 @@ pub(super) fn build_menu_rows(
         }
         push_entry_rows(&mut rows, entry, i == selected, shortfall);
     }
+    push_build_menu_footer(&mut rows);
     rows
 }
 
-/// What both levels of the deploy menu open with. Esc goes back on either —
-/// out of a category to the list of them, or from there to the Build page.
+/// What both levels of the deploy menu open with.
 fn build_menu_preamble(shortfall: Option<&str>) -> Vec<Row> {
-    let mut rows = vec![text_row("Esc to go back; Up/Down + Enter also work")];
+    let mut rows = Vec::new();
     if let Some(line) = shortfall {
         // ORANGE and a `Row::Text`, so it is pinned above the scrolling list
         // it is about rather than paging away from it — and so it never
@@ -166,6 +166,12 @@ fn push_entry_rows(
     rows.extend(description_rows(&entry.description));
 }
 
+/// Esc goes back on either level — out of a category to the list of them, or
+/// from there to the Build page.
+fn push_build_menu_footer(rows: &mut Vec<Row>) {
+    push_key_footer(rows, &["Enter choose", "Esc back"]);
+}
+
 /// One row of the deploy menu's top level, everything that needed a `Game`
 /// already worked out.
 pub(super) enum BuildLine {
@@ -197,6 +203,7 @@ pub(super) fn build_top_rows(
             )),
         }
     }
+    push_build_menu_footer(&mut rows);
     rows
 }
 
@@ -300,11 +307,13 @@ pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String
         }),
         text_row(""),
         text_row(DIRECTION_PROMPT),
+        text_row(""),
+        text_row(DIRECTION_KEYS),
     ]);
     rows
 }
 
-const DIRECTION_PROMPT: &str = "Choose a direction to deploy (arrows/hjkl), Esc to cancel";
+const DIRECTION_PROMPT: &str = "Choose a direction to deploy";
 
 /// What the build menu writes after a structure's name. A waived bill (see
 /// `StructureDef::first_free`) has no rows at all, and a row that trailed
@@ -347,7 +356,11 @@ pub(super) fn draw_build_direction(
             );
             build_direction_rows(&def.name, &def.description, &cost)
         }
-        None => vec![text_row(DIRECTION_PROMPT)],
+        None => vec![
+            text_row(DIRECTION_PROMPT),
+            text_row(""),
+            text_row(DIRECTION_KEYS),
+        ],
     };
     draw_popup(
         "Deploy Direction",
@@ -664,13 +677,11 @@ fn upgrade_cost_display(app: &mut App, structure: Entity) -> Vec<String> {
 /// warning where a missing prompt would be a blank confirmation.
 const UNNAMED_BUILD_TARGET: &str = "structure";
 
-const PROGRAM_PICKER_PROMPT: &str =
-    "Which program pays for it? (Esc to cancel; Up/Down + Enter also work)";
+const PROGRAM_PICKER_PROMPT: &str = "Which program pays for it?";
 
 /// `PROGRAM_PICKER_PROMPT` for a wreck's rebuild, which names the job
 /// rather than a payment.
-const REBUILD_PICKER_PROMPT: &str =
-    "Which program rebuilds it? (Esc to cancel; Up/Down + Enter also work)";
+const REBUILD_PICKER_PROMPT: &str = "Which program rebuilds it?";
 
 /// What the picker says, once and above the list, about a build that runs no
 /// work cycle at all.
@@ -775,6 +786,7 @@ pub(super) fn build_program_rows(
             ROW_WRAP_COLUMNS,
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     rows
 }
 
@@ -1052,7 +1064,7 @@ pub(super) fn draw_staffing_menu(
     m: &Metrics,
 ) {
     let mut rows = vec![text_row(format!(
-        "Standing orders for the {} (Esc to close; Up/Down + Enter also work)",
+        "Standing orders for the {}",
         staffing.target
     ))];
     if staffing.rows.is_empty() {
@@ -1069,6 +1081,7 @@ pub(super) fn draw_staffing_menu(
     rows.push(text_row(
         "A standing job is filled only by a program no work order needs.",
     ));
+    push_key_footer(&mut rows, &["Enter choose", "Esc back"]);
     draw_popup(
         "Standing Orders",
         PopupSize::Large,
@@ -1239,15 +1252,14 @@ pub(super) fn draw_work_order_pick(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let mut rows = vec![text_row(
-        "What should the base hold? (Esc to cancel; Up/Down + Enter also work)",
-    )];
+    let mut rows = vec![text_row("What should the base hold?")];
     if items.is_empty() {
         rows.push(text_row("(nothing the base can make — deploy a machine)"));
     }
     for (i, (_, name)) in items.iter().enumerate() {
         rows.push(item_row(name.clone(), i == selected));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup(
         "New Work Order",
         PopupSize::Large,
@@ -1258,7 +1270,8 @@ pub(super) fn draw_work_order_pick(
     );
 }
 
-const WORK_ORDER_QUANTITY_KEYS: &str = "[S] Standing order   Digits then Enter   Esc to go back";
+const WORK_ORDER_QUANTITY_KEYS: &str =
+    "Type digits  ·  [S] standing order  ·  Enter order  ·  Esc cancel";
 
 /// How many of it. The same two-page shape the compile flow uses.
 ///
@@ -1541,9 +1554,7 @@ pub(super) fn draw_structure_menu(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let mut rows = vec![text_row(format!(
-        "{prompt} (Esc to cancel; Up/Down + Enter also work)"
-    ))];
+    let mut rows = vec![text_row(prompt)];
     if structures.is_empty() {
         rows.push(text_row("(no structures nearby)"));
     }
@@ -1569,6 +1580,7 @@ pub(super) fn draw_structure_menu(
             glyph_color(s.color),
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -1580,7 +1592,7 @@ pub(super) fn draw_remove_menu(
     m: &Metrics,
 ) {
     let mut rows = vec![text_row(
-        "Demolish which structure? Removing Home destroys the whole base. (Esc to cancel; Up/Down + Enter also work)",
+        "Demolish which structure? Removing Home destroys the whole base.",
     )];
     if structures.is_empty() {
         rows.push(text_row("(no structures nearby)"));
@@ -1603,6 +1615,7 @@ pub(super) fn draw_remove_menu(
             glyph_color(s.color),
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup(
         "Demolish Structure",
         PopupSize::Large,
@@ -2340,9 +2353,10 @@ mod tests {
                 .expect("a structure is an item row");
             assert_eq!(
                 last_item,
-                rows.len() - 1,
-                "the deploy menu pinned {} rows below its list — a description \
-                 is detached from the structure it belongs to",
+                rows.len() - 3,
+                "the deploy menu pinned {} rows below its list instead of just \
+                 the key footer — a description is detached from the structure \
+                 it belongs to",
                 rows.len() - last_item - 1
             );
         }
@@ -2475,6 +2489,7 @@ mod tests {
             "the cost carries the have/need figures the refusal would otherwise be the first news of: {text:?}"
         );
         assert!(text.contains(&DIRECTION_PROMPT), "{text:?}");
+        assert!(text.contains(&DIRECTION_KEYS), "{text:?}");
     }
 
     /// A waived bill has no rows to join, and both screens that quote one
@@ -2544,8 +2559,8 @@ mod tests {
             "once for the screen, not once per row"
         );
         assert!(
-            matches!(shut.first(), Some(Row::Text(_))),
-            "the Esc line still leads, so the warning sits under it and above the list"
+            matches!(shut.first(), Some(Row::TextColored(..))),
+            "the warning leads, above the list"
         );
         assert_eq!(
             shut.iter()
@@ -3540,8 +3555,8 @@ mod build_program_tests {
                 .expect("a candidate is an item row");
             assert_eq!(
                 last,
-                rows.len() - 1,
-                "the picker pinned {} rows below its list",
+                rows.len() - 3,
+                "the picker pinned {} rows below its list instead of just the key footer",
                 rows.len() - last - 1
             );
         }

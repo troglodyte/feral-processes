@@ -132,7 +132,7 @@ pub const SPRITE_PALETTE: [(u8, u8, u8); 63] = [
 pub const SPRITE_ALPHA_THRESHOLD: u8 = 128;
 
 /// The file-stem suffix that marks a sprite as authored in colour:
-/// `depot.colour.png` is drawn under the key `depot` with its tint's hue
+/// `rootkit.colour.png` is drawn under the key `rootkit` with its tint's hue
 /// dropped. Here rather than in gui so the asset census can resolve a
 /// `sprite:` override to either file. See `assets/sprites/README.md`.
 pub const FULL_COLOUR_SUFFIX: &str = ".colour";

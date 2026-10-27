@@ -95,9 +95,8 @@ Art authored in colour goes muddy under a hued tint. Name the file
 `<key>.png` would be, but drawn with a **grey** tint at the brightest
 channel of the colour the glyph would have had. The hue is dropped, and
 brightness, the map's edge shading and the damage dimming, still darkens
-it. `depot.colour.png` is the shipped example: every depot tier points at
-`depot`, so marking the file rather than six `.ron` defs is what keeps them
-from disagreeing.
+it. The species art is the shipped example (`rootkit.colour.png` and its
+neighbours); every structure is a plain grey sprite under the tint.
 
 If both `<key>.png` and `<key>.colour.png` exist, the colour one draws.
 The sprite editor opens and saves the colour file the same way: a sprite

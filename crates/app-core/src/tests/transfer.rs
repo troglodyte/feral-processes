@@ -139,21 +139,22 @@ fn c_beside_an_empty_machine_opens_an_empty_window() {
     assert!(app.basket_rows.is_empty());
 }
 
-/// **`+` takes out and `-` puts in**, the sign of the amount: the bare
-/// arrows belong to the structure hub's navigation. This test is the pin.
+/// **`-` takes out and `+` puts in**, the keyboard's left-to-right matching
+/// Shift/Ctrl+Left (take) and Right (put): the bare arrows belong to the
+/// structure hub's navigation. This test is the pin.
 #[test]
-fn plus_takes_out_and_minus_puts_in() {
+fn minus_takes_out_and_plus_puts_in() {
     let mut app = depot_picker(973, SHELF, &[(ITEM, 5)]);
     let row = row_of(&app, ITEM);
     app.menu_selected = row;
 
+    app.handle_key(GameKey::Char('-'));
+    assert_eq!(app.basket_amounts[row], 1, "- takes off the shelf");
     app.handle_key(GameKey::Char('+'));
-    assert_eq!(app.basket_amounts[row], 1, "+ takes off the shelf");
-    app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(
         app.basket_amounts[row], -1,
-        "- walks back through zero and puts into the Depot"
+        "+ walks back through zero and puts into the Depot"
     );
 }
 
@@ -163,11 +164,11 @@ fn plus_and_minus_saturate_at_both_ends() {
     let mut app = picker_with_shelf(974, 2);
 
     for _ in 0..4 {
-        app.handle_key(GameKey::Char('+'));
+        app.handle_key(GameKey::Char('-'));
     }
     assert_eq!(amounts(&app), vec![2], "nothing more is on the shelf");
     for _ in 0..6 {
-        app.handle_key(GameKey::Char('-'));
+        app.handle_key(GameKey::Char('+'));
     }
     assert_eq!(amounts(&app), vec![0], "and nothing in the pack to put in");
 }
@@ -229,7 +230,7 @@ fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
         3,
         "the row being edited does not spend its own budget"
     );
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[first], -2, "so it can be lowered again");
 }
 
@@ -287,10 +288,10 @@ fn digits_type_into_the_rows_current_sign() {
     app.handle_key(GameKey::Char('3'));
     assert_eq!(app.basket_amounts[row], 3, "a row at zero types a take");
 
-    app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.basket_amounts[row], -1);
     app.handle_key(GameKey::Char('2'));
     assert_eq!(app.basket_amounts[row], -12, "and keeps the sign it is in");
@@ -499,20 +500,20 @@ fn carrier_picker(held: usize, racked: usize, rack_room: u32) -> App {
 #[test]
 fn a_carrier_row_clamps_to_one_either_way() {
     let mut app = carrier_picker(1, 1, 8);
-    // Row 0 is the pack's — a put, so only `-` moves it.
-    for key in [GameKey::Char('-'), GameKey::Char('-'), GameKey::Char('-')] {
+    // Row 0 is the pack's — a put, so only `+` moves it.
+    for key in [GameKey::Char('+'), GameKey::Char('+'), GameKey::Char('+')] {
         app.handle_key(key);
     }
     assert_eq!(app.basket_amounts[0], -1);
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[0], 0, "and no further the other way");
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[0], 0, "a pack-side carrier has no take");
 
     app.menu_selected = 1;
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[1], 1);
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[1], 1);
 }
 
@@ -547,7 +548,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
     let first = MAX_DOWNED_PROGRAMS - 1;
     assert_eq!(app.take_available(first), 1);
     app.menu_selected = first;
-    app.handle_key(GameKey::Char('+'));
+    app.handle_key(GameKey::Char('-'));
     assert_eq!(app.basket_amounts[first], 1);
     assert_eq!(
         app.take_available(first + 1),
@@ -556,7 +557,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
     );
     // And a pending put frees it again — the net is what the commit checks.
     app.menu_selected = 0;
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.take_available(first + 1), 1);
 }
 
@@ -564,7 +565,7 @@ fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
 fn the_rack_budget_is_shared_across_the_pack_side_rows() {
     let mut app = carrier_picker(2, 0, 1);
     assert_eq!(app.put_available(0), 1);
-    app.handle_key(GameKey::Char('-'));
+    app.handle_key(GameKey::Char('+'));
     assert_eq!(app.put_available(1), 0, "one slot, one put");
     assert_eq!(app.put_available(0), 1, "the edited row keeps its own");
 }
@@ -632,7 +633,7 @@ fn c_beside_a_refit_bench_lets_the_basket_put_cores_up_to_its_capacity() {
     assert_eq!(app.basket_rows[row].item().unwrap().can_put, 20);
     app.menu_selected = row;
     for _ in 0..25 {
-        app.handle_key(GameKey::Char('-'));
+        app.handle_key(GameKey::Char('+'));
     }
 
     assert_eq!(amounts(&app)[row], -20, "the 21st core is not offered");

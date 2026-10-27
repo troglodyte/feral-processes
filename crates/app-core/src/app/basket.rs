@@ -151,13 +151,15 @@ impl App {
     /// number that cannot exceed what is available is worth having by
     /// construction rather than by a check at the commit.
     ///
-    /// **`+` takes out and `-` puts in**, the sign of the amount itself: a
-    /// take is positive and a put negative. The bare arrows are not here
-    /// because the structure hub spends them on its own navigation, the
-    /// base report's rule; `=` is `+` without Shift. Shift and Ctrl on the
-    /// arrows are still this screen's — the hub never reads them — and keep
-    /// their direction: Shift/Ctrl+Left toward `you`, the take end, and
-    /// Shift/Ctrl+Right toward the container, the put end.
+    /// **`-` takes out and `+` puts in**, the keys' left-to-right order on
+    /// the keyboard matching the arrows' — `+` against the sign of the
+    /// amount, where a take is positive, because the player reads the key
+    /// as "add to storage". The bare arrows are not here because the
+    /// structure hub spends them on its own navigation, the base report's
+    /// rule; `=` is `+` without Shift. Shift and Ctrl on the arrows are still
+    /// this screen's — the hub never reads them — and keep their direction:
+    /// Shift/Ctrl+Left toward `you`, the take end, and Shift/Ctrl+Right
+    /// toward the container, the put end.
     pub(crate) fn handle_basket_key(&mut self, key: GameKey) {
         let len = self.basket_rows.len();
         match key {
@@ -198,8 +200,8 @@ impl App {
                 });
             }
             GameKey::Backspace => self.edit_row(|n, _, _| n / 10),
-            GameKey::Char('+' | '=') => self.edit_row(|n, _, _| n + 1),
-            GameKey::Char('-') => self.edit_row(|n, _, _| n - 1),
+            GameKey::Char('-') => self.edit_row(|n, _, _| n + 1),
+            GameKey::Char('+' | '=') => self.edit_row(|n, _, _| n - 1),
             // The two modifiers are different verbs. Shift is a *target* —
             // an end of the range, idempotent under the key repeat driving
             // these arrows. Ctrl is a *step*: it closes half the gap to the

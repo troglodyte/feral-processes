@@ -85,7 +85,7 @@ fn watch_pieces(name: &str) -> Vec<Piece> {
         ("WATCHING ".to_string(), palette::EMPHASIS, true),
         (name.to_string(), palette::LABEL, false),
         sep(),
-        ("Esc to return".to_string(), palette::LABEL, false),
+        ("Esc back".to_string(), palette::LABEL, false),
     ]
 }
 

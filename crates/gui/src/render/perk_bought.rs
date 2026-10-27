@@ -14,10 +14,11 @@ use feral_processes_engine::PerkReport;
 use feral_processes_engine::text;
 
 use super::level_up::{duel_heading, duel_lines, duel_moved, panel_rect, stat_line};
+use super::popup::key_hints;
 use super::{BORDER, Metrics, PANEL_BG, SCRIM, TEXT, TEXT_DIM};
 use crate::paint::{Painter, Rect};
 
-const HINT: &str = "[Enter] Back to perks";
+const HINT: &[&str] = &["Enter back to perks", "Esc back"];
 
 fn title(report: &PerkReport) -> String {
     format!(
@@ -109,8 +110,9 @@ pub(super) fn draw_perk_bought(report: &PerkReport, painter: &Painter, m: &Metri
 
     y += m.gap;
     y += m.line_height;
-    let hint_w = painter.measure_ui_advance(HINT, m.small());
-    painter.ui(HINT, right - hint_w, y, m.small(), TEXT_DIM);
+    let hint = key_hints(HINT);
+    let hint_w = painter.measure_ui_advance(&hint, m.small());
+    painter.ui(&hint, right - hint_w, y, m.small(), TEXT_DIM);
 }
 
 #[cfg(test)]
@@ -237,7 +239,7 @@ mod tests {
         assert!(!drawn.contains("AGAINST A TYPICAL"), "{drawn}");
         assert!(drawn.contains("TIGHTEN TOLERANCES OF EVERY KIND \u{2014} LEVEL 99"));
         assert!(drawn.contains("Max HP   1234 \u{2192} 9999"), "{drawn}");
-        assert!(drawn.contains(HINT), "{drawn}");
+        assert!(drawn.contains(&key_hints(HINT)), "{drawn}");
 
         let moved = widest_report(moved_duel());
         let drawn = text(&moved);

@@ -28,10 +28,7 @@ pub(super) fn draw_excavate_brush(
 }
 
 fn body_rows(rows: &[BrushRow], selected: usize) -> Vec<Row> {
-    let mut body = vec![
-        text_row("Pick what the next box marks. Esc to go back."),
-        text_row(""),
-    ];
+    let mut body = vec![text_row("Pick what the next box marks."), text_row("")];
     body.extend(rows.iter().enumerate().map(|(i, row)| {
         let item = item_row(row.label.to_string(), i == selected);
         match row.shade {
@@ -39,6 +36,7 @@ fn body_rows(rows: &[BrushRow], selected: usize) -> Vec<Row> {
             None => item,
         }
     }));
+    push_key_footer(&mut body, &["Enter choose", "Esc back"]);
     body
 }
 

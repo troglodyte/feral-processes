@@ -39,6 +39,7 @@ pub(super) fn draw_develop(
             glyph_color(p.color),
         ));
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Develop", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -146,6 +147,7 @@ pub(super) fn draw_develop_program(
             rows.push(text_row(format!("  - {} ({})", option.name, option.tag)));
         }
     }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Develop", PopupSize::Large, &rows, refusal, painter, m);
 }
 

@@ -23,16 +23,14 @@ pub(super) fn draw_farm_recipe(
 }
 
 pub(super) fn body_rows(rows: &[CropRow], selected: usize) -> Vec<Row> {
-    let mut body = vec![
-        text_row("Pick what this plot grows. Esc to go back."),
-        text_row(""),
-    ];
+    let mut body = vec![text_row("Pick what this plot grows."), text_row("")];
     body.extend(rows.iter().enumerate().map(|(i, row)| {
         item_row(
             format!("{} — {}", row.label, row.description),
             i == selected,
         )
     }));
+    push_key_footer(&mut body, &["Enter choose", "Esc back"]);
     body
 }
 

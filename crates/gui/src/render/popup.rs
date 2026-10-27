@@ -334,6 +334,52 @@ pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
     }
 }
 
+/// Joins chips into a hint line with app-core's `KEY_HINT_SEP` — app-core
+/// owns the separator because its own key lines (the sprite editor's) are
+/// built there. A line a `const` has to hold
+/// is kept as a chip list and passed through here where it is drawn, so no
+/// screen hand-copies the separator.
+pub(super) fn key_hints(chips: &[&str]) -> String {
+    chips.join(feral_processes_app_core::KEY_HINT_SEP)
+}
+
+/// A prompt as text rows wrapped to `size`'s popup width. Text rows are never
+/// wrapped by `draw_popup`, so a prompt that grows with a name or a count has
+/// to be broken here or it runs off the right edge of a `Small` box.
+pub(super) fn wrapped_text_rows(text: &str, size: PopupSize) -> Vec<Row> {
+    wrap_text(text, status_wrap_columns(size))
+        .into_iter()
+        .map(text_row)
+        .collect()
+}
+
+/// `wrapped_text_rows` in a colour.
+pub(super) fn wrapped_colored_rows(text: &str, color: Color, size: PopupSize) -> Vec<Row> {
+    wrap_text(text, status_wrap_columns(size))
+        .into_iter()
+        .map(|line| Row::TextColored(line, color))
+        .collect()
+}
+
+/// Appends the blank spacer and the hint line: trailing text rows after the
+/// last item are what `popup_layout` pins as the footer.
+pub(super) fn push_key_footer(rows: &mut Vec<Row>, chips: &[&str]) {
+    rows.push(text_row(""));
+    rows.push(text_row(key_hints(chips)));
+}
+
+/// The first footer line of every basket screen (caravan, market, dispatch);
+/// the second line carries the screen's own actions.
+pub(super) const BASKET_STEP_KEYS: &[&str] = &[
+    "Left/Right set a row",
+    "Shift+Left/Right to the end",
+    "Ctrl+Left/Right halves the gap",
+];
+
+/// The footer of every "which way?" prompt; the handler reads the arrows and
+/// hjkl alike.
+pub(super) const DIRECTION_KEYS: &[&str] = &["Arrows/hjkl pick", "Esc cancel"];
+
 pub(super) fn text_row(s: impl Into<String>) -> Row {
     Row::Text(s.into())
 }
@@ -906,6 +952,29 @@ pub(super) fn row_label_text(row: &Row) -> String {
     }
 }
 
+/// Asserts every row fits `size`'s popup at the two windows the width
+/// censuses hold the game to. The font scales with height and the wrap budget
+/// is a fixed column count (`ROW_WRAP_COLUMNS`, calibrated near 16:9), so the
+/// smallest window is the tightest; a 5:4 one overflows every popup alike.
+#[cfg(test)]
+pub(super) fn assert_rows_fit(rows: &[Row], size: PopupSize) {
+    crate::paint::with_painter(|p| {
+        for (screen_w, screen_h) in [(1280.0, 720.0), (1440.0, 900.0)] {
+            let m = crate::text::ui_metrics(screen_h);
+            let room = popup_body_width(screen_w, size, &m);
+            for row in rows {
+                let line = row_label_text(row);
+                let drawn = p.measure_ui_advance(&line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a row overflows its popup at {screen_w}x{screen_h} by {:.0}px ({drawn:.0} drawn into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
+        }
+    });
+}
+
 /// How much width a row of `size`'s popup has for its own text at
 /// `screen_w`, one pad in from each edge — `popup_max_rows`' counterpart,
 /// and one derivation rather than a fraction restated per width census.
@@ -1262,6 +1331,28 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_hints_join_chips_with_the_one_separator() {
+        assert_eq!(
+            key_hints(&["Enter choose", "Esc back"]),
+            "Enter choose  ·  Esc back"
+        );
+    }
+
+    /// The pinned rows a screen is *meant* to end with: the blank spacer and
+    /// the key hint line, when it has one. Anything pinned beyond that is a
+    /// description torn off the list.
+    fn key_footer_rows(rows: &[Row]) -> usize {
+        match rows {
+            [.., Row::Text(spacer), Row::Text(hint)]
+                if spacer.is_empty() && hint.contains("Esc ") =>
+            {
+                2
+            }
+            _ => 0,
+        }
+    }
 
     /// A row's name starts after the highlight prefix and, with an icon, the
     /// icon slot; prose under it must start in that same column.
@@ -1746,7 +1837,7 @@ mod tests {
                     let rows = build_menu_rows_fixture(structures, selected);
                     let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                     assert!(
-                        l.footer.is_empty(),
+                        l.footer.len() <= key_footer_rows(&rows),
                         "at {window_h}px a {structures}-structure build menu pinned {} \
                          row(s) as a footer — the last description is detached from \
                          the structure it describes",
@@ -2029,7 +2120,7 @@ mod tests {
                     for (screen, rows) in progression_rows_fixtures(n, selected) {
                         let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                         assert!(
-                            l.footer.is_empty(),
+                            l.footer.len() <= key_footer_rows(&rows),
                             "at {window_h}px the {screen} picker with {n} rows pinned {} \
                              row(s) below the list — the last description is detached from \
                              the row it describes",

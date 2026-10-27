@@ -19,7 +19,7 @@ use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_engine::{Game, ResearchGraph, ResearchId, ResearchTree};
 
-use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
+use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row, key_hints};
 use super::progression::{conversion_rows, flag, material_rows, row_color, unlock_rows};
 use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
 
@@ -443,10 +443,23 @@ pub(super) fn draw_research_graph(
         Color::new(0.25, 0.85, 0.85, 1.0),
     );
     painter.ui(
-        if dev_unlock {
-            "G list  arrows move  Enter work  A abandon  U unlock  Esc close"
+        &if dev_unlock {
+            key_hints(&[
+                "[G] list",
+                "Arrows move",
+                "Enter work",
+                "[A] abandon",
+                "[U] unlock",
+                "Esc back",
+            ])
         } else {
-            "G list  arrows move  Enter work  A abandon  Esc close"
+            key_hints(&[
+                "[G] list",
+                "Arrows move",
+                "Enter work",
+                "[A] abandon",
+                "Esc back",
+            ])
         },
         geo.panel.x,
         m.line_height,
@@ -1183,7 +1196,7 @@ mod tests {
             "the panel carries the sentence that would refuse this row ({opening:?})"
         );
         assert!(
-            text.contains("A abandon"),
+            text.contains("[A] abandon"),
             "and the footer offers the key the list offers: {text:?}"
         );
     }

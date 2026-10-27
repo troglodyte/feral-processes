@@ -7,6 +7,7 @@
 //! hands over `FrameMapCell::Unknown` for anything never seen, and this
 //! file only has to draw it.
 
+use super::popup::key_hints;
 use super::*;
 use feral_processes_app_core::STACK_MAP_MIN_ZOOM;
 use feral_processes_engine::{FrameMapCell, FrameMapMark, FrameMapView};
@@ -309,10 +310,11 @@ pub(super) fn draw_frame_map_cursor(
     painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
 
     let heading = format!(
-        "WILD JUMP   target {},{}   {}   Enter to commit, Esc to back out",
+        "WILD JUMP   target {},{}   {}   {}",
         cursor.0,
         cursor.1,
         cursor_reading(view, cursor),
+        key_hints(&["Enter commit", "Esc cancel"]),
     );
     painter.ui(
         &heading,

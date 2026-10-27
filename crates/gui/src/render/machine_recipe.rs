@@ -34,6 +34,16 @@ pub(super) fn page_rows(screen: Option<&MachineRecipeScreen>, selected: usize) -
     }
 }
 
+fn confirm_rows(prompt: &str, selected: usize) -> Vec<Row> {
+    let mut rows = wrapped_text_rows(prompt, PopupSize::Small);
+    rows.push(text_row(""));
+    rows.push(item_row("[Y] switch", selected == 0));
+    rows.push(item_row("[N] keep the current recipe", selected == 1));
+    rows.push(text_row(""));
+    rows.push(text_row(key_hints(&["[Y] switch", "[N] or Esc cancel"])));
+    rows
+}
+
 pub(super) fn draw_machine_recipe_confirm(
     screen: Option<&MachineRecipeScreen>,
     selected: usize,
@@ -42,17 +52,12 @@ pub(super) fn draw_machine_recipe_confirm(
     m: &Metrics,
 ) {
     let body = match screen.and_then(|s| s.confirm_prompt()) {
-        Some(prompt) => vec![
-            text_row(prompt),
-            text_row(""),
-            item_row("[y] Yes", selected == 0),
-            item_row("[n] No", selected == 1),
-        ],
+        Some(prompt) => confirm_rows(&prompt, selected),
         None => vec![text_row("There is nothing to confirm.")],
     };
     draw_popup(
         "Switch recipe",
-        PopupSize::Large,
+        PopupSize::Small,
         &body,
         refusal,
         painter,
@@ -68,17 +73,16 @@ fn body_rows(screen: &MachineRecipeScreen, selected: usize) -> Vec<Row> {
         Some(_) => "Pick a row to switch; a switch empties what the machine holds",
         None => "Nothing set yet — the machine makes nothing until you pick a row",
     }));
-    body.push(text_row("Esc to go back"));
     body.push(text_row(""));
     if view.rows.is_empty() {
         body.push(text_row(
             "You have not researched anything this machine makes.",
         ));
-        return body;
     }
     for (i, row) in view.rows.iter().enumerate() {
         body.push(item_row(row_text(row), i == selected));
     }
+    push_key_footer(&mut body, &["Enter choose", "Esc back"]);
     body
 }
 
@@ -106,6 +110,39 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use feral_processes_engine::{DifficultyMode, Game, MachineRecipeView, RecipePace};
+
+    /// The prompt is app-core's own `confirm_prompt`, asked of the longest
+    /// shipped machine name switching to the longest recipe it could list,
+    /// so a longer sentence there or a longer name in the assets fails here.
+    #[test]
+    fn the_switch_confirm_fits_its_small_popup_with_the_longest_prompt() {
+        let game = shipped_game();
+        let machine = game
+            .structure_defs()
+            .iter()
+            .filter(|d| d.machine.is_some())
+            .map(|d| d.name.clone())
+            .max_by_key(|n| n.chars().count())
+            .expect("a shipped machine");
+        let rows = shipped_rows(&game);
+        let longest = rows
+            .iter()
+            .max_by_key(|r| r.name.chars().count())
+            .expect("a shipped recipe");
+        let screen = MachineRecipeScreen {
+            machine: Entity::PLACEHOLDER,
+            pending: Some(longest.item.clone()),
+            view: MachineRecipeView {
+                tile: (0, 0),
+                name: machine,
+                current: None,
+                held: 9999,
+                rows: rows.clone(),
+            },
+        };
+        let prompt = screen.confirm_prompt().expect("a row is pending");
+        assert_rows_fit(&confirm_rows(&prompt, 0), PopupSize::Small);
+    }
 
     fn shipped_game() -> Game {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));

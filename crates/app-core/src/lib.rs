@@ -9,6 +9,11 @@
 
 mod app;
 
+/// The one separator between key chips on every hint line, here so the
+/// renderer's `key_hints` and the key lines this crate hands it are the same
+/// string.
+pub const KEY_HINT_SEP: &str = "  ·  ";
+
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::base_report::{BASE_REPORT_PAGES, base_page_flag};
 pub use app::building::{

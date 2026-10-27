@@ -160,7 +160,7 @@ use party::{
     draw_companion_equip, draw_companion_memories, draw_fuse_menu, draw_fuse_name_menu,
     draw_fuse_second_menu, draw_refactor, draw_refactor_item, draw_rename_menu,
 };
-use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
+use popup::{DIRECTION_KEYS, PopupSize, Row, counted_item_row, draw_popup, key_hints, text_row};
 use progression::{draw_research_menu, draw_respec_confirm};
 use put_down::draw_put_down;
 use refit_copy::draw_refit_copy;
@@ -1273,7 +1273,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         )),
         Mode::StructureManifest => Some((
             structure_manifest::structure_rows(game, app.pending_structure_manifest)
-                .unwrap_or_else(|| vec![text_row("That structure is gone. Esc to go back.")]),
+                .unwrap_or_else(|| {
+                    vec![
+                        text_row("That structure is gone."),
+                        text_row(""),
+                        text_row("Esc back"),
+                    ]
+                }),
             None,
         )),
         _ => None,
@@ -1422,16 +1428,16 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         // the whole of the screen the player decides on: the list this
         // replaced carried that sentence above its rows.
         Mode::UpgradeDirection => draw_direction_prompt(
-            "Upgrade Direction",
+            "Upgrade direction",
             "Upgrade which neighbour? Your crew fetches the parts and does \
-             the work. (arrows/hjkl, Esc to cancel)",
+             the work.",
             refusal,
             painter,
             m,
         ),
         Mode::InspectDirection => draw_direction_prompt(
-            "Inspect Direction",
-            "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
+            "Inspect direction",
+            "Choose a direction to inspect",
             refusal,
             painter,
             m,
@@ -1440,16 +1446,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         // reaches Home in one keypress, so the warning cannot wait for the
         // confirmation screen to be the first mention of it.
         Mode::RemoveDirection => draw_direction_prompt(
-            "Demolish Direction",
-            "Demolish which neighbour? Removing Home destroys the whole base. \
-             (arrows/hjkl, Esc to cancel)",
+            "Demolish direction",
+            "Demolish which neighbour? Removing Home destroys the whole base.",
             refusal,
             painter,
             m,
         ),
         Mode::TrapDirection => draw_direction_prompt(
-            "Place Direction",
-            "Place the honeypot which way? (arrows/hjkl, Esc to cancel)",
+            "Place direction",
+            "Place the honeypot which way?",
             refusal,
             painter,
             m,
@@ -1848,7 +1853,11 @@ fn draw_direction_prompt(
     draw_popup(
         title,
         PopupSize::Small,
-        &[text_row(body)],
+        &[
+            text_row(body),
+            text_row(""),
+            text_row(key_hints(DIRECTION_KEYS)),
+        ],
         refusal,
         painter,
         m,

@@ -73,7 +73,11 @@ pub(super) fn draw_manifest(
         draw_popup(
             "Manifest",
             PopupSize::Small,
-            &[text_row("That program is gone. Esc to go back.")],
+            &[
+                text_row("That program is gone."),
+                text_row(""),
+                text_row("Esc back"),
+            ],
             refusal,
             painter,
             m,

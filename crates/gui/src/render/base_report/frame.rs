@@ -258,7 +258,7 @@ pub(super) fn keybar_groups(
     });
     if on_rail {
         let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
-        return [Some(nav), cycle, Some(vec![keycap("Esc", "close")])]
+        return [Some(nav), cycle, Some(vec![keycap("Esc", "back")])]
             .into_iter()
             .flatten()
             .map(group)
@@ -440,7 +440,7 @@ mod tests {
             let rail = text(true);
             assert!(rail.contains("page"), "{mode:?}: {rail}");
             assert!(rail.contains("open"), "{mode:?}: {rail}");
-            assert!(rail.contains("close"), "{mode:?}: {rail}");
+            assert!(rail.contains("back"), "{mode:?}: {rail}");
             let rows = text(false);
             assert!(rows.contains("menu"), "{mode:?}: {rows}");
         }

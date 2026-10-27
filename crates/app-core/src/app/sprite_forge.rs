@@ -194,8 +194,19 @@ pub enum SpriteOp {
 
 /// The Forge's key line: the editor's own keys, then the Forge's save and
 /// leave.
-const FORGE_KEYS: &str = "Tab: switch panel   Arrows: move   Space: paint   \
-    Backspace: erase   u: undo   x: clear   g: brush size   f: fill   i: pick colour   s: save   Esc: back";
+const FORGE_KEYS: [&str; 11] = [
+    "Tab switch panel",
+    "Arrows move",
+    "Space paint",
+    "Backspace erase",
+    "[u] undo",
+    "[x] clear",
+    "[g] brush size",
+    "[f] fill",
+    "[i] pick colour",
+    "[s] save",
+    "Esc back",
+];
 
 impl App {
     /// Tells the app where the player's own sprites live. The launcher
@@ -516,7 +527,7 @@ impl App {
             .map(|s| s.3);
         Some(session.editor.view(EditorChrome {
             title: format!("Sprite Forge — {}", session.subject),
-            keys: FORGE_KEYS.to_string(),
+            keys: FORGE_KEYS.join(crate::KEY_HINT_SEP),
             buttons: FORGE_BUTTONS.to_vec(),
             tint,
             full_colour: session.full_colour(),

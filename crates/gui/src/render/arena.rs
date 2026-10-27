@@ -26,8 +26,15 @@ pub(super) fn draw_arena_builder(
         .map(|(i, row)| item_row(row.label.clone(), i == selected))
         .collect();
     body.push(text_row(""));
-    body.push(text_row("Left/Right adjust  Enter pick  Backspace remove"));
-    body.push(text_row("[F]ight  [L]oad  [S]ave  Esc back"));
+    body.push(text_row(key_hints(&[
+        "Left/Right adjust",
+        "Enter pick",
+        "Backspace remove",
+        "[f] fight",
+        "[l] load",
+        "[s] save",
+        "Esc back",
+    ])));
     draw_popup("Arena", PopupSize::Large, &body, refusal, painter, m);
 }
 
@@ -49,7 +56,7 @@ pub(super) fn draw_arena_load(
     painter: &Painter,
     m: &Metrics,
 ) {
-    draw_id_list("Load Scenario", rows, selected, refusal, painter, m);
+    draw_id_list("Load scenario", rows, selected, refusal, painter, m);
 }
 
 /// The two id lists differ only in their title, so they are one function
@@ -70,7 +77,7 @@ fn draw_id_list(
         body.push(item_row(row.to_string(), i == selected));
     }
     body.push(text_row(""));
-    body.push(text_row("Enter to choose, Esc to go back."));
+    body.push(text_row(key_hints(&["Enter choose", "Esc back"])));
     draw_popup(title, PopupSize::Large, &body, refusal, painter, m);
 }
 
@@ -84,10 +91,10 @@ pub(super) fn draw_arena_save(input: &str, refusal: Option<&str>, painter: &Pain
         item_row(format!("{input}_"), true),
         text_row(""),
         text_row("An existing file of that name is overwritten."),
-        text_row("Enter to write, Esc to cancel."),
+        text_row(key_hints(&["Enter write", "Esc cancel"])),
     ];
     draw_popup(
-        "Save Scenario",
+        "Save scenario",
         PopupSize::Small,
         &body,
         refusal,
@@ -130,10 +137,13 @@ pub(super) fn draw_arena_result(
         body.push(item_row(line.clone(), i == selected));
     }
     body.push(text_row(""));
-    body.push(text_row(
-        "[R]efight this seed  [N]ext seed  Up/Down scroll  Esc back",
-    ));
-    draw_popup("Arena Result", PopupSize::Large, &body, refusal, painter, m);
+    body.push(text_row(key_hints(&[
+        "[r] refight",
+        "[n] next seed",
+        "Up/Down scroll",
+        "Esc back",
+    ])));
+    draw_popup("Arena result", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// What was fielded, or `None` for a fight that was never staged. Split out

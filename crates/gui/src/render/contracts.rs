@@ -86,7 +86,7 @@ fn contract_rows(
     }
 
     rows.push(text_row(""));
-    rows.extend(contract_footer().into_iter().map(text_row));
+    rows.push(text_row(contract_footer()));
     rows
 }
 
@@ -108,18 +108,10 @@ fn hint_rows(contract: &ContractRow) -> Vec<Row> {
         .unwrap_or_default()
 }
 
-/// The footer's two lines. Split out, like `rename_help`, so a test can
-/// measure exactly the strings `draw_contracts` pushes.
-///
-/// Two lines rather than one: a single 122-character run-on overflowed
-/// `PopupSize::Large`'s body, painting its last few characters over the map,
-/// and buried the `[A]` abandon hint in its third clause behind two clauses
-/// about an unrelated key. The abandon hint now leads its own line.
-fn contract_footer() -> [&'static str; 2] {
-    [
-        "Enter takes the highlighted offer, or hands over a held contract's cargo.",
-        "[A] gives back the highlighted contract.        Esc to close.",
-    ]
+/// The footer line. Split out, like `rename_help`, so a test can measure
+/// exactly the string `draw_contracts` pushes.
+fn contract_footer() -> String {
+    key_hints(&["Enter take or hand over", "[A] give back", "Esc back"])
 }
 
 /// One contract's headline row. A held one shows its progress; an offer has
@@ -428,11 +420,7 @@ mod tests {
                 offered_header(BrokerReach::AtBroker, true),
                 offered_header(BrokerReach::OffBase, false),
             ];
-            for line in contract_footer()
-                .into_iter()
-                .map(String::from)
-                .chain(headers)
-            {
+            for line in std::iter::once(contract_footer()).chain(headers) {
                 let drawn = p.measure_ui_advance(&line, m.font_size);
                 assert!(
                     drawn <= room,

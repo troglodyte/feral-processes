@@ -7,6 +7,7 @@
 //! side list is `App::world_map_marks`, the same list the key handler
 //! indexes, so a row here is the mark it selects there.
 
+use super::popup::key_hints;
 use super::*;
 use crate::paint::Face;
 use feral_processes_engine::outposts::Trend;
@@ -338,9 +339,9 @@ fn legend() -> Vec<String> {
         "Towns: red Hostile, blue Cold, grey Neutral,".to_string(),
         "       green Warm, yellow Allied".to_string(),
         "Cyan line: a route.  Red line: preyed on.".to_string(),
-        "Gold box: compass target.  Esc closes.".to_string(),
-        "Arrows pan  Tab: list/map  Click picks".to_string(),
-        "C compass  P centre".to_string(),
+        "Gold box: compass target".to_string(),
+        key_hints(&["Arrows pan", "Tab list/map", "Click picks"]),
+        key_hints(&["[C] compass", "[P] centre", "Esc back"]),
     ]
 }
 
@@ -688,7 +689,7 @@ mod tests {
         let drawn = crate::paint::painted_text(&shapes);
         assert!(drawn.iter().any(|t| t.contains("WORLD MAP")));
         assert!(drawn.iter().any(|t| t.contains("Lowport")));
-        assert!(drawn.iter().any(|t| t.contains("Esc close")));
+        assert!(drawn.iter().any(|t| t.contains("Esc back")));
     }
 
     /// The row highlight and the header's focus cue follow the focus flag.

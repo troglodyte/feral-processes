@@ -239,8 +239,9 @@ pub(super) fn draw_field_routine(
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
         });
     }
+    push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
-        "Run a Routine",
+        "Run a routine",
         PopupSize::Large,
         &rows,
         refusal,
@@ -284,8 +285,9 @@ pub(super) fn draw_field_routine_ally(
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
+    push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
-        "Run a Routine",
+        "Run a routine",
         PopupSize::Large,
         &rows,
         refusal,

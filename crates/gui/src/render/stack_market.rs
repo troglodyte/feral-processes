@@ -95,12 +95,12 @@ pub(super) fn draw_stack_market(
         idx += 1;
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "[S] sells the whole stack  ·  type to filter  ·  Esc to walk on (clears a filter first)",
-    ));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
+    rows.push(text_row(key_hints(&[
+        "[S] sell the whole stack",
+        "Type to filter",
+        "[I] inspect",
+        "Esc back (clears the filter first)",
+    ])));
     draw_popup(
         "A stall in the corridor",
         PopupSize::Large,

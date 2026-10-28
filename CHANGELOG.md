@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.22
+
+**A discovery now spends the program you pinned to the Research Station.** Studying used to roll against the same program for ever. Now, when a study turns up a new research node, the pinned program is used up the same way a finished project uses it up. A miss still spends only the attempt. Pin another program to keep studying.
+
+**A Research Station shows an `x` while it still holds a spent program.** The `x` stays until one of your programs carries the spent one away, and nothing more is studied there until it has gone.
+
+**A spent program is carried to a Quarantine Rack, else a stockpile, else the floor beside the Station.** A full rack used to stop a project from finishing, with the program left waiting at the Station. The floor beside the Station is always somewhere to put it, so only a program still waiting at the Station holds up the next one.
+
 ## 0.20.21
 
 **The deploy menu leaves a blank line above each structure's name.** Each name used to sit right under the previous structure's description, so the list read as one block of text. Now every structure starts after a gap.

@@ -8,6 +8,7 @@ use crate::components::{Routines, Tamed};
 use crate::resources::{CraftedRoutines, Research};
 use crate::routine_craft::{AreaKind, Core, CraftedRoutine, RangeKind, Subroutine, Version};
 use crate::routine_tree::{capacity_node_id, part_node_id};
+use crate::views::MaterialLine;
 use crate::*;
 
 fn heal() -> Subroutine {
@@ -237,7 +238,10 @@ fn a_build_is_refused_for_a_name_a_missing_part_a_misfit_and_the_cap() {
         "a 25 character name"
     );
     let err = game.build_routine("Hurt", &[damage()]).unwrap_err();
-    assert!(err.contains("missing"), "{err}");
+    assert!(
+        err.contains("Research"),
+        "an unresearched part is not crafted: {err}"
+    );
     let err = game
         .build_routine("Nope", &[heal(), Subroutine::Range(RangeKind::Near)])
         .unwrap_err();
@@ -775,7 +779,10 @@ fn the_preview_quotes_what_the_build_will_run_as() {
 
     let missing = game.build_preview("Mender", &parts);
     assert_eq!(missing.parts_missing.len(), 2, "both parts are short");
-    assert!(missing.blocked.as_ref().unwrap().contains("missing"));
+    assert!(
+        missing.blocked.as_ref().unwrap().contains("Research"),
+        "Range: Near is short and not researched"
+    );
 
     for part in &parts {
         stock(&mut game, part, 1);
@@ -915,4 +922,205 @@ fn a_lost_counter_is_lifted_past_the_highest_saved_id() {
     assert!(crafted(&loaded).next_id >= n);
     let fresh = loaded.mint_built("Next", &[heal()]);
     assert_ne!(fresh, id, "a new build never reuses a saved id");
+}
+
+// ---------------------------------------------------------------------------
+// Compile crafts the missing parts
+// ---------------------------------------------------------------------------
+
+fn bite_type() -> Subroutine {
+    Subroutine::DamageType(crate::damage::DamageType::Thermal)
+}
+
+fn disk() -> ItemId {
+    ItemId::from(ids::ROUTINE_DISK)
+}
+
+fn empty_pack(game: &mut Game) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+}
+
+/// A Workbench, `parts` researched, and nothing carried.
+fn crafting_game(seed: u32, parts: &[Subroutine]) -> Game {
+    let mut game = bench_game(seed);
+    for part in parts {
+        know(&mut game, part);
+    }
+    empty_pack(&mut game);
+    game
+}
+
+#[test]
+fn compile_crafts_every_missing_part_from_disks_and_materials() {
+    let parts = [heal(), Subroutine::Range(RangeKind::Near)];
+    let mut game = crafting_game(70_100, &parts);
+    for part in &parts {
+        let (material, count) = crate::routine_craft::material(part);
+        give(&mut game, &disk(), 1);
+        give(&mut game, &material, count);
+    }
+
+    let id = game.build_routine("Mender", &parts).unwrap();
+
+    assert!(crafted(&game).unslotted.contains(&id));
+    let player = game.player_entity();
+    let inv = game.world.get::<Inventory>(player).unwrap();
+    assert!(
+        inv.items.iter().all(|(_, n)| *n == 0),
+        "the bill is spent exactly and no part is left over: {:?}",
+        inv.items
+    );
+}
+
+#[test]
+fn compile_spends_held_parts_and_crafts_only_the_shortfall() {
+    let parts = [damage(), bite_type()];
+    let mut game = crafting_game(70_101, &parts);
+    stock(&mut game, &damage(), 1);
+    let (material, count) = crate::routine_craft::material(&bite_type());
+    give(&mut game, &disk(), 1);
+    give(&mut game, &material, count);
+
+    let preview = game.build_preview("Bite", &parts);
+    let fragments = game.item_name(&material).to_string();
+    assert_eq!(
+        preview.materials,
+        vec![
+            MaterialLine {
+                label: game.item_name(&disk()).to_string(),
+                have: 1,
+                need: 1
+            },
+            MaterialLine {
+                label: fragments,
+                have: count,
+                need: count
+            },
+        ],
+        "the held Damage part adds nothing to the bill"
+    );
+    assert_eq!(preview.blocked, None);
+
+    game.build_routine("Bite", &parts).unwrap();
+
+    assert_eq!(game.parts_held(&damage()), 0);
+    assert_eq!(game.held_in_reach(&disk()), 0);
+    assert_eq!(game.held_in_reach(&material), 0);
+}
+
+#[test]
+fn parts_sharing_a_material_are_billed_together_and_a_short_bill_spends_nothing() {
+    let parts = [damage(), bite_type()];
+    let mut game = crafting_game(70_102, &parts);
+    let (material, _) = crate::routine_craft::material(&damage());
+    assert_eq!(material, crate::routine_craft::material(&bite_type()).0);
+    let need: u32 = parts
+        .iter()
+        .map(|p| crate::routine_craft::material(p).1)
+        .sum();
+    give(&mut game, &disk(), 2);
+    give(&mut game, &material, need - 1);
+
+    let preview = game.build_preview("Bite", &parts);
+    let line = preview
+        .materials
+        .iter()
+        .find(|l| l.label == game.item_name(&material))
+        .unwrap();
+    assert_eq!((line.have, line.need), (need - 1, need));
+    let blocked = preview.blocked.unwrap();
+    assert!(blocked.contains(game.item_name(&material)), "{blocked}");
+
+    let err = game.build_routine("Bite", &parts).unwrap_err();
+    assert_eq!(err, blocked, "the preview and Compile give one reason");
+    assert_eq!(game.held_in_reach(&disk()), 2, "a refusal spends nothing");
+    assert_eq!(game.held_in_reach(&material), need - 1);
+
+    give(&mut game, &material, 1);
+    game.build_routine("Bite", &parts).unwrap();
+}
+
+#[test]
+fn a_missing_part_that_is_not_researched_is_refused_not_crafted() {
+    let mut game = crafting_game(70_103, &[]);
+    assert!(!game.subroutine_known(&damage()));
+    let (material, count) = crate::routine_craft::material(&damage());
+    give(&mut game, &disk(), 1);
+    give(&mut game, &material, count);
+
+    let preview = game.build_preview("Bite", &[damage()]);
+    assert_eq!(preview.unresearched, vec![damage().label()]);
+    assert!(preview.materials.is_empty(), "nothing it can craft");
+    let err = game.build_routine("Bite", &[damage()]).unwrap_err();
+    assert!(
+        err.contains("Research") && err.contains(&damage().label()),
+        "{err}"
+    );
+    assert_eq!(game.held_in_reach(&disk()), 1, "a refusal spends nothing");
+}
+
+#[test]
+fn the_name_is_refused_before_any_shortage() {
+    let mut game = crafting_game(70_104, &[]);
+    let err = game.build_routine("", &[damage()]).unwrap_err();
+    assert!(err.contains("name"), "{err}");
+}
+
+#[test]
+fn every_held_part_leaves_the_materials_list_empty() {
+    let mut game = crafting_game(70_105, &[]);
+    stock(&mut game, &heal(), 1);
+    let preview = game.build_preview("Mender", &[heal()]);
+    assert!(preview.materials.is_empty());
+    assert!(preview.unresearched.is_empty());
+}
+
+#[test]
+fn a_part_option_carries_its_craft_cost_only_when_researched() {
+    let mut game = bench_game(70_106);
+    stock(&mut game, &damage(), 1);
+    let cost = |game: &Game, part: Subroutine| {
+        game.build_part_options("Core", &[])
+            .into_iter()
+            .find(|o| o.part == part)
+            .unwrap()
+            .craft_cost
+    };
+    assert_eq!(
+        cost(&game, heal()),
+        Some(crate::routine_craft::material(&heal()))
+    );
+    assert_eq!(cost(&game, damage()), None, "held but not researched");
+}
+
+#[test]
+fn compile_receipts_each_crafted_part_as_a_craft() {
+    let mut game = crafting_game(70_107, &[heal()]);
+    let (material, count) = crate::routine_craft::material(&heal());
+    give(&mut game, &disk(), 1);
+    give(&mut game, &material, count);
+    game.world
+        .resource_mut::<crate::resources::BattleTelemetry>()
+        .on = true;
+
+    game.build_routine("Mender", &[heal()]).unwrap();
+
+    let crafts: u32 = game
+        .world
+        .resource::<crate::resources::BattleTelemetry>()
+        .records
+        .iter()
+        .filter_map(|r| match r {
+            crate::telemetry::Record::Acquire {
+                item, qty, source, ..
+            } if *item == ItemId::part(&heal()).0 && source == "craft" => Some(*qty),
+            _ => None,
+        })
+        .sum();
+    assert_eq!(crafts, 1);
 }

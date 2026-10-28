@@ -5,9 +5,11 @@
 use std::collections::BTreeMap;
 
 use super::catalogue::{
-    AreaKind, BuildError, Core, RangeKind, StatusKind, Subroutine, fits, validate_build,
+    AreaKind, BuildError, Core, RangeKind, StatusKind, Subroutine, fits, material, validate_build,
 };
 use crate::damage::DamageType;
+use crate::ids;
+use crate::items::ItemId;
 use crate::tuning::{CRAFT_NAME_MAX, CRAFT_NAME_MIN};
 use crate::views::{BuildSlotRow, PartOption};
 
@@ -16,8 +18,17 @@ use crate::views::{BuildSlotRow, PartOption};
 pub enum PlanError {
     Name(String),
     Build(BuildError),
-    /// The parts the player does not hold enough of, with how many short.
-    Missing(Vec<(Subroutine, u32)>),
+    /// Parts the build is short of that cannot be crafted, not being
+    /// researched.
+    Unresearched(Vec<Subroutine>),
+    /// The first item crafting the shortfall needs more of than is in
+    /// reach: the item, how many are held, how many are needed. It carries
+    /// an id, not a name, so `Game` words it.
+    Short {
+        item: ItemId,
+        have: u32,
+        need: u32,
+    },
 }
 
 impl std::fmt::Display for PlanError {
@@ -25,9 +36,12 @@ impl std::fmt::Display for PlanError {
         match self {
             PlanError::Name(why) => f.write_str(why),
             PlanError::Build(e) => e.fmt(f),
-            PlanError::Missing(short) => {
-                let names: Vec<String> = short.iter().map(|(p, _)| p.label()).collect();
-                write!(f, "You are missing {}.", names.join(", "))
+            PlanError::Unresearched(parts) => {
+                let names: Vec<String> = parts.iter().map(Subroutine::label).collect();
+                write!(f, "Research {} first.", names.join(", "))
+            }
+            PlanError::Short { item, have, need } => {
+                write!(f, "You need {need} {} (you have {have}).", item.0)
             }
         }
     }
@@ -72,20 +86,105 @@ pub fn parts_missing(
         .collect()
 }
 
-/// Whether the build is allowed and payable; the parts it spends if so.
+/// What a build's parts come to: the held parts it spends, the shortfall it
+/// crafts, the shortfall it cannot craft, and what crafting costs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BuildNeeds {
+    pub spend: Vec<(Subroutine, u32)>,
+    pub craft: Vec<(Subroutine, u32)>,
+    pub unresearched: Vec<Subroutine>,
+    /// `craft_bill` of `craft`.
+    pub bill: Vec<(ItemId, u32)>,
+}
+
+/// Splits `parts` into what is held and what must be crafted. Held parts are
+/// spent first; a shortfall is crafted only where it is `known`.
+pub fn build_needs(
+    parts: &[Subroutine],
+    held: impl Fn(&Subroutine) -> u32,
+    known: impl Fn(&Subroutine) -> bool,
+) -> BuildNeeds {
+    needs_of(parts, &held, &known)
+}
+
+// Takes `&dyn Fn`, not `impl Fn`, on evidence: rustc 1.95 at the dev
+// profile's `opt-level = 1` miscompiled the generic body with `Game`'s two
+// closures inlined (a held count of 0 came back as a craft of ~30000, or
+// 2^31), while `opt-level = 0` was right. Keep the closures out of line.
+fn needs_of(
+    parts: &[Subroutine],
+    held: &dyn Fn(&Subroutine) -> u32,
+    known: &dyn Fn(&Subroutine) -> bool,
+) -> BuildNeeds {
+    let mut needs = BuildNeeds::default();
+    for (part, need) in parts_used(parts) {
+        let short = need.saturating_sub(held(&part));
+        if short < need {
+            needs.spend.push((part, need - short));
+        }
+        if short > 0 {
+            if known(&part) {
+                needs.craft.push((part, short));
+            } else {
+                needs.unresearched.push(part);
+            }
+        }
+    }
+    needs.bill = craft_bill(&needs.craft);
+    needs
+}
+
+/// What crafting `craft` costs, summed: one Routine Disk a part first, then
+/// each material once, however many parts share it.
+pub fn craft_bill(craft: &[(Subroutine, u32)]) -> Vec<(ItemId, u32)> {
+    let disk = ItemId::from(ids::ROUTINE_DISK);
+    let mut bill: Vec<(ItemId, u32)> = Vec::new();
+    let mut add = |item: ItemId, qty: u32| match bill.iter_mut().find(|(i, _)| *i == item) {
+        Some((_, n)) => *n += qty,
+        None => bill.push((item, qty)),
+    };
+    for (_, count) in craft {
+        add(disk.clone(), *count);
+    }
+    for (part, count) in craft {
+        let (item, per) = material(part);
+        add(item, per * count);
+    }
+    bill
+}
+
+/// A build that will go through: its trimmed name and what it uses.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuildPlan {
+    pub name: String,
+    pub needs: BuildNeeds,
+}
+
+/// Whether the build is allowed and payable, crafting the shortfall, and
+/// what it spends if so. Refuses the name, then the build, then a shortfall
+/// that cannot be crafted, then the first item short in reach.
 pub fn plan_build(
     name: &str,
     parts: &[Subroutine],
     cap: usize,
     held: impl Fn(&Subroutine) -> u32,
-) -> Result<(String, Vec<(Subroutine, u32)>), PlanError> {
+    known: impl Fn(&Subroutine) -> bool,
+    in_reach: impl Fn(&ItemId) -> u32,
+) -> Result<BuildPlan, PlanError> {
     let name = check_name(name)?;
     validate_build(parts, cap).map_err(PlanError::Build)?;
-    let short = parts_missing(parts, held);
-    if !short.is_empty() {
-        return Err(PlanError::Missing(short));
+    let needs = build_needs(parts, held, known);
+    if !needs.unresearched.is_empty() {
+        return Err(PlanError::Unresearched(needs.unresearched));
     }
-    Ok((name, parts_used(parts)))
+    if let Some((item, need)) = needs.bill.iter().find(|(i, n)| in_reach(i) < *n) {
+        return Err(PlanError::Short {
+            item: item.clone(),
+            have: in_reach(item),
+            need: *need,
+        });
+    }
+    Ok(BuildPlan { name, needs })
 }
 
 /// The build page's rows, in page order.
@@ -160,6 +259,7 @@ pub fn part_options(
         .map(|part| PartOption {
             label: part.label(),
             held: held(&part),
+            craft_cost: known(&part).then(|| material(&part)),
             part,
         })
         .collect()

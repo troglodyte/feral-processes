@@ -26,6 +26,9 @@ pub struct PartOption {
     pub label: String,
     /// How many of this part the player holds.
     pub held: u32,
+    /// The material crafting one costs beside a Routine Disk, and how many;
+    /// `None` when it is not researched and so cannot be crafted.
+    pub craft_cost: Option<(crate::items::ItemId, u32)>,
 }
 
 /// The live preview under the build rows: what the build reads as, costs,
@@ -43,11 +46,25 @@ pub struct BuildPreview {
     pub parts_used: Vec<(String, u32)>,
     /// Parts it needs and the player lacks, with how many short.
     pub parts_missing: Vec<(String, u32)>,
+    /// What Compile spends crafting the missing parts, Routine Disk first;
+    /// empty when every part is held.
+    pub materials: Vec<MaterialLine>,
+    /// Missing parts that cannot be crafted until researched, labelled.
+    pub unresearched: Vec<String>,
     /// Parts in the build and the most a routine may hold now.
     pub part_count: usize,
     pub part_cap: usize,
     /// Why Compile would be refused, or `None` when it would go through.
     pub blocked: Option<String>,
+}
+
+/// One line of the build preview's materials: an item, how many are in
+/// reach and how many crafting the missing parts takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MaterialLine {
+    pub label: String,
+    pub have: u32,
+    pub need: u32,
 }
 
 /// One row of the Subroutines list.

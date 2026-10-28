@@ -111,6 +111,10 @@ pub fn build_needs(
 // profile's `opt-level = 1` miscompiled the generic body with `Game`'s two
 // closures inlined (a held count of 0 came back as a craft of ~30000, or
 // 2^31), while `opt-level = 0` was right. Keep the closures out of line.
+// Out of line was not enough: with `short = need.saturating_sub(held)` and a
+// spend of `need - short`, a held count of 1 against a need of 2 came back as
+// a spend of 22436 (`a_part_held_once_and_needed_twice_…` catches it), so
+// the split goes through `min` instead.
 fn needs_of(
     parts: &[Subroutine],
     held: &dyn Fn(&Subroutine) -> u32,
@@ -118,9 +122,10 @@ fn needs_of(
 ) -> BuildNeeds {
     let mut needs = BuildNeeds::default();
     for (part, need) in parts_used(parts) {
-        let short = need.saturating_sub(held(&part));
-        if short < need {
-            needs.spend.push((part, need - short));
+        let have = held(&part).min(need);
+        let short = need - have;
+        if have > 0 {
+            needs.spend.push((part, have));
         }
         if short > 0 {
             if known(&part) {

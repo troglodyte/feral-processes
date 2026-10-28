@@ -2,8 +2,9 @@
 //! Built routines, plus the two popups the build page opens.
 //!
 //! Every figure is a view off the engine (`Game::build_rows`,
-//! `build_part_options`, `build_preview`, `built_routine_rows`); this file only lays them out. Rows are returned
-//! rather than drawn so the structure hub frames them like any other page.
+//! `build_part_options`, `build_preview`, `built_routine_rows`); this file
+//! only lays them out. Rows are returned rather than drawn so the structure
+//! hub frames them like any other page.
 
 use super::popup::*;
 use super::*;

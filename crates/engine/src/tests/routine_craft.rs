@@ -971,6 +971,13 @@ fn parts_sharing_a_material_are_billed_together_and_a_short_bill_spends_nothing(
         .find(|l| l.label == game.item_name(&material))
         .unwrap();
     assert_eq!((line.have, line.need), (need - 1, need));
+    let disks = &preview.materials[0];
+    assert_eq!(disks.label, game.item_name(&disk()));
+    assert_eq!(
+        (disks.have, disks.need),
+        (2, 2),
+        "one disk per crafted part"
+    );
     let blocked = preview.blocked.unwrap();
     assert!(blocked.contains(game.item_name(&material)), "{blocked}");
 
@@ -1020,7 +1027,7 @@ fn every_held_part_leaves_the_materials_list_empty() {
 
 #[test]
 fn compile_without_a_blank_disk_names_the_disk_and_spends_nothing() {
-    let mut game = crafting_game(70_107, &[heal()]);
+    let mut game = crafting_game(70_108, &[heal()]);
     let (material, count) = crate::routine_craft::material(&heal());
     give(&mut game, &material, count);
 

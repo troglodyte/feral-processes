@@ -620,3 +620,23 @@ fn every_buildable_routine_compiles_to_one_the_loader_would_accept() {
     }
     assert!(built > 2000, "only {built} builds were tried");
 }
+
+#[test]
+fn a_part_crafted_twice_bills_two_disks_and_twice_its_material() {
+    let (material, per) = material(&Subroutine::Trickle);
+    let disk = crate::items::ItemId::from(crate::items::ids::ROUTINE_DISK);
+    assert_eq!(
+        craft_bill(&[(Subroutine::Trickle, 2)]),
+        vec![(disk, 2), (material, 2 * per)]
+    );
+}
+
+#[test]
+fn a_part_held_once_and_needed_twice_spends_one_and_crafts_one() {
+    let heal = Subroutine::Core(Core::Heal, Version::V1);
+    let parts = [heal, Subroutine::Trickle, Subroutine::Trickle];
+    let needs = build_needs(&parts, |p| u32::from(*p == Subroutine::Trickle), |_| true);
+    assert_eq!(needs.spend, vec![(Subroutine::Trickle, 1)]);
+    assert_eq!(needs.craft, vec![(heal, 1), (Subroutine::Trickle, 1)]);
+    assert!(needs.unresearched.is_empty());
+}

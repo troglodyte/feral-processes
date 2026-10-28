@@ -1,6 +1,7 @@
 //! What the Workbench's routine-crafting pages draw (ADR 0029): the build
-//! page's slot rows, option lists and preview, and the Built routines list. Every figure is read off the engine, so a
-//! page can never promise a part the build would refuse.
+//! page's slot rows, option lists and preview, and the Built routines list.
+//! Every figure is read off the engine, so a page can never promise a part
+//! the build would refuse.
 
 use crate::abilities::AbilityId;
 use crate::routine_craft::Subroutine;

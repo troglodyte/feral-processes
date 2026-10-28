@@ -141,16 +141,7 @@ fn a_workbench_adds_the_forge_pages_once_weapon_bench_is_researched() {
     unlock_research_chain(&mut game, "weapon_bench");
     assert_eq!(
         game.adjacent_structures()[0].pages,
-        vec![
-            Build,
-            Built,
-            Forge,
-            NewDesign,
-            WeaponParts,
-            Salvage,
-            Compile,
-            Info
-        ]
+        vec![Build, Built, Forge, NewDesign, Salvage, Compile, Info]
     );
 }
 

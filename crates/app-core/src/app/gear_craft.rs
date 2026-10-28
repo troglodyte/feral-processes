@@ -1,5 +1,5 @@
 //! The Workbench's weapon-crafting pages (ADR 0031): the Forge (designs),
-//! New design, Weapon parts and Salvage.
+//! New design and Salvage.
 //!
 //! The new-design page keeps a draft (`DesignDraft`) on `App`; every figure
 //! it shows comes from `Game::design_*` views, and Save calls
@@ -145,13 +145,6 @@ pub fn gear_craft_refusal_line(game: &Game, why: &GearCraftRefusal) -> String {
                 "Short of {}: need {need}, have {held}.",
                 game.item_name(item)
             )
-        }
-        GearCraftRefusal::MissingParts(list) => {
-            let list: Vec<String> = list
-                .iter()
-                .map(|(part, n)| format!("{} x{n}", part.label()))
-                .collect();
-            format!("Missing parts: {}.", list.join(", "))
         }
         GearCraftRefusal::NameEmpty => "Give the design a name.".to_string(),
         GearCraftRefusal::NameTooLong { max } => {
@@ -393,18 +386,6 @@ impl App {
             }
             _ => {}
         }
-    }
-
-    pub(crate) fn handle_weapon_parts_key(&mut self, key: GameKey) {
-        let Some(game) = &self.game else { return };
-        let rows = game.weapon_part_rows();
-        let Some(idx) = self.selected_index(key, rows.len()) else {
-            return;
-        };
-        let part = rows[idx].part;
-        let Some(game) = &mut self.game else { return };
-        let outcome = game.craft_weapon_part(part);
-        self.report_craft(outcome);
     }
 
     pub(crate) fn handle_weapon_salvage_key(&mut self, key: GameKey) {

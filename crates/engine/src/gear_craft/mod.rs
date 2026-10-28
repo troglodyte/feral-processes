@@ -16,7 +16,10 @@ use crate::affixes::{AffixDb, AffixId};
 use crate::items::EquipmentSlot;
 use crate::items_db::ItemDef;
 
-pub use plan::{BuildPlan, check_design, parts_used, plan_build};
+pub use plan::{
+    BuildInput, BuildPlan, check_design, material_bill, parts_used, plan_build, split_held,
+    uncraftable,
+};
 pub(crate) use power::design_power;
 pub use weapon::{FitError, WeaponPart};
 
@@ -104,8 +107,6 @@ pub enum GearCraftRefusal {
         need: u32,
         held: u32,
     },
-    /// Parts the design needs and the player does not hold.
-    MissingParts(Vec<(WeaponPart, u32)>),
     NameEmpty,
     NameTooLong {
         max: usize,

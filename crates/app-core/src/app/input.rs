@@ -302,7 +302,6 @@ impl App {
             Mode::NewDesign => self.handle_new_design_key(key),
             Mode::DesignPick => self.handle_design_pick_key(key),
             Mode::DesignName => self.handle_design_name_key(key),
-            Mode::WeaponParts => self.handle_weapon_parts_key(key),
             Mode::WeaponSalvage => self.handle_weapon_salvage_key(key),
             Mode::Craft => self.handle_craft_key(key),
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),

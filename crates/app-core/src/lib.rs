@@ -1740,8 +1740,6 @@ pub enum Mode {
     DesignPick,
     /// Typing the design's name.
     DesignName,
-    /// The Workbench's Weapon parts page: craft a part.
-    WeaponParts,
     /// The Workbench's Salvage page: take an authored weapon apart.
     WeaponSalvage,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
@@ -2524,7 +2522,6 @@ impl Mode {
             | Mode::NewDesign
             | Mode::DesignPick
             | Mode::DesignName
-            | Mode::WeaponParts
             | Mode::WeaponSalvage
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.

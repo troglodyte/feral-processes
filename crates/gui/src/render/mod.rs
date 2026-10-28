@@ -30,6 +30,8 @@ use feral_processes_engine::{
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
 mod alerts;
+mod alt_labels;
+mod alt_overlay;
 mod arena;
 mod bars;
 mod base;

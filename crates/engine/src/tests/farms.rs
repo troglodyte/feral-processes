@@ -41,7 +41,7 @@ fn a_box_marks_one_plot_with_no_recipe() {
     assert!(
         tiles
             .iter()
-            .all(|t| t.crop.is_none() && t.state == FarmTileState::Fallow)
+            .all(|t| t.crop.is_none() && t.crop_name.is_none() && t.state == FarmTileState::Fallow)
     );
     let plots: std::collections::HashSet<_> = tiles.iter().map(|t| t.plot).collect();
     assert_eq!(plots.len(), 1);
@@ -115,6 +115,7 @@ fn setting_a_recipe_sows_the_whole_plot() {
     assert_eq!(game.plot_recipe(plot), Some(CropId::from("power_cell")));
     for t in game.farm_tiles() {
         assert_eq!(t.crop, Some(("+".to_string(), GlyphColor::Yellow)));
+        assert_eq!(t.crop_name.as_deref(), Some("Power Cell"));
     }
 }
 

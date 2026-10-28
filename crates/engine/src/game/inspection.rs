@@ -1504,6 +1504,9 @@ impl Game {
                     };
                 EntityView {
                     unconfigured: self.placed(entity).is_some_and(|p| p.is_unconfigured()),
+                    making: self
+                        .placed(entity)
+                        .and_then(|p| p.product_name(self.world.resource::<ItemDb>())),
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,

@@ -205,6 +205,9 @@ pub struct EntityView {
     /// Finished output only: staged input is never marked, and a banked
     /// output never reaches `Stock::output`, so it never lights this.
     pub holds_output: bool,
+    /// A Research Station whose slot still holds the last spent subject,
+    /// waiting for a body to carry it away. The map's `x`.
+    pub holds_spent_program: bool,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
     /// If this is a structure, its current/max raid `Durability`.

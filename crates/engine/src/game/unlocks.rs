@@ -1457,7 +1457,10 @@ impl Game {
     /// `GameRng`, names the node, logs through `log_base` and raises a
     /// notification, none of which a bevy system can reach.
     ///
-    /// **The three early returns hold the bar rather than spending it.** A
+    /// A discovery spends the subject, exactly as a finished subject-gated
+    /// project does; a miss spends nothing but the attempt.
+    ///
+    /// **The four early returns hold the bar rather than spending it.** A
     /// full bar with an empty pen, or with nothing left to find, is banked
     /// and fires the instant the condition clears. That is what makes a
     /// discovery legible as a consequence of the player's action rather than
@@ -1467,7 +1470,11 @@ impl Game {
         if self.world.resource::<ActiveResearch>().study < crate::tuning::STUDY_ATTEMPT_DATA {
             return;
         }
-        if self.pinned_subject().is_none() {
+        let Some(subject) = self.pinned_subject() else {
+            return;
+        };
+        // The last spent subject still waits to be carried away.
+        if self.study_slot_full() {
             return;
         }
         let pool = self.eligible_discoveries();
@@ -1492,6 +1499,7 @@ impl Game {
             pool[rng.0.random_range(0..pool.len())].clone()
         };
         self.discover_research(&id);
+        self.spend_subject(subject);
     }
 
     pub(crate) fn settle_research(&mut self) {
@@ -1527,33 +1535,40 @@ impl Game {
         {
             return;
         }
-        // The conversion: two existing doors and no new function.
-        // `downed_program_for_with_overkill(subject, 0.0)` reads
-        // `overkill_term`'s own identity value, so the condition roll is
-        // best-case — a controlled dissection beats overkilling something in
-        // the field. The program is left standing at the station whose pen
-        // held the subject, never in the player's pack; the gate just above
-        // guarantees the slot is empty and a rack will have room for it.
-        if let Some(subject) = subject
-            && let Some(station) = self.study_station()
-        {
-            let name = self.creature_label(subject);
-            let departing = self
-                .world
-                .get::<crate::components::ProgramId>(subject)
-                .copied()
-                .map(|id| (id, self.creature_short_label(subject)));
-            if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0) {
-                self.hold_at_station(station, program);
-                self.destroy_built_held_by(subject);
-                self.world.despawn(subject);
-                if let Some((id, short)) = departing {
-                    self.note_departure(id, &short, crate::bonds::Departure::LetGo);
-                }
-                self.log(format!("{name} is spent in the study."));
-            }
+        if let Some(subject) = subject {
+            self.spend_subject(subject);
         }
         self.grant_research(&def);
+    }
+
+    /// The pinned subject, converted into a downed program left standing at
+    /// the station whose pen held it — never in the player's pack. Shared by
+    /// a finished subject-gated project and a discovery; both callers gate on
+    /// the slot being empty first.
+    ///
+    /// `downed_program_for_with_overkill(subject, 0.0)` reads
+    /// `overkill_term`'s own identity value, so the condition roll is
+    /// best-case — a controlled dissection beats overkilling something in the
+    /// field.
+    fn spend_subject(&mut self, subject: Entity) {
+        let Some(station) = self.study_station() else {
+            return;
+        };
+        let name = self.creature_label(subject);
+        let departing = self
+            .world
+            .get::<crate::components::ProgramId>(subject)
+            .copied()
+            .map(|id| (id, self.creature_short_label(subject)));
+        if let Some(program) = self.downed_program_for_with_overkill(subject, 0.0) {
+            self.hold_at_station(station, program);
+            self.destroy_built_held_by(subject);
+            self.world.despawn(subject);
+            if let Some((id, short)) = departing {
+                self.note_departure(id, &short, crate::bonds::Departure::LetGo);
+            }
+            self.log(format!("{name} is spent in the study."));
+        }
     }
 
     /// Everything a finished node does once its bill and subject are settled:

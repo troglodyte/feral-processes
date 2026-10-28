@@ -114,20 +114,56 @@ fn an_idle_staffer_carries_the_held_program_to_a_rack_with_room() {
 }
 
 #[test]
-fn nothing_leaves_the_station_when_no_rack_has_room() {
+fn with_every_rack_full_the_program_is_set_down_beside_the_station() {
     let (mut game, station, rack) = base_with_station_and_rack();
     game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
     hold(&mut game, station, 7);
-    let worker = spawn_tamed(&mut game, 100, 3);
+    spawn_tamed(&mut game, 100, 3);
 
-    for _ in 0..120 {
-        game.tick();
-        assert!(
-            game.world.get::<CarryingProgram>(worker).is_none(),
-            "picked up with nowhere to go"
-        );
-    }
-    assert_eq!(held_at(&game, station).map(|p| p.level), Some(7));
+    tick_until(&mut game, "program set down", |g| {
+        !floor_programs(g).is_empty()
+    });
+    let at = *game.world.get::<Position>(station).unwrap();
+    let (cell, level) = floor_programs(&mut game)[0];
+    assert_eq!(level, 7);
+    assert_eq!(chebyshev(cell, at), 1, "next to the station");
+    assert!(held_at(&game, station).is_none(), "the slot is cleared");
+}
+
+#[test]
+fn a_free_stockpile_cell_comes_before_the_floor_by_the_station() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    game.toggle_stockpile_box((8, 8), (8, 8));
+    hold(&mut game, station, 7);
+    spawn_tamed(&mut game, 100, 3);
+
+    tick_until(&mut game, "program set down", |g| {
+        !floor_programs(g).is_empty()
+    });
+    assert_eq!(
+        floor_programs(&mut game),
+        vec![(Position { x: 8, y: 8 }, 7)]
+    );
+}
+
+#[test]
+fn shelter_skips_the_station_slot_for_a_stockpile_cell() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    game.toggle_stockpile_box((8, 8), (8, 8));
+    let at = *game.world.get::<Position>(station).unwrap();
+
+    game.shelter_program(program(7), at);
+
+    assert!(
+        held_at(&game, station).is_none(),
+        "the slot is not a shelter"
+    );
+    assert_eq!(
+        floor_programs(&mut game),
+        vec![(Position { x: 8, y: 8 }, 7)]
+    );
 }
 
 #[test]
@@ -171,7 +207,7 @@ fn a_station_still_holding_a_program_stalls_completion_with_its_own_text() {
 
     assert_eq!(
         game.research_material_shortfall(),
-        Some("crew to carry the last program to a rack".to_string()),
+        Some("crew to carry the last program away".to_string()),
         "the slot is reported ahead of rack room, in the gate's own order"
     );
     game.tick();
@@ -219,19 +255,18 @@ fn rack_room_respects_tier() {
 }
 
 #[test]
-fn a_full_rack_blocks_completion_and_reports_room_on_a_rack() {
+fn only_a_held_program_blocks_completion() {
     let (mut game, station, rack) = base_with_station_and_rack();
     game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
     assert_eq!(
         game.study_yield_blocker(),
-        Some("room on a Quarantine Rack")
+        None,
+        "the floor by the station is always somewhere to go"
     );
-    game.world.get_mut::<Racked>(rack).unwrap().0.pop();
-    assert_eq!(game.study_yield_blocker(), None);
     hold(&mut game, station, 7);
     assert_eq!(
         game.study_yield_blocker(),
-        Some("crew to carry the last program to a rack")
+        Some("crew to carry the last program away")
     );
 }
 
@@ -403,8 +438,8 @@ fn a_carrier_on_respite_racks_before_it_walks_to_the_amenity() {
     assert_eq!(racked_levels(&game, rack), vec![7]);
 }
 
-/// A rack with room that no route reaches is not a destination: nothing
-/// leaves the station for it.
+/// A rack with room that no route reaches is not a destination: the
+/// program goes to the next rung instead.
 #[test]
 fn a_rack_with_room_that_cannot_be_reached_is_not_chosen() {
     let (mut game, station, rack) = base_with_station_and_rack();
@@ -422,16 +457,15 @@ fn a_rack_with_room_that_cannot_be_reached_is_not_chosen() {
         spawn_structure_at(&mut game, "wall", rack_at.x + dx, rack_at.y + dy);
     }
     hold(&mut game, station, 7);
-    let worker = spawn_tamed(&mut game, 100, 3);
+    spawn_tamed(&mut game, 100, 3);
 
-    for _ in 0..60 {
-        game.tick();
-        assert!(
-            game.world.get::<CarryingProgram>(worker).is_none(),
-            "picked up for a rack it cannot reach"
-        );
-    }
-    assert_eq!(held_at(&game, station).map(|p| p.level), Some(7));
+    tick_until(&mut game, "program set down", |g| {
+        !floor_programs(g).is_empty()
+    });
+    assert!(
+        racked_levels(&game, rack).is_empty(),
+        "never walked to the walled rack"
+    );
 }
 
 /// A walk that waits for ever (the party standing in the only corridor) must
@@ -499,7 +533,7 @@ fn patience_starts_over_when_the_carrier_moves() {
 }
 
 #[test]
-fn a_rack_lost_mid_trip_puts_the_program_back_on_the_station() {
+fn a_rack_lost_mid_trip_sends_the_carrier_to_the_next_rung() {
     let (mut game, station, rack) = base_with_station_and_rack();
     hold(&mut game, station, 7);
     let worker = spawn_tamed(&mut game, 100, 3);
@@ -508,14 +542,38 @@ fn a_rack_lost_mid_trip_puts_the_program_back_on_the_station() {
     });
 
     game.world.despawn(rack);
-    game.tick();
+    tick_until(&mut game, "program set down", |g| {
+        !floor_programs(g).is_empty()
+    });
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert!(held_at(&game, station).is_none());
+}
+
+/// A carrier that can reach nothing at all still has the station slot to
+/// fall back on: a body is never left holding what it cannot place.
+#[test]
+fn a_carrier_that_reaches_nothing_puts_the_program_back_on_the_station() {
+    let (mut game, station, _rack) = base_with_station_and_rack();
+    let worker = a_carrier(&mut game);
+    *game.world.get_mut::<Position>(worker).unwrap() = Position { x: 5, y: 5 };
+    for (dx, dy) in [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ] {
+        spawn_structure_at(&mut game, "wall", 5 + dx, 5 + dy);
+    }
+    let mut board = game.rack_board().unwrap();
+
+    assert!(game.rack_step(worker, &mut board));
 
     assert!(game.world.get::<CarryingProgram>(worker).is_none());
-    assert_eq!(
-        held_at(&game, station).map(|p| p.level),
-        Some(7),
-        "nowhere to deliver: it goes back where it came from"
-    );
+    assert_eq!(held_at(&game, station).map(|p| p.level), Some(7));
 }
 
 #[test]
@@ -808,4 +866,131 @@ fn a_hold_ended_with_the_rack_full_and_the_slot_taken_leaves_the_program_on_the_
     assert!(kept(&mut game).contains(&7));
     assert_eq!(held_at(&game, station).map(|p| p.level), Some(8));
     assert_eq!(pack_programs(&game), 0);
+}
+
+/// Floor programs as `(cell, level)`, `(x, y)`-sorted.
+fn floor_programs(game: &mut Game) -> Vec<(Position, u32)> {
+    let mut found: Vec<(Position, u32)> = game
+        .world
+        .query::<(&Position, &crate::components::FloorItem)>()
+        .iter(&game.world)
+        .filter_map(|(p, f)| match &f.0 {
+            crate::items::FloorThing::Program(prog) => Some((*p, prog.level)),
+            _ => None,
+        })
+        .collect();
+    found.sort_by_key(|(p, _)| (p.x, p.y));
+    found
+}
+
+fn chebyshev(a: Position, b: Position) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
+
+/// A pinned subject with a full bar and a pool to find from.
+fn a_study_ready_to_roll() -> (Game, Entity, Entity) {
+    let (mut game, station, _rack) = base_with_station_and_rack();
+    unlock_research_chain(&mut game, "automation");
+    let subject = spawn_tamed(&mut game, 10, 3);
+    pin_subject_at_pen(&mut game, subject, station);
+    (game, station, subject)
+}
+
+fn fill_study(game: &mut Game) {
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = crate::tuning::STUDY_ATTEMPT_DATA;
+}
+
+fn discovered(game: &Game) -> usize {
+    game.world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .len()
+}
+
+/// **A discovery uses the subject up; a miss leaves it.** Rolled until the
+/// first hit, asserting at every miss that the subject still stands.
+#[test]
+fn a_discovery_downs_the_pinned_subject_and_a_miss_does_not() {
+    let (mut game, station, subject) = a_study_ready_to_roll();
+    let mut misses = 0;
+    for _ in 0..200 {
+        let before = discovered(&game);
+        fill_study(&mut game);
+        game.settle_study();
+        if discovered(&game) > before {
+            break;
+        }
+        misses += 1;
+        assert!(
+            game.world.get_entity(subject).is_ok(),
+            "a miss spent the subject"
+        );
+    }
+    assert!(discovered(&game) > 0, "200 attempts never hit");
+    assert!(
+        game.world.get_entity(subject).is_err(),
+        "the subject is spent"
+    );
+    assert!(held_at(&game, station).is_some(), "it waits at the station");
+    assert!(game.pinned_subject().is_none());
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|l| l.text.contains("is spent in the study.")),
+    );
+    let _ = misses;
+}
+
+/// A player who re-pins before the last program is carried off waits: the
+/// full slot holds the bar, and a held bar draws nothing.
+#[test]
+fn a_full_slot_holds_the_study_bar_and_draws_no_rng() {
+    let (mut game, station, _subject) = a_study_ready_to_roll();
+    hold(&mut game, station, 7);
+    fill_study(&mut game);
+
+    fn peek(g: &mut Game) -> u64 {
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+    reseed_rng(&mut game, 55);
+    let without = peek(&mut game);
+    reseed_rng(&mut game, 55);
+    game.settle_study();
+    assert_eq!(peek(&mut game), without, "a held bar drew from the stream");
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .study,
+        crate::tuning::STUDY_ATTEMPT_DATA,
+        "the attempt is banked, not spent"
+    );
+}
+
+#[test]
+fn the_map_marks_a_station_holding_a_spent_program() {
+    let (mut game, station, _rack) = base_with_station_and_rack();
+    let at = *game.world.get::<Position>(station).unwrap();
+    game.world
+        .insert_resource(crate::resources::Locale::Base { x: 0, y: 0 });
+    // The fixture spawns no glyph, and the map views only what it draws.
+    game.world
+        .entity_mut(station)
+        .insert(crate::components::Glyph {
+            ch: 'R',
+            color: crate::components::GlyphColor::White,
+        });
+    let marked = |game: &mut Game| {
+        game.view_entities_at((at.x, at.y), 4, 4)
+            .into_iter()
+            .find(|v| v.entity == station)
+            .map(|v| v.holds_spent_program)
+    };
+    assert_eq!(marked(&mut game), Some(false));
+    hold(&mut game, station, 7);
+    assert_eq!(marked(&mut game), Some(true));
 }

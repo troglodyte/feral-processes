@@ -2184,6 +2184,7 @@ mod tests {
             build: None,
             output_stranded: false,
             holds_output: false,
+            holds_spent_program: false,
             hp_fraction: None,
             level: None,
             durability: None,

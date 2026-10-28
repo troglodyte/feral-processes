@@ -279,7 +279,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   so it outlives the building.
 - **A downed program lives in four places now, and the rack is the only one
   that is not a queue** — the fourth is a Research Station's `StudyYield`,
-  where a finished study's program waits for a body to rack it, and
+  where a spent subject's program waits for a body to carry it away, and
   research never touches the player's pack.
 - **A Teardown Rig staffs itself — `can_progress` for a rig is
   `Game::rig_has_work`, which counts a fetcher's carried program, and the
@@ -303,7 +303,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `RACK_CARRY_PATIENCE_BEATS` hands the program back through the shelter
   chain, so being held out of the pool is bounded.
 - **`Game::shelter_program` is the one never-lose chain — a rack with room,
-  the station's empty slot, then the floor through `Game::set_down` — and it
+  a free stockpile cell, then the floor through `Game::set_down` — and it
   never uses the player's pack, bar `set_down`'s own no-free-floor fallback
   to `stow_program`**; `return_carried_program` and
   `return_study_yield` call it, and `Game::drop_load` calls it for a

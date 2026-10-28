@@ -1,13 +1,14 @@
-//! Where a finished study's downed program goes: held at the Research
-//! Station, then walked to a Quarantine Rack by an idle body.
+//! Where a spent subject's downed program goes: held at the Research
+//! Station, then walked away by an idle body — to a Quarantine Rack, else a
+//! free stockpile cell, else the floor beside the station.
 //!
-//! Research never touches the player's pack. `settle_research` hands the
-//! program to `Game::hold_at_station`; this module's errand moves it from
-//! the station's `StudyYield` slot into a rack's `Racked`, and its room
-//! accounting is the completion gate (`Game::study_yield_blocker`).
+//! Research never touches the player's pack. `Game::spend_subject` hands the
+//! program to `Game::hold_at_station` on a finished project or a discovery;
+//! this module's errand empties the station's `StudyYield` slot, and a full
+//! slot is the gate on the next spend (`Game::study_yield_blocker`).
 //!
 //! The errand is `clearing`'s shape: **destination before pickup** (nothing
-//! leaves the station until a rack with room is in reach), the destination
+//! leaves the station until a destination is in reach), the destination
 //! re-derived each beat from where the body stands rather than stored, and a
 //! body is never left holding something it cannot place. A carrier is a
 //! `CarryingProgram` body with no `Task` — a teardown rig's fetcher is always
@@ -22,7 +23,7 @@
 //! of the posting pool for ever.
 //!
 //! **A downed program is never lost and never goes to the pack**:
-//! `shelter_program` is the one chain (rack, station slot, floor), and
+//! `shelter_program` is the one chain (rack, stockpile, floor), and
 //! `Game::drop_load` calls it, so any door that frees a carrier keeps the
 //! kill.
 
@@ -47,7 +48,28 @@ pub(crate) struct RackBoard {
     /// Rack room not spoken for by a body already walking one: what a new
     /// pick-up may still claim.
     spare: u32,
+    /// Floor cells a carrier has chosen this beat, so a second carrier does
+    /// not walk to the same one.
+    claimed: Vec<Position>,
 }
+
+/// Where a carrier is taking its program.
+#[derive(Clone, Copy)]
+enum ProgramDrop {
+    Rack(Position, Entity),
+    Floor(Position),
+}
+
+impl ProgramDrop {
+    fn at(self) -> Position {
+        match self {
+            ProgramDrop::Rack(p, _) | ProgramDrop::Floor(p) => p,
+        }
+    }
+}
+
+/// How many cells around the station the last rung considers, nearest first.
+const BESIDE_STATION_CELLS: usize = 16;
 
 impl Game {
     /// Every Quarantine Rack, `(x, y)`-sorted. Sorted because callers pick
@@ -105,19 +127,21 @@ impl Game {
         self.total_rack_room().saturating_sub(claimed)
     }
 
+    /// Whether the station's slot still holds the last spent subject. Nothing
+    /// more is spent into it until a body carries that one away.
+    pub(crate) fn study_slot_full(&self) -> bool {
+        self.study_station()
+            .and_then(|s| self.world.get::<StudyYield>(s))
+            .is_some_and(|held| held.0.is_some())
+    }
+
     /// Why a subject-gated project may not complete right now, in the text
     /// the HUD shows after "needs". One door for `settle_research`'s gate and
-    /// `research_material_shortfall`, so they cannot order the two reasons
-    /// differently.
+    /// `research_material_shortfall`. Rack room is no reason: the floor
+    /// beside the station is always somewhere to go.
     pub(crate) fn study_yield_blocker(&self) -> Option<&'static str> {
-        let station_full = self
-            .study_station()
-            .and_then(|s| self.world.get::<StudyYield>(s))
-            .is_some_and(|held| held.0.is_some());
-        if station_full {
-            return Some("crew to carry the last program to a rack");
-        }
-        (self.free_rack_room() == 0).then_some("room on a Quarantine Rack")
+        self.study_slot_full()
+            .then_some("crew to carry the last program away")
     }
 
     /// Leaves `program` standing at `station`.
@@ -128,9 +152,8 @@ impl Game {
     }
 
     /// Puts a program somewhere it survives, and never in the player's pack
-    /// (research does not use it): the first rack with room, else the
-    /// station's empty slot, else the floor around `at`. `closing` is a
-    /// station being destroyed, whose slot is no place to leave anything.
+    /// (research does not use it): the first rack with room, else the first
+    /// free stockpile cell, else the floor around `at`.
     ///
     /// **The last rung is the floor, not a log line saying it is lost.** A
     /// claimed rack's room can shrink under the claim (a demolition, a rig
@@ -143,12 +166,7 @@ impl Game {
     /// `set_down` falls back to `stow_program`, which fills the player's
     /// downed store (or a rack, or the store past its cap). Very hard to
     /// reach, and the log says which it was.
-    pub(crate) fn shelter_program(
-        &mut self,
-        held: DownedProgram,
-        at: Position,
-        closing: Option<Entity>,
-    ) {
+    pub(crate) fn shelter_program(&mut self, held: DownedProgram, at: Position) {
         let label = self.downed_program_label(&held);
         if let Some(rack) = self
             .quarantine_racks()
@@ -160,14 +178,14 @@ impl Game {
             shelf.0.push(held);
             return;
         }
-        if let Some(station) = self.study_station().filter(|&s| {
-            Some(s) != closing
-                && self
-                    .world
-                    .get::<StudyYield>(s)
-                    .is_none_or(|slot| slot.0.is_none())
-        }) {
-            self.hold_at_station(station, held);
+        if let Some(cell) = self
+            .free_stockpile_cells()
+            .and_then(|cells| cells.first().copied())
+        {
+            self.log_base(format!(
+                "No rack has room — {label} is set down on a stockpile."
+            ));
+            self.set_down(cell, vec![FloorThing::Program(held)]);
             return;
         }
         // With no free floor cell `set_down` falls back to `stow_program`,
@@ -196,7 +214,7 @@ impl Game {
         else {
             return;
         };
-        self.shelter_program(held, at, Some(station));
+        self.shelter_program(held, at);
     }
 
     /// `None` when nothing is held at a station and nobody is walking one:
@@ -215,7 +233,11 @@ impl Game {
         }
         stations.sort_by_key(|(_, p)| (p.x, p.y));
         let spare = self.total_rack_room().saturating_sub(in_transit);
-        Some(RackBoard { stations, spare })
+        Some(RackBoard {
+            stations,
+            spare,
+            claimed: Vec::new(),
+        })
     }
 
     /// The gates the other idle errands share, less their `CarryingProgram`
@@ -287,28 +309,59 @@ impl Game {
             return false;
         };
         let holding = self.world.get::<CarryingProgram>(worker).is_some();
-        if !holding && (board.stations.is_empty() || board.spare == 0) {
+        if !holding && board.stations.is_empty() {
             return false;
         }
+        // Gathered before the reach field borrows the grid.
+        let stockpile = self.free_stockpile_cells().unwrap_or_default();
+        let beside = self
+            .study_station()
+            .and_then(|s| self.world.get::<Position>(s).copied())
+            .map(|at| self.free_floor_cells(at, BESIDE_STATION_CELLS))
+            .unwrap_or_default();
         let blocked = self.blocked_tiles().rigid();
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
         let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius);
-        let nearest_rack = self
-            .quarantine_racks()
-            .into_iter()
-            .filter(|&(_, _, rack)| self.rack_room(rack) > 0)
-            .map(|(x, y, rack)| (Position { x, y }, rack))
-            .filter(|&(p, _)| reachable(p))
-            .min_by_key(|&(p, _)| (chebyshev(here, p), p.x, p.y));
+        let open = |p: Position| reachable(p) && !board.claimed.contains(&p);
+        // A pick-up may only count rack room nobody walking is promised.
+        let rack = (holding || board.spare > 0)
+            .then(|| {
+                self.quarantine_racks()
+                    .into_iter()
+                    .filter(|&(_, _, rack)| self.rack_room(rack) > 0)
+                    .map(|(x, y, rack)| (Position { x, y }, rack))
+                    .filter(|&(p, _)| reachable(p))
+                    .min_by_key(|&(p, _)| (chebyshev(here, p), p.x, p.y))
+            })
+            .flatten()
+            .map(|(p, rack)| ProgramDrop::Rack(p, rack));
+        let destination = rack
+            .or_else(|| {
+                stockpile
+                    .into_iter()
+                    .filter(|&p| open(p))
+                    .min_by_key(|&p| (chebyshev(here, p), p.x, p.y))
+                    .map(ProgramDrop::Floor)
+            })
+            .or_else(|| {
+                beside
+                    .into_iter()
+                    .map(|(x, y)| Position { x, y })
+                    .find(|&p| open(p))
+                    .map(ProgramDrop::Floor)
+            });
+        if let Some(ProgramDrop::Floor(p)) = destination {
+            board.claimed.push(p);
+        }
         if holding {
-            return self.rack_deliver(worker, here, nearest_rack);
+            return self.rack_deliver(worker, here, destination);
         }
         // Destination before pickup.
-        if nearest_rack.is_none() {
+        let Some(destination) = destination else {
             return false;
-        }
+        };
         let Some((index, target)) = board
             .stations
             .iter()
@@ -331,47 +384,60 @@ impl Game {
             self.world
                 .entity_mut(worker)
                 .insert(CarryingProgram(program));
-            board.spare -= 1;
+            if matches!(destination, ProgramDrop::Rack(..)) {
+                board.spare -= 1;
+            }
         }
         true
     }
 
-    /// The held half: walk to the nearest rack in reach with room and shelve
-    /// the program, or set it back when there is none.
+    /// The held half: walk to the destination and leave the program there —
+    /// shelved on a rack or set down on its cell — or set it back when there
+    /// is none.
     fn rack_deliver(
         &mut self,
         worker: Entity,
         here: Position,
-        rack: Option<(Position, Entity)>,
+        destination: Option<ProgramDrop>,
     ) -> bool {
-        let Some((pos, rack)) = rack else {
+        let Some(destination) = destination else {
             self.put_carried_program_back(worker);
             return true;
         };
+        let pos = destination.at();
         if !at_station(here, pos, 1) {
             if self.walk_idle_toward(worker, here, pos).is_err() {
                 self.put_carried_program_back(worker);
             }
             return true;
         }
-        if let Some(held) = self
+        let Some(held) = self
             .world
             .entity_mut(worker)
             .take::<CarryingProgram>()
             .map(|c| c.0)
-        {
-            let label = self.downed_program_label(&held);
-            if let Some(mut shelf) = self.world.get_mut::<Racked>(rack) {
-                shelf.0.push(held);
+        else {
+            return true;
+        };
+        let label = self.downed_program_label(&held);
+        match destination {
+            ProgramDrop::Rack(_, rack) => {
+                if let Some(mut shelf) = self.world.get_mut::<Racked>(rack) {
+                    shelf.0.push(held);
+                }
+                self.log_base(format!("{label} is racked."));
             }
-            self.log_base(format!("{label} is racked."));
+            ProgramDrop::Floor(cell) => {
+                self.set_down(cell, vec![FloorThing::Program(held)]);
+                self.log_base(format!("{label} is set down."));
+            }
         }
         true
     }
 
     /// A carrier with nowhere reachable to deliver sets its load back on the
-    /// station slot, where the gate reports the missing room; failing that,
-    /// anywhere it survives. A body is never left holding what it cannot
+    /// station slot, where the gate reports it; failing that, anywhere it
+    /// survives. A body is never left holding what it cannot
     /// place, and the kill is never dropped.
     fn put_carried_program_back(&mut self, worker: Entity) {
         let Some(at) = self.world.get::<Position>(worker).copied() else {
@@ -385,9 +451,8 @@ impl Game {
         else {
             return;
         };
-        // `shelter_program` tries a rack with room first, even one this body
-        // could not reach; the station slot is where an unreachable errand
-        // leaves it, so that comes before the rack.
+        // The slot is a holding place for an errand that reached nothing,
+        // not one of `shelter_program`'s destinations.
         let slot = self.study_station().filter(|&s| {
             self.world
                 .get::<StudyYield>(s)
@@ -395,7 +460,7 @@ impl Game {
         });
         match slot {
             Some(station) => self.hold_at_station(station, held),
-            None => self.shelter_program(held, at, None),
+            None => self.shelter_program(held, at),
         }
     }
 }

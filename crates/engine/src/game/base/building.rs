@@ -731,8 +731,8 @@ impl Game {
     }
 
     /// Puts a worker's in-transit carrier somewhere it survives:
-    /// `shelter_program`'s chain — a rack with room, the station's empty
-    /// slot, the floor — and never the player's pack. A rig's fetcher took
+    /// `shelter_program`'s chain — a rack with room, a free stockpile cell,
+    /// the floor — and never the player's pack. A rig's fetcher took
     /// its program off a rack, so a rack is usually where it goes back;
     /// keeping the pack out is what makes one chain serve rig and research
     /// carriers alike.
@@ -754,7 +754,7 @@ impl Game {
         else {
             return;
         };
-        self.shelter_program(held, at, None);
+        self.shelter_program(held, at);
     }
 
     /// Empties `target`'s `Stock` and reports what came off it, so the

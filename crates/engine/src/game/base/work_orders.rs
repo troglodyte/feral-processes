@@ -3399,11 +3399,11 @@ impl Game {
     }
 
     /// Every deployed Research Node while a project is active **and still has
-    /// progress left to earn**, and nothing at all otherwise.
+    /// progress left to earn**, and with none active, `study_wants`.
     ///
     /// This is what staffs a Research Node — there is no `StandingJob` behind
-    /// it and no new `MachineStatus`: with no project selected the want
-    /// simply is not raised, the scheduler posts nobody, and
+    /// it and no new `MachineStatus`: with no project selected and nothing
+    /// pinned the want simply is not raised, the scheduler posts nobody, and
     /// `idle_machine_system` reads the node `Idle`. That is what keeps "a
     /// banked resource can never clog, so a Research Node has no full state"
     /// true through this feature.
@@ -3428,7 +3428,7 @@ impl Game {
     fn research_wants(&self) -> Vec<(Entity, TaskKind)> {
         let research = self.world.resource::<resources::ActiveResearch>();
         let Some(id) = research.id.as_ref() else {
-            return Vec::new();
+            return self.study_wants();
         };
         let earned = research.progress.get(id).copied().unwrap_or(0);
         // A node the `ResearchDb` no longer knows reads as nothing left to
@@ -3451,6 +3451,28 @@ impl Game {
             // assembles its output — without it a body parks at a starved bench above the
             // whole queue, which is C1's shape with a different cause.
             .filter(|&machine| can_progress(self, machine))
+            .map(|machine| (machine, TaskKind::GatherResource))
+            .collect()
+    }
+
+    /// With no project selected, the station whose pen holds a subject —
+    /// pinning one is the player asking for a study, and the data a study
+    /// banks (`systems::deliver_payout`) only arrives if someone works it.
+    ///
+    /// The same saturation gate as `research_wants`, asked of the study:
+    /// with nothing left `settle_study` could uncover, the attempt never
+    /// spends and the bank sits at its cap, so the body is let go rather
+    /// than parked on a station landing nothing.
+    fn study_wants(&self) -> Vec<(Entity, TaskKind)> {
+        let Some(station) = self.study_station() else {
+            return Vec::new();
+        };
+        if self.pinned_subject().is_none() || self.eligible_discoveries().is_empty() {
+            return Vec::new();
+        }
+        producers_of(self, &self.research_currency())
+            .into_iter()
+            .filter(|&machine| machine == station && can_progress(self, machine))
             .map(|machine| (machine, TaskKind::GatherResource))
             .collect()
     }

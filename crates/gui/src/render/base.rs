@@ -83,31 +83,6 @@ const STOCKPILE_FILL: Color = Color::new(
 /// floor finish and the biome pattern still read through it.
 const ROOM_TINT_ALPHA: f32 = 0.28;
 
-/// Point size of a room's Alt label: small enough that a four-cell room
-/// holds "Fine dormitory" at the default zoom.
-const ROOM_LABEL_SIZE: u16 = 14;
-
-/// How many room cells a label centred on `at` can sit over along its row,
-/// counting `at` itself. An L-shaped room's widest row is not the one its
-/// label lands on.
-fn room_row_cols(cells: &[(i32, i32)], at: (i32, i32)) -> i32 {
-    let has = |x: i32| cells.contains(&(x, at.1));
-    let run = |step: i32| {
-        (1..)
-            .map(|d| at.0 + step * d)
-            .take_while(|&x| has(x))
-            .count() as i32
-    };
-    // The label is centred on `at`, so only the shorter side bounds it.
-    1 + 2 * run(-1).min(run(1))
-}
-
-/// Whether a room label of `text_w` pixels sits inside `cols` cells of room.
-/// Text never clips or wraps, so a label that does not fit is dropped.
-fn room_label_fits(text_w: f32, cols: i32, tile_px: f32) -> bool {
-    text_w <= cols as f32 * tile_px
-}
-
 /// What a floor item draws as: an item in its own glyph, in the amber of
 /// cargo; a downed program in the gray `x` the battle map gives a fallen
 /// body, so the two boards say "disabled" the same way.
@@ -228,7 +203,7 @@ const GROUND_LEVEL: f32 = 0.18;
 /// How many tiles beyond the visible pane `draw_surface_map` fetches. One for
 /// the camera to slide in from, one so that tile has neighbours to compare
 /// biomes against. See the call site for why both are needed.
-const RINGS: i32 = 2;
+pub(super) const RINGS: i32 = 2;
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
@@ -830,13 +805,14 @@ fn draw_surface_map(
     // exactly `tile_origin_px`'s arguments for this frame, including
     // `off_x`/`off_y` after they have already eased toward their target —
     // a click has to invert the frame it was actually drawn against.
-    fx.set_map_click(Some(MapClickLayout {
+    let layout = MapClickLayout {
         pane,
         center,
         half: (half_w, half_h),
         off: (off_x, off_y),
         tile_px,
-    }));
+    };
+    fx.set_map_click(Some(layout));
 
     painter.rect(
         pane.x,
@@ -1787,39 +1763,15 @@ fn draw_surface_map(
             )
         });
     }
-    for room in &rooms {
-        let label = format!("{} {}", room.band.label(), room.role);
-        let size = ROOM_LABEL_SIZE;
-        if !room_label_fits(
-            painter.measure_ui(&label, size).width,
-            room_row_cols(&room.cells, room.label_at),
-            tile_px,
-        ) {
-            continue;
-        }
-        let (px, py) = tile_origin_px(
-            room.label_at,
-            center,
-            (half_w, half_h),
-            (off_x, off_y),
-            tile_px,
-            pane,
+    if reveal {
+        super::alt_overlay::draw_alt_labels(
+            painter,
+            &layout,
+            &rooms,
+            &entities,
+            &farm_tiles,
+            &structure_floor,
         );
-        let w = painter.measure_ui(&label, size).width;
-        let x = px + tile_px / 2.0 - w / 2.0;
-        let fully_inside = x >= pane.x
-            && x + w <= pane.x + pane.w
-            && py >= pane.y
-            && py + tile_px <= pane.y + pane.h;
-        if fully_inside {
-            painter.ui(
-                &label,
-                x,
-                py + tile_px / 2.0 + size as f32 * 0.3,
-                size,
-                TEXT,
-            );
-        }
     }
     // Over every body and effect, since it marks one of them when the walk
     // is a chase; resolved against `entities` — what this frame drew — so
@@ -2119,26 +2071,6 @@ mod tests {
     use feral_processes_engine::components::{GlyphColor, MachineStatus, POWER_MAX};
     use feral_processes_engine::floors::FloorShade;
     use feral_processes_engine::{CharacterChoice, DifficultyMode, Game};
-
-    #[test]
-    fn a_room_label_wider_than_its_room_is_dropped() {
-        assert!(room_label_fits(80.0, 5, 16.0));
-        assert!(!room_label_fits(81.0, 5, 16.0));
-    }
-
-    /// An L: a row of five over a column of one. The label sits on the
-    /// column's row, so the room's five-wide top must not make it fit.
-    #[test]
-    fn a_label_is_measured_against_its_own_row() {
-        let l: Vec<(i32, i32)> = (0..5).map(|x| (x, 0)).chain([(0, 1)]).collect();
-        assert_eq!(room_row_cols(&l, (2, 0)), 5);
-        assert_eq!(room_row_cols(&l, (0, 1)), 1);
-        // Centred on the run's end cell, the label has no room past it.
-        assert_eq!(room_row_cols(&l, (0, 0)), 1);
-        assert_eq!(room_row_cols(&l, (1, 0)), 3);
-        assert!(!room_label_fits(80.0, room_row_cols(&l, (0, 1)), 16.0));
-        assert!(room_label_fits(80.0, room_row_cols(&l, (2, 0)), 16.0));
-    }
 
     fn test_assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -6325,6 +6257,32 @@ mod tests {
             !hidden.iter().any(|t| t == "?"),
             "the marker must not draw without reveal: {hidden:?}"
         );
+    }
+
+    /// The `chains` template: a base whose machines are already set.
+    fn chains_game() -> Game {
+        let ron = std::fs::read_to_string(test_assets().join("../dev-saves/chains.ron")).unwrap();
+        let data = feral_processes_engine::save::from_ron(&ron).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_gui_alt_chains_{}.bin",
+            std::process::id()
+        ));
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        Game::load(&path, &test_assets()).unwrap()
+    }
+
+    #[test]
+    fn the_map_names_what_a_machine_makes_only_while_reveal_is_held() {
+        let mut game = chains_game();
+        let (_, revealed) =
+            drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), (3, 0), true);
+        assert!(
+            revealed.iter().any(|t| t == "Bytecode Block"),
+            "a set Factory must be labelled while reveal is held: {revealed:?}"
+        );
+        let (_, hidden) =
+            drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), (3, 0), false);
+        assert!(!hidden.iter().any(|t| t == "Bytecode Block"), "{hidden:?}");
     }
 
     /// The four rungs `difficulty_color` can answer with.

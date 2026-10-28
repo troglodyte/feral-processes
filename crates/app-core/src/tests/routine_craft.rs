@@ -1,5 +1,5 @@
-//! The Workbench's routine-crafting pages: Build routine, Subroutines and
-//! Built routines, and installing what they make.
+//! The Workbench's routine-crafting pages: Build routine and Built
+//! routines, and installing what they make.
 
 use super::support::*;
 use crate::*;
@@ -46,16 +46,12 @@ fn type_text(app: &mut App, text: &str) {
 }
 
 #[test]
-fn a_workbench_hub_has_the_three_routine_pages() {
+fn a_workbench_hub_has_the_routine_pages() {
     let mut app = app_at_a_workbench(80_001);
     app.handle_key(GameKey::Char('c'));
     let hub = app.structure_hub.as_ref().expect("the hub opens");
     let pages = &hub.current().pages;
-    for page in [
-        StructurePage::Build,
-        StructurePage::Subroutines,
-        StructurePage::Built,
-    ] {
+    for page in [StructurePage::Build, StructurePage::Built] {
         assert!(pages.contains(&page), "{page:?} in {pages:?}");
     }
 }
@@ -143,32 +139,29 @@ fn the_name_field_stops_at_its_limit_and_backspace_deletes() {
 }
 
 #[test]
-fn the_subroutines_page_filters_by_typing_and_enter_crafts() {
+fn compile_crafts_a_missing_part_from_disks_and_materials() {
     let mut app = app_at_a_workbench(80_006);
     know(&mut app, &heal());
     let disk = feral_processes_engine::items::ItemId::from(
         feral_processes_engine::items::ids::ROUTINE_DISK,
     );
     let game = app.game.as_mut().unwrap();
-    game.dev_give_item(&disk, 2).unwrap();
+    game.dev_give_item(&disk, 1).unwrap();
     let (mat, n) = feral_processes_engine::routine_craft::material(&heal());
     game.dev_give_item(&mat, n).unwrap();
-    open_page(&mut app, Mode::Subroutines);
+    assert_eq!(game.parts_held(&heal()), 0);
+    open_page(&mut app, Mode::RoutineBuild);
+    app.routine_draft.parts = vec![heal()];
+    app.routine_draft.name = "Mender".into();
 
-    type_text(&mut app, "heal v1");
-    let visible = subroutines_visible(app.game.as_ref().unwrap(), app.filter_text());
-    assert_eq!(visible.len(), 1);
-    app.handle_key(GameKey::Enter);
-    assert_eq!(app.game.as_mut().unwrap().parts_held(&heal()), 1);
-}
+    pick_row(&mut app, COMPILE_ROW);
 
-#[test]
-fn an_unresearched_part_is_not_listed() {
-    let mut app = app_at_a_workbench(80_007);
-    open_page(&mut app, Mode::Subroutines);
-    type_text(&mut app, "area");
-    let visible = subroutines_visible(app.game.as_ref().unwrap(), app.filter_text());
-    assert!(visible.is_empty());
+    let game = app.game.as_ref().unwrap();
+    let built = game.built_routine_rows();
+    assert_eq!(built.len(), 1, "{:?}", app.status_line);
+    assert_eq!(built[0].name, "Mender");
+    assert_eq!(game.blank_disks_held(), 0, "the disk is spent");
+    assert_eq!(game.parts_held(&heal()), 0, "the crafted part went in");
 }
 
 #[test]

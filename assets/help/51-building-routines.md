@@ -1,8 +1,8 @@
 # Building routines
 
-Routines you run are built, not found. At a Workbench you compile Subroutines, then combine them into
-a routine and give it a name. Stand beside the Workbench and press c; its pages are Compile, Build routine,
-Subroutines and Built routines. The Workbench uses what the base is storing as well as what you
+Routines you run are built, not found. At a Workbench you combine Subroutines into a routine and give
+it a name. Stand beside the Workbench and press c; its pages are Compile, Build routine and Built
+routines. The Workbench uses what the base is storing as well as what you
 carry, taking from the base first, so you do not have to bring materials to it.
 
 A Subroutine is one part. Every routine has exactly one Core, which is what it does: Heal, Damage,
@@ -13,15 +13,16 @@ it, and the Build routine page says why when a row is closed.
 - Compile page. Everything you can compile from your own recipes, including the gear that needs a bench
   (Scrap Ward, Shiv Routine, Packet Buffer, Kinetic Edge, Probe Service and Handshake Forge). Away from a
   Workbench you only see the field recipes.
-- Subroutines page. Every part, with how many you hold and what one costs: a blank Routine Disk and
-  some of one material. A Core costs more material at a higher version. Type to filter the list and
-  press Enter to compile one. A part you have not researched says so on its row.
-- Build routine page. Press Enter on a row to see the parts that fit it and how many you hold. It
-  lists the parts you have researched and any you hold, so a part from an extraction or a boss can be
-  used before you research it. The
-  preview underneath reads out what the routine will do, its Power cost and how long before it can run
-  again, which parts it uses and which you are missing. Name it, then choose Compile. Building uses up the
-  parts.
+- Build routine page. Press Enter on a row to see the parts that fit it, how many you hold and, for a
+  part you have researched, what making one costs: a blank Routine Disk and some of one material. A
+  Core costs more material at a higher version. The list shows the parts you have researched and any
+  you hold, so a part from an extraction or a boss can be used before you research it. The preview
+  underneath reads out what the routine will do, its Power cost and how long before it can run again,
+  which parts it uses and which you are missing. Name it, then choose Compile. Compile uses the parts
+  you hold and makes the missing ones from disks and materials. Under Materials the preview lists what
+  that takes, each line as what you have against what you need: green when you have enough, red when
+  you do not. A missing part you have not researched is listed in red too, and Compile waits until you
+  research it or find one. Nothing is used up unless the whole routine can be built.
 - Built routines page. Routines you have built that are not in a slot yet.
 
 A routine may hold only so many parts; research raises the limit.

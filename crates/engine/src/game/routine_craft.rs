@@ -16,9 +16,7 @@ use crate::routine_tree::{capacity_node_id, part_node_id};
 use crate::tuning::{
     CRAFT_ID_PREFIX, CRAFT_PART_CAP_MAX, CRAFT_PART_CAP_START, CRAFT_STARTER_NAME,
 };
-use crate::views::{
-    BuildPreview, BuildSlotRow, BuiltRoutineRow, MaterialLine, PartOption, SubroutineRow,
-};
+use crate::views::{BuildPreview, BuildSlotRow, BuiltRoutineRow, MaterialLine, PartOption};
 use crate::*;
 
 impl Game {
@@ -51,31 +49,6 @@ impl Game {
     /// Blank Routine Disks in reach — what crafting a part spends.
     pub fn blank_disks_held(&self) -> u32 {
         self.held_in_reach(&ItemId::from(ids::ROUTINE_DISK))
-    }
-
-    /// Crafts one `part` at the Workbench for one Routine Disk and the
-    /// part's material (`routine_craft::material`).
-    pub fn craft_subroutine(&mut self, part: Subroutine) -> Result<(), String> {
-        self.require_workbench_free()?;
-        if !self.subroutine_known(&part) {
-            return Err("Research that part first.".into());
-        }
-        let disk = ItemId::from(ids::ROUTINE_DISK);
-        let (material, count) = routine_craft::material(&part);
-        let (disks, mats) = (self.held_in_reach(&disk), self.held_in_reach(&material));
-        if disks == 0 {
-            return Err(format!("You need a blank {}.", self.item_name(&disk)));
-        }
-        if mats < count {
-            return Err(format!(
-                "You need {count} {} (you have {mats}).",
-                self.item_name(&material)
-            ));
-        }
-        self.pay_from_reach(&[(disk, 1), (material, count)])?;
-        self.grant_loot(ItemId::part(&part), 1, LootSource::Craft);
-        self.log(format!("You compile a {} part.", part.label()));
-        Ok(())
     }
 
     /// Builds a routine named `name` from `parts`, spending the parts held
@@ -323,27 +296,6 @@ impl Game {
             part_cap: cap,
             blocked,
         }
-    }
-
-    /// The Subroutines page: every researched part with its slot, how many
-    /// are held and what a craft costs. An unresearched part stays off the
-    /// list, held or not, so the page shows what research has taught.
-    pub fn subroutine_rows(&self) -> Vec<SubroutineRow> {
-        Subroutine::all()
-            .into_iter()
-            .filter(|part| self.subroutine_known(part))
-            .map(|part| {
-                let (material, material_count) = routine_craft::material(&part);
-                SubroutineRow {
-                    label: part.label(),
-                    slot: part.slot(),
-                    held: self.parts_held(&part),
-                    material: self.item_name(&material).to_string(),
-                    material_count,
-                    part,
-                }
-            })
-            .collect()
     }
 
     /// The Built routines page: routines waiting for a slot.

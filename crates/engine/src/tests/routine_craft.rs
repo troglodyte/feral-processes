@@ -171,47 +171,6 @@ fn a_part_cannot_be_bought_off_a_caravan_shelf_but_sells_back() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn crafting_a_part_spends_a_disk_and_its_material_and_needs_research_and_a_bench() {
-    let mut game = Game::new(70_006, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let part = damage();
-    let (material, count) = crate::routine_craft::material(&part);
-
-    let err = game.craft_subroutine(part).unwrap_err();
-    assert!(err.contains("Workbench"), "{err}");
-
-    stand_an_extraction_bench(&mut game, 30, 30);
-    let err = game.craft_subroutine(part).unwrap_err();
-    assert!(err.contains("Research"), "{err}");
-
-    know(&mut game, &part);
-    let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .take(material.clone(), 9_999);
-    let err = game.craft_subroutine(part).unwrap_err();
-    assert!(err.contains("blank"), "{err}");
-
-    give(&mut game, &ItemId::from(ids::ROUTINE_DISK), 2);
-    let err = game.craft_subroutine(part).unwrap_err();
-    assert!(err.contains(&format!("{count}")), "{err}");
-    assert_eq!(game.blank_disks_held(), 2, "a refusal spent a disk");
-
-    give(&mut game, &material, count + 1);
-    game.craft_subroutine(part).unwrap();
-
-    assert_eq!(game.parts_held(&part), 1);
-    assert_eq!(game.blank_disks_held(), 1);
-    assert_eq!(
-        game.world
-            .get::<Inventory>(game.player_entity())
-            .unwrap()
-            .count(&material),
-        1
-    );
-}
-
-#[test]
 fn a_build_spends_its_parts_waits_unslotted_and_never_reuses_an_id() {
     let mut game = bench_game(70_007);
     let first = build(&mut game, "  Mender ", &[heal()]);
@@ -824,27 +783,6 @@ fn the_preview_says_when_the_cap_or_the_bench_blocks_the_build() {
 }
 
 #[test]
-fn the_subroutines_list_hides_the_unresearched_and_counts_what_is_held() {
-    let mut game = bench_game(70_044);
-    stock(&mut game, &damage(), 2);
-    let find =
-        |game: &Game, part: Subroutine| game.subroutine_rows().into_iter().find(|r| r.part == part);
-    let healing = find(&game, heal()).expect("Heal v1.0 is known from a new game");
-    assert_eq!(healing.slot, "Core");
-    assert!(
-        find(&game, damage()).is_none(),
-        "an unresearched part is hidden even when held"
-    );
-
-    know(&mut game, &damage());
-    let dmg = find(&game, damage()).expect("researching it lists it");
-    assert_eq!(dmg.held, 2);
-    let (material, count) = crate::routine_craft::material(&damage());
-    assert_eq!(dmg.material, game.item_name(&material));
-    assert_eq!(dmg.material_count, count);
-}
-
-#[test]
 fn the_built_page_lists_only_routines_not_in_a_slot() {
     let mut game = bench_game(70_045);
     let player = game.player_entity();
@@ -1078,6 +1016,20 @@ fn every_held_part_leaves_the_materials_list_empty() {
     let preview = game.build_preview("Mender", &[heal()]);
     assert!(preview.materials.is_empty());
     assert!(preview.unresearched.is_empty());
+}
+
+#[test]
+fn compile_without_a_blank_disk_names_the_disk_and_spends_nothing() {
+    let mut game = crafting_game(70_107, &[heal()]);
+    let (material, count) = crate::routine_craft::material(&heal());
+    give(&mut game, &material, count);
+
+    let err = game.build_routine("Mender", &[heal()]).unwrap_err();
+
+    assert!(err.contains(game.item_name(&disk())), "{err}");
+    let player = game.player_entity();
+    let inv = game.world.get::<Inventory>(player).unwrap();
+    assert_eq!(inv.count(&material), count, "a refusal spent the material");
 }
 
 #[test]

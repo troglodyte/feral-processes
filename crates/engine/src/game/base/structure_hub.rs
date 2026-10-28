@@ -22,7 +22,6 @@ pub enum StructurePage {
     Rebuild,
     /// The Workbench's routine-crafting pages (ADR 0029), in rail order.
     Build,
-    Subroutines,
     Built,
     /// The Workbench's weapon-crafting pages (ADR 0031), shown once
     /// `weapon_bench` is researched.
@@ -121,7 +120,6 @@ impl Game {
         page(self.is_awaiting_site(e), StructurePage::Rebuild);
         let bench = self.is_routine_bench(e);
         page(bench, StructurePage::Build);
-        page(bench, StructurePage::Subroutines);
         page(bench, StructurePage::Built);
         let forge = bench && self.weapon_tree_open();
         page(forge, StructurePage::Forge);

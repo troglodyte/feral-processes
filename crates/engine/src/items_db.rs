@@ -676,7 +676,7 @@ impl ItemDb {
     /// field is a compile error here and someone decides what a part does
     /// about it.
     ///
-    /// No `craftable`: `Game::craft_subroutine` is the one door, because the
+    /// No `craftable`: `Game::build_routine` is the one door, because the
     /// bill names a Routine Disk and a material by part and a recipe cannot
     /// say "any researched part". No `droppable` either; the bosses'
     /// parts come through `Game::pay_boss_routine_parts`, which drops a

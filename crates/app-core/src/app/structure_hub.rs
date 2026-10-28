@@ -71,10 +71,6 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Compile",
             screens: &[Mode::Craft],
         },
-        StructurePage::Subroutines => &HubPage {
-            title: "Subroutines",
-            screens: &[Mode::Subroutines],
-        },
         StructurePage::Built => &HubPage {
             title: "Built routines",
             screens: &[Mode::BuiltRoutines],
@@ -248,7 +244,6 @@ impl App {
             StructurePage::WeaponParts => self.mode = Mode::WeaponParts,
             StructurePage::Salvage => self.mode = Mode::WeaponSalvage,
             StructurePage::Compile => self.mode = Mode::Craft,
-            StructurePage::Subroutines => self.mode = Mode::Subroutines,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,
             StructurePage::Info => {
                 self.pending_structure_manifest = Some(entity);

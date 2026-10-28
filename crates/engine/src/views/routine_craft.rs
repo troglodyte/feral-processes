@@ -1,6 +1,5 @@
-//! What the Workbench's three routine-crafting pages draw (ADR 0029): the
-//! build page's slot rows, option lists and preview, the Subroutines list,
-//! and the Built routines list. Every figure is read off the engine, so a
+//! What the Workbench's routine-crafting pages draw (ADR 0029): the build
+//! page's slot rows, option lists and preview, and the Built routines list. Every figure is read off the engine, so a
 //! page can never promise a part the build would refuse.
 
 use crate::abilities::AbilityId;
@@ -65,20 +64,6 @@ pub struct MaterialLine {
     pub label: String,
     pub have: u32,
     pub need: u32,
-}
-
-/// One row of the Subroutines list.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SubroutineRow {
-    pub part: Subroutine,
-    /// "Heal v2.0", "Range: Near".
-    pub label: String,
-    /// Which build row it fills.
-    pub slot: &'static str,
-    pub held: u32,
-    /// The material a craft spends beside a Routine Disk, and how many.
-    pub material: String,
-    pub material_count: u32,
 }
 
 /// One row of the Built routines list: a routine waiting for a slot.

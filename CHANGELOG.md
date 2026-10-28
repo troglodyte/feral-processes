@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.21
+
+**The deploy menu leaves a blank line above each structure's name.** Each name used to sit right under the previous structure's description, so the list read as one block of text. Now every structure starts after a gap.
+
+**The Research Station has its own Research group in the deploy menu.** It used to be listed under Extractors because it produces Research Data, but you build it to study a pinned program, so it now has a group of its own.
+
+**Pausing the game silences the base's background hum and beeps.** The ambient sound used to keep playing while everything else was stopped. It now stops when you pause and starts again when you resume.
+
 ## 0.20.20
 
 **A program pinned in a Research Station's pen is now studied by someone without you picking a project or posting a worker by hand.** With no project selected, the station's data goes toward studying the pinned program, but nobody was ever sent to work the station, so the study sat still. Now one free program is posted to the station holding the pin for as long as a study could still turn up something new.

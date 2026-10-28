@@ -208,7 +208,7 @@ fn the_forge_builds_a_design_and_refuses_deleting_one_with_a_copy_out() {
     open_page(&mut app, Mode::Forge);
     pick_row(&mut app, 0);
     let line = app.status_line.clone().unwrap();
-    assert!(line.starts_with("Missing parts"), "{line}");
+    assert!(line.starts_with("Short of"), "{line}");
 
     let game = app.game.as_mut().unwrap();
     game.dev_give_item(&ItemId::weapon_part(edge()), 1).unwrap();
@@ -255,7 +255,6 @@ fn every_refusal_has_a_plain_sentence() {
             need: 3,
             held: 1,
         },
-        GearCraftRefusal::MissingParts(vec![(edge(), 2)]),
         GearCraftRefusal::NameEmpty,
         GearCraftRefusal::NameTooLong { max: 24 },
         GearCraftRefusal::Fit(FitError::NoFrame),

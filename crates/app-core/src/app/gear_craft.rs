@@ -146,13 +146,6 @@ pub fn gear_craft_refusal_line(game: &Game, why: &GearCraftRefusal) -> String {
                 game.item_name(item)
             )
         }
-        GearCraftRefusal::MissingParts(list) => {
-            let list: Vec<String> = list
-                .iter()
-                .map(|(part, n)| format!("{} x{n}", part.label()))
-                .collect();
-            format!("Missing parts: {}.", list.join(", "))
-        }
         GearCraftRefusal::NameEmpty => "Give the design a name.".to_string(),
         GearCraftRefusal::NameTooLong { max } => {
             format!("Design names are at most {max} characters.")

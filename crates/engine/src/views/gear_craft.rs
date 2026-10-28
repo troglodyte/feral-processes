@@ -3,6 +3,7 @@
 //! weapon parts list. Every figure is read off the engine, so a page can
 //! never promise a part the build would refuse.
 
+use super::MaterialLine;
 use crate::affixes::AffixId;
 use crate::gear_craft::weapon::Category;
 use crate::gear_craft::{GearCraftRefusal, WeaponPart};
@@ -35,6 +36,10 @@ pub struct DesignPartOption {
     pub part: WeaponPart,
     pub label: String,
     pub held: u32,
+    /// The material and count crafting one costs: `Some` once researched
+    /// (held or not), `None` for a Proc, which only salvage hands out, and
+    /// for a part that is held but not researched.
+    pub craft_cost: Option<(String, u32)>,
     /// Why it is greyed: it does not fit the design as it stands, or the
     /// player has neither the research nor a copy.
     pub unavailable: Option<GearCraftRefusal>,
@@ -64,11 +69,24 @@ pub struct DesignPreview {
     pub parts_used: Vec<(String, u32)>,
     /// Parts needed and not held, with how many short.
     pub parts_missing: Vec<(String, u32)>,
+    /// What Forge spends crafting the missing parts plus the frame; empty
+    /// without a Frame.
+    pub materials: Vec<MaterialLine>,
+    /// Missing parts that cannot be crafted, as the full red line.
+    pub uncraftable: Vec<String>,
     /// Modifiers in the design (affixes included) and the most it may hold.
     pub part_count: usize,
     pub part_cap: usize,
     /// Why saving or building would be refused, or `None`.
     pub blocked: Option<GearCraftRefusal>,
+}
+
+/// What building a design from nothing but materials takes: the Forge's
+/// bill under the highlighted design.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DesignBill {
+    pub materials: Vec<MaterialLine>,
+    pub uncraftable: Vec<String>,
 }
 
 /// One row of the Weapon parts list.

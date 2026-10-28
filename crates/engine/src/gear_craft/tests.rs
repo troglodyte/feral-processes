@@ -514,3 +514,22 @@ fn decompose_maps_decompiler_to_capture_grants_to_proc_and_drops_mitigation() {
     assert!(parts("broadcast_storm").contains(&WeaponPart::Reach(AreaKind::Everyone)));
     assert!(parts("scatter_lance").contains(&WeaponPart::Reach(AreaKind::Group)));
 }
+
+#[test]
+fn a_part_needed_twice_and_held_once_spends_one_and_crafts_one() {
+    // Two Edge frames is not a legal design, but the split is pure and the
+    // count of 2 is what the opt-level-1 miscompile got wrong.
+    let two = GearDesign {
+        id: 1,
+        name: "Twice".into(),
+        slot: EquipmentSlot::Weapon,
+        parts: vec![GearPart::Weapon(edge()), GearPart::Weapon(edge())],
+    };
+    let (spend, craft) = split_held(&two, &|_| 1);
+    assert_eq!(spend, vec![(edge(), 1)]);
+    assert_eq!(craft, vec![(edge(), 1)]);
+    let (spend, craft) = split_held(&two, &|_| 0);
+    assert_eq!((spend, craft), (vec![], vec![(edge(), 2)]));
+    let (spend, craft) = split_held(&two, &|_| 5);
+    assert_eq!((spend, craft), (vec![(edge(), 2)], vec![]));
+}

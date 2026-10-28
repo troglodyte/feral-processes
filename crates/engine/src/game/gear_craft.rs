@@ -20,8 +20,8 @@ use crate::items::FloorThing;
 use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
 use crate::tuning::{GEAR_PART_CAP_MAX, GEAR_PART_CAP_START};
 use crate::views::{
-    DesignAffixOption, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow, SalvageRow,
-    WeaponPartRow,
+    DesignAffixOption, DesignBill, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow,
+    MaterialLine, SalvageRow, WeaponPartRow,
 };
 use crate::*;
 
@@ -195,23 +195,82 @@ impl Game {
         Ok(id)
     }
 
-    /// Builds one copy of design `id`: spends its parts and the frame's
-    /// bill, and mints one Ordinary, tier-0 copy into cargo.
+    /// Builds one copy of design `id`: spends the parts held, crafts the
+    /// rest from materials, pays the frame's bill, and mints one Ordinary,
+    /// tier-0 copy into cargo. All or nothing.
     pub fn build_design(&mut self, id: u32) -> Result<GearCopy, GearCraftRefusal> {
         self.require_forge_free()?;
         let design = self.design(id).ok_or(GearCraftRefusal::NoSuchDesign(id))?;
-        let plan = gear_craft::plan_build(&design, |p| self.weapon_parts_held(p))?;
-        let mut bill: Vec<(ItemId, u32)> = plan
-            .parts
+        let plan = self.plan_design(&design)?;
+        self.pay_gear_bill(&plan.bill)?;
+        // Crafted parts pass through the pack so each is receipted as a
+        // craft, the way crafting one by hand was.
+        for (part, count) in &plan.craft {
+            self.grant_loot(ItemId::weapon_part(*part), *count, LootSource::Craft);
+        }
+        let parts: Vec<(ItemId, u32)> = plan
+            .spend
             .iter()
+            .chain(&plan.craft)
             .map(|(part, count)| (ItemId::weapon_part(*part), *count))
             .collect();
-        bill.push(plan.bill);
-        self.pay_gear_bill(&bill)?;
+        self.pay_gear_bill(&parts)?;
         let copy = GearCopy::plain(gear_craft::weapon::item_id(id));
         self.grant_loot(copy.item.clone(), 1, LootSource::Craft);
-        self.log(format!("You build a {}.", design.name));
+        let name = &design.name;
+        let crafted: u32 = plan.craft.iter().map(|(_, n)| n).sum();
+        self.log(match crafted {
+            0 => format!("You build a {name}."),
+            1 => format!("You compile 1 missing part and build a {name}."),
+            n => format!("You compile {n} missing parts and build a {name}."),
+        });
         Ok(copy)
+    }
+
+    /// `gear_craft::plan_build` over what is in reach now: the one decision
+    /// `build_design` acts on and the Forge pages report.
+    fn plan_design(&self, design: &GearDesign) -> Result<gear_craft::BuildPlan, GearCraftRefusal> {
+        gear_craft::plan_build(&gear_craft::BuildInput {
+            design,
+            held: &|p| self.weapon_parts_held(p),
+            known: &|p| self.weapon_part_known(p),
+            in_reach: &|i| self.held_in_reach(i),
+        })
+    }
+
+    /// What Forge would spend on design `id` from materials alone, and what
+    /// it can never craft. Shown even when the build would be refused, so
+    /// every shortfall is on the page at once.
+    pub fn design_bill(&self, id: u32) -> Option<DesignBill> {
+        let design = self.design(id)?;
+        Some(self.bill_of(&design))
+    }
+
+    fn bill_of(&self, design: &GearDesign) -> DesignBill {
+        if design.frame().is_none() {
+            return DesignBill {
+                materials: Vec::new(),
+                uncraftable: Vec::new(),
+            };
+        }
+        let (_, craft) = gear_craft::split_held(design, &|p| self.weapon_parts_held(p));
+        DesignBill {
+            materials: gear_craft::material_bill(design, &craft)
+                .iter()
+                .map(|(item, need)| MaterialLine {
+                    label: self.item_name(item).to_string(),
+                    have: self.held_in_reach(item),
+                    need: *need,
+                })
+                .collect(),
+            uncraftable: gear_craft::uncraftable(&craft, &|p| self.weapon_part_known(p))
+                .into_iter()
+                .map(|part| match part {
+                    WeaponPart::Proc(_) => format!("{} — salvage a weapon first", part.label()),
+                    _ => format!("{} — research first", part.label()),
+                })
+                .collect(),
+        }
     }
 
     /// Deletes design `id`, which is refused while a copy of its weapon
@@ -367,17 +426,9 @@ impl Game {
 
     /// Why building `design` would be refused now, or `None`.
     fn build_block(&self, design: &GearDesign) -> Option<GearCraftRefusal> {
-        if let Err(refusal) = self.require_forge_free() {
-            return Some(refusal);
-        }
-        match gear_craft::plan_build(design, |p| self.weapon_parts_held(p)) {
-            Err(refusal) => Some(refusal),
-            Ok(plan) => {
-                let (item, need) = plan.bill;
-                let held = self.held_in_reach(&item);
-                (held < need).then_some(GearCraftRefusal::ShortOf { item, need, held })
-            }
-        }
+        self.require_forge_free()
+            .err()
+            .or_else(|| self.plan_design(design).err())
     }
 
     /// The new-design page's rows: the frame and each modifier category,
@@ -424,10 +475,17 @@ impl Game {
                         .err()
                         .map(GearCraftRefusal::Fit)
                 };
+                let craft_cost = (self.weapon_part_known(part)
+                    && !matches!(part, WeaponPart::Proc(_)))
+                .then(|| {
+                    let (item, count) = gear_craft::weapon::part_bill(part);
+                    (self.item_name(&item).to_string(), count)
+                });
                 DesignPartOption {
                     part,
                     label: part.label(),
                     held: self.weapon_parts_held(part),
+                    craft_cost,
                     unavailable,
                 }
             })
@@ -475,6 +533,7 @@ impl Game {
                 (have < *need).then_some((*p, need - have))
             })
             .collect();
+        let bill = self.bill_of(&design);
         let blocked = gear_craft::check_design(
             name,
             parts,
@@ -494,6 +553,8 @@ impl Game {
             power: def.as_ref().and_then(|d| self.design_rating(d)),
             parts_used: label(used),
             parts_missing: label(missing),
+            materials: bill.materials,
+            uncraftable: bill.uncraftable,
             part_count: design
                 .weapon_parts()
                 .iter()

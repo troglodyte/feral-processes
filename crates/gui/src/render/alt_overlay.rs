@@ -14,7 +14,7 @@ const ROOM_LABEL_SIZE: u16 = 14;
 const ALT_LABEL_PAD: f32 = 2.0;
 
 /// The line from a pushed-out machine label back to its machine.
-const ALT_LEADER: Color = Color::new(0.92, 0.92, 0.92, 0.45);
+const ALT_LEADER: Color = Color { a: 0.45, ..TEXT };
 
 /// Alt's labels: room names, then what each machine and sown plot makes,
 /// placed by `alt_labels::layout` so that none covers another.
@@ -72,6 +72,7 @@ pub(super) fn draw_alt_labels(
     let (hw, hh) = (view.half.0 + RINGS, view.half.1 + RINGS);
     let soft = entities
         .iter()
+        .filter(|e| e.is_structure)
         .map(|e| e.pos)
         .chain(structure_floor.iter().enumerate().flat_map(|(ry, row)| {
             row.iter().enumerate().filter(|c| *c.1).map(move |(rx, _)| {

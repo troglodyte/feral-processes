@@ -84,6 +84,8 @@ pub(crate) enum Placement {
 struct Candidate {
     rect: TileRect,
     leader: Option<Segment>,
+    /// Distance class: 0 for a room row, the ring for a machine spot.
+    ring: i32,
 }
 
 /// How many room cells a label centred on `at` can sit over along its row,
@@ -130,14 +132,17 @@ pub(crate) fn layout(input: &LayoutInput) -> Vec<Placement> {
                         .is_none_or(|l| !boxes.iter().any(|b| segment_crosses_rect(l, b)))
                 })
                 // `min_by_key` keeps the first of equals, so candidate order
-                // is the tie-break: clean beats soft-covering, then a leader
-                // crossing no other leader beats one that does.
+                // is the tie-break. Clean beats soft-covering anywhere in the
+                // radius; a leader crossing no other leader only wins among
+                // spots of its own ring. Soft cells are a machine label's
+                // concern: a room name keeps its row over its own furniture.
                 .min_by_key(|c| {
-                    let soft = c.rect.tiles().any(|t| input.soft.contains(&t));
+                    let soft = matches!(req.kind, LabelKind::Machine { .. })
+                        && c.rect.tiles().any(|t| input.soft.contains(&t));
                     let crosses = c
                         .leader
                         .is_some_and(|l| leaders.iter().any(|o| segments_cross(l, *o)));
-                    (soft, crosses)
+                    (soft, c.ring, crosses)
                 });
             match pick {
                 Some(c) => {
@@ -189,6 +194,7 @@ fn room_box(cx: f32, row: i32, req: &LabelRequest) -> Candidate {
             h: req.h,
         },
         leader: None,
+        ring: 0,
     }
 }
 
@@ -239,7 +245,7 @@ fn machine_candidates(at: (i32, i32), req: &LabelRequest) -> Vec<Candidate> {
         for &(bx, by) in &spots[..n] {
             let rect = TileRect { x: bx, y: by, w, h };
             let leader = (ring > 1).then(|| (rect.clamp(centre), centre));
-            out.push(Candidate { rect, leader });
+            out.push(Candidate { rect, leader, ring });
         }
     }
     out
@@ -461,6 +467,10 @@ mod tests {
         // Today's placement: centred on the label cell, on that cell's row.
         let cells: Vec<(i32, i32)> = (0..5).map(|x| (x, 0)).collect();
         let r = rect(&run(&[room(&cells, (2, 0), 4.0)], &[])[0]);
+        assert_eq!((r.x + r.w / 2.0, r.y + r.h / 2.0), (2.5, 0.5));
+        // A room's own furniture is no reason to leave the row.
+        let two_rows: Vec<(i32, i32)> = (0..2).flat_map(|y| (0..5).map(move |x| (x, y))).collect();
+        let r = rect(&run(&[room(&two_rows, (2, 0), 4.0)], &cells)[0]);
         assert_eq!((r.x + r.w / 2.0, r.y + r.h / 2.0), (2.5, 0.5));
     }
 

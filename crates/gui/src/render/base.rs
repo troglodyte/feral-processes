@@ -1763,7 +1763,8 @@ fn draw_surface_map(
             )
         });
     }
-    if reveal {
+    // Base space only: `structure_floor` answers in base-space cells.
+    if reveal && base_pos.is_some() {
         super::alt_overlay::draw_alt_labels(
             painter,
             &layout,
@@ -6268,7 +6269,9 @@ mod tests {
             std::process::id()
         ));
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();
-        Game::load(&path, &test_assets()).unwrap()
+        let game = Game::load(&path, &test_assets()).unwrap();
+        let _ = std::fs::remove_file(&path);
+        game
     }
 
     #[test]

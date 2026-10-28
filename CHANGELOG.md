@@ -53,6 +53,18 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.24
+
+**Forge at a Workbench now makes any missing weapon parts for you.** You no longer craft each part by hand before building a weapon: Forge uses the parts you hold and makes the rest from materials. Nothing is used up unless the whole weapon can be built.
+
+**The Forge page and the New design preview list the materials a build will use.** Each line shows what you have against what you need, green when you have enough and red when you do not. A part that cannot be made is listed in red with what to do instead: a proc has to be salvaged from a weapon, and a part you have not researched has to be researched first.
+
+**The part list shows what making each part costs.** A part you have researched shows its cost beside how many you hold.
+
+**The Workbench's Weapon parts page is gone.** Forge does its job now, so the weapon pages are Forge, New design and Salvage.
+
+**The New design preview no longer crashes a debug build when you hold more of a part than the design needs.**
+
 ## 0.20.23
 
 **Compile at a Workbench now makes any missing parts for you.** You no longer craft each part by hand before building a routine: Compile uses the parts you hold and makes the rest from blank Routine Disks and materials. Nothing is used up unless the whole routine can be built.

@@ -1,5 +1,5 @@
-//! The Workbench's weapon-crafting pages: Forge, New design, Weapon parts
-//! and Salvage, and the Weapons research tab.
+//! The Workbench's weapon-crafting pages: Forge, New design and
+//! Salvage, and the Weapons research tab.
 
 use super::support::*;
 use crate::*;
@@ -178,17 +178,6 @@ fn changing_the_frame_drops_a_modifier_the_new_frame_refuses() {
     open_page(&mut app, Mode::NewDesign);
     choose(&mut app, row_of(Category::Frame), whip);
     assert_eq!(app.design_draft.parts, vec![whip]);
-}
-
-#[test]
-fn the_workbench_has_no_weapon_parts_page() {
-    let mut app = forge_app(81_008);
-    app.handle_key(GameKey::Char('c'));
-    let pages = &app.structure_hub.as_ref().unwrap().current().pages;
-    assert!(
-        pages.iter().all(|p| format!("{p:?}") != "WeaponParts"),
-        "{pages:?}"
-    );
 }
 
 #[test]

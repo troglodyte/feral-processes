@@ -514,7 +514,7 @@ impl Game {
             .iter()
             .filter_map(|(p, need)| {
                 let have = self.weapon_parts_held(*p);
-                (have < *need).then_some((*p, need - have))
+                (have < *need).then(|| (*p, need - have))
             })
             .collect();
         let bill = self.bill_of(&design);

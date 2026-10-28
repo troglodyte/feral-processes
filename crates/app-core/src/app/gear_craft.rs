@@ -1,5 +1,5 @@
 //! The Workbench's weapon-crafting pages (ADR 0031): the Forge (designs),
-//! New design, Weapon parts and Salvage.
+//! New design and Salvage.
 //!
 //! The new-design page keeps a draft (`DesignDraft`) on `App`; every figure
 //! it shows comes from `Game::design_*` views, and Save calls

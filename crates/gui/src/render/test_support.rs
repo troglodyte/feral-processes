@@ -585,3 +585,47 @@ pub(super) fn with_creature_within_sight(mut game: Game, at: (i32, i32)) -> (Gam
     save::save_to_file(&path, &data).unwrap();
     (Game::load(&path, &test_assets_dir()).unwrap(), moved)
 }
+
+/// A founded base with a Workbench standing in it and `designs` saved at the
+/// Forge — the state the weapon-crafting pages show real bills in. The
+/// Workbench and the designs ride the save edit for
+/// `app_in_base_with_an_extractor`'s reason: nothing public stands one up.
+pub(super) fn game_with_a_workbench_and_designs(
+    seed: u32,
+    designs: Vec<feral_processes_engine::gear_craft::GearDesign>,
+) -> Game {
+    let assets_dir = test_assets_dir();
+    let mut game = new_game(seed);
+    game.place_structure("home", 0, 0, None)
+        .expect("a fresh run can afford its first Home");
+    while game.take_notification().is_some() {}
+    let path = scratch_path("workbench_designs", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    game.save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    data.gear_designs = designs;
+    data.structures.push(save::StructureSave {
+        recipe: None,
+        kind: "workbench".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+        pod_charged: None,
+        incubating: Vec::new(),
+        study_yield: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    Game::load(&path, &assets_dir).unwrap()
+}

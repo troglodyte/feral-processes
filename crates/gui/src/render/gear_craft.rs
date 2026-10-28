@@ -312,30 +312,111 @@ pub(super) fn draw_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_engine::DifficultyMode;
-    use feral_processes_engine::gear_craft::weapon::Category;
+    use feral_processes_engine::gear_craft::weapon::{Category, Frame, Proc, Tilt, WeaponPart};
+    use feral_processes_engine::gear_craft::{GearDesign, GearPart};
+    use feral_processes_engine::items::{EquipmentSlot, ItemId};
+    use feral_processes_engine::routine_craft::{StatusKind, Version};
 
-    fn shipped_game() -> Game {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        Game::new(42, DifficultyMode::Forgiving, assets).expect("shipped assets")
+    /// The longest Proc label the shipped catalogue carries, so the census
+    /// measures the catalogue rather than a literal that drifts from it.
+    fn longest_proc() -> Proc {
+        *Proc::ALL
+            .iter()
+            .max_by_key(|p| WeaponPart::Proc(**p).label().len())
+            .expect("a Proc exists")
     }
 
-    /// Every part row, the empty new-design page and every category list
-    /// fit the hub page at the smallest supported window.
+    /// A Forge holding a design that needs a Proc (salvage only), an
+    /// unresearched Tilt and two known parts, with a double-digit stock of
+    /// the known ones, so the Materials block, the uncraftable lines and the
+    /// picker notes ("12 held   N <material>") are all measured.
+    fn forge_with_every_kind_of_line() -> (Game, Vec<WeaponPart>) {
+        let frame = WeaponPart::Frame(Frame::Edge, Version::V1);
+        let rider = WeaponPart::Rider(StatusKind::Bleed);
+        let parts = vec![
+            frame,
+            rider,
+            WeaponPart::Tilt(Tilt::Heavy),
+            WeaponPart::Proc(longest_proc()),
+        ];
+        let design = GearDesign {
+            id: 1,
+            name: "W".repeat(24),
+            slot: EquipmentSlot::Weapon,
+            parts: parts.iter().copied().map(GearPart::Weapon).collect(),
+        };
+        let mut game =
+            super::super::test_support::game_with_a_workbench_and_designs(42, vec![design]);
+        for id in ["automation".to_string(), "weapon_bench".to_string()] {
+            let _ = game.dev_unlock_research(&id);
+        }
+        for part in [frame, rider] {
+            let _ = game.dev_unlock_research(&part.node_id());
+            game.dev_give_item(&ItemId::weapon_part(part), 12)
+                .expect("a part item exists");
+        }
+        (game, parts)
+    }
+
+    /// Each row's suffix appended to its label, which is the width the row
+    /// draws: `row_label_text` leaves the suffix column out.
+    fn with_suffixes_inline(rows: Vec<Row>) -> Vec<Row> {
+        rows.into_iter()
+            .map(|row| match &row {
+                Row::Item {
+                    suffix: Some(note), ..
+                } => text_row(format!("{}   {note}", row_label_text(&row))),
+                _ => row,
+            })
+            .collect()
+    }
+
+    /// Every part row, the new-design page, every category list and the
+    /// Forge's Materials and uncraftable lines fit the hub page at the
+    /// smallest supported window.
     #[test]
     fn the_weapon_pages_fit_the_hub_content_rect() {
-        let game = shipped_game();
-        let design = new_design_page_rows(&game, &DesignDraft::default(), 0);
+        let (game, parts) = forge_with_every_kind_of_line();
+        let draft = DesignDraft {
+            name: "W".repeat(24),
+            parts: parts.clone(),
+            ..DesignDraft::default()
+        };
+        let design = new_design_page_rows(&game, &draft, 0);
+        assert!(
+            design
+                .iter()
+                .any(|r| row_label_text(r).contains("Materials")),
+            "premise: the preview lists a bill"
+        );
         super::super::base_report::assert_rows_fit(&design, "new design");
         for category in std::iter::once(Category::Frame).chain(Category::MODIFIERS) {
             let draft = DesignDraft {
                 picking: Some(DesignPicking::Category(category)),
+                parts: parts[..2].to_vec(),
                 ..DesignDraft::default()
             };
-            let rows = pick_rows(&game, &draft, "", 0);
+            let rows = with_suffixes_inline(pick_rows(&game, &draft, "", 0));
+            if category == Category::Frame {
+                assert!(
+                    rows.iter().any(|r| row_label_text(r).contains("12 held")),
+                    "premise: the Frame list notes a double-digit held count"
+                );
+            }
             super::super::base_report::assert_rows_fit(&rows, "part list");
+            super::super::popup::assert_rows_fit(&rows, PopupSize::Large);
         }
         let forge = forge_page_rows(&game, 0);
+        assert!(
+            forge
+                .iter()
+                .any(|r| row_label_text(r).contains("Materials")),
+            "premise: the highlighted design shows its bill"
+        );
+        assert!(
+            forge.iter().any(|r| matches!(r, Row::TextColored(_, RED))),
+            "premise: an uncraftable line is drawn"
+        );
         super::super::base_report::assert_rows_fit(&forge, "forge");
         let salvage = salvage_page_rows(&game, 0);
         super::super::base_report::assert_rows_fit(&salvage, "salvage");

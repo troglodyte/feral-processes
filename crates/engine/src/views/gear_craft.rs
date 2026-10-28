@@ -1,6 +1,6 @@
 //! What the Workbench's weapon-crafting pages draw (ADR 0031): the designs
 //! list, the new-design rows and part picker, the live preview, and the
-//! weapon parts list. Every figure is read off the engine, so a page can
+//! salvage list. Every figure is read off the engine, so a page can
 //! never promise a part the build would refuse.
 
 use super::MaterialLine;

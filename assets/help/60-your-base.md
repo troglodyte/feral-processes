@@ -180,13 +180,15 @@ The rest of what a base does:
   whatever post it held and walks to the pen by itself, and the same row unpins it again once
   nothing needs it there. While a program is pinned, each full study attempt has a 35% chance to
   uncover a hidden research node; a miss spends the attempt and the log says the study turned up
-  nothing.
+  nothing. A find spends the pinned program the way a finished project does, so pin another to
+  keep studying.
 - From sector 2 on, most nodes need a program pinned before they can finish. You can still pick
   one with nobody pinned: the research screen marks the row with `!` and says what it is waiting
   on, and the project holds until a program is in the pen. Any program you own satisfies it, and
-  which one does not matter. Finishing the project spends the pinned one: it leaves your roster and lands in your
-  downed-program store exactly as if you had beaten it in a fight, still worth a tool afterward —
-  see [taking a program apart](extraction). Change your mind and abandon the project (`A`) to get
+  which one does not matter. Finishing the project spends the pinned one: it leaves your roster as a downed program, still
+  worth a tool afterward — see [taking a program apart](extraction). It waits at the Station,
+  marked with an `x`, until a program carries it to a Quarantine Rack, else a free stockpile cell,
+  else the floor beside the Station; nothing more is spent there until it is gone. Change your mind and abandon the project (`A`) to get
   the program back as ordinary staff instead of losing it; losing the Station itself does the same.
 - Picking a node also files its material bill as work orders, at the top of the queue, so the base makes the
   goods the same way it makes anything else. The project completes when it has the Research Data,

@@ -1540,6 +1540,10 @@ impl Game {
                     serviced,
                     output_stranded,
                     holds_output,
+                    holds_spent_program: self
+                        .world
+                        .get::<crate::components::StudyYield>(entity)
+                        .is_some_and(|held| held.0.is_some()),
                     hp_fraction,
                     level,
                     durability,

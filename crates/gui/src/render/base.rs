@@ -1537,6 +1537,11 @@ fn draw_surface_map(
             if structure.is_some_and(|ev| ev.unconfigured) {
                 draw_unconfigured_mark(painter, px, py, tile_px);
             }
+            // A Research Station still holding its last spent subject: an
+            // `x` in the top-left quarter until a body carries it away.
+            if structure.is_some_and(|ev| ev.holds_spent_program) {
+                draw_spent_program_mark(painter, px, py, tile_px);
+            }
             // How far along the work on this cell is — see
             // `EntityView::job_progress`. **After the outline**, which is
             // drawn along `tile_px - 1.0` and two pixels thick: painted
@@ -1881,6 +1886,20 @@ fn draw_unconfigured_mark(painter: &Painter, px: f32, py: f32, tile_px: f32) {
     );
 }
 
+fn draw_spent_program_mark(painter: &Painter, px: f32, py: f32, tile_px: f32) {
+    const INSET: f32 = 2.0;
+    let glyph = "x";
+    let size = ((tile_px / 2.0) as u16).max(1);
+    let dims = painter.measure_map(glyph, size);
+    painter.map(
+        glyph,
+        px + INSET,
+        py + INSET + dims.height,
+        size,
+        hud::palette::ATTENTION,
+    );
+}
+
 /// A plot tile's outline: quiet, so a field reads as ground set aside and
 /// not as a plan or a wall.
 const PLOT_EDGE: Color = Color::new(0.20, 0.42, 0.22, 1.0);
@@ -2173,6 +2192,7 @@ mod tests {
             shelf_fill: None,
             output_stranded: false,
             holds_output: false,
+            holds_spent_program: false,
             hp_fraction: None,
             level: None,
             durability: None,

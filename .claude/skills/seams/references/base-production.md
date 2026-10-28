@@ -570,8 +570,11 @@
   `Carrying`; the two destruction paths **put the carrier back** rather than
   adding it to the dropped tuple — `Game::return_carried_program`, which is
   `Game::shelter_program`'s chain: first rack with room in `(x, y)` order,
-  then the Research Station's empty slot, then the floor through
-  `Game::set_down`. The player's store is deliberately not in it (research
+  then the first free stockpile cell, then the floor through
+  `Game::set_down`. The station slot left the chain when a discovery began
+  spending the subject: a full slot now holds the next spend, so sheltering
+  into it would stall study. It stays only as `put_carried_program_back`'s
+  holding place for an errand that reached nothing. The player's store is deliberately not in it (research
   never uses the pack) and there is no "lost" rung: a claimed rack's room can
   shrink under the claim — a demolition, a rig fetcher's kill sheltered onto
   a rack, `stow_program`'s overflow (the player's own put is refused) — so

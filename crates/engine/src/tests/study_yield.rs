@@ -970,3 +970,27 @@ fn a_full_slot_holds_the_study_bar_and_draws_no_rng() {
         "the attempt is banked, not spent"
     );
 }
+
+#[test]
+fn the_map_marks_a_station_holding_a_spent_program() {
+    let (mut game, station, _rack) = base_with_station_and_rack();
+    let at = *game.world.get::<Position>(station).unwrap();
+    game.world
+        .insert_resource(crate::resources::Locale::Base { x: 0, y: 0 });
+    // The fixture spawns no glyph, and the map views only what it draws.
+    game.world
+        .entity_mut(station)
+        .insert(crate::components::Glyph {
+            ch: 'R',
+            color: crate::components::GlyphColor::White,
+        });
+    let marked = |game: &mut Game| {
+        game.view_entities_at((at.x, at.y), 4, 4)
+            .into_iter()
+            .find(|v| v.entity == station)
+            .map(|v| v.holds_spent_program)
+    };
+    assert_eq!(marked(&mut game), Some(false));
+    hold(&mut game, station, 7);
+    assert_eq!(marked(&mut game), Some(true));
+}

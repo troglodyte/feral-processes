@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.23
+
+**Compile at a Workbench now makes any missing parts for you.** You no longer craft each part by hand before building a routine: Compile uses the parts you hold and makes the rest from blank Routine Disks and materials. Nothing is used up unless the whole routine can be built.
+
+**The Build routine preview lists the materials Compile will use.** Each line shows what you have against what you need, green when you have enough and red when you do not. A missing part you have not researched is listed in red too, since it can only be found, not made.
+
+**The part list shows what making each part costs.** A part you have researched shows its cost beside how many you hold: one disk and some of one material.
+
+**The Workbench's Subroutines page is gone.** Compile does its job now, so the Workbench has Compile, Build routine and Built routines.
+
 ## 0.20.22
 
 **A discovery now spends the program you pinned to the Research Station.** Studying used to roll against the same program for ever. Now, when a study turns up a new research node, the pinned program is used up the same way a finished project uses it up. A miss still spends only the attempt. Pin another program to keep studying.

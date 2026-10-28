@@ -1,9 +1,9 @@
-//! The Workbench's weapon-crafting pages (ADR 0031): the Forge, New design,
-//! Weapon parts and Salvage, plus the two popups the new-design page opens.
+//! The Workbench's weapon-crafting pages (ADR 0031): the Forge, New design
+//! and Salvage, plus the two popups the new-design page opens.
 //!
 //! Every figure is a view off the engine (`Game::design_rows`,
 //! `design_slot_rows`, `design_part_options`, `design_preview`,
-//! `weapon_part_rows`, `salvage_rows`) and every refusal is worded by
+//! `design_bill`, `salvage_rows`) and every refusal is worded by
 //! app-core, so this file only lays them out. Rows are returned rather than
 //! drawn so the structure hub frames them like any other page.
 
@@ -16,7 +16,7 @@ use feral_processes_app_core::{
     design_pick_visible, design_row_category, gear_craft_refusal_line,
 };
 use feral_processes_engine::gear_craft::GearCraftRefusal;
-use feral_processes_engine::views::DesignPreview;
+use feral_processes_engine::views::{DesignPreview, MaterialLine};
 
 /// The Forge: every saved design, Enter builds one and `D` deletes it.
 pub(super) fn forge_page_rows(game: &Game, selected: usize) -> Vec<Row> {
@@ -37,11 +37,36 @@ pub(super) fn forge_page_rows(game: &Game, selected: usize) -> Vec<Row> {
         if let Some(why) = &design.blocked {
             rows.extend(dim_lines(&gear_craft_refusal_line(game, why)));
         }
+        if i == selected
+            && let Some(bill) = game.design_bill(design.id)
+        {
+            rows.extend(materials_rows(&bill.materials, &bill.uncraftable));
+        }
     }
     push_key_footer(
         &mut rows,
         &["Enter build a weapon", "[D] delete a design", "Esc back"],
     );
+    rows
+}
+
+/// What a build would spend, green where the stock in reach covers it, and
+/// the missing parts no craft can make.
+fn materials_rows(materials: &[MaterialLine], uncraftable: &[String]) -> Vec<Row> {
+    if materials.is_empty() && uncraftable.is_empty() {
+        return Vec::new();
+    }
+    let mut rows = vec![text_row("Materials")];
+    for line in materials {
+        let color = if line.have >= line.need { GREEN } else { RED };
+        rows.push(Row::TextColored(
+            format!("{} {}/{}", line.label, line.have, line.need),
+            color,
+        ));
+    }
+    for line in uncraftable {
+        rows.push(Row::TextColored(line.clone(), RED));
+    }
     rows
 }
 
@@ -76,6 +101,7 @@ fn preview_rows(game: &Game, preview: &DesignPreview) -> Vec<Row> {
     if let Some(why) = &preview.blocked {
         rows.extend(text_lines(&gear_craft_refusal_line(game, why)));
     }
+    rows.extend(materials_rows(&preview.materials, &preview.uncraftable));
     rows
 }
 
@@ -148,13 +174,17 @@ pub(super) fn pick_rows(
             let options = game.design_part_options(category, &draft.parts, draft.affixes.len());
             for (i, &src) in visible.iter().enumerate() {
                 let option = &options[src];
+                let craft = match &option.craft_cost {
+                    Some((material, n)) => format!("   {n} {material}"),
+                    None => String::new(),
+                };
                 let (note, color) = match (&option.unavailable, option.held) {
                     (Some(GearCraftRefusal::PartNotResearched(_)), _) => {
                         ("not researched".to_string(), TEXT_DIM)
                     }
                     (Some(_), _) => ("does not fit".to_string(), TEXT_DIM),
-                    (None, 0) => ("none held".to_string(), TEXT_DIM),
-                    (None, held) => (format!("{held} held"), TEXT),
+                    (None, 0) => (format!("none held{craft}"), TEXT_DIM),
+                    (None, held) => (format!("{held} held{craft}"), TEXT),
                 };
                 rows.push(annotated_item_row(
                     option.label.clone(),
@@ -228,34 +258,6 @@ pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
     ]
 }
 
-/// The Weapon parts page: every part, locked ones greyed.
-pub(super) fn parts_page_rows(game: &Game, selected: usize) -> Vec<Row> {
-    let mut rows = vec![text_row(
-        "Enter compiles a part from the material shown. Grey parts are not researched.",
-    )];
-    for (i, row) in game.weapon_part_rows().iter().enumerate() {
-        let (note, color) = if !row.known {
-            ("not researched".to_string(), TEXT_DIM)
-        } else {
-            let color = if row.affordable { TEXT } else { TEXT_DIM };
-            (
-                format!(
-                    "held {} · {} {}",
-                    row.held, row.material_count, row.material
-                ),
-                color,
-            )
-        };
-        rows.push(annotated_item_row(
-            format!("{} ({})", row.label, row.category.label()),
-            Some(note),
-            i == selected,
-            color,
-        ));
-    }
-    rows
-}
-
 /// The Salvage page: authored weapons in the pack.
 pub(super) fn salvage_page_rows(game: &Game, selected: usize) -> Vec<Row> {
     let salvage = game.salvage_rows();
@@ -323,8 +325,6 @@ mod tests {
     #[test]
     fn the_weapon_pages_fit_the_hub_content_rect() {
         let game = shipped_game();
-        let parts = parts_page_rows(&game, 0);
-        super::super::base_report::assert_rows_fit(&parts, "weapon parts");
         let design = new_design_page_rows(&game, &DesignDraft::default(), 0);
         super::super::base_report::assert_rows_fit(&design, "new design");
         for category in std::iter::once(Category::Frame).chain(Category::MODIFIERS) {
@@ -339,5 +339,30 @@ mod tests {
         super::super::base_report::assert_rows_fit(&forge, "forge");
         let salvage = salvage_page_rows(&game, 0);
         super::super::base_report::assert_rows_fit(&salvage, "salvage");
+    }
+
+    #[test]
+    fn materials_rows_colour_covered_and_short_lines_and_list_uncraftable() {
+        let line = |label: &str, have, need| MaterialLine {
+            label: label.to_string(),
+            have,
+            need,
+        };
+        let rows = materials_rows(
+            &[line("Scrap", 6, 6), line("Core fragment", 1, 3)],
+            &["Venom proc \u{2014} salvage a weapon first".to_string()],
+        );
+        let colored: Vec<(&str, _)> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::TextColored(t, c) => Some((t.as_str(), *c)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(colored[0], ("Scrap 6/6", GREEN));
+        assert_eq!(colored[1], ("Core fragment 1/3", RED));
+        assert_eq!(colored[2].1, RED);
+        assert!(colored[2].0.contains("salvage"));
+        assert!(materials_rows(&[], &[]).is_empty());
     }
 }

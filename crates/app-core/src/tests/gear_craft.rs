@@ -86,7 +86,6 @@ fn a_workbench_hub_has_the_forge_pages_only_once_weapon_bench_is_researched() {
     for page in [
         StructurePage::Forge,
         StructurePage::NewDesign,
-        StructurePage::WeaponParts,
         StructurePage::Salvage,
     ] {
         assert!(pages.contains(&page), "{page:?} in {pages:?}");
@@ -182,20 +181,35 @@ fn changing_the_frame_drops_a_modifier_the_new_frame_refuses() {
 }
 
 #[test]
-fn the_parts_page_crafts_a_known_part_and_refuses_an_unresearched_one() {
+fn the_workbench_has_no_weapon_parts_page() {
     let mut app = forge_app(81_008);
-    open_page(&mut app, Mode::WeaponParts);
-    let rows = app.game.as_ref().unwrap().weapon_part_rows();
-    let locked = rows.iter().position(|r| !r.known).unwrap();
-    pick_row(&mut app, locked);
-    let line = app.status_line.clone().unwrap();
-    assert!(line.ends_with("isn't researched yet."), "{line}");
+    app.handle_key(GameKey::Char('c'));
+    let pages = &app.structure_hub.as_ref().unwrap().current().pages;
+    assert!(
+        pages.iter().all(|p| format!("{p:?}") != "WeaponParts"),
+        "{pages:?}"
+    );
+}
 
-    let at = rows.iter().position(|r| r.part == edge()).unwrap();
-    assert!(rows[at].affordable, "{:?}", rows[at]);
-    pick_row(&mut app, at);
-    assert!(app.status_line.is_none(), "{:?}", app.status_line);
-    assert_eq!(app.game.as_ref().unwrap().weapon_parts_held(edge()), 1);
+#[test]
+fn the_forge_crafts_the_missing_parts_from_materials() {
+    let mut app = forge_app(81_012);
+    let game = app.game.as_mut().unwrap();
+    game.create_design("Plain", vec![GearPart::Weapon(edge())])
+        .unwrap();
+    let id = game.design_rows()[0].id;
+    let (frame, version) = game.gear_designs().remove(0).frame().unwrap();
+    let (item, count) = feral_processes_engine::gear_craft::weapon::frame_bill(frame, version);
+    game.dev_give_item(&item, count).unwrap();
+    let (item, count) = feral_processes_engine::gear_craft::weapon::part_bill(edge());
+    game.dev_give_item(&item, count).unwrap();
+    assert_eq!(game.weapon_parts_held(edge()), 0);
+    open_page(&mut app, Mode::Forge);
+    pick_row(&mut app, 0);
+    assert_eq!(app.status_line, None);
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(game.design_holder(id), Some(DesignHolder::Pack));
+    assert_eq!(game.weapon_parts_held(edge()), 0);
 }
 
 #[test]

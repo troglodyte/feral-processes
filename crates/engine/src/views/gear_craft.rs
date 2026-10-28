@@ -89,22 +89,6 @@ pub struct DesignBill {
     pub uncraftable: Vec<String>,
 }
 
-/// One row of the Weapon parts list.
-#[derive(Clone, Debug, PartialEq)]
-pub struct WeaponPartRow {
-    pub part: WeaponPart,
-    pub label: String,
-    pub category: Category,
-    pub held: u32,
-    /// The material a craft spends and how many.
-    pub material: String,
-    pub material_count: u32,
-    /// Whether the player has the material in reach.
-    pub affordable: bool,
-    /// Whether the part's research is done; a locked part is listed, greyed.
-    pub known: bool,
-}
-
 /// One row of the Salvage page: a pack copy that can be taken apart.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SalvageRow {

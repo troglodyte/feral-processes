@@ -388,18 +388,6 @@ impl App {
         }
     }
 
-    pub(crate) fn handle_weapon_parts_key(&mut self, key: GameKey) {
-        let Some(game) = &self.game else { return };
-        let rows = game.weapon_part_rows();
-        let Some(idx) = self.selected_index(key, rows.len()) else {
-            return;
-        };
-        let part = rows[idx].part;
-        let Some(game) = &mut self.game else { return };
-        let outcome = game.craft_weapon_part(part);
-        self.report_craft(outcome);
-    }
-
     pub(crate) fn handle_weapon_salvage_key(&mut self, key: GameKey) {
         let Some(game) = &self.game else { return };
         let rows = game.salvage_rows();

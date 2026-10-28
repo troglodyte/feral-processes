@@ -671,24 +671,6 @@ fn the_slot_rows_name_what_fills_each_category() {
     );
 }
 
-#[test]
-fn the_part_rows_list_every_part_locked_until_researched() {
-    let mut game = bench_game(71_043);
-    let rows = game.weapon_part_rows();
-    assert_eq!(rows.len(), WeaponPart::all().len());
-    assert!(rows.iter().all(|r| !r.known));
-    know(&mut game, WeaponPart::Extend);
-    give(&mut game, &ItemId::weapon_part(WeaponPart::Extend), 2);
-    let row = game
-        .weapon_part_rows()
-        .into_iter()
-        .find(|r| r.part == WeaponPart::Extend)
-        .unwrap();
-    assert!(row.known);
-    assert_eq!(row.held, 2);
-    assert_eq!(row.material_count, crate::tuning::GEAR_MODIFIER_PART_COST);
-}
-
 // ---------------------------------------------------------------------------
 // Phase 3: salvage
 // ---------------------------------------------------------------------------

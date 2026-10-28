@@ -21,7 +21,7 @@ use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
 use crate::tuning::{GEAR_PART_CAP_MAX, GEAR_PART_CAP_START};
 use crate::views::{
     DesignAffixOption, DesignBill, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow,
-    MaterialLine, SalvageRow, WeaponPartRow,
+    MaterialLine, SalvageRow,
 };
 use crate::*;
 
@@ -109,22 +109,6 @@ impl Game {
         // Checked above, so the payment cannot find a line short.
         self.pay_from_reach(bill)
             .expect("the whole bill was checked against reach");
-        Ok(())
-    }
-
-    /// Crafts one `part` at the Workbench for its material bill.
-    pub fn craft_weapon_part(&mut self, part: WeaponPart) -> Result<(), GearCraftRefusal> {
-        self.require_forge_free()?;
-        if matches!(part, WeaponPart::Proc(_)) {
-            return Err(GearCraftRefusal::SalvageOnly(part));
-        }
-        if !self.weapon_part_known(part) {
-            return Err(GearCraftRefusal::PartNotResearched(part));
-        }
-        let bill = gear_craft::weapon::part_bill(part);
-        self.pay_gear_bill(std::slice::from_ref(&bill))?;
-        self.grant_loot(ItemId::weapon_part(part), 1, LootSource::Craft);
-        self.log(format!("You compile a {} part.", part.label()));
         Ok(())
     }
 
@@ -584,27 +568,6 @@ impl Game {
                     parts: parts.iter().map(|p| p.label()).collect(),
                     copy: row.copy,
                 })
-            })
-            .collect()
-    }
-
-    /// The Weapon parts page: every part, locked ones greyed, with what is
-    /// held and what a craft costs.
-    pub fn weapon_part_rows(&self) -> Vec<WeaponPartRow> {
-        WeaponPart::all()
-            .into_iter()
-            .map(|part| {
-                let (material, material_count) = gear_craft::weapon::part_bill(part);
-                WeaponPartRow {
-                    label: part.label(),
-                    category: part.category(),
-                    held: self.weapon_parts_held(part),
-                    material: self.item_name(&material).to_string(),
-                    material_count,
-                    affordable: self.held_in_reach(&material) >= material_count,
-                    known: self.weapon_part_known(part),
-                    part,
-                }
             })
             .collect()
     }

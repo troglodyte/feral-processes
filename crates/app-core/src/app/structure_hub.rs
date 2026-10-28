@@ -59,10 +59,6 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "New design",
             screens: &[Mode::NewDesign],
         },
-        StructurePage::WeaponParts => &HubPage {
-            title: "Weapon parts",
-            screens: &[Mode::WeaponParts],
-        },
         StructurePage::Salvage => &HubPage {
             title: "Salvage",
             screens: &[Mode::WeaponSalvage],
@@ -241,7 +237,6 @@ impl App {
             StructurePage::Build => self.mode = Mode::RoutineBuild,
             StructurePage::Forge => self.mode = Mode::Forge,
             StructurePage::NewDesign => self.mode = Mode::NewDesign,
-            StructurePage::WeaponParts => self.mode = Mode::WeaponParts,
             StructurePage::Salvage => self.mode = Mode::WeaponSalvage,
             StructurePage::Compile => self.mode = Mode::Craft,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,

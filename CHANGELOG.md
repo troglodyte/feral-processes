@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.20
+
+**A program pinned in a Research Station's pen is now studied by someone without you picking a project or posting a worker by hand.** With no project selected, the station's data goes toward studying the pinned program, but nobody was ever sent to work the station, so the study sat still. Now one free program is posted to the station holding the pin for as long as a study could still turn up something new.
+
 ## 0.20.19
 
 **The message log no longer fills with base chatter: machines starting, stopping, idling or stalling, every extraction cycle (yours or a posted program's), and every crop harvest.** These came in by the thousand over a session and buried the lines that needed you. A stalled machine still appears on the alert board (`N`) the moment it stalls, which is where you act on it; level-ups from base work still appear in the log.

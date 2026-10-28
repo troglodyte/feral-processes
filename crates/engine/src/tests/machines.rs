@@ -803,6 +803,7 @@ fn an_unset_machine_reads_as_its_kind_and_is_flagged() {
         .unwrap();
     assert_eq!(view.label, "Factory");
     assert!(view.unconfigured);
+    assert_eq!(view.making, None);
     set_recipe_researched(&mut game, factory, "bytecode_block").unwrap();
     let view = game
         .view_entities(60, 60)
@@ -811,6 +812,26 @@ fn an_unset_machine_reads_as_its_kind_and_is_flagged() {
         .unwrap();
     assert_eq!(view.label, "Factory (Bytecode Block)");
     assert!(!view.unconfigured);
+    assert_eq!(view.making.as_deref(), Some("Bytecode Block"));
+}
+
+#[test]
+fn a_fixed_extractor_is_making_its_work_output_and_a_depot_nothing() {
+    let mut game = bare_game();
+    let mut spawn = |kind: &str, x| {
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == kind)
+            .unwrap();
+        game.spawn_structure(&def, x, 40, None)
+    };
+    let node = spawn("research_node", 40);
+    let depot = spawn("depot", 44);
+    let views = game.view_entities(60, 60);
+    let making = |e| views.iter().find(|v| v.entity == e).unwrap().making.clone();
+    assert_eq!(making(node).as_deref(), Some("Research Data"));
+    assert_eq!(making(depot), None);
 }
 
 #[test]

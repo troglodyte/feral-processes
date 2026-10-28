@@ -2153,6 +2153,7 @@ mod tests {
     fn patient_view(recovering: bool) -> EntityView {
         EntityView {
             unconfigured: false,
+            making: None,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'd',
@@ -6614,6 +6615,7 @@ mod tests {
             pos: (0, 0),
             plot: feral_processes_engine::Entity::PLACEHOLDER,
             crop: Some(("+".to_string(), GlyphColor::Yellow)),
+            crop_name: Some("Power Cell".to_string()),
             state,
         };
         let pane = Rect::new(0.0, 0.0, 100.0, 100.0);
@@ -6682,6 +6684,7 @@ mod tests {
             pos: (0, 0),
             plot: feral_processes_engine::Entity::PLACEHOLDER,
             crop: Some(("+".to_string(), GlyphColor::Yellow)),
+            crop_name: Some("Power Cell".to_string()),
             state: FarmTileState::Ripe,
         };
         let occupied = std::collections::HashSet::from([(0, 0)]);

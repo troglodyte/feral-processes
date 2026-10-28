@@ -353,6 +353,7 @@ impl Game {
                     pos: (p.x, p.y),
                     plot: tile.plot,
                     crop: def.map(|d| (d.glyph.clone(), d.color)),
+                    crop_name: def.map(|d| d.name.clone()),
                     state,
                 }
             })

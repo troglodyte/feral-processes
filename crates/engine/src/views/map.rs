@@ -4,6 +4,10 @@ use super::*;
 pub struct EntityView {
     /// A configurable machine standing with nothing set to make.
     pub unconfigured: bool,
+    /// The display name of what this structure makes — a set machine's
+    /// recipe item or a fixed extractor's `work` output — for the base
+    /// map's Alt labels. `None` for an unset machine and every non-producer.
+    pub making: Option<String>,
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,
@@ -381,6 +385,8 @@ pub struct FarmTileView {
     pub plot: Entity,
     /// The recipe's glyph and colour; `None` when the plot is unsown.
     pub crop: Option<(String, GlyphColor)>,
+    /// The sown crop's display name, for the Alt labels; `None` when unsown.
+    pub crop_name: Option<String>,
     pub state: FarmTileState,
 }
 

@@ -2145,6 +2145,7 @@ mod tests {
     pub(super) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         EntityView {
             unconfigured: false,
+            making: None,
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'n',

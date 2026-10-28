@@ -936,8 +936,9 @@ fn frame(
     }
     // Not during a fight in the base: battle cues want the room to
     // themselves. Nor over a death in it, which keeps `base_pos` until the
-    // game-over screen is dismissed.
-    let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver;
+    // game-over screen is dismissed. Nor while paused: the machines it
+    // stands for are stopped too, and this also silences the drone.
+    let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver && !fe.app.paused;
     if let Some(blip) = fe.ambience.tick(now, ambient) {
         sounds.play_blip(&mut commands, blip, volume * ambience::BLIP_MIX);
     }

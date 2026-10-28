@@ -153,6 +153,10 @@ pub enum StructureCategory {
     /// Consumes its neighbours' output, given a program — see
     /// `MachineRole::Assemble`.
     Assembler,
+    /// Holds a program under study — see `StructureDef::studies`. Its own
+    /// group although it also produces Research Data, because what the
+    /// player builds it for is the study, not the output.
+    Research,
     Utility,
     /// Keeps programs running: refills a need, heals the downed, or adds
     /// roster slots.
@@ -1099,6 +1103,10 @@ impl StructureDef {
         if self.id == crate::HOME_STRUCTURE_ID {
             return StructureCategory::Home;
         }
+        // Ahead of `work`, which the Research Station also declares.
+        if self.studies {
+            return StructureCategory::Research;
+        }
         if self.work.is_some() {
             return StructureCategory::Extractor;
         }
@@ -1109,7 +1117,7 @@ impl StructureDef {
             };
         }
         // A rig consumes something and pays items out, given a program —
-        // which is what `Assembler` means here. Deliberately not an eighth
+        // which is what `Assembler` means here. Deliberately not a ninth
         // `StructureCategory`: the variant is a build-menu grouping, and a
         // new one is a group every menu has to learn to draw.
         if self.strips.is_some() {
@@ -1475,6 +1483,15 @@ mod tests {
             let def = db.get(id).expect("shipped structure should load");
             assert_eq!(def.category(), StructureCategory::EntityHealth, "{id}");
         }
+    }
+
+    #[test]
+    fn the_research_station_files_under_research_not_extractors() {
+        let db = test_db();
+        let def = db
+            .get("research_node")
+            .expect("shipped structure should load");
+        assert_eq!(def.category(), StructureCategory::Research);
     }
 
     /// An amenity declares what it refills, and the block round-trips.

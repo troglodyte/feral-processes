@@ -1,15 +1,14 @@
-//! The Workbench's routine-crafting pages (ADR 0029): Build routine,
-//! Subroutines and Built routines, plus the two popups the build page opens.
+//! The Workbench's routine-crafting pages (ADR 0029): Build routine and
+//! Built routines, plus the two popups the build page opens.
 //!
 //! Every figure is a view off the engine (`Game::build_rows`,
-//! `build_part_options`, `build_preview`, `subroutine_rows`,
-//! `built_routine_rows`); this file only lays them out. Rows are returned
-//! rather than drawn so the structure hub frames them like any other page.
+//! `build_part_options`, `build_preview`, `built_routine_rows`); this file
+//! only lays them out. Rows are returned rather than drawn so the structure
+//! hub frames them like any other page.
 
-use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::{RoutineDraft, subroutines_visible};
+use feral_processes_app_core::RoutineDraft;
 use feral_processes_engine::routine_craft::Subroutine;
 use feral_processes_engine::views::BuildPreview;
 
@@ -85,8 +84,29 @@ fn preview_rows(preview: &BuildPreview) -> Vec<Row> {
             count_label(&preview.parts_missing)
         )));
     }
+    rows.extend(material_rows(preview));
     if let Some(why) = &preview.blocked {
         rows.extend(text_lines(why));
+    }
+    rows
+}
+
+/// What Compile would craft the missing parts from, green where the stock in
+/// reach covers it, and the missing parts no craft can make.
+fn material_rows(preview: &BuildPreview) -> Vec<Row> {
+    if preview.materials.is_empty() && preview.unresearched.is_empty() {
+        return Vec::new();
+    }
+    let mut rows = vec![text_row("Materials")];
+    for line in &preview.materials {
+        let color = if line.have >= line.need { GREEN } else { RED };
+        rows.push(Row::TextColored(
+            format!("{} {}/{}", line.label, line.have, line.need),
+            color,
+        ));
+    }
+    for label in &preview.unresearched {
+        rows.push(Row::TextColored(format!("{label} — research first"), RED));
     }
     rows
 }
@@ -152,10 +172,14 @@ pub(super) fn pick_rows(game: &Game, draft: &RoutineDraft, selected: usize) -> V
     let options = game.build_part_options(slot, &draft.parts);
     let mut rows = vec![text_row(format!("Choose a part for {slot}."))];
     for (i, option) in options.iter().enumerate() {
+        let craft = match &option.craft_cost {
+            Some((material, n)) => format!("   1 disk + {n} {}", game.item_name(material)),
+            None => String::new(),
+        };
         let (note, color) = if option.held > 0 {
-            (format!("{} held", option.held), TEXT)
+            (format!("{} held{craft}", option.held), TEXT)
         } else {
-            ("none held".to_string(), TEXT_DIM)
+            (format!("none held{craft}"), TEXT_DIM)
         };
         rows.push(annotated_item_row(
             option.label.clone(),
@@ -181,32 +205,6 @@ pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
         text_row(""),
         text_row(key_hints(&["Type a name", "Enter or Esc finish"])),
     ]
-}
-
-/// The Subroutines page: every researched part, crafted with Enter, filtered by typing.
-pub(super) fn subroutine_page_rows(game: &Game, filter: &str, selected: usize) -> Vec<Row> {
-    let all = game.subroutine_rows();
-    let mut rows = vec![text_row(
-        "Type to filter. Enter compiles one for a Routine Disk and the material shown.",
-    )];
-    rows.extend(filter_line(filter));
-    let visible = subroutines_visible(game, filter);
-    if visible.is_empty() && !filter.is_empty() {
-        rows.push(no_match_row(filter));
-    }
-    for (i, row) in visible.iter().map(|&src| &all[src]).enumerate() {
-        let note = format!(
-            "held {} · 1 Routine Disk + {} {}",
-            row.held, row.material_count, row.material
-        );
-        rows.push(annotated_item_row(
-            format!("{} ({})", row.label, row.slot),
-            Some(note),
-            i == selected,
-            TEXT,
-        ));
-    }
-    rows
 }
 
 /// The Built routines page: routines waiting for a slot.

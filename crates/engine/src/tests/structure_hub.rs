@@ -125,12 +125,12 @@ fn nothing_is_offered_in_a_battle_or_outside_the_base() {
 }
 
 #[test]
-fn a_workbench_offers_build_subroutines_built_compile_then_info() {
+fn a_workbench_offers_build_built_compile_then_info() {
     let mut game = fresh();
     stand_an_extraction_bench(&mut game, 1, 0);
     assert_eq!(
         game.adjacent_structures()[0].pages,
-        vec![Build, Subroutines, Built, Compile, Info]
+        vec![Build, Built, Compile, Info]
     );
 }
 
@@ -143,7 +143,6 @@ fn a_workbench_adds_the_forge_pages_once_weapon_bench_is_researched() {
         game.adjacent_structures()[0].pages,
         vec![
             Build,
-            Subroutines,
             Built,
             Forge,
             NewDesign,

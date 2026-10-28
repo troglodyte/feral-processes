@@ -297,7 +297,6 @@ impl App {
             Mode::RoutineBuild => self.handle_routine_build_key(key),
             Mode::RoutineBuildPick => self.handle_routine_build_pick_key(key),
             Mode::RoutineBuildName => self.handle_routine_build_name_key(key),
-            Mode::Subroutines => self.handle_subroutines_key(key),
             Mode::BuiltRoutines => self.handle_built_routines_key(key),
             Mode::Forge => self.handle_forge_key(key),
             Mode::NewDesign => self.handle_new_design_key(key),

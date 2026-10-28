@@ -1,5 +1,5 @@
 //! A bench pays out of the base's stores, not only the pack: the Workbench's
-//! Subroutines and Build pages, a bench recipe's compile, the Mod Bench,
+//! Build page, a bench recipe's compile, the Mod Bench,
 //! forging a tool and fitting a Teardown Rig all reach a Depot when the
 //! party stands in base space, base stock first. A no-bench recipe and
 //! anything done outside base space still pay from the pack alone.
@@ -73,7 +73,7 @@ fn at_the_workbench(seed: u32) -> Game {
 }
 
 #[test]
-fn crafting_a_part_pays_from_a_depot() {
+fn compiling_crafts_the_missing_part_from_a_depot() {
     let mut game = at_the_workbench(7101);
     let disk = ItemId::from(ids::ROUTINE_DISK);
     let (material, count) = crate::routine_craft::material(&heal());
@@ -84,11 +84,15 @@ fn crafting_a_part_pays_from_a_depot() {
         &[(disk.clone(), 2), (material.clone(), count)],
     );
 
-    game.craft_subroutine(heal()).unwrap();
+    game.build_routine("Mender", &[heal()]).unwrap();
 
     assert_eq!(shelf(&game, store, &disk), 1);
     assert_eq!(shelf(&game, store, &material), 0);
-    assert_eq!(game.parts_held(&heal()), 1);
+    assert_eq!(
+        game.parts_held(&heal()),
+        0,
+        "the crafted part went into the build"
+    );
 }
 
 #[test]
@@ -100,7 +104,7 @@ fn base_stock_is_spent_before_the_pack() {
     give(&mut game, &disk, 1);
     give(&mut game, &material, count);
 
-    game.craft_subroutine(heal()).unwrap();
+    game.build_routine("Mender", &[heal()]).unwrap();
 
     assert_eq!(shelf(&game, store, &disk), 0, "the Depot's disk goes first");
     assert_eq!(pack(&game, &disk), 1, "the carried disk stays carried");
@@ -141,7 +145,7 @@ fn a_depot_is_out_of_reach_outside_base_space() {
     game.world.insert_resource(Locale::Surface);
 
     assert_eq!(game.blank_disks_held(), 0);
-    assert!(game.craft_subroutine(heal()).is_err());
+    assert!(game.build_routine("Mender", &[heal()]).is_err());
     assert_eq!(shelf(&game, store, &disk), 1, "a refusal spends nothing");
 }
 

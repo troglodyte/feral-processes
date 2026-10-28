@@ -136,7 +136,7 @@ pub mod ids {
     /// against deciding what it is for instead.
     pub const ACCESS_SHARD: &str = "access_shard";
     /// Burnt to craft a Subroutine part — see
-    /// `Game::craft_subroutine`. Named from Rust for the same reason
+    /// `Game::build_routine`. Named from Rust for the same reason
     /// `ACCESS_SHARD` is: what crafting costs is engine content, not a
     /// data-driven requirement. The item, and the whole chain that makes it,
     /// are still ordinary `.ron` files.

@@ -16,7 +16,7 @@ use crate::routine_tree::{capacity_node_id, part_node_id};
 use crate::tuning::{
     CRAFT_ID_PREFIX, CRAFT_PART_CAP_MAX, CRAFT_PART_CAP_START, CRAFT_STARTER_NAME,
 };
-use crate::views::{BuildPreview, BuildSlotRow, BuiltRoutineRow, PartOption, SubroutineRow};
+use crate::views::{BuildPreview, BuildSlotRow, BuiltRoutineRow, MaterialLine, PartOption};
 use crate::*;
 
 impl Game {
@@ -51,51 +51,69 @@ impl Game {
         self.held_in_reach(&ItemId::from(ids::ROUTINE_DISK))
     }
 
-    /// Crafts one `part` at the Workbench for one Routine Disk and the
-    /// part's material (`routine_craft::material`).
-    pub fn craft_subroutine(&mut self, part: Subroutine) -> Result<(), String> {
-        self.require_workbench_free()?;
-        if !self.subroutine_known(&part) {
-            return Err("Research that part first.".into());
-        }
-        let disk = ItemId::from(ids::ROUTINE_DISK);
-        let (material, count) = routine_craft::material(&part);
-        let (disks, mats) = (self.held_in_reach(&disk), self.held_in_reach(&material));
-        if disks == 0 {
-            return Err(format!("You need a blank {}.", self.item_name(&disk)));
-        }
-        if mats < count {
-            return Err(format!(
-                "You need {count} {} (you have {mats}).",
-                self.item_name(&material)
-            ));
-        }
-        self.pay_from_reach(&[(disk, 1), (material, count)])?;
-        self.grant_loot(ItemId::part(&part), 1, LootSource::Craft);
-        self.log(format!("You compile a {} part.", part.label()));
-        Ok(())
-    }
-
-    /// Builds a routine named `name` from `parts`, spending the parts.
-    /// The routine waits unslotted (the Built routines page) until
+    /// Builds a routine named `name` from `parts`, spending the parts held
+    /// and crafting the rest from Routine Disks and materials, all or
+    /// nothing. The routine waits unslotted (the Built routines page) until
     /// `install_built` writes it into a slot.
     pub fn build_routine(&mut self, name: &str, parts: &[Subroutine]) -> Result<AbilityId, String> {
         self.require_workbench_free()?;
-        let cap = self.part_cap();
-        let (name, used) = routine_craft::plan_build(name, parts, cap, |p| self.parts_held(p))
-            .map_err(|e: PlanError| e.to_string())?;
-        let bill: Vec<_> = used
+        let plan = self
+            .plan_build(name, parts)
+            .map_err(|e| self.plan_refusal(&e))?;
+        self.pay_from_reach(&plan.needs.bill)?;
+        // Crafted parts pass through the pack so each is receipted as a
+        // craft, the way crafting one by hand was.
+        for (part, count) in &plan.needs.craft {
+            self.grant_loot(ItemId::part(part), *count, LootSource::Craft);
+        }
+        let bill: Vec<_> = routine_craft::parts_used(parts)
             .iter()
             .map(|(part, count)| (ItemId::part(part), *count))
             .collect();
         self.pay_from_reach(&bill)?;
-        let id = self.mint_built(&name, parts);
+        let id = self.mint_built(&plan.name, parts);
         self.world
             .resource_mut::<CraftedRoutines>()
             .unslotted
             .push(id.clone());
-        self.log(format!("You compile {name}."));
+        let crafted: u32 = plan.needs.craft.iter().map(|(_, n)| n).sum();
+        let name = &plan.name;
+        self.log(match crafted {
+            0 => format!("You compile {name}."),
+            1 => format!("You compile 1 missing part and build {name}."),
+            n => format!("You compile {n} missing parts and build {name}."),
+        });
         Ok(id)
+    }
+
+    /// `routine_craft::plan_build` over what is in reach now: the one
+    /// decision `build_routine` acts on and `build_preview` reports.
+    fn plan_build(
+        &self,
+        name: &str,
+        parts: &[Subroutine],
+    ) -> Result<routine_craft::BuildPlan, PlanError> {
+        routine_craft::plan_build(
+            name,
+            parts,
+            self.part_cap(),
+            |p| self.parts_held(p),
+            |p| self.subroutine_known(p),
+            |i| self.held_in_reach(i),
+        )
+    }
+
+    /// A refusal in the player's words: an item short is named, not keyed.
+    fn plan_refusal(&self, e: &PlanError) -> String {
+        match e {
+            PlanError::Short { item, have, need } => {
+                format!(
+                    "You need {need} {} (you have {have}).",
+                    self.item_name(item)
+                )
+            }
+            other => other.to_string(),
+        }
     }
 
     /// Writes the unslotted built routine `id` into `entity`'s next free
@@ -251,41 +269,33 @@ impl Game {
         let label = |list: Vec<(Subroutine, u32)>| -> Vec<(String, u32)> {
             list.into_iter().map(|(p, n)| (p.label(), n)).collect()
         };
-        let blocked = routine_craft::plan_build(name, parts, cap, |p| self.parts_held(p))
+        let blocked = self
+            .plan_build(name, parts)
             .err()
-            .map(|e| e.to_string())
+            .map(|e| self.plan_refusal(&e))
             .or_else(|| self.require_workbench_free().err());
+        let needs =
+            routine_craft::build_needs(parts, |p| self.parts_held(p), |p| self.subroutine_known(p));
         BuildPreview {
             description,
             power_cost,
             cooldown,
             parts_used: label(routine_craft::parts_used(parts)),
             parts_missing: label(routine_craft::parts_missing(parts, |p| self.parts_held(p))),
+            materials: needs
+                .bill
+                .iter()
+                .map(|(item, need)| MaterialLine {
+                    label: self.item_name(item).to_string(),
+                    have: self.held_in_reach(item),
+                    need: *need,
+                })
+                .collect(),
+            unresearched: needs.unresearched.iter().map(Subroutine::label).collect(),
             part_count: parts.len(),
             part_cap: cap,
             blocked,
         }
-    }
-
-    /// The Subroutines page: every researched part with its slot, how many
-    /// are held and what a craft costs. An unresearched part stays off the
-    /// list, held or not, so the page shows what research has taught.
-    pub fn subroutine_rows(&self) -> Vec<SubroutineRow> {
-        Subroutine::all()
-            .into_iter()
-            .filter(|part| self.subroutine_known(part))
-            .map(|part| {
-                let (material, material_count) = routine_craft::material(&part);
-                SubroutineRow {
-                    label: part.label(),
-                    slot: part.slot(),
-                    held: self.parts_held(&part),
-                    material: self.item_name(&material).to_string(),
-                    material_count,
-                    part,
-                }
-            })
-            .collect()
     }
 
     /// The Built routines page: routines waiting for a slot.

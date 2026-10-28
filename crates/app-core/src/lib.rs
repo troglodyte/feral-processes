@@ -47,7 +47,7 @@ pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
 pub use app::rig_tool::RigToolScreen;
 pub use app::routine_craft::{
-    BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft, subroutines_visible,
+    BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
@@ -1727,8 +1727,6 @@ pub enum Mode {
     RoutineBuildPick,
     /// Typing the routine's name.
     RoutineBuildName,
-    /// The Workbench's Subroutines page: craft a part. Type to filter.
-    Subroutines,
     /// The Workbench's Built routines page: routines waiting for a slot.
     BuiltRoutines,
     /// The Workbench's Forge page: the saved weapon designs. Enter builds
@@ -2521,7 +2519,6 @@ impl Mode {
             | Mode::RoutineBuild
             | Mode::RoutineBuildPick
             | Mode::RoutineBuildName
-            | Mode::Subroutines
             | Mode::BuiltRoutines
             | Mode::Forge
             | Mode::NewDesign

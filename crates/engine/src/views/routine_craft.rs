@@ -1,7 +1,7 @@
-//! What the Workbench's three routine-crafting pages draw (ADR 0029): the
-//! build page's slot rows, option lists and preview, the Subroutines list,
-//! and the Built routines list. Every figure is read off the engine, so a
-//! page can never promise a part the build would refuse.
+//! What the Workbench's routine-crafting pages draw (ADR 0029): the build
+//! page's slot rows, option lists and preview, and the Built routines list.
+//! Every figure is read off the engine, so a page can never promise a part
+//! the build would refuse.
 
 use crate::abilities::AbilityId;
 use crate::routine_craft::Subroutine;
@@ -26,6 +26,9 @@ pub struct PartOption {
     pub label: String,
     /// How many of this part the player holds.
     pub held: u32,
+    /// The material crafting one costs beside a Routine Disk, and how many;
+    /// `None` when it is not researched and so cannot be crafted.
+    pub craft_cost: Option<(crate::items::ItemId, u32)>,
 }
 
 /// The live preview under the build rows: what the build reads as, costs,
@@ -43,6 +46,11 @@ pub struct BuildPreview {
     pub parts_used: Vec<(String, u32)>,
     /// Parts it needs and the player lacks, with how many short.
     pub parts_missing: Vec<(String, u32)>,
+    /// What Compile spends crafting the missing parts, Routine Disk first;
+    /// empty when every part is held.
+    pub materials: Vec<MaterialLine>,
+    /// Missing parts that cannot be crafted until researched, labelled.
+    pub unresearched: Vec<String>,
     /// Parts in the build and the most a routine may hold now.
     pub part_count: usize,
     pub part_cap: usize,
@@ -50,18 +58,13 @@ pub struct BuildPreview {
     pub blocked: Option<String>,
 }
 
-/// One row of the Subroutines list.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SubroutineRow {
-    pub part: Subroutine,
-    /// "Heal v2.0", "Range: Near".
+/// One line of the build preview's materials: an item, how many are in
+/// reach and how many crafting the missing parts takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MaterialLine {
     pub label: String,
-    /// Which build row it fills.
-    pub slot: &'static str,
-    pub held: u32,
-    /// The material a craft spends beside a Routine Disk, and how many.
-    pub material: String,
-    pub material_count: u32,
+    pub have: u32,
+    pub need: u32,
 }
 
 /// One row of the Built routines list: a routine waiting for a slot.

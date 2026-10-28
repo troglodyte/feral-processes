@@ -1,12 +1,11 @@
-//! The Workbench's three routine-crafting pages (ADR 0029): Build routine,
-//! Subroutines and Built routines.
+//! The Workbench's two routine-crafting pages (ADR 0029): Build routine and
+//! Built routines.
 //!
 //! The build page keeps a draft (`RoutineDraft`) on `App`; every figure it
 //! shows comes from `Game::build_rows` / `build_part_options` /
 //! `build_preview`, and Compile calls `Game::build_routine`, so the screen
 //! cannot promise what the engine would refuse.
 
-use crate::app::list_filter::filter_matches;
 use crate::*;
 use feral_processes_engine::routine_craft::Subroutine;
 
@@ -29,16 +28,6 @@ pub struct RoutineDraft {
     pub picking: Option<&'static str>,
     /// The build row to put the highlight back on after a pick or a name.
     pub row: usize,
-}
-
-/// Indices into `Game::subroutine_rows` that `filter` leaves, by label.
-pub fn subroutines_visible(game: &Game, filter: &str) -> Vec<usize> {
-    let labels: Vec<String> = game
-        .subroutine_rows()
-        .into_iter()
-        .map(|r| r.label)
-        .collect();
-    filter_matches(labels.iter().map(String::as_str), filter)
 }
 
 impl App {
@@ -174,21 +163,6 @@ impl App {
             }
             _ => {}
         }
-    }
-
-    pub(crate) fn handle_subroutines_key(&mut self, key: GameKey) {
-        if self.take_filter_key(key) {
-            return;
-        }
-        let Some(game) = &self.game else { return };
-        let visible = subroutines_visible(game, self.filter_text());
-        let Some(pos) = self.selected_index(key, visible.len()) else {
-            return;
-        };
-        let Some(game) = &mut self.game else { return };
-        let part = game.subroutine_rows()[visible[pos]].part;
-        let outcome = game.craft_subroutine(part);
-        self.report(outcome);
     }
 
     pub(crate) fn handle_built_routines_key(&mut self, key: GameKey) {

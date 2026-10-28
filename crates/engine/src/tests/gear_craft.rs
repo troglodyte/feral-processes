@@ -628,6 +628,18 @@ fn the_designs_list_and_the_preview_quote_the_same_numbers() {
 }
 
 #[test]
+fn a_preview_holding_more_of_a_part_than_it_needs_lists_nothing_missing() {
+    let mut game = bench_game(71_042);
+    give(&mut game, &ItemId::weapon_part(edge()), 3);
+    let preview = game.design_preview("Spare", &parts(&[edge()]));
+    assert!(
+        preview.parts_missing.is_empty(),
+        "{:?}",
+        preview.parts_missing
+    );
+}
+
+#[test]
 fn a_part_that_does_not_fit_is_greyed_with_the_reason() {
     let mut game = bench_game(71_041);
     know(&mut game, edge());

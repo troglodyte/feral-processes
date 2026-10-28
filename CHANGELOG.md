@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.25
+
+**Holding Alt in the base now shows what each machine makes.** Every machine that is set to a recipe, every extractor and the Research Node gets a label with its product's name, and every sown farm plot gets one with its crop's name. An unset machine and a Depot get none.
+
+**Labels never overlap.** Room names and machine labels are placed together. A machine label sits beside its machine when there is space, and is otherwise moved a few tiles away with a thin line back to the machine. A room name can move to another row of its room instead of disappearing when its usual row is too narrow.
+
 ## 0.20.24
 
 **Forge at a Workbench now makes any missing weapon parts for you.** You no longer craft each part by hand before building a weapon: Forge uses the parts you hold and makes the rest from materials. Nothing is used up unless the whole weapon can be built.

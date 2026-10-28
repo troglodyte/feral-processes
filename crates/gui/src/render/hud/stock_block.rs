@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn a_long_stall_reason_wraps_whole_rather_than_being_cut() {
         let m = ui_metrics(900.0);
-        let short_of = "crew to carry the last program to a rack";
+        let short_of = "crew to carry the last program away";
         let research = ResearchReadout::Stalled {
             name: "Outpost Founding".to_string(),
             short_of: short_of.to_string(),

@@ -3078,13 +3078,10 @@ fn completing_a_subject_gated_project_destroys_the_subjects_built_routines() {
     );
 }
 
-/// No rack room refuses the conversion, and that refusal blocks the whole
-/// completion — reported the way a material shortfall is, through
-/// `Game::research_material_shortfall` — rather than eating the body and
-/// discovering afterward that the program has nowhere to go. A full pack is
-/// irrelevant now: research never uses it.
+/// With no rack at all a subject-gated completion still goes through: the
+/// spent program waits at the station and is set down beside it.
 #[test]
-fn no_rack_room_blocks_a_subject_gated_completion() {
+fn no_rack_does_not_block_a_subject_gated_completion() {
     let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
@@ -3092,42 +3089,16 @@ fn no_rack_room_blocks_a_subject_gated_completion() {
     pin_subject_at_pen(&mut game, program, node);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
-    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    shelve_research_bill(&mut game, "paging", 8, 8);
     fill_research_progress(&mut game, "paging");
-    let cost = game
-        .world
-        .resource::<ResearchDb>()
-        .get("paging")
-        .unwrap()
-        .cost;
-    assert_eq!(
-        game.research_material_shortfall(),
-        Some("room on a Quarantine Rack".to_string()),
-        "no rack at all must be reported before the bill is even considered"
-    );
+    assert_eq!(game.research_material_shortfall(), None);
 
     game.tick();
 
+    assert!(game.is_researched("paging"));
     assert!(
-        !game.is_researched("paging"),
-        "no rack room must block completion"
-    );
-    assert!(
-        game.world
-            .get::<crate::components::UnderStudy>(program)
-            .is_some(),
-        "the subject must still be pinned — nothing was spent"
-    );
-    assert_eq!(
-        research_progress(&game, "paging"),
-        cost,
-        "the progress must be intact"
-    );
-    assert_eq!(
-        node_output(&game, shelf, ids::BYTECODE_BLOCK),
-        stocked,
-        "the materials must be intact too"
+        game.world.get_entity(program).is_err(),
+        "the subject is spent"
     );
 }
 
@@ -3509,6 +3480,7 @@ fn a_study_never_discovers_outside_the_eligible_pool() {
             .resource_mut::<crate::resources::ActiveResearch>()
             .study = crate::tuning::STUDY_ATTEMPT_DATA;
         game.settle_study();
+        repin_after_a_find(&mut game, node);
     }
 
     let found: Vec<String> = game
@@ -3535,6 +3507,19 @@ fn a_study_never_discovers_outside_the_eligible_pool() {
             );
         }
     }
+}
+
+/// A find spends the subject: clear the slot and pin a fresh one, so a
+/// forced-attempt loop keeps rolling.
+fn repin_after_a_find(game: &mut Game, node: Entity) {
+    if game.pinned_subject().is_some() {
+        return;
+    }
+    if let Some(mut slot) = game.world.get_mut::<crate::components::StudyYield>(node) {
+        slot.0 = None;
+    }
+    let fresh = spawn_tamed(game, 10, 3);
+    pin_subject_at_pen(game, fresh, node);
 }
 
 /// `settle_study` draws **no** `GameRng` on a tick where no attempt is made
@@ -3588,6 +3573,7 @@ fn a_failed_study_attempt_says_so() {
             .resource_mut::<crate::resources::ActiveResearch>()
             .study = crate::tuning::STUDY_ATTEMPT_DATA;
         game.settle_study();
+        repin_after_a_find(&mut game, node);
     }
 
     assert!(
@@ -3644,8 +3630,8 @@ fn an_idle_station_with_a_subject_pinned_uncovers_a_node_on_its_own() {
         );
     }
     assert!(
-        game.world.get::<Stats>(subject).is_some(),
-        "discovery is free — the subject survives every attempt"
+        game.world.get_entity(subject).is_err(),
+        "the discovery spent the subject"
     );
 }
 

@@ -233,7 +233,7 @@ impl Game {
                 .entity_mut(who)
                 .take::<crate::components::CarryingProgram>()
         {
-            self.shelter_program(held, pos, None);
+            self.shelter_program(held, pos);
         }
         self.set_down(pos, things);
     }

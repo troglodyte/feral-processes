@@ -3462,12 +3462,16 @@ impl Game {
     /// The same saturation gate as `research_wants`, asked of the study:
     /// with nothing left `settle_study` could uncover, the attempt never
     /// spends and the bank sits at its cap, so the body is let go rather
-    /// than parked on a station landing nothing.
+    /// than parked on a station landing nothing. A slot still holding the
+    /// last spent subject holds the attempt the same way.
     fn study_wants(&self) -> Vec<(Entity, TaskKind)> {
         let Some(station) = self.study_station() else {
             return Vec::new();
         };
-        if self.pinned_subject().is_none() || self.eligible_discoveries().is_empty() {
+        if self.pinned_subject().is_none()
+            || self.study_slot_full()
+            || self.eligible_discoveries().is_empty()
+        {
             return Vec::new();
         }
         producers_of(self, &self.research_currency())

@@ -45,6 +45,7 @@ fn category_name(category: StructureCategory) -> &'static str {
         StructureCategory::Home => "Home",
         StructureCategory::Extractor => "Extractors",
         StructureCategory::Assembler => "Assemblers",
+        StructureCategory::Research => "Research",
         StructureCategory::Utility => "Utility",
         StructureCategory::EntityHealth => "Entity Health",
         StructureCategory::Trade => "Trade",
@@ -57,6 +58,7 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
         StructureCategory::Home => None,
         StructureCategory::Extractor => Some("── Extractors — produce on their own ──"),
         StructureCategory::Assembler => Some("── Assemblers — fed by what they touch ──"),
+        StructureCategory::Research => Some("── Research — study a pinned program ──"),
         StructureCategory::Utility => Some("── Utility ──"),
         StructureCategory::EntityHealth => Some("── Entity Health ──"),
         StructureCategory::Trade => Some("── Trade ──"),
@@ -116,17 +118,26 @@ pub(super) fn build_menu_rows(
     let mut rows = build_menu_preamble(shortfall);
     let mut current: Option<StructureCategory> = None;
     for (i, entry) in entries.iter().enumerate() {
-        if current != Some(entry.category) {
-            current = Some(entry.category);
-            if let Some(heading) = category_heading(entry.category) {
-                rows.push(colored_item_row("", false, TEXT_DIM));
-                rows.push(colored_item_row(heading, false, TEXT_DIM));
-            }
+        let heading = (current != Some(entry.category))
+            .then(|| category_heading(entry.category))
+            .flatten();
+        current = Some(entry.category);
+        // A blank line above every name, so one structure's description
+        // does not run into the next one's name; a heading brings its own.
+        rows.push(blank_row());
+        if let Some(heading) = heading {
+            rows.push(colored_item_row(heading, false, TEXT_DIM));
         }
         push_entry_rows(&mut rows, entry, i == selected, shortfall);
     }
     push_build_menu_footer(&mut rows);
     rows
+}
+
+/// A `Row::Item` rather than `Row::Text`, for the reason `build_menu_rows`
+/// gives.
+fn blank_row() -> Row {
+    colored_item_row("", false, TEXT_DIM)
 }
 
 /// What both levels of the deploy menu open with.
@@ -195,7 +206,9 @@ pub(super) fn build_top_rows(
     for (i, line) in lines.iter().enumerate() {
         match line {
             BuildLine::Structure(entry) => {
-                push_entry_rows(&mut rows, entry, i == selected, shortfall)
+                rows.push(blank_row());
+                push_entry_rows(&mut rows, entry, i == selected, shortfall);
+                rows.push(blank_row());
             }
             BuildLine::Category { category, count } => rows.push(item_row(
                 format!("{} ({count})", category_name(*category)),

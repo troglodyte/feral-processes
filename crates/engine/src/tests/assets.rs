@@ -6082,7 +6082,7 @@ fn the_machines_cost_and_draw_what_the_spec_says() {
     let db = game.world.resource::<StructureDb>();
     // (kind, build cost, power draw, capacity)
     for (kind, cost, draw, capacity) in [
-        ("extractor", 12, 1, 20),
+        ("extractor", 6, 1, 20),
         ("factory", 16, 2, 20),
         ("assembler", 18, 3, 15),
         ("printer", 16, 2, 15),

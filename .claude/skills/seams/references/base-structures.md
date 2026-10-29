@@ -12,17 +12,15 @@
   for the same reason — a base running dry more than once over a run is the
   common case, not an edge one.
 
-- **The Home is free, and it and the anchor land on the tile the party
+- **The Home costs `HOME_FOUNDING_COST` fragments (paid in code), and it and the anchor land on the tile the party
   founded from.** `place_structure` puts both there — `Game::move_anchor_to`
   is the anchor's one writer and founding its only caller — and
   `lay_founding_floor` floors that tile and the ring of eight around it,
   skipping cells nothing can stand on or that `floor_conflict` refuses.
   **The one refusal it needed is a Stack link**: a link tile is walked onto
-  to *descend*, so a Home sharing one could never be stood on. The cost went
-  to nothing because the wizard's Kit step replaces the class kit — a run
-  that bought gear over fragments could not open a base at all — and the
-  founding path stays generic over `build_cost`, so a mod that prices it back
-  up still works. **The fixture trap it exposed**: app-core's compiler
+  to *descend*, so a Home sharing one could never be stood on. It also refuses unless all eight ring cells
+  are walkable. The cost is small (2) and a test holds every class kit to
+  covering it, because the Kit step replaces the default kit. **The fixture trap it exposed**: app-core's compiler
   fixture pushed its cargo onto the save's inventory `Vec` as a *second* row
   for an item the kit already carried, which was invisible only while
   founding happened to zero the kit's row — `Inventory::count` reads the

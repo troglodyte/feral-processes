@@ -378,13 +378,13 @@ fn a_part_supplied_request_survives_a_reload() {
 /// yet, so there is no roster standing in it and no shelf to fetch from — so
 /// it keeps the pack-charging, refuse-on-shortfall shape the rest of the
 /// verb has shed. What it charges is nothing: the Home's `build_cost` is
-/// empty, and the pack is what a modded cost would still be taken from.
+/// empty, and the founding fragments come out of the pack.
 #[test]
 fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
     let mut game = Game::new(1108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
-    file_build(&mut game, "home", 0, 0).expect("a Home costs nothing and founds the base");
+    file_build(&mut game, "home", 0, 0).expect("a kit covers the founding cost");
 
     stand_in_base(&mut game);
     assert!(
@@ -393,8 +393,8 @@ fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
     );
     assert_eq!(
         count_item(&game, ids::CORE_FRAGMENT),
-        before,
-        "and the shipped Home takes nothing out of the pack for it"
+        before - crate::tuning::HOME_FOUNDING_COST,
+        "and the Home takes HOME_FOUNDING_COST out of the pack"
     );
 }
 

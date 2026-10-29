@@ -762,7 +762,7 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         .into_iter()
         .find(|d| d.id == "recharger_node")
         .expect("recharger_node.ron should load");
-    assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 10)]);
+    assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 8)]);
     let regen = def
         .power_regen
         .as_ref()
@@ -2796,18 +2796,78 @@ fn founding_on_a_stack_link_is_refused() {
     );
 }
 
-/// **The Home is free**, and that is a floor under the run rather than a
-/// discount: the wizard's Kit step can spend the whole allowance on gear, so
-/// a priced Home is a run that can never open a base at all.
+/// Founding costs `HOME_FOUNDING_COST` Core Fragments out of the pack, paid in
+/// code: an empty pack is refused and spends nothing, a stocked one pays
+/// exactly that.
 #[test]
-fn founding_costs_nothing() {
+fn founding_costs_the_founding_fragments() {
     let mut game = Game::new(3603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.entity_mut(player).insert(Inventory::default());
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("an empty pack cannot found a base");
+    assert!(err.contains("Not enough"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
 
-    game.place_structure("home", 0, 0, None)
-        .expect("an empty pack is enough to found a base");
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(fragment.clone(), crate::tuning::HOME_FOUNDING_COST + 3);
+    game.place_structure("home", 0, 0, None).unwrap();
     assert!(game.has_home(), "the Home is standing");
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&fragment),
+        3,
+        "founding spends HOME_FOUNDING_COST and nothing more"
+    );
+}
+
+/// The 3x3 must be open ground: a blocker in the ring refuses founding.
+#[test]
+fn founding_is_refused_when_a_ring_cell_is_blocked() {
+    let mut game = Game::new(3604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (px, py) = (40, 40);
+    stand_player_at(&mut game, px, py);
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                map.set_override(
+                    px + dx,
+                    py + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                        rock_shade: None,
+                    },
+                );
+            }
+        }
+        map.set_override(
+            px + 1,
+            py + 1,
+            Tile {
+                biome: Biome::BlackIce,
+                walkable: false,
+                rock_shade: None,
+            },
+        );
+    }
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("a blocked ring cell refuses founding");
+    assert!(err.contains("no room"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
 }
 
 // ------------------------------------------------------- the program rule

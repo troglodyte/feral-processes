@@ -1950,10 +1950,14 @@ pub(super) fn stall_alerts(game: &Game, status: MachineStatus) -> u32 {
 /// exists, so most structure-placement tests need this first. The player is
 /// stood on the Home's tile to found it and put back where they were.
 ///
-/// Nothing is stocked first: the Home is free, so a fixture that topped the
-/// pack up for it would leave every downstream inventory count carrying
-/// materials the test never asked for.
+/// The founding fragments are given first and are exactly what founding
+/// takes, so every downstream inventory count is as the test left it.
 pub(super) fn place_home(game: &mut Game) {
+    give(
+        game,
+        &ItemId::from(ids::CORE_FRAGMENT),
+        crate::tuning::HOME_FOUNDING_COST,
+    );
     place_now(game, "home", 0, 0).unwrap();
 }
 

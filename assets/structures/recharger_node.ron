@@ -4,7 +4,7 @@
     description: "Base power source, supplies the base's Grid. It burns a Power Cell to keep running.",
     glyph: 'z',
     color: Orange,
-    build_cost: [("core_fragment", 10)],
+    build_cost: [("core_fragment", 8)],
     work: None,
     power_regen: Some((
         per_tick: 1.0,

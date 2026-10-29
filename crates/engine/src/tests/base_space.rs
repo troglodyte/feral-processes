@@ -1619,6 +1619,7 @@ fn dig_site_count(game: &mut Game) -> usize {
 #[test]
 fn marking_a_box_marks_every_solid_cell_in_it() {
     let mut game = game_at_the_frontier(3250);
+    game.dev_lay_floor([(PLAN_FAR.0 - 1, PLAN_FAR.1)]);
     for (x, y) in PLAN_CELLS {
         set_rock(&mut game, (x, y));
         assert!(
@@ -1770,6 +1771,7 @@ fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
 fn marked_cells_is_sorted() {
     let mut game = game_at_the_frontier(3256);
     let near = PLAN_FAR;
+    game.dev_lay_floor([(near.0 - 1, near.1)]);
     let far = (near.0 + 2, near.1 + 2);
     game.toggle_mark_box(far, near, None);
 
@@ -2109,6 +2111,18 @@ fn mark(game: &mut Game, cell: (i32, i32)) {
     game.toggle_mark_box(cell, cell, None);
 }
 
+/// Marks `cell` although nothing floored touches it: floor is laid beside it
+/// just long enough for the mark to be accepted, then taken back. The state an
+/// old save can hold, for the tests about a crew that must not trust the mark.
+fn mark_unchecked(game: &mut Game, cell: (i32, i32)) {
+    let beside = (cell.0 - 1, cell.1);
+    game.dev_lay_floor([beside]);
+    mark(game, cell);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .revert(beside.0, beside.1);
+}
+
 fn pass(game: &mut Game, ticks: usize) {
     for _ in 0..ticks {
         game.tick();
@@ -2322,7 +2336,7 @@ fn a_marked_blocker_off_the_floor_is_not_cut_until_floor_is_pending_beside_it() 
     // only that and rock.
     excavate(&mut game, WALL);
     let blocker = (WALL.0 + 1, WALL.1);
-    game.toggle_mark_box(blocker, blocker, None);
+    mark_unchecked(&mut game, blocker);
     let site = game
         .dig_site_at(blocker.0, blocker.1)
         .expect("a marked blocker has a dig site");
@@ -3497,7 +3511,7 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
         (-TEST_POCKET_HALF_WIDTH - 3, 1),
     ];
     for cell in buried {
-        mark(&mut game, cell);
+        mark_unchecked(&mut game, cell);
     }
     mark(&mut game, WALL);
     assert!(
@@ -3541,7 +3555,7 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
         (sealed.0, sealed.1 - 1),
         (sealed.0, sealed.1 + 1),
     ] {
-        mark(&mut game, cell);
+        mark_unchecked(&mut game, cell);
     }
     mark(&mut game, WALL);
     assert!(
@@ -4918,5 +4932,53 @@ fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
         game.current_tick(),
         tick,
         "a refused diagonal costs no turn"
+    );
+}
+
+/// Floor joins the base: a press on open ground with no floor beside it is
+/// refused, and one beside laid floor is accepted.
+#[test]
+fn a_tile_press_must_touch_floor() {
+    let mut game = game(3140);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 10);
+    let far = (OFF_THE_FLOOR.0, OFF_THE_FLOOR.1);
+    step_off_the_floor(&mut game);
+    stand_player_at(&mut game, far.0, far.1);
+    let err = game.lay_tile().expect_err("no floor beside it");
+    assert_eq!(
+        err,
+        crate::game::base::building::PlacementRefusal::NotAdjacent.message()
+    );
+
+    let (ex, ey) = (far.0 - 1, far.1);
+    game.dev_lay_floor([(ex, ey)]);
+    game.lay_tile().expect("floor beside it");
+}
+
+/// A marked blocker beside floor is accepted; an unmarked one is
+/// `NeedsMining`, and one touching nothing is `NotAdjacent`.
+#[test]
+fn floor_request_refusals_on_blockers() {
+    use crate::game::base::building::{PlacementRefusal as R, floor_request_refusal};
+    let mut game = game(3141);
+    place_home(&mut game);
+    let rock = (TEST_POCKET_HALF_WIDTH + 6, 0);
+    set_rock(&mut game, rock);
+    game.dev_lay_floor([(rock.0 - 1, rock.1)]);
+    let pending = std::collections::BTreeSet::new();
+    assert_eq!(
+        floor_request_refusal(rock, game.ground(), &pending, false),
+        Some(R::NeedsMining)
+    );
+    assert_eq!(
+        floor_request_refusal(rock, game.ground(), &pending, true),
+        None
+    );
+    let lone = (rock.0 + 5, rock.1);
+    set_rock(&mut game, lone);
+    assert_eq!(
+        floor_request_refusal(lone, game.ground(), &pending, true),
+        Some(R::NotAdjacent)
     );
 }

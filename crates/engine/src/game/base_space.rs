@@ -384,9 +384,17 @@ impl Game {
         let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                self.set_mark(&mut sites, x, y, marking, brush);
+        // Floor must join the base, so a pass can unlock cells an earlier
+        // cell in the box needed first; repeat until a pass marks nothing new.
+        loop {
+            let before = sites.len();
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    self.set_mark(&mut sites, x, y, marking, brush);
+                }
+            }
+            if !(marking && brush.is_none()) || sites.len() == before {
+                break;
             }
         }
     }
@@ -550,6 +558,19 @@ impl Game {
             match brush {
                 None => {
                     if floor {
+                        return;
+                    }
+                    // A dig mark on a blocker is the dig request itself, so
+                    // only adjacency can refuse it here.
+                    let pending = self.pending_floor();
+                    if crate::game::base::building::floor_request_refusal(
+                        (x, y),
+                        self.ground(),
+                        &pending,
+                        true,
+                    )
+                    .is_some()
+                    {
                         return;
                     }
                     None

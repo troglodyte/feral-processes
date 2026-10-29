@@ -31,6 +31,11 @@ pub(crate) enum PlacementRefusal {
     Occupied,
     SiteFiled,
     DigMark,
+    /// A floor request with no laid or pending floor beside it: the base
+    /// grows without gaps.
+    NotAdjacent,
+    /// A floor request on a blocker nobody has dug out yet.
+    NeedsMining,
 }
 
 impl PlacementRefusal {
@@ -40,8 +45,36 @@ impl PlacementRefusal {
             Self::Occupied => "Something is already deployed there.",
             Self::SiteFiled => "Your crew is already set to build something there.",
             Self::DigMark => "There's a dig mark there — clear it before building.",
+            Self::NotAdjacent => "Floor has to join the base — pick a cell next to it.",
+            Self::NeedsMining => "That's solid rock — dig it out before laying floor.",
         }
     }
+}
+
+/// Why a floor request on `cell` is refused, or `None`. Pure over the ground
+/// so the player's tile press and the crew's mark ask the same question.
+///
+/// Adjacency comes first: a request that joins nothing is told so whether or
+/// not the cell is rock. A blocker beside the base is accepted only when it
+/// carries a dig mark (`dig_marked`), because the mark is what gets it mined.
+pub(crate) fn floor_request_refusal(
+    cell: (i32, i32),
+    ground: crate::base_grid::Ground<'_>,
+    pending: &std::collections::BTreeSet<(i32, i32)>,
+    dig_marked: bool,
+) -> Option<PlacementRefusal> {
+    let (x, y) = cell;
+    let adjacent = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| {
+        let n = (x + dx, y + dy);
+        ground.is_floor(n.0, n.1) || pending.contains(&n)
+    });
+    if !adjacent {
+        return Some(PlacementRefusal::NotAdjacent);
+    }
+    if !ground.walkable(x, y) && !dig_marked {
+        return Some(PlacementRefusal::NeedsMining);
+    }
+    None
 }
 
 /// What one `Game::place_wall_box` did.
@@ -138,6 +171,18 @@ impl Game {
                     .into(),
             );
         }
+        if founding {
+            let ring_is_open = (-1..=1)
+                .flat_map(|dy| (-1..=1).map(move |dx| (px + dx, py + dy)))
+                .all(|(rx, ry)| self.ground().walkable(rx, ry));
+            if !ring_is_open {
+                return Err(
+                    "There's no room to found a base here — the ground around you is blocked. \
+                     Try open ground."
+                        .into(),
+                );
+            }
+        }
         let (x, y) = if founding {
             (px, py)
         } else {
@@ -233,6 +278,11 @@ impl Game {
         // they are short, and the structure standing on the tile before the
         // call returns.
         if founding {
+            let mut build_cost = build_cost;
+            build_cost.push((
+                ItemId::from(ids::CORE_FRAGMENT),
+                crate::tuning::HOME_FOUNDING_COST,
+            ));
             let short: Vec<String> = {
                 let player = self.player_entity();
                 let inv = self.world.get::<Inventory>(player).unwrap();
@@ -1132,6 +1182,11 @@ impl Game {
         }
         if let Some(why) = self.floor_conflict(x, y) {
             return Err(why.into());
+        }
+        let pending = self.pending_floor();
+        let dig_marked = self.dig_site_at(x, y).is_some();
+        if let Some(refusal) = floor_request_refusal((x, y), self.ground(), &pending, dig_marked) {
+            return Err(refusal.message().into());
         }
 
         let fragment = ItemId::from(ids::CORE_FRAGMENT);

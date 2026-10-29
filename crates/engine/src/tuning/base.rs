@@ -275,13 +275,18 @@ pub const FARM_HARVEST_TICKS: u32 = 6;
 ///
 /// **Fragments, not Blank Substrate**, because the floor is what grows the
 /// base and a Factory sitting between the mine and every tile made expansion
-/// wait on a 12-tick press per cell. Half a substrate's four fragments, so
-/// the plain floor is cheaper than it was as well as quicker; finishes stay
+/// wait on a 12-tick press per cell. One fragment, so
+/// the plain floor is cheap; finishes stay
 /// on substrate (`FLOOR_FINISH_COST`) as the Factory-fed decoration.
 ///
 /// Above `ROCK_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
 /// so a dig plan never floors itself out of its own rubble.
-pub const FLOOR_TILE_COST: u32 = 2;
+pub const FLOOR_TILE_COST: u32 = 1;
+
+/// Core Fragments the founding Home costs, paid from the pack. Every class
+/// kit must cover it (`classes` test), or a run could never open a base.
+/// Paid in code: a `build_cost` on `home.ron` would be a new schema use.
+pub const HOME_FOUNDING_COST: u32 = 2;
 
 /// How many Blank Substrate a finish costs, on top of the
 /// `FLOOR_TILE_COST` fragments the tile itself already spent —

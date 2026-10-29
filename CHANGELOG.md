@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.26
+
+**The Compile screen can now order what a batch is missing.** After picking a recipe and a quantity, press [O] and the base gets a work order for each ingredient you are short of, for exactly the shortfall. Before, you had to note what was missing, leave the screen and file each order by hand on the work order page. An ingredient the base cannot make is named on the screen with the reason, and the ones it can make are still ordered.
+
 ## 0.20.25
 
 **Holding Alt in the base now shows what each machine makes.** Every machine that is set to a recipe, every extractor and the Research Node gets a label with its product's name, and every sown farm plot gets one with its crop's name. An unset machine and a Depot get none.

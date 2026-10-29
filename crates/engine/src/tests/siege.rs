@@ -737,6 +737,37 @@ mod opening {
         );
     }
 
+    /// The pack is drawn from ground a species lives on. The first spawn
+    /// cell in coordinate order is often mined ground (`Biome::Excavated`,
+    /// cut and not yet floored), which fields nobody; drawing there left the
+    /// pack empty and sent a siege the player was standing in off-screen.
+    #[test]
+    fn a_mined_first_spawn_cell_still_fields_a_pack() {
+        let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        ready_base(&mut game);
+        set_zone(&mut game, 2);
+        let first = board::siege_spawn_cells(
+            game.world.resource::<crate::base_grid::BaseGrid>(),
+            game.world.resource::<WorldMap>(),
+        )[0];
+        game.world.resource_mut::<WorldMap>().set_override(
+            first.0,
+            first.1,
+            Tile {
+                biome: Biome::Excavated,
+                walkable: true,
+                rock_shade: None,
+            },
+        );
+        assert!(
+            game.habitat_pools(first.0, first.1, None, 0).is_none(),
+            "test premise: mined ground fields nobody"
+        );
+
+        assert!(game.open_siege(), "the siege should open on the board");
+        assert!(game.world.resource::<TacticalBattle>().siege_pack > 0);
+    }
+
     /// A posted program standing at its machine is on the board at that
     /// cell — nobody is deployed, the base's own arrangement is the opening
     /// position.

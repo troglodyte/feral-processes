@@ -12,7 +12,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **The siege board is built, not `generate`d** — the floor plus
   `siege::board::siege_spawn_cells`, the walkable cells beside its edge in
   coordinate order (a breadth-first fallback for a sealed base), and one
-  `GameRng` draw picks the stretch the pack enters on.
+  `GameRng` draw picks the spawn cell the pack starts seating from.
 - **A siege never passes through `fights_tactically` or `start_battle`** —
   `Game::open_siege` is its own door, so a siege is always tactical whatever
   the profile toggle says.

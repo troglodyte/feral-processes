@@ -60,14 +60,27 @@ impl Game {
         };
         let zone = self.world.resource::<ZoneLevel>().0;
         // The pack is drawn from the ground it comes in over — the first
-        // spawn cell — not from the floor, which no species lives on.
-        let site = board::siege_spawn_cells(
+        // spawn cell, in coordinate order, that any species lives on — not
+        // from the floor, which none does. The first cell alone is often
+        // mined ground (`Biome::Excavated`, cut and not yet floored) with an
+        // empty pool. `habitat_pools` draws nothing, so the walk keeps the
+        // RNG stream as it was.
+        let spawns = board::siege_spawn_cells(
             self.world.resource::<crate::base_grid::BaseGrid>(),
             self.world.resource::<WorldMap>(),
-        )
-        .first()
-        .copied()
-        .unwrap_or(player_cell);
+        );
+        let site = spawns
+            .iter()
+            .copied()
+            .find(|&(x, y)| {
+                self.habitat_pools(x, y, None, 0)
+                    .is_some_and(|(candidates, _)| !candidates.is_empty())
+            })
+            // No spawn cell fields anyone: the pack comes out empty and the
+            // siege resolves off-screen, rather than being drawn from the
+            // ground under the floor.
+            .or_else(|| spawns.first().copied())
+            .unwrap_or(player_cell);
         let raiders = self.spawn_siege_pack(site, zone);
         if self.open_siege_with(raiders.clone()) {
             return true;
@@ -125,9 +138,11 @@ impl Game {
             siege_board.board.clone(),
         );
 
-        // Which edge this siege comes from: one draw over the spawn cells,
-        // sorted by coordinate, so the pack arrives together along one
-        // stretch of the floor's edge and the choice never rides query order.
+        // Where the pack starts seating: one draw over the spawn cells, which
+        // are sorted by `(x, y)` so the choice never rides query order. That
+        // order is not a walk along the floor's edge — consecutive cells
+        // share a column, not a run of edge — so the raiders after the first
+        // fill the next cells of the list, wherever on the edge those lie.
         let start = {
             let mut rng = self.world.resource_mut::<crate::resources::GameRng>();
             rng.0.random_range(0..siege_board.spawns.len())
@@ -170,8 +185,9 @@ impl Game {
             place_nearby(&mut battle, player_seat, entity);
         }
 
-        // **Raiders enter at the floor's edge**, one spawn cell each along
-        // the drawn stretch, filing in behind it when a cell is taken. Counted by what actually seated, not by
+        // **Raiders enter at the floor's edge**, one spawn cell each from the
+        // drawn start onward in list order, filing in beside a cell that is
+        // taken. Counted by what actually seated, not by
         // `raiders.len()` — `TacticalBattle::siege_pack` is
         // `siege::raiders::siege_morale_broken`'s reading of "the pack this
         // fight opened with," and a raider turned away for want of a free

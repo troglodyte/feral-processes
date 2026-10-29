@@ -12,10 +12,14 @@
   resolves the siege off-screen. Fallback cells can be cut off from the
   floor — besiegers that dig are deferred, not forgotten. `open_siege_with`
   draws one `GameRng` index over the list and seats raider *i* at
-  `spawns[(start + i) % n]`, so the pack arrives together along one stretch
-  of edge, and `siege_door` is `spawns[start]`. The pack's species is drawn
-  at the first spawn cell: `habitat_pools` reads the raw field biome, and the
-  floor itself is habitat for nothing.
+  `spawns[(start + i) % n]` — coordinate order, not a walk along the edge,
+  so consecutive raiders share a column rather than a run of edge — and
+  `siege_door` is `spawns[start]`. The pack's species is drawn at the first
+  spawn cell any species lives on: `habitat_pools` reads the raw field
+  biome, the floor itself is habitat for nothing, and the first cell alone
+  is often mined ground (`Biome::Excavated`) whose empty pool once sent a
+  siege the player stood in off-screen. `habitat_pools` draws no RNG, so
+  the walk keeps the stream.
 - **A siege never touches `fights_tactically` or `start_battle`.**
   `Game::open_siege` mints its own `BattleSpec` and opens `TacticalBattle`
   directly, so a siege is tactical whatever the player's battle-map profile

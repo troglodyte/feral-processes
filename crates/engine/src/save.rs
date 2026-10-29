@@ -2182,7 +2182,12 @@ impl SaveData {
 /// unslotted_routines, next_crafted_id}` are written and a `crafted/<n>` id
 /// may sit in any routine slot; a v38 file would load with its slots naming
 /// nothing and its etched disks unusable.
-pub const SAVE_FORMAT_VERSION: u32 = 39;
+///
+/// 39 → 40: the base returns to the field (ADR 0032). `locale` no longer
+/// has a `Base` arm, `base_grid` holds only floor overlay cells keyed by
+/// field coordinates, and mined ground is a `WorldMap` override; a v39 base
+/// would load as floor over unmined field with the party's base tile lost.
+pub const SAVE_FORMAT_VERSION: u32 = 40;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {

@@ -221,3 +221,25 @@ fn downed_and_lashing_staff_raise_one_row_each() {
     assert_eq!(texts, ["1 lashing out (Base)", "2 downed tools (Base)"]);
     assert!(rows.iter().all(|r| r.key == 'b' && r.threat));
 }
+
+/// The CREW bar shows the first CREW row, so a program hitting people must
+/// come before an unspent point — the screenshot that found this read
+/// "11 perk points unspent" over a tantrum.
+#[test]
+fn staff_unrest_outranks_unspent_points() {
+    use crate::components::Grievance;
+    let mut game = fresh(7);
+    soured_staff(&mut game, &[Some(Grievance::LashingOut)]);
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 3;
+    let k = kinds(&mut game);
+    let at = |kind| {
+        k.iter()
+            .position(|&x| x == kind)
+            .unwrap_or_else(|| panic!("{kind:?} in {k:?}"))
+    };
+    assert!(
+        at(AttentionKind::StaffUnrest) < at(AttentionKind::PerkPoints),
+        "{k:?}"
+    );
+}

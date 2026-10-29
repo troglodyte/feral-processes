@@ -2044,6 +2044,24 @@ impl Game {
             });
         }
 
+        // Ahead of the CREW tab's other rows: the collapsed bar shows the
+        // tab's first row, and a program hitting people outranks a point
+        // waiting to be spent. Worst first within it for the same reason.
+        let moods = self.staff_moods();
+        for (n, what) in [
+            (moods.lashing_out, "lashing out"),
+            (moods.downed_tools, "downed tools"),
+        ] {
+            if n > 0 {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::StaffUnrest,
+                    text: format!("{n} {what} (Base)"),
+                    key: 'b',
+                    threat: true,
+                });
+            }
+        }
+
         for call in self.calls_to_act(self.player_entity()) {
             match call {
                 CallToAct::PerkPoints(points) => {
@@ -2091,22 +2109,6 @@ impl Game {
                 key: 'p',
                 threat: false,
             });
-        }
-
-        // Worst first, so the badge's first row is the one hitting people.
-        let moods = self.staff_moods();
-        for (n, what) in [
-            (moods.lashing_out, "lashing out"),
-            (moods.downed_tools, "downed tools"),
-        ] {
-            if n > 0 {
-                rows.push(AttentionRow {
-                    kind: AttentionKind::StaffUnrest,
-                    text: format!("{n} {what} (Base)"),
-                    key: 'b',
-                    threat: true,
-                });
-            }
         }
 
         // One row per outpost in `Trend::Stale`, `Trend::Declining` or dark

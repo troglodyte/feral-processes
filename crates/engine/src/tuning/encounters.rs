@@ -550,12 +550,9 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 /// itself when the player reaches it, however far out it is, so a link may
 /// now scatter as far as it likes.
 ///
-/// It does *not* keep links off the base floor by itself. That used to be
-/// `Game::stamp_platform`'s job on top of it — despawning any link caught
-/// inside the slab it stamped — and it retired with `resources::Platform`.
-/// `spawn_surface_links` skipping `Biome::Platform` is dead for the same
-/// reason (nothing ever produces that biome on a `WorldMap`); keeping links
-/// off the floor is `Game::floor_conflict`'s job.
+/// It does *not* keep links off the base floor: the floor is a `BaseGrid`
+/// overlay, never written into the `WorldMap` this scatter reads, so that is
+/// `Game::floor_conflict`'s job.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
 /// How far past the base's own edge the *first* link of a zone is placed —

@@ -811,6 +811,25 @@ mod opening {
         let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         sealed_base(&mut game);
         set_zone(&mut game, 2);
+        let held = game
+            .world
+            .resource::<ItemDb>()
+            .all()
+            .find(|d| d.equipment.is_none())
+            .map(|d| d.id.clone())
+            .expect("the shipped items hold a plain item");
+        game.dev_give_item(&held, 3).unwrap();
+        let stock_before = game.base_stock();
+        let pack_items_before = game
+            .world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .items
+            .clone();
+        assert!(
+            !pack_items_before.is_empty(),
+            "the check needs something to lose"
+        );
         let pack_before: Vec<Entity> = {
             assert!(game.open_siege(), "a sealed base still opens its siege");
             game.world
@@ -852,6 +871,19 @@ mod opening {
                 .iter()
                 .any(|row| row.text.contains("no way in")),
             "the withdrawal should be announced"
+        );
+        assert_eq!(
+            game.base_stock(),
+            stock_before,
+            "a withdrawal took base stock"
+        );
+        assert_eq!(
+            game.world
+                .get::<Inventory>(game.player_entity())
+                .unwrap()
+                .items,
+            pack_items_before,
+            "a withdrawal changed the party's inventory"
         );
     }
 

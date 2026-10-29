@@ -360,16 +360,13 @@ fn warping_to_a_zone_that_is_not_ahead_is_refused() {
     );
 }
 
-/// Base space is a separate coordinate system from the zone surface — Home
-/// sits at `BASE_EXIT_CELL` and a fresh zone's spawn tile is found by the
-/// same `(0, 0)`-first scan, so their numbers coincide by construction and
-/// comparing them proves nothing about which space either belongs to (see
-/// `find_blocking_structure_at`'s doc comment for the same trap on a
-/// different call site). Home and the node are hand-displaced off the
-/// origin before the breach for exactly that reason: left at their real
-/// founding coordinates, both would sit at `(0, 0)` before and after
-/// regardless of whether the deleted reposition block were still here, so
-/// the check would pass either way. What actually matters, and what the old
+/// A fixture's Home sits at the origin and a fresh zone's spawn tile is
+/// found by the same `(0, 0)`-first scan, so their numbers coincide by
+/// construction. Home and the node are hand-displaced off the origin before
+/// the breach for exactly that reason: left at their founding coordinates,
+/// both would sit at `(0, 0)` before and after regardless of whether the
+/// deleted reposition block were still here, so the check would pass either
+/// way. What actually matters, and what the old
 /// version of this test got backwards, is that the breach must leave Home
 /// exactly where it already was rather than relocating it to the new spawn
 /// tile — asserting equality to spawn was asserting the very relocation
@@ -466,7 +463,7 @@ fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
     let (home, node) = build_a_base(&mut game);
     // Both Home and the node are moved off `(0, 0)` for the same reason
     // `breaching_leaves_every_structures_absolute_position_untouched` does:
-    // Home always founds at `BASE_EXIT_CELL`, itself `(0, 0)`, and
+    // The fixture's Home founds at `(0, 0)`, and
     // `find_walkable_start` always resolves `(0, 0)` too — so the deleted
     // block's `spawn + (node - home)` write reproduces the same absolute
     // number whenever Home is left at its real founding position, even
@@ -2174,12 +2171,11 @@ fn a_breach_does_not_move_the_party() {
     assert_eq!((after.x, after.y), (before.x, before.y));
 }
 
-/// The base is out of phase, not on the zone surface — a breach must not
-/// touch a `Structure`'s `Position` at all, in either direction.
+/// A breach must not touch a `Structure`'s `Position` at all, in either direction.
 ///
 /// `find_walkable_start` always resolves `(0, 0)` on every generated map
 /// (checked directly: every seed 0..30 breaches to spawn `(0, 0)`), and the
-/// Home is always founded at `BASE_EXIT_CELL`, itself `(0, 0)` — so under an
+/// fixture's Home is founded at `(0, 0)` — so under an
 /// ordinary breach a structure's absolute position and its offset from Home
 /// are the same number, and the old offset-rebuild block reproduced the
 /// right answer by coincidence. Comparing to Home, or trusting an

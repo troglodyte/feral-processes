@@ -25,8 +25,7 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
         .ok_or_else(|| "the player has no position to roll around".to_string())?;
     let (x, y) = (pos.x, pos.y);
 
-    // The same sparse overlay `stamp_platform` writes through, so nothing new
-    // is introduced to the map. Without it only the biome under the spawn
+    // A sparse override keeps the map otherwise untouched. Without it only the biome under the spawn
     // point is reachable, which leaves most of the encounter tables
     // unaskable.
     let biome = match encounter {

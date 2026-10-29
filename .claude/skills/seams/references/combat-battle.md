@@ -179,7 +179,9 @@
   passes with the arm deleted.
 
 - **`walkable()` alone does not decide where a `Pursuing` guardian may step**
-  — `pursuit_field` excludes `Biome::Platform` separately.
+  — pursuit, patrols, followers and wandering read floor-merged ground
+  through `BaseGrid::ground_tile`, and `open_to_hostiles`'s `Platform` arm is
+  the single floor rule (the trap is spelled out in `base-digging.md`).
 
 - **There is one Dijkstra walk on the surface, and the step rule is a cost
   function, not a predicate.** `walk_field`, with `pursuit_field` a one-line

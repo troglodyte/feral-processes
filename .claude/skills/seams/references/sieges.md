@@ -15,7 +15,8 @@
   withdraws the whole pack once `SIEGE_SEALED_HOLD_ROUNDS` full rounds have
   passed and no besieger has a terrain walk to floor
   (`raiders::any_reaches_floor` — terrain only, so a crowd at a choke is not
-  a seal). No loss, no loot. One besieger with a path keeps the whole pack
+  a seal; structures never seal a base, only terrain does). The fight
+  still settles as a win, and ranged besiegers can hurt during the hold. One besieger with a path keeps the whole pack
   in the fight; the round counts from the opening, so a path that closes
   late withdraws at once. Besiegers that dig are deferred, not forgotten. `open_siege_with`
   draws one `GameRng` index over the list and seats raider *i* at

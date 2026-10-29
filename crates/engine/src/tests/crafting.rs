@@ -1185,3 +1185,80 @@ fn the_quoted_maximum_is_a_batch_the_compile_accepts() {
             .unwrap_or_else(|e| panic!("the quote for {item} was refused: {e}"));
     }
 }
+
+/// A Routine Disk compile at a Workbench in base space, with the Mining Node
+/// and Lathe that make its Blank Substrate standing only when `with_line`.
+fn at_a_disk_bench(seed: u32, with_line: bool) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_structure_at(&mut game, "workbench", 1, 0);
+    if with_line {
+        stand_ample_grid_supply(&mut game);
+        spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+        spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
+    }
+    let player = game.player_entity();
+    let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+    inv.items.clear();
+    inv.add(ItemId::from("blank_substrate"), 1);
+    game
+}
+
+#[test]
+fn a_compile_shortfall_is_the_batch_bill_less_what_is_in_reach() {
+    let game = at_a_disk_bench(4401, false);
+    let disk = ItemId::from("routine_disk");
+    let per_unit = game.craft_cost(&disk, false)[0].1;
+
+    assert_eq!(
+        game.craft_shortfall(&disk, 3, false),
+        vec![(ItemId::from("blank_substrate"), per_unit * 3 - 1)]
+    );
+    assert!(
+        game.craft_shortfall(&disk, 0, false).is_empty(),
+        "nothing asked for is nothing missing"
+    );
+}
+
+#[test]
+fn ordering_a_shortfall_files_one_batch_per_missing_ingredient() {
+    let mut game = at_a_disk_bench(4402, true);
+    let disk = ItemId::from("routine_disk");
+    let short = game.craft_shortfall(&disk, 3, false);
+
+    let outcome = game.order_craft_shortfall(&disk, 3, false).unwrap();
+
+    assert_eq!(outcome.filed, short);
+    assert!(outcome.refused.is_empty());
+    let orders: Vec<(ItemId, u32, bool)> = game
+        .work_orders()
+        .iter()
+        .map(|o| (o.item.clone(), o.qty, o.standing))
+        .collect();
+    assert_eq!(orders, vec![(short[0].0.clone(), short[0].1, false)]);
+}
+
+#[test]
+fn an_ingredient_the_base_cannot_make_is_named_and_not_filed() {
+    let mut game = at_a_disk_bench(4403, false);
+    let disk = ItemId::from("routine_disk");
+
+    let outcome = game.order_craft_shortfall(&disk, 3, false).unwrap();
+
+    assert!(outcome.filed.is_empty());
+    assert_eq!(outcome.refused.len(), 1);
+    assert_eq!(outcome.refused[0].0, ItemId::from("blank_substrate"));
+    assert!(!outcome.refused[0].1.is_empty());
+    assert!(game.work_orders().is_empty());
+}
+
+#[test]
+fn ordering_with_nothing_missing_is_refused() {
+    let mut game = at_a_disk_bench(4404, true);
+    let disk = ItemId::from("routine_disk");
+
+    assert!(game.order_craft_shortfall(&disk, 0, false).is_err());
+    assert!(game.work_orders().is_empty());
+}

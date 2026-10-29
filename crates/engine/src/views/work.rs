@@ -236,6 +236,14 @@ pub struct CraftRecipe {
     pub requires_structure: Option<String>,
 }
 
+/// What `Game::order_craft_shortfall` did with each ingredient a compile was
+/// short of: a work order filed for it, or the reason the base cannot make it.
+#[derive(Debug, Default)]
+pub struct ShortfallOrders {
+    pub filed: Vec<(ItemId, u32)>,
+    pub refused: Vec<(ItemId, String)>,
+}
+
 /// One ingredient of a `RecipeStep`, and where the player is meant to get it.
 pub struct RecipeInput {
     /// Display name, resolved for the same reason `RecipeStep`'s are.

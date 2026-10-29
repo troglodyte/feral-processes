@@ -33,6 +33,21 @@ fn careful_price(qty: u32) -> u32 {
     qty + (qty * QUALITY_CAREFUL_COST_PERCENT).div_ceil(100)
 }
 
+/// Each line of `cost`, for `quantity` units, less what `held` says is in
+/// reach — only the lines that come up short, in recipe order.
+fn shortfall(
+    cost: &[(ItemId, u32)],
+    quantity: u32,
+    held: impl Fn(&ItemId) -> u32,
+) -> Vec<(ItemId, u32)> {
+    cost.iter()
+        .filter_map(|(item, qty)| {
+            let short = (qty * quantity).saturating_sub(held(item));
+            (short > 0).then(|| (item.clone(), short))
+        })
+        .collect()
+}
+
 pub(crate) struct CraftOrder {
     /// The tier of the best bench the recipe's structure is standing at,
     /// or 1 when the recipe names no bench — see
@@ -232,6 +247,46 @@ impl Game {
             (room / per_unit) as u32
         };
         by_pack.min(by_reserve)
+    }
+
+    /// What a batch of `quantity` would still need of each ingredient: the
+    /// bill `begin_hand_craft` charges, less what `max_craftable` counts as
+    /// in reach.
+    pub fn craft_shortfall(
+        &self,
+        result: &ItemId,
+        quantity: u32,
+        careful: bool,
+    ) -> Vec<(ItemId, u32)> {
+        shortfall(&self.craft_cost(result, careful), quantity, |item| {
+            self.held_for_compile(result, item)
+        })
+    }
+
+    /// Files a work order for each ingredient `craft_shortfall` names.
+    ///
+    /// Partial on purpose, unlike most doors: each order stands alone, so an
+    /// ingredient the base cannot make is named in `refused` rather than
+    /// holding back the ones it can.
+    pub fn order_craft_shortfall(
+        &mut self,
+        result: &ItemId,
+        quantity: u32,
+        careful: bool,
+    ) -> Result<ShortfallOrders, String> {
+        self.require_base()?;
+        let short = self.craft_shortfall(result, quantity, careful);
+        if short.is_empty() {
+            return Err("Nothing is missing.".into());
+        }
+        let mut outcome = ShortfallOrders::default();
+        for (item, qty) in short {
+            match self.queue_work_order(WorkOrder::batch(item.clone(), qty)) {
+                Ok(()) => outcome.filed.push((item, qty)),
+                Err(reason) => outcome.refused.push((item, reason)),
+            }
+        }
+        Ok(outcome)
     }
 
     /// What the player, standing where they are with the base they have,

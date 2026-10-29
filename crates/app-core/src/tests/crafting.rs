@@ -643,3 +643,34 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     assert_eq!(app.mode, Mode::Craft);
     assert!(app.structure_hub.is_some());
 }
+
+/// Picks `packet_buffer` on the bench page and types `quantity`.
+fn at_packet_buffer_quantity(seed: u32, quantity: &str) -> App {
+    let mut app = app_at_a_stocked_bench(seed);
+    open_bench_compile(&mut app);
+    let row = picks_in_bench_list(&app, "packet_buffer");
+    pick_row(&mut app, row);
+    for c in quantity.chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+    app
+}
+
+#[test]
+fn ordering_missing_with_nothing_missing_is_refused_on_the_page() {
+    let mut app = at_packet_buffer_quantity(720, "1");
+    app.handle_key(GameKey::Char('o'));
+    assert_eq!(app.mode, Mode::CraftQuantity);
+    assert_eq!(app.status_line.as_deref(), Some("Nothing is missing."));
+    assert!(app.game.as_ref().unwrap().work_orders().is_empty());
+}
+
+#[test]
+fn ordering_what_the_base_cannot_make_names_it_and_files_nothing() {
+    let mut app = at_packet_buffer_quantity(721, "9999");
+    app.handle_key(GameKey::Char('O'));
+    assert_eq!(app.mode, Mode::CraftQuantity);
+    let line = app.status_line.clone().expect("the refusal is shown");
+    assert!(line.starts_with("Can't order "), "got: {line}");
+    assert!(app.game.as_ref().unwrap().work_orders().is_empty());
+}

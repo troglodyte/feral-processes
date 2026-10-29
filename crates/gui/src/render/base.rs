@@ -2121,6 +2121,7 @@ mod tests {
             recovering,
             refitting: false,
             serviced: false,
+            mood: feral_processes_engine::MoodStep::Ok,
             build: None,
             job_progress: None,
             shelf_fill: None,

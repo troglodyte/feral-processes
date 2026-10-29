@@ -288,6 +288,21 @@ pub const MORALE_DOWNS_TOOLS_AT: f32 = -50.0;
 /// hole.
 pub const MORALE_RECOVERED_AT: f32 = -6.0;
 
+/// Morale below which a staff program reads as *slipping* on the map and
+/// the HUD — `views::mood_step`. Display only; nothing in the sim reads it.
+///
+/// **Above `MORALE_RECOVERED_AT`**, so a body coming back off the
+/// grievance ladder passes through slipping on the way to ok rather than
+/// jumping straight there, and the player's early warning fires before
+/// `MORALE_SULKS_AT` changes any behaviour. Halfway from neutral to
+/// sulking. Held at compile time below.
+pub const MORALE_SLIPPING_AT: f32 = -4.0;
+const _: () = assert!(
+    0.0 > MORALE_SLIPPING_AT
+        && MORALE_SLIPPING_AT > MORALE_RECOVERED_AT
+        && MORALE_RECOVERED_AT > MORALE_SULKS_AT
+);
+
 /// The most the situational thoughts can add to or take from a program's
 /// morale in total (`situations::sum`), either way.
 ///

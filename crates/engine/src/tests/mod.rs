@@ -134,6 +134,7 @@ mod spend_preview;
 mod sprite_palette;
 mod stack;
 mod stack_movement;
+mod staff_mood;
 mod staff_report;
 mod stock;
 mod stockpiles;

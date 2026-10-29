@@ -1349,6 +1349,9 @@ impl Game {
         // `anywhere_to_unload`'s reason: a program reaching full Integrity
         // has to stop wearing the mark without anything having to notice.
         let recovering_bodies = self.recovering_programs();
+        // Taken once for the pass: `mood_step` asks each body's role, and
+        // this set is that question already answered for all of them.
+        let base_staff: HashSet<Entity> = self.base_staff().into_iter().collect();
         let refit_serving = self.refit_bench_serving().is_some()
             || self.world.resource::<crate::resources::RefitStand>().mended;
 
@@ -1541,6 +1544,11 @@ impl Game {
                     recovering,
                     refitting,
                     serviced,
+                    mood: if base_staff.contains(&entity) {
+                        self.staff_mood_step(entity)
+                    } else {
+                        crate::views::MoodStep::Ok
+                    },
                     output_stranded,
                     holds_output,
                     holds_spent_program: self

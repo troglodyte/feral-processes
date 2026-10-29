@@ -189,6 +189,8 @@ pub struct EntityView {
     /// not happening. A body still walking to its amenity, or standing at
     /// one with no place free, wears nothing.
     pub serviced: bool,
+    /// `Game::mood_step` — `Ok` for anything but base staff.
+    pub mood: MoodStep,
     /// If this is a structure, whether its output buffer is full while
     /// nothing in the base can take a load — no depot built, or every depot
     /// already full.

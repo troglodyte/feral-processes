@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.29
+
+**Walls are now painted with a box, like mining and stockpiles.** Pick Wall from the build menu, press Space on one corner and Space on the other, and every free floor cell in the box gets a wall for your crew to raise. A box one cell wide is a row. Drawing takes no time, and the cell you are standing on is left open. Starting a box on a wall that isn't built yet calls off the unbuilt walls in it and gives back what was already carried there. Before, each wall took its own trip through the menu and a direction, and a turn.
+
 ## 0.20.28
 
 **You can now see how your base staff feel without opening the base menu.** A staff program whose mood is slipping wears a small pip in the bottom-right corner of its tile: dim yellow when it is slipping, yellow when it sulks, red when it has downed tools, and a larger red pip when it is lashing out. The CREW tab counts staff by mood, both on its collapsed bar and in a MOOD row on the open tab. Staff who have downed tools or are lashing out go on the attention list ahead of other warnings, so the status bar and the CREW bar show the alarm. The reasons stay in the base menu's staff report.

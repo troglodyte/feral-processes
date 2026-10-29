@@ -1446,6 +1446,13 @@ fn draw_surface_map(
             // the one variant no species authors, so "this belongs to a
             // town" reads without being told and without spending the
             // identity hue this program already has.
+            // Base space only, for `draw_rising_mark`'s reason: the step is
+            // a claim about a body standing in the base.
+            if base_pos.is_some()
+                && let Some(ev) = actor
+            {
+                draw_mood_mark(painter, ev, px, py, tile_px, vig);
+            }
             if actor.is_some_and(|ev| ev.patrol.is_some()) {
                 let mark = patrol_mark_rect(px, py, tile_px);
                 painter.rect(
@@ -2414,6 +2421,39 @@ mod tests {
             "the mark's ink (top {mark_top}, bottom {mark_bottom}) must sit \
              entirely above the patient's own glyph (top {glyph_top}), not \
              overlap it"
+        );
+    }
+
+    /// A body can be sulking and being serviced at once, so the mood pip
+    /// and the floating `+`/`^` both draw on one tile and must not share
+    /// pixels. Pinned against the mark's own measured ink at rest, its
+    /// lowest frame.
+    #[test]
+    fn mood_mark_does_not_overlap_rising_mark() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, FrameCues::default(), false);
+        let busy = patient_view(true);
+        let (mark_dims, mark_shapes) = with_painter(|p| {
+            let dims = p.measure_map("+", CELL_GLYPH_PX);
+            draw_rising_mark(
+                p,
+                Some(&busy),
+                &fx,
+                Rect::new(0.0, 0.0, CELL, CELL),
+                CELL_GLYPH_PX,
+                1.0,
+            );
+            dims
+        });
+        let mark_bottom = mark_y(&mark_shapes, "+").expect("the mark is drawn") + mark_dims.height;
+        let largest = mood_mark(feral_processes_engine::MoodStep::LashingOut)
+            .unwrap()
+            .0;
+        let pip = mood_mark_rect(0.0, 0.0, CELL, largest);
+        assert!(
+            pip.y >= mark_bottom,
+            "the mood pip (top {}) reaches into the rising mark (bottom {mark_bottom})",
+            pip.y
         );
     }
 

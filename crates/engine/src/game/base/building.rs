@@ -404,12 +404,18 @@ impl Game {
 
     /// Files a Wall on every cell of `cells` a single Wall would be
     /// allowed on, counting the rest as skipped.
+    ///
+    /// The party's own cell is skipped too: the direction prompt can only
+    /// ever point at a neighbour, so `placement_refusal` never had to ask,
+    /// and `displace_bodies_from` moves programs, never the player — a
+    /// barrier raised there would stand on top of them.
     fn file_walls(&mut self, def: &StructureDef, cells: &[(i32, i32)]) -> WallBox {
         let build_cost = self.structure_build_cost(def);
         let free_build = self.dev_free_build();
+        let party = self.base_pos();
         let mut painted = WallBox::default();
         for &cell in cells {
-            if self.placement_refusal(&[cell], false).is_some() {
+            if Some(cell) == party || self.placement_refusal(&[cell], false).is_some() {
                 painted.skipped += 1;
                 continue;
             }

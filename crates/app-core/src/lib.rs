@@ -3124,7 +3124,8 @@ pub struct App {
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
     /// Where the box cursor is aimed, in **base-space** coordinates, shared
-    /// by `Mode::Excavate` and `Mode::Stockpile`. `None` outside those and
+    /// by `Mode::Excavate`, `Mode::Stockpile` and `Mode::WallBox`. `None`
+    /// outside those and
     /// the brush picker —
     /// opening the mode puts it on the party's own cell and leaving clears
     /// it.

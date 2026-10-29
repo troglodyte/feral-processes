@@ -78,6 +78,61 @@ fn a_wall_box_skips_cells_a_single_wall_would_be_refused_on() {
     assert_eq!(sites(&mut game), walls(&[(1, 1), (1, 3), (1, 4), (1, 5)]));
 }
 
+/// The cursor opens on the party, so the first box drawn usually covers
+/// it — and a barrier raised under the player is a cell the direction
+/// prompt could never have targeted.
+#[test]
+fn a_wall_box_skips_the_party_s_own_cell() {
+    let mut game = walled_base(5109);
+    stand_in_base_at(&mut game, 1, 1);
+
+    let painted = game.place_wall_box((1, 1), (2, 1)).unwrap();
+
+    assert_eq!(
+        painted,
+        WallBox {
+            filed: 1,
+            skipped: 1,
+            called_off: 0
+        }
+    );
+    assert_eq!(sites(&mut game), walls(&[(2, 1)]));
+}
+
+/// A called-off wall owes back what was carried to it, the same as
+/// `cancel_build_request` — with no Depot standing, into the pack.
+#[test]
+fn calling_off_a_wall_box_returns_what_was_delivered() {
+    let mut game = walled_base(5110);
+    game.place_wall_box((1, 1), (1, 1)).unwrap();
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    let site = game
+        .world
+        .query::<(Entity, &BuildSite)>()
+        .iter(&game.world)
+        .map(|(e, _)| e)
+        .next()
+        .unwrap();
+    game.world.get_mut::<BuildSite>(site).unwrap().delivered = vec![(fragment.clone(), 5)];
+    let player = game.player_entity();
+    let before = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&fragment);
+
+    game.place_wall_box((1, 1), (1, 1)).unwrap();
+
+    assert!(sites(&mut game).is_empty());
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&fragment),
+        before + 5
+    );
+}
+
 #[test]
 fn a_wall_box_with_nowhere_to_stand_a_wall_is_refused() {
     let mut game = walled_base(5103);

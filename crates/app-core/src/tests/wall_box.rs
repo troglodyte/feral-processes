@@ -69,7 +69,8 @@ fn two_spaces_file_a_row_of_walls_and_spend_no_tick() {
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char(' '));
 
-    assert_eq!(filed_walls(&app), 3);
+    // Three cells, less the party's own.
+    assert_eq!(filed_walls(&app), 2);
     assert_eq!(app.mode, Mode::WallBox, "the mode stays open");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);

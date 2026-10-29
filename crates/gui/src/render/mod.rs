@@ -1981,7 +1981,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 169] = [
+    const ALL_MODES: [Mode; 170] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -2076,6 +2076,7 @@ mod tests {
         Mode::ExcavateBrush,
         Mode::FarmRecipe,
         Mode::Stockpile,
+        Mode::WallBox,
         Mode::PutDown,
         Mode::Refactor,
         Mode::RefactorItem,
@@ -2242,7 +2243,7 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 33] = [
+    const NEEDS_PENDING_STATE: [Mode; 34] = [
         // The Workbench pages are drawn only inside the structure hub frame,
         // which the census app never opens.
         Mode::RoutineBuild,
@@ -2275,6 +2276,7 @@ mod tests {
         Mode::FieldRoutineAlly,
         Mode::Excavate,
         Mode::Stockpile,
+        Mode::WallBox,
         Mode::RefactorItem,
         Mode::DevelopProgram,
         Mode::ExtractPick,

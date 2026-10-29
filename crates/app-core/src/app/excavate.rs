@@ -208,7 +208,7 @@ impl App {
     pub fn plan_keybar(&self) -> Option<Vec<(String, String)>> {
         let excavating = match self.mode {
             Mode::Excavate | Mode::ExcavateBrush => true,
-            Mode::Stockpile => false,
+            Mode::Stockpile | Mode::WallBox => false,
             _ => return None,
         };
         let row = |k: &str, l: String| (k.to_string(), l);

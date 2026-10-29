@@ -362,6 +362,7 @@ impl App {
             Mode::ExcavateBrush => self.handle_excavate_brush_key(key),
             Mode::FarmRecipe => self.handle_farm_recipe_key(key),
             Mode::Stockpile => self.handle_stockpile_key(key),
+            Mode::WallBox => self.handle_wall_box_key(key),
             Mode::PutDown => self.handle_put_down_key(key),
             Mode::Refactor => self.handle_refactor_key(key),
             Mode::RefactorItem => self.handle_refactor_item_key(key),

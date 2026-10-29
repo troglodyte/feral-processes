@@ -107,7 +107,7 @@ use components::{
     Talents, Tamed, Tampered, Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::auto_resolve::AutoResolve;
-pub use game::base::building::AwaitingSite;
+pub use game::base::building::{AwaitingSite, WallBox};
 pub use game::base::lines::LineKey;
 pub use game::base::prison::JailBlock;
 pub use game::base::structure_hub::{AdjacentStructure, StructurePage};
@@ -202,6 +202,10 @@ pub(crate) fn zone_portal_cost(base_qty: u32, zone: u32) -> u32 {
 /// already standing somewhere. Also what pins the build menu's ordering
 /// (see `StructureDb::all`).
 const HOME_STRUCTURE_ID: &str = "home";
+
+/// `StructureDef::id` of the Wall, the one structure placed by painting a
+/// box (`Game::place_wall_box`) rather than one cell at a time.
+const WALL_STRUCTURE_ID: &str = "wall";
 
 /// The entire public API surface the renderer talks to via app-core. Its
 /// methods live in the `game` module, split by topic; the renderer never

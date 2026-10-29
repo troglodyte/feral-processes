@@ -2071,6 +2071,10 @@ pub enum Mode {
     /// box, committing through `Game::toggle_stockpile_box` instead. Like
     /// `Excavate`, a mode and not an action — it spends no turn.
     Stockpile,
+    /// Painting walls, picked from the build menu: the Excavation plan's
+    /// cursor and box, committing through `Game::place_wall_box`. A plan
+    /// like `Stockpile` — it spends no turn; the crew raising them does.
+    WallBox,
     /// Picking one thing from the pack to set on the floor, `y` on the base
     /// map. Choosing a row puts it down and spends a turn; Esc leaves
     /// without one.
@@ -2603,6 +2607,8 @@ impl Mode {
             | Mode::FarmRecipe
             // Opened from the base map only, so it never layers over a fight.
             | Mode::Stockpile
+            // Opened from the build menu in base space, `Stockpile`'s reason.
+            | Mode::WallBox
             // Opened from the base map only, so it never layers over a fight.
             | Mode::PutDown
             | Mode::Refactor
@@ -3118,7 +3124,8 @@ pub struct App {
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
     /// Where the box cursor is aimed, in **base-space** coordinates, shared
-    /// by `Mode::Excavate` and `Mode::Stockpile`. `None` outside those and
+    /// by `Mode::Excavate`, `Mode::Stockpile` and `Mode::WallBox`. `None`
+    /// outside those and
     /// the brush picker —
     /// opening the mode puts it on the party's own cell and leaving clears
     /// it.

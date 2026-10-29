@@ -265,7 +265,7 @@ pub(super) fn draw_playing_base(
         .filter(|_| {
             matches!(
                 app.mode,
-                Mode::Excavate | Mode::ExcavateBrush | Mode::Stockpile
+                Mode::Excavate | Mode::ExcavateBrush | Mode::Stockpile | Mode::WallBox
             )
         })
         .map(|cursor| PlanCursor {

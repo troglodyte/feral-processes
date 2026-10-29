@@ -85,19 +85,6 @@ fn a_hand_laid_grid_survives_a_real_save_and_load() {
     assert_eq!(grid.floor_count(), 2);
 }
 
-/// A grid written before the overlay — base space's `cells` and a `seed` —
-/// still parses, every old standable cell as floor at the same coordinates:
-/// the checked-in `dev-saves/` load with their base intact until they are
-/// recaptured with the save format bump.
-#[test]
-fn a_pre_overlay_grid_parses_with_its_cells_as_floor() {
-    let grid: BaseGrid = ron::from_str("(cells:{(0,0):Floor,(1,0):Open(mined_at:3)},seed:7)")
-        .expect("the old shape still parses");
-    assert!(grid.is_floor(0, 0));
-    assert!(grid.is_floor(1, 0));
-    assert_eq!(grid.floor_count(), 2);
-}
-
 // ---------------------------------------------------------------------------
 // Floor finishes
 // ---------------------------------------------------------------------------

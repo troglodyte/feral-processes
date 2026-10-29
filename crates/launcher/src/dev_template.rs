@@ -857,11 +857,8 @@ mod tests {
         let mut game = Game::load(&out, &assets_dir()).unwrap();
         let _ = std::fs::remove_file(&out);
 
-        // Not yet `on_base_floor()`: this template predates the floor
-        // overlay (ADR 0032) and loads with no floor until it is recaptured
-        // with the save format bump.
         assert!(
-            !game.is_underground(),
+            game.on_base_floor(),
             "a siege is fought on the base's own board — a party in the Stack \
              cannot be besieged"
         );

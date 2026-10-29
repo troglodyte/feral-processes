@@ -1828,7 +1828,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         next_gear_design_id: 0,
         known_affixes: Vec::new(),
         link_sites: Vec::new(),
-        locale: crate::resources::Locale::Surface.into(),
+        locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
         stack_memory_tiered: true,
         entered_tiers: Default::default(),

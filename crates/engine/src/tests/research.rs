@@ -2064,7 +2064,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
 fn save_format_version_is_unchanged_by_research_projects() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "these fields add no bump of their own; a changed version is a \
          deliberate bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

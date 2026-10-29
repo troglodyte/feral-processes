@@ -12,6 +12,17 @@ cargo run -- --template extraction   # regenerate the world and play it
 cargo run --bin savetool -- template # what's available
 ```
 
+## Recaptured at v40: the base on the field
+
+`SAVE_FORMAT_VERSION` 40 (ADR 0032) moved the base onto the field: the
+party's base-space tile is gone, the base is a floor overlay keyed by field
+coordinates, and mined ground is a map override. All 21 templates were
+recaptured by loading each through the real `Game::load` and saving it back
+(not hand-edited), so each now holds its old base cells as floor at the same
+coordinates and the party where its old base tile put it. Every template
+already has a founded Home, so none needs the 2 fragments founding costs;
+the new-run founding flow is tested in the engine instead.
+
 ## Migrated at v38: configurable machines
 
 `SAVE_FORMAT_VERSION` 38 gave `StructureSave` a `recipe`, and the one-recipe

@@ -988,7 +988,7 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
 fn caravans_cost_no_save_format_bump() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "a caravan field adds no bump of its own; a changed version is a deliberate bump"
     );
 }
@@ -1663,7 +1663,7 @@ fn caravan_memory_survives_a_save_and_load() {
     );
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "the caravan fields add no bump of their own; the version stays at the current pin"
     );
 }

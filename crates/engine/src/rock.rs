@@ -37,10 +37,6 @@ pub struct RockDef {
     /// id and no Rust behind it.
     pub id: String,
     pub name: String,
-    /// Relative share of the field this kind covers. Zero is refused at
-    /// load: a kind nothing can ever roll is an authoring mistake, not a
-    /// way to disable a file.
-    pub weight: u32,
     /// How much damage one cell of this kind absorbs before it opens.
     pub durability: u32,
     /// The fewest swings this kind can ever be opened in, however hard the
@@ -89,7 +85,6 @@ impl RockDef {
         RockDef {
             id: "entropy".to_string(),
             name: "Entropy".to_string(),
-            weight: 1,
             durability: crate::tuning::BASE_ROCK_DURABILITY,
             min_swings: crate::tuning::BASE_ROCK_MIN_SWINGS,
             shade: 1.0,
@@ -198,9 +193,6 @@ impl RockDb {
 fn def_fault(def: &RockDef) -> Option<String> {
     if def.id.is_empty() || def.name.is_empty() {
         return Some("has no id or no name".into());
-    }
-    if def.weight == 0 {
-        return Some("weight must be at least 1, or the kind could never be rolled".into());
     }
     if def.durability == 0 {
         return Some("durability must be at least 1, or the cell would open to no swing".into());
@@ -333,6 +325,7 @@ mod tests {
     const GOOD: &str = r#"(
     id: "test",
     name: "Test Rock",
+    // An old file's `weight` still parses; the field is ignored.
     weight: 10,
     durability: 24,
     min_swings: 2,

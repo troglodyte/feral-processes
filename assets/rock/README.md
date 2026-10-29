@@ -4,19 +4,14 @@ One `.ron` file per kind of base-space rock. A kind decides how hard a wall
 is to cut, how few swings it can ever fall in, and how bright its exposed
 face is drawn.
 
-**Which kind a given cell is, is derived and never stored.** `BaseGrid` is a
-sparse map in which a coordinate absent from it *is* solid rock, so there is
-nowhere to write a kind without making the sparse map not sparse.
-`RockDb::kind_at` folds base space's own seed with the *block* a coordinate
-falls in and reduces the result to a kind by weight — so kinds come in
-patches with an inside, adding a file widens the pool for the whole map, and
-a wall you have never touched still knows what it is.
+**Which kind a given cell is, is derived and never stored**, so a wall you
+have never touched still knows what it is.
 
-**On the field, the kind comes from the biome.** `RockDb::kind_at(biome)`
+**The kind comes from the biome.** `RockDb::kind_at(biome)`
 maps Data Void to `compacted`, Black Ice to `fused` and Entropy to `entropy`
 by these exact ids; a missing file falls back to the built-in ordinary kind.
-`weight` applies only to base-space rock (`base_kind_at`), which goes away
-when the base moves onto the field.
+Files from before this mapping may still carry a `weight` field; it is
+ignored.
 
 Drop a file in, restart, and it is in the world. Nothing else to edit.
 
@@ -26,7 +21,6 @@ Drop a file in, restart, and it is in the world. Nothing else to edit.
 (
     id: "compacted",
     name: "Compacted Entropy",
-    weight: 22,
     durability: 60,
     min_swings: 3,
     shade: 1.9,
@@ -37,7 +31,6 @@ Drop a file in, restart, and it is in the world. Nothing else to edit.
 |---|---|---|
 | `id` | string | Unique. Two files sharing one id keep whichever loads last. |
 | `name` | string | What examining an exposed face calls it. |
-| `weight` | u32 | Relative share of base space. Must be at least 1 — a kind nothing can roll is an authoring mistake, not a way to disable a file. |
 | `durability` | u32 | Damage one cell absorbs before it opens. |
 | `min_swings` | u32 | The fewest swings this kind can *ever* fall in. |
 | `shade` | f32 | Brightness of an exposed face, `1.0`..`4.0`. |

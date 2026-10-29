@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Your base now stands on the open field instead of in a separate room.** Found a Home wherever you are standing: it costs 2 core fragments and lays a 3x3 patch of floor around you. Build, haul and defend on the same ground you explore, and mine blockers beside your floor to widen the base. Before, the base was its own pocket you walked into and out of, with its own rock.
+
+**Old saves will not load.** The way a base is stored changed, so saves from before this release are refused, and the `dev-saves/` templates have been recaptured to match. Start a new run, or keep playing the old version for the old save.
+
+**Rock kinds come from the ground they sit in.** Data Void rock is compacted, Black Ice is fused and Entropy is ordinary. The `weight` field in `assets/rock/*.ron` no longer does anything, and files that still carry it keep loading.
+
 ## 0.20.29
 
 **Walls are now painted with a box, like mining and stockpiles.** Pick Wall from the build menu, press Space on one corner and Space on the other, and every free floor cell in the box gets a wall for your crew to raise. A box one cell wide is a row. Drawing takes no time, and the cell you are standing on is left open. Starting a box on a wall that isn't built yet calls off the unbuilt walls in it and gives back what was already carried there. Before, each wall took its own trip through the menu and a direction, and a turn.

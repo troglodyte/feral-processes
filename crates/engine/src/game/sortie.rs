@@ -435,16 +435,19 @@ impl Game {
             let sortie = &self.world.resource::<crate::resources::Sorties>().0[index];
             (sortie.risk, sortie.members.clone())
         };
-        // The pool is drawn against the party's own anchor tile, which is a
-        // real walkable surface tile of this sector — field coordinates
-        // are a different space and `habitat_pools` would answer about
-        // whatever surface ground happened to share the numbers.
+        // The pool is drawn against the anchor's tile, the base's own ground
+        // on the field.
         let (ax, ay) = self.anchor_position().unwrap_or((0, 0));
         let species = {
-            let Some((candidates, _)) = self.habitat_pools(ax, ay, None, risk) else {
-                return;
-            };
+            let candidates = self
+                .habitat_pools(ax, ay, None, risk)
+                .map(|(c, _)| c)
+                .unwrap_or_default();
             if candidates.is_empty() {
+                // Ground that fields nobody (mined ground under the anchor,
+                // say) is a battle fought with no one to fight. Counted, or
+                // `step_sortie`'s `while battles_done < due` never ends.
+                self.world.resource_mut::<crate::resources::Sorties>().0[index].battles_done += 1;
                 return;
             }
             let mut rng = self.world.resource_mut::<crate::resources::GameRng>();

@@ -795,6 +795,43 @@ pub(super) fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec
     (game, squad)
 }
 
+/// A trip from an anchor whose ground fields no species still comes home:
+/// a battle with nobody to fight is counted as fought. It used to return
+/// without counting, and `step_sortie`'s `while battles_done < due` spun
+/// forever on it. Mined ground (`Biome::Excavated`) is what the anchor
+/// really stands on once the base has dug around it.
+#[test]
+fn a_sortie_from_an_anchor_with_no_species_finishes() {
+    let (mut game, _) = a_dispatched_sortie(5000, DifficultyMode::Forgiving);
+    let (ax, ay) = game.anchor_position().expect("an anchor");
+    game.world
+        .resource_mut::<crate::world::WorldMap>()
+        .set_override(
+            ax,
+            ay,
+            crate::world::Tile {
+                biome: crate::world::Biome::Excavated,
+                walkable: true,
+                rock_shade: None,
+            },
+        );
+    let risk = game.world.resource::<Sorties>().0[0].risk;
+    assert!(
+        game.habitat_pools(ax, ay, None, risk).is_none(),
+        "test premise: the anchor's ground fields nobody"
+    );
+
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    for _ in 0..total {
+        game.wait();
+    }
+
+    assert!(
+        game.world.resource::<Sorties>().0.is_empty(),
+        "the trip should have come home"
+    );
+}
+
 /// A sortie's kill banks a downed program onto the trip through
 /// `Game::downed_program_for` — the same roll an ordinary kill makes, not a
 /// copy of it (`game/combat_rewards.rs`'s own reason for splitting that

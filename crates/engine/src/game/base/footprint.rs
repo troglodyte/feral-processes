@@ -21,21 +21,14 @@ pub(crate) fn distance_to_floor(floor: &BaseGrid, tile: (i32, i32)) -> Option<i3
 }
 
 impl Game {
-    /// Lays founding's floor: the anchor's own cell and the ring around it,
-    /// each where the field can be stood on and nothing on the field refuses
-    /// floor. A blocker in the ring is left unfloored here; refusing the
-    /// founding outright for one is the founding rule's own job.
+    /// Lays founding's floor: the anchor's own cell and the ring around it.
+    /// Founding has already refused a ring with a blocked or conflicting
+    /// cell, so every cell of it takes floor.
     pub(crate) fn lay_founding_floor(&mut self, x: i32, y: i32) {
+        let mut grid = self.world.resource_mut::<BaseGrid>();
         for dy in -1..=1 {
             for dx in -1..=1 {
-                let cell = (x + dx, y + dy);
-                if self.ground().walkable(cell.0, cell.1)
-                    && self.floor_conflict(cell.0, cell.1).is_none()
-                {
-                    self.world
-                        .resource_mut::<BaseGrid>()
-                        .lay_floor(cell.0, cell.1);
-                }
+                grid.lay_floor(x + dx, y + dy);
             }
         }
     }

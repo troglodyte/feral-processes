@@ -2741,12 +2741,11 @@ fn a_negative_recovery_rate_never_damages_the_program_it_names() {
     );
 }
 
-/// **The door lands where the party founded from.**
+/// **The base lands where the party founded from.**
 ///
-/// The Home still stands on `BASE_EXIT_CELL` — base space has one origin
-/// and one way out of it — but the anchor it is reached through is a zone
-/// fixture, and pinning that to the sector's arrival point made every run's
-/// base open at the same tile whatever ground the player had walked to.
+/// The Home and the anchor both stand on the tile the party founded from;
+/// pinning them to the sector's arrival point made every run's base open at
+/// the same tile whatever ground the player had walked to.
 #[test]
 fn founding_stands_the_anchor_where_the_party_is() {
     let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2824,6 +2823,57 @@ fn founding_costs_the_founding_fragments() {
             .count(&fragment),
         3,
         "founding spends HOME_FOUNDING_COST and nothing more"
+    );
+}
+
+/// A ring cell that is walkable but refuses floor — here a Stack link —
+/// refuses founding outright, rather than founding a base with a hole in
+/// its first floor.
+#[test]
+fn founding_is_refused_when_a_ring_cell_holds_a_link() {
+    let mut game = Game::new(3605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let link = {
+        let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+        *query
+            .iter(&game.world)
+            .next()
+            .expect("a fresh sector is seeded with links")
+    };
+    let (px, py) = (link.x - 1, link.y);
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                map.set_override(
+                    px + dx,
+                    py + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                        rock_shade: None,
+                    },
+                );
+            }
+        }
+    }
+    stand_player_at(&mut game, px, py);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("a link in the ring refuses founding");
+    assert!(err.contains("link"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
+    assert!(
+        !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(px, py),
+        "a refused founding lays no floor"
     );
 }
 

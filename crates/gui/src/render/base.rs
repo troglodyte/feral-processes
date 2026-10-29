@@ -557,6 +557,7 @@ pub(super) fn draw_playing_base(
         buffs: &buffs,
         pack: &pack,
         pets: &pets,
+        moods: game.staff_moods(),
         structures: &structures,
         stock: &stock_rows,
         builds: &builds,

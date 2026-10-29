@@ -1983,6 +1983,25 @@ impl Game {
             });
         }
 
+        // With the other threat rows, for their reason: the status bar's
+        // badge is the first row and the CREW bar the tab's first, and a
+        // program hitting people outranks an idle node or a point waiting to
+        // be spent. Worst first within it for the same reason.
+        let moods = self.staff_moods();
+        for (n, what) in [
+            (moods.lashing_out, "lashing out"),
+            (moods.downed_tools, "downed tools"),
+        ] {
+            if n > 0 {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::StaffUnrest,
+                    text: format!("{n} {what} (Base)"),
+                    key: 'b',
+                    threat: true,
+                });
+            }
+        }
+
         // Standing at a counter with cargo a held job wants. Read before the
         // base rows because it is the only row here that can be acted on from
         // exactly one tile, and it stops being available the moment the player
@@ -2042,24 +2061,6 @@ impl Game {
                 key: 'b',
                 threat: false,
             });
-        }
-
-        // Ahead of the CREW tab's other rows: the collapsed bar shows the
-        // tab's first row, and a program hitting people outranks a point
-        // waiting to be spent. Worst first within it for the same reason.
-        let moods = self.staff_moods();
-        for (n, what) in [
-            (moods.lashing_out, "lashing out"),
-            (moods.downed_tools, "downed tools"),
-        ] {
-            if n > 0 {
-                rows.push(AttentionRow {
-                    kind: AttentionKind::StaffUnrest,
-                    text: format!("{n} {what} (Base)"),
-                    key: 'b',
-                    threat: true,
-                });
-            }
         }
 
         for call in self.calls_to_act(self.player_entity()) {

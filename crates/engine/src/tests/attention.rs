@@ -243,3 +243,16 @@ fn staff_unrest_outranks_unspent_points() {
         "{k:?}"
     );
 }
+
+/// The status bar's badge is `attention().first()`, and threat rows lead —
+/// an idle machine must not stand in front of a program hitting people.
+#[test]
+fn staff_unrest_leads_an_idle_node() {
+    use crate::components::Grievance;
+    let mut game = fresh(2);
+    deploy_upgradeable_node(&mut game);
+    soured_staff(&mut game, &[Some(Grievance::LashingOut)]);
+    let k = kinds(&mut game);
+    assert!(k.contains(&AttentionKind::IdleStructures), "{k:?}");
+    assert_eq!(k.first(), Some(&AttentionKind::StaffUnrest), "{k:?}");
+}

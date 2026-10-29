@@ -2645,7 +2645,8 @@ mod tests {
             y: 11,
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
-       }.into();
+        }
+        .into();
         // A `BTreeSet` of tuples, which is the same place a text encoding
         // tends to give up.
         // A newtype over an `Option<enum>` with a tuple payload, and the
@@ -3196,7 +3197,8 @@ mod tests {
             y: 11,
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
-       }.into();
+        }
+        .into();
         data.trace = 123;
         save_to_file(&path, &data).unwrap();
         let loaded = load_from_file(&path).unwrap();

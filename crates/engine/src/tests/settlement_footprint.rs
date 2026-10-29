@@ -7,9 +7,7 @@
 //! what is here is the square that latch now moves.
 
 use super::support::*;
-use crate::components::{
-    CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap,
-};
+use crate::components::{CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap};
 use crate::resources::{FrameMemory, Outposts, Settlements, StackMemory, Standings, Visit};
 use crate::settlements::SettlementKey;
 use crate::tuning::*;
@@ -1185,4 +1183,3 @@ fn a_displaced_creature_never_lands_on_the_player() {
     assert_ne!((pos.x, pos.y), first, "the creature landed on the player");
     assert!(!footprint_set(&mut game, key).contains(&(pos.x, pos.y)));
 }
-

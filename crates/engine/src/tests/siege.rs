@@ -603,17 +603,19 @@ mod board {
         floor(&mut game, &[(0, 0)]);
 
         let cells = spawn_cells(&game);
-        assert!(!cells.is_empty(), "a sealed base still has somewhere to come from");
-        let nearest = cells
-            .iter()
-            .map(|&(x, y)| x.abs() + y.abs())
-            .min()
-            .unwrap();
+        assert!(
+            !cells.is_empty(),
+            "a sealed base still has somewhere to come from"
+        );
+        let nearest = cells.iter().map(|&(x, y)| x.abs() + y.abs()).min().unwrap();
         assert!(
             cells.iter().all(|&(x, y)| x.abs() + y.abs() == nearest),
             "only the first ring that holds walkable ground: {cells:?}"
         );
-        assert_eq!(nearest, 3, "the rock is two cells deep, so ring three is open");
+        assert_eq!(
+            nearest, 3,
+            "the rock is two cells deep, so ring three is open"
+        );
         let mut sorted = cells.clone();
         sorted.sort();
         assert_eq!(cells, sorted);
@@ -646,7 +648,11 @@ mod board {
         let siege_board = build(&mut game).expect("the floor has an edge");
         for cell in [(0, 0), (1, 0), (2, 0), (-1, 0), (1, 1)] {
             let at = siege_board.to_board(cell).unwrap();
-            assert_eq!(siege_board.board.cell(at.0, at.1), BattleCell::Open, "{cell:?}");
+            assert_eq!(
+                siege_board.board.cell(at.0, at.1),
+                BattleCell::Open,
+                "{cell:?}"
+            );
         }
         let corner = siege_board.to_board((-1, -1)).unwrap();
         assert_eq!(
@@ -3881,7 +3887,6 @@ mod rereview_findings {
              takes"
         );
     }
-
 
     // ---- C4-m: the reap's bench/dissolve matches `Game::run_raid`'s
     // defender precedent — a log line, and `Task` stripped before it.

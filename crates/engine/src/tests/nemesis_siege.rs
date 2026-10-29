@@ -816,7 +816,10 @@ fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
     // A board with no open cell is one `restore` cannot seat the party on,
     // which is the case that drops the siege.
     let siege_at = text.find("siege: Some(").expect("save layout moved");
-    let cells_at = siege_at + text[siege_at..].find("cells: [").expect("save layout moved");
+    let cells_at = siege_at
+        + text[siege_at..]
+            .find("cells: [")
+            .expect("save layout moved");
     let cells_end = cells_at + text[cells_at..].find(']').unwrap();
     let broken = format!(
         "{}{}{}",

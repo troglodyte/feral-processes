@@ -1247,7 +1247,10 @@ fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
         }
         assert!(
             game.ground().walkable(4, 3)
-                && !game.world.resource::<crate::base_grid::BaseGrid>().is_floor(4, 3),
+                && !game
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(4, 3),
             "precondition: the corridor is walkable ground, not floor"
         );
     }

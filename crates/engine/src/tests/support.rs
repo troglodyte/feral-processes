@@ -1226,7 +1226,9 @@ pub(super) fn place_machine(
     dy: i32,
 ) -> Result<Entity, String> {
     place_now(game, kind, dx, dy)?;
-    let (bx, by) = game.field_pos().expect("a test places machines from the field");
+    let (bx, by) = game
+        .field_pos()
+        .expect("a test places machines from the field");
     let machine = game
         .world
         .query::<(Entity, &Structure, &Position)>()
@@ -1857,13 +1859,27 @@ pub(super) fn breach_through_a_portal(game: &mut Game) {
     let zone = game.world.resource::<ZoneLevel>().0;
     game.grant_phase_key(zone);
     game.lay_test_pocket();
+    // The first pocket cell east of a standing spot whose step nothing on
+    // the field would answer first — the base shares the field with links,
+    // programs and towns, and a fixture's portal must not land on one.
+    let clear = |game: &mut Game, x: i32, y: i32| {
+        game.find_wild_creature_at(x, y).is_none()
+            && game.find_nest_at(x, y).is_none()
+            && game.find_surface_link_at(x, y).is_none()
+            && game.find_settlement_at(x, y).is_none()
+            && game.find_trap_at(x, y).is_none()
+    };
+    let x = (0..TEST_POCKET_HALF_WIDTH)
+        .chain(-TEST_POCKET_HALF_WIDTH..0)
+        .find(|&x| clear(game, x, 0) && clear(game, x + 1, 0))
+        .expect("a pocket row with two clear cells");
     game.world.spawn((
         Structure {
             kind: "portal".to_string(),
         },
-        Position { x: 1, y: 0 },
+        Position { x: x + 1, y: 0 },
     ));
-    stand_in_base_at(game, 0, 0);
+    stand_in_base_at(game, x, 0);
     game.move_player(1, 0);
 }
 

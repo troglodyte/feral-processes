@@ -932,7 +932,11 @@ mod tests {
         };
         let mut game = game(17);
         let (_, _, tile) = far(&mut game);
-        assert_eq!(game.found_outpost(tile), Ok(()), "far from the anchor's floor");
+        assert_eq!(
+            game.found_outpost(tile),
+            Ok(()),
+            "far from the anchor's floor"
+        );
 
         let mut game = self::game(17);
         let (ax, ay, tile) = far(&mut game);

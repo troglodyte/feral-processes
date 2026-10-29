@@ -493,10 +493,13 @@ fn a_guarded_refusal_is_silent() {
     game.refuse_transfer();
     game.world.remove_resource::<BattleState>();
 
-    descend(&mut game);
-    game.refuse_transfer();
-
     assert_eq!(lines(&game).len(), before, "no guard says a word");
+
+    // Going down logs its own arrival; the refusal down there adds nothing.
+    descend(&mut game);
+    let underground = lines(&game).len();
+    game.refuse_transfer();
+    assert_eq!(lines(&game).len(), underground, "nor in the Stack");
 }
 
 // The rules below survived the merge of the collect and deposit doors into

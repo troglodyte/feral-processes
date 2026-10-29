@@ -33,7 +33,12 @@ fn assert_floor_refused(game: &mut Game) {
         game.dig_site_at(OUTSIDE.0, OUTSIDE.1).is_none(),
         "a floor request was filed on the fixture's cell"
     );
-    assert!(!game.world.resource::<BaseGrid>().is_floor(OUTSIDE.0, OUTSIDE.1));
+    assert!(
+        !game
+            .world
+            .resource::<BaseGrid>()
+            .is_floor(OUTSIDE.0, OUTSIDE.1)
+    );
 }
 
 #[test]

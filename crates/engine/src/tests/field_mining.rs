@@ -208,7 +208,10 @@ fn bumping_a_blocker_beside_floor_mines_it() {
         game.move_player(1, 0);
     }
     assert_eq!(
-        game.world.resource_mut::<WorldMap>().tile(WALL.0, WALL.1).biome,
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(WALL.0, WALL.1)
+            .biome,
         Biome::Excavated
     );
     let player = game.player_entity();
@@ -237,7 +240,10 @@ fn bumping_a_blocker_away_from_floor_is_refused_and_cuts_nothing() {
         game.move_player(1, 0);
     }
     assert!(!walkable(&mut game, WALL), "the rock stands");
-    assert!(game.dig_site_at(WALL.0, WALL.1).is_none(), "and chips nothing");
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "and chips nothing"
+    );
 }
 
 #[test]

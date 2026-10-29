@@ -6,7 +6,6 @@ use crate::components::Squeezing;
 use crate::components::{Memories, MemorySubject};
 use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
 use crate::memories::MemoryId;
-use TEST_POCKET_HALF_WIDTH;
 use crate::*;
 
 /// A Home on the player's own tile — walkable by definition — plus enough

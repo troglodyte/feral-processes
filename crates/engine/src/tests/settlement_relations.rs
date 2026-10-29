@@ -842,7 +842,10 @@ fn travelling_out_lands_beside_the_town_and_never_on_it() {
             .walkable,
         "the relay set the party down somewhere they could not have walked"
     );
-    assert!(!game.on_base_floor(), "the relay left the party in base space");
+    assert!(
+        !game.on_base_floor(),
+        "the relay left the party in base space"
+    );
     assert_eq!(
         game.world.resource::<GameClock>().tick - before,
         quote,

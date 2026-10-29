@@ -58,7 +58,11 @@ fn the_player_cannot_walk_into_a_wall_and_the_bump_is_free() {
 
     game.move_player(1, 0);
 
-    assert_eq!(game.field_pos(), Some((0, 0)), "the wall must stop the step");
+    assert_eq!(
+        game.field_pos(),
+        Some((0, 0)),
+        "the wall must stop the step"
+    );
     assert_eq!(
         game.world.resource::<GameClock>().tick,
         before,

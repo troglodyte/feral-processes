@@ -212,6 +212,11 @@ pub enum AttentionKind {
     /// it are earning `unslotted`. Past, not at: a roster filling its slots
     /// exactly has nothing wrong with it, since slots are not a door.
     Unslotted,
+    /// Base staff who have downed tools or are lashing out — one row per
+    /// step, counted by `Game::staff_moods`. The two quiet steps are left to
+    /// the map mark and the CREW bar: they change nothing the player must
+    /// answer yet.
+    StaffUnrest,
     /// A held `Objective::Deliver` whose counter the player is standing at,
     /// carrying some of what it asked for.
     ///

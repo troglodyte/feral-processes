@@ -2093,6 +2093,22 @@ impl Game {
             });
         }
 
+        // Worst first, so the badge's first row is the one hitting people.
+        let moods = self.staff_moods();
+        for (n, what) in [
+            (moods.lashing_out, "lashing out"),
+            (moods.downed_tools, "downed tools"),
+        ] {
+            if n > 0 {
+                rows.push(AttentionRow {
+                    kind: AttentionKind::StaffUnrest,
+                    text: format!("{n} {what} (Base)"),
+                    key: 'b',
+                    threat: true,
+                });
+            }
+        }
+
         // One row per outpost in `Trend::Stale`, `Trend::Declining` or dark
         // — design correction 10. Tile order (`resources::Outposts`' own
         // `BTreeMap` order), so the row a player sees first is stable.

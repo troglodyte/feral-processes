@@ -170,3 +170,54 @@ fn a_threat_sorts_above_everything_else() {
     assert!(all.contains(&AttentionKind::IdleStructures));
     assert!(all.contains(&AttentionKind::PerkPoints));
 }
+
+/// Staff standing in a base, each holding `grievance` (or nothing) — no tick,
+/// so `update_disgruntled` cannot clear what the test inserted.
+fn soured_staff(game: &mut Game, grievances: &[Option<crate::components::Grievance>]) {
+    stand_in_base(game);
+    for (i, g) in grievances.iter().enumerate() {
+        let body = spawn_tamed_on_map(game, -2 - i as i32, 0);
+        if let Some(grievance) = *g {
+            game.world
+                .entity_mut(body)
+                .insert(crate::components::Disgruntled {
+                    grievance,
+                    stranded: false,
+                    told: false,
+                });
+        }
+    }
+}
+
+/// The two quiet steps are the map's and the CREW bar's to show; raising
+/// them here would nag about a body that is still working.
+#[test]
+fn a_sulking_staff_raises_no_attention() {
+    use crate::components::Grievance;
+    let mut game = fresh(7);
+    soured_staff(&mut game, &[Some(Grievance::Sulking), None]);
+    assert!(!kinds(&mut game).contains(&AttentionKind::StaffUnrest));
+}
+
+/// One row per step and never one per body, lashing first.
+#[test]
+fn downed_and_lashing_staff_raise_one_row_each() {
+    use crate::components::Grievance;
+    let mut game = fresh(7);
+    soured_staff(
+        &mut game,
+        &[
+            Some(Grievance::DownedTools),
+            Some(Grievance::LashingOut),
+            Some(Grievance::DownedTools),
+        ],
+    );
+    let rows: Vec<AttentionRow> = game
+        .attention()
+        .into_iter()
+        .filter(|r| r.kind == AttentionKind::StaffUnrest)
+        .collect();
+    let texts: Vec<&str> = rows.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(texts, ["1 lashing out (Base)", "2 downed tools (Base)"]);
+    assert!(rows.iter().all(|r| r.key == 'b' && r.threat));
+}

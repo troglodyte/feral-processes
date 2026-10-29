@@ -115,7 +115,8 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         AttentionKind::PerkPoints
         | AttentionKind::StatPoints
         | AttentionKind::ProgramPoints
-        | AttentionKind::Unslotted => InfoTab::Crew,
+        | AttentionKind::Unslotted
+        | AttentionKind::StaffUnrest => InfoTab::Crew,
     }
 }
 

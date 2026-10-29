@@ -159,6 +159,7 @@ mod transfer;
 mod traps;
 mod travel;
 mod turn;
+mod wall_box;
 mod walls;
 mod watch;
 mod weapon_reach;

@@ -44,6 +44,30 @@ impl PlacementRefusal {
     }
 }
 
+/// What one `Game::place_wall_box` did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WallBox {
+    /// Wall requests filed.
+    pub filed: usize,
+    /// Cells a single wall would have been refused on.
+    pub skipped: usize,
+    /// Wall requests called off by a box drawn from a filed wall.
+    pub called_off: usize,
+}
+
+/// The log line for a wall box that filed something.
+fn filed_walls_line(name: &str, painted: WallBox) -> String {
+    let skipped = match painted.skipped {
+        0 => String::new(),
+        1 => " 1 cell was skipped.".to_string(),
+        n => format!(" {n} cells were skipped."),
+    };
+    match painted.filed {
+        1 => format!("You mark out a {name}. Your crew will raise it.{skipped}"),
+        n => format!("You mark out {n} {name}s. Your crew will raise them.{skipped}"),
+    }
+}
+
 impl Game {
     /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
     /// the party, spending `program` — a tamed program you own — to pay for
@@ -322,6 +346,101 @@ impl Game {
         });
         self.tick();
         Ok(())
+    }
+
+    /// Paints the box spanned by base-space cells `a` and `b` with Wall
+    /// requests — `Mode::WallBox`'s commit, the Excavation plan's box
+    /// applied to building.
+    ///
+    /// **The anchor decides**, `toggle_mark_box`'s rule: a box whose `a`
+    /// cell holds a filed Wall calls off every Wall request in it and
+    /// nothing else. Otherwise every cell `placement_refusal` passes is
+    /// filed and the rest are skipped — one blocked cell in a line is not a
+    /// reason to refuse the line.
+    ///
+    /// **Spends no tick**, unlike `place_structure`: drawing is a plan, the
+    /// box modes' rule. The crew raising each wall is unchanged.
+    pub fn place_wall_box(&mut self, a: (i32, i32), b: (i32, i32)) -> Result<WallBox, String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't deploy right now.".into());
+        }
+        let def = self
+            .world
+            .resource::<StructureDb>()
+            .get(WALL_STRUCTURE_ID)
+            .cloned()
+            .ok_or_else(|| "Unknown structure".to_string())?;
+        if !self.structure_unlocked(WALL_STRUCTURE_ID) {
+            return Err(format!("{} hasn't been researched yet.", def.name));
+        }
+        if !self.has_structure(HOME_STRUCTURE_ID) {
+            return Err("Deploy a Home first before building anything else.".into());
+        }
+        self.require_base()?;
+
+        // Row by row, so a call-off returns materials in a fixed order.
+        let cells: Vec<(i32, i32)> = (a.1.min(b.1)..=a.1.max(b.1))
+            .flat_map(|y| (a.0.min(b.0)..=a.0.max(b.0)).map(move |x| (x, y)))
+            .collect();
+        if self.filed_wall_at(a).is_some() {
+            let called_off = self.call_off_walls(&cells);
+            self.log_base(match called_off {
+                1 => format!("You call off 1 {}.", def.name),
+                n => format!("You call off {n} {}s.", def.name),
+            });
+            return Ok(WallBox {
+                called_off,
+                ..WallBox::default()
+            });
+        }
+
+        let painted = self.file_walls(&def, &cells);
+        if painted.filed == 0 {
+            return Err(format!("Nowhere in that box can take a {}.", def.name));
+        }
+        self.log_base(filed_walls_line(&def.name, painted));
+        Ok(painted)
+    }
+
+    /// Files a Wall on every cell of `cells` a single Wall would be
+    /// allowed on, counting the rest as skipped.
+    fn file_walls(&mut self, def: &StructureDef, cells: &[(i32, i32)]) -> WallBox {
+        let build_cost = self.structure_build_cost(def);
+        let free_build = self.dev_free_build();
+        let mut painted = WallBox::default();
+        for &cell in cells {
+            if self.placement_refusal(&[cell], false).is_some() {
+                painted.skipped += 1;
+                continue;
+            }
+            let site = BuildSite::new(def.id.clone(), build_cost.clone());
+            let site = self.spawn_build_site(site, cell.0, cell.1);
+            if free_build {
+                self.finish_site_now(site);
+            }
+            painted.filed += 1;
+        }
+        painted
+    }
+
+    /// Calls off every new-Wall request on `cells`, returning how many.
+    fn call_off_walls(&mut self, cells: &[(i32, i32)]) -> usize {
+        let mut called_off = 0;
+        for &cell in cells {
+            if let Some((site, build)) = self.filed_wall_at(cell) {
+                self.call_off(site, &build);
+                called_off += 1;
+            }
+        }
+        called_off
+    }
+
+    /// The new-Wall request filed on `cell`, if there is one.
+    fn filed_wall_at(&mut self, cell: (i32, i32)) -> Option<(Entity, BuildSite)> {
+        let site = self.base_space_build_site_at(cell.0, cell.1)?;
+        let build = self.world.get::<BuildSite>(site)?.clone();
+        (build.structure == WALL_STRUCTURE_ID && build.goal == BuildGoal::New)
+            .then_some((site, build))
     }
 
     /// Turns the dev free build on or off for this run: while on, a build
@@ -1011,8 +1130,7 @@ impl Game {
             return Err("A drop pod's recharge can't be called off.".into());
         }
         let name = self.structure_name(&build.structure);
-        self.return_build_holdings(&build);
-        self.world.despawn(site);
+        self.call_off(site, &build);
         self.log_base(format!("You call off the {name}."));
         self.tick();
         Ok(())
@@ -1476,6 +1594,14 @@ impl Game {
     /// supported thing to do to an install rather than a panic. Saying
     /// nothing would leave a program simply missing from the roster with no
     /// line anywhere accounting for it.
+    /// Takes a filed request down and owes back what it holds — the part
+    /// of a cancel that `cancel_build_request` and a called-off wall box
+    /// share.
+    fn call_off(&mut self, site: Entity, build: &BuildSite) {
+        self.return_build_holdings(build);
+        self.world.despawn(site);
+    }
+
     fn return_build_holdings(&mut self, build: &BuildSite) {
         for (item, qty) in &build.delivered {
             self.return_material(item, *qty);

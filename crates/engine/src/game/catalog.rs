@@ -1032,6 +1032,13 @@ impl Game {
             .is_none_or(|def| def.needs_program())
     }
 
+    /// Whether `id` is placed by painting a box (`place_wall_box`) rather
+    /// than by pointing at one cell — asked here so the build menu holds
+    /// no copy of which structure that is.
+    pub fn structure_places_by_box(&self, id: &StructureId) -> bool {
+        id == WALL_STRUCTURE_ID
+    }
+
     pub fn species_defs(&self) -> Vec<SpeciesDef> {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }

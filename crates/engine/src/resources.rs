@@ -2268,6 +2268,19 @@ pub struct FrameMemory {
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
+/// The tier each Stack link was first entered at, keyed by the link's
+/// surface tile.
+///
+/// Survives the `StackMemory` wipe in `Game::enter_next_zone` on purpose:
+/// that wipe is what lets a link re-tier, and this is what exempts the
+/// links the party has already walked. `Game::frame_spec` reads
+/// `entered_tier.unwrap_or(zone)`, so a link never entered carves at the
+/// current tier and an entered one keeps its maze. Keyed per link rather
+/// than per frame, so a deeper frame first walked after a breach still
+/// belongs to the stack the party entered.
+#[derive(Resource, Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnteredTiers(pub BTreeMap<(i32, i32), u32>);
+
 /// Which world chunks have had their wild population placed — see
 /// `Game::ensure_local_population`. A chunk in here is one the sector has
 /// already stocked; a chunk absent from it is ground nothing has ever lived

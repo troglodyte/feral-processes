@@ -657,6 +657,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.init_resource::<crate::resources::EnteredTiers>();
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::SeenTiles::default());
@@ -1740,6 +1741,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.init_resource::<crate::resources::EnteredTiers>();
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::SeenTiles::default());
@@ -2072,6 +2074,7 @@ impl Game {
         } else {
             crate::resources::StackMemory::default()
         });
+        game.world.insert_resource(data.entered_tiers);
         // **Before `restore_settlements`, not after.** That call draws every
         // known town's glyph through `Game::settlement_kind`, which reads
         // `Relation::grown` out of this resource. Restored after, every
@@ -3620,6 +3623,10 @@ impl Game {
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
             stack_memory_tiered: true,
+            entered_tiers: self
+                .world
+                .resource::<crate::resources::EnteredTiers>()
+                .clone(),
             settlements: self
                 .world
                 .resource::<crate::resources::Settlements>()

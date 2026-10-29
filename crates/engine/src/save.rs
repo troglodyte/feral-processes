@@ -1908,6 +1908,11 @@ pub struct SaveData {
     /// shape, two screens up in the same function.
     #[serde(default)]
     pub stack_memory_tiered: bool,
+    /// The tier each entered Stack link was first entered at — see
+    /// `resources::EnteredTiers`. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub entered_tiers: crate::resources::EnteredTiers,
     /// Which world chunks of this zone have had their wild population
     /// placed — see `resources::PopulatedChunks`. Saved rather than derived
     /// because it is history, not geometry: the chunks a run has stocked
@@ -2528,6 +2533,7 @@ mod tests {
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
             stack_memory_tiered: true,
+            entered_tiers: crate::resources::EnteredTiers::default(),
             populated_chunks: crate::resources::PopulatedChunks::default(),
             explored_chunks: crate::resources::ExploredChunks::default(),
             seen_tiles: crate::resources::SeenTiles::default(),

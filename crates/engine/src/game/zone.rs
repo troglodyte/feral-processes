@@ -811,7 +811,10 @@ impl Game {
     ///   surviving link keys a `FrameSpec` that now folds in the tier, so
     ///   the frame behind it is re-carved and the memory of the old one —
     ///   which cells were seen, which caches were emptied, which lair was
-    ///   cleared — describes a frame that no longer exists.
+    ///   cleared — describes a frame that no longer exists. A link the
+    ///   party had already entered is the exception: `EnteredTiers` pins
+    ///   its tier, so it re-carves the maze it was entered with, and only
+    ///   the seen/looted history of it is lost.
     pub(crate) fn enter_next_zone(&mut self) {
         self.notify(crate::notifications::NotificationKind::Breach);
 

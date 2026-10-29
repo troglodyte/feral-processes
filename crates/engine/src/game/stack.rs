@@ -520,12 +520,30 @@ impl Game {
             frames,
             // The world map is persistent, so the seed above is fixed for
             // the whole run and the tier is the only thing left that moves
-            // a surviving entrance's frame. Read live rather than stored on
-            // the link, which is a bare marker: `components::SurfaceLink`
-            // has no fields and every other Stack difficulty term reads
-            // `ZoneLevel` the same way.
-            tier: self.world.resource::<ZoneLevel>().0,
+            // a surviving entrance's frame. A link the party has entered
+            // keeps the tier it was entered at (`resources::EnteredTiers`,
+            // which outlives the breach's `StackMemory` wipe); any other
+            // carves at the live `ZoneLevel`.
+            tier: self
+                .world
+                .resource::<crate::resources::EnteredTiers>()
+                .0
+                .get(&entrance)
+                .copied()
+                .unwrap_or(self.world.resource::<ZoneLevel>().0),
         }
+    }
+
+    /// Pins `entrance` to the current tier the first time the party goes
+    /// through it. Before the frame is generated, so that frame is carved
+    /// from the pinned tier.
+    fn record_entered_tier(&mut self, entrance: (i32, i32)) {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        self.world
+            .resource_mut::<crate::resources::EnteredTiers>()
+            .0
+            .entry(entrance)
+            .or_insert(zone);
     }
 
     /// Generates the frame for `depth` and puts the party on the cell
@@ -548,6 +566,7 @@ impl Game {
         entrance: (i32, i32),
         landing: impl FnOnce(&stack::Frame) -> (i32, i32),
     ) {
+        self.record_entered_tier(entrance);
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
         let (x, y) = landing(&level);
         let mut tally = self.world.resource_mut::<crate::resources::RunTally>();
@@ -685,6 +704,10 @@ impl Game {
             .resource_mut::<StackMemory>()
             .0
             .retain(|&(tile, _), _| tile != entrance);
+        self.world
+            .resource_mut::<crate::resources::EnteredTiers>()
+            .0
+            .remove(&entrance);
     }
 
     /// The nearest legal tile to `from` a replacement link may stand on, or
@@ -1176,6 +1199,7 @@ impl Game {
             ..
         } = locale
         {
+            self.record_entered_tier(entrance);
             let level = stack::generate(self.frame_spec(depth, frames, entrance));
             // A frame is regenerated, not saved, so a change to the generator
             // moves the walls under an old save — and a party restored into

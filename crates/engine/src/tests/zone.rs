@@ -2432,3 +2432,75 @@ fn a_patrol_member_and_a_nest_guardian_pursue_in_the_same_tick() {
         "and so did the patrol member, off the same field, in the same tick"
     );
 }
+
+fn surface_link_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+    let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+    let mut tiles: Vec<(i32, i32)> = query.iter(&game.world).map(|p| (p.x, p.y)).collect();
+    tiles.sort();
+    tiles
+}
+
+/// Breaches on populated ground (the wild is deliberately not cleared) with
+/// one link entered and then left, and returns `(entered, never_entered)`.
+fn breach_with_one_link_entered(game: &mut Game) -> ((i32, i32), (i32, i32)) {
+    let links = surface_link_tiles(game);
+    assert!(links.len() >= 2, "a fresh zone scatters several links");
+    let (entered, untouched) = (links[0], links[1]);
+    game.enter_stack(entered.0, entered.1);
+    game.clear_stack();
+    breach_through_a_portal(game);
+    assert_eq!(game.player_status().zone, 2);
+    (entered, untouched)
+}
+
+/// A breach re-carves a link the party never entered at the new tier, and
+/// leaves one they had entered carved at the tier they entered it at.
+#[test]
+fn a_breach_keeps_an_entered_links_tier_and_re_tiers_the_rest() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let links = surface_link_tiles(&mut game);
+    let before = game.frame_spec(1, 3, links[0]);
+    assert_eq!(before.tier, 1);
+
+    let (entered, untouched) = breach_with_one_link_entered(&mut game);
+
+    let kept = game.frame_spec(1, 3, entered);
+    assert_eq!(
+        kept.tier, 1,
+        "an entered link keeps the tier it was entered at"
+    );
+    assert_eq!(kept.rng_seed(), before.rng_seed());
+    assert_eq!(
+        game.frame_spec(1, 3, untouched).tier,
+        2,
+        "a link never entered carves at the new tier"
+    );
+}
+
+/// The kept tier is per link, not per frame: a frame deeper down the same
+/// stack, first walked after the breach, still carves at the entered tier.
+#[test]
+fn an_entered_links_deeper_frames_share_its_tier() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (entered, _) = breach_with_one_link_entered(&mut game);
+    assert_eq!(game.frame_spec(2, 3, entered).tier, 1);
+}
+
+/// `entered_tier` is history, so it must come back from a save.
+#[test]
+fn an_entered_links_tier_survives_a_save_and_load_after_a_breach() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let (entered, untouched) = breach_with_one_link_entered(&mut game);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_entered_tier_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.frame_spec(1, 3, entered).tier, 1);
+    assert_eq!(loaded.frame_spec(1, 3, untouched).tier, 2);
+}

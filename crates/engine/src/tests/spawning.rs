@@ -1831,6 +1831,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
         stack_memory_tiered: true,
+        entered_tiers: Default::default(),
         populated_chunks: crate::resources::PopulatedChunks::default(),
         explored_chunks: crate::resources::ExploredChunks::default(),
         seen_tiles: crate::resources::SeenTiles::default(),

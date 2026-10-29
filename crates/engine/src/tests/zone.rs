@@ -2115,6 +2115,50 @@ fn a_breach_keeps_the_tiles_the_player_changed() {
     );
 }
 
+/// A breach keeps every tile the player changed and every cell of the base's
+/// floor: the `WorldMap` overrides and the `BaseGrid` come out of it equal,
+/// not just one sampled cell.
+#[test]
+fn a_breach_leaves_the_overrides_and_the_floor_unchanged() {
+    let mut game = Game::new(4243, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.lay_test_pocket();
+    let cut = Tile {
+        biome: Biome::Excavated,
+        walkable: true,
+        rock_shade: None,
+    };
+    game.world
+        .resource_mut::<WorldMap>()
+        .set_override(TEST_POCKET_HALF_WIDTH + 1, 0, cut);
+    // `Tile` has no `PartialEq`; what an override says is its biome and
+    // whether it can be stood on.
+    let overrides_of = |game: &Game| {
+        game.world
+            .resource::<WorldMap>()
+            .overrides()
+            .iter()
+            .map(|(&cell, t)| (cell, (t.biome, t.walkable)))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let overrides = overrides_of(&game);
+    let floor = game.world.resource::<crate::base_grid::BaseGrid>().clone();
+    assert!(floor.floor_count() > 0, "test premise: floor is laid");
+
+    breach(&mut game);
+
+    assert_eq!(game.player_status().zone, 2);
+    assert_eq!(
+        overrides_of(&game),
+        overrides,
+        "a breach changed the tile overrides"
+    );
+    assert_eq!(
+        game.world.resource::<crate::base_grid::BaseGrid>(),
+        &floor,
+        "a breach changed the base's floor"
+    );
+}
+
 /// The party stands where it stood. The old breach teleported them onto a
 /// fresh `ZoneSpawnPoint`, which is what made a place impossible to return
 /// to.
@@ -2241,6 +2285,43 @@ fn a_breach_clears_the_wild_but_leaves_a_nests_guardian_standing() {
     assert!(
         game.world.get::<Creature>(guardian).is_some(),
         "a breach cleared a nest's own guardian, leaving the nest bare"
+    );
+}
+
+/// What a breach does to nests: an existing nest's guardian keeps the stats
+/// it was rolled with (`clear_local_wild` spares `NestGuardian`), and a nest
+/// spawned after the breach fields its guardian at the new tier.
+#[test]
+fn a_nest_spawned_after_a_breach_fields_the_new_tier() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let guardian_of = |game: &mut Game, nest: Entity| {
+        let mut query = game.world.query::<(Entity, &NestGuardian)>();
+        query
+            .iter(&game.world)
+            .find(|(_, g)| g.nest == nest)
+            .map(|(e, _)| e)
+            .expect("a nest fields a guardian")
+    };
+    let old_nest = game.spawn_nest("scrapper", ppos.x + 4, ppos.y);
+    let old = guardian_of(&mut game, old_nest);
+    let old_hp = game.world.get::<Stats>(old).unwrap().max_hp;
+
+    breach_through_a_portal(&mut game);
+    assert_eq!(game.player_status().zone, 2);
+
+    assert_eq!(
+        game.world.get::<Stats>(old).unwrap().max_hp,
+        old_hp,
+        "an existing guardian keeps the tier it was spawned at"
+    );
+    let new_nest = game.spawn_nest("scrapper", ppos.x - 4, ppos.y);
+    let new = guardian_of(&mut game, new_nest);
+    let new_hp = game.world.get::<Stats>(new).unwrap().max_hp;
+    // Zone 2 doubles base stats; the individual roll cannot close that gap.
+    assert!(
+        new_hp > old_hp,
+        "a nest spawned after the breach should field the new tier: {new_hp} vs {old_hp}"
     );
 }
 

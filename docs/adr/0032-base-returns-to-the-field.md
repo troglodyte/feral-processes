@@ -1,6 +1,6 @@
 # 0032 — The base returns to the field; a breach re-tiers the field in place
 
-- Status: Proposed
+- Status: Agreed
 - Decided by: user, on Claude's proposal (awaiting the user's OK on this record)
 - Date: 2026-10-29
 - Pattern: —

@@ -4,6 +4,11 @@ A room is a stretch of base floor with walls or rock all the way around it. Nobo
 directly: close off a space and the base notices it. A gap in the wall, or a corridor that runs on
 into open floor, means the space is not a room yet.
 
+Walls are painted rather than placed one at a time. Pick Wall from the build menu, press Space on
+one corner and Space again on the other, and every free floor cell in that box gets a wall for the
+crew to raise. A row is a box one cell wide. Drawing costs no time. Start a box on a wall that is
+not built yet and it calls off the unbuilt walls in it instead.
+
 A door is how the crew gets through. Build one in a gap in the wall and the programs walk through
 it, while the space behind it still counts as closed. Every other machine and bench blocks the
 crew, so a door is the only thing that can stand in a doorway. During a siege a door is an

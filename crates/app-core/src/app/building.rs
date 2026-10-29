@@ -355,8 +355,26 @@ impl App {
             }
             BuildRow::Structure(i) => {
                 self.build_category = None;
-                self.pending_structure = Some(menu.defs[i].id.clone());
-                self.mode = Mode::BuildDirection;
+                let id = &menu.defs[i].id;
+                let painted_from = self
+                    .game
+                    .as_ref()
+                    .filter(|g| g.structure_places_by_box(id))
+                    .and_then(|g| g.base_pos());
+                match painted_from {
+                    Some(party) => {
+                        self.excavate_cursor = Some(party);
+                        self.excavate_anchor = None;
+                        self.mode = Mode::WallBox;
+                    }
+                    // Outside base space the direction prompt stays, so the
+                    // engine's own "you're not in the base" refusal is what
+                    // the player reads.
+                    None => {
+                        self.pending_structure = Some(id.clone());
+                        self.mode = Mode::BuildDirection;
+                    }
+                }
             }
         }
     }

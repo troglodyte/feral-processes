@@ -79,5 +79,6 @@ mod trade;
 mod transfer;
 mod traps;
 mod travel;
+mod wall_box;
 mod watch;
 mod world_map;

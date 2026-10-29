@@ -65,4 +65,5 @@ mod tools;
 pub(crate) mod trade;
 mod transfer;
 pub(crate) mod travel;
+mod wall_box;
 mod world_map;

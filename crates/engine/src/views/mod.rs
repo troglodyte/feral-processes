@@ -8,7 +8,7 @@ use crate::abilities::AffinityKind;
 use crate::alerts::AlertKind;
 use crate::battle::ActionOption;
 use crate::classes::PlayerClass;
-use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
+use crate::components::{EquippedItem, GlyphColor, Grievance, MachineStatus, Rarity, TaskKind};
 use crate::duties::Duty;
 use crate::game::party::ProgramRole;
 use crate::icon::PlayerIcon;

@@ -3,6 +3,7 @@
 
 use super::terrain::at_level;
 use super::*;
+use feral_processes_engine::MoodStep;
 
 /// The staffed mark's side, as a fraction of the tile, and how far it is held
 /// off the tile's edges. The inset is not cosmetic: `outline_open` drops the
@@ -187,6 +188,62 @@ pub(super) fn patrol_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
         size,
         size,
     )
+}
+
+/// A staff program's mood pip, as a scale on `IDENTITY_MARK` and a palette
+/// role — or nothing for a body that is ok.
+///
+/// **The pip grows as the step worsens**, so the ladder reads without colour
+/// and the two red steps stay apart: downed tools is a full pip, lashing out
+/// a larger one. The roles are the ones the map already spends on the same
+/// news about a machine — `WARN` for what waiting may fix, `ATTENTION` for
+/// what wants a look, `THREAT` for harm — and never the glyph's own hue,
+/// which says which program this is.
+pub(super) fn mood_mark(step: MoodStep) -> Option<(f32, Color)> {
+    match step {
+        MoodStep::Ok => None,
+        MoodStep::Slipping => Some((0.7, hud::palette::WARN)),
+        MoodStep::Sulking => Some((1.0, hud::palette::ATTENTION)),
+        MoodStep::DownedTools => Some((1.0, hud::palette::THREAT)),
+        MoodStep::LashingOut => Some((1.5, hud::palette::THREAT)),
+    }
+}
+
+/// Where a staff program's mood pip sits — `patrol_mark_rect`'s
+/// bottom-right corner, `scale` times its size, growing up and left from
+/// the same anchor.
+///
+/// **The patrol's corner is free on a staff tile**: a patrol is a town's
+/// program and never the player's, the nemesis corner is a hostile's, the
+/// con earmark is read against wild programs, and the bottom-left is the
+/// job mark a posted body wears. The top is the rarity bar and the rising
+/// `+`/`^`, which a body can wear at the same time as this.
+pub(super) fn mood_mark_rect(px: f32, py: f32, tile_px: f32, scale: f32) -> Rect {
+    let size = (tile_px - 1.0) * IDENTITY_MARK * scale;
+    let floor = progress_bar_rect(px, py, tile_px).y;
+    Rect::new(
+        px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        floor - IDENTITY_MARK_INSET - size,
+        size,
+        size,
+    )
+}
+
+/// Draws `ev`'s mood pip, if it wears one. Gated in here, `draw_held_output`'s
+/// shape, so the call site has nothing to agree with.
+pub(super) fn draw_mood_mark(
+    painter: &Painter,
+    ev: &EntityView,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    vig: f32,
+) {
+    let Some((scale, role)) = mood_mark(ev.mood) else {
+        return;
+    };
+    let r = mood_mark_rect(px, py, tile_px, scale);
+    painter.rect(r.x, r.y, r.w, r.h, at_level(role, vig));
 }
 
 /// Where a battle-map body's own HP bar sits — the full width of its
@@ -813,6 +870,54 @@ pub(super) fn machine_color(status: MachineStatus) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mood_mark_colours_by_step() {
+        use feral_processes_engine::MoodStep::*;
+        assert_eq!(mood_mark(Ok), None);
+        assert_eq!(mood_mark(Slipping).map(|m| m.1), Some(hud::palette::WARN));
+        assert_eq!(
+            mood_mark(Sulking).map(|m| m.1),
+            Some(hud::palette::ATTENTION)
+        );
+        assert_eq!(
+            mood_mark(DownedTools).map(|m| m.1),
+            Some(hud::palette::THREAT)
+        );
+        assert_eq!(
+            mood_mark(LashingOut).map(|m| m.1),
+            Some(hud::palette::THREAT)
+        );
+        // Without colour the two red steps still read apart, and the pip
+        // only ever grows as the step worsens.
+        let scale = |s| mood_mark(s).unwrap().0;
+        assert!(scale(Slipping) <= scale(Sulking));
+        assert!(scale(Sulking) <= scale(DownedTools));
+        assert!(scale(DownedTools) < scale(LashingOut));
+    }
+
+    /// The bars run the tile's full width; a pip sharing their row would
+    /// sit under or over them. Checked at the largest pip, which is the one
+    /// that reaches furthest.
+    #[test]
+    fn mood_mark_clears_both_bars() {
+        let largest = mood_mark(feral_processes_engine::MoodStep::LashingOut)
+            .unwrap()
+            .0;
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (100.0, 200.0);
+            let r = mood_mark_rect(px, py, tile_px, largest);
+            assert!(
+                r.x >= px && r.x + r.w <= px + tile_px,
+                "tile_px={tile_px}: {r:?}"
+            );
+            assert!(r.y >= py + RARITY_BAR_PX, "tile_px={tile_px}: {r:?}");
+            assert!(
+                r.y + r.h <= progress_bar_rect(px, py, tile_px).y,
+                "tile_px={tile_px}: {r:?} runs into the progress bar"
+            );
+        }
+    }
 
     /// Both bars run the tile's full width, so a square sharing their row
     /// would sit under or over them rather than beside them.

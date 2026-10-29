@@ -212,6 +212,11 @@ pub enum AttentionKind {
     /// it are earning `unslotted`. Past, not at: a roster filling its slots
     /// exactly has nothing wrong with it, since slots are not a door.
     Unslotted,
+    /// Base staff who have downed tools or are lashing out — one row per
+    /// step, counted by `Game::staff_moods`. The two quiet steps are left to
+    /// the map mark and the CREW bar: they change nothing the player must
+    /// answer yet.
+    StaffUnrest,
     /// A held `Objective::Deliver` whose counter the player is standing at,
     /// carrying some of what it asked for.
     ///
@@ -385,6 +390,85 @@ pub struct WellbeingNeed {
     pub name: String,
     pub fraction: f32,
     pub below_critical: bool,
+}
+
+/// How far into the grievance ladder a base staff program is, as the map
+/// mark and the CREW counts show it — see `mood_step`. Ordered best to
+/// worst.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MoodStep {
+    #[default]
+    Ok,
+    /// Below `MORALE_SLIPPING_AT` and not yet acting on it.
+    Slipping,
+    Sulking,
+    DownedTools,
+    LashingOut,
+}
+
+impl MoodStep {
+    pub fn label(self) -> &'static str {
+        match self {
+            MoodStep::Ok => "ok",
+            MoodStep::Slipping => "slipping",
+            MoodStep::Sulking => "sulking",
+            MoodStep::DownedTools => "downed",
+            MoodStep::LashingOut => "lashing",
+        }
+    }
+}
+
+/// Which step a body with `grievance` held and `morale` summed reads as.
+///
+/// **The acting steps are the stored marker, never the number.**
+/// `Disgruntled` carries the hysteresis and the ratchet, so a body inside the
+/// −8..−6 band still reads sulking for exactly as long as it still sulks;
+/// derived from `morale` the mark would say "ok" over a program refusing a
+/// machine. Only slipping, which changes no behaviour, reads the number.
+pub fn mood_step(grievance: Option<Grievance>, morale: f32) -> MoodStep {
+    match grievance {
+        Some(Grievance::Sulking) => MoodStep::Sulking,
+        Some(Grievance::DownedTools) => MoodStep::DownedTools,
+        Some(Grievance::LashingOut) => MoodStep::LashingOut,
+        None if morale < crate::tuning::MORALE_SLIPPING_AT => MoodStep::Slipping,
+        None => MoodStep::Ok,
+    }
+}
+
+/// Base staff counted by `MoodStep`, `Game::staff_moods`. Ok is not
+/// counted: the HUD reads the roster for the headcount.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MoodCounts {
+    pub slipping: usize,
+    pub sulking: usize,
+    pub downed_tools: usize,
+    pub lashing_out: usize,
+}
+
+impl MoodCounts {
+    pub fn is_calm(&self) -> bool {
+        *self == MoodCounts::default()
+    }
+
+    /// Every counted step, worst first, zeros included.
+    pub fn worst_first(&self) -> [(MoodStep, usize); 4] {
+        [
+            (MoodStep::LashingOut, self.lashing_out),
+            (MoodStep::DownedTools, self.downed_tools),
+            (MoodStep::Sulking, self.sulking),
+            (MoodStep::Slipping, self.slipping),
+        ]
+    }
+
+    pub(crate) fn add(&mut self, step: MoodStep) {
+        match step {
+            MoodStep::Ok => {}
+            MoodStep::Slipping => self.slipping += 1,
+            MoodStep::Sulking => self.sulking += 1,
+            MoodStep::DownedTools => self.downed_tools += 1,
+            MoodStep::LashingOut => self.lashing_out += 1,
+        }
+    }
 }
 
 /// One Staff-role program on the Wellbeing page - see `Game::staff_wellbeing`.

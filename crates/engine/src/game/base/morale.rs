@@ -350,4 +350,33 @@ impl Game {
             "{who} can't find a way to anywhere in this base worth stopping at."
         ));
     }
+
+    /// The step `who` reads as on the map and in the CREW counts —
+    /// `views::mood_step` over its stored marker and its morale. `Ok` for
+    /// anything that is not base staff: a party member or the player can hold
+    /// a low sum, but the indicator is a claim about the people working the
+    /// base.
+    pub fn mood_step(&self, who: Entity) -> crate::views::MoodStep {
+        if self.program_role(who) != Some(crate::ProgramRole::Staff) {
+            return crate::views::MoodStep::Ok;
+        }
+        self.staff_mood_step(who)
+    }
+
+    /// `mood_step` for a body the caller already knows is staff, so a loop
+    /// over `base_staff` does not ask the role twice.
+    pub(crate) fn staff_mood_step(&self, who: Entity) -> crate::views::MoodStep {
+        let grievance = self.world.get::<Disgruntled>(who).map(|d| d.grievance);
+        crate::views::mood_step(grievance, self.morale(who))
+    }
+
+    /// Every base staff body counted by its mood step — the one fold the
+    /// CREW summary, its open row and the attention rows all read.
+    pub fn staff_moods(&self) -> crate::views::MoodCounts {
+        let mut counts = crate::views::MoodCounts::default();
+        for who in self.base_staff() {
+            counts.add(self.staff_mood_step(who));
+        }
+        counts
+    }
 }

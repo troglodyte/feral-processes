@@ -18,7 +18,8 @@
 
 use feral_processes_app_core::{InfoTab, item_fusion_note};
 use feral_processes_engine::{
-    ActiveBuffView, BuildOrderRow, ContractRow, LabourDemand, PetInfo, StockRow, StructureReport,
+    ActiveBuffView, BuildOrderRow, ContractRow, LabourDemand, MoodCounts, PetInfo, StockRow,
+    StructureReport,
 };
 
 use super::palette;
@@ -226,6 +227,9 @@ pub(in crate::render) struct PaneData<'a> {
     /// outlives.
     pub pack: &'a [PackRow],
     pub pets: &'a [PetInfo],
+    /// `Game::staff_moods` — every base staff body, not the `CREW_ROWS` the
+    /// pane has room to list.
+    pub moods: MoodCounts,
     pub structures: &'a [StructureReport],
     pub stock: &'a [StockRow],
     pub builds: &'a [BuildOrderRow],
@@ -536,6 +540,13 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
             Vec::new()
         },
     ));
+    let mut mood = vec![label("MOOD    ")];
+    if d.moods.is_calm() {
+        mood.push(body("all ok"));
+    } else {
+        mood.extend(mood_pieces(&d.moods));
+    }
+    out.push(text(mood));
     out.push(text(vec![(
         format!("{}{}{}", cell("  UNIT", 16), cell("LV", 4), "INTEG"),
         palette::LABEL,
@@ -698,6 +709,51 @@ fn contract_rows(d: &PaneData) -> Vec<Row> {
     out
 }
 
+/// The most cells the mood counts may spend, on the collapsed bar and the
+/// open pane's row alike — three steps of single-digit counts whole. Held
+/// against the narrowest column, at the open row's larger size, by
+/// `crew_summary_fits_the_narrowest_bar`.
+const MOOD_CELLS: usize = 34;
+
+/// The non-ok mood steps, worst first, each in its map pip's colour — or, past
+/// `MOOD_CELLS`, as many as fit and a `+n` for the bodies left out.
+///
+/// **The mildest steps are the ones dropped**, `strip::fitting`'s rule of
+/// cutting from the end: the bar exists to say the worst thing first.
+fn mood_pieces(moods: &MoodCounts) -> Vec<Piece> {
+    let joiner = " \u{00b7} ";
+    let steps: Vec<_> = moods
+        .worst_first()
+        .into_iter()
+        .filter(|&(_, n)| n > 0)
+        .collect();
+    let mut out: Vec<Piece> = Vec::new();
+    let mut used = 0;
+    for (i, &(step, n)) in steps.iter().enumerate() {
+        let t = format!("{n} {}", step.label());
+        let lead = if i == 0 { 0 } else { joiner.chars().count() };
+        // Room is kept for the `+n` whenever anything would follow.
+        let after: usize = steps[i + 1..].iter().map(|&(_, n)| n).sum();
+        let tail = if after > 0 {
+            format!(" +{after}").len()
+        } else {
+            0
+        };
+        if used + lead + t.chars().count() + tail > MOOD_CELLS {
+            let dropped = n + after;
+            out.push((format!(" +{dropped}"), palette::FAINT, false));
+            break;
+        }
+        if i > 0 {
+            out.push((joiner.to_string(), palette::FAINT, false));
+        }
+        let color = crate::render::marks::mood_mark(step).map_or(palette::BODY, |m| m.1);
+        used += lead + t.chars().count();
+        out.push((t, color, false));
+    }
+    out
+}
+
 /// A closed tab's one-line summary, for its collapsed bar.
 ///
 /// Read **only when the tab has no attention row** — a condition needing the
@@ -717,6 +773,10 @@ pub(in crate::render) fn summary(tab: InfoTab, d: &PaneData) -> String {
             let held: u32 = d.stock.iter().map(|r| r.qty).sum();
             format!("{workable} nodes \u{00b7} {held} held")
         }
+        InfoTab::Crew if !d.moods.is_calm() => mood_pieces(&d.moods)
+            .iter()
+            .map(|(t, _, _)| t.as_str())
+            .collect(),
         InfoTab::Crew => {
             let party = d.pets.iter().filter(|p| p.party_slot.is_some()).count();
             let pips: String = "\u{2589}".repeat(party.min(CREW_PIPS));
@@ -846,6 +906,7 @@ mod tests {
             buffs,
             pack,
             pets,
+            moods: MoodCounts::default(),
             structures,
             stock,
             builds: &[],
@@ -1413,6 +1474,98 @@ mod tests {
             );
             assert!(r.ends_with('\u{2026}'), "a clipped activity says so: {r:?}");
         });
+    }
+
+    fn worst_moods() -> feral_processes_engine::MoodCounts {
+        feral_processes_engine::MoodCounts {
+            slipping: 12,
+            sulking: 12,
+            downed_tools: 12,
+            lashing_out: 12,
+        }
+    }
+
+    #[test]
+    fn crew_summary_is_unchanged_when_calm() {
+        let pets = [pet("Archive", Some(0))];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+        assert!(d.moods.is_calm());
+        assert_eq!(summary(InfoTab::Crew, &d), "\u{2589} 33/33");
+    }
+
+    #[test]
+    fn crew_summary_counts_worst_first() {
+        let d = PaneData {
+            moods: feral_processes_engine::MoodCounts {
+                slipping: 1,
+                sulking: 2,
+                downed_tools: 0,
+                lashing_out: 1,
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            summary(InfoTab::Crew, &d),
+            "1 lashing \u{00b7} 2 sulking \u{00b7} 1 slipping"
+        );
+    }
+
+    /// Every step populated with two-digit counts is the widest the bar can
+    /// be asked to say; it drops the mildest steps and counts the bodies it
+    /// dropped rather than running off the column.
+    #[test]
+    fn crew_summary_fits_the_narrowest_bar() {
+        let d = PaneData {
+            moods: worst_moods(),
+            ..Default::default()
+        };
+        let s = summary(InfoTab::Crew, &d);
+        assert!(s.starts_with("12 lashing"), "{s}");
+        assert!(s.contains('+'), "nothing dropped was counted: {s}");
+        let m = ui_metrics(720.0);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let r = crate::render::hud::layout::regions(char_w * 44.0, 720.0, char_w, &m, false);
+            let room = crate::render::hud::column::regions(r.info_column, &m)
+                .body
+                .w
+                - m.inset * 2.0;
+            // `draw_collapsed_bar`'s own runs: label, mark, space, text.
+            let drawn = format!("{} ! {s}", InfoTab::Crew.label());
+            let width = p.measure_ui_advance(&drawn, m.small());
+            assert!(width <= room, "{width:.0} drawn into {room:.0}: {drawn}");
+            // The open pane's row says the same thing at the body size.
+            let row: String = rows(InfoTab::Crew, &d)
+                .iter()
+                .find_map(|r| match r {
+                    Row::Text { left, .. } if left[0].0.starts_with("MOOD") => {
+                        Some(left.iter().map(|(t, _, _)| t.as_str()).collect())
+                    }
+                    _ => None,
+                })
+                .expect("a MOOD row");
+            let width = p.measure_ui_advance(&row, m.font_size);
+            assert!(width <= room, "{width:.0} drawn into {room:.0}: {row}");
+        });
+    }
+
+    #[test]
+    fn crew_pane_has_a_mood_row() {
+        let line = |d: &PaneData| -> String {
+            rows(InfoTab::Crew, d)
+                .iter()
+                .find_map(|r| match r {
+                    Row::Text { left, .. } if left[0].0.starts_with("MOOD") => {
+                        Some(left.iter().map(|(t, _, _)| t.as_str()).collect())
+                    }
+                    _ => None,
+                })
+                .expect("a MOOD row")
+        };
+        let mut d = PaneData::default();
+        assert!(line(&d).ends_with("all ok"));
+        d.moods.downed_tools = 3;
+        assert!(line(&d).ends_with("3 downed"), "{}", line(&d));
     }
 
     /// Every tab summarises to something, and none of them to nothing — a

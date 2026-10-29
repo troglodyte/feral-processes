@@ -147,10 +147,10 @@ fn craft_rows(
 /// actually prints: `draw_row` clips a row vertically and never
 /// horizontally, so a footer past the popup body is lost in silence.
 const CRAFT_QUANTITY_KEYS: &[&str] = &[
-    "Type digits",
     "[C] careful",
     "[F] compile 5",
     "[M] compile max",
+    "[O] order missing",
     "Enter compile",
     "Esc cancel",
 ];
@@ -159,6 +159,7 @@ const CRAFT_QUANTITY_KEYS: &[&str] = &[
 /// other row on this page that can grow by a word, and the width test
 /// measures both.
 const CRAFT_QUANTITY_ARROWS: &[&str] = &[
+    "Type digits",
     "Left/Right adjust",
     "Shift+Left/Right to the end",
     "Ctrl+Left/Right halves the gap",

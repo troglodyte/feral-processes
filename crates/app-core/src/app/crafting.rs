@@ -123,6 +123,7 @@ impl App {
             GameKey::Char('c') | GameKey::Char('C') => {
                 self.careful_craft = !self.careful_craft;
             }
+            GameKey::Char('o') | GameKey::Char('O') => self.order_missing(),
             GameKey::Char('f') | GameKey::Char('F') => {
                 let Some(result) = self.pending_craft.take() else {
                     self.mode = self.compile_exit_mode();
@@ -158,6 +159,34 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Files a work order for whatever the batch on this page is short of.
+    /// Every filed order leaves for the list — its log line is the receipt —
+    /// and anything the base cannot make keeps the page open, naming why.
+    fn order_missing(&mut self) {
+        let quantity = self.craft_quantity();
+        let careful = self.careful_craft;
+        let (Some(game), Some(result)) = (&mut self.game, &self.pending_craft) else {
+            return;
+        };
+        let outcome = match game.order_craft_shortfall(result, quantity, careful) {
+            Ok(outcome) => outcome,
+            Err(e) => return self.refuse(e),
+        };
+        if outcome.refused.is_empty() {
+            self.pending_craft = None;
+            self.craft_quantity_input.clear();
+            self.status_line = None;
+            self.mode = self.compile_exit_mode();
+            return;
+        }
+        let reasons: Vec<String> = outcome
+            .refused
+            .iter()
+            .map(|(item, reason)| format!("Can't order {}: {reason}", game.item_name(item)))
+            .collect();
+        self.refuse(reasons.join(" "));
     }
 
     /// What `[M]` would compile: the most this batch can afford, priced with

@@ -121,7 +121,7 @@ pub enum Event {
 pub enum LootSource {
     /// A fight's spoils: gear, a work resource, a Stack boss's fragments.
     Kill,
-    /// Cut out of base space by hand.
+    /// Cut out of the field by hand.
     Rock,
     /// A cache cracked open — a nest's or the Stack's.
     Cache,

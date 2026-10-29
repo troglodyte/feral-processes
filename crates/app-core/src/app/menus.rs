@@ -320,25 +320,11 @@ impl App {
         let Some(idx) = self.selected_index(key, roster.rows.len()) else {
             return;
         };
-        // The picker this opens acts on the structure three ways, and
-        // `Game::work_structure` — the one that stands the player at its
-        // station tile — is behind `require_base`, so the screen is only
-        // fully usable in one locale. The guard used to ask
-        // `is_underground()`, which was the same question when there were
-        // two locales and is not now: on the open grid the keypress was
-        // permitted and the engine refused it a moment later, which reads to
-        // the player as the key doing nothing.
-        //
-        // The other two rows toggle a standing job, which the engine leaves
-        // unguarded — so this refuses slightly more than the engine would.
-        // Deliberate: every structure stands in base space, and a screen
-        // that opened out on the grid to offer two of its three rows would
-        // be harder to explain than one that says where the base is.
-        //
-        // Refused at the keypress like the demolish key, rather than opening
-        // a picker whose every row is a dead end — the roster itself still
-        // reads fine from anywhere.
-        if self.game.as_ref().is_some_and(|g| !g.in_base()) {
+        // `Game::work_structure` is behind `require_field`, so the picker is
+        // refused at the keypress underground rather than opening on rows
+        // that are mostly dead ends — the roster itself still reads fine from
+        // anywhere.
+        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
             self.refuse(OUT_OF_BASE);
             return;
         }

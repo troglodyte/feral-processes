@@ -967,12 +967,12 @@ fn a_caravan_is_drawn_in_exactly_one_space_per_stage() {
 fn the_transition_stages_stand_on_the_surface() {
     for stage in [CaravanStage::Docking, CaravanStage::Leaving] {
         assert!(
-            !stage.in_base_space(),
+            !stage.inside_the_base(),
             "{stage:?} is spent standing on the anchor, out in the sector"
         );
     }
     for stage in [CaravanStage::Crossing, CaravanStage::Docked] {
-        assert!(stage.in_base_space(), "{stage:?} is inside");
+        assert!(stage.inside_the_base(), "{stage:?} is inside");
     }
 }
 

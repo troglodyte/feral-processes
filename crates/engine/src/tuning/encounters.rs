@@ -454,7 +454,7 @@ pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
 /// on base platform tiles, and never produces a boss or a nest.
 pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 
-/// Chance that powering down in the field is interrupted — the pack engages
+/// Chance that powering down away from the base floor is interrupted — the pack engages
 /// and nothing is restored, though the charge is spent all the same.
 ///
 /// **Not comparable to the per-step rates above it.** Those are rates that
@@ -463,7 +463,7 @@ pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 /// magnitude more dangerous. Modest on purpose: an outlet that buys a fight
 /// too often stops reading as a way to recover at all.
 ///
-/// Only charged rests roll. A free rest inside base space never reaches this
+/// Only charged rests roll. A free rest on the base floor never reaches this
 /// — it rides the branch that takes the charge, so the slab stays the one
 /// safe ground without a locale check of its own.
 pub const REST_AMBUSH_CHANCE: f64 = 0.15;
@@ -550,13 +550,12 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 /// itself when the player reaches it, however far out it is, so a link may
 /// now scatter as far as it likes.
 ///
-/// It does *not* keep links off the base platform by itself. That used to be
+/// It does *not* keep links off the base floor by itself. That used to be
 /// `Game::stamp_platform`'s job on top of it — despawning any link caught
-/// inside the slab it stamped — and it retired with `resources::Platform`:
-/// the base is out of phase now, so nothing a build does can catch a link
-/// under it any more. `spawn_surface_links` skipping `Biome::Platform` is
-/// dead for the same reason (nothing ever produces that biome on a
-/// `WorldMap` again); a base-space replacement for both is slice 2/3's.
+/// inside the slab it stamped — and it retired with `resources::Platform`.
+/// `spawn_surface_links` skipping `Biome::Platform` is dead for the same
+/// reason (nothing ever produces that biome on a `WorldMap`); keeping links
+/// off the floor is `Game::floor_conflict`'s job.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
 /// How far past the base's own edge the *first* link of a zone is placed —

@@ -26,9 +26,8 @@ use crate::world::{NEIGHBOURS, WorldMap};
 ///
 /// The step rule is a parameter because the callers genuinely disagree about
 /// which tiles are theirs to cross: `pursuit_field` below refuses the ground
-/// the base is safe on, and a hauling program walks base space instead —
-/// a different coordinate space entirely, whose walkability lives in
-/// `BaseGrid` and not in any `Tile`.
+/// the base is safe on, and a hauling program walks the floor instead —
+/// whose walkability lives in `BaseGrid` and not in the `Tile` it covers.
 ///
 /// That is why the rule takes a *coordinate* and reads whatever it likes for
 /// itself, rather than being handed a `Tile`. This function knows how to walk
@@ -38,7 +37,7 @@ use crate::world::{NEIGHBOURS, WorldMap};
 /// `WorldMap::tile` generates chunks lazily.
 ///
 /// **The rule is a cost function and not a predicate**: `None` is refused,
-/// `Some(c)` is what entering that tile costs. Every surface and base-space
+/// `Some(c)` is what entering that tile costs. Every surface and field
 /// caller answers `Some(1)`, which is exactly the uniform field this
 /// returned before; the battle map's `Rough` ground costs two and is why
 /// the shape widened. A predicate cannot say "crossable, but dearly", and

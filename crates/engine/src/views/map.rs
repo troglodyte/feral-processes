@@ -56,7 +56,7 @@ pub struct EntityView {
     /// by `shown_at`.
     pub is_landmark: bool,
     /// Whether this entity is the base anchor — `components::BaseAnchor`,
-    /// the permanent door into base space that `Game::new` spawns under the
+    /// the tile the Home stands on, which `Game::new` spawns under the
     /// party.
     ///
     /// It is neither a creature nor a `Structure`, so it is the one map
@@ -374,7 +374,7 @@ pub fn shown_at(sight: Sight, view: &EntityView) -> bool {
 /// part-way through.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DigMark {
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     pub cut: Option<f32>,
 }
@@ -382,7 +382,7 @@ pub struct DigMark {
 /// One farm cell as the base map draws it — see `Game::farm_tiles`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FarmTileView {
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     pub plot: Entity,
     /// The recipe's glyph and colour; `None` when the plot is unsown.
@@ -412,7 +412,7 @@ pub struct RoomView {
     /// The role's display name, e.g. "quarters".
     pub role: String,
     pub band: RoomBand,
-    /// **Base-space** cells, sorted.
+    /// **Field** cells, sorted.
     pub cells: Vec<(i32, i32)>,
     /// The cell of `cells` nearest the room's centre, where a label goes.
     pub label_at: (i32, i32),
@@ -423,7 +423,7 @@ pub struct RoomView {
 /// One floor item as the base map draws it — see `Game::floor_items`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloorItemView {
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     pub look: FloorLook,
     /// Display name, for the examine line.
@@ -698,7 +698,7 @@ pub struct WorldMapView {
 /// these.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloorMark {
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     /// The finish to lay, or `None` for a strip.
     pub finish: Option<String>,

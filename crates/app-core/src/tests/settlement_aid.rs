@@ -43,16 +43,18 @@ fn app_at_an_allied_town(seed: u32) -> (App, SettlementKey) {
     let key = SettlementKey { rx: 6, ry: 6 };
     register_a_known_settlement(&mut app, key, (0, 0));
 
-    // Out of base space, standing on the anchor, with the town beside it.
+    // Standing on the anchor, with the town just past the base's floor.
     let assets_dir = test_assets_dir();
     let path = scratch_path("aid_surface", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     let anchor = data.anchor.expect("the fixture founded a base");
     data.locale = Locale::Surface;
-    // North of the anchor: east would be the Relay's own base-space
-    // coordinates, and a settlement recorded there collides by number.
-    data.settlements.0.get_mut(&key).unwrap().tile = (anchor.0, anchor.1 + 1);
+    // The town stands well clear of the base, and the party beside it, so
+    // the walk home is a real trip.
+    let town = (anchor.0 + 30, anchor.1);
+    data.settlements.0.get_mut(&key).unwrap().tile = town;
+    data.player.position = (town.0, town.1 - 1);
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
@@ -74,7 +76,12 @@ fn g_asks_the_town_for_a_program() {
 
     app.handle_key(GameKey::Char('G'));
 
-    assert_eq!(roster_size(&app), before + 1, "no program arrived");
+    assert_eq!(
+        roster_size(&app),
+        before + 1,
+        "no program arrived: {:?}",
+        app.status_line
+    );
     assert_eq!(app.status_line, None, "a granted gift refused");
 }
 
@@ -129,7 +136,12 @@ fn t_on_the_town_page_sends_you_home_and_closes_the_page() {
 
     app.handle_key(GameKey::Char('T'));
 
-    assert_eq!(app.game.as_ref().unwrap().player_status().position, anchor);
+    let at = app.game.as_ref().unwrap().player_status().position;
+    // The Home stands on the anchor tile, so the walk home ends beside it.
+    assert!(
+        (at.0 - anchor.0).abs() <= 1 && (at.1 - anchor.1).abs() <= 1,
+        "{at:?} is not home ({anchor:?})"
+    );
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -223,8 +235,8 @@ fn t_on_a_destination_row_travels_and_leaves_no_cue_dangling() {
     );
 }
 
-/// And the in-reach case, forced rather than hoped for: a town one tile off
-/// the anchor guarantees the band-1 landing search answers within a tile of
+/// And the in-reach case, forced rather than hoped for: a town just past the
+/// base's floor guarantees the band-1 landing search answers within a tile of
 /// it, because the anchor itself is walkable — the party is standing on it.
 /// So the page must open, which is the half the old test never reached.
 #[test]
@@ -238,11 +250,9 @@ fn arriving_within_reach_opens_the_town_page() {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     let anchor = data.anchor.expect("the fixture founded a base");
-    // Diagonally off the anchor. Nothing is despawned by a registration, and
-    // the landing filter asks about creatures, nests, links and towns rather
-    // than structures, so the base-space coordinates this happens to share
-    // cannot affect the answer.
-    data.settlements.0.get_mut(&key).unwrap().tile = (anchor.0 + 1, anchor.1 + 1);
+    // Just past the pocket's edge, so the town's footprint clears the base.
+    data.settlements.0.get_mut(&key).unwrap().tile =
+        (anchor.0, anchor.1 - TEST_POCKET_HALF_HEIGHT - 1);
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);

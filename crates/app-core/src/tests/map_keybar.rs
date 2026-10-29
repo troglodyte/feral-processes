@@ -30,13 +30,15 @@ fn app_in_base(seed: u32) -> App {
 }
 
 #[test]
-fn base_space_offers_mining_and_trade() {
+fn the_field_offers_mining_and_trade() {
     let app = app_in_base(5101);
     let keys = keys(&app);
-    for key in ["< >", "b", "c", "n", "t", "s"] {
+    for key in ["b", "c", "n", "t", "s"] {
         assert!(keys.contains(&key.to_string()), "{key} missing: {keys:?}");
     }
-    assert!(!keys.contains(&"g".to_string()), "{keys:?}");
+    for stack_only in ["< >", "g"] {
+        assert!(!keys.contains(&stack_only.to_string()), "{keys:?}");
+    }
 }
 
 /// `n` is a toggle, so its label says which way it is set — the excavate
@@ -48,18 +50,6 @@ fn the_mine_label_says_when_mining_is_on() {
     app.handle_key(GameKey::Char('n'));
     assert!(app.game.as_ref().unwrap().mining());
     assert_eq!(label(&app, "n").as_deref(), Some("mine (on)"));
-}
-
-/// Both refuse on the open grid: the rock and the traders are through the
-/// anchor.
-#[test]
-fn the_open_grid_drops_mining_and_trade() {
-    let app = test_app(5103);
-    assert!(!app.game.as_ref().unwrap().in_base());
-    let keys = keys(&app);
-    assert!(!keys.contains(&"n".to_string()), "{keys:?}");
-    assert!(!keys.contains(&"t".to_string()), "{keys:?}");
-    assert!(keys.contains(&"c".to_string()), "{keys:?}");
 }
 
 /// `c` is unbound underground and `n` refuses; `g` and `o` are the Stack's
@@ -99,10 +89,7 @@ fn watching_a_program_takes_over_the_bar() {
     assert_eq!(label(&app, "Esc").as_deref(), Some("stop watching"));
 
     app.handle_key(GameKey::Esc);
-    assert!(
-        keys(&app).contains(&"< >".to_string()),
-        "bar not handed back"
-    );
+    assert!(keys(&app).contains(&"b".to_string()), "bar not handed back");
 }
 
 /// A popup over the map takes `Esc` for itself, so the watch bar's "Esc
@@ -123,7 +110,7 @@ fn a_popup_over_a_watched_map_does_not_offer_to_stop_watching() {
     app.handle_key(GameKey::Char('i'));
     assert_ne!(app.mode, Mode::Playing);
     assert_eq!(app.watching, Some(staff), "the popup released the camera");
-    assert!(keys(&app).contains(&"< >".to_string()), "{:?}", keys(&app));
+    assert!(keys(&app).contains(&"b".to_string()), "{:?}", keys(&app));
 }
 
 /// Any key but a step or the clock's cancels a walk, and the clock keys are
@@ -145,10 +132,7 @@ fn a_walk_in_progress_takes_over_the_bar() {
     assert_eq!(label(&app, "Space").as_deref(), Some("pause"));
     app.handle_key(GameKey::Esc);
     assert!(app.walk.is_none());
-    assert!(
-        keys(&app).contains(&"< >".to_string()),
-        "bar not handed back"
-    );
+    assert!(keys(&app).contains(&"b".to_string()), "bar not handed back");
 }
 
 /// The plan's bar still outranks the map's, as one group.
@@ -160,20 +144,25 @@ fn the_excavate_plan_keeps_its_own_bar() {
     assert_eq!(app.map_keybar(), vec![app.plan_keybar().unwrap()]);
 }
 
-/// Every locale's bar keeps the crossing pair and the screens first, which
-/// is what `the_keybar_fits_the_log_pane` measures the cut against.
+/// Every locale's bar keeps the screens first (after the Stack's crossing
+/// pair), which is what `the_keybar_fits_the_log_pane` measures the cut
+/// against.
 #[test]
-fn every_locale_bar_leads_with_the_crossing_and_the_screens() {
+fn every_locale_bar_leads_with_the_screens() {
     for locale in [
-        MapLocale::Base,
-        MapLocale::OpenGrid,
+        MapLocale::Field,
         MapLocale::Stack { market: false },
         MapLocale::Stack { market: true },
     ] {
         for mining in [false, true] {
             let bar = locale_keybar(locale, mining);
-            assert_eq!(bar[0], [("< >".into(), "ascend/descend".into())]);
-            let screens: Vec<&str> = bar[1].iter().map(|(k, _)| k.as_str()).collect();
+            let screens_at = if matches!(locale, MapLocale::Stack { .. }) {
+                assert_eq!(bar[0], [("< >".into(), "ascend/descend".into())]);
+                1
+            } else {
+                0
+            };
+            let screens: Vec<&str> = bar[screens_at].iter().map(|(k, _)| k.as_str()).collect();
             assert_eq!(screens, ["b", "i", "D", "?", "Esc"], "{locale:?}");
         }
     }

@@ -519,7 +519,7 @@ fn a_dispatch_queues_one_cargo_walk() {
     assert_eq!(walks.len(), 1, "one cargo cue on departure");
     assert_eq!(
         walks[0].path.last(),
-        Some(&TEST_HOME_CELL),
+        Some(&crate::tests::support::TEST_HOME_CELL),
         "base space has one door and the walk ends at it"
     );
 }

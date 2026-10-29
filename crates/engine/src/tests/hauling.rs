@@ -368,7 +368,7 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     // far side of the pocket is what buys the walk.
     stand_in_base_at(
         &mut game,
-        node_pos.x + STARTING_POCKET_HALF_WIDTH - 1,
+        node_pos.x + TEST_POCKET_HALF_WIDTH - 1,
         node_pos.y,
     );
     game.assign_cronjob(worker, node).unwrap();
@@ -2404,8 +2404,8 @@ fn a_game_side_walker_pays_the_squeeze_before_it_moves() {
 fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
     let mut grid = crate::base_grid::BaseGrid::default();
     for x in -3..=0 {
-        grid.open(x, -1, 0);
-        grid.open(x, -2, 0);
+        grid.lay_floor(x, -1);
+        grid.lay_floor(x, -2);
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: -3, y: -2 };

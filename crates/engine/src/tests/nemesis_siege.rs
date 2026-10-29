@@ -545,7 +545,7 @@ fn the_marching_nemesis_is_chosen_by_what_it_is_not_by_entity_order() {
     };
     let later_cell = mk(&mut game, x + 20, y);
     let earlier_cell = mk(&mut game, x, y);
-    game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+    stand_in_base(&mut game);
     game.nemesis_march_check();
     assert!(has_siege_tags(&game, earlier_cell), "lower cell goes first");
     assert!(!has_siege_tags(&game, later_cell));

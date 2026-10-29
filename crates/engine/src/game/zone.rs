@@ -434,7 +434,7 @@ impl Game {
         crate::game::base::hauling::footprint_tiles(rows.into_iter().map(|(_, p, side)| (p, side)))
     }
 
-    /// Every cell a walk in base space refuses — every deployed structure's
+    /// Every cell a walk in the field refuses — every deployed structure's
     /// **anchor** and every body standing in one — from the `Game` side.
     /// `haul_step_system` builds the same set from its own queries; both go
     /// through `hauling::blocked_tiles` so the two cannot disagree about what
@@ -486,7 +486,7 @@ impl Game {
         }
     }
 
-    /// Every body standing in base space, with the cell it is standing in.
+    /// Every body standing in the field, with the cell it is standing in.
     ///
     /// **The `Game`-side half of `party::walks_the_base`**, which is where the
     /// rule itself lives and why this is a list rather than a predicate: the
@@ -495,9 +495,8 @@ impl Game {
     /// `drift_idle_staff` folds them into a tally to find out who is sharing.
     ///
     /// A program whose `Position` is the surface tile it was beaten on is held
-    /// out by the rule, not by a coordinate test: base space and the zone
-    /// surface alias onto each other freely — both origins are usually
-    /// `(0, 0)` — so a stale tile is indistinguishable from a real one by
+    /// out by the rule, not by a coordinate test: a stale tile can be a real
+    /// floor tile, so it is indistinguishable from a standing body's by
     /// looking at it.
     pub(crate) fn base_bodies(&mut self) -> Vec<(Entity, Position)> {
         let mut query = self
@@ -676,9 +675,9 @@ impl Game {
             .then_some(entity)
     }
 
-    /// A barrier structure (`StructureDef::barrier`) standing on base-space
+    /// A barrier structure (`StructureDef::barrier`) standing on field
     /// `(x, y)`, if any — `find_zone_portal_at`'s shape, asked by
-    /// `Game::move_in_base` before the step.
+    /// `Game::move_player` before the step.
     pub(crate) fn barrier_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world

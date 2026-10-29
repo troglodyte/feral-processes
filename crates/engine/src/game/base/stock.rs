@@ -312,7 +312,7 @@ impl Game {
     ///
     /// Makes no claim about where the party is standing — it is about the
     /// base, the way a Broker's board is — so it needs no
-    /// `require_surface` and reads the same four frames down the Stack.
+    /// `require_field` and reads the same four frames down the Stack.
     pub fn base_stock(&self) -> Vec<StockRow> {
         let db = self.world.resource::<ItemDb>();
         let mut totals: std::collections::BTreeMap<&ItemId, u32> =

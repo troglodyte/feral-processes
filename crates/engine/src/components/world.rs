@@ -6,11 +6,8 @@ pub struct Hostile;
 
 /// A wild program besieging the base — `game::siege::raiders`'s marker.
 ///
-/// The third kind of body carrying a base-space `Position`, after a posted
-/// program and a `DigSite`. `Game::stands_in_base_space` is the door that
-/// sharpening matters at: without an arm there a besieger's board cell would
-/// be read as a zone-surface tile the way an ordinary wild `Creature`'s is,
-/// and the two coordinate spaces alias onto each other by design.
+/// Unlike an ordinary wild `Creature`, a besieger walks the base floor and
+/// is excluded from the wild-spawn density counts for that reason.
 ///
 /// A unit marker rather than data — a besieger's behaviour lives in
 /// `game::siege::raiders`, keyed off this component and off `components::
@@ -32,17 +29,16 @@ pub struct StolenFrom(pub Entity);
 /// Which leg of its journey a caravan is on.
 ///
 /// **The stage decides which space the caravan stands in**, which is why
-/// `Game::stands_in_base_space` reads a field rather than testing for the
-/// component's presence: this is the first entity besides the player that
-/// changes spaces, and asking "is it a caravan" would put it in one space
-/// forever. See `in_base_space`.
+/// `inside_the_base` reads a field rather than testing for the component's
+/// presence: the caravan changes from walking the open ground to walking
+/// the floor, and asking "is it a caravan" would put it in one place forever.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CaravanStage {
     /// Walking across the zone surface toward the anchor.
     Approaching,
     /// Standing **on** the anchor tile, about to phase out.
     Docking,
-    /// Inside base space, walking to the Market.
+    /// On the base floor, walking to the Market.
     Crossing,
     /// Standing beside the Market, open for trade.
     Docked,
@@ -51,16 +47,14 @@ pub enum CaravanStage {
 }
 
 impl CaravanStage {
-    /// Whether a caravan at this stage stands in base space.
+    /// Whether a caravan at this stage stands on the base floor.
     ///
     /// `Docking` and `Leaving` are the two transition ticks and both answer
     /// **false**, decided rather than defaulted: each is spent standing on
-    /// the anchor tile *on the zone surface*, which is the tile the caravan
-    /// walked to and the tile it walks away from. Answering true for either
-    /// would draw it inside the base on a surface coordinate — base space's
-    /// origin and the zone spawn point commonly alias, so the glyph would
-    /// land somewhere plausible and stay wrong.
-    pub fn in_base_space(self) -> bool {
+    /// the anchor tile, which is the tile the caravan walked to and the tile
+    /// it walks away from. Answering true for either would treat it as
+    /// already inside the base.
+    pub fn inside_the_base(self) -> bool {
         matches!(self, CaravanStage::Crossing | CaravanStage::Docked)
     }
 }
@@ -72,9 +66,7 @@ impl CaravanStage {
 /// in `game/caravan.rs` from the base's own seed. What lives here is what
 /// could not be derived: which leg it is on and where it is standing.
 ///
-/// The third entity to carry a base-space `Position`, after a posted program
-/// and a `DigSite` — and the first that carries one only *sometimes*. See
-/// `CaravanStage::in_base_space`.
+/// See `CaravanStage::inside_the_base` for which stages count as on the floor.
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 pub struct Caravan {
     pub stage: CaravanStage,
@@ -109,17 +101,13 @@ pub struct Caravan {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SurfaceLink;
 
-/// The permanent door into base space — the player's pocket-dimension base,
-/// stepped into by walking onto this tile (`Game::enter_base`, wired in a
-/// later task). Modeled on `SurfaceLink`: it carries `Position` and `Glyph`
-/// alongside this, and stands on the zone map like any other surface
-/// entity.
+/// The base's anchor: the tile the Home stands on. Modeled on `SurfaceLink`:
+/// it carries `Position` and `Glyph` alongside this, and stands on the zone
+/// map like any other surface entity.
 ///
-/// Deliberately **not** a `Structure`. That is load-bearing rather than
-/// cosmetic: "every `Structure` entity is in base space" is how this slice
-/// tells a deployed building apart from anything standing on the surface,
-/// with no marker component of its own — making the anchor a `Structure`
-/// would silently break that rule.
+/// Deliberately **not** a `Structure`: making the anchor a `Structure` would
+/// have `run_raid`'s structure queries and the deployed-building census
+/// pick it up.
 ///
 /// There is exactly one, spawned once by `Game::new` (and restored once by
 /// `Game::load`) and never destroyed: it carries no `Durability`, so

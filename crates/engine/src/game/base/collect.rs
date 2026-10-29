@@ -94,9 +94,7 @@ impl Game {
     /// and `tests/transfer.rs` can pin the order directly; nothing outside
     /// the crate calls it.
     pub(crate) fn adjacent_stock(&self) -> Vec<Entity> {
-        // The party's base cell rather than their `Position`: every machine
-        // with a `Stock` stands in base space, and `Position` is pinned to
-        // the anchor tile on the zone surface while the party is in here.
+        // `field_pos` is `None` underground, where nothing is adjacent.
         let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
@@ -160,7 +158,7 @@ impl Game {
     }
 
     /// Whether a structure flagged `StructureDef::indexes_storage` stands
-    /// orthogonally beside the party in base space — asked of the flag and
+    /// orthogonally beside the party in the field — asked of the flag and
     /// never of the shipped id, so a mod's second terminal is a file.
     fn indexes_storage_here(&self) -> bool {
         let Some((px, py)) = self.field_pos() else {
@@ -197,7 +195,7 @@ impl Game {
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and
-    /// `require_base` already, and owns the announcement and the turn. That
+    /// `require_field` already, and owns the announcement and the turn. That
     /// is what lets one screen take and give inside a single action.
     ///
     /// An over-ask is clamped rather than refused, and units leave a buffer

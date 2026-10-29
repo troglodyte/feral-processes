@@ -22,7 +22,7 @@ use crate::world::Biome;
 /// A founded outpost with every field away from its zero value, so a round
 /// trip that silently dropped one would still show a plausible-looking
 /// record on the other side.
-fn a_founded_outpost() -> Outpost {
+pub(super) fn a_founded_outpost() -> Outpost {
     let mut stock = BTreeMap::new();
     stock.insert(ItemId("cache_grain".to_string()), 7);
     stock.insert(ItemId("static_mesh".to_string()), 3);

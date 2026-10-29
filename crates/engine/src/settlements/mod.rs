@@ -12,7 +12,7 @@
 //! That is what makes one a property of the map rather than an event: there
 //! is no spawn, no despawn, and nothing in the save that could disagree
 //! with the ground. It is the same rule `rock::RockDb::base_kind_at` follows for
-//! what a base-space coordinate is made of, and it only became possible
+//! what a field coordinate is made of, and it only became possible
 //! once a breach stopped rebuilding the world.
 //!
 //! **What a settlement *is* is no longer only authored** — `growth.rs`. The

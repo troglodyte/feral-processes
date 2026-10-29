@@ -471,128 +471,156 @@ fn an_approaching_siege_asks_for_the_players_attention() {
 mod board {
     use super::*;
     use crate::base_grid::BaseGrid;
-    use TEST_HOME_CELL;
-    use crate::game::siege::board::build;
+    use crate::game::siege::board::{build, siege_spawn_cells};
     use crate::tactical::map::BattleCell;
 
-    /// Cuts `cells` into an otherwise solid `BaseGrid`, floored — a base
-    /// with a known, deliberate shape for the flood fill to walk.
-    fn dig(game: &mut Game, cells: &[(i32, i32)]) {
+    fn set_tile(game: &mut Game, (x, y): (i32, i32), walkable: bool) {
+        let biome = if walkable {
+            Biome::OpenGrid
+        } else {
+            Biome::DataVoid
+        };
+        game.world.resource_mut::<WorldMap>().set_override(
+            x,
+            y,
+            Tile {
+                biome,
+                walkable,
+                rock_shade: None,
+            },
+        );
+    }
+
+    /// Every cell within `r` of `center` set walkable (`true`) or blocked,
+    /// so a test's ground never depends on the seed's terrain.
+    fn fill(game: &mut Game, center: (i32, i32), r: i32, walkable: bool) {
+        for y in center.1 - r..=center.1 + r {
+            for x in center.0 - r..=center.0 + r {
+                set_tile(game, (x, y), walkable);
+            }
+        }
+    }
+
+    fn floor(game: &mut Game, cells: &[(i32, i32)]) {
         let mut grid = game.world.resource_mut::<BaseGrid>();
         for &(x, y) in cells {
             grid.lay_floor(x, y);
         }
     }
 
+    fn spawn_cells(game: &Game) -> Vec<(i32, i32)> {
+        siege_spawn_cells(
+            game.world.resource::<BaseGrid>(),
+            game.world.resource::<WorldMap>(),
+        )
+    }
+
     #[test]
-    fn no_base_at_all_yields_no_board() {
+    fn no_floor_at_all_yields_no_board() {
         let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         assert!(build(&mut game).is_none());
     }
 
-    /// Rock reads `Blocked` and laid floor `Open`, on a base with a known
-    /// cut.
+    /// Siege spawn cells are the walkable field cells orthogonally next to
+    /// the floor's edge — never floor, never diagonal-only — sorted by
+    /// coordinate, and the same answer every time it is asked.
     #[test]
-    fn rock_is_blocked_and_laid_floor_is_open() {
+    fn siege_spawn_cells_lie_on_the_edge_and_are_deterministic() {
         let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        dig(&mut game, &[(0, 0), (1, 0), (2, 0)]);
+        fill(&mut game, (0, 0), 4, true);
+        floor(&mut game, &[(0, 0), (1, 0), (2, 0)]);
+        // One edge cell is rock, so the answer is not just "every neighbour".
+        set_tile(&mut game, (1, 1), false);
 
-        let siege_board = build(&mut game).expect("the door is walkable");
-
-        let door = siege_board.to_board(BASE_EXIT_CELL).unwrap();
-        assert_eq!(siege_board.board.cell(door.0, door.1), BattleCell::Open);
-        let dug = siege_board.to_board((1, 0)).unwrap();
-        assert_eq!(siege_board.board.cell(dug.0, dug.1), BattleCell::Open);
-
-        // A cell just off the cut corridor was never dug, so it is not in
-        // the fill and reads `Blocked` — whether or not it lies inside the
-        // board's own bounding box.
-        if let Some(off) = siege_board.to_board((1, 1)) {
-            assert_eq!(siege_board.board.cell(off.0, off.1), BattleCell::Blocked);
-        }
+        let cells = spawn_cells(&game);
+        let expected = vec![(-1, 0), (0, -1), (0, 1), (1, -1), (2, -1), (2, 1), (3, 0)];
+        assert_eq!(cells, expected);
+        assert_eq!(spawn_cells(&game), cells, "asked twice, answered the same");
     }
 
-    /// A pocket of floor with no walkable path to the door is absent from
-    /// the board by construction — never visited by the fill, never opened.
+    /// A sealed base — every cell touching the floor is rock — falls back to
+    /// the nearest walkable ring outside it, found by walking out through the
+    /// rock, rather than calling the siege off.
     #[test]
-    fn a_sealed_pocket_is_excluded_from_the_board() {
+    fn a_sealed_base_spawns_at_the_nearest_walkable_ring() {
         let mut game = Game::new(942, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        // A corridor out from the door, and a pocket at (5, 0) with no
-        // walkable neighbour connecting it back — solid rock all around it.
-        dig(&mut game, &[(0, 0), (1, 0), (2, 0)]);
-        dig(&mut game, &[(5, 0)]);
+        fill(&mut game, (0, 0), 6, true);
+        fill(&mut game, (0, 0), 2, false);
+        floor(&mut game, &[(0, 0)]);
 
-        let siege_board = build(&mut game).expect("the door is walkable");
-
-        // The pocket may or may not fall inside the bounding box the
-        // connected corridor produced; either way it must never read
-        // `Open`, since the fill never reached it.
-        if let Some(pocket) = siege_board.to_board((5, 0)) {
-            assert_eq!(
-                siege_board.board.cell(pocket.0, pocket.1),
-                BattleCell::Blocked,
-                "a sealed pocket must not be reachable on the board"
-            );
-        }
-    }
-
-    /// `to_board`/`to_base` round-trip for every cell of a fill, and
-    /// `to_board` answers `None` outside the box.
-    #[test]
-    fn to_board_and_to_base_round_trip() {
-        let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        dig(&mut game, &[(0, 0), (1, 0), (0, 1), (-1, 0)]);
-
-        let siege_board = build(&mut game).expect("the door is walkable");
-
-        for base_cell in [(0, 0), (1, 0), (0, 1), (-1, 0)] {
-            let cell = siege_board
-                .to_board(base_cell)
-                .expect("a dug cell must be on the board");
-            assert_eq!(siege_board.to_base(cell), base_cell);
-        }
-
-        assert_eq!(siege_board.to_board((1000, 1000)), None);
-    }
-
-    /// The door is in bounds and `Open`.
-    #[test]
-    fn the_door_is_in_bounds_and_open() {
-        let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.lay_test_pocket();
-        let siege_board = build(&mut game).expect("the starting pocket floors the door");
+        let cells = spawn_cells(&game);
+        assert!(!cells.is_empty(), "a sealed base still has somewhere to come from");
+        let nearest = cells
+            .iter()
+            .map(|&(x, y)| x.abs() + y.abs())
+            .min()
+            .unwrap();
         assert!(
-            siege_board
-                .board
-                .in_bounds(siege_board.door.0, siege_board.door.1)
+            cells.iter().all(|&(x, y)| x.abs() + y.abs() == nearest),
+            "only the first ring that holds walkable ground: {cells:?}"
         );
-        assert_eq!(
-            siege_board
-                .board
-                .cell(siege_board.door.0, siege_board.door.1),
-            BattleCell::Open
-        );
-        assert_eq!(siege_board.to_board(BASE_EXIT_CELL), Some(siege_board.door));
+        assert_eq!(nearest, 3, "the rock is two cells deep, so ring three is open");
+        let mut sorted = cells.clone();
+        sorted.sort();
+        assert_eq!(cells, sorted);
     }
 
-    /// A single-cell base yields a 1x1 board rather than `None` or a panic.
+    /// Nothing walkable within the search: no board, so the clock resolves
+    /// the siege off-screen instead.
     #[test]
-    fn a_single_cell_base_yields_a_1x1_board() {
-        let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        // A brand-new base already floors `BASE_EXIT_CELL` — see
-        // `Game::lay_starting_pocket` — so an entirely rock-walled cell
-        // does not occur in play. This pins the fill's own behaviour when
-        // it genuinely finds nothing beyond the door: a 1x1 board, not a
-        // crash or a `None`.
-        let mut grid = crate::base_grid::BaseGrid::default();
-        grid.set_seed(1);
-        grid.lay_floor(BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
-        game.world.insert_resource(grid);
+    fn a_base_buried_past_the_search_yields_no_board() {
+        let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fill(
+            &mut game,
+            (0, 0),
+            crate::tuning::SIEGE_SPAWN_SEARCH_TILES + 2,
+            false,
+        );
+        floor(&mut game, &[(0, 0)]);
+        assert!(spawn_cells(&game).is_empty());
+        assert!(build(&mut game).is_none());
+    }
 
-        let siege_board = build(&mut game).expect("the door alone is still walkable");
-        assert_eq!(siege_board.board.side, 1);
-        assert_eq!(siege_board.origin, BASE_EXIT_CELL);
-        assert_eq!(siege_board.door, (0, 0));
+    /// Floor and spawn cells read `Open`; everything else in the box reads
+    /// `Blocked`.
+    #[test]
+    fn floor_and_spawn_cells_are_open_and_the_rest_blocked() {
+        let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fill(&mut game, (0, 0), 4, true);
+        floor(&mut game, &[(0, 0), (1, 0), (2, 0)]);
+
+        let siege_board = build(&mut game).expect("the floor has an edge");
+        for cell in [(0, 0), (1, 0), (2, 0), (-1, 0), (1, 1)] {
+            let at = siege_board.to_board(cell).unwrap();
+            assert_eq!(siege_board.board.cell(at.0, at.1), BattleCell::Open, "{cell:?}");
+        }
+        let corner = siege_board.to_board((-1, -1)).unwrap();
+        assert_eq!(
+            siege_board.board.cell(corner.0, corner.1),
+            BattleCell::Blocked,
+            "a diagonal-only neighbour is not a spawn cell"
+        );
+        for &spawn in &siege_board.spawns {
+            assert_eq!(siege_board.board.cell(spawn.0, spawn.1), BattleCell::Open);
+        }
+    }
+
+    /// `to_board`/`to_field` round-trip for every cell, and `to_board`
+    /// answers `None` outside the box.
+    #[test]
+    fn to_board_and_to_field_round_trip() {
+        let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fill(&mut game, (0, 0), 4, true);
+        floor(&mut game, &[(0, 0), (1, 0), (0, 1), (-1, 0)]);
+
+        let siege_board = build(&mut game).expect("the floor has an edge");
+        for field_cell in [(0, 0), (1, 0), (0, 1), (-1, 0)] {
+            let cell = siege_board
+                .to_board(field_cell)
+                .expect("a floor cell must be on the board");
+            assert_eq!(siege_board.to_field(cell), field_cell);
+        }
+        assert_eq!(siege_board.to_board((1000, 1000)), None);
     }
 }
 
@@ -701,18 +729,22 @@ mod opening {
         );
     }
 
-    /// Raiders are all at or adjacent to the door at round 1, and their
+    /// Raiders are all seated on the floor's edge at round 1, and their
     /// count is exactly `siege::pack_size(zone)` — the same call the
     /// off-screen resolution prices a shortfall with, so the siege you
     /// fight and the siege you miss field the same pack.
     #[test]
-    fn raiders_are_seated_at_the_door_and_number_pack_size() {
+    fn raiders_are_seated_on_the_floors_edge_and_number_pack_size() {
         let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         ready_base(&mut game);
         set_zone(&mut game, 2);
-        let door = board::build(&mut game).unwrap().door;
+        let spawns = crate::game::siege::board::siege_spawn_cells(
+            game.world.resource::<crate::base_grid::BaseGrid>(),
+            game.world.resource::<WorldMap>(),
+        );
 
         assert!(game.open_siege());
+        let origin = game.world.resource::<TacticalBattle>().siege_origin;
 
         let bodies: Vec<(Entity, (i32, i32))> =
             game.world.resource::<TacticalBattle>().bodies().collect();
@@ -727,10 +759,10 @@ mod opening {
             "the seated pack must be exactly what pack_size(zone) prices"
         );
         for &(_, cell) in &raiders {
-            let dist = (cell.0 - door.0).abs().max((cell.1 - door.1).abs());
+            let field = (cell.0 + origin.0, cell.1 + origin.1);
             assert!(
-                dist <= 2,
-                "a raider at {cell:?} strayed far from the door at {door:?}"
+                spawns.contains(&field),
+                "a raider at {field:?} was not seated on the floor's edge"
             );
         }
     }
@@ -1382,7 +1414,7 @@ mod raiders_citizenship {
 
     /// A besieger's `Position` is a base-space cell, and the two coordinate
     /// spaces alias onto each other by design — `components::Besieger`'s own
-    /// doc. Without `Game::stands_in_base_space`'s arm this reads as a wild
+    /// doc. Without `Game::stands_inside_the_base`'s arm this reads as a wild
     /// `Creature` standing on the zone surface at the same numbers.
     #[test]
     fn a_besieger_draws_on_the_base_map_and_not_the_surface() {
@@ -1487,16 +1519,16 @@ mod raiders_steal {
         // not move where the door is read as standing) — this fixture has
         // to carry the same value `Game::open_siege` would have written, or
         // every besieger under test reads a phantom door at `(0, 0)`.
-        battle.siege_door = siege_board.door;
+        battle.siege_door = siege_board.spawns[0];
         // Seated at the door so `Game::settle_tactical` does not read the
         // fight as a jack-out the moment a besieger's own turn wraps the
         // round (`reap_tactical_dead`'s unconditional `settle_tactical`
         // call) — a fixture that never seats the player at all reads
         // `battle.cell_of(player)` as `None`, which is the same "gone" a
         // real jack-out leaves.
-        battle.place(game.player_entity(), siege_board.door);
+        battle.place(game.player_entity(), siege_board.spawns[0]);
         game.world.insert_resource(battle);
-        siege_board.door
+        siege_board.spawns[0]
     }
 
     fn spawn_besieger(game: &mut Game) -> Entity {
@@ -1781,16 +1813,16 @@ mod raiders_wreck {
         // not move where the door is read as standing) — this fixture has
         // to carry the same value `Game::open_siege` would have written, or
         // every besieger under test reads a phantom door at `(0, 0)`.
-        battle.siege_door = siege_board.door;
+        battle.siege_door = siege_board.spawns[0];
         // Seated at the door so `Game::settle_tactical` does not read the
         // fight as a jack-out the moment a besieger's own turn wraps the
         // round (`reap_tactical_dead`'s unconditional `settle_tactical`
         // call) — a fixture that never seats the player at all reads
         // `battle.cell_of(player)` as `None`, which is the same "gone" a
         // real jack-out leaves.
-        battle.place(game.player_entity(), siege_board.door);
+        battle.place(game.player_entity(), siege_board.spawns[0]);
         game.world.insert_resource(battle);
-        siege_board.door
+        siege_board.spawns[0]
     }
 
     fn spawn_besieger(game: &mut Game) -> Entity {
@@ -1935,16 +1967,16 @@ mod raiders_withdraw {
         battle.siege_pack = pack;
         // See the other `open_pocket_battle`s: `Game::besieger_turn` reads
         // `battle.siege_door` rather than rebuilding the board every beat.
-        battle.siege_door = siege_board.door;
+        battle.siege_door = siege_board.spawns[0];
         // Seated at the door so `Game::settle_tactical` does not read the
         // fight as a jack-out the moment a besieger's own turn wraps the
         // round (`reap_tactical_dead`'s unconditional `settle_tactical`
         // call) — a fixture that never seats the player at all reads
         // `battle.cell_of(player)` as `None`, which is the same "gone" a
         // real jack-out leaves.
-        battle.place(game.player_entity(), siege_board.door);
+        battle.place(game.player_entity(), siege_board.spawns[0]);
         game.world.insert_resource(battle);
-        siege_board.door
+        siege_board.spawns[0]
     }
 
     fn spawn_besieger(game: &mut Game) -> Entity {
@@ -2443,9 +2475,9 @@ mod persist {
         };
         let mut battle = TacticalBattle::open(spec, siege_board.board.clone());
         battle.siege_origin = siege_board.origin;
-        battle.siege_door = siege_board.door;
+        battle.siege_door = siege_board.spawns[0];
 
-        let door_cell = siege_board.door;
+        let door_cell = siege_board.spawns[0];
         let staff_cell = siege_board.to_board((1, 0)).unwrap();
         let structure_cell = siege_board.to_board((2, 0)).unwrap();
         let besieger_cell = siege_board.to_board((3, 0)).unwrap();
@@ -3221,7 +3253,7 @@ mod review_findings {
             let mut grid = game.world.resource_mut::<BaseGrid>();
             grid.lay_floor(-TEST_POCKET_HALF_WIDTH - 1, 0);
         }
-        let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().door;
+        let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().spawns[0];
         assert_ne!(
             rebuilt_door, frozen_door,
             "the fixture must actually shift the origin for this test to mean anything"

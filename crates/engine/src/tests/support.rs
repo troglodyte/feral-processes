@@ -254,8 +254,17 @@ impl Game {
 }
 
 /// Stands the player on `TEST_HOME_CELL` on the field — where a fixture's
-/// Home stands — out of the Stack if they were in it.
+/// Home stands — out of the Stack if they were in it, and floors the fixture
+/// pocket first if nothing is laid there: standing in the base means standing
+/// on its floor (`Game::on_base_floor`).
 pub(crate) fn stand_in_base(game: &mut Game) {
+    let floored = game
+        .world
+        .resource::<crate::base_grid::BaseGrid>()
+        .is_floor(TEST_HOME_CELL.0, TEST_HOME_CELL.1);
+    if !floored {
+        game.lay_test_pocket();
+    }
     stand_in_base_at(game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
 }
 
@@ -880,6 +889,14 @@ pub(super) fn file_build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Resul
         // whether it may is `tests::phase_keys`' question.
         let zone = game.world.resource::<ZoneLevel>().0;
         game.grant_phase_key(zone);
+    }
+    // The Home founds where the party stands, so every fixture founds on
+    // `TEST_HOME_CELL` and gets the fixture pocket around it — the ground
+    // its coordinates were written against.
+    if kind == "home" {
+        from_inside_the_base(game, |g| g.place_structure(kind, dx, dy, None))?;
+        game.lay_test_pocket();
+        return Ok(());
     }
     let program = build_program(game, &kind.to_string(), 1);
     game.place_structure(kind, dx, dy, program)
@@ -1889,8 +1906,7 @@ pub(super) fn stall_alerts(game: &Game, status: MachineStatus) -> u32 {
 /// pack up for it would leave every downstream inventory count carrying
 /// materials the test never asked for.
 pub(super) fn place_home(game: &mut Game) {
-    from_inside_the_base(game, |g| place_now(g, "home", 0, 0).unwrap());
-    game.lay_test_pocket();
+    place_now(game, "home", 0, 0).unwrap();
 }
 
 /// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off

@@ -311,7 +311,7 @@ pub struct RecipeChain {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildOrderRow {
     pub entity: Entity,
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     /// Whether this raises a new structure or advances the one already on
     /// the cell a tier — see `components::BuildGoal`. Read through
@@ -451,7 +451,7 @@ pub struct TransferCarrier {
 /// One Depot's filter as its screen draws it — see
 /// `Game::depot_filter_view`.
 ///
-/// `tile` is base space, and it is the header: with up to four Depots
+/// `tile` is a field coordinate, and it is the header: with up to four Depots
 /// orthogonally adjacent the player has to be told which one they are
 /// editing. `room` is that Depot's own `Stock::output_room`, not the
 /// transfer picker's shared budget, for the same reason.
@@ -481,7 +481,7 @@ pub struct DepotFilterRow {
 
 /// What the recipe menu draws for one configurable machine.
 ///
-/// `tile` is base space and the header, `RigToolView`'s reason: a base may
+/// `tile` is a field coordinate and the header, `RigToolView`'s reason: a base may
 /// stand several machines and the player has to be told which one they are
 /// setting. `held` is the units a change would empty (input plus output), so
 /// the screen can warn before the player makes it.

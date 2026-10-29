@@ -62,7 +62,7 @@ impl Game {
     /// edge the party can actually stand beside.
     ///
     /// **The space guard is the first line, not an omission.** A `Position`
-    /// is a *surface* tile only while `Locale::Open`: in base space it is a
+    /// is a *surface* tile only while `Locale::Open`: in the field it is a
     /// base-grid cell and underground it is the pinned entrance tile, and
     /// either can land within a tile of a town's coordinates by coincidence
     /// — `find_target_in_direction`'s own settlement arm gates the same way

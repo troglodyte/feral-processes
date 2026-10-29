@@ -107,13 +107,13 @@ fn a_step_hands_the_camera_back_and_still_steps() {
     let (mut app, staff) = watching_app(7);
     open_manifest(&mut app, staff, ManifestOrigin::Roster);
     app.handle_key(GameKey::Char('W'));
-    let before = app.game.as_ref().unwrap().base_pos().unwrap();
+    let before = app.game.as_ref().unwrap().field_pos().unwrap();
 
     walk(&mut app, GameKey::Right);
 
     assert_eq!(app.watching, None);
     assert_ne!(
-        app.game.as_ref().unwrap().base_pos().unwrap(),
+        app.game.as_ref().unwrap().field_pos().unwrap(),
         before,
         "the movement key must still move — releasing is not swallowing"
     );
@@ -121,7 +121,7 @@ fn a_step_hands_the_camera_back_and_still_steps() {
 
 /// The camera reads `watch_position` every frame, so the release has to come
 /// from the same call rather than from a list of things that might end a
-/// watch. Leaving base space is one of them and stands for all of them.
+/// watch. Going underground is one of them and stands for all of them.
 #[test]
 fn the_camera_lets_go_when_the_program_stops_being_watchable() {
     let (mut app, staff) = watching_app(7);
@@ -129,16 +129,12 @@ fn the_camera_lets_go_when_the_program_stops_being_watchable() {
     app.handle_key(GameKey::Char('W'));
     assert_eq!(app.watching, Some(staff));
 
-    app.game
-        .as_mut()
-        .unwrap()
-        .leave_base()
-        .expect("the party can always step out");
+    go_underground(&mut app);
 
     assert_eq!(
         app.watch_center(),
         None,
-        "nothing to watch from the zone surface"
+        "nothing to watch from inside the Stack"
     );
     assert_eq!(
         app.watching, None,

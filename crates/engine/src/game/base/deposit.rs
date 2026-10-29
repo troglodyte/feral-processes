@@ -134,7 +134,7 @@ impl Game {
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and
-    /// `require_base` already, and owns the announcement and the turn. That
+    /// `require_field` already, and owns the announcement and the turn. That
     /// is what lets one screen take and give inside a single action.
     ///
     /// Every clamp lives here: against what the pack holds, against each

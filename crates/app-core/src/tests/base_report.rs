@@ -364,12 +364,11 @@ fn each_popup_child_names_the_hub_screen_it_draws_over() {
     assert_eq!(base_popup_parent(Mode::Playing), None);
 }
 
-/// The old command rows were `Locality::Base`; the screens now open from
+/// The old command rows were `Locality::Field`; the screens now open from
 /// anywhere, so the keys that change something carry the refusal.
 #[test]
-fn work_orders_refuse_edits_outside_base_space() {
-    let mut app = app_inside_a_small_base(30022, false);
-    app.game.as_mut().unwrap().leave_base().unwrap();
+fn work_orders_refuse_edits_underground() {
+    let mut app = app_inside_a_small_base(30022, true);
     open_hub_screen(&mut app, Mode::WorkOrders);
     let last = app.work_order_rows().len() - 1;
 
@@ -383,7 +382,7 @@ fn work_orders_refuse_edits_outside_base_space() {
 }
 
 #[test]
-fn queued_orders_cannot_be_cancelled_or_reordered_outside_base_space() {
+fn queued_orders_cannot_be_cancelled_or_reordered_underground() {
     let mut app = app_inside_a_small_base(30026, false);
     let item = app.orderable_items()[0].0.clone();
     let game = app.game.as_mut().unwrap();
@@ -391,7 +390,7 @@ fn queued_orders_cannot_be_cancelled_or_reordered_outside_base_space() {
         game.queue_work_order(WorkOrder::batch(item.clone(), qty))
             .unwrap();
     }
-    game.leave_base().unwrap();
+    go_underground(&mut app);
     open_hub_screen(&mut app, Mode::WorkOrders);
     let quantities = |app: &App| -> Vec<u32> {
         app.game
@@ -416,8 +415,9 @@ fn queued_orders_cannot_be_cancelled_or_reordered_outside_base_space() {
 }
 
 #[test]
-fn the_duty_table_refuses_edits_outside_base_space() {
+fn the_duty_table_refuses_edits_underground() {
     let mut app = app_owning_distant_programs(30023, 1);
+    go_underground(&mut app);
     open_hub_screen(&mut app, Mode::BaseStaff);
     let before = app.base_staff_table().rows[0].cells.clone();
 
@@ -546,7 +546,7 @@ fn the_list_cursor_wraps_over_each_screens_own_report_and_costs_no_time() {
     let mut app = app_inside_a_small_base(30020, false);
     {
         let game = app.game.as_mut().unwrap();
-        let r = feral_processes_engine::tuning::STARTING_POCKET_HALF_HEIGHT + 1;
+        let r = TEST_POCKET_HALF_HEIGHT + 1;
         // Four cells in a row: four dig marks.
         game.toggle_mark_box((0, r), (3, r), None);
         // Three requests that cost no program.
@@ -759,7 +759,7 @@ fn the_command_pages_sit_after_overview_with_their_titles() {
 }
 
 #[test]
-fn each_command_page_lists_its_table_in_base_space() {
+fn each_command_page_lists_its_table_inside_the_base() {
     let mut app = app_inside_a_small_base_with_programs(30103, false, 1);
     assert_eq!(
         command_labels(&mut app, Mode::BaseBuild),

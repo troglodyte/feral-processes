@@ -130,15 +130,13 @@ fn a_refused_placement_says_so_and_places_nothing() {
     assert_eq!(traps_standing(&mut app), 1);
 }
 
-/// `d` used to be refused outside base space. It opens the prompt in both
-/// spaces now, so the assertion is on the mode: the old behaviour was a
-/// refusal and the new one is a screen.
+/// `d` opens the prompt on bare ground too, so the assertion is on the mode.
 #[test]
 fn d_on_the_surface_opens_the_direction_prompt() {
     let mut app = test_app(955);
     assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "the fixture stands on the open grid"
+        !app.game.as_ref().unwrap().on_base_floor(),
+        "the fixture stands on bare ground"
     );
 
     app.handle_key(GameKey::Char('d'));
@@ -163,33 +161,4 @@ fn d_on_the_surface_destroys_a_honeypot_and_refuses_empty_ground() {
     app.handle_key(GameKey::Char('d'));
     app.handle_key(GameKey::Right);
     assert_eq!(traps_standing(&mut app), 0, "and this way it goes");
-}
-
-/// The regression this task is most likely to ship: a base-space query asked
-/// about a surface tile answers by numeric coincidence, and the coincidence
-/// is the *common* case — `find_walkable_start` returns `(0, 0)` whenever it
-/// can, so the anchor, the zone spawn point and base space's origin all
-/// carry the same numbers. Nothing else in the suite would catch this.
-#[test]
-fn d_on_the_surface_cannot_demolish_a_structure_standing_in_base_space() {
-    let mut app = test_app(957);
-    found_the_base(&mut app);
-    let structures = |app: &mut App| app.game.as_mut().unwrap().structure_report().len();
-    let before = structures(&mut app);
-    assert!(before > 0, "the base has to be standing or this is vacuous");
-    assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "founding leaves the party on the open grid"
-    );
-
-    for dir in [GameKey::Up, GameKey::Down, GameKey::Left, GameKey::Right] {
-        app.handle_key(GameKey::Char('d'));
-        app.handle_key(dir);
-    }
-
-    assert_eq!(
-        structures(&mut app),
-        before,
-        "a surface demolish must never reach base space"
-    );
 }

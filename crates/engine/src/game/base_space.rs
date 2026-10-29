@@ -61,7 +61,7 @@ pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) ->
 }
 
 impl Game {
-    /// Queues one `TransitCue` for a walk between two base-space cells, or
+    /// Queues one `TransitCue` for a walk between two field cells, or
     /// queues nothing when there is no walk between them — `transit_path`'s
     /// own "a walk that does not exist is nothing" rule, carried through
     /// rather than re-checked here.
@@ -101,7 +101,7 @@ impl Game {
         self.has_structure(HOME_STRUCTURE_ID)
     }
 
-    /// Moves the anchor — base space's one door — onto zone-surface
+    /// Moves the anchor — the base's one fixed point — onto field
     /// `(x, y)`.
     ///
     /// **One writer, two callers with nothing else in common**: founding a
@@ -120,7 +120,7 @@ impl Game {
         }
     }
 
-    /// Every `DigSite` in base space, by the tile it stands on.
+    /// Every `DigSite` in the field, by the tile it stands on.
     ///
     /// The lookup `toggle_mark_box` walks its box against. Built once per
     /// press rather than per cell: bevy's `World::query_filtered` constructs
@@ -128,7 +128,7 @@ impl Game {
     /// tile by tile made one committed 25x25 box cost 625 of those, times a
     /// linear scan that grows with the sites already standing.
     ///
-    /// **The keys are in base space**, so this must never be indexed with a
+    /// **The keys are in the field**, so this must never be indexed with a
     /// zone-surface coordinate — see `components::DigSite`.
     fn dig_sites_by_tile(&mut self) -> HashMap<(i32, i32), Entity> {
         let mut query = self
@@ -140,13 +140,13 @@ impl Game {
             .collect()
     }
 
-    /// The `DigSite` standing on base-space `(x, y)`, if the player has
+    /// The `DigSite` standing on field `(x, y)`, if the player has
     /// started on that wall or marked it.
     ///
     /// For a single tile. Anything walking a region wants
     /// `dig_sites_by_tile` instead, for the reason stated there.
     ///
-    /// **Its `Position` is in base space**, so this must never be reached
+    /// **Its `Position` is in the field**, so this must never be reached
     /// for with a zone-surface coordinate — see `components::DigSite`.
     pub(crate) fn dig_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
@@ -159,7 +159,7 @@ impl Game {
     }
 
     /// What the first wall the player can see in `(dx, dy)` is made of, out
-    /// to `range` — the examine ray's base-space answer.
+    /// to `range` — the examine ray's field answer.
     ///
     /// **Reads the same faces the map colours, and that is the point.** If
     /// the map hid a kind while `x` named it, the hiding would be decorative
@@ -292,7 +292,7 @@ impl Game {
     /// the `DigSite` that records progress if this is the first. Returns the
     /// site when the swing broke the cell and `None` while it still stands.
     ///
-    /// Shared by the base-space strike and the field strike
+    /// Shared by the field strike and the field strike
     /// (`Game::strike_field_rock`), so rock wears down by one rule in both.
     pub(crate) fn swing_at_rock(
         &mut self,
@@ -407,7 +407,7 @@ impl Game {
         }
     }
 
-    /// Every stockpile cell, in `(x, y)` order; empty outside base space.
+    /// Every stockpile cell, in `(x, y)` order; empty outside the field.
     pub fn stockpile_cells(&self) -> Vec<(i32, i32)> {
         if self.is_underground() {
             return Vec::new();
@@ -501,7 +501,7 @@ impl Game {
         marks
     }
 
-    /// Whether base-space `(x, y)` is marked. A cell with no `DigSite` is
+    /// Whether field `(x, y)` is marked. A cell with no `DigSite` is
     /// not, which is what makes an untouched wall the unmarked case without
     /// storing anything for it.
     fn is_marked_in(&self, sites: &HashMap<(i32, i32), Entity>, x: i32, y: i32) -> bool {
@@ -623,13 +623,13 @@ impl Game {
         }
     }
 
-    /// Lays floor over base-space `(x, y)` and retires the cell's `DigSite`
+    /// Lays floor over field `(x, y)` and retires the cell's `DigSite`
     /// with it.
     ///
-    /// The one place a base-space cell becomes `Floor` in play — `lay_tile`
+    /// The one place a field cell becomes `Floor` in play — `lay_tile`
     /// today, the crew's flooring job next — because a finished cell has
     /// nothing left to record and a mark that outlived the tile would be a
-    /// job no one could ever complete. `lay_starting_pocket` writes the grid
+    /// job no one could ever complete. Founding writes the starting 3x3
     /// directly instead: it runs before anything can have dug.
     pub(crate) fn floor_cell(&mut self, x: i32, y: i32) {
         self.world.resource_mut::<BaseGrid>().lay_floor(x, y);

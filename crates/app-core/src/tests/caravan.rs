@@ -64,8 +64,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
     app.mode = Mode::Playing;
-    // Founded from the open grid, which is the one build made from outside
-    // base space — then straight back in, since a caravan is met in there.
+    // Founded, then stood on the pocket's floor, since a caravan is met there.
     found_the_base(&mut app);
     stand_in_base_at(&mut app, 1, 1);
 
@@ -110,15 +109,8 @@ fn the_trade_page_offers_the_caravan_row_only_while_one_is_docked() {
         "a trader is standing at the counter and the row is missing"
     );
 
-    // Out on the grid there is nothing to take, and the row goes with it.
-    // Base space has one door, so the party walks to it first.
-    stand_in_base_at(&mut docked, 0, 0);
-    docked
-        .game
-        .as_mut()
-        .unwrap()
-        .leave_base()
-        .expect("standing on the exit cell, the way out is open");
+    // Out on the field there is nothing to take, and the row goes with it.
+    stand_in_base_at(&mut docked, TEST_POCKET_HALF_WIDTH + 1, 0);
     assert!(
         !command_labels_all(&mut docked).contains(&"Caravan"),
         "the row survived the party walking out of the base"
@@ -132,8 +124,7 @@ fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
     let mut app = a_caravan();
     open_command(&mut app, "Caravan");
     assert_eq!(app.mode, Mode::Caravan);
-    stand_in_base_at(&mut app, 0, 0);
-    app.game.as_mut().unwrap().leave_base().unwrap();
+    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH + 1, 0);
     let rows = app.command_rows(Mode::BaseTrade).unwrap().len();
 
     app.handle_key(GameKey::Esc);

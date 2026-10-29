@@ -308,7 +308,7 @@ pub struct BaseReportFlags {
 pub struct MachineRow {
     pub entity: Entity,
     pub label: String,
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     /// `Running` for a machine listed only because it is damaged.
     pub status: crate::components::MachineStatus,
@@ -320,7 +320,7 @@ pub struct MachineRow {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PowerLine {
     pub label: String,
-    /// **Base-space** coordinates.
+    /// **Field** coordinates.
     pub pos: (i32, i32),
     /// What it puts on the grid now: 0 for a dry or unsiphoned supplier.
     pub supply: u32,

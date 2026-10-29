@@ -207,7 +207,7 @@ impl Game {
 
     /// The most whole units of `result` the player can compile right now:
     /// what is in reach affords at `craft_cost` (the pack, plus the base's
-    /// stores for a bench recipe in base space; already
+    /// stores for a bench recipe in the field; already
     /// Lean-Compiler-adjusted, and carrying the careful surcharge when
     /// `careful`), and what the reserve can carry at
     /// `hand_craft_power_cost`, whichever runs out first. 0 if `result` has
@@ -406,7 +406,7 @@ impl Game {
     /// the quoted refusal name the batch's bill; the *spending* is per unit
     /// (see `advance_hand_craft`), so the two can come apart if something
     /// takes from the pack while the compile runs. That is a real edge —
-    /// a build crew reaches into the player's pack from base space — and
+    /// a build crew reaches into the player's pack from the field — and
     /// the loop ends the batch rather than compiling out of nothing.
     pub fn begin_hand_craft(
         &mut self,
@@ -611,7 +611,7 @@ impl Game {
     }
 
     /// How many of `item` a bench can draw on: the pack, plus every store
-    /// the base holds while the party stands in base space. Out in a zone
+    /// the base holds while the party stands in the field. Out in a zone
     /// the base is not in reach, so a bench verb used there sees the pack
     /// alone.
     pub(crate) fn held_in_reach(&self, item: &ItemId) -> u32 {
@@ -627,7 +627,7 @@ impl Game {
     /// `pay_items` for a bench: the whole bill is checked against
     /// `held_in_reach` before a unit moves, then each line is spent base
     /// stock first (`spend_from_stores`), so what the player carries stays
-    /// on them for the field. Outside base space it is `pay_items`.
+    /// on them for the field. Outside the field it is `pay_items`.
     pub(crate) fn pay_from_reach(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
         if self.field_pos().is_none() {
             return self.pay_items(cost);

@@ -481,10 +481,8 @@ pub(super) fn draw_playing_base(
             &status,
             plan,
             travel,
-            // The party's own cell unless the camera has been sent
-            // somewhere: `base_pos` is `Some` only in base space, which is
-            // exactly where the pinned `Position` is the wrong answer.
-            watch.unwrap_or_else(|| game.base_pos().unwrap_or(status.position)),
+            // The party's own cell unless the camera has been sent somewhere.
+            watch.unwrap_or(status.position),
             reveal,
         );
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
@@ -521,11 +519,11 @@ pub(super) fn draw_playing_base(
         hud::compass_block::draw_compass_block(regions.map_pane, row, painter, m);
     }
 
-    // The BASE blocks are base-space only, and `structure_report` walks
-    // every structure — gathered behind the same test the pane draws them
-    // behind rather than every frame the party spends on the surface.
-    let in_base = game.in_base();
-    let (structures, builds, labour) = if in_base {
+    // `structure_report` walks every structure — gathered behind the same
+    // test the pane draws the BASE blocks behind, rather than every frame
+    // the party has no base to report on.
+    let has_base = game.has_home() && !game.is_underground();
+    let (structures, builds, labour) = if has_base {
         (
             game.structure_report(),
             game.build_order_report(),
@@ -535,7 +533,7 @@ pub(super) fn draw_playing_base(
         (Vec::new(), Vec::new(), Default::default())
     };
     let pets = game.owned_pets();
-    // Unlike the BASE blocks this is not gated on `in_base`: a contract reads
+    // Unlike the BASE blocks this is not gated on `has_base`: a contract reads
     // from anywhere, and it is `&self` over at most `MAX_ACTIVE_CONTRACTS`
     // rows. `Game::contract_board` is the expensive one and is not called.
     let contracts = game.active_contracts();
@@ -564,7 +562,7 @@ pub(super) fn draw_playing_base(
         labour,
         contracts: &contracts,
         shielded: game.raid_defense_active(),
-        in_base,
+        has_base,
     };
 
     // The column draws its own fill and frame and hands back the body rect;
@@ -589,7 +587,7 @@ pub(super) fn draw_playing_base(
         regions.status_bar,
         &hud::status_bar::StatusBarState {
             zone: status.zone,
-            position: game.base_pos().unwrap_or(status.position),
+            position: status.position,
             tick: game.current_tick(),
             clock,
             power: game.base_power(),
@@ -654,28 +652,6 @@ fn draw_surface_map(
     let hw = half_w + RINGS;
     let hh = half_h + RINGS;
 
-    // `status.position` is the player's `Position` component, which stays
-    // pinned to the anchor tile on the zone surface while the party is out
-    // of phase — see `resources::Locale`'s own doc for why. `view_tiles`
-    // and `view_entities` both centre on `Game::base_pos` in that locale
-    // instead, so this pane has to agree with them or a base's structures
-    // draw offset from its own floor by however far base space has been
-    // walked from its origin. `base_pos` is `None` everywhere but base
-    // space, which is exactly when the pinned tile is already the right
-    // answer.
-    let base_pos = game.base_pos();
-    // Every `VisualEffect` the engine queues names a *structure's* tile —
-    // all three `Game::push_effect` callers are structure damage — so the
-    // whole queue is base-space by construction. This pane draws one space
-    // at a time, so on the surface those coordinates would land on
-    // unrelated open ground: the same cross-space aliasing `view_entities`
-    // refuses now, and the structure being flashed is not even drawn there
-    // to explain it.
-    //
-    // Suppressed rather than moved to the anchor: a raid already reaches a
-    // player who is out of the base through the log pane's own flash and a
-    // `MessageKind::Raid` line, and neither of those claims a tile.
-    let show_effects = base_pos.is_some();
     // Hoisted out of the tile loop: it is one reading of one reserve, and the
     // whole grid is drawn against the same one.
     let floor = vignette_floor(status.power, status.max_power);
@@ -710,7 +686,7 @@ fn draw_surface_map(
         //
         // Which *space* a program stands in is a separate question and is
         // already settled inside `view_entities`
-        // (`Game::stands_in_base_space`); this one is only ever asked about
+        // (`Game::stands_inside_the_base`); this one is only ever asked about
         // programs the party is in the same space as.
         //
         // Through the engine's predicate rather than spelled out here,
@@ -729,38 +705,21 @@ fn draw_surface_map(
             shown_at(sight, e)
         })
         .collect();
-    // Base space only: `marked_cells` answers in base-space coordinates, and
-    // asking it on the surface would draw a plan over the zone map at
-    // coordinates that mean something else entirely — the cross-space read
-    // 0.13.0 shipped two fixes for.
-    let marked = if base_pos.is_some() {
-        game.marked_cells()
-    } else {
-        Vec::new()
-    };
-    // `marked`'s space rule; the engine answers empty outside base itself.
+    let marked = game.marked_cells();
     let stockpiles = game.stockpile_cells();
-    // Read once for the whole map rather than per tile, and gated on the
-    // space rather than on the flag alone: the tools arm the player's own
-    // bump into rock, base space is the only place there is rock to bump
-    // into, and nothing disarms them on the way back out through the
-    // anchor. Ungated, the ring follows the party onto the zone map and
-    // claims something the ground there cannot answer.
-    let cutting = base_pos.is_some() && game.mining();
-    // Base space only, like the floor items: `farm_tiles` answers empty
-    // elsewhere.
+    // Read once for the whole map rather than per tile.
+    let cutting = game.mining();
     let farm_tiles = game.farm_tiles();
     // Each plot cell's ambient `dim`, recorded by the tile loop so the plot
     // pass after it scales its outline and crop by the same light the
     // ground beneath took.
     let mut plot_dim: std::collections::HashMap<(i32, i32), f32> = Default::default();
-    // Base space only, and `floor_items` already answers empty elsewhere.
     let floor_marks: std::collections::HashMap<(i32, i32), (char, Color)> = game
         .floor_items()
         .into_iter()
         .map(|item| (item.pos, floor_item_mark(&item.look)))
         .collect();
-    // Alt shows the rooms. `view_rooms` answers empty outside base space.
+    // Alt shows the rooms.
     let rooms = if reveal {
         game.view_rooms()
     } else {
@@ -770,20 +729,9 @@ fn draw_surface_map(
         .iter()
         .flat_map(|r| r.cells.iter().map(|&c| (c, r.tint)))
         .collect();
-    // Cloud shadows are the zone map's alone. Base space is a pocket cut
-    // out of rock with no sky over it, and the Stack draws through
-    // `render/stack.rs` and never reaches here at all — so this one flag is
-    // the whole of the gate: it is a property of the locale, not of a tile.
-    let outdoors = base_pos.is_none();
-    // Outposts are zone-surface fixtures and never stand in base space or
-    // the Stack (which draws through `render/stack.rs` and never reaches
-    // this function at all) — `outdoors`'s own gate, `marked`'s mirror one
-    // locale over.
-    let outpost_marks = if outdoors {
-        game.outpost_marks()
-    } else {
-        Vec::new()
-    };
+    // Outposts are field fixtures; the Stack draws through `render/stack.rs`
+    // and never reaches this function.
+    let outpost_marks = game.outpost_marks();
     // Which of those tiles already carries an entity's own glyph and marks
     // — `draw_outpost_marks`'s own doc: an outpost's glyph must not paint
     // over the player's `@` or a wild program standing on its tile, and its
@@ -792,13 +740,11 @@ fn draw_surface_map(
     // bar needs no such check — it holds the bottom edge, and every corner
     // mark that could share it is built to lift clear of that edge instead.
     let mut outpost_occupants: std::collections::HashMap<(i32, i32), bool> = Default::default();
-    if outdoors {
-        for ev in &entities {
-            outpost_occupants
-                .entry(ev.pos)
-                .and_modify(|nemesis| *nemesis |= ev.nemesis)
-                .or_insert(ev.nemesis);
-        }
+    for ev in &entities {
+        outpost_occupants
+            .entry(ev.pos)
+            .and_modify(|nemesis| *nemesis |= ev.nemesis)
+            .or_insert(ev.nemesis);
     }
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
@@ -1021,7 +967,7 @@ fn draw_surface_map(
             // Power reserve and nothing else.
             let remembered = sight == Sight::Remembered;
             // Memory is still: the world out there is not moving for you.
-            let cloud = if outdoors && !remembered {
+            let cloud = if !remembered {
                 fx.cloud_shade(world)
             } else {
                 1.0
@@ -1069,14 +1015,9 @@ fn draw_surface_map(
             }
             // A multi-cell structure's own floor — one of its non-anchor
             // footprint cells — takes a flat fill over whatever biome was
-            // just drawn underneath. Checked only in base space:
-            // `Game::view_structure_floor_at` reads base-space `Position`s, so
-            // asking it on the zone surface would draw a structure floor over
-            // ground these coordinates happen to share only by numeric
-            // accident — the same cross-space aliasing `show_effects` and
-            // `cutting` already refuse. `structure_floor` is `view_tiles_at`'s
+            // just drawn underneath. `structure_floor` is `view_tiles_at`'s
             // own indexing, read once above rather than requeried here.
-            if base_pos.is_some() && structure_floor[ry][rx] {
+            if structure_floor[ry][rx] {
                 painter.rect(
                     cell.x,
                     cell.y,
@@ -1146,12 +1087,9 @@ fn draw_surface_map(
             // `Fx::strain_jitter`.
             //
             // Keyed on the actor, `centred_bob`'s rule: two subjects in two
-            // Stations rattle out of step. Base-space gated exactly as the
-            // pin marks are below — `view_pinned_at` reads base-space
-            // `Position`s, and out on the zone surface these coordinates mean
-            // something else entirely.
+            // Stations rattle out of step.
             let (jx, jy) = match actor {
-                Some(ev) if base_pos.is_some() && pinned[ry][rx] == PinMark::Strained => {
+                Some(ev) if pinned[ry][rx] == PinMark::Strained => {
                     // The ink's own margin is the budget — `Fx::strain_jitter`
                     // has the argument. Recomputed rather than hoisted off the
                     // `inset` below it, which is scoped to the sprite attempt.
@@ -1363,16 +1301,14 @@ fn draw_surface_map(
             // outline both refuse. Neither would be in `entities` out there
             // anyway; the gate is what keeps that an assertion rather than a
             // coincidence.
-            if base_pos.is_some() {
-                draw_rising_mark(
-                    painter,
-                    actor,
-                    fx,
-                    Rect::new(px, py, tile_px, tile_px),
-                    glyph_px,
-                    vig,
-                );
-            }
+            draw_rising_mark(
+                painter,
+                actor,
+                fx,
+                Rect::new(px, py, tile_px, tile_px),
+                glyph_px,
+                vig,
+            );
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is
             // usually spoken for: a hostile is tinted by `difficulty_color`
@@ -1424,7 +1360,7 @@ fn draw_surface_map(
             // rather than inventing a second arbitration between the two —
             // see `corner_marker`'s doc. `pinned` is read once above,
             // `structure_floor`'s own reason.
-            if base_pos.is_some() && pinned[ry][rx] != PinMark::Unpinned {
+            if pinned[ry][rx] != PinMark::Unpinned {
                 draw_pin_marks(painter, px, py, tile_px, marker, vig);
             }
             // A nemesis draws a mark on top of its glyph — belt and braces,
@@ -1447,11 +1383,7 @@ fn draw_surface_map(
             // the one variant no species authors, so "this belongs to a
             // town" reads without being told and without spending the
             // identity hue this program already has.
-            // Base space only, for `draw_rising_mark`'s reason: the step is
-            // a claim about a body standing in the base.
-            if base_pos.is_some()
-                && let Some(ev) = actor
-            {
+            if let Some(ev) = actor {
                 draw_mood_mark(painter, ev, px, py, tile_px, vig);
             }
             if actor.is_some_and(|ev| ev.patrol.is_some()) {
@@ -1535,10 +1467,8 @@ fn draw_surface_map(
             // Which occupant owns the bar and what hue it wears is
             // `cell_bar`, extracted so the precedence between a machine and
             // a request standing on the same cell is testable. The actor is
-            // offered in base space alone, the recovery mark's gate: staff
-            // live there, and the zone map's cells mean somewhere else.
-            let staff = actor.filter(|_| base_pos.is_some());
-            if let Some((done, color)) = cell_bar(structure, building, staff) {
+            // offered as-is: staff share the field with the machines.
+            if let Some((done, color)) = cell_bar(structure, building, actor) {
                 draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
             }
             // How full a Depot or Rack is, up the right edge — after the outline for
@@ -1608,171 +1538,159 @@ fn draw_surface_map(
                 let m = staffed_mark_rect(px, py, tile_px, lift);
                 painter.rect(m.x, m.y, m.w, m.h, Color { a: alpha, ..base });
             }
-            if show_effects && let Some(flash) = fx.tile_flash(world) {
+            if let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
             }
         }
     }
     // Over the tiles and under the plan: a plot is on the ground, and a plan
     // is drawn over it.
-    if base_pos.is_some() {
-        // A floor item's glyph was drawn in the tile loop, so it claims the
-        // cell from the crop the way an entity does.
-        let occupied: std::collections::HashSet<(i32, i32)> = entities
-            .iter()
-            .map(|e| e.pos)
-            .chain(floor_marks.keys().copied())
-            .collect();
-        draw_farm_plots(
-            painter,
-            &farm_tiles,
-            &occupied,
-            &plot_dim,
-            |world| {
-                tile_origin_px(
-                    world,
-                    center,
-                    (half_w, half_h),
-                    (off_x, off_y),
-                    tile_px,
-                    pane,
-                )
-            },
-            (tile_px, glyph_px),
-            pane,
-        );
-    }
+    // A floor item's glyph was drawn in the tile loop, so it claims the
+    // cell from the crop the way an entity does.
+    let occupied: std::collections::HashSet<(i32, i32)> = entities
+        .iter()
+        .map(|e| e.pos)
+        .chain(floor_marks.keys().copied())
+        .collect();
+    draw_farm_plots(
+        painter,
+        &farm_tiles,
+        &occupied,
+        &plot_dim,
+        |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        },
+        (tile_px, glyph_px),
+        pane,
+    );
     // Over the tiles and under the sparks: a plan is a thing drawn on the
     // ground, and a burst is a thing happening above it.
-    if base_pos.is_some() {
-        draw_excavation_plan(
-            painter,
-            &stockpiles,
-            &marked,
-            plan,
-            |world| {
-                tile_origin_px(
-                    world,
-                    center,
-                    (half_w, half_h),
-                    (off_x, off_y),
-                    tile_px,
-                    pane,
-                )
-            },
-            tile_px,
-            pane,
-        );
-    }
+    draw_excavation_plan(
+        painter,
+        &stockpiles,
+        &marked,
+        plan,
+        |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        },
+        tile_px,
+        pane,
+    );
     // The surface's own mirror of the plan pass above: a record with no
     // entity has no other way onto the map, `render/outposts.rs::
     // draw_outpost_marks`'s own doc.
-    if outdoors {
-        draw_outpost_marks(
-            painter,
-            &outpost_marks,
-            |world| {
-                tile_origin_px(
-                    world,
-                    center,
-                    (half_w, half_h),
-                    (off_x, off_y),
-                    tile_px,
-                    pane,
-                )
-            },
-            tile_px,
-            glyph_px,
-            pane,
-            |tile| outpost_occupants.get(&tile).copied(),
-        );
-    }
+    draw_outpost_marks(
+        painter,
+        &outpost_marks,
+        |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        },
+        tile_px,
+        glyph_px,
+        pane,
+        |tile| outpost_occupants.get(&tile).copied(),
+    );
     // After every tile, so a speck drifting across a tile boundary is not
     // cut by the next tile's ground. Kept off any tile something stands on
     // instead of under it, since the tile loop drew ground and glyph
     // together and there is no layer between them to slip into.
-    if outdoors {
-        let occupied: std::collections::HashSet<(i32, i32)> =
-            entities.iter().map(|e| e.pos).collect();
-        let specks = fx.wildlife(
-            (center.0 - hw, center.1 - hh),
-            (center.0 + hw, center.1 + hh),
-        );
-        draw_wildlife(
-            painter,
-            &specks,
-            |world| {
-                let rx = usize::try_from(world.0 - center.0 + hw).ok()?;
-                let ry = usize::try_from(world.1 - center.1 + hh).ok()?;
-                let tile = tiles.get(ry)?.get(rx)?;
-                (tile.walkable && sights[ry][rx] == Sight::InSight && !occupied.contains(&world))
-                    .then(|| biome_tint(tile.biome))
-            },
-            |world| {
-                tile_origin_px(
-                    world,
-                    center,
-                    (half_w, half_h),
-                    (off_x, off_y),
-                    tile_px,
-                    pane,
-                )
-            },
-            |x, y| {
-                vignette(
-                    x - (pane.x + pane.w / 2.0),
-                    y - (pane.y + pane.h / 2.0),
-                    pane.w / 2.0,
-                    pane.h / 2.0,
-                    floor,
-                )
-            },
-            tile_px,
-            pane,
-        );
-    }
+    let occupied: std::collections::HashSet<(i32, i32)> = entities.iter().map(|e| e.pos).collect();
+    let specks = fx.wildlife(
+        (center.0 - hw, center.1 - hh),
+        (center.0 + hw, center.1 + hh),
+    );
+    draw_wildlife(
+        painter,
+        &specks,
+        |world| {
+            let rx = usize::try_from(world.0 - center.0 + hw).ok()?;
+            let ry = usize::try_from(world.1 - center.1 + hh).ok()?;
+            let tile = tiles.get(ry)?.get(rx)?;
+            (tile.walkable && sights[ry][rx] == Sight::InSight && !occupied.contains(&world))
+                .then(|| biome_tint(tile.biome))
+        },
+        |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        },
+        |x, y| {
+            vignette(
+                x - (pane.x + pane.w / 2.0),
+                y - (pane.y + pane.h / 2.0),
+                pane.w / 2.0,
+                pane.h / 2.0,
+                floor,
+            )
+        },
+        tile_px,
+        pane,
+    );
     // After every tile so debris lands on top of the base rather than under
     // it, and before the border so a spark from a structure at the pane's
     // edge cannot draw over the frame.
-    if show_effects {
-        fx.draw_bursts(painter, tile_px, |world| {
-            tile_origin_px(
-                world,
-                center,
-                (half_w, half_h),
-                (off_x, off_y),
-                tile_px,
-                pane,
-            )
-        });
-        // Behind the same gate as the debris, and for a sharper version of
-        // the same reason: a walk names base-space cells, and a squad drawn
-        // filing out of the anchor while the pane is showing the zone
-        // surface would be walking across open ground the party is standing
-        // on. Over the tiles, since a body walks on top of the floor.
-        fx.draw_walkers(painter, tile_px, glyph_px, |world| {
-            tile_origin_px(
-                world,
-                center,
-                (half_w, half_h),
-                (off_x, off_y),
-                tile_px,
-                pane,
-            )
-        });
-        fx.draw_speech(painter, tile_px, glyph_px, |world| {
-            tile_origin_px(
-                world,
-                center,
-                (half_w, half_h),
-                (off_x, off_y),
-                tile_px,
-                pane,
-            )
-        });
-    }
-    // Base space only: `structure_floor` answers in base-space cells.
-    if reveal && base_pos.is_some() {
+    fx.draw_bursts(painter, tile_px, |world| {
+        tile_origin_px(
+            world,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
+    // Behind the same gate as the debris, and for a sharper version of
+    // the same reason: a walk names base-space cells, and a squad drawn
+    // filing out of the anchor while the pane is showing the zone
+    // surface would be walking across open ground the party is standing
+    // on. Over the tiles, since a body walks on top of the floor.
+    fx.draw_walkers(painter, tile_px, glyph_px, |world| {
+        tile_origin_px(
+            world,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
+    fx.draw_speech(painter, tile_px, glyph_px, |world| {
+        tile_origin_px(
+            world,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
+    if reveal {
         super::alt_overlay::draw_alt_labels(
             painter,
             &layout,
@@ -2474,7 +2392,7 @@ mod tests {
     /// through the real path proves the call site asks `Game::downed_store`
     /// for it rather than passing an empty one.
     #[test]
-    fn the_base_stock_is_listed_over_the_map_in_base_space() {
+    fn the_base_stock_is_listed_over_the_map_inside_the_base() {
         use super::test_support::{HELD_PROGRAMS, STOCKED_NAME, StandingIn, game_with_base_stock};
         let mut app =
             super::test_support::playing_app_around(game_with_base_stock(5101, StandingIn::Base));
@@ -2654,7 +2572,6 @@ mod tests {
     /// test reaches game state without a `world` accessor.
     fn attention_question_marks(recipe: Option<&str>) -> usize {
         use feral_processes_engine::items::ItemId;
-        use feral_processes_engine::resources::Locale;
         use feral_processes_engine::save;
         let mut app = playing_app();
         let path = std::env::temp_dir().join(format!(
@@ -2664,7 +2581,6 @@ mod tests {
         ));
         app.game.as_mut().unwrap().save(&path).unwrap();
         let mut data = save::load_from_file(&path).unwrap();
-        data.locale = Locale::Base { x: 0, y: 0 };
         data.structures.push(save::StructureSave {
             recipe: recipe.map(ItemId::from),
             kind: "factory".to_string(),
@@ -4059,7 +3975,7 @@ mod tests {
         );
     }
 
-    /// A settlement carries none of `stands_in_base_space`'s tags —
+    /// A settlement carries none of `stands_inside_the_base`'s tags —
     /// `Caravan`/`Structure`/`BuildSite`/`Tamed` — so it falls through
     /// `Game::view_entities_at` to the surface map and lands in
     /// `draw_surface_map`'s `actor` slot exactly like a nest. Nothing states
@@ -4231,24 +4147,15 @@ mod tests {
         shapes
     }
 
-    /// The two halves of the cloud gate, and they are asserted together on
-    /// purpose. The zone-map half alone passes against a renderer that
-    /// shadows base space too — where a drifting patch would read as the
-    /// ceiling of a pocket underground doing something it cannot do.
+    /// Clouds drift over the field: the ground is shaded differently a minute
+    /// of wind later.
     #[test]
-    fn clouds_drift_over_the_zone_map_and_never_over_base_space() {
+    fn clouds_drift_over_the_field() {
         let (surface_early, _) = painted_fills_and_strokes(&drawn_surface_at(0.0));
         let (surface_later, _) = painted_fills_and_strokes(&drawn_surface_at(60.0));
         assert_ne!(
             surface_early, surface_later,
             "the ground must be shaded differently a minute of wind later"
-        );
-
-        let (base_early, _) = painted_fills_and_strokes(&drawn_base_at(0.0, false, true));
-        let (base_later, _) = painted_fills_and_strokes(&drawn_base_at(60.0, false, true));
-        assert_eq!(
-            base_early, base_later,
-            "base space has no sky and must not change with the clock"
         );
     }
 
@@ -4257,7 +4164,7 @@ mod tests {
     ///
     /// The party is stood **in base space**, which is the whole point: the
     /// site's `Position` is a base-space cell, and `view_entities` selects
-    /// on `Game::stands_in_base_space` — drawn from the surface, nothing
+    /// on `Game::stands_inside_the_base` — drawn from the surface, nothing
     /// here would be on the pane at all.
     fn drawn_base(at: f64, request: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         drawn_base_at(at, request, true)
@@ -4285,7 +4192,6 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
         if request {
             // **Staged through the save rather than filed through
             // `place_structure`.** Filing a request costs a tamed program
@@ -4296,7 +4202,7 @@ mod tests {
             // `a_settlement_draws_its_glyph_on_the_surface_map`), and it
             // leaves this fixture asking about the *drawing* rather than
             // about what a build costs.
-            let (px, py) = game.base_pos().expect("the party stepped inside");
+            let (px, py) = game.field_pos().expect("the party stepped inside");
             // A per-call counter, not pid alone: unlike the neighbouring
             // `fp_gui_attention_census_`/`fp_gui_settlement_glyph_` fixtures,
             // this helper is reached from several `#[test]` functions
@@ -4364,15 +4270,14 @@ mod tests {
     /// Home immediately — no request, no labour — so this is the one
     /// non-Home structure test could ever use without a labour crew to
     /// finish a build with, and it needs the step off the same way
-    /// `STEPS_OFF_THE_ANCHOR` does: the party lands on the Home's own tile
-    /// at `enter_base`, and an actor there would take the sprite lookup
+    /// `STEPS_OFF_THE_ANCHOR` does: the party stands on the Home's own tile
+    /// when it is founded, and an actor there would take the sprite lookup
     /// over the structure standing under it.
     fn drawn_base_with_sprites(sprites: SpriteTable, steps: usize) -> (usize, Vec<String>) {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
         for _ in 0..steps {
             game.move_player(1, 0);
         }
@@ -4456,8 +4361,6 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base()
-            .expect("the party steps inside, standing on the Home");
 
         let mut table = SpriteTable::default();
         table.insert_still(
@@ -4518,8 +4421,6 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base()
-            .expect("the party steps inside, standing on the Home");
 
         let mut table = SpriteTable::default();
         table.insert_still("anchor", bevy_egui::egui::TextureId::User(7));
@@ -5024,7 +4925,7 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
+        game.dev_lay_floor((-2..=8).flat_map(|x| (-2..=6).map(move |y| (x, y))));
 
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -6488,7 +6389,7 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
+        game.dev_lay_floor((-2..=8).flat_map(|x| (-2..=6).map(move |y| (x, y))));
 
         let path = crate::render::test_support::scratch_path("research_station", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
@@ -6531,8 +6432,7 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
-        let at = game.base_pos().expect("in base space");
+        let at = game.field_pos().expect("in base space");
         let path = crate::render::test_support::scratch_path("floor_pile", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
@@ -6561,8 +6461,7 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
-        let at = game.base_pos().expect("in base space");
+        let at = game.field_pos().expect("in base space");
         let path = crate::render::test_support::scratch_path("farm_plot", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
         game.save(&path).unwrap();
@@ -6594,7 +6493,7 @@ mod tests {
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();
-            let centre = game.base_pos().unwrap();
+            let centre = game.field_pos().unwrap();
             draw_surface_map(
                 &mut game,
                 &mut fx,
@@ -6735,7 +6634,7 @@ mod tests {
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();
-            let centre = game.base_pos().unwrap();
+            let centre = game.field_pos().unwrap();
             draw_surface_map(
                 game,
                 &mut fx,
@@ -6762,7 +6661,7 @@ mod tests {
     /// A floor item draws its own glyph, and only because it is there: the
     /// identical base without one paints no such glyph in that colour.
     #[test]
-    fn a_floor_item_draws_its_items_glyph_in_base_space() {
+    fn a_floor_item_draws_its_items_glyph_inside_the_base() {
         use feral_processes_engine::items::{FloorThing, ItemId};
         let drawn = |thing: Option<FloorThing>| {
             let mut game = base_with_a_floor_item(560_200, thing);
@@ -6855,7 +6754,6 @@ mod tests {
             .expect("the shipped assets must load");
         bare.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        bare.enter_base().expect("the party steps inside");
         let mut fx2 = Fx::new();
         let (_, without_station) = with_painter(|p| {
             let status = bare.player_status();
@@ -6909,7 +6807,6 @@ mod tests {
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
-        game.enter_base().expect("the party steps inside");
 
         let path = crate::render::test_support::scratch_path("drop_pod_terminal", seed);
         let _cleanup = crate::render::test_support::RemoveOnDrop(&path);

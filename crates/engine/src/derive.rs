@@ -2,7 +2,7 @@
 //!
 //! Several things in the game are a property of *the place* rather than of
 //! the moment you looked at it: what a Stack cell says for itself
-//! (`descriptions.rs`), what a base-space coordinate is made of
+//! (`descriptions.rs`), what a field coordinate is made of
 //! (`rock.rs`). None of them
 //! may draw from `resources::GameRng` — a draw does not survive a save/load
 //! and shifts every later roll in the run — and none may lean on an `StdRng`

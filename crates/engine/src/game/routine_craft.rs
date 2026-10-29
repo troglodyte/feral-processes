@@ -41,7 +41,7 @@ impl Game {
     }
 
     /// How many of `part` the Workbench can draw on — the pack, and the
-    /// base's stores while in base space (`held_in_reach`).
+    /// base's stores while in the field (`held_in_reach`).
     pub fn parts_held(&self, part: &Subroutine) -> u32 {
         self.held_in_reach(&ItemId::part(part))
     }

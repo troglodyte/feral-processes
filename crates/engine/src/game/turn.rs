@@ -746,11 +746,11 @@ impl Game {
 
     /// Drops any job the player is working, narrating it once.
     ///
-    /// Its own function because both walkable locales have to do it: a job
-    /// is posted from base space (`Game::work_structure` is a base action,
+    /// Its own function because both ways of moving have to do it: a job
+    /// is posted from the base floor (`Game::work_structure` is a base action,
     /// and promises in so many words that moving off breaks it), and the
-    /// party can then walk in either base space or on the zone surface. Two
-    /// copies would be two places for that narration to drift.
+    /// party can then walk on or off the floor. Two copies would be two
+    /// places for that narration to drift.
     pub(crate) fn break_off_job(&mut self) {
         let player = self.player_entity();
         if self.world.get::<Task>(player).is_some() {
@@ -759,8 +759,8 @@ impl Game {
         }
     }
 
-    /// One step on the zone surface — or, in base space, one step through
-    /// that, since the same four keys steer both.
+    /// One step on the field, which is the base floor and the ground around
+    /// it alike.
     ///
     /// The Stack is the exception rather than a third branch: down there the
     /// party has a facing and moves through `step_forward`/`turn_left` and
@@ -1155,13 +1155,13 @@ impl Game {
     /// that gate rather than carrying a second copy of its two checks is
     /// what keeps this in step with `terrain_at`'s own refusal.
     ///
-    /// **Also refuses underground and in base space**, which
-    /// `environment_biome_at` alone does not: `Position` stays pinned to the
-    /// surface entrance (Stack) or the anchor tile (base) in both locales —
-    /// the same pinning `terrain_row`'s own guard exists for — so without
-    /// this a boundary turning over at the entrance tile would announce
-    /// weather at a place the player is not standing while they are four
-    /// frames down or safely inside the base pocket. `move_player` already
+    /// **Also refuses underground and on the base floor**, which
+    /// `environment_biome_at` alone does not: underground `Position` stays
+    /// pinned to the surface entrance — the same pinning `terrain_row`'s own
+    /// guard exists for — so without this a boundary turning over at the
+    /// entrance tile would announce weather at a place the player is not
+    /// standing while they are four frames down, and the floor is sheltered.
+    /// `move_player` already
     /// refused both states before this was ever reachable from anywhere but
     /// itself; called from `tick_inner`, every tick-spending verb in both
     /// locales reaches this and needs the same refusal.
@@ -1457,8 +1457,8 @@ impl Game {
     /// Power down: Integrity and Power restored to full, for the player and
     /// for every program that is **not base staff**.
     ///
-    /// Priced by where the party is standing and nothing else. **Inside
-    /// base space it is free** — the walk home is the cost, and no
+    /// Priced by where the party is standing and nothing else. **On the
+    /// base floor it is free** — the walk home is the cost, and no
     /// structure has to be in reach. **Anywhere else** — the open grid or
     /// four frames down the Stack alike — it spends one unit of an item
     /// whose def sets `ItemDef::enables_rest`, the Power Outlet among the

@@ -697,7 +697,7 @@ pub(crate) fn deliver_payout(
     landed
 }
 
-/// A machine's identity for a record: its `StructureDef` id, its base-space
+/// A machine's identity for a record: its `StructureDef` id, its field
 /// tile and its tier. Extracted because three seams want the same three
 /// figures out of the same optional components, and a hand-written copy at
 /// each would drift in the way `spawn_structure`'s rule warns about.
@@ -871,7 +871,7 @@ pub(crate) fn feeds(
 pub(crate) struct StallSite<'a> {
     pub telemetry: &'a mut BattleTelemetry,
     pub tick: u64,
-    /// The machine's own base-space tile, which is what tells one instance
+    /// The machine's own field tile, which is what tells one instance
     /// of a kind from another — `Record::Extract` is keyed the same way.
     pub machine: (i32, i32),
     /// Its `StructureDef` id, never the display name: the name is prose and

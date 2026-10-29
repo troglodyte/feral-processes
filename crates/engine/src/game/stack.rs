@@ -238,12 +238,9 @@ impl Game {
         // can never land directly underfoot. `MAX_BUILD_DISTANCE_FROM_HOME`
         // rather than a live radius: this used to widen with
         // `resources::Platform`'s grown slab so a link could never spawn
-        // *inside* it, but the base is out of phase now and nothing a build
-        // does touches the zone surface — `link_site_free`'s own
-        // `Biome::Platform` check below is dead for the same reason, kept
-        // rather than deleted because slice 2/3 is where this whole
-        // avoidance gets a base-space replacement. What is left of the
-        // reasoning still holds: since `reach` widens only once one link is
+        // *inside* it; `link_site_free`'s own `Biome::Platform` check below
+        // is dead for the same reason, kept rather than deleted. What is
+        // left of the reasoning still holds: since `reach` widens only once one link is
         // down and the attempt budget is shared across all three, too
         // narrow an on-ramp would not cost the zone its first link — it
         // would cost the zone every link, which reads as a bad seed rather
@@ -293,9 +290,8 @@ impl Game {
     /// the one safe ground in the game, and a hole down into the Stack in
     /// the middle of it would undo that. **Unreachable now that nothing
     /// writes `Biome::Platform` into a `WorldMap`** — kept rather than
-    /// deleted, same as `find_blocking_structure_at`'s call below (which now
-    /// refuses to answer outside base space and so is always `None` here);
-    /// slice 2/3 is where this gets a `BaseGrid`-aware replacement.
+    /// deleted, same as `find_blocking_structure_at`'s call below. Keeping
+    /// links off the floor is `Game::floor_conflict`'s job.
     ///
     /// A nest is checked before an entrance in `move_player`, so a link
     /// sharing a nest's tile is a link that can never be walked into — the
@@ -395,7 +391,7 @@ impl Game {
     }
 
     /// Whether the party stands on the base's laid floor: home, for the
-    /// rules that used to mean "in base space" — mending, the siege clock
+    /// rules that want it — mending, the siege clock
     /// fighting rather than resolving offscreen, the ground's bite and a
     /// patrol's challenge both staying out.
     pub fn on_base_floor(&self) -> bool {
@@ -440,7 +436,7 @@ impl Game {
     /// constructors spawn the one `components::BaseAnchor` entity and record
     /// it in `resources::AnchorEntity` before returning. `None` here would
     /// mean that bookkeeping has gone missing, not a normal outcome the way
-    /// `base_pos`'s `None` is.
+    /// `field_pos`'s `None` is.
     ///
     /// A plain resource-then-component read rather than a query, so this can
     /// stay `&self` — `World::query_filtered` needs `&mut World` to build,
@@ -491,12 +487,12 @@ impl Game {
     ///
     /// The radius is the base's own reach, exactly as
     /// `distance_from_danger_origin` reads it and for the same reason: with
-    /// nothing carved out of base space there is no safe territory to
+    /// nothing carved out of the field there is no safe territory to
     /// measure from and the walk is the whole distance. `BaseGrid::radius`
     /// answers 0 in that case, so the branch this used to take is folded
     /// into the number.
     ///
-    /// It read `Platform::radius` until the base went out of phase, and that
+    /// It read `Platform::radius` until the base became `BaseGrid`, and that
     /// value is set by a breach and nothing else now — so every link near a
     /// fresh run's base ran *deeper* than it should, and shallower again
     /// after a save and load.

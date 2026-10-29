@@ -197,8 +197,7 @@ impl Game {
     }
 
     /// The player's `Position` is a surface tile in every locale — pinned to
-    /// the anchor in base space, to the entrance in the Stack — so it is
-    /// read without a locale check.
+    /// the entrance in the Stack — so it is read without a locale check.
     fn player_or_anchor_at(&self, x: i32, y: i32) -> bool {
         let anchor = self.world.resource::<AnchorEntity>().0;
         [self.player_entity(), anchor].into_iter().any(|entity| {

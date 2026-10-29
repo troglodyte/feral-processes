@@ -679,12 +679,9 @@ fn an_unreachable_dig_site_posts_a_site_cut_off_alert_once() {
             ItemId::from(ids::CORE_FRAGMENT),
             crate::tuning::FLOOR_TILE_COST,
         );
-    let tick = game.current_tick();
-    game.world.resource_mut::<base_grid::BaseGrid>().open(
-        ALERT_STRANDED_STATION.0,
-        ALERT_STRANDED_STATION.1,
-        tick,
-    );
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(ALERT_STRANDED_STATION.0, ALERT_STRANDED_STATION.1);
     game.toggle_mark_box(ALERT_STRANDED_CELL, ALERT_STRANDED_CELL, None);
 
     for _ in 0..20 {

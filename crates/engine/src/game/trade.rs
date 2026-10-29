@@ -392,9 +392,8 @@ impl Game {
     /// through `settlement_buyback_unit_cost` rather than a structure's
     /// fixed `sell_rate`.
     ///
-    /// **No `require_base`.** A settlement stands on the zone surface, not
-    /// in base space, so `Game::settlement_reach` is the gate here — the
-    /// same one `Game::commit_settlement_basket` checks.
+    /// **No `require_field`.** `Game::settlement_reach` is the gate here —
+    /// the same one `Game::commit_settlement_basket` checks.
     pub fn settlement_buy_back(
         &mut self,
         key: crate::settlements::SettlementKey,

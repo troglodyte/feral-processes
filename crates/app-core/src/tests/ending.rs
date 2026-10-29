@@ -1,6 +1,5 @@
 //! The Basin Exit prompt and `Mode::Ending`.
 
-use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 
 use super::support::*;
@@ -42,7 +41,7 @@ fn app_beside_the_exit_seeded(seed: u32, keys: u16) -> App {
     let path = scratch_path("basin_exit", seed);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base { x: 1, y: 0 };
+    stand_save_on_field(&mut data, 1, 0);
     data.zone = 10;
     data.player.phase_keys.held = keys;
     data.structures.push(structure("basin_exit", 2, 0));

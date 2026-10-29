@@ -93,10 +93,9 @@ impl Biome {
 pub struct Tile {
     pub biome: Biome,
     pub walkable: bool,
-    /// How bright this cell's rock face is drawn, for a base-space cell that
+    /// How bright this cell's rock face is drawn, for a field cell that
     /// is an *exposed* face — solid, with air orthogonally against it. `None`
-    /// everywhere on the zone surface, and on every base cell that is walked
-    /// on or buried behind another.
+    /// on every cell that is walked on or buried behind another.
     ///
     /// **Deliberately `#[serde(skip)]`.** `Tile` lands in the save through
     /// `SaveData::tile_overrides`, and this is a derived display value
@@ -115,11 +114,9 @@ impl Tile {
     /// Whether a hostile may stand here: walkable, and not the base slab.
     ///
     /// **Unreachable now that nothing writes `Biome::Platform` into a
-    /// `WorldMap`** — the base is out of phase and its floor is
-    /// `base_grid::BaseGrid`, not a tile override. Left as-is rather than
-    /// deleted; slice 2/3 is where the slab-era readers below get replaced
-    /// with a base-space equivalent of this rule, and `stamp_platform`
-    /// (named below) no longer exists.
+    /// `WorldMap`** — the base floor is `base_grid::BaseGrid`, not a tile
+    /// override. Left as-is rather than deleted; `stamp_platform` (named
+    /// below) no longer exists.
     ///
     /// `walkable` alone is not the rule, and the slab is why. It is the one
     /// safe ground in the game, established in three places already —
@@ -349,11 +346,11 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
                     Biome::Backplane => 'm',
                     Biome::OpenGrid => 'o',
                     Biome::Platform => 'p',
-                    // Base-space rendering vocabulary only — `classify`
+                    // Field rendering vocabulary only — `classify`
                     // never produces either, so this map capture can never
                     // actually reach them.
                     Biome::Excavated | Biome::Entropy => {
-                        unreachable!("classify never produces a base-space biome")
+                        unreachable!("classify never produces Excavated or Entropy")
                     }
                 });
             }

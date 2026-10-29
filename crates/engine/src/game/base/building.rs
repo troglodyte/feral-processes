@@ -15,7 +15,7 @@ use crate::*;
 pub struct AwaitingSite {
     pub site: Entity,
     pub structure: StructureId,
-    /// Base-space coordinates.
+    /// Field coordinates.
     pub x: i32,
     pub y: i32,
 }
@@ -226,7 +226,7 @@ impl Game {
         let committed_who = offered_label.filter(|_| committed.is_some());
 
         // **The Home is stood up by hand; everything else is a request.**
-        // Founding is the one build with nobody to ask: base space does not
+        // Founding is the one build with nobody to ask: the base does not
         // exist yet, so there is no roster standing in it and no shelf to
         // fetch from. It therefore keeps the original shape entirely — every
         // material out of the player's own pack, refused on the spot when
@@ -314,7 +314,7 @@ impl Game {
         Ok(())
     }
 
-    /// Paints the box spanned by base-space cells `a` and `b` with Wall
+    /// Paints the box spanned by field cells `a` and `b` with Wall
     /// requests — `Mode::WallBox`'s commit, the Excavation plan's box
     /// applied to building.
     ///
@@ -431,7 +431,7 @@ impl Game {
             .is_some_and(|dev| dev.0)
     }
 
-    /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
+    /// Stands a filed `BuildSite` on field `(x, y)`: the one place a new
     /// request's components are written, shared by `place_structure` and
     /// `file_ruins` so a deploy and a rebuild cannot drift — and so both move
     /// a program standing on the footprint aside the same way.
@@ -920,7 +920,7 @@ impl Game {
         }
     }
 
-    /// Spawns the finished structure `def` on base-space `(x, y)` and
+    /// Spawns the finished structure `def` on field `(x, y)` and
     /// returns it.
     ///
     /// **The one place a structure's component list is written**, and it has
@@ -1110,7 +1110,7 @@ impl Game {
     /// Core Fragments.
     ///
     /// The fragments are raw stock; the tile is what they become underfoot.
-    /// `BaseCell::Floor` stays the code's name for the result — this is the
+    /// "Floor" stays the code's name for the result — this is the
     /// player's word for it, the same way "GC Entropy Sweep" is the player's
     /// word for a raid — and no new item exists for it.
     ///
@@ -1165,12 +1165,12 @@ impl Game {
         Ok(())
     }
 
-    /// The pending `BuildSite` standing on base-space `(x, y)`, if any.
+    /// The pending `BuildSite` standing on field `(x, y)`, if any.
     ///
     /// `find_blocking_structure_at`'s counterpart, and it carries the same
-    /// `in_base` gate for the same reason: a build site's `Position` is in
-    /// base space, so a surface-space query must never be answered by one
-    /// whose coordinates happen to coincide. **Point-in-footprint too**,
+    /// gate for the same reason: a build site's `Position` is a field tile,
+    /// so a query from the Stack must never be answered by one whose
+    /// coordinates happen to coincide. **Point-in-footprint too**,
     /// against the footprint of the structure the site *will become* —
     /// `find_blocking_structure_at`'s rule one tick early, since a request
     /// for a Research Station claims the same four cells a standing one
@@ -1718,11 +1718,10 @@ impl Game {
             self.world.despawn(target);
         }
         // `clear_platform` used to run here, restoring the zone surface
-        // under a demolished Home's slab. The base is out of phase now —
-        // its floor is `BaseGrid`, the player's own dug ground, and
+        // under a demolished Home's slab. The floor is `BaseGrid` now, and
         // `Game::has_home`'s own doc already states the design this
         // implies: demolishing the Home takes every structure with it but
-        // leaves the floor standing, so you can be in base space having
+        // leaves the floor standing, so you can be on the floor having
         // just demolished the Home out from under yourself.
 
         // Route through `grant_loot`, not a direct `add`: demolishing a Home

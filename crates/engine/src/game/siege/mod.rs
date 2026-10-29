@@ -102,7 +102,7 @@ impl Game {
             .biome;
 
         // Read before anything is spawned or seated: every entity that
-        // exists in base space *before* this call is what the fight opens
+        // exists in the field *before* this call is what the fight opens
         // with, raiders excepted.
         let structures = self.structure_footprints();
         // A prisoner is behind bars, not a defender: it occupies its pen
@@ -147,7 +147,7 @@ impl Game {
                 self.is_barrier(e)
             });
 
-        // **Every body in base space is seated where it already stands.**
+        // **Every body in the field is seated where it already stands.**
         // Nobody is deployed; a body whose own cell fell outside the fill
         // (a program adopted on the surface that has not drifted in) is
         // simply not seated.

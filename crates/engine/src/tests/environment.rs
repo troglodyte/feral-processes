@@ -1532,17 +1532,16 @@ fn terrain_row_is_none_underground() {
     );
 }
 
-/// The base pocket is the one place in the game that must never read as
-/// hostile — `enter_base` pins `Position` to the anchor tile, same as the
-/// Stack pins it to the surface entrance, so without the `in_base` guard
-/// this would name the anchor's own ground and any weather live over it
-/// while the party is safely inside.
+/// The base's floor is the one place in the game that must never read as
+/// hostile — without the `on_base_floor` guard this would name the ground
+/// under the floor and any weather live over it while the party is home.
 #[test]
 fn terrain_row_is_none_in_base() {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
+    game.lay_test_pocket();
     stand_in_base(&mut game);
-    assert!(game.in_base(), "the fixture never got into base space");
+    assert!(game.on_base_floor(), "the fixture never stood on the floor");
 
     assert!(
         game.terrain_row().is_none(),

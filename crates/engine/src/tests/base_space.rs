@@ -1,47 +1,81 @@
-//! Base space: the third locale, and which guard each action carries.
+//! The base on the field: its guard, its floor, mining, dig marks and the
+//! crew that works them, finishes and the plan's own orders.
 //!
-//! `Game::require_surface` used to mean "not in the Stack", because with two
-//! locales "not underground" and "on the surface proper" were one condition.
-//! They are two now, and every guarded action has had to declare which it
-//! meant. **A wrong declaration is silent** — nothing about it fails to
-//! compile, and both answers refuse in the Stack, so the Stack tests cannot
-//! tell them apart either. These are what makes it loud: each one drives the
-//! real entry point from all three locales and asserts which refusal it met.
+//! The base has no space of its own (ADR 0032): every cell here is a field
+//! coordinate, laid floor is the `BaseGrid` overlay, and a mined blocker is a
+//! `Biome::Excavated` override in the `WorldMap`. Field terrain near the
+//! origin is seed-generated, so a test that needs rock at a cell sets it
+//! (`set_rock`) rather than trusting the seed.
 
 use super::support::*;
 use crate::floors::FloorId;
-use TEST_HOME_CELL;
+use crate::world::{Biome, Tile, WorldMap};
 use crate::*;
 
 fn game(seed: u32) -> Game {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
+/// Overrides field `cell` to an ordinary blocker — the `entropy` rock kind,
+/// the one `RockDb::kind_at` falls back to.
+fn set_rock(game: &mut Game, cell: (i32, i32)) {
+    set_blocker(game, cell, Biome::Entropy);
+}
+
+/// Overrides field `cell` to a blocker of `biome`, whose rock kind
+/// `RockDb::kind_at` derives.
+fn set_blocker(game: &mut Game, (x, y): (i32, i32), biome: Biome) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        x,
+        y,
+        Tile {
+            biome,
+            walkable: false,
+            rock_shade: None,
+        },
+    );
+}
+
+/// Overrides field `cell` to mined ground: what `Game::strike_field_rock`
+/// leaves behind, written directly.
+fn excavate(game: &mut Game, (x, y): (i32, i32)) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        x,
+        y,
+        Tile {
+            biome: Biome::Excavated,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+}
+
+/// Whether nothing can stand on field `cell`: not floor, and a blocker.
+fn is_solid(game: &Game, (x, y): (i32, i32)) -> bool {
+    !game.ground().walkable(x, y)
+}
+
 /// Where an action is attempted from.
 #[derive(Clone, Copy, Debug)]
 enum At {
-    Surface,
+    /// On the base's floor, at the Home's tile.
     Base,
+    /// On the field, well off the base's floor.
+    OffFloor,
     Stack,
 }
 
-/// The fragment every `Game::require_base` refusal carries, in both of the
-/// locales it refuses. Matched on rather than the whole string so the two
-/// wordings ("not out here" / "not down here") stay free to differ, which is
-/// the point of having two.
-const THE_BASE: &str = "back at the base";
+/// A cell of open field far from `TEST_HOME_CELL` and its pocket.
+const FAR_FIELD: (i32, i32) = (40, 40);
 
-/// The same for `Game::require_surface`. Deliberately *not* a substring of
-/// `THE_BASE` or the other way round: a test that cannot tell the two
-/// refusals apart proves nothing about which guard a site is on.
-const OPEN_GRID: &str = "open grid";
+/// The fragment every `Game::require_field` refusal carries.
+const THE_FIELD: &str = "up on the field";
 
 /// Builds a fresh fixture, moves the party to `at`, and runs `action`.
 ///
-/// The fixture always runs on the surface and the locale is set afterwards,
-/// which is what keeps the three runs comparable: the base, the machines and
-/// the player's `Position` are identical in all three, and the locale is the
-/// only difference between them.
+/// The fixture always runs first and the party is moved afterwards, which is
+/// what keeps the runs comparable: the base, the machines and everything
+/// else are identical, and where the party stands is the only difference.
 fn attempt<T>(
     seed: u32,
     at: At,
@@ -51,48 +85,45 @@ fn attempt<T>(
     let mut game = game(seed);
     let subject = fixture(&mut game);
     match at {
-        At::Surface => {}
         At::Base => stand_in_base(&mut game),
+        At::OffFloor => stand_in_base_at(&mut game, FAR_FIELD.0, FAR_FIELD.1),
         At::Stack => descend(&mut game),
     }
     action(&mut game, subject)
 }
 
-/// Asserts `what` belongs to base space: permitted there, and refused in the
-/// other two *by the base guard* rather than by some later check the fixture
-/// happened to trip. Reading the refusal is the whole assertion — an
-/// `is_err()` here would pass just as well against a site left on
-/// `require_surface`, since that refuses in the Stack too.
-fn is_a_base_action<T>(
+/// Asserts `what` is a field action: permitted standing on the base, and
+/// refused in the Stack *by the field guard* rather than by some later check
+/// the fixture happened to trip. Reading the refusal is the whole assertion
+/// — an `is_err()` here would pass just as well against a refusal for
+/// reach, which says nothing about the guard.
+fn is_a_field_action<T>(
     seed: u32,
     what: &str,
     fixture: impl Fn(&mut Game) -> T,
     action: impl Fn(&mut Game, T) -> Result<(), String>,
 ) {
     if let Err(refused) = attempt(seed, At::Base, &fixture, &action) {
-        panic!("{what} must be permitted in base space, got: {refused}");
+        panic!("{what} must be permitted on the base, got: {refused}");
     }
-    for at in [At::Surface, At::Stack] {
-        let refused = attempt(seed, at, &fixture, &action)
-            .err()
-            .unwrap_or_else(|| panic!("{what} must be refused on the {at:?}"));
-        assert!(
-            refused.contains(THE_BASE),
-            "{what} must be refused on the {at:?} by the base guard, got: {refused}"
-        );
-    }
+    let refused = attempt(seed, At::Stack, &fixture, &action)
+        .err()
+        .unwrap_or_else(|| panic!("{what} must be refused in the Stack"));
+    assert!(
+        refused.contains(THE_FIELD),
+        "{what} must be refused in the Stack by the field guard, got: {refused}"
+    );
 }
 
 // ---------------------------------------------------------------------
-// The eleven re-read guard sites
+// The re-read guard sites
 // ---------------------------------------------------------------------
 
-/// A machine, not the Home: founding the base is the one deploy made from
-/// the open grid (`Game::place_structure`), and it has its own tests further
-/// down. Everything after it is a base action.
+/// A machine, not the Home: founding the base has its own tests further
+/// down.
 #[test]
-fn deploying_a_structure_is_a_base_action() {
-    is_a_base_action(
+fn deploying_a_structure_is_a_field_action() {
+    is_a_field_action(
         3100,
         "deploying",
         |game| {
@@ -104,8 +135,8 @@ fn deploying_a_structure_is_a_base_action() {
 }
 
 #[test]
-fn upgrading_a_structure_is_a_base_action() {
-    is_a_base_action(
+fn upgrading_a_structure_is_a_field_action() {
+    is_a_field_action(
         3101,
         "upgrading",
         |game| {
@@ -122,8 +153,8 @@ fn upgrading_a_structure_is_a_base_action() {
 }
 
 #[test]
-fn demolishing_a_structure_is_a_base_action() {
-    is_a_base_action(
+fn demolishing_a_structure_is_a_field_action() {
+    is_a_field_action(
         3102,
         "demolishing",
         deploy_upgradeable_node,
@@ -132,21 +163,18 @@ fn demolishing_a_structure_is_a_base_action() {
 }
 
 #[test]
-fn working_a_machine_by_hand_is_a_base_action() {
-    is_a_base_action(
+fn working_a_machine_by_hand_is_a_field_action() {
+    is_a_field_action(
         3103,
         "working a machine by hand",
-        |game| {
-            let at = *game.world.get::<Position>(game.player_entity()).unwrap();
-            spawn_extractor(game, at.x + 1, at.y)
-        },
+        |game| spawn_extractor(game, TEST_HOME_CELL.0 + 1, TEST_HOME_CELL.1),
         |game, node| game.work_structure(node),
     );
 }
 
 #[test]
-fn filing_a_work_order_is_a_base_action() {
-    is_a_base_action(
+fn filing_a_work_order_is_a_field_action() {
+    is_a_field_action(
         3104,
         "filing a work order",
         |game| {
@@ -162,14 +190,11 @@ fn filing_a_work_order_is_a_base_action() {
     );
 }
 
-/// A transfer reports what it took rather than a `Result`, so its
-/// refusal is an empty haul. That makes the base half of this the load-bearing
-/// assertion: an empty haul on the surface is what a site left on
-/// `require_surface` would produce in base space instead.
+/// A transfer reports what it took rather than a `Result`, so its refusal is
+/// an empty haul: the base half of this is the load-bearing assertion.
 #[test]
-fn collecting_from_a_machine_is_a_base_action() {
+fn collecting_from_a_machine_is_a_field_action() {
     let stock_a_neighbour = |game: &mut Game| {
-        let at = *game.world.get::<Position>(game.player_entity()).unwrap();
         let mut stock = Stock::new(crate::tuning::DEFAULT_OUTPUT_CAPACITY);
         stock.output.insert(ItemId::from(ids::CORE_FRAGMENT), 4);
         game.world.spawn((
@@ -177,8 +202,8 @@ fn collecting_from_a_machine_is_a_base_action() {
                 kind: "extractor".to_string(),
             },
             Position {
-                x: at.x + 1,
-                y: at.y,
+                x: TEST_HOME_CELL.0 + 1,
+                y: TEST_HOME_CELL.1,
             },
             stock,
         ));
@@ -193,19 +218,17 @@ fn collecting_from_a_machine_is_a_base_action() {
 
     assert!(
         attempt(3105, At::Base, &stock_a_neighbour, &collect).is_ok(),
-        "collecting must work in base space, where the machines are"
+        "collecting must work standing beside the machine"
     );
-    for at in [At::Surface, At::Stack] {
-        assert!(
-            attempt(3105, at, &stock_a_neighbour, &collect).is_err(),
-            "collecting must take nothing on the {at:?}"
-        );
-    }
+    assert!(
+        attempt(3105, At::Stack, &stock_a_neighbour, &collect).is_err(),
+        "collecting must take nothing in the Stack"
+    );
 }
 
 #[test]
-fn selling_an_item_is_a_base_action() {
-    is_a_base_action(
+fn selling_an_item_is_a_field_action() {
+    is_a_field_action(
         3106,
         "selling to a trader",
         |game| {
@@ -218,16 +241,16 @@ fn selling_an_item_is_a_base_action() {
 }
 
 #[test]
-fn buying_an_item_back_is_a_base_action() {
-    is_a_base_action(
+fn buying_an_item_back_is_a_field_action() {
+    is_a_field_action(
         3107,
         "buying back from a trader",
         |game| {
             let market = spawn_market(game);
             let plating = ItemId::from(ids::FIREWALL_PLATING);
             give(game, &plating, 2);
-            // Sold from inside the base, since selling is a base action too —
-            // the shelf this buys back off has to be stocked somehow.
+            // Sold from the base first, since selling is a field action too
+            // — the shelf this buys back off has to be stocked somehow.
             from_inside_the_base(game, |g| g.sell_item(market, gear(&plating, 0), 2)).unwrap();
             let paid = game.sell_price(market, &plating).unwrap();
             give(game, &ItemId::from(ids::CREDITS), paid * 8);
@@ -238,8 +261,8 @@ fn buying_an_item_back_is_a_base_action() {
 }
 
 #[test]
-fn selling_a_program_is_a_base_action() {
-    is_a_base_action(
+fn selling_a_program_is_a_field_action() {
+    is_a_field_action(
         3108,
         "selling a program",
         |game| {
@@ -252,8 +275,8 @@ fn selling_a_program_is_a_base_action() {
 }
 
 #[test]
-fn buying_an_item_is_a_base_action() {
-    is_a_base_action(
+fn buying_an_item_is_a_field_action() {
+    is_a_field_action(
         3109,
         "buying from a trader",
         |game| {
@@ -270,24 +293,22 @@ fn buying_an_item_is_a_base_action() {
     );
 }
 
-/// **Controller ruling 7, slice-1 Task 6, since superseded.** `rest` was the
-/// one site of the eleven that kept `require_surface`, then became the one
-/// that took `require_base` instead. It now takes neither: a rest is
-/// allowed in all three locales and the locale decides only what it *costs*
-/// — free inside the base, one rest charge anywhere else.
+/// A rest is allowed everywhere and where the party stands decides only
+/// what it *costs*: free on the base's floor, one rest charge anywhere else.
 ///
-/// That makes base space the cheap place to power down rather than the only
+/// That makes the base the cheap place to power down rather than the only
 /// one, so this is the axis worth pinning here: three runs differing by
-/// locale alone, each asserted on the outlet count rather than on the clock,
-/// since no rest advances the clock any more.
+/// where the party stands alone, each asserted on the outlet count rather
+/// than on the clock, since no rest advances the clock any more.
 #[test]
-fn resting_is_free_in_base_space_and_priced_outside_it() {
+fn resting_is_free_on_the_base_floor_and_priced_off_it() {
     let outlets_spent = |at: At| {
         let mut game = game(3110);
         stand_in_base_beside_home(&mut game);
+        game.lay_test_pocket();
         match at {
             At::Base => {}
-            At::Surface => game.world.insert_resource(Locale::Surface),
+            At::OffFloor => stand_in_base_at(&mut game, FAR_FIELD.0, FAR_FIELD.1),
             At::Stack => descend(&mut game),
         }
         let player = game.player_entity();
@@ -304,7 +325,7 @@ fn resting_is_free_in_base_space_and_priced_outside_it() {
         assert_eq!(
             game.world.get::<PowerReserve>(player).unwrap().get(),
             100.0,
-            "the rest has to run in every locale, or the count below is vacuous: {:?}",
+            "the rest has to run everywhere, or the count below is vacuous: {:?}",
             game.message_log(5)
         );
         before - held(&game)
@@ -313,10 +334,10 @@ fn resting_is_free_in_base_space_and_priced_outside_it() {
     assert_eq!(
         outlets_spent(At::Base),
         0,
-        "inside the base the walk home is the whole price"
+        "on the base's floor the walk home is the whole price"
     );
     assert_eq!(
-        outlets_spent(At::Surface),
+        outlets_spent(At::OffFloor),
         1,
         "out on the grid a rest is bought with a carried charge"
     );
@@ -328,76 +349,62 @@ fn resting_is_free_in_base_space_and_priced_outside_it() {
 }
 
 // ---------------------------------------------------------------------
-// The two systems that guard on `is_underground` rather than on a
-// `require_*`, and the locale predicates themselves
+// The locale predicates
 // ---------------------------------------------------------------------
 
-/// `is_underground` stays strictly "down inside the Stack". Base space is off
-/// the surface too, and answering yes here would apply every Stack rule in
-/// the game — no Power supply, Trace, the frame view — to the base.
+/// `is_underground` stays strictly "down inside the Stack". Standing on the
+/// base is the field, and answering yes here would apply every Stack rule
+/// in the game — no Power supply, Trace, the frame view — to the base.
 #[test]
-fn base_space_is_not_underground() {
+fn standing_on_the_base_is_not_underground() {
     let mut game = game(3112);
+    place_home(&mut game);
     stand_in_base(&mut game);
 
-    assert!(!game.is_underground(), "base space is not the Stack");
-    assert!(game.in_base());
-    assert_eq!(game.field_pos(), Some((0, 0)));
+    assert!(!game.is_underground(), "the base is not the Stack");
+    assert!(game.on_base_floor());
+    assert_eq!(game.field_pos(), Some(TEST_HOME_CELL));
     assert!(
         game.stack_view().is_none(),
-        "there is no frame loaded in base space"
+        "there is no frame loaded on the field"
     );
 }
 
-/// The mirror: `base_pos` is the refusal mechanism for anything base-only, so
-/// it must answer `None` in both of the other two locales rather than a
-/// default pair.
+/// `on_base_floor` is what the old "in base space" rules read now, so it
+/// must answer no off the floor and in the Stack rather than echo a tile
+/// that happens to be floored.
 #[test]
-fn base_pos_answers_nowhere_but_base_space() {
+fn on_base_floor_answers_only_for_laid_floor_on_the_field() {
     let mut game = game(3113);
-    assert_eq!(game.field_pos(), None, "the surface is not base space");
-    assert!(!game.in_base());
+    place_home(&mut game);
+    stand_in_base(&mut game);
+    assert!(game.on_base_floor(), "the Home's tile is floor");
 
+    stand_in_base_at(&mut game, FAR_FIELD.0, FAR_FIELD.1);
+    assert!(!game.on_base_floor(), "open field is not the base");
+    assert_eq!(game.field_pos(), Some(FAR_FIELD));
+
+    stand_in_base(&mut game);
     descend(&mut game);
-    assert_eq!(game.field_pos(), None, "the Stack is not base space either");
-    assert!(!game.in_base());
+    assert!(
+        !game.on_base_floor(),
+        "the Stack is not the base, whatever tile the entrance pins"
+    );
+    assert_eq!(game.field_pos(), None, "the Stack is not the field");
 }
 
-/// A Recharger's radius is measured from `Game::base_pos`, not the player's
-/// `Position` — that stays pinned to the anchor tile for the whole of a
-/// visit to base space, and every `Structure`, Recharger included, can only
-/// ever be deployed *in* base space now (`place_structure` requires
-/// `require_base` for everything but the founding Home).
-///
-/// **Reaching the party in base space is the deliberate, corrected
-/// behaviour, not a bug.** `recharger_node.ron`'s own description reads
-/// "while you stand anywhere on your base" — a Recharger that could never
-/// regen anyone in base space would be a structure with no reachable
-/// purpose at all. See `power_regen_system`'s doc comment for the fuller
-/// argument; this test held the opposite claim before that fix and is the
-/// reason the defect survived review.
-///
-/// Walked through the real entry points — `enter_base` and `place_structure`
-/// — rather than `spawn_recharger_node`'s old trick of spawning a structure
-/// at an offset from the player's `Position`. That fixture places a
-/// structure in whatever coordinate space `Position` happens to hold,
-/// which is base-space numbers on the surface and surface-space numbers
-/// once `stand_in_base` flips the locale without moving anything — the
-/// exact manufactured coincidence that let the old, inverted assertion
-/// here pass.
+/// A Recharger's radius is measured from the party's field tile, and
+/// `recharger_node.ron`'s own description reads "while you stand anywhere
+/// on your base" — so a Recharger beside the party standing on the base
+/// regens it. Walked through `place_structure` rather than a spawn at an
+/// offset, so the Recharger stands where a real deploy puts it.
 #[test]
-fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
+fn a_recharger_regens_the_party_standing_on_the_base() {
     let mut game = game(3114);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
+    place_home(&mut game);
+    stand_in_base(&mut game);
     place_now(&mut game, "recharger_node", 1, 0)
-        .expect("floor beside the origin is inside the starting pocket");
-    assert_eq!(
-        game.field_pos(),
-        Some((0, 0)),
-        "the party never moved off the exit cell — the Recharger sits one step away"
-    );
+        .expect("floor beside the Home is inside the pocket");
 
     let player = game.player_entity();
     game.world
@@ -411,90 +418,12 @@ fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
     let after = game.world.get::<PowerReserve>(player).unwrap().get();
     assert!(
         after > before,
-        "a Recharger deployed in base space must regen a party genuinely \
-         standing in there, reached through enter_base: {before} -> {after}"
+        "a Recharger deployed on the base must regen a party standing there: \
+         {before} -> {after}"
     );
 }
-
-/// The surface arm of the same guard, and not a no-op the way comparing the
-/// raw `Position` there might look. `BASE_EXIT_CELL` puts a base's Home at
-/// base-space `(0, 0)` on *every* run, and `scan_center`'s own doc names why
-/// that matters: a surface tile reads as the same numbers as a base-space
-/// one exactly when the anchor sits near base space's origin — which the
-/// zone spawn point usually does, but "usually" is not "always", so
-/// `stand_player_at` forces the coincidence here rather than trusting the
-/// fixture's seed to land on it.
-#[test]
-fn a_recharger_does_not_reach_the_party_genuinely_on_the_surface() {
-    let mut game = game(3117);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
-    place_now(&mut game, "recharger_node", 1, 0)
-        .expect("floor beside the origin is inside the starting pocket");
-    game.leave_base().unwrap();
-    assert!(!game.in_base(), "back on the open grid");
-
-    // Forced onto numbers a base-space Recharger's radius-10 reach would
-    // have matched under the old, buggy compare: the Recharger sits at
-    // base-space (1, 0).
-    stand_player_at(&mut game, 0, 0);
-
-    let player = game.player_entity();
-    game.world
-        .get_mut::<PowerReserve>(player)
-        .unwrap()
-        .spend(5.0);
-    let before = game.world.get::<PowerReserve>(player).unwrap().get();
-
-    game.tick();
-
-    let after = game.world.get::<PowerReserve>(player).unwrap().get();
-    let expected_from_decay_alone = before - crate::tuning::HUNGER_DECAY_PER_TICK;
-    assert!(
-        (after - expected_from_decay_alone).abs() < 1e-4,
-        "a Recharger standing in base space must not reach a party genuinely \
-         on the open surface, however close the raw numbers land: expected \
-         decay only ({before} -> {expected_from_decay_alone}), got {after}"
-    );
-}
-
-/// The same trap on the other reader of the pinned `Position`: a guardian
-/// standing beside the anchor tile would otherwise open a battle on a party
-/// that is not there.
-#[test]
-fn a_nest_guardian_does_not_open_a_battle_in_base_space() {
-    let provoked = |at: At| {
-        let mut game = game(3115);
-        let at_tile = *game.world.get::<Position>(game.player_entity()).unwrap();
-        // No `Nest` component needed — the leash check only asks for a
-        // `Position` on the entity `NestGuardian::nest` names.
-        let nest = game.world.spawn(at_tile).id();
-        let guardian = game
-            .spawn_wild_creature("construct", at_tile.x + 1, at_tile.y)
-            .expect("construct ships with the game");
-        game.world
-            .entity_mut(guardian)
-            .insert((NestGuardian { nest }, Pursuing));
-        if let At::Base = at {
-            stand_in_base(&mut game);
-        }
-        game.tick();
-        game.has_active_battle()
-    };
-
-    assert!(
-        provoked(At::Surface),
-        "an adjacent pursuer must still engage on the surface"
-    );
-    assert!(
-        !provoked(At::Base),
-        "a pursuer beside the anchor must not reach a party out of phase"
-    );
-}
-
 // ---------------------------------------------------------------------
-// The anchor: the permanent door into base space
+// The anchor: where the Home was founded
 // ---------------------------------------------------------------------
 
 /// `Game::new` spawns exactly one `BaseAnchor`, standing on the same tile
@@ -610,233 +539,46 @@ fn the_anchor_is_not_counted_as_a_deployed_structure() {
 }
 
 // ---------------------------------------------------------------------
-// Walking in and out through the anchor, and moving around inside
+// Moving on the field next to rock
 // ---------------------------------------------------------------------
 
-/// The fragment `Game::enter_base` uses when the anchor has nothing behind
-/// it yet. Deliberately shares no wording with the "you are not on the
-/// anchor" refusal: a player standing in the right place with no base built
-/// and a player standing in the wrong place are told different things, and a
-/// test that could not tell the two apart would pass against an entry that
-/// refused for the wrong reason.
-const NO_BASE_YET: &str = "nothing on the other side";
-
-/// A run that has a base to walk into: the run's first Home deployed the way
-/// a player deploys it, which stands it on `BASE_EXIT_CELL` and lays the
-/// starting pocket around it.
-///
-/// Nothing is laid by hand any more. The Home is the thing that opens base
-/// space, so a fixture that floored cells itself would be describing a state
-/// the game cannot reach.
+/// A run with a base: the run's first Home founded on `TEST_HOME_CELL` and
+/// the fixture pocket laid around it.
 fn game_with_a_base(seed: u32) -> Game {
     let mut game = game(seed);
     place_home(&mut game);
     game
 }
 
-/// A base-space cell outside the starting pocket: solid rock, and the same
-/// cell whichever test asks. One step north of the pocket's north edge.
-fn solid_rock_north() -> (i32, i32) {
-    (0, -TEST_POCKET_HALF_HEIGHT - 1)
+/// A field cell one step north of the pocket's north edge, made solid rock:
+/// the same cell whichever test asks, and minable, since the edge is floor.
+fn solid_rock_north(game: &mut Game) -> (i32, i32) {
+    let cell = (0, -TEST_POCKET_HALF_HEIGHT - 1);
+    set_rock(game, cell);
+    cell
 }
 
-/// The player's tile on the zone surface.
-fn player_tile(game: &Game) -> Position {
-    *game.world.get::<Position>(game.player_entity()).unwrap()
-}
-
-/// The round trip the spec names: stepping through the anchor puts the party
-/// out of phase at the exit cell, coming back out restores the surface, and
-/// the player's surface `Position` is the anchor tile throughout — pinned
-/// there rather than merely starting there, which is what every guard on the
-/// eleven re-read sites is protecting against.
-#[test]
-fn entering_and_leaving_through_the_anchor_round_trips_the_players_position() {
-    let mut game = game_with_a_base(3120);
-    let anchor = game.anchor_position().expect("a fresh game has an anchor");
-    let before = player_tile(&game);
-    assert_eq!(
-        (before.x, before.y),
-        anchor,
-        "the fixture must start the player on the anchor, or this tests nothing"
-    );
-
-    game.enter_base()
-        .expect("standing on an anchor with a Home behind it");
-
-    assert!(game.in_base());
-    assert!(!game.is_underground(), "base space is not the Stack");
-    assert_eq!(game.field_pos(), Some((0, 0)), "you arrive at the exit cell");
-    assert_eq!(
-        player_tile(&game),
-        before,
-        "the surface Position stays pinned to the anchor tile"
-    );
-
-    game.leave_base().expect("standing on the exit cell");
-
-    assert!(!game.in_base());
-    assert_eq!(game.locale(), Locale::Surface);
-    assert_eq!(
-        player_tile(&game),
-        before,
-        "you come back out where you went in"
-    );
-}
-
-/// The anchor is the only door. Asserted against the same fixture from the
-/// anchor tile too, so this cannot pass against an `enter_base` that refuses
-/// everywhere.
-#[test]
-fn the_anchor_is_the_only_way_in() {
-    let mut game = game_with_a_base(3121);
-    {
-        let player = game.player_entity();
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x += 3;
-    }
-
-    let refused = game
-        .enter_base()
-        .expect_err("three tiles off the anchor is not the door");
-    assert!(
-        !refused.contains(NO_BASE_YET),
-        "the fixture has a Home, so this must refuse for the position, got: {refused}"
-    );
-
-    {
-        let player = game.player_entity();
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x -= 3;
-    }
-    game.enter_base()
-        .expect("back on the anchor, the same call must be permitted");
-}
-
-/// A new run has no base at all — `place_structure` refuses everything until
-/// a Home is deployed — so the anchor leads nowhere, and says so in its own
-/// words rather than by claiming the player is standing somewhere else.
-#[test]
-fn an_anchor_with_no_home_behind_it_refuses_entry() {
-    let mut game = game(3122);
-    let standing = player_tile(&game);
-    assert_eq!(
-        (standing.x, standing.y),
-        game.anchor_position().unwrap(),
-        "the player starts on the anchor, so position cannot be what refuses"
-    );
-
-    let refused = game
-        .enter_base()
-        .expect_err("a run with no Home has no base to enter");
-
-    assert!(
-        refused.contains(NO_BASE_YET),
-        "entry with no Home must name the missing base, got: {refused}"
-    );
-    assert!(!game.in_base());
-}
-
-/// **The silent-guard test.** In the Stack the player's `Position` is pinned
-/// to the entrance tile, and a run that dived from its starting tile dived
-/// from the anchor — so the "are you standing on the anchor?" check passes
-/// four frames down. `enter_base` therefore has to ask `require_surface`
-/// first, and this is the only thing that says so.
-#[test]
-fn entering_is_refused_from_the_stack_even_standing_on_the_anchor_tile() {
-    let mut game = game_with_a_base(3123);
-    descend(&mut game);
-
-    let pinned = player_tile(&game);
-    assert_eq!(
-        (pinned.x, pinned.y),
-        game.anchor_position().unwrap(),
-        "the fixture must pin Position to the anchor tile, or this tests nothing"
-    );
-
-    let refused = game
-        .enter_base()
-        .expect_err("there is no anchor four frames down");
-
-    assert!(
-        refused.contains(OPEN_GRID),
-        "entry from the Stack must be refused by the surface guard, got: {refused}"
-    );
-    assert!(!game.in_base());
-}
-
-/// Leaving belongs to base space, and is refused in the other two locales by
-/// the base guard rather than by a check that happens to fail there.
-#[test]
-fn leaving_is_a_base_action() {
-    is_a_base_action(
-        3124,
-        "leaving base space",
-        |_| (),
-        |game, ()| game.leave_base(),
-    );
-}
-
-/// The way out is the one cell the Home stands on, not wherever you happen
-/// to be — otherwise base space would have a door in every wall.
-#[test]
-fn the_way_out_is_only_at_the_exit_cell() {
-    let mut game = game_with_a_base(3125);
-    game.enter_base().unwrap();
-    game.move_player(1, 0);
-    assert_eq!(
-        game.field_pos(),
-        Some((1, 0)),
-        "the fixture must walk a tile"
-    );
-
-    let refused = game
-        .leave_base()
-        .expect_err("one cell east of the Home is not the door");
-    assert!(
-        !refused.contains(THE_BASE),
-        "this must refuse for the cell, not by the locale guard, got: {refused}"
-    );
-    assert!(
-        game.in_base(),
-        "a refused exit leaves the party where it was"
-    );
-
-    game.move_player(-1, 0);
-    game.leave_base().expect("back on the exit cell");
-    assert!(!game.in_base());
-}
-
-/// Solid rock does not give, and the party stays out of it. Both halves of
-/// the pin are asserted: base-space coordinates unchanged, *and* the surface
-/// `Position` unchanged — without the second, a `move_player` that never
-/// dispatched on locale at all would walk the party across the zone map and
-/// still pass.
+/// Solid rock does not give, and the party stays out of it.
 ///
-/// The turn is slice 2's, and it moved: a step into rock is a *swing* now
-/// (`Game::strike_rock`), and a swing costs the turn a step would have, the
-/// same way shoving at a nest on the surface does. What it never does is
-/// land the party inside the wall, which is what this asserts.
+/// A step into a minable blocker is a *swing* (`Game::bump_rock`), and a
+/// swing costs the turn a step would have, the same way shoving at a nest
+/// does. What it never does is land the party inside the wall.
 #[test]
-fn swinging_at_solid_rock_moves_nothing_in_either_space() {
+fn swinging_at_solid_rock_does_not_move_the_party() {
     let mut game = game_with_a_base(3126);
-    game.enter_base().unwrap();
     // Tools out: a disarmed bump is refused before it can swing, which is a
     // different code path from the one this test is about.
     game.toggle_mining();
     // The pocket's north edge, so the step north leaves it.
     let edge = (0, -TEST_POCKET_HALF_HEIGHT);
+    let rock = solid_rock_north(&mut game);
     stand_in_base_at(&mut game, edge.0, edge.1);
-    let standing = player_tile(&game);
-    let tick = game.current_tick();
 
-    // Past the pocket, and never laid: absent from `BaseGrid`, so solid.
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(solid_rock_north().0, solid_rock_north().1),
+        is_solid(&game, rock),
         "the fixture must be shoving at real rock"
     );
+    let tick = game.current_tick();
     game.move_player(0, -1);
 
     assert_eq!(game.field_pos(), Some(edge), "solid rock does not give");
@@ -845,58 +587,38 @@ fn swinging_at_solid_rock_moves_nothing_in_either_space() {
         tick + 1,
         "a swing at rock costs the turn the step would have"
     );
-    assert_eq!(player_tile(&game), standing);
 }
 
-/// A step onto laid Floor moves the base-space coordinates, spends a turn,
-/// and leaves the surface `Position` exactly where it was.
-#[test]
-fn walking_onto_floor_moves_only_the_base_space_coordinates() {
-    let mut game = game_with_a_base(3127);
-    game.enter_base().unwrap();
-    let standing = player_tile(&game);
-    let tick = game.current_tick();
-
-    game.move_player(1, 0);
-
-    assert_eq!(game.field_pos(), Some((1, 0)));
-    assert!(game.current_tick() > tick, "a step in base space is a turn");
-    assert_eq!(
-        player_tile(&game),
-        standing,
-        "the surface Position must not move a tile"
-    );
-}
-
-/// Movement reads `BaseGrid::walkable`, not `is_floor`: mined-out rock is
-/// somewhere you can stand long before it is somewhere you can build.
+/// Movement reads the ground, not the floor: mined-out rock is somewhere
+/// you can stand long before it is somewhere you can build.
 #[test]
 fn mined_rock_is_walkable_before_it_is_floored() {
     let mut game = game_with_a_base(3128);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(0, 1, tick);
-    game.enter_base().unwrap();
+    let edge = (0, TEST_POCKET_HALF_HEIGHT);
+    let mined = (0, TEST_POCKET_HALF_HEIGHT + 1);
+    excavate(&mut game, mined);
+    stand_in_base_at(&mut game, edge.0, edge.1);
 
     game.move_player(0, 1);
 
-    assert_eq!(game.field_pos(), Some((0, 1)));
+    assert_eq!(game.field_pos(), Some(mined));
     assert!(
-        !game.world.resource::<base_grid::BaseGrid>().is_floor(0, 1),
-        "the fixture cell must be Open and not Floor, or this tests nothing"
+        !game
+            .world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(mined.0, mined.1),
+        "the fixture cell must be mined and not floor, or this tests nothing"
     );
 }
 
 /// A swing at rock still breaks off a posted job, exactly as shoving at a
-/// wall on the zone surface does — `move_player` drops the job before it
-/// looks at what is in the way, "since either way you stopped working to do
-/// it", and `Game::work_structure` promises the player as much when it
-/// posts.
+/// wall does elsewhere — `move_player` drops the job before it looks at
+/// what is in the way, "since either way you stopped working to do it", and
+/// `Game::work_structure` promises the player as much when it posts.
 ///
 /// The drop happens *before* the wall is even looked at, which is why it
-/// survived slice 2 turning that shove into a swing: had it lived in the
-/// refusal branch instead, digging would have quietly stopped ending jobs.
+/// survived the shove turning into a swing: had it lived in the refusal
+/// branch instead, digging would have quietly stopped ending jobs.
 #[test]
 fn swinging_at_solid_rock_still_breaks_off_a_job() {
     let mut game = game_with_a_base(3129);
@@ -904,7 +626,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     // and solid rock one step further north to break it off against.
     let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     let node = spawn_extractor(&mut game, edge.0 + 1, edge.1);
-    game.enter_base().unwrap();
+    solid_rock_north(&mut game);
     // Tools out: a disarmed bump is refused before it can swing, which is a
     // different code path from the one this test is about.
     game.toggle_mining();
@@ -917,7 +639,6 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     );
     let tick = game.current_tick();
 
-    // Past the pocket's edge, and never laid: absent from `BaseGrid`, so solid.
     game.move_player(0, -1);
 
     assert_eq!(
@@ -937,114 +658,79 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
 }
 
 // ---------------------------------------------------------------------
-// The pocket, and the base moving into it
+// Founding, and deploying onto floor
 // ---------------------------------------------------------------------
 
-/// How many cells `Game::lay_starting_pocket` is supposed to floor, counted
-/// the long way round rather than read off the implementation: the chamfered
-/// box of `STARTING_POCKET_HALF_WIDTH` by `STARTING_POCKET_HALF_HEIGHT`.
-///
-/// Spelled out here so a change to either constant is a change this test
-/// *sees* rather than one it silently follows.
-fn pocket_cells() -> usize {
-    let w = TEST_POCKET_HALF_WIDTH;
-    let h = TEST_POCKET_HALF_HEIGHT;
-    let cut = crate::tuning::PLATFORM_CORNER_CUT;
-    let mut n = 0;
-    for dy in -h..=h {
-        for dx in -w..=w {
-            if dx.abs() + dy.abs() <= w + h - cut {
-                n += 1;
-            }
+/// Stands the party on `TEST_HOME_CELL` with the 3x3 around it forced to
+/// open ground, so founding there lays the whole ring whatever the seed put
+/// under it.
+fn ready_to_found(game: &mut Game) {
+    let mut map = game.world.resource_mut::<WorldMap>();
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            map.set_override(
+                TEST_HOME_CELL.0 + dx,
+                TEST_HOME_CELL.1 + dy,
+                Tile {
+                    biome: Biome::OpenGrid,
+                    walkable: true,
+                    rock_shade: None,
+                },
+            );
         }
     }
-    n
+    stand_in_base_at(game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
 }
 
-/// **Controller ruling 10.** Deploying is a base action, and the anchor
-/// refuses entry until a Home stands — so a fresh run could do neither, and
-/// the first Home has to be deployable from the open grid or a run has no
-/// way to start a base at all.
-///
-/// Every other base fixture in the suite teleports: `place_home` routes
-/// through `from_inside_the_base` and app-core's `stand_in_base` overwrites
-/// a loaded save's locale. That is exactly why none of them caught the
-/// deadlock, so this one starts from a plain `Game::new` and walks.
+/// The first Home goes on the tile the party stands on, and the anchor with
+/// it: the base opens on ground the player chose. A direction is ignored.
 #[test]
-fn a_fresh_run_deploys_its_first_home_from_the_open_grid_and_walks_in() {
+fn the_first_home_stands_on_the_partys_tile_with_the_anchor() {
     let mut game = game(3130);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    assert!(
-        !game.in_base(),
-        "the fixture must start on the open grid, or it teleports like the others"
-    );
+    ready_to_found(&mut game);
 
-    place_now(&mut game, "home", 1, 0)
+    game.place_structure("home", 1, 0, None)
         .expect("the first Home is what opens the base, so it cannot need the base to exist");
 
     let home = game.home_position().expect("a Home was just deployed");
-    assert_eq!(
-        (home.x, home.y),
-        BASE_EXIT_CELL,
-        "the first Home stands on base space's own origin, whatever direction was pointed"
-    );
-
-    game.enter_base()
-        .expect("the anchor opens onto the pocket the Home just laid");
-    assert_eq!(game.field_pos(), Some(BASE_EXIT_CELL));
+    assert_eq!((home.x, home.y), TEST_HOME_CELL);
+    assert_eq!(game.anchor_position(), Some(TEST_HOME_CELL));
 }
 
-/// And only the first one. Every later deployment is a base action, refused
-/// on the open grid by the base guard rather than by some later check.
+/// Founding floors exactly the ring around the Home, into `BaseGrid` and
+/// nowhere else. Floor is an overlay: a ring laid *and* a `Biome::Platform`
+/// stamped into the `WorldMap` would pass a floor-count assertion on its
+/// own, so the overrides are asserted too.
 #[test]
-fn every_deployment_after_the_first_home_is_a_base_action() {
-    let mut game = game(3131);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    place_now(&mut game, "home", 1, 0).expect("the founding deploy is permitted from outside");
-
-    let refused = game
-        .place_structure("extractor", 1, 0, None)
-        .expect_err("a machine is a base action");
-
-    assert!(
-        refused.contains(THE_BASE),
-        "a machine deployed from the open grid must be refused by the base guard, got: {refused}"
-    );
-}
-
-/// The pocket is laid into `BaseGrid` and nowhere else. The whole point of
-/// the move is that `Biome::Platform` stops being written into `WorldMap`,
-/// so this asserts the override overlay as well as the floor count — a
-/// pocket laid *and* a slab stamped would pass a floor-count assertion on
-/// its own.
-#[test]
-fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
+fn founding_lays_the_ring_and_stamps_no_world_tile() {
     let mut game = game(3132);
     assert_eq!(
         game.world.resource::<base_grid::BaseGrid>().floor_count(),
         0,
-        "base space starts solid"
+        "a fresh run has no floor"
     );
-    let overrides_before = game.world.resource::<WorldMap>().overrides().len();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    ready_to_found(&mut game);
+    let overrides_before = game.world.resource::<WorldMap>().overrides().len();
 
-    place_now(&mut game, "home", 1, 0).unwrap();
+    game.place_structure("home", 0, 0, None).unwrap();
 
     let grid = game.world.resource::<base_grid::BaseGrid>();
     assert_eq!(
         grid.floor_count(),
-        pocket_cells(),
-        "the pocket is the whole starting slab, laid as Floor"
+        9,
+        "the Home's tile and the ring around it"
     );
-    assert!(grid.is_floor(0, 0), "including the cell the Home stands on");
+    assert!(grid.is_floor(TEST_HOME_CELL.0, TEST_HOME_CELL.1));
     assert!(
-        grid.is_solid(TEST_POCKET_HALF_WIDTH + 1, 0),
-        "and it stops: past the radius is unmined rock"
+        !grid.is_floor(TEST_HOME_CELL.0 + 2, TEST_HOME_CELL.1),
+        "and it stops at the ring"
     );
     assert_eq!(
         game.world.resource::<WorldMap>().overrides().len(),
         overrides_before,
-        "laying the pocket must write no tile into the zone surface at all"
+        "founding must write no tile into the field at all"
     );
     assert!(
         !game
@@ -1057,72 +743,36 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
     );
 }
 
-/// The opening pocket is 19 cells across, double the 9 it was: at 9 the
-/// beginner structures did not all fit. Spelled as a literal so a change to
-/// `STARTING_POCKET_HALF_WIDTH` is a change this test sees.
-#[test]
-fn the_starting_pocket_is_nineteen_cells_wide() {
-    let mut game = game(3132);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-
-    let grid = game.world.resource::<base_grid::BaseGrid>();
-    let row: Vec<i32> = (-20..=20).filter(|&x| grid.is_floor(x, 0)).collect();
-    assert_eq!(row.len(), 19, "the Home's row is floored edge to edge");
-    assert_eq!((row[0], row[18]), (-9, 9), "centred on base space's origin");
-}
-
-/// Twice as wide, not twice as big: the pocket kept the 9-cell height it
-/// opened at when it was widened.
-#[test]
-fn the_starting_pocket_is_nine_cells_tall() {
-    let mut game = game(3133);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-
-    let grid = game.world.resource::<base_grid::BaseGrid>();
-    let column: Vec<i32> = (-20..=20).filter(|&y| grid.is_floor(0, y)).collect();
-    assert_eq!(column.len(), 9, "the Home's column is floored edge to edge");
-    assert_eq!(
-        (column[0], column[8]),
-        (-4, 4),
-        "centred on base space's origin"
-    );
-}
-
-/// A machine goes up on pocket Floor exactly as it always went up on the
-/// slab, deployed relative to the cell the player is standing in.
+/// A machine goes up on floor, deployed relative to the cell the player is
+/// standing in.
 #[test]
 fn a_machine_deploys_onto_pocket_floor() {
     let mut game = game(3133);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
-    game.move_player(1, 0);
-    assert_eq!(game.field_pos(), Some((1, 0)), "stepped off the Home tile");
+    place_home(&mut game);
+    stand_in_base_at(&mut game, 1, 0);
 
     place_machine(&mut game, "extractor", "core_fragment", 1, 0)
-        .expect("floor two cells east of the origin is inside the pocket");
+        .expect("floor two cells east of the Home is inside the pocket");
 
     let node = find_structure_by_kind(&mut game, "extractor").expect("it went up");
     let at = *game.world.get::<Position>(node).unwrap();
     assert_eq!(
         (at.x, at.y),
         (2, 0),
-        "a deploy is measured from the player's base cell, not their surface tile"
+        "a deploy is measured from the party's tile"
     );
 }
 
-/// And the footprint rule is `BaseGrid::is_floor` and nothing else: solid
-/// rock one step past the pocket's edge refuses, in the pocket's own words.
+/// And the footprint rule is `BaseGrid::is_floor` and nothing else: ground
+/// one step past the pocket's edge refuses, in the floor rule's own words.
 #[test]
 fn deploying_off_the_pocket_floor_is_refused() {
     let mut game = game(3134);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
+    place_home(&mut game);
     let edge = TEST_POCKET_HALF_WIDTH;
-    game.world.insert_resource(Locale::Base { x: edge, y: 0 });
+    stand_in_base_at(&mut game, edge, 0);
     assert!(
         game.world
             .resource::<base_grid::BaseGrid>()
@@ -1132,17 +782,18 @@ fn deploying_off_the_pocket_floor_is_refused() {
 
     let refused = game
         .place_structure("extractor", 1, 0, None)
-        .expect_err("one step past the edge is unmined rock");
+        .expect_err("one step past the edge is not floor");
 
     assert!(
-        !refused.contains(THE_BASE),
+        !refused.contains(THE_FIELD),
         "this must be refused by the footprint rule, not by the locale guard: {refused}"
     );
     assert!(
-        game.world
+        !game
+            .world
             .resource::<base_grid::BaseGrid>()
-            .is_solid(edge + 1, 0),
-        "and the cell it refused really is solid, or the test proves nothing"
+            .is_floor(edge + 1, 0),
+        "and the cell it refused really is off the floor, or the test proves nothing"
     );
 }
 
@@ -1150,58 +801,53 @@ fn deploying_off_the_pocket_floor_is_refused() {
 // `broker_reach` measures the base, not the Broker
 // ---------------------------------------------------------------------
 
-/// A run with a Home and a Broker standing, and the party still outside.
-///
-/// The Home is what lays the pocket, so a Broker without one would stand in
-/// a base space that is still solid everywhere — and `broker_reach` would
-/// answer `OffBase` for want of floor rather than for want of distance.
+/// A run with a Home and a Broker standing, and the party on the Home.
 fn game_with_a_broker(seed: u32) -> Game {
     let mut game = game(seed);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
+    place_home(&mut game);
     spawn_machine_at(&mut game, "contract_broker", 1, 0);
+    stand_in_base(&mut game);
     game
 }
 
 #[test]
 fn a_broker_is_in_reach_from_pocket_floor() {
-    let mut game = game_with_a_broker(3135);
-    game.enter_base().unwrap();
+    let game = game_with_a_broker(3135);
     assert_eq!(game.broker_reach(), BrokerReach::AtBroker);
 }
 
 #[test]
 fn a_broker_is_out_of_reach_off_the_floor() {
     let mut game = game_with_a_broker(3136);
-    assert_eq!(
-        game.broker_reach(),
-        BrokerReach::OffBase,
-        "on the zone surface the party is not in the base at all"
-    );
-
-    game.enter_base().unwrap();
     let outside = TEST_POCKET_HALF_WIDTH + 3;
-    game.world
-        .insert_resource(Locale::Base { x: outside, y: 0 });
+    stand_in_base_at(&mut game, outside, 0);
     assert!(
-        game.world
+        !game
+            .world
             .resource::<base_grid::BaseGrid>()
-            .is_solid(outside, 0),
+            .is_floor(outside, 0),
         "the fixture cell must be off the floor, or this tests nothing"
     );
     assert_eq!(
         game.broker_reach(),
         BrokerReach::OffBase,
-        "in base space but off the floor is still off the base"
+        "on the field but off the floor is off the base"
+    );
+
+    stand_in_base(&mut game);
+    descend(&mut game);
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::OffBase,
+        "and so is the Stack"
     );
 }
 
 #[test]
 fn no_broker_standing_is_not_the_same_as_being_off_the_base() {
     let mut game = game(3137);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
+    place_home(&mut game);
+    stand_in_base(&mut game);
     assert_eq!(
         game.broker_reach(),
         BrokerReach::NoBroker,
@@ -1210,196 +856,18 @@ fn no_broker_standing_is_not_the_same_as_being_off_the_base() {
 }
 
 // ---------------------------------------------------------------------
-// The base is out of phase, and the zone surface must not feel it
+// The base's reach, saved
 // ---------------------------------------------------------------------
 
-/// Paints open ground over a box around the player and clears everything
-/// alive off it, so a walk below is testing the rule under test rather than
-/// the seed's terrain or whatever wandered in. A wild program on the route
-/// would open a battle, and `move_player` refuses every step after that —
-/// which reads exactly like the wall this is looking for.
-fn clear_ground_around_the_player(game: &mut Game, half: i32) {
-    let at = *game.world.get::<Position>(game.player_entity()).unwrap();
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dy in -half..=half {
-            for dx in -half..=half {
-                map.set_override(
-                    at.x + dx,
-                    at.y + dy,
-                    Tile {
-                        biome: Biome::OpenGrid,
-                        walkable: true,
-                        rock_shade: None,
-                    },
-                );
-            }
-        }
-    }
-    clear_the_route(game);
-}
-
-/// Everything on the zone surface that answers a step with something other
-/// than a step. Called before *each* one below rather than once: every step
-/// ticks the world, and `maybe_spawn_wild_creature` can put a program on the
-/// route between two of them.
-fn clear_the_route(game: &mut Game) {
-    let alive: Vec<Entity> = {
-        let mut query = game
-            .world
-            .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>>();
-        query.iter(&game.world).collect()
-    };
-    for entity in alive {
-        game.world.despawn(entity);
-    }
-    // And any fight one of them opened. A step draws an ambush *after* it
-    // lands (`Game::maybe_ambush`), so the fight refuses the step after this
-    // one — which is the same shape as the wall under test and would read as
-    // it on an unlucky seed.
-    game.world.remove_resource::<BattleState>();
-}
-
-/// **A base standing must not wall the open grid.**
-///
-/// Every `Structure` is in base space, so a surface reader asking a
-/// base-space query about a zone tile answers by numeric coincidence — and
-/// the coincidence is the common case, because `find_walkable_start` returns
-/// `(0, 0)` whenever it can and the pocket is laid around base space's own
-/// origin. Left in, the founding Home made the **anchor tile itself**
-/// unwalkable: step off it and the step back was refused silently, with no
-/// message and no turn, and the only way home was a symlink.
-///
-/// A full circuit rather than one step, and every step asserted, because the
-/// tiles a base occupies are a patch and not a line — a fix that only
-/// stopped the Home blocking would leave every machine an invisible wall.
+/// The floor `BaseGrid` laid survives a real save and load.
 #[test]
-fn a_base_standing_does_not_wall_the_zone_surface() {
-    let mut game = game(3140);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
-    // Machines all around the exit cell, so the surface tiles they would
-    // shadow are the ones the circuit walks over.
-    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-        place_machine(&mut game, "extractor", "core_fragment", dx, dy)
-            .unwrap_or_else(|e| panic!("({dx}, {dy}) is pocket floor: {e}"));
-    }
-    game.leave_base().unwrap();
-    clear_ground_around_the_player(&mut game, 3);
-
-    let anchor = game.anchor_position().expect("a fresh game has an anchor");
-    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    assert_eq!(
-        (start.x, start.y),
-        anchor,
-        "the party leaves the base standing on the anchor"
-    );
-
-    // Once round the anchor and back onto it. The last step is the one the
-    // Home used to refuse.
-    let circuit = [
-        (1, 0),
-        (0, 1),
-        (-1, 0),
-        (-1, 0),
-        (0, -1),
-        (0, -1),
-        (1, 0),
-        (1, 0),
-        (0, 1),
-        (-1, 0),
-    ];
-    let mut expected = start;
-    for (dx, dy) in circuit {
-        clear_the_route(&mut game);
-        expected = Position {
-            x: expected.x + dx,
-            y: expected.y + dy,
-        };
-        game.move_player(dx, dy);
-        assert_eq!(
-            *game.world.get::<Position>(game.player_entity()).unwrap(),
-            expected,
-            "a step onto ({}, {}) was refused — a base-space structure is \
-             shadowing the zone surface",
-            expected.x,
-            expected.y
-        );
-    }
-    assert_eq!(
-        (expected.x, expected.y),
-        anchor,
-        "the circuit has to end back on the anchor, or it never tested the \
-         tile the Home stands on"
-    );
-}
-
-/// The other half of the same rule: a Portal stands in base space, so it is
-/// walked onto **there**. Firing a breach from the surface tile that happens
-/// to carry its base-space numbers is the same misread pointed the other way,
-/// and this one costs a zone.
-#[test]
-fn a_portal_in_the_base_does_not_breach_from_the_zone_surface() {
-    let mut game = game(3141);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    give(&mut game, &ItemId::from(ids::PORTAL_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
-    place_now(&mut game, "portal", 1, 0)
-        .expect("a Portal is a structure like any other and stands on floor");
-    game.leave_base().unwrap();
-    clear_ground_around_the_player(&mut game, 3);
-    let zone_before = game.player_status().zone;
-
-    // The surface tile one east of the anchor, which is where the Portal's
-    // base-space coordinates land when the two spaces share an origin.
-    game.move_player(1, 0);
-
-    assert_eq!(
-        game.player_status().zone,
-        zone_before,
-        "walking the open grid must not fire a Portal standing out of phase"
-    );
-    assert!(
-        find_structure_by_kind(&mut game, "portal").is_some(),
-        "and the Portal must still be standing, not consumed by a step \
-         taken in another coordinate space"
-    );
-
-    // And it does breach, from where it actually stands. Back onto the
-    // anchor first — the door is a tile, not a key.
-    game.move_player(-1, 0);
-    game.enter_base().unwrap();
-    game.move_player(1, 0);
-    assert_eq!(
-        game.player_status().zone,
-        zone_before + 1,
-        "walking onto it inside the base is what breaches"
-    );
-}
-
-// ---------------------------------------------------------------------
-// `resources::Platform` no longer exists, and the two readers that used to
-// branch on it take their radius off the grid instead
-// ---------------------------------------------------------------------
-
-/// The load path used to rebuild `Platform::center` from
-/// `Game::home_position`, which is a **base-space** coordinate now — that
-/// made a loaded run behave differently from the same run before the
-/// reload, and it put `Game::clear_platform`'s 401x401 override sweep back
-/// in reach of a Home demolition. Both retired with `resources::Platform`
-/// itself, so there is nothing left to resurrect; what is still worth
-/// asserting is the other half this test always carried — that the pocket
-/// `BaseGrid` actually laid survives the round trip.
-#[test]
-fn a_reload_keeps_the_pocket() {
+fn a_reload_keeps_the_floor() {
     let mut game = game(3142);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
+    place_home(&mut game);
+    let laid = game.world.resource::<base_grid::BaseGrid>().floor_count();
     assert!(
-        game.home_position().is_some(),
-        "the fixture must have a Home, or the load path has nothing to rebuild from"
+        laid >= test_pocket_cells().len(),
+        "the fixture must have laid the pocket"
     );
 
     let path = std::env::temp_dir().join(format!(
@@ -1412,8 +880,8 @@ fn a_reload_keeps_the_pocket() {
 
     assert_eq!(
         loaded.world.resource::<base_grid::BaseGrid>().floor_count(),
-        pocket_cells(),
-        "the pocket the Home laid must come back, not an empty base"
+        laid,
+        "the floor the base laid must come back, not an empty base"
     );
 }
 
@@ -1503,71 +971,49 @@ fn a_link_near_the_base_runs_shallower_than_one_by_a_baseless_run() {
 }
 
 // ---------------------------------------------------------------------
-// `Game::view_tiles` dispatches on locale — Task 7
+// `Game::view_tiles` merges the floor over the field
 // ---------------------------------------------------------------------
 
-/// In base space, `view_tiles` synthesises tiles from `BaseGrid` rather
-/// than reading `WorldMap` at the player's (surface-pinned) `Position`:
-/// laid floor reads as `Biome::Platform`, a merely-carved cell as
-/// `Biome::Excavated`, and solid, untouched rock as `Biome::Entropy` — the
-/// three-way mapping `Game::view_tiles` documents.
+/// `view_tiles` reads the field with the base merged over it: laid floor
+/// reads as `Biome::Platform`, a mined, unfloored cell as its
+/// `Biome::Excavated` override, and an untouched blocker as its own biome.
 #[test]
-fn view_tiles_synthesises_the_three_base_biomes() {
+fn view_tiles_merges_the_floor_over_the_field() {
     let mut game = game(3200);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
-    // A cell mined but not floored, just past the starting pocket's edge —
-    // `BaseGrid::open` is `pub(crate)` and unused by any gameplay path this
-    // slice, so this is the only way to put one on the board at all.
-    let open_at = (TEST_POCKET_HALF_WIDTH + 1, 0);
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(open_at.0, open_at.1, 0);
+    place_home(&mut game);
+    let mined = (TEST_POCKET_HALF_WIDTH + 1, 0);
+    excavate(&mut game, mined);
+    let rock = (TEST_POCKET_HALF_WIDTH + 2, 0);
+    set_rock(&mut game, rock);
     stand_in_base(&mut game);
 
-    // A window wide enough to reach the Open cell just past the pocket and
-    // solid rock well beyond it, centred on base space's own origin —
-    // `stand_in_base` always lands the party there.
     let half = TEST_POCKET_HALF_WIDTH + 3;
     let tiles = game.view_tiles(half, half);
-    let at = |x: i32, y: i32| tiles[(half + y) as usize][(half + x) as usize];
+    let at = |(x, y): (i32, i32)| tiles[(half + y) as usize][(half + x) as usize];
 
     assert_eq!(
-        at(0, 0).biome,
+        at(TEST_HOME_CELL).biome,
         Biome::Platform,
-        "base space's own origin is laid floor — the Home stands on it"
+        "the Home's tile is laid floor"
     );
-    assert!(at(0, 0).walkable);
+    assert!(at(TEST_HOME_CELL).walkable);
 
     assert_eq!(
-        at(open_at.0, open_at.1).biome,
+        at(mined).biome,
         Biome::Excavated,
-        "a carved, unfloored cell reads as Excavated"
+        "a mined, unfloored cell reads as Excavated"
     );
-    assert!(
-        at(open_at.0, open_at.1).walkable,
-        "carved rock is walkable even unfloored"
-    );
+    assert!(at(mined).walkable, "mined rock is walkable even unfloored");
 
-    let solid = (half, half);
-    assert_eq!(
-        at(solid.0, solid.1).biome,
-        Biome::Entropy,
-        "untouched base space, absent from BaseGrid, reads as Entropy"
-    );
-    assert!(
-        !at(solid.0, solid.1).walkable,
-        "Entropy is solid — nothing has dug there yet"
-    );
+    assert_eq!(at(rock).biome, Biome::Entropy, "a blocker reads as itself");
+    assert!(!at(rock).walkable, "nothing has dug there yet");
 }
 
-/// `view_tiles` on the surface is unchanged: still a straight read of
-/// `WorldMap` centred on the player's own `Position`, `Biome::Platform`
-/// included wherever a test hand-writes one — the point being that base
-/// space's synthesis in `view_tiles` only ever engages through
-/// `Game::base_pos`, never by inspecting the biome it would produce.
+/// With no floor laid, `view_tiles` is a straight read of `WorldMap`
+/// centred on the player's own `Position`: the merge only ever changes a
+/// cell the base has floored.
 #[test]
-fn view_tiles_is_unchanged_on_the_surface() {
+fn view_tiles_with_no_floor_is_the_world_map() {
     let mut game = game(3201);
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let half = 5;
@@ -1590,180 +1036,38 @@ fn view_tiles_is_unchanged_on_the_surface() {
             assert_eq!(
                 (g.biome, g.walkable),
                 (e.biome, e.walkable),
-                "surface view_tiles diverged from a direct WorldMap read at grid ({gx}, {gy})"
+                "view_tiles diverged from a direct WorldMap read at grid ({gx}, {gy})"
             );
         }
     }
 }
 
-// ---------------------------------------------------------------------
-// What the map draws is what is standing in the space the party is in
-// ---------------------------------------------------------------------
-
-/// The player's glyph follows the party around base space.
-///
-/// `Position` stays pinned to the anchor tile on the zone surface while the
-/// party is out of phase (see `resources::Locale`), and `view_entities` is
-/// where the map gets every glyph it draws — the player's included. Reading
-/// the pinned tile there draws `@` whereever the anchor's surface
-/// coordinates happen to alias into base space and leaves it there, however
-/// far the party walks.
-#[test]
-fn the_player_is_drawn_where_the_party_stands_in_base_space() {
-    let mut game = game(3210);
-    let pinned = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let standing = (pinned.x + 2, pinned.y + 1);
-    stand_in_base_at(&mut game, standing.0, standing.1);
-
-    let views = game.view_entities(10, 10);
-    let player = views
-        .iter()
-        .find(|v| v.is_player)
-        .expect("the player is drawn on the base map");
-
-    assert_eq!(
-        player.pos, standing,
-        "the player's glyph is drawn at the base-space cell the party is on, \
-         not at the surface tile Position is pinned to"
-    );
-
-    // Out on the surface the two are the same tile, so the substitution has
-    // to be a no-op there rather than a second rule.
-    game.world.insert_resource(Locale::Surface);
-    let out_here = game.view_entities(10, 10);
-    let player = out_here
-        .iter()
-        .find(|v| v.is_player)
-        .expect("the player is drawn on the zone map");
-    assert_eq!(
-        player.pos,
-        (pinned.x, pinned.y),
-        "on the surface the player is drawn on its own Position"
-    );
-}
-
-/// Nothing standing on the zone surface is drawn inside the base.
-///
-/// A `SurfaceLink` — the `>` of a Stack entrance — and the anchor itself
-/// both carry a `Position` and a `Glyph` and neither is a `Structure` or a
-/// `Creature`, so the two existing space gates in `view_entities` look
-/// straight past them and they draw at whatever base-space cell their
-/// surface coordinates alias onto.
-#[test]
-fn surface_fixtures_are_not_drawn_inside_the_base() {
-    let mut game = game(3211);
-    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let link = game
-        .world
-        .spawn((
-            SurfaceLink,
-            Position {
-                x: center.x + 2,
-                y: center.y,
-            },
-            Glyph {
-                ch: '>',
-                color: GlyphColor::Yellow,
-            },
-        ))
-        .id();
-    let anchor = game.world.resource::<AnchorEntity>().0;
-    stand_in_base(&mut game);
-
-    let views = game.view_entities(20, 20);
-
-    assert!(
-        !views.iter().any(|v| v.entity == link),
-        "a Stack entrance stands on the zone surface and must not be drawn in base space"
-    );
-    assert!(
-        !views.iter().any(|v| v.entity == anchor),
-        "the anchor stands on the zone surface too — from the inside it is the way out, \
-         not a tile of the base"
-    );
-
-    // And the other way, so the gate cannot be satisfied by drawing nothing:
-    // both are fixtures of the zone map and both belong on it.
-    game.world.insert_resource(Locale::Surface);
-    let out_here = game.view_entities(20, 20);
-    assert!(
-        out_here.iter().any(|v| v.entity == link),
-        "a Stack entrance is drawn on the zone surface"
-    );
-    assert!(
-        out_here.iter().any(|v| v.entity == anchor),
-        "so is the anchor — it is the door, and you have to be able to find it"
-    );
-}
-
-/// A program standing in the base is not drawn out on the zone surface.
-///
-/// Base staff are parked around the Home in base-space coordinates every
-/// tick by `schedule_base_labour`, which is exactly what makes their
-/// `Position` honest — and `drawn_on_surface_map` reads that honesty as
-/// "draw it". On the surface those coordinates mean a different tile
-/// entirely, so the base's roster shows up scattered across the open grid.
-#[test]
-fn a_program_standing_in_the_base_is_not_drawn_on_the_zone_surface() {
-    let mut game = game(3212);
-    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let staff = spawn_tamed_on_map(&mut game, center.x + 2, center.y + 1);
-    assert_eq!(
-        game.program_role(staff),
-        Some(ProgramRole::Staff),
-        "a program that is neither wielded nor in the party is base staff"
-    );
-    assert!(
-        game.position_is_honest(staff),
-        "idle staff carry a live base-space tile — that is the case this test is about"
-    );
-
-    let views = game.view_entities(20, 20);
-
-    assert!(
-        !views.iter().any(|v| v.entity == staff),
-        "an owned program stands in base space and must not be drawn on the zone surface"
-    );
-}
-
-/// The examine ray agrees with the map about that last one.
-///
-/// `views::drawn_on_surface_map` is the one rule for "Examine names only
-/// what the map draws", and a program the map no longer draws must stop
-/// being nameable from the open grid too.
-#[test]
-fn the_examine_ray_does_not_name_a_program_standing_in_the_base() {
-    let mut game = game(3213);
-    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let staff = spawn_tamed_on_map(&mut game, center.x + 2, center.y);
-
-    let found = game.find_target_in_direction(1, 0, crate::tuning::EXAMINE_RANGE_TILES);
-
-    assert!(
-        !matches!(found, Some(InspectTarget::Creature(e)) if e == staff),
-        "examine may not name a program that is standing in the base"
-    );
-}
-
 // ---------------------------------------------------------------------------
-// Slice 2: rock you can hit
+// Rock you can hit
 // ---------------------------------------------------------------------------
 
-/// The party in base space at the eastern edge of the starting pocket, one
-/// step from solid rock.
+/// The party at the eastern edge of the fixture pocket, one step from solid
+/// rock: a band of ordinary rock `FRONTIER` cells deep and three tall is
+/// forced east of the edge, so `WALL`, the cells behind it and the cells
+/// beside it are rock whatever the seed generated there.
 ///
-/// Deploying the Home is what lays the pocket, so this is the cheapest
-/// fixture that has a *frontier* at all — a wall with floor behind it, which
-/// is the only place a player ever swings.
+/// The cheapest fixture that has a *frontier* at all — a wall with floor
+/// behind it, which is the only place the base may cut (`minable`).
 fn game_at_the_frontier(seed: u32) -> Game {
     let mut game = game(seed);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_now(&mut game, "home", 1, 0).unwrap();
+    place_home(&mut game);
+    for x in WALL.0..WALL.0 + FRONTIER {
+        for y in WALL.1 - 1..=WALL.1 + 1 {
+            set_rock(&mut game, (x, y));
+        }
+    }
     stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     game
 }
 
-/// The solid cell east of `game_at_the_frontier`'s standing tile.
+/// How deep `game_at_the_frontier`'s band of rock runs east of the edge.
+const FRONTIER: i32 = 4;
+
 /// How many swings `swinger` needs to cut the cell at `at` — **read off
 /// that cell's own kind**, not off `BASE_ROCK_DURABILITY`.
 ///
@@ -1794,10 +1098,32 @@ fn game_at_the_frontier_cutting(seed: u32) -> Game {
     game
 }
 
+/// The solid cell east of `game_at_the_frontier`'s standing tile.
 const WALL: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 1, 0);
 
-fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
-    game.world.resource::<base_grid::BaseGrid>().cell(x, y)
+/// What a field cell is, as far as the base is concerned.
+#[derive(Debug, PartialEq)]
+enum Cell {
+    /// A blocker nobody has cut.
+    Solid,
+    /// A blocker the base mined: its `Biome::Excavated` override.
+    Excavated,
+    /// Walkable ground the base never touched.
+    Open,
+    /// Laid floor.
+    Floor,
+}
+
+fn cell(game: &Game, (x, y): (i32, i32)) -> Cell {
+    if game.world.resource::<base_grid::BaseGrid>().is_floor(x, y) {
+        return Cell::Floor;
+    }
+    let tile = game.world.resource::<WorldMap>().peek(x, y);
+    match (tile.walkable, tile.biome) {
+        (false, _) => Cell::Solid,
+        (true, Biome::Excavated) => Cell::Excavated,
+        (true, _) => Cell::Open,
+    }
 }
 
 /// The swing count is computed from the constants rather than written down:
@@ -1818,16 +1144,14 @@ fn a_wall_opens_after_the_swings_its_durability_implies() {
     for swing in 1..swings {
         game.move_player(1, 0);
         assert!(
-            game.world
-                .resource::<base_grid::BaseGrid>()
-                .is_solid(WALL.0, WALL.1),
+            is_solid(&game, (WALL.0, WALL.1)),
             "the wall gave way on swing {swing} of {swings}"
         );
     }
 
     game.move_player(1, 0);
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "the wall was still standing after the {swings} swings its \
          durability implies"
     );
@@ -1841,9 +1165,7 @@ fn a_swing_at_rock_does_not_move_the_party() {
     game.move_player(1, 0);
 
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
+        is_solid(&game, (WALL.0, WALL.1)),
         "this test is about a swing that does not break through"
     );
     assert_eq!(
@@ -1866,15 +1188,13 @@ fn identical_swings_at_rock_do_identical_damage() {
         let wall = game.wall_at(x, y);
         (wall.durability, wall.swing_cap)
     };
-    let (w, h) = (
-        TEST_POCKET_HALF_WIDTH,
-        TEST_POCKET_HALF_HEIGHT,
+    let north = (0, TEST_POCKET_HALF_HEIGHT + 1);
+    set_rock(&mut game, north);
+    assert_eq!(
+        kind(&game, north),
+        kind(&game, east),
+        "the two walls must be the same kind for their damage to compare"
     );
-    let north = (-w..=w)
-        .filter(|&x| game.world.resource::<base_grid::BaseGrid>().is_floor(x, h))
-        .map(|x| (x, h + 1))
-        .find(|&at| kind(&game, at) == kind(&game, east))
-        .expect("the pocket's north face has a wall of the east wall's kind");
 
     let player = game.player_entity();
     game.strike_field_rock(player, east.0, east.1);
@@ -1890,30 +1210,6 @@ fn identical_swings_at_rock_do_identical_damage() {
         left(&mut game, east),
         left(&mut game, north),
         "two fresh walls took different damage from the same player"
-    );
-}
-
-/// `mined_at` is save format only now, but it still has to name the tick
-/// the swing actually landed on, not some other tick nearby.
-#[test]
-fn an_opened_cell_records_the_tick_it_was_opened() {
-    let mut game = game_at_the_frontier_cutting(3213);
-    let player = game.player_entity();
-    let swings = swings_for(&game, player, WALL);
-
-    for _ in 1..swings {
-        game.move_player(1, 0);
-    }
-    // Read before the breaking swing: the clock advances after it lands.
-    let opened_on = game.world.resource::<GameClock>().tick;
-    game.move_player(1, 0);
-
-    assert_eq!(
-        cell(&game, WALL),
-        Some(base_grid::BaseCell::Open {
-            mined_at: opened_on
-        }),
-        "the opened cell records a different tick from the swing that opened it"
     );
 }
 
@@ -1936,7 +1232,7 @@ fn a_swing_costs_a_turn() {
 ///
 /// **Stated as a rate, because the per-cell form cannot fail.** A cell pays
 /// at most one fragment — `ROCK_FRAGMENT_CHANCE` is a probability, and
-/// `strike_rock` clamps it — against the four a Blank Substrate costs, so
+/// `roll_rock_fragment` clamps it — against the four a Blank Substrate costs, so
 /// "a cut pays less than a floor" passes for every legal value of the knob
 /// and holds nothing. What can actually breach the decision is the payout
 /// *per tick*, which three constants decide between them: raise the chance,
@@ -2003,7 +1299,7 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: laying a VectorStasis Tile
+// laying a VectorStasis Tile
 // ---------------------------------------------------------------------------
 
 /// The party standing on a carved, unfloored cell holding exactly enough
@@ -2011,10 +1307,7 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
 /// for.
 fn game_on_open_rock(seed: u32, tiles: u32) -> Game {
     let mut game = game_at_the_frontier(seed);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     stand_in_base_at(&mut game, WALL.0, WALL.1);
     set_fragments(&mut game, tiles * crate::tuning::FLOOR_TILE_COST);
     game
@@ -2152,21 +1445,21 @@ fn laying_a_tile_on_floor_refuses_in_different_words_from_having_no_fragments() 
     );
 }
 
-/// `Game::require_base`, not `require_surface`: laying a tile claims
-/// something about where the party is standing, and out on the open grid
-/// there is no cell of base space under them at all.
+/// `Game::require_field`: laying a tile claims something about the cell the
+/// party is standing on, and underground the player's `Position` is pinned
+/// to the entrance and names no cell they can reach.
 #[test]
-fn laying_a_tile_on_the_surface_refuses() {
+fn laying_a_tile_in_the_stack_refuses() {
     let mut game = game_on_open_rock(3225, 1);
-    game.world.insert_resource(Locale::Surface);
+    descend(&mut game);
 
     let refused = game
         .lay_tile()
-        .expect_err("there is no base space out here");
+        .expect_err("there is no field cell underfoot down here");
 
     assert!(
-        refused.contains(THE_BASE),
-        "a tiling attempt on the surface must meet the base guard, got: {refused}"
+        refused.contains(THE_FIELD),
+        "a tiling attempt in the Stack must meet the field guard, got: {refused}"
     );
     assert_eq!(
         fragments_held(&game),
@@ -2177,7 +1470,7 @@ fn laying_a_tile_on_the_surface_refuses() {
 
 /// Settled decision 8, and the only thing pinning the player's word for a
 /// laid tile: the fragments are raw stock in the store, the tile is what they
-/// becomes underfoot. `BaseCell::Floor` stays the code's name for it, the
+/// becomes underfoot. `BaseGrid`'s floor stays the code's name for it, the
 /// same way "GC Entropy Sweep" is the player's word for a raid.
 #[test]
 fn the_laid_tile_is_named_a_vectorstasis_tile() {
@@ -2198,46 +1491,42 @@ fn the_laid_tile_is_named_a_vectorstasis_tile() {
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: the frontier stays cut
+// The frontier stays cut
 // ---------------------------------------------------------------------------
 
-/// A base with `cut` carved out on the tick the fixture returns, and the
-/// party parked back on the exit cell so they are not standing in it.
+/// A base with `cut` mined out, and the party parked back on the Home's
+/// tile so they are not standing in it.
 fn game_with_a_cut_cell(seed: u32, cut: (i32, i32)) -> Game {
     let mut game = game_at_the_frontier(seed);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(cut.0, cut.1, tick);
-    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+    excavate(&mut game, (cut.0, cut.1));
+    stand_in_base_at(&mut game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
     game
 }
 
-/// Winds the clock to `ticks` past the moment `cut` was opened and runs one
-/// turn, which is what puts the schedule over it.
+/// Winds the clock `ticks` forward and runs one turn.
 fn wait_out(game: &mut Game, ticks: u64) {
     game.world.resource_mut::<GameClock>().tick += ticks;
     game.wait();
 }
 
-/// Open ground stays open forever: only a laid `BaseCell::Floor` may ever
-/// take a structure (`Game::place_structure`'s own gate), so leaving a cut
-/// cell bare costs nothing, however long the base is left alone.
+/// Mined ground stays mined forever: only laid floor may ever take a
+/// structure (`Game::place_structure`'s own gate), so leaving a cut cell
+/// bare costs nothing, however long the base is left alone.
 #[test]
-fn an_unfloored_cell_stays_open_forever() {
+fn an_unfloored_cell_stays_mined_forever() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3230, cut);
 
     wait_out(&mut game, 1000);
 
     assert!(
-        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, cut) == Cell::Excavated,
         "an unfloored cell must stay open forever"
     );
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: what you dug and what you marked, saved
+// what you dug and what you marked, saved
 // ---------------------------------------------------------------------------
 
 /// Through a real `save`/`load` and not only the RON round trip: a round
@@ -2301,20 +1590,14 @@ fn a_mark_survives_a_save_round_trip() {
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: the marks a plan is drawn out of
+// the marks a plan is drawn out of
 // ---------------------------------------------------------------------------
 
-/// Two cells of solid rock well outside the opening pocket, drawn with the
+/// Cells well outside the fixture pocket, drawn with the
 /// far corner *up-left* of the anchor so the box has to be normalised rather
 /// than assumed ordered.
-const PLAN_ANCHOR: (i32, i32) = (
-    TEST_POCKET_HALF_WIDTH + 2,
-    TEST_POCKET_HALF_WIDTH + 2,
-);
-const PLAN_FAR: (i32, i32) = (
-    TEST_POCKET_HALF_WIDTH + 1,
-    TEST_POCKET_HALF_WIDTH + 1,
-);
+const PLAN_ANCHOR: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 2, TEST_POCKET_HALF_WIDTH + 2);
+const PLAN_FAR: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 1, TEST_POCKET_HALF_WIDTH + 1);
 const PLAN_CELLS: [(i32, i32); 4] = [
     PLAN_FAR,
     (PLAN_FAR.0, PLAN_ANCHOR.1),
@@ -2337,8 +1620,9 @@ fn dig_site_count(game: &mut Game) -> usize {
 fn marking_a_box_marks_every_solid_cell_in_it() {
     let mut game = game_at_the_frontier(3250);
     for (x, y) in PLAN_CELLS {
+        set_rock(&mut game, (x, y));
         assert!(
-            game.world.resource::<base_grid::BaseGrid>().is_solid(x, y),
+            is_solid(&game, (x, y)),
             "the fixture must draw its box over solid rock"
         );
     }
@@ -2427,7 +1711,7 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
         game.move_player(1, 0);
     }
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "the fixture must have cut the wall through"
     );
     assert!(
@@ -2469,7 +1753,7 @@ fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
     }
 
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "the fixture must have cut the wall through"
     );
     assert_eq!(
@@ -2547,7 +1831,7 @@ fn a_floor_it_mark_has_no_cut_to_report() {
         game.move_player(1, 0);
     }
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "the fixture must have cut the wall through"
     );
 
@@ -2623,12 +1907,7 @@ fn the_brush_table_matches_the_design() {
         let cell = WALL;
         match state {
             CellState::Solid => {}
-            CellState::Open => {
-                let tick = game.current_tick();
-                game.world
-                    .resource_mut::<base_grid::BaseGrid>()
-                    .open(cell.0, cell.1, tick);
-            }
+            CellState::Open => excavate(&mut game, cell),
             CellState::FloorPlain => {
                 game.world
                     .resource_mut::<base_grid::BaseGrid>()
@@ -2803,11 +2082,11 @@ fn floor_marks_exclude_plain_dig_marks_and_digging_excludes_floor_marks() {
 }
 
 // ---------------------------------------------------------------------------
-// Slice 2: the crew
+// the crew
 // ---------------------------------------------------------------------------
 
 /// A base with `n` programs on its staff and the party parked back on the
-/// exit cell.
+/// Home's tile.
 ///
 /// The party's cell matters: everything below is about work that happens
 /// while nobody is standing over it, and a fixture that left the player at
@@ -2815,7 +2094,7 @@ fn floor_marks_exclude_plain_dig_marks_and_digging_excludes_floor_marks() {
 /// brought down.
 fn base_with_a_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
     let mut game = game_at_the_frontier(seed);
-    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+    stand_in_base_at(&mut game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
     let mut staff = Vec::new();
     for _ in 0..n {
         // No assign call: an owned program outside the party is staff.
@@ -2897,7 +2176,7 @@ fn fragments_for(game: &mut Game, tiles: u32) {
 }
 
 /// The one Depot `fragments_for` stocks, spawned on first use at the
-/// starting pocket's west edge, clear of `WALL` and the exit cell.
+/// starting pocket's west edge, clear of `WALL` and the Home's tile.
 fn fragment_shelf(game: &mut Game) -> Entity {
     let at = Position {
         x: -TEST_POCKET_HALF_WIDTH,
@@ -2932,9 +2211,7 @@ fn a_crew_cuts_a_marked_wall_without_the_player() {
     let (mut game, staff) = base_with_a_crew(3260, 1);
     mark(&mut game, WALL);
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(WALL.0, WALL.1),
+        is_solid(&game, (WALL.0, WALL.1)),
         "precondition: the marked cell starts solid"
     );
 
@@ -2944,7 +2221,7 @@ fn a_crew_cuts_a_marked_wall_without_the_player() {
     // Any opened state, not `Open` alone: the test is about the cut, and
     // whether a tile follows is the substrate tests' question.
     assert!(
-        cell(&game, WALL).is_some(),
+        cell(&game, WALL) != Cell::Solid,
         "the crew never cut the wall the player marked"
     );
 }
@@ -2953,10 +2230,7 @@ fn a_crew_cuts_a_marked_wall_without_the_player() {
 /// the tile and nothing else — no swing, and no fragment shaking loose from
 /// a cut to muddy a count.
 fn open_wall(game: &mut Game) {
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(game, WALL);
 }
 
 /// Settled decision 4's second half, worked by somebody else: the mark
@@ -2972,12 +2246,124 @@ fn a_crew_floors_a_marked_cell_after_cutting_it() {
 
     assert_eq!(
         cell(&game, WALL),
-        Some(base_grid::BaseCell::Floor),
+        Cell::Floor,
         "the crew cut the cell and left it bare"
     );
     assert!(
         game.dig_site_at(WALL.0, WALL.1).is_none(),
         "a finished cell keeps no dig site"
+    );
+}
+
+/// **Resolved question 1, worked end to end by the crew.** A field blocker
+/// next to floor, marked with the plain brush, is a floor request the base
+/// accepts while the cell is still rock: the crew digs it first — the cell
+/// becomes an `Excavated` override — and then floors it, without the player.
+///
+/// A blocker of its own kind on the pocket's north edge rather than `WALL`,
+/// so nothing about the frontier fixture's band is doing the work.
+#[test]
+fn a_marked_blocker_beside_floor_is_dug_and_then_floored_by_the_crew() {
+    let (mut game, staff) = base_with_a_crew(3292, 1);
+    fragments_for(&mut game, 1);
+    let blocker = (0, -TEST_POCKET_HALF_HEIGHT - 1);
+    set_blocker(&mut game, blocker, Biome::DataVoid);
+    assert_eq!(cell(&game, blocker), Cell::Solid, "precondition: rock");
+
+    game.toggle_mark_box(blocker, blocker, None);
+    assert!(
+        is_marked(&mut game, blocker),
+        "a blocker beside floor takes a floor request"
+    );
+
+    let budget = (swings_for(&game, staff[0], blocker) + 1)
+        * crate::tuning::BASE_DIG_TICKS_PER_SWING
+        + WALK_ALLOWANCE as u32;
+    for _ in 0..budget * 2 {
+        if cell(&game, blocker) == Cell::Floor {
+            break;
+        }
+        game.tick();
+    }
+
+    assert_eq!(
+        cell(&game, blocker),
+        Cell::Floor,
+        "the crew left the marked blocker unfloored"
+    );
+    assert_eq!(
+        game.world
+            .resource::<WorldMap>()
+            .peek(blocker.0, blocker.1)
+            .biome,
+        Biome::Excavated,
+        "the floor went down over a cell the crew dug, not over rock"
+    );
+    assert!(
+        game.dig_site_at(blocker.0, blocker.1).is_none(),
+        "a finished cell keeps no dig site"
+    );
+}
+
+/// The other half of the gate (`field_mining::minable`): the crew digs
+/// outward from the floor, so a marked blocker that touches neither floor
+/// nor pending floor is never cut, even with a body posted beside it.
+///
+/// The body is posted by hand on mined ground next to the cell — the
+/// scheduler would never send one, since a station is a floor face — so the
+/// gate in `run_dig_crew` is the only thing between it and a swing. Then a
+/// floor request on the mined cell it stands on makes the blocker pending-
+/// adjacent, and the same body cuts it: the refusal was the gate's and
+/// nothing else's.
+#[test]
+fn a_marked_blocker_off_the_floor_is_not_cut_until_floor_is_pending_beside_it() {
+    let mut game = game_at_the_frontier(3293);
+    // `WALL` mined but not floored or marked; the blocker beyond it touches
+    // only that and rock.
+    excavate(&mut game, WALL);
+    let blocker = (WALL.0 + 1, WALL.1);
+    game.toggle_mark_box(blocker, blocker, None);
+    let site = game
+        .dig_site_at(blocker.0, blocker.1)
+        .expect("a marked blocker has a dig site");
+    let full = game.world.get::<Durability>(site).unwrap().hp;
+
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: WALL.0,
+            y: WALL.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    for _ in 0..crate::tuning::BASE_DIG_TICKS_PER_SWING * 3 {
+        game.run_dig_crew();
+    }
+
+    assert_eq!(
+        game.world.get::<Durability>(site).map(|d| d.hp),
+        Some(full),
+        "the crew swung at a blocker no floor or pending floor touches"
+    );
+    assert_eq!(cell(&game, blocker), Cell::Solid);
+
+    // A floor request on the mined cell: pending floor beside the blocker.
+    game.toggle_mark_box(WALL, WALL, None);
+    for _ in 0..crate::tuning::BASE_DIG_TICKS_PER_SWING {
+        game.run_dig_crew();
+    }
+
+    assert!(
+        game.world
+            .get::<Durability>(site)
+            .is_none_or(|d| d.hp < full),
+        "with pending floor beside it the same body must cut it — or the \
+         refusal above was not the gate's"
     );
 }
 
@@ -2996,7 +2382,7 @@ fn a_crew_tile_costs_the_same_fragments_as_a_hand_laid_one() {
         4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
     );
 
-    assert_eq!(cell(&game, WALL), Some(base_grid::BaseCell::Floor));
+    assert_eq!(cell(&game, WALL), Cell::Floor);
     assert_eq!(
         shelf_fragments(&mut game),
         2 * crate::tuning::FLOOR_TILE_COST,
@@ -3036,7 +2422,7 @@ fn a_crew_pays_for_its_tile_out_of_the_base_stock() {
 
     assert_eq!(
         cell(&game, WALL),
-        Some(base_grid::BaseCell::Floor),
+        Cell::Floor,
         "the crew left the cell bare with a full shelf beside it"
     );
     assert_eq!(
@@ -3066,7 +2452,7 @@ fn a_crew_never_spends_the_player_s_fragments() {
     );
 
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "the crew floored the cell out of the player's pack"
     );
     assert_eq!(fragments_held(&game), 3 * crate::tuning::FLOOR_TILE_COST);
@@ -3088,17 +2474,14 @@ fn a_crew_with_no_fragments_says_so_once() {
     fragments_for(&mut game, 0);
     // Cut open by hand rather than by the crew, so the floor job this test
     // is about is in front of it from the first tick.
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     mark(&mut game, WALL);
 
     let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
     pass(&mut game, wait * 4);
 
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "a cell floored with no fragments anywhere"
     );
     assert!(
@@ -3132,10 +2515,7 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
     fragments_for(&mut game, 0);
     // A floor job, opened by hand for `a_crew_with_no_fragments_says_so_once`'s
     // reason.
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     mark(&mut game, WALL);
 
     let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
@@ -3177,10 +2557,7 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
 fn a_dry_dig_job_frees_the_body_for_production() {
     let (mut game, staff) = base_with_a_crew(3284, 1);
     fragments_for(&mut game, 0);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
     game.set_standing_job(mine, true, false).unwrap();
     mark(&mut game, WALL);
@@ -3213,7 +2590,7 @@ fn a_crew_cuts_with_no_fragments_and_floors_once_they_arrive() {
     pass(&mut game, wait * 2);
 
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "a marked cell must be cut even with nothing to floor it with, got {:?}",
         cell(&game, WALL)
     );
@@ -3235,7 +2612,7 @@ fn a_crew_cuts_with_no_fragments_and_floors_once_they_arrive() {
 
     assert_eq!(
         cell(&game, WALL),
-        Some(base_grid::BaseCell::Floor),
+        Cell::Floor,
         "the cut cell is floored once a tile's fragments exist"
     );
 }
@@ -3260,10 +2637,7 @@ fn a_crew_one_fragment_short_of_a_tile_is_dry() {
         4 * crate::tuning::BASE_DIG_TICKS_PER_SWING as usize,
     );
 
-    assert!(matches!(
-        cell(&game, WALL),
-        Some(base_grid::BaseCell::Open { .. })
-    ));
+    assert!(cell(&game, WALL) == Cell::Excavated);
     assert_eq!(lines_saying(&game, NO_FRAGMENTS), 1);
     assert_eq!(
         shelf_fragments(&mut game),
@@ -3278,11 +2652,8 @@ fn a_crew_one_fragment_short_of_a_tile_is_dry() {
 fn one_tile_of_fragments_floors_one_of_two_cells() {
     let (mut game, _) = base_with_a_crew(3288, 2);
     let second = (WALL.0, WALL.1 + 1);
-    let tick = game.current_tick();
     for (x, y) in [WALL, second] {
-        game.world
-            .resource_mut::<base_grid::BaseGrid>()
-            .open(x, y, tick);
+        excavate(&mut game, (x, y));
     }
     fragments_for(&mut game, 1);
     mark(&mut game, WALL);
@@ -3295,7 +2666,7 @@ fn one_tile_of_fragments_floors_one_of_two_cells() {
 
     let floored = [WALL, second]
         .into_iter()
-        .filter(|c| cell(&game, *c) == Some(base_grid::BaseCell::Floor))
+        .filter(|c| cell(&game, *c) == Cell::Floor)
         .count();
     assert_eq!(
         floored, 1,
@@ -3311,10 +2682,7 @@ fn one_tile_of_fragments_floors_one_of_two_cells() {
 fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
     let (mut game, _staff) = base_with_a_crew(3289, 1);
     let solid = (WALL.0, WALL.1 + 1);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     fragments_for(&mut game, 1);
     mark(&mut game, WALL);
     mark(&mut game, solid);
@@ -3327,13 +2695,11 @@ fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
 
     assert_eq!(
         cell(&game, WALL),
-        Some(base_grid::BaseCell::Floor),
+        Cell::Floor,
         "the open cell must get the one tile — it is the one already exposed"
     );
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(solid.0, solid.1),
+        is_solid(&game, (solid.0, solid.1)),
         "and the cut waits its turn behind the open cell's own floor job"
     );
 }
@@ -3358,20 +2724,18 @@ fn a_cell_waiting_on_its_floor_outranks_a_cell_still_whole() {
 #[test]
 fn a_floor_job_that_dries_up_mid_cycle_still_frees_its_body() {
     let (mut game, staff) = base_with_a_crew(3287, 1);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     mark(&mut game, WALL);
     fragments_for(&mut game, 1);
     let site = game
         .dig_site_at(WALL.0, WALL.1)
         .expect("marking an open cell spawns its dig site");
 
+    // On the floor face west of the cell: the crew stands on floor alone.
     let worker = staff[0];
     if let Some(mut pos) = game.world.get_mut::<Position>(worker) {
         *pos = Position {
-            x: WALL.0,
+            x: WALL.0 - 1,
             y: WALL.1,
         };
     }
@@ -3450,9 +2814,10 @@ fn a_dig_job_is_taken_when_there_is_a_spare_body() {
 }
 
 /// The tile a stranded station stands on, and the cell marked beside it.
-/// Open ground far enough out that nothing walkable touches it, so a station
-/// exists and no route to it does — `NoPost::NoRoute`, the half of the split
-/// that is the player's errand.
+/// A lone floor tile far enough out that no floor joins it to the base —
+/// the crew walks on floor alone — so a station exists and no route to it
+/// does: `NoPost::NoRoute`, the half of the split that is the player's
+/// errand.
 const STRANDED_STATION: (i32, i32) = (20, 0);
 const STRANDED_CELL: (i32, i32) = (21, 0);
 
@@ -3461,12 +2826,8 @@ fn game_with_an_unroutable_mark(seed: u32) -> (Game, Vec<Entity>) {
     // A cut the base could pay to floor: these tests are about the route,
     // and a dry base drops the want before the route is ever in question.
     fragments_for(&mut game, 1);
-    let tick = game.current_tick();
-    game.world.resource_mut::<base_grid::BaseGrid>().open(
-        STRANDED_STATION.0,
-        STRANDED_STATION.1,
-        tick,
-    );
+    game.dev_lay_floor([STRANDED_STATION]);
+    set_rock(&mut game, STRANDED_CELL);
     mark(&mut game, STRANDED_CELL);
     (game, staff)
 }
@@ -3518,11 +2879,14 @@ fn a_dig_site_with_no_exposed_face_never_complains() {
     let (mut game, _) = base_with_a_crew(3265, 1);
     let buried = (20, 20);
     mark(&mut game, buried);
+    // A face is a floor cell beside the mark — the crew stands on floor
+    // alone — so a mark with no floor around it has none.
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
         assert!(
-            game.world
+            !game
+                .world
                 .resource::<base_grid::BaseGrid>()
-                .is_solid(buried.0 + dx, buried.1 + dy),
+                .is_floor(buried.0 + dx, buried.1 + dy),
             "precondition: the marked cell must have no face to stand at"
         );
     }
@@ -3548,12 +2912,7 @@ fn a_site_that_becomes_reachable_again_can_complain_again() {
     // a tile to stand on, or the site would come back as `BoxedIn` and be
     // silent for a different reason than the one under test.
     let corridor = (TEST_POCKET_HALF_WIDTH + 1)..STRANDED_STATION.0;
-    let tick = game.current_tick();
-    for x in corridor.clone() {
-        game.world
-            .resource_mut::<base_grid::BaseGrid>()
-            .open(x, 0, tick);
-    }
+    game.dev_lay_floor(corridor.clone().map(|x| (x, 0)));
     game.tick();
     let site = game
         .dig_site_at(STRANDED_CELL.0, STRANDED_CELL.1)
@@ -3683,21 +3042,19 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
 fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3241, cut);
-    // An `Open` cell's site starts at zero: there is nothing left to cut.
+    // A mined cell's site starts at zero: there is nothing left to cut.
     game.toggle_mark_box(cut, cut, None);
     assert!(
         game.dig_site_at(cut.0, cut.1).is_some(),
-        "marking an open cell spawns a site to floor"
+        "marking a mined cell spawns a site to floor"
     );
 
-    // `BaseGrid::revert` by hand: nothing in play calls it any more, but the
-    // shape it used to leave behind — a spent meter on a solid cell — still
-    // has to be handled gracefully if it is ever seen again.
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .revert(cut.0, cut.1);
+    // The blocker put back by hand: nothing in play does it, but the shape
+    // it leaves behind — a spent meter on a solid cell — still has to be
+    // handled gracefully if it is ever seen again.
+    set_rock(&mut game, cut);
     assert!(
-        cell(&game, cut).is_none(),
+        cell(&game, cut) == Cell::Solid,
         "precondition: the cell must be solid rock again"
     );
     game.toggle_mark_box(cut, cut, None);
@@ -3744,11 +3101,11 @@ fn mining_cues(game: &mut Game) -> Vec<(i32, i32)> {
         .collect()
 }
 
-/// Mining is the one base-space verb with nothing of its own to animate —
+/// Mining is the one base verb with nothing of its own to animate —
 /// the cell wears a progress bar and no glyph moves — so the cue is the
 /// whole of the feedback that a swing landed.
 ///
-/// Queued from `Game::strike_rock` and not from either of its callers,
+/// Queued from `Game::swing_at_rock` and not from either of its callers,
 /// which is what makes the player's bump and a posted digger's cycle sound
 /// alike: the two share the one place rock takes damage.
 #[test]
@@ -3781,8 +3138,8 @@ fn a_bump_that_does_not_cut_is_silent() {
     );
 }
 
-/// Swinger-blind, which is the whole reason the cue sits in `strike_rock`
-/// rather than in `move_in_base`: a crew cutting is the base's own sound,
+/// Swinger-blind, which is the whole reason the cue sits in `swing_at_rock`
+/// rather than in `bump_rock`: a crew cutting is the base's own sound,
 /// and nothing about it is keyed to the player standing there to hear it.
 #[test]
 fn a_crew_swing_queues_the_same_cue() {
@@ -3802,7 +3159,7 @@ fn a_crew_swing_queues_the_same_cue() {
 /// A game with one program posted on a dig job at `at`, and the program.
 ///
 /// Shaped after `a_digger_drops_a_post_whose_mark_was_cleared`: the site is
-/// spawned by a first swing, because `strike_rock` creates it lazily rather
+/// spawned by a first swing, because `swing_at_rock` creates it lazily rather
 /// than marking doing it.
 fn a_posted_digger(seed: u32, at: (i32, i32)) -> (Game, Entity) {
     let mut game = game_at_the_frontier(seed);
@@ -3861,7 +3218,7 @@ fn a_crew_cues_every_tick_it_cuts_and_not_just_when_the_swing_lands() {
 }
 
 /// Exactly one cue on the tick the swing lands, and not two. That tick is
-/// cued by `strike_rock` rather than by the progress counter — every other
+/// cued by `swing_at_rock` rather than by the progress counter — every other
 /// tick of the cycle is the other way round — so the seam between the two
 /// push sites is the one place a tick could double up.
 #[test]
@@ -3931,7 +3288,7 @@ fn breaking_through_queues_one_cue_and_not_two() {
         game.strike_field_rock(player, WALL.0, WALL.1);
     }
     assert!(
-        cell(&game, WALL).is_none(),
+        cell(&game, WALL) == Cell::Solid,
         "precondition: the wall must still be standing before the last swing"
     );
     game.take_effects();
@@ -4001,7 +3358,7 @@ fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
     // `station_tile`'s `(distance, x, y)` order takes the western — the
     // unreachable one — first.
     for (x, y) in [(-1, 0), (1, 0), (1, 1), (0, 2)] {
-        grid.open(x, y, 0);
+        grid.lay_floor(x, y);
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
@@ -4024,7 +3381,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
 
     let mut grid = base_grid::BaseGrid::default();
     for (x, y) in [(-1, 0), (1, 0), (0, 2)] {
-        grid.open(x, y, 0);
+        grid.lay_floor(x, y);
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: 0, y: 2 };
@@ -4037,7 +3394,7 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     );
 
     let mut boxed = base_grid::BaseGrid::default();
-    boxed.open(from.x, from.y, 0);
+    boxed.lay_floor(from.x, from.y);
     assert_eq!(
         post_reach(&boxed, from, target, 1, &blocked, boxed.radius()),
         Err(NoPost::BoxedIn),
@@ -4056,7 +3413,7 @@ fn a_body_on_a_face_is_not_a_throughway_and_a_body_short_of_it_is() {
 
     let mut grid = base_grid::BaseGrid::default();
     for (x, y) in [(-1, 2), (-1, 1), (-1, 0), (0, -1)] {
-        grid.open(x, y, 0);
+        grid.lay_floor(x, y);
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: -1, y: 2 };
@@ -4090,7 +3447,7 @@ fn the_crew_field_and_the_posted_walk_agree_about_a_body_on_a_face() {
 
     let mut grid = base_grid::BaseGrid::default();
     for (x, y) in [(-1, 2), (-1, 1), (-1, 0), (0, -1)] {
-        grid.open(x, y, 0);
+        grid.lay_floor(x, y);
     }
     let target = Position { x: 0, y: 0 };
     let from = Position { x: -1, y: 2 };
@@ -4177,9 +3534,7 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
     // A sealed cell of open rock, walled in on every side: it gives its four
     // neighbours a face nothing can route to.
     let sealed = (-TEST_POCKET_HALF_WIDTH - 4, 0);
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(sealed.0, sealed.1, 0);
+    excavate(&mut game, (sealed.0, sealed.1));
     for cell in [
         (sealed.0 - 1, sealed.1),
         (sealed.0 + 1, sealed.1),
@@ -4212,150 +3567,35 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
     );
 }
 
-/// **The trap this feature was designed around.** `WorldMap::seed()` looks
-/// like the run's identity and is not — `enter_next_zone` mints the next
-/// zone from `wrapping_add(0x9E37_79B9)` — while `BaseGrid` travels with the
-/// run. Salted off the world seed, every seam in the base would reshuffle on
-/// every breach, and a wall left half-cut would come back a different kind
-/// under its already-saved `Durability`.
-///
-/// Neither seed moves any more — the world is persistent, so the world seed
-/// is minted once at `Game::new` and the base's own seed never tracked it.
-/// The tier is what a breach moves, and asserting it moved is what keeps
-/// the seam assertions below from passing against a breach that never
-/// happened.
-#[test]
-fn base_spaces_seed_and_its_seams_survive_a_breach() {
-    let mut game = game(4471);
-    let before_world = game.world.resource::<crate::world::WorldMap>().seed();
-    let before_base = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    let sample: Vec<String> = (-6..6)
-        .flat_map(|x| (-6..6).map(move |y| (x, y)))
-        .map(|(x, y)| {
-            game.world
-                .resource::<crate::rock::RockDb>()
-                .base_kind_at(before_base, x, y)
-                .id
-                .clone()
-        })
-        .collect();
-
-    game.enter_next_zone();
-
-    let after_world = game.world.resource::<crate::world::WorldMap>().seed();
-    let after_base = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    assert_eq!(
-        game.player_status().zone,
-        2,
-        "the fixture must actually breach, or the seam assertions below are vacuous"
-    );
-    assert_eq!(before_world, after_world, "a breach reseeded the world map");
-    assert_eq!(
-        before_base, after_base,
-        "base space's seed tracked the world seed across a breach — every seam \
-         in the base just moved"
-    );
-    let after: Vec<String> = (-6..6)
-        .flat_map(|x| (-6..6).map(move |y| (x, y)))
-        .map(|(x, y)| {
-            game.world
-                .resource::<crate::rock::RockDb>()
-                .base_kind_at(after_base, x, y)
-                .id
-                .clone()
-        })
-        .collect();
-    assert_eq!(sample, after, "the base's seams moved on a breach");
-}
-
-/// Base space's seed is saved, so the seams a player has learned are the
-/// seams they come back to.
-#[test]
-fn base_spaces_seed_survives_a_real_save_and_load() {
-    let mut game = game(5528);
-    let before = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    assert_ne!(
-        before, 0,
-        "the fixture must mint a non-zero seed to be a real test"
-    );
-
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_base_seed_{}.bin",
-        std::process::id()
-    ));
-    game.save(&path).unwrap();
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-
-    assert_eq!(
-        loaded.world.resource::<crate::base_grid::BaseGrid>().seed(),
-        before
-    );
-}
-
-/// Deciding what a wall is made of must not touch `GameRng`: a draw from the
-/// shared stream does not survive a save/load, so the same wall would be a
-/// different kind after a reload, and it would shift every later roll in the
-/// run.
-#[test]
-fn deciding_a_walls_kind_draws_no_game_rng() {
-    fn draw(g: &mut Game) -> u64 {
-        g.world
-            .resource_mut::<crate::resources::GameRng>()
-            .0
-            .random::<u64>()
-    }
-    let mut probed = game(6612);
-    let before = draw(&mut probed);
-    let seed = probed.world.resource::<crate::base_grid::BaseGrid>().seed();
-    for x in -20..20 {
-        for y in -20..20 {
-            let _ = probed
-                .world
-                .resource::<crate::rock::RockDb>()
-                .base_kind_at(seed, x, y);
-        }
-    }
-    let after = draw(&mut probed);
-
-    let mut untouched = game(6612);
-    let a = draw(&mut untouched);
-    let b = draw(&mut untouched);
-    assert_eq!((before, after), (a, b), "kind_at moved the RNG stream");
-}
-
 /// A helper for the hardness tests: how many swings `swinger` needs to open
-/// the cell at `(x, y)`, driven through the real `strike_rock`.
+/// the cell at `(x, y)`, driven through the real `strike_field_rock`.
 fn swings_to_open(game: &mut Game, swinger: Entity, x: i32, y: i32) -> u32 {
     for n in 1..500 {
         game.strike_field_rock(swinger, x, y);
-        if !game
-            .world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_solid(x, y)
-        {
+        if !is_solid(game, (x, y)) {
             return n;
         }
     }
     panic!("the cell at ({x}, {y}) never opened");
 }
 
-/// Finds a solid cell of the given kind near the base, so a test can name a
-/// kind rather than a coordinate.
-fn solid_cell_of(game: &Game, kind: &str) -> (i32, i32) {
-    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    let db = game.world.resource::<crate::rock::RockDb>();
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    for r in 1..60 {
-        for x in -r..=r {
-            for y in -r..=r {
-                if grid.is_solid(x, y) && db.base_kind_at(seed, x, y).id == kind {
-                    return (x, y);
-                }
-            }
-        }
-    }
-    panic!("no solid {kind} near the base");
+/// The blocker biomes, each of which `RockDb::kind_at` maps to a rock kind.
+const BLOCKER_BIOMES: [Biome; 3] = [Biome::Entropy, Biome::DataVoid, Biome::BlackIce];
+
+/// Forces a blocker of rock kind `kind` onto a field cell away from any
+/// base, and returns it, so a test can name a kind rather than a coordinate.
+/// A kind is the blocker's biome's (`RockDb::kind_at`), so the cell is
+/// overridden to the biome that maps to it — one cell per biome, so two
+/// kinds asked of one game never share a cell.
+fn rock_cell_of(game: &mut Game, kind: &str) -> (i32, i32) {
+    let (i, biome) = BLOCKER_BIOMES
+        .iter()
+        .enumerate()
+        .find(|(_, b)| game.world.resource::<crate::rock::RockDb>().kind_at(**b).id == kind)
+        .unwrap_or_else(|| panic!("no blocker biome maps to rock kind {kind}"));
+    let cell = (FAR_FIELD.0, FAR_FIELD.1 + 2 * i as i32);
+    set_blocker(game, cell, *biome);
+    cell
 }
 
 /// **The reported bug.** A developed player walked into a wall and the wall
@@ -4380,7 +3620,7 @@ fn no_shipped_kind_falls_to_one_swing_however_hard_you_hit() {
         .map(|d| (d.id.clone(), d.min_swings))
         .collect();
     for (kind, floor) in kinds {
-        let (x, y) = solid_cell_of(&game, &kind);
+        let (x, y) = rock_cell_of(&mut game, &kind);
         let swings = swings_to_open(&mut game, player, x, y);
         assert_eq!(
             swings, floor,
@@ -4408,7 +3648,7 @@ fn a_fresh_players_dig_rate_on_ordinary_rock_is_unchanged() {
         "the fixture must swing under the cap for this to say anything: \
          {per_swing} a swing opens ordinary rock in {expected}"
     );
-    let (x, y) = solid_cell_of(&game, "entropy");
+    let (x, y) = rock_cell_of(&mut game, "entropy");
     assert_eq!(swings_to_open(&mut game, player, x, y), expected);
 }
 
@@ -4418,22 +3658,22 @@ fn a_fresh_players_dig_rate_on_ordinary_rock_is_unchanged() {
 fn a_denser_kind_takes_more_swings_than_ordinary_rock() {
     let mut game = game(7733);
     let player = game.player_entity();
-    let ordinary = solid_cell_of(&game, "entropy");
-    let fused = solid_cell_of(&game, "fused");
+    let ordinary = rock_cell_of(&mut game, "entropy");
+    let fused = rock_cell_of(&mut game, "fused");
     let a = swings_to_open(&mut game, player, ordinary.0, ordinary.1);
     let b = swings_to_open(&mut game, player, fused.0, fused.1);
     assert!(b > a, "fused took {b} swings, ordinary took {a}");
 }
 
 /// A half-cut wall of a denser kind comes back with that kind's ceiling, not
-/// the fallback's. The load path re-derives from the site's saved
-/// `Position`, so nothing new is written to the save — and clamping against
+/// the fallback's. The load path re-derives from the blocker's saved field
+/// override, so nothing new is written to the save — and clamping against
 /// the flat constant instead would silently cap a Fused wall at 24.
 #[test]
 fn a_half_cut_dense_wall_reloads_with_its_own_ceiling() {
     let mut game = game(7734);
     let player = game.player_entity();
-    let (x, y) = solid_cell_of(&game, "fused");
+    let (x, y) = rock_cell_of(&mut game, "fused");
     game.strike_field_rock(player, x, y);
     let before = {
         let site = game.dig_site_at(x, y).expect("a struck wall has a site");
@@ -4487,7 +3727,10 @@ fn with_mining_off_a_step_into_rock_costs_nothing_at_all() {
 
     game.move_player(1, 0);
 
-    assert!(cell(&game, WALL).is_none(), "a disarmed bump cut the wall");
+    assert!(
+        cell(&game, WALL) == Cell::Solid,
+        "a disarmed bump cut the wall"
+    );
     assert_eq!(
         game.world.resource::<GameClock>().tick,
         before_tick,
@@ -4514,7 +3757,7 @@ fn with_mining_on_a_step_into_rock_swings_exactly_as_before() {
         game.move_player(1, 0);
     }
     assert!(
-        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        cell(&game, WALL) == Cell::Excavated,
         "an armed bump did not cut the wall"
     );
 }
@@ -4552,7 +3795,7 @@ fn a_posted_crew_cuts_a_marked_cell_with_the_players_mining_off() {
     let ticks = ticks_to_cut(&game, staff[0]);
     pass(&mut game, ticks);
     assert!(
-        cell(&game, WALL).is_some(),
+        cell(&game, WALL) != Cell::Solid,
         "the crew stopped digging because the player put their own tools away"
     );
 }
@@ -4569,58 +3812,61 @@ fn arming_the_bump_spends_no_turn() {
     assert_eq!(game.world.resource::<GameClock>().tick, before);
 }
 
-/// A face is solid rock with air orthogonally against it. Diagonal does not
-/// count — a diagonal neighbour does not expose a face — and neither does
-/// walkable ground itself.
+/// The rock shade the map draws at field `cell`, or `None` for a cell drawn
+/// anonymous — read through `view_tiles_at` centred on the cell itself.
+fn shade_at(game: &mut Game, cell: (i32, i32)) -> Option<f32> {
+    game.view_tiles_at(cell, 0, 0)[0][0].rock_shade
+}
+
+/// A face is a blocker with laid floor orthogonally against it. Diagonal
+/// does not count — a diagonal neighbour does not expose a face — and
+/// neither does walkable ground itself.
 #[test]
-fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
-    let game = game_at_the_frontier(9201);
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    let (w, h) = (
-        TEST_POCKET_HALF_WIDTH,
-        TEST_POCKET_HALF_HEIGHT,
+fn a_face_is_a_blocker_with_floor_orthogonally_beside_it() {
+    let mut game = game_at_the_frontier(9201);
+    // The pocket's corners are cut, so this cell touches floor at a corner
+    // and nowhere else: `(9, 2)` is floor, `(9, 3)` and `(10, 2)` are not.
+    let diagonal = (TEST_POCKET_HALF_WIDTH + 1, 3);
+    set_rock(&mut game, diagonal);
+    assert!(
+        [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .all(|(dx, dy)| !game
+                .world
+                .resource::<base_grid::BaseGrid>()
+                .is_floor(diagonal.0 + dx, diagonal.1 + dy)),
+        "precondition: the diagonal cell must touch floor at a corner only"
     );
 
     assert!(
-        grid.is_exposed(WALL.0, WALL.1),
+        shade_at(&mut game, WALL).is_some(),
         "the frontier wall is a face"
     );
     assert!(
-        !grid.is_exposed(WALL.0 + 1, WALL.1),
+        shade_at(&mut game, (WALL.0 + 1, WALL.1)).is_none(),
         "rock behind a face is not itself a face"
     );
     assert!(
-        !grid.is_exposed(0, 0),
-        "walkable ground is not a face — the predicate must require solid"
+        shade_at(&mut game, TEST_HOME_CELL).is_none(),
+        "floor is not a face — the predicate must require a blocker"
     );
-    // The pocket's corners are cut, so the cell diagonally off one touches
-    // walkable ground at a corner and nowhere else.
-    let diagonal = (w, h);
-    if grid.is_solid(diagonal.0, diagonal.1) {
-        let orthogonal_air = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-            .iter()
-            .any(|(dx, dy)| grid.walkable(diagonal.0 + dx, diagonal.1 + dy));
-        assert_eq!(
-            grid.is_exposed(diagonal.0, diagonal.1),
-            orthogonal_air,
-            "exposure must be decided orthogonally, never diagonally"
-        );
-    }
+    assert!(
+        shade_at(&mut game, diagonal).is_none(),
+        "exposure must be decided orthogonally, never diagonally"
+    );
 }
 
-/// Cutting a cell lights up its neighbours, and reverting it (via
+/// Flooring a cell lights up its neighbours, and reverting it (via
 /// `BaseGrid::revert`, a fixture-only operation now) puts them out again.
-/// The reason `is_exposed` is derived per lookup rather than cached: more
-/// than one verb moves it.
+/// The reason exposure is derived per lookup rather than cached: more than
+/// one verb moves it. Mining alone does not — a cut cell is ground, not
+/// floor, and the base digs outward from its floor (`minable`).
 #[test]
-fn cutting_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
+fn flooring_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
     let mut game = game_at_the_frontier_cutting(9202);
     let beyond = (WALL.0 + 1, WALL.1);
     assert!(
-        !game
-            .world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_exposed(beyond.0, beyond.1),
+        shade_at(&mut game, beyond).is_none(),
         "the cell behind the wall must start buried"
     );
 
@@ -4628,21 +3874,23 @@ fn cutting_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
     for _ in 0..swings_for(&game, player, WALL) {
         game.move_player(1, 0);
     }
+    assert_eq!(cell(&game, WALL), Cell::Excavated, "precondition: cut");
     assert!(
-        game.world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_exposed(beyond.0, beyond.1),
-        "cutting a cell did not expose what was behind it"
+        shade_at(&mut game, beyond).is_none(),
+        "a cut but unfloored cell exposed what was behind it"
+    );
+
+    game.dev_lay_floor([WALL]);
+    assert!(
+        shade_at(&mut game, beyond).is_some(),
+        "flooring a cell did not expose what was behind it"
     );
 
     game.world
-        .resource_mut::<crate::base_grid::BaseGrid>()
+        .resource_mut::<base_grid::BaseGrid>()
         .revert(WALL.0, WALL.1);
     assert!(
-        !game
-            .world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_exposed(beyond.0, beyond.1),
+        shade_at(&mut game, beyond).is_none(),
         "reverting a cell left its neighbour still lit"
     );
 }
@@ -4654,30 +3902,28 @@ fn cutting_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
 #[test]
 fn the_map_and_the_examine_ray_agree_about_a_wall() {
     let mut game = game_at_the_frontier(9203);
-    let (cx, cy) = game.field_pos().expect("the fixture stands in base space");
     let named = game
         .describe_base_rock(1, 0, crate::tuning::EXAMINE_RANGE_TILES)
         .expect("the ray must find the frontier wall");
 
-    let half = 8;
-    let tiles = game.view_tiles(half, half);
-    let seen = tiles[(WALL.1 - cy + half) as usize][(WALL.0 - cx + half) as usize];
+    let seen = shade_at(&mut game, WALL);
     assert!(
-        seen.rock_shade.is_some(),
+        seen.is_some(),
         "the ray named a wall the map drew as anonymous rock"
     );
 
-    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let biome = game.world.resource::<WorldMap>().peek(WALL.0, WALL.1).biome;
     let kind = game
         .world
         .resource::<crate::rock::RockDb>()
-        .base_kind_at(seed, WALL.0, WALL.1);
+        .kind_at(biome)
+        .clone();
     assert!(
         named.starts_with(&kind.name),
         "{named:?} is not {}",
         kind.name
     );
-    assert_eq!(seen.rock_shade, Some(kind.shade));
+    assert_eq!(seen, Some(kind.shade));
 }
 
 /// Deep rock is anonymous on the map, and that is the whole mechanic: a
@@ -4686,18 +3932,10 @@ fn the_map_and_the_examine_ray_agree_about_a_wall() {
 #[test]
 fn rock_behind_a_face_is_drawn_anonymous() {
     let mut game = game_at_the_frontier(9204);
-    let (cx, cy) = game.field_pos().unwrap();
-    let half = 8;
-    let tiles = game.view_tiles(half, half);
     let deep = (WALL.0 + 2, WALL.1);
-    assert!(
-        game.world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_solid(deep.0, deep.1),
-        "the fixture must name buried rock"
-    );
+    assert!(is_solid(&game, deep), "the fixture must name buried rock");
     assert_eq!(
-        tiles[(deep.1 - cy + half) as usize][(deep.0 - cx + half) as usize].rock_shade,
+        shade_at(&mut game, deep),
         None,
         "buried rock advertised its kind"
     );
@@ -4710,24 +3948,18 @@ fn rock_behind_a_face_is_drawn_anonymous() {
 /// to make the two halves agree.
 #[test]
 fn a_swing_at_unseen_rock_meets_its_real_kind() {
-    let game = game(9205);
-    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    let db = game.world.resource::<crate::rock::RockDb>();
-    let hard = db
+    let mut game = game(9205);
+    let hard = game
+        .world
+        .resource::<crate::rock::RockDb>()
         .defs()
         .max_by_key(|d| d.durability)
-        .expect("the shipped roster is not empty");
+        .expect("the shipped roster is not empty")
+        .clone();
     // A buried cell of the hardest kind: unseen on the map, and still that
     // kind to anything that hits it.
-    let buried = (-40..40)
-        .flat_map(|x| (-40..40).map(move |y| (x, y)))
-        .find(|&(x, y)| {
-            grid.is_solid(x, y)
-                && !grid.is_exposed(x, y)
-                && db.base_kind_at(seed, x, y).id == hard.id
-        })
-        .expect("a buried cell of the hardest kind");
+    let buried = rock_cell_of(&mut game, &hard.id);
+    assert_eq!(shade_at(&mut game, buried), None, "precondition: unseen");
     assert_eq!(game.wall_at(buried.0, buried.1).durability, hard.durability);
 }
 
@@ -4759,7 +3991,7 @@ fn a_posted_digger_is_drawn_on_the_map() {
         .view_entities(40, 40)
         .into_iter()
         .find(|v| v.entity == digger)
-        .expect("the digger is standing in base space beside the wall");
+        .expect("the digger is standing beside the wall");
     assert!(
         views::drawn_on_surface_map(view.is_tamed, view.position_is_honest),
         "a posted digger is drawn wherever it is standing"
@@ -5242,10 +4474,7 @@ fn a_restored_apply_naming_a_dropped_finish_is_pruned_at_load() {
 fn with_one_worker_the_tile_site_is_worked_before_the_finish_site() {
     let (mut game, staff) = base_with_a_crew(3278, 1);
     let tile_cell = WALL;
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(tile_cell.0, tile_cell.1, tick);
+    excavate(&mut game, (tile_cell.0, tile_cell.1));
     game.toggle_mark_box(tile_cell, tile_cell, None);
     // Touches the now-Open `tile_cell`, so it has a station of its own —
     // laid directly rather than dug, since only the ordering is under test.
@@ -5380,15 +4609,15 @@ fn a_finished_cell_lands_at_view_tiles_ats_own_index() {
     assert_eq!(finish.name, "Cobalt Carpet");
 }
 
-/// Base space's own view has no meaning anywhere else, so it must not leak a
-/// finish onto a zone-surface coordinate that merely aliases one.
+/// A finish lives on laid floor alone, so a run with no floor resolves none
+/// anywhere.
 #[test]
-fn view_finishes_at_is_all_none_off_base_space() {
+fn view_finishes_at_is_all_none_with_no_floor_laid() {
     let game = game(4402);
     let finishes = game.view_finishes_at((0, 0), 2, 2);
     assert!(
         finishes.iter().flatten().all(|f| f.is_none()),
-        "the party is on the surface; nothing here should resolve"
+        "nothing is laid; nothing here should resolve"
     );
 }
 
@@ -5518,10 +4747,7 @@ fn a_tile_plan_files_a_fragment_order_and_no_substrate_order() {
     let (mut game, _staff) = base_with_a_crew(3405, 1);
     lay_substrate_line(&mut game);
     fragments_for(&mut game, 0);
-    let tick = game.current_tick();
-    game.world
-        .resource_mut::<base_grid::BaseGrid>()
-        .open(WALL.0, WALL.1, tick);
+    excavate(&mut game, (WALL.0, WALL.1));
     mark(&mut game, WALL);
     mark(&mut game, (WALL.0, WALL.1 + 1));
 
@@ -5666,21 +4892,20 @@ fn a_plan_order_keeps_its_provenance_across_a_save() {
 }
 
 /// Rock is cut straight ahead only. A diagonal swing could open a cell that
-/// touches the base at a corner alone, and the siege board's fill is
-/// four-way (`siege::board`), so a room dug that way would stand where no
-/// raid could reach it. Refused like a disarmed bump: free, no tick.
+/// touches the base at a corner alone, and the base grows four ways, so a
+/// room dug that way would stand out of every siege's reach. Refused like a
+/// disarmed bump: free, no tick. The target is minable (floor sits under it
+/// orthogonally), so the diagonal is the only reason to refuse.
 #[test]
 fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
     let mut game = game_with_a_base(3129);
-    game.enter_base().unwrap();
     game.toggle_mining();
     let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     stand_in_base_at(&mut game, edge.0, edge.1);
     let target = (edge.0 + 1, edge.1 - 1);
+    set_rock(&mut game, target);
     assert!(
-        game.world
-            .resource::<base_grid::BaseGrid>()
-            .is_solid(target.0, target.1),
+        is_solid(&game, target),
         "the fixture must be shoving at real rock"
     );
     let tick = game.current_tick();
@@ -5688,6 +4913,7 @@ fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
     game.move_player(1, -1);
 
     assert_eq!(game.field_pos(), Some(edge));
+    assert_eq!(cell(&game, target), Cell::Solid, "and nothing was cut");
     assert_eq!(
         game.current_tick(),
         tick,

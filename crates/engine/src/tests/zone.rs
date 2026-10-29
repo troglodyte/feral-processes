@@ -448,7 +448,7 @@ fn find_blocking_structure_at_refuses_outside_base_space() {
     let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (home, _node) = build_a_base(&mut game);
     assert!(
-        !game.in_base(),
+        !game.on_base_floor(),
         "build_a_base's fixtures return the party to the surface"
     );
     let home_pos = *game.world.get::<Position>(home).unwrap();

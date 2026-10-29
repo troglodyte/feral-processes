@@ -679,9 +679,9 @@ pub struct StructureDef {
     /// "default_raidable")]` — true, as every structure was before it.
     #[serde(default = "default_raidable")]
     pub swept: bool,
-    /// A barrier refuses the player's step in base space, as solid rock
+    /// A barrier refuses the player's step in the field, as solid rock
     /// does, and blocks line of sight on a siege board while it stands —
-    /// `Game::move_in_base` and `siege::board::seat_structures` are its
+    /// `Game::move_player` and `siege::board::seat_structures` are its
     /// two readers. Its cells already refuse every other body's walk,
     /// because every structure's anchor does. `#[serde(default)]`.
     #[serde(default)]

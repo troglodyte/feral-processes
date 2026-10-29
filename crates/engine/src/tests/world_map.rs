@@ -51,7 +51,7 @@ fn negative_tiles_floor_to_the_chunk_below() {
 }
 
 #[test]
-fn nothing_is_revealed_in_base_space() {
+fn nothing_is_revealed_inside_the_base() {
     let mut game = game();
     game.world.resource_mut::<ExploredChunks>().0.clear();
     move_party_to(&mut game, 50 * CHUNK_SIZE, 50 * CHUNK_SIZE);
@@ -137,7 +137,7 @@ fn chunk_tile(cx: i32, cy: i32) -> (i32, i32) {
 }
 
 #[test]
-fn the_view_is_none_in_base_space_and_the_stack() {
+fn the_view_is_none_inside_the_base_and_the_stack() {
     let mut game = bare();
     assert!(game.world_map((0, 0), 3).is_some());
     descend(&mut game);

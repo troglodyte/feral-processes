@@ -378,7 +378,7 @@ fn name_of(game: &Game, item: &str) -> String {
 }
 
 #[test]
-fn a_floor_item_in_base_space_has_a_view_row_naming_it() {
+fn a_floor_item_inside_the_base_has_a_view_row_naming_it() {
     let mut g = game();
     stand_in_base_at(&mut g, 0, 0);
     put_item(&mut g, 2, 1, core_unit());

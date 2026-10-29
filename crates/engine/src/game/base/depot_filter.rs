@@ -18,7 +18,7 @@
 //! ask either.** A refund is the base handing back goods it already owned —
 //! a cancelled build, a route's proceeds — and `Game::return_material`'s
 //! fallback ladder ends in a log line about units left in the dust when the
-//! player is not in base space to catch them. Honouring a filter there
+//! player is not in the field to catch them. Honouring a filter there
 //! would let a closed shelf destroy materials while the player was out in
 //! the field, which is not what anyone means by sorting their storage.
 

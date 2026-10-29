@@ -58,9 +58,8 @@ fn esc_takes_the_anchor_then_the_mode() {
 }
 
 #[test]
-fn z_on_the_zone_surface_refuses() {
-    let mut app = test_app(6204);
-    found_the_base(&mut app);
+fn z_underground_refuses() {
+    let mut app = app_underground(6204);
     app.handle_key(GameKey::Char('z'));
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.status_line.is_some());

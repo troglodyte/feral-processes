@@ -200,14 +200,13 @@ impl Game {
     }
 
     /// Drains every `TransitCue` queued since the last call — `take_effects`'
-    /// counterpart for a body walking across base space rather than something
+    /// counterpart for a body walking across the field rather than something
     /// happening on one tile.
     ///
     /// A frontend that draws no walks must still call it so the queue does
-    /// not sit at its cap, and one that is not currently drawing base space
-    /// drops what it gets: a cue names base-space cells, and painting it over
-    /// the zone surface is the cross-space aliasing `base_pos` already gates
-    /// raid flashes against.
+    /// not sit at its cap, and one that is not currently drawing the field
+    /// drops what it gets: a cue names field cells, which mean nothing in the
+    /// Stack.
     pub fn take_transits(&mut self) -> Vec<crate::resources::TransitCue> {
         self.world
             .resource_mut::<crate::resources::TransitQueue>()
@@ -216,8 +215,8 @@ impl Game {
 
     /// Drains every `SpeechCue` queued since the last call — `take_transits`'
     /// counterpart for a conversation. The same two duties hold: a frontend
-    /// that draws no marks must still call it, and one not drawing base space
-    /// drops what it gets, since a cue names base-space cells.
+    /// that draws no marks must still call it, and one not drawing the field
+    /// drops what it gets, since a cue names field cells.
     pub fn take_speech(&mut self) -> Vec<crate::resources::SpeechCue> {
         self.world
             .resource_mut::<crate::resources::SpeechQueue>()
@@ -229,8 +228,8 @@ impl Game {
     ///
     /// A frontend that draws no bolts must still call it, or the queue sits
     /// at its cap forever. A cue names *board* cells, so one drawn anywhere
-    /// but the tactical pane is the same cross-space aliasing `take_transits`
-    /// warns about one space over.
+    /// but the tactical pane paints the wrong cells, as `take_transits` warns
+    /// about for field cues.
     pub fn take_bolts(&mut self) -> Vec<crate::resources::BoltCue> {
         self.world
             .resource_mut::<crate::resources::BoltQueue>()
@@ -967,12 +966,10 @@ impl Game {
     /// lowest-tiled one that actually contributes `raid_defense`.
     ///
     /// **A `Structure` and never the anchor.** A `VisualEffect` names a
-    /// base-space cell (`render/base.rs` draws the queue only while `base_pos`
-    /// is `Some`), and the anchor is a zone-surface fixture whose tile is also
-    /// the party's pinned `Position` out of phase — so a flash on it paints
-    /// the player's own cell, which is exactly the cross-space aliasing that
-    /// gate was added to close.
-    /// `seam:a-raids-flash-is-base-space-too-and-the-pane-has-to-say-so`
+    /// field cell (`render/base.rs` draws the queue only while `field_pos`
+    /// is `Some`), and the anchor is the tile the Home stands on, so a flash
+    /// on it would paint over the player's own cell when they stand home.
+    /// `seam:a-raids-flash-is-field-too-and-the-pane-has-to-say-so`
     /// records the ambient sweep suppressing its flash rather than moving it
     /// there; this moves it onto something that is genuinely in the right
     /// space instead.

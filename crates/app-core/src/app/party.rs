@@ -8,7 +8,7 @@ impl App {
     /// stand-down behind `P` are decided at home: hidden off-base it would
     /// take reading your own programs away four frames down along with the
     /// one thing that needed guarding. `add_companion` and
-    /// `stand_down_companion` carry `require_base` themselves and refuse onto
+    /// `stand_down_companion` carry `require_field` themselves and refuse onto
     /// the status line, which is a sentence the player can act on rather than
     /// a row that is simply gone. See
     /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` guard

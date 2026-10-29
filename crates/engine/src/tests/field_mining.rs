@@ -1,9 +1,10 @@
-//! Mining a blocker on the field: the pure adjacency gate and the strike
-//! that turns a blocker into an `Excavated` override. The bump and the crew
-//! are wired to these in a later phase.
+//! Mining a blocker on the field: the pure adjacency gate, the strike that
+//! turns a blocker into an `Excavated` override, and the player's bump.
 
 use super::support::*;
-use crate::base_grid::BaseGrid;
+use std::collections::BTreeSet;
+
+use crate::base_grid::{BaseGrid, Ground};
 use crate::game::field_mining::minable;
 use crate::*;
 
@@ -34,6 +35,13 @@ fn walkable(game: &mut Game, cell: (i32, i32)) -> bool {
         .walkable
 }
 
+fn ground<'a>(game: &'a Game, floor: &'a BaseGrid) -> Ground<'a> {
+    Ground {
+        floor,
+        map: game.world.resource::<WorldMap>(),
+    }
+}
+
 fn fragments(game: &Game) -> u32 {
     let player = game.player_entity();
     game.world
@@ -60,8 +68,7 @@ fn a_blocker_beside_floor_is_minable() {
     wall_at(&mut game, WALL, Biome::DataVoid);
     let mut floor = BaseGrid::default();
     floor.lay_floor(WALL.0 - 1, WALL.1);
-    let mut map = game.world.resource_mut::<WorldMap>();
-    assert!(minable(WALL, &floor, &mut map));
+    assert!(minable(WALL, ground(&game, &floor), &BTreeSet::new()));
 }
 
 #[test]
@@ -72,8 +79,7 @@ fn a_blocker_not_beside_floor_is_not_minable() {
     // Diagonal and two-away floor do not count; only orthogonal neighbours.
     floor.lay_floor(WALL.0 - 1, WALL.1 - 1);
     floor.lay_floor(WALL.0 + 2, WALL.1);
-    let mut map = game.world.resource_mut::<WorldMap>();
-    assert!(!minable(WALL, &floor, &mut map));
+    assert!(!minable(WALL, ground(&game, &floor), &BTreeSet::new()));
 }
 
 #[test]
@@ -89,8 +95,7 @@ fn walkable_ground_beside_floor_is_not_minable() {
         .set_override(WALL.0, WALL.1, open);
     let mut floor = BaseGrid::default();
     floor.lay_floor(WALL.0 - 1, WALL.1);
-    let mut map = game.world.resource_mut::<WorldMap>();
-    assert!(!minable(WALL, &floor, &mut map));
+    assert!(!minable(WALL, ground(&game, &floor), &BTreeSet::new()));
 }
 
 #[test]
@@ -166,4 +171,83 @@ fn field_rock_kinds_follow_the_biome() {
     assert_eq!(db.kind_at(Biome::DataVoid).id, "compacted");
     assert_eq!(db.kind_at(Biome::BlackIce).id, "fused");
     assert_eq!(db.kind_at(Biome::Entropy).id, "entropy");
+}
+
+/// Pending floor counts as adjacency (plan, resolved question 5): a line of
+/// marks queued into the rock is dug in order without waiting on each tile.
+#[test]
+fn a_blocker_beside_pending_floor_is_minable() {
+    let mut game = game(7);
+    wall_at(&mut game, WALL, Biome::DataVoid);
+    let floor = BaseGrid::default();
+    let pending = BTreeSet::from([(WALL.0 - 1, WALL.1)]);
+    assert!(minable(WALL, ground(&game, &floor), &pending));
+}
+
+/// A base with its floor at `WALL`'s west, the player standing on it, and
+/// mining armed.
+fn armed_beside_a_wall(seed: u32) -> Game {
+    let mut game = game(seed);
+    let beside = (WALL.0 - 1, WALL.1);
+    game.dev_lay_floor([beside]);
+    stand_in_base_at(&mut game, beside.0, beside.1);
+    wall_at(&mut game, WALL, Biome::DataVoid);
+    if !game.mining() {
+        game.toggle_mining();
+    }
+    game
+}
+
+#[test]
+fn bumping_a_blocker_beside_floor_mines_it() {
+    let mut game = armed_beside_a_wall(31);
+    for _ in 0..500 {
+        if walkable(&mut game, WALL) {
+            break;
+        }
+        game.move_player(1, 0);
+    }
+    assert_eq!(
+        game.world.resource_mut::<WorldMap>().tile(WALL.0, WALL.1).biome,
+        Biome::Excavated
+    );
+    let player = game.player_entity();
+    let at = *game.world.get::<Position>(player).unwrap();
+    assert_eq!((at.x, at.y), (WALL.0 - 1, WALL.1), "a swing is not a step");
+}
+
+#[test]
+fn bumping_a_blocker_away_from_floor_is_refused_and_costs_nothing() {
+    let mut game = game(32);
+    // Open ground under the player, no floor anywhere.
+    let beside = (WALL.0 - 1, WALL.1);
+    game.world.resource_mut::<WorldMap>().set_override(
+        beside.0,
+        beside.1,
+        Tile {
+            biome: Biome::OpenGrid,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    stand_in_base_at(&mut game, beside.0, beside.1);
+    wall_at(&mut game, WALL, Biome::DataVoid);
+    game.toggle_mining();
+    let tick = game.current_tick();
+    for _ in 0..50 {
+        game.move_player(1, 0);
+    }
+    assert!(!walkable(&mut game, WALL), "the rock stands");
+    assert_eq!(game.current_tick(), tick, "a refused bump spends no turn");
+    assert!(game.dig_site_at(WALL.0, WALL.1).is_none(), "and chips nothing");
+}
+
+#[test]
+fn a_disarmed_bump_beside_floor_is_refused() {
+    let mut game = armed_beside_a_wall(33);
+    game.toggle_mining();
+    let tick = game.current_tick();
+    game.move_player(1, 0);
+    assert!(!walkable(&mut game, WALL));
+    assert_eq!(game.current_tick(), tick);
 }

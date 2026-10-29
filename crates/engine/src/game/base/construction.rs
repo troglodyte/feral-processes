@@ -48,8 +48,8 @@ enum Source {
     Shelf(Entity, Position),
     /// A floor item lying on a stockpile cell.
     Stockpile(Entity, Position),
-    /// The party's own pack, reachable only while the party is standing in
-    /// base space — a builder walks over and takes it out of your hands, so
+    /// The party's own pack, reachable only while the party is standing on
+    /// the field — a builder walks over and takes it out of your hands, so
     /// there has to be a pair of hands there to take it from. Four frames
     /// down the Stack the pack is simply not a source, and the site waits.
     Pack(Position),
@@ -374,7 +374,7 @@ impl Game {
     }
 
     /// The party's pack as a source, or `None` when it holds none of `item`
-    /// or when the party is not standing in base space to be taken from.
+    /// or when the party is not standing in the field to be taken from.
     fn pack_source(&self, item: &ItemId) -> Option<Source> {
         let (x, y) = self.field_pos()?;
         let player = self.player_entity();

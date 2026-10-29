@@ -571,7 +571,7 @@ fn the_third_eligible_kill_always_drops() {
 #[test]
 fn a_miss_is_counted_and_a_held_key_is_not_rolled_again() {
     let mut game = new_game();
-    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let seed = game.world.resource::<WorldMap>().seed();
     let first_drops = crate::game::phase_keys::phase_key_roll(seed, 1, 0);
     let held = kill_guardian(&mut game);
     assert_eq!(held, first_drops);

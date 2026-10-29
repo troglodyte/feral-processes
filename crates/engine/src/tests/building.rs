@@ -2,44 +2,9 @@
 
 use super::support::*;
 use crate::components::Downed;
-use crate::tuning::{
-    MAX_BUILD_DISTANCE_FROM_HOME, STARTING_POCKET_HALF_HEIGHT, STARTING_POCKET_HALF_WIDTH,
-    haul_walk_radius,
-};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, haul_walk_radius};
 use crate::views::PinMark;
 use crate::*;
-
-/// The pocket is a chamfered box, not the square it would be without
-/// `PLATFORM_CORNER_CUT`: that many diagonal steps come off each of the four
-/// corners, so the corner cell and the two beside it are unmined rock.
-/// Checked at all four corners because the shape is written in absolute
-/// values and a sign error would round three of them and leave one square.
-#[test]
-fn the_starting_pocket_has_its_corners_cut() {
-    let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game);
-    let (w, h) = (STARTING_POCKET_HALF_WIDTH, STARTING_POCKET_HALF_HEIGHT);
-
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    for (sx, sy) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
-        for (dx, dy) in [(w, h), (w - 1, h), (w, h - 1)] {
-            let (dx, dy) = (dx * sx, dy * sy);
-            assert!(
-                grid.is_solid(dx, dy),
-                "({dx}, {dy}) is inside the cut corner and should still be rock"
-            );
-        }
-        // The cells the cut stops at, so a deeper chamfer can't pass by
-        // asserting only on what was removed.
-        for (dx, dy) in [(w - 2, h), (w - 1, h - 1), (w, h - 2)] {
-            let (dx, dy) = (dx * sx, dy * sy);
-            assert!(
-                grid.is_floor(dx, dy),
-                "({dx}, {dy}) is the first cell past the cut and should be laid floor"
-            );
-        }
-    }
-}
 
 /// The cut is footprint, not paint: `place_structure` measures against the
 /// same `BaseGrid::is_floor` the pocket was laid into, so a cell with no
@@ -56,7 +21,7 @@ fn a_cut_corner_is_not_buildable() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 40);
     place_home(&mut game);
-    let (w, h) = (STARTING_POCKET_HALF_WIDTH, STARTING_POCKET_HALF_HEIGHT);
+    let (w, h) = (TEST_POCKET_HALF_WIDTH, TEST_POCKET_HALF_HEIGHT);
 
     let err = game
         .place_structure("assembler", w, h, None)
@@ -205,7 +170,7 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     place_home(&mut game);
 
     // The pocket's east edge, so the next placement lands one cell into rock.
-    stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     let err = game
         .place_structure("assembler", 1, 0, None)
         .expect_err("a cell with no floor under it shouldn't be buildable");
@@ -1556,7 +1521,7 @@ fn a_posted_program_starts_from_the_player() {
     stand_in_base_at(&mut game, player_pos.x, player_pos.y);
     // Tamed far enough out that the old rule would have refused it outright,
     // and far enough that it could never have walked in.
-    let reach = haul_walk_radius(STARTING_POCKET_HALF_WIDTH);
+    let reach = haul_walk_radius(TEST_POCKET_HALF_WIDTH);
     let worker = spawn_tamed_on_map(&mut game, 2, reach + 5);
 
     game.assign_cronjob(worker, structure)
@@ -1578,7 +1543,7 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 2, 0);
     let worker = spawn_tamed_on_map(&mut game, 2, 1);
-    let reach = haul_walk_radius(STARTING_POCKET_HALF_WIDTH);
+    let reach = haul_walk_radius(TEST_POCKET_HALF_WIDTH);
     stand_in_base_at(&mut game, 2, reach + 5);
 
     let err = game
@@ -2795,10 +2760,15 @@ fn founding_stands_the_anchor_where_the_party_is() {
         Some((7, -3)),
         "the anchor follows the deploy rather than staying at the arrival point"
     );
-    // The claim that matters: the party can step through it from where they
-    // are standing, which is what `enter_base` asks.
-    game.enter_base()
-        .expect("the door is underfoot the moment the Home is up");
+    // The Home stands on the anchor's tile, and founding floors the ring.
+    let home = first_structure(&mut game, "home");
+    let at = *game.world.get::<Position>(home).unwrap();
+    assert_eq!((at.x, at.y), (7, -3));
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(7, -3)
+    );
 }
 
 /// A link is walked *onto* to descend, so an anchor sharing its tile could
@@ -3913,7 +3883,7 @@ fn a_program_the_commit_refuses_files_no_order() {
 fn a_bad_cell_is_reported_before_the_program_cost() {
     let mut game = a_base_with_programs(20260908, 2);
     // One step past the pocket's east edge, which is unmined rock.
-    stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
 
     let err = game
         .place_structure("extractor", 1, 0, None)

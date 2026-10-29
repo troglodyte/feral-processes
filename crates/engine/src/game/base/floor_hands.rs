@@ -74,7 +74,7 @@ impl Game {
         self.hands_free()?;
         let party = self
             .party_cell()
-            .expect("hands_free passed, so the party is in base space");
+            .expect("hands_free passed, so the party is on the field");
         let cell = self
             .free_floor_cells(party, 1)
             .first()
@@ -149,7 +149,7 @@ impl Game {
         self.hands_free()?;
         let party = self
             .party_cell()
-            .expect("hands_free passed, so the party is in base space");
+            .expect("hands_free passed, so the party is on the field");
         let e = floor_item_at(&mut self.world, party)
             .ok_or_else(|| "There's nothing here to pick up.".to_string())?;
         let player = self.player_entity();

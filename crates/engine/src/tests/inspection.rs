@@ -745,7 +745,7 @@ fn view_entities_reports_a_con_read_for_hostiles_and_none_for_anyone_else() {
     let hard_view = views.iter().find(|v| v.entity == hard).unwrap();
     // The tamed program is asked for from inside the base, because that is
     // the space its `Position` is a cell of and `view_entities` selects by
-    // space (`Game::stands_in_base_space`). The rule under test — only a
+    // space (`Game::stands_inside_the_base`). The rule under test — only a
     // hostile is difficulty-coloured — is the same on either side of the
     // anchor.
     stand_in_base_at(&mut game, player_pos.x, player_pos.y + 1);
@@ -2433,50 +2433,6 @@ fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
         game.find_target_in_direction(1, 0, 10),
         Some(InspectTarget::Creature(wild)),
         "the same tile, now tamed, proves the refusal above was about wildlife specifically"
-    );
-}
-
-/// The mirror bug on the surface side, closed generally rather than left
-/// open: `Structure` is the space tag, and `find_target_in_direction`'s own
-/// `Structure` query answered it with no locale check at all, unlike
-/// `find_blocking_structure_at`, `view_entities` and `adjacent_structure`.
-/// A player who breaches, builds a Home, and walks back near the spawn tile
-/// could aim `x` at a base structure drawn nowhere on their screen — base
-/// space's own origin and the zone spawn point are both commonly `(0, 0)`,
-/// which this reproduces deliberately (the player is moved onto the exact
-/// tile the fixture's Mining Node's base-space position numerically
-/// carries) rather than relying on that coincidence to land by luck.
-#[test]
-fn find_target_in_direction_refuses_a_base_structure_seen_from_the_surface() {
-    let mut game = Game::new(3213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (_home, node) = build_a_base(&mut game);
-    assert!(
-        !game.in_base(),
-        "build_a_base's fixtures return the party to the surface"
-    );
-    let node_pos = *game.world.get::<Position>(node).unwrap();
-
-    // Standing one tile west of the node's own coordinates, on the
-    // surface, so the eastward ray runs straight through them.
-    let player = game.player_entity();
-    let start = Position {
-        x: node_pos.x - 1,
-        y: node_pos.y,
-    };
-    {
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x = start.x;
-        pos.y = start.y;
-    }
-    // A wild program spawned on this exact tile would find *it* first and
-    // mask the assertion this test is actually making.
-    clear_creatures_east_of_player(&mut game, start, 10);
-
-    assert_eq!(
-        game.find_target_in_direction(1, 0, 10),
-        None,
-        "a base structure's position must not answer a surface-space ray, \
-         however close the numbers land"
     );
 }
 

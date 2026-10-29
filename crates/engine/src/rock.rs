@@ -29,7 +29,7 @@ use serde::Deserialize;
 /// above at a factor that keeps the darkest walkable ground brighter still.
 pub const SHADE_BAND: (f32, f32) = (1.0, 4.0);
 
-/// One kind of base-space rock.
+/// One kind of field rock.
 #[derive(Clone, Debug, Deserialize)]
 pub struct RockDef {
     /// A string id following the `ItemId` precedent rather than an enum —
@@ -37,7 +37,7 @@ pub struct RockDef {
     /// id and no Rust behind it.
     pub id: String,
     pub name: String,
-    /// Relative share of base space this kind covers. Zero is refused at
+    /// Relative share of the field this kind covers. Zero is refused at
     /// load: a kind nothing can ever roll is an authoring mistake, not a
     /// way to disable a file.
     pub weight: u32,
@@ -75,7 +75,7 @@ pub struct Wall {
 }
 
 impl RockDef {
-    /// The kind base space is made of when `assets/rock/` is empty or holds
+    /// The kind the field's rock is made of when `assets/rock/` is empty or holds
     /// nothing loadable.
     ///
     /// An empty directory is a supported install: it restores *uniform*
@@ -236,7 +236,7 @@ mod tests {
         let db = db();
         assert!(
             db.defs().count() >= 2,
-            "a single shipped kind makes base space uniform"
+            "a single shipped kind makes every blocker the same rock"
         );
     }
 

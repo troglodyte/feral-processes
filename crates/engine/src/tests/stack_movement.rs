@@ -100,14 +100,14 @@ fn frame(game: &Game) -> crate::stack::Frame {
 fn at(game: &Game) -> (i32, i32) {
     match game.locale() {
         Locale::Stack { x, y, .. } => (x, y),
-        Locale::Surface | Locale::Base { .. } => panic!("expected to be underground"),
+        Locale::Surface => panic!("expected to be underground"),
     }
 }
 
 fn facing(game: &Game) -> Dir {
     match game.locale() {
         Locale::Stack { facing, .. } => facing,
-        Locale::Surface | Locale::Base { .. } => panic!("expected to be underground"),
+        Locale::Surface => panic!("expected to be underground"),
     }
 }
 

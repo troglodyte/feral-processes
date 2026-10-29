@@ -253,12 +253,9 @@ mod tests {
         if let Some(tools) = tools {
             data.player.tools = tools;
         }
-        // Base space, standing on `(0, 0)`. `extraction_bench_tier` does not
-        // care where the party is, but `Game::adjacent_teardown_rig` does —
-        // and the two rig key hints only draw when it answers `Some`, so a
-        // fixture on the surface would measure a page a rig owner never
-        // sees.
-        data.locale = feral_processes_engine::resources::Locale::Base { x: 0, y: 0 };
+        // Standing on `(0, 0)`, where a fresh run starts. `extraction_bench_tier`
+        // does not care where the party is, but `Game::adjacent_teardown_rig`
+        // does — and the two rig key hints only draw when it answers `Some`.
         if let Some((kind, tier, position)) = bench {
             data.structures.push(save::StructureSave {
                 recipe: None,

@@ -63,6 +63,7 @@ fn the_research_page_opens_research_and_esc_closes_it() {
 #[test]
 fn a_refused_selection_lands_on_the_status_line() {
     let mut app = test_app(502);
+    go_underground(&mut app);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
     pick_row(&mut app, 0);
@@ -128,6 +129,7 @@ fn enter_selects_the_highlighted_node() {
 #[test]
 fn a_refused_research_node_is_written_to_the_log_too() {
     let mut app = test_app(502);
+    go_underground(&mut app);
     open_command(&mut app, "Research");
     to_the_list(&mut app);
     pick_row(&mut app, 0);

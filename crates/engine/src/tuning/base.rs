@@ -165,9 +165,10 @@ pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 /// existed rather than the current shape.
 ///
 /// **All three — `build_radius`, `clear_platform` and the Heap Pillar —
-/// are deleted along with `resources::Platform`.** Base space grows by
-/// laying floor on `base_grid::BaseGrid` now (`Game::floor_cell`), not by widening a clamped radius, and nothing reads
-/// this constant as an active ceiling any more.
+/// are deleted along with `resources::Platform`.** The base grows by
+/// laying floor on `base_grid::BaseGrid` now (`Game::floor_cell`), not by
+/// widening a clamped radius, and nothing reads this constant as an active
+/// ceiling any more.
 ///
 /// Kept rather than deleted: two of this file's own doc comments
 /// (`STACK_NEAREST_LINK_TILES`, `CONTRACT_HABITAT_SAMPLES`) still reason
@@ -184,7 +185,7 @@ pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 // record under `docs/measurements/` — see the slice 2 section of
 // `docs/superpowers/archive/specs/2026-08-19-base-out-of-phase-design.md`.
 
-/// How much damage one cell of base-space rock absorbs before it opens.
+/// How much damage one cell of field rock absorbs before it opens.
 ///
 /// **Never scaled by zone, depth or level.** The rock is the same rock all
 /// run, so the thing that changes is the player: a wall that takes about
@@ -450,9 +451,9 @@ pub const MAX_OUTPOSTS: usize = 4;
 /// How close a candidate tile must be walked before it may be founded, in
 /// Chebyshev tiles from the base anchor.
 ///
-/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a base-space
+/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a field
 /// constant, value 4) — an outpost stands on the *zone surface*, a
-/// different coordinate space at a different scale, and reusing a base-space
+/// different coordinate space at a different scale, and reusing a field
 /// literal there would make an unrelated base-building retune silently move
 /// where an outpost may stand. **A fraction of a region**,
 /// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against

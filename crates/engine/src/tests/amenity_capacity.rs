@@ -137,7 +137,7 @@ fn box_in_to_one_tile(game: &mut Game, site: Position) -> (i32, i32) {
     for dy in -r..=r {
         for dx in -r..=r {
             let (x, y) = (site.x + dx, site.y + dy);
-            if (dx, dy) == (0, 0) || !game.world.resource::<BaseGrid>().walkable(x, y) {
+            if (dx, dy) == (0, 0) || !game.world.resource::<BaseGrid>().is_floor(x, y) {
                 continue;
             }
             if keep.is_none() {

@@ -24,44 +24,21 @@ pub struct GroupMenuRow {
 struct GroupEntry {
     label: &'static str,
     target: Mode,
-    /// Where this row's action is legal, which for most of the base commands is
-    /// "in base space" — see `Locality`.
-    ///
-    /// It used to be a `surface_only` bool and used to ask `is_underground()`,
-    /// which was the same question while "not in the Stack" and "where the
-    /// base is" were one condition. They are two now —
-    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` carries
-    /// the split — and this names the half it always meant: the engine refuses
-    /// each of these rows anywhere but base space, so offering them on the
-    /// open grid advertises a screen whose every action is a dead end.
-    ///
-    /// A field in a readable table rather than an `in_base()` check folded
-    /// into each `available` closure, because it has to be kept in step with
-    /// that list in the engine and a table is what makes that checkable.
-    /// Emptiness alone would not do the job: every row below that reads
-    /// `App::nearby_*` scans around the party, which in base space is a
-    /// different coordinate space entirely — so those menus would cheerfully
-    /// list a base the party is nowhere near.
+    /// Where this row's action is legal. A field rather than an
+    /// `is_underground()` check folded into each `available` closure, because
+    /// it has to be kept in step with the engine's `require_field` callers
+    /// and a table is what makes that checkable.
     locality: Locality,
     available: fn(&mut App) -> bool,
 }
 
 /// Where a group-menu row's action is legal.
-///
-/// Three answers and not two, because the build row genuinely has a third:
-/// deploying is a `Game::require_base` caller like everything else in the
-/// base commands, *except* for the run's first Home. That one is the act that
-/// opens base space at all, so it has to be reachable from the open grid or
-/// a fresh run can never start a base — and a row that was hidden until you
-/// were inside would hide the only way of getting inside.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Locality {
     /// Legal wherever the party is standing.
     Anywhere,
-    /// Base space only — one of `Game::require_base`'s callers.
-    Base,
-    /// Base space, and the open grid while no Home stands: founding.
-    BaseOrFounding,
+    /// Anywhere on the field — one of `Game::require_field`'s callers.
+    Field,
 }
 
 impl Locality {
@@ -72,23 +49,16 @@ impl Locality {
         };
         match self {
             Locality::Anywhere => true,
-            Locality::Base => game.in_base(),
-            // Deliberately not "anywhere but the Stack": the founding deploy
-            // asks `Game::require_surface`, so the open grid is the only
-            // place outside the base it is permitted from.
-            Locality::BaseOrFounding => {
-                game.in_base() || (!game.has_home() && !game.is_underground())
-            }
+            Locality::Field => !game.is_underground(),
         }
     }
 }
 
 const BUILD_ROWS: &[GroupEntry] = &[
     GroupEntry {
-        // The one row with a third answer: see `Locality::BaseOrFounding`.
         label: "Deploy a structure",
         target: Mode::Build,
-        locality: Locality::BaseOrFounding,
+        locality: Locality::Field,
         available: |app| {
             app.game
                 .as_ref()
@@ -98,13 +68,13 @@ const BUILD_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Work a structure yourself",
         target: Mode::WorkStructure,
-        locality: Locality::Base,
+        locality: Locality::Field,
         available: |app| !app.workable_structures().is_empty(),
     },
     GroupEntry {
         label: "Upgrade a structure",
         target: Mode::UpgradeDirection,
-        locality: Locality::Base,
+        locality: Locality::Field,
         // The *scan radius*, where the screen it opens reaches one tile.
         // Deliberately the wider question, `Mode::Remove`'s own row's shape:
         // a row that appeared only while you were already standing beside a
@@ -116,7 +86,7 @@ const BUILD_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Demolish a structure",
         target: Mode::Remove,
-        locality: Locality::Base,
+        locality: Locality::Field,
         available: |app| !app.nearby_structures().is_empty(),
     },
 ];
@@ -176,7 +146,7 @@ const RESEARCH_ROWS: &[GroupEntry] = &[
         // state it.
         label: "Study a program",
         target: Mode::PinSubject,
-        locality: Locality::Base,
+        locality: Locality::Field,
         available: |app| {
             app.game
                 .as_ref()
@@ -189,7 +159,7 @@ const RESEARCH_ROWS: &[GroupEntry] = &[
         // so the screen is what tells the player where to stand.
         label: "Hold a program",
         target: Mode::PinPrisoner,
-        locality: Locality::Base,
+        locality: Locality::Field,
         available: |app| app.game.as_ref().is_some_and(|g| g.has_holding_cell()),
     },
 ];
@@ -217,8 +187,8 @@ const TRADE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not `Locality::Base`, and the row is not `surface_only` either:
-        // `caravan_reach` already measures base space, so a second locality
+        // Not `Locality::Field`, and the row is not `surface_only` either:
+        // `caravan_reach` already measures reach, so a second locality
         // clause here would be the same fact read twice and the redundant
         // half is the one that rots.
         //
@@ -237,8 +207,8 @@ const TRADE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not `Locality::Base`, and for the Caravan row's reason directly
-        // above: `dispatch_reach` already measures base space, so a second
+        // Not `Locality::Field`, and for the Caravan row's reason directly
+        // above: `dispatch_reach` already measures reach, so a second
         // locality clause here would be the same fact read twice.
         label: "Dispatch",
         target: Mode::Dispatch,

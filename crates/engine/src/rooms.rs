@@ -147,7 +147,7 @@ pub fn room_work_scale(band: RoomBand) -> f64 {
     ROOM_WORK_SCALE[band as usize]
 }
 
-/// A structure standing in base space: its anchor and its def.
+/// A structure standing in the field: its anchor and its def.
 pub struct PlacedStructure<'a> {
     pub at: (i32, i32),
     pub def: &'a StructureDef,
@@ -469,15 +469,6 @@ mod tests {
         let r = run(&g, &[(&wall, (2, 0))], (99, 99));
         assert_eq!(r.rooms.len(), 2);
         assert!(r.room_at(2, 0).is_none());
-    }
-
-    #[test]
-    fn open_cells_count_toward_a_room() {
-        let mut g = block(2, 1);
-        g.open(2, 0, 0);
-        let r = run(&g, &[], (99, 99));
-        assert_eq!(r.rooms.len(), 1);
-        assert_eq!(r.rooms[0].cells.len(), 3);
     }
 
     #[test]

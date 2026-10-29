@@ -165,7 +165,7 @@ impl Game {
     /// is aimed at.
     ///
     /// The step rule is `hauling::post_field`'s, character for character,
-    /// because the two have to agree about which tiles a body in base space
+    /// because the two have to agree about which tiles a body in the field
     /// may cross; what differs is which end of the walk the field is rooted
     /// at, `hauling::crew_reach`'s reason for the same duplication — rooted
     /// at the pen rather than at the worker, so `Ok(())` on arrival is a

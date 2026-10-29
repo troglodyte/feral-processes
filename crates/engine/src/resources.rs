@@ -103,7 +103,7 @@ pub struct GameClock {
     pub tick: u64,
 }
 
-/// Whether the player's own step into solid base-space rock is a swing or a
+/// Whether the player's own step into solid field rock is a swing or a
 /// refusal.
 ///
 /// **Off when a run starts.** A step into rock used to be a swing
@@ -786,12 +786,12 @@ pub enum EffectKind {
     Destroyed,
     /// A blow landed in a staff tantrum. **Draws identically to `Hit`** — the
     /// same sparks, the same duration, the same red — and exists only so gui
-    /// can fire a sound cue for it. Teaching gui to sound every base-space
+    /// can fire a sound cue for it. Teaching gui to sound every field
     /// `Hit` instead would be less code and would also give raids audio they
     /// have never had, which is a change to a shipped feature nobody asked
     /// for.
     Brawl,
-    /// A swing landed on base-space rock — the player's bump or a posted
+    /// A swing landed on field rock — the player's bump or a posted
     /// digger's cycle alike, since both go through `Game::strike_rock`.
     ///
     /// **Draws nothing**, which makes it the one kind here that is purely a
@@ -803,7 +803,7 @@ pub enum EffectKind {
     ///
     /// It rides this queue rather than a sound queue of its own because this
     /// is the one channel the engine already has for a tick-driven
-    /// base-space cue, and a new `Resource` beside it would shift bevy's
+    /// field cue, and a new `Resource` beside it would shift bevy's
     /// query iteration order for the sake of one clip.
     Mine,
 }
@@ -825,7 +825,7 @@ pub struct Brawl {
     pub taken: i32,
 }
 
-/// Every fight currently open in base space, and who is too recently out of
+/// Every fight currently open in the field, and who is too recently out of
 /// one to start another.
 ///
 /// Deliberately not serialized, `EffectQueue`'s reason. The cooldown is
@@ -869,7 +869,7 @@ impl EffectQueue {
     }
 }
 
-/// A program walking from one base-space cell to another, for a frontend to
+/// A program walking from one field cell to another, for a frontend to
 /// animate.
 ///
 /// **Purely cosmetic.** Nothing in the simulation is standing at any of
@@ -918,7 +918,7 @@ impl TransitQueue {
 }
 
 /// A conversation that fired, for a frontend to mark over the speaker. In
-/// base-space cells, like `TransitCue`.
+/// field cells, like `TransitCue`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SpeechCue {
     pub cell: (i32, i32),
@@ -1783,7 +1783,7 @@ impl BattleTimeline {
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
 
-/// Where the player has been standing in base space and for how many
+/// Where the player has been standing in the field and for how many
 /// consecutive ticks, so the Refit Bench can tell a stop from a walk past.
 /// Not a save field: the wait is two ticks and a load restarts it harmlessly.
 #[derive(Resource, Default, Clone, Debug)]

@@ -5,7 +5,6 @@
 //! test that matters most here is the one asserting the clock never moves.
 
 use feral_processes_engine::floors::FloorId;
-use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 
 use super::support::*;
@@ -16,11 +15,7 @@ use crate::*;
 fn app_at_the_frontier(seed: u32) -> App {
     let mut app = test_app(seed);
     found_the_base(&mut app);
-    stand_in_base_at(
-        &mut app,
-        feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
-        0,
-    );
+    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH, 0);
     app
 }
 
@@ -95,10 +90,7 @@ fn app_without_floors(seed: u32) -> (App, NoFloorsAssets) {
     let path = dir.join("stand.sav");
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base {
-        x: feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
-        y: 0,
-    };
+    stand_save_on_field(&mut data, TEST_POCKET_HALF_WIDTH, 0);
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &dir).unwrap());
 
@@ -123,25 +115,24 @@ fn tick(app: &App) -> u64 {
 }
 
 #[test]
-fn m_opens_excavation_plan_in_base_space_and_does_nothing_on_the_surface() {
+fn m_opens_excavation_plan_on_the_field_and_does_nothing_underground() {
     let mut app = app_at_the_frontier(4300);
     app.handle_key(GameKey::Char('m'));
     assert_eq!(
         app.mode,
         Mode::Excavate,
-        "m must open the plan in base space"
+        "m must open the plan on the field"
     );
 
-    let mut surface = test_app(4301);
-    found_the_base(&mut surface);
-    surface.handle_key(GameKey::Char('m'));
+    let mut stack = app_underground(4301);
+    stack.handle_key(GameKey::Char('m'));
     assert_eq!(
-        surface.mode,
+        stack.mode,
         Mode::Playing,
-        "there is nothing to excavate on the open grid"
+        "there is nothing to excavate in the Stack"
     );
     assert!(
-        surface.status_line.is_some(),
+        stack.status_line.is_some(),
         "a refused key must say why rather than looking broken"
     );
 }
@@ -149,7 +140,7 @@ fn m_opens_excavation_plan_in_base_space_and_does_nothing_on_the_surface() {
 #[test]
 fn the_cursor_starts_on_the_party_and_moves_with_the_direction_keys() {
     let mut app = app_at_the_frontier(4302);
-    let party = app.game.as_ref().unwrap().base_pos().unwrap();
+    let party = app.game.as_ref().unwrap().field_pos().unwrap();
 
     app.handle_key(GameKey::Char('m'));
     assert_eq!(
@@ -170,7 +161,7 @@ fn the_cursor_starts_on_the_party_and_moves_with_the_direction_keys() {
 #[test]
 fn committing_a_box_reaches_toggle_mark_box() {
     let mut app = app_at_the_frontier(4303);
-    let (px, py) = app.game.as_ref().unwrap().base_pos().unwrap();
+    let (px, py) = app.game.as_ref().unwrap().field_pos().unwrap();
 
     app.handle_key(GameKey::Char('m'));
     // Out onto solid rock, so the box is drawn over cells that can take a
@@ -428,7 +419,7 @@ fn opening_the_mode_resets_the_brush_to_plain() {
 #[test]
 fn committing_with_a_finish_brush_marks_the_already_laid_floor_under_it() {
     let mut app = app_at_the_frontier(4309);
-    let party = app.game.as_ref().unwrap().base_pos().unwrap();
+    let party = app.game.as_ref().unwrap().field_pos().unwrap();
 
     app.handle_key(GameKey::Char('m'));
     pick_brush(

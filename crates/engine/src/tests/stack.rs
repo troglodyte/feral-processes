@@ -639,7 +639,7 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     home_then_descend(&mut game);
     let link = match locale(&game) {
         Locale::Stack { entrance, .. } => entrance,
-        Locale::Surface | Locale::Base { .. } => unreachable!("just descended"),
+        Locale::Surface => unreachable!("just descended"),
     };
     walk_corridors(&mut game, 12);
     let before = map(&game).explored;

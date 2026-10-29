@@ -242,8 +242,8 @@ impl crate::Game {
     /// stranded here" is a claim about where it is standing, and a memory
     /// keyed to the machine's tile could never be read by the drift hook it
     /// exists for — `drift_idle_staff` already refuses a tile a `Structure`
-    /// stands on. A posted program's `Position` is base space, which is the
-    /// space `MemorySubject::BaseTile` names.
+    /// stands on. A posted program's `Position` is a field tile, which is
+    /// what `MemorySubject::BaseTile` names.
     ///
     /// **Edge-triggered, off `Stranded::since`.** `haul_step_system` writes
     /// the marker on entry only, so this pass runs immediately after the
@@ -476,7 +476,7 @@ impl crate::Game {
     /// about standing on a cell, which an idle staff member wandering the
     /// base does exactly as much as one posted at a machine. `base_staff()`
     /// is every program in `ProgramRole::Staff`, which is precisely "every
-    /// program standing in base space" — the party, the wielded program and
+    /// program standing in the field" — the party, the wielded program and
     /// a dispatched sortie are elsewhere and carry no reading here.
     ///
     /// Collected before anything is written, `note_postings`' reason:

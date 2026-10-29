@@ -315,8 +315,8 @@ impl Game {
 
     /// `body` reaches the door and leaves — `Game::tactical_step`'s own
     /// off-board departure exists for a body disengaging on foot, but a
-    /// besieger's door is not reliably at the board's own edge (the flood
-    /// fill's bounding box need not put `BASE_EXIT_CELL` on its boundary),
+    /// besieger's door is not reliably at the board's own edge (the anchor
+    /// tile need not sit on the board's boundary),
     /// so this calls the same removal the edge-step takes directly rather
     /// than depending on that geometry. **What it carried is gone** — no
     /// further bookkeeping, which is what "stolen" means once it is through

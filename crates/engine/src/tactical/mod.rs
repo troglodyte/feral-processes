@@ -111,8 +111,8 @@ pub struct Fallen {
 ///
 /// **The one place a battle coordinate lives.** No world `Position` is
 /// written for a body on a battle map, the same way the Stack keeps its
-/// coordinates in `resources::Locale` and base space keeps its own there
-/// too. A body's `Position` stays exactly where the fight opened.
+/// coordinates in `resources::Locale`. A body's `Position` stays exactly
+/// where the fight opened.
 ///
 /// Bare `#[derive(Resource)]` — no `Default`, no `Serialize` — matching
 /// `BattleState` for the same reason: a fight is never saved, so nothing

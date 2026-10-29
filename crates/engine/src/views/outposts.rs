@@ -4,7 +4,7 @@ use super::*;
 ///
 /// `DigMark`'s shape one subsystem over: a record with no entity still needs
 /// a map pass of its own, since it cannot ride `Game::view_entities_at`.
-/// **Zone-surface coordinates**, `DigMark::pos`'s own base-space carrying
+/// **Zone-surface coordinates**, `DigMark::pos`'s own field carrying
 /// its opposite: an outpost cannot stand anywhere else (design spec §9).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OutpostMark {

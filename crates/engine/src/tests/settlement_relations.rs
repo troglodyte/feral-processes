@@ -837,7 +837,7 @@ fn travelling_out_lands_beside_the_town_and_never_on_it() {
             .walkable,
         "the relay set the party down somewhere they could not have walked"
     );
-    assert!(!game.in_base(), "the relay left the party in base space");
+    assert!(!game.on_base_floor(), "the relay left the party in base space");
     assert_eq!(
         game.world.resource::<GameClock>().tick - before,
         quote,
@@ -978,7 +978,6 @@ fn an_allied_town_with_a_relay_offers_all_three() {
     // reach-gated because their doors are, so a page read from across the
     // map offers the garrison alone.
     stand_in_base_at(&mut game, 0, 0);
-    game.leave_base().expect("step out onto the anchor");
     let (ax, ay) = game.anchor_position().unwrap();
     let key = SettlementKey { rx: 4, ry: 0 };
     place_settlement(&mut game, key, ax, ay + 1);
@@ -998,7 +997,6 @@ fn a_town_read_from_out_of_reach_offers_neither_verb() {
     let mut game = game();
     super::routes::deploy_relay(&mut game);
     stand_in_base_at(&mut game, 0, 0);
-    game.leave_base().expect("step out onto the anchor");
     let (ax, ay) = game.anchor_position().unwrap();
     let key = SettlementKey { rx: 4, ry: 0 };
     place_settlement(&mut game, key, ax, ay + 4);
@@ -1058,7 +1056,6 @@ fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
     // it: the gift needs the party within a tile of the town, and the relay
     // line needs a Relay standing — this is the one spot both are true.
     stand_in_base_at(&mut game, 0, 0);
-    game.leave_base().expect("step out onto the anchor");
     let (ax, ay) = game.anchor_position().unwrap();
     let key = SettlementKey { rx: 4, ry: 0 };
     // `(ax + 1, ay)` would be the Relay's own numeric coordinates, and

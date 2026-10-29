@@ -57,7 +57,7 @@ impl Game {
     /// ordered by the first side it occupies going N, E, S, W. A structure
     /// with nothing but its `Info` page is not in the cycle.
     ///
-    /// Empty outside base space, after game over and during a fight, the
+    /// Empty outside the field, after game over and during a fight, the
     /// guards the transfer offers carry.
     pub fn adjacent_structures(&self) -> Vec<AdjacentStructure> {
         let Some((px, py)) = self.field_pos() else {

@@ -777,9 +777,9 @@ fn walk_feeders(
 /// Where the idle staff member at `index` arrives at `tick`, on the
 /// Chebyshev ring of `IDLE_STAFF_RING_TILES` around `center`.
 ///
-/// **The way into base space, not a place to stand.** A program that has
-/// just been beaten carries the surface tile it was beaten on and has never
-/// had a base-space cell of its own; this is the tile that gives it one,
+/// **The way onto the floor, not a place to stand.** A program that has
+/// just been beaten carries the tile it was beaten on and has never
+/// stood on the floor; this is the tile that puts it there,
 /// and `drift_idle_staff` walks it on from there. It is asked only of a
 /// body that is not standing on laid floor, so in an established base it
 /// fires once per program and never again.
@@ -868,7 +868,7 @@ struct WanderBeat {
     occupied: std::collections::HashSet<(i32, i32)>,
     /// Where the idle pool stands, grown with every tile written this beat.
     held: std::collections::HashSet<(i32, i32)>,
-    /// The party's cell when it is in base space.
+    /// The party's cell when it is in the field.
     party: Option<(i32, i32)>,
 }
 
@@ -2872,10 +2872,8 @@ impl Game {
         if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
             return;
         }
-        // The party is the other body standing in base space, read off
-        // `Locale` and never the player's `Position`, which is pinned to
-        // the anchor tile out on the zone surface. A program that steps
-        // onto the party hides the `@`.
+        // The party is the other body standing in the field. A program that
+        // steps onto the party hides the `@`.
         if beat.party == Some((tile.x, tile.y)) {
             return;
         }
@@ -3242,9 +3240,8 @@ impl Game {
         // party underground has its `Position` pinned to the surface
         // entrance tile, so anything claiming something about where the base
         // is has to refuse rather than answer from a tile four frames up.
-        // `require_base` rather than `require_surface` since the base went
-        // out of phase — this reads which machines are standing, and they
-        // stand in base space.
+        // This reads which machines are standing, and they stand in the
+        // field.
         self.require_field()?;
         // A research line is filed whatever stands. The bill is filed once,
         // at selection, and never topped up (`select_research`), so a line

@@ -27,8 +27,8 @@ use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel
 /// How deep the party stands, for a `Descend` objective.
 ///
 /// A free function so `contract_system` and `Game::objective_state` cannot
-/// disagree about what base space answers — 0 is what "no Stack depth
-/// reached" means here, and base space is neither the surface nor a frame.
+/// disagree about what the field answers — 0 is what "no Stack depth
+/// reached" means here, and the field is neither a frame nor a descent.
 ///
 /// Deliberately not `stack_market`'s `stack_depth`, which floors at 1
 /// because a price needs a multiplier.
@@ -421,7 +421,7 @@ pub enum BrokerReach {
     /// A Broker exists, but the player is not in the base — out on the grid, or
     /// underground. The board is readable; nothing on it can be acted on.
     OffBase,
-    /// In base space, standing on laid floor, with a Broker standing.
+    /// Standing on the base floor, with a Broker standing.
     /// Everything is available.
     AtBroker,
 }
@@ -951,16 +951,12 @@ impl Game {
     /// measures the **base**. `place_structure` refuses everything but a Home
     /// until a Home is standing and every structure has to stand on laid
     /// floor, so a Broker is in the base by construction; "is the player in
-    /// the base" is therefore the whole question. Since the base moved out of
-    /// phase that reads as: the party is in base space, standing on
-    /// `BaseCell::Floor`.
+    /// the base" is therefore the whole question: `on_base_floor`.
     ///
-    /// Floor and not merely `walkable`, so it keeps saying what it said: the
+    /// Floor and not merely walkable, so it keeps saying what it said: the
     /// desk is reachable from the base's laid ground, not from a corridor
     /// mined out past its edge. Nothing else is asked — no `is_underground`
-    /// check, because `base_pos` is already `None` in every locale but this
-    /// one, and no locale-dependent `Position` read, because `Position` is
-    /// pinned to the anchor tile the whole time the party is in here.
+    /// check, because `on_base_floor` is already false in the Stack.
     pub fn broker_reach(&self) -> BrokerReach {
         if !self.has_broker() {
             return BrokerReach::NoBroker;
@@ -1194,8 +1190,8 @@ impl Game {
     /// Whether the player is standing where this contract may be handed over.
     ///
     /// One question with one answer per row, because **the two reaches are
-    /// mutually exclusive by construction**: `settlement_reach` is false in
-    /// base space and `broker_reach` answers `AtBroker` only there. A town
+    /// mutually exclusive by construction**: `settlement_reach` is false on
+    /// the base floor and `broker_reach` answers `AtBroker` only there. A town
     /// that refuses service is not a counter either, the gate
     /// `deliver_to_contract` applies.
     fn at_contract_counter(&self, issuer: Option<crate::settlements::SettlementKey>) -> bool {

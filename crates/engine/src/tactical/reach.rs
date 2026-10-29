@@ -2,7 +2,7 @@
 //! what its routines cover once it stops.
 //!
 //! The fifth caller of `game::pursuit::walk_field`, after the two on the
-//! zone surface and the two in base space. It is a caller and not a second
+//! zone surface and the two on the base floor. It is a caller and not a second
 //! walk on purpose: the search is the same search, and the one thing this
 //! space disagrees with the others about — `Rough` ground costing two — is
 //! exactly what the step rule is a cost function for.

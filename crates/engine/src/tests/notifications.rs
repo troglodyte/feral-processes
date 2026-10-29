@@ -237,7 +237,7 @@ fn founding_the_home_queues_its_tutorial_once() {
         .map(|n| n.title)
         .collect();
     assert!(
-        titles.iter().any(|t| t == "Base Space"),
+        titles.iter().any(|t| t == "Your Base"),
         "founding says what base space is: {titles:?}"
     );
 }

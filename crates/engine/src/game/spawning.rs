@@ -1157,7 +1157,7 @@ impl Game {
     /// Measured before the change: zero to two programs per box across 240
     /// tiles of walked ground (`docs/measurements/`).
     ///
-    /// Deliberately *not* guarded by `Game::require_surface` or an
+    /// Deliberately *not* guarded by `Game::require_field` or an
     /// `is_underground` check, unlike `power_regen_system` and
     /// `pursuit_tick`. Those refuse because they would otherwise reach the
     /// party through a `Position` pinned to the entrance tile. This one makes
@@ -1244,7 +1244,7 @@ impl Game {
     /// rather than whether it has been visited.
     ///
     /// Makes no claim about where the party is beyond which regions are near
-    /// them, so it needs no `require_surface` guard for the reason
+    /// them, so it needs no `require_field` guard for the reason
     /// `ensure_local_population` states: it stocks ground, and the surface
     /// keeps existing while the party is below.
     pub(crate) fn ensure_local_settlements(&mut self) {
@@ -1537,7 +1537,7 @@ impl Game {
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
         loop {
             let hostiles: Vec<(Entity, (i32, i32))> = {
-                // `Without<Besieger>` — a besieger's `Position` is a base-space
+                // `Without<Besieger>` — a besieger's `Position` is a field
                 // cell for the length of the siege, not a zone-surface one,
                 // and it is neither ambient population nor culled the way a
                 // wild pack is. A nemesis and its band are filtered out here, not
@@ -1602,9 +1602,9 @@ impl Game {
     /// why the ground around a besieged nest is crowded.
     pub(crate) fn local_hostile_count(&mut self, x: i32, y: i32) -> usize {
         // `Without<Besieger>` for `components::Besieger`'s own reason: its
-        // `Position` aliases a base-space cell onto whatever zone-surface
-        // tile shares its coordinates, so counting it here would let a siege
-        // silently choke off ordinary wild spawns near the base.
+        // it is a base fixture rather than wild population, so counting it
+        // here would let a siege silently choke off ordinary wild spawns
+        // near the base.
         let mut query = self
             .world
             .query_filtered::<&Position, (With<Hostile>, Without<crate::components::Besieger>)>();

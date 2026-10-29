@@ -51,12 +51,9 @@ fn a_program_in_range_brings_back_the_rows_that_need_one() {
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
-/// Every row the `base_only` flag carries, and the flag's whole job. Each of
-/// them is a `Game::require_base` caller, so base space is the only locale
-/// the engine will accept them in — offering them anywhere else advertises a
-/// screen whose every action is refused on the far side. The flag used to be
-/// `surface_only` and used to ask `is_underground()`, which was the same
-/// question only while there were two locales.
+/// Every row `Locality::Field` gates. Each of them is a `Game::require_field`
+/// caller, so the Stack is where the engine refuses them — offering them
+/// there advertises a screen whose every action is refused on the far side.
 const GUARDED: [&str; 4] = [
     "Deploy a structure",
     "Work a structure yourself",
@@ -64,46 +61,23 @@ const GUARDED: [&str; 4] = [
     "Demolish a structure",
 ];
 
-/// Which of `GUARDED` `app` offers from inside the base, having asserted
-/// that walking back out through the anchor takes **every** one of them off
-/// screen.
-///
-/// One fixture on both sides of the door rather than two fixtures, for the
-/// reason the engine's own `tests/base_space.rs` gives: the base, the
-/// machines and the player's `Position` are identical either side, so where
-/// the party is standing is the only thing that can explain a difference.
+/// Which of `GUARDED` `app` offers on the field, having asserted the fixture
+/// stands there and that the rows no locale gates survive alongside them.
 ///
 /// Returns what it found so the caller can prove the fixtures between them
-/// exercise all four rows. A row no fixture ever makes available inside is a
-/// row whose flag has no coverage at all — flipping it to `base_only: false`
-/// would leave the suite green, which is exactly the hole this returns a
-/// value to close.
-fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
+/// exercise all four rows. A row no fixture ever makes available is a row
+/// whose locality has no coverage at all, which is exactly the hole this
+/// returns a value to close.
+fn base_rows_offered(mut app: App) -> Vec<&'static str> {
     assert!(
-        app.game.as_ref().is_some_and(|g| g.in_base()),
-        "the fixture must start inside the base"
+        app.game.as_ref().is_some_and(|g| !g.is_underground()),
+        "the fixture must start on the field"
     );
     let offered: Vec<&'static str> = command_labels_all(&mut app)
         .into_iter()
         .filter(|label| GUARDED.contains(label))
         .collect();
-
-    app.game
-        .as_mut()
-        .unwrap()
-        .leave_base()
-        .expect("the fixture stands on the exit cell");
-
     let rows = command_labels_all(&mut app);
-    for absent in GUARDED {
-        assert!(
-            !rows.contains(&absent),
-            "{absent:?} is a base action, so it must not be offered on the open grid: {rows:?}"
-        );
-    }
-    // Not a menu that lost every row: the two that are not locale-gated at
-    // all have to survive the walk out, or the assertions above would pass
-    // against a command page that had simply gone empty.
     assert!(
         rows.contains(&"Research"),
         "research is not locale-gated: {rows:?}"
@@ -117,7 +91,7 @@ fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
 }
 
 #[test]
-fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
+fn the_command_pages_offer_their_base_rows_on_the_field() {
     let mut covered: Vec<&'static str> = Vec::new();
 
     // Two fixtures because no single one stands up every guarded row: the
@@ -125,22 +99,20 @@ fn the_command_pages_offer_their_base_rows_only_inside_base_space() {
     // small base has an extractor whose product can be ordered.
     let mut extractor = app_owning_a_program_and_an_extractor(4004, &[]);
     stand_in_base(&mut extractor);
-    covered.extend(base_rows_lost_on_leaving(extractor));
-    covered.extend(base_rows_lost_on_leaving(
-        app_inside_a_small_base_with_programs(4006, false, 1),
-    ));
+    covered.extend(base_rows_offered(extractor));
+    covered.extend(base_rows_offered(app_inside_a_small_base_with_programs(
+        4006, false, 1,
+    )));
 
     for row in GUARDED {
         assert!(
             covered.contains(&row),
-            "no fixture here ever offers {row:?} inside the base, so its `base_only` flag is untested: {covered:?}"
+            "no fixture here ever offers {row:?} on the field, so its locality is untested: {covered:?}"
         );
     }
 }
 
-/// The same rows are off screen four frames down, where they were already
-/// hidden before the base moved out of phase — so the flag's rename cannot
-/// have quietly re-opened the Stack.
+/// The same rows are off screen four frames down.
 #[test]
 fn the_command_pages_drop_their_base_rows_underground_too() {
     for mut app in [
@@ -155,7 +127,7 @@ fn the_command_pages_drop_their_base_rows_underground_too() {
         for absent in GUARDED {
             assert!(
                 !rows.contains(&absent),
-                "{absent:?} reaches the base through a pinned Position: {rows:?}"
+                "{absent:?} is a field verb: {rows:?}"
             );
         }
         // The chains are a property of the loaded assets, not of anything the
@@ -250,6 +222,9 @@ fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::BuildDirection);
     app.handle_key(GameKey::Char('l'));
+    // Founding fires the base tutorial; it is not the menu the origin
+    // belongs to.
+    dismiss_notifications(&mut app);
     assert_eq!(app.mode, Mode::Playing, "placing ends on the map");
 
     // The stale-origin trap: a completely unrelated screen, opened from the
@@ -285,7 +260,7 @@ fn esc_from_a_group_menu_returns_to_the_map() {
 /// different thing from the key being used again deliberately.
 #[test]
 fn the_retired_map_keys_do_nothing() {
-    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'T', 'f', 'm', 'M', 'v'] {
+    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'T', 'f', 'M', 'v'] {
         let mut app = test_app(4012);
         app.handle_key(GameKey::Char(key));
         assert_eq!(
@@ -311,7 +286,7 @@ fn i_opens_the_pack_and_x_inspects() {
 
 /// The party-side action deliberately left flat, because it is pressed
 /// every few turns while walking. `t` is tested separately below — every
-/// trader is a base-space `Structure` now, so it only opens on a base.
+/// trader is a field `Structure`, so it opens anywhere on the field.
 #[test]
 fn the_hot_keys_stayed_on_the_map() {
     let mut app = test_app(4014);
@@ -345,34 +320,22 @@ fn u_opens_the_compass_and_never_a_way_home() {
     );
 }
 
-/// `t` closes the same hole `d`'s `in_base()` guard and the group menu's
-/// `base_only` rows already closed: every trader `Game::view_entities` can now
-/// find is a `Structure`, and a `Structure` is never found outside base space
-/// — so the open grid used to open `Mode::Trade` onto a list that could only
-/// ever come back empty. Noted rather than fixed in
-/// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` when the
-/// other two keys moved.
+/// `t` opens the trader list wherever the party is on the field, and says so
+/// underground, where only a live stall sells anything.
 #[test]
-fn t_opens_the_trader_list_only_from_the_base() {
+fn t_opens_the_trader_list_on_the_field_and_refuses_underground() {
     let mut app = test_app(4015);
-    app.handle_key(GameKey::Char('t'));
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "no base exists yet, so there is nowhere for the list to open onto"
-    );
-    assert!(
-        app.status_line.is_some(),
-        "the refusal has to say something, not fail silently"
-    );
-
     found_the_base(&mut app);
     stand_in_base(&mut app);
     app.handle_key(GameKey::Char('t'));
-    assert_eq!(
-        app.mode,
-        Mode::Trade,
-        "standing in the base, the same key opens the trader list"
+    assert_eq!(app.mode, Mode::Trade);
+
+    let mut stack = app_underground(4016);
+    stack.handle_key(GameKey::Char('t'));
+    assert_eq!(stack.mode, Mode::Playing);
+    assert!(
+        stack.status_line.is_some(),
+        "the refusal has to say something, not fail silently"
     );
 }
 

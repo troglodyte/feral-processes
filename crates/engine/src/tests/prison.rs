@@ -261,7 +261,7 @@ fn every_refusal_leaves_the_pack_the_records_and_the_roster_alone() {
     let (mut game, _) = base_with_a_cell();
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
-        .open(PEN.0, PEN.1, 0);
+        .revert(PEN.0, PEN.1);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
     // A structure that is not a cell.

@@ -1216,7 +1216,7 @@ pub struct FarmPlotSave {
     pub tiles: Vec<FarmTileSave>,
 }
 
-/// One cell of a plot, in **base-space** coordinates like `DigSiteSave`.
+/// One cell of a plot, in **field** coordinates like `DigSiteSave`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FarmTileSave {
     pub position: (i32, i32),
@@ -1224,7 +1224,7 @@ pub struct FarmTileSave {
     pub growth: crate::components::CropGrowth,
 }
 
-/// A cell of base-space rock the player has started on — see
+/// A cell of field rock the player has started on — see
 /// `components::DigSite`, whose `Durability` and mark this carries.
 ///
 /// `announced_stuck` is deliberately absent: it is a crew's "I already said
@@ -1232,7 +1232,7 @@ pub struct FarmTileSave {
 /// exactly when the player should be told again.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DigSiteSave {
-    /// **Base-space** coordinates, not a tile on the zone surface.
+    /// **Field** coordinates, not a tile on the zone surface.
     pub position: (i32, i32),
     pub durability: u32,
     pub marked: bool,
@@ -1267,7 +1267,7 @@ pub struct DigSiteSave {
 /// the bill of materials beside it after a retune.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BuildSiteSave {
-    /// **Base-space** coordinates, not a tile on the zone surface.
+    /// **Field** coordinates, not a tile on the zone surface.
     pub position: (i32, i32),
     pub structure: crate::structures::StructureId,
     /// The bill of materials as it was priced when the request was filed —
@@ -1309,7 +1309,7 @@ pub struct BuildSiteSave {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RuinSave {
     pub kind: crate::structures::StructureId,
-    /// **Base-space** coordinates, `BuildSiteSave::position`'s rule.
+    /// **Field** coordinates, `BuildSiteSave::position`'s rule.
     pub x: i32,
     pub y: i32,
     /// What a wrecked machine was set to — see `resources::Ruin::recipe`.
@@ -1328,7 +1328,7 @@ pub struct RuinSave {
 /// that a retune could put out of step with the first.
 ///
 /// `position` is in **whichever space the stage says**, exactly as the
-/// `Position` component it comes from is — see `CaravanStage::in_base_space`.
+/// `Position` component it comes from is — see `CaravanStage::inside_the_base`.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CaravanSave {
     pub position: (i32, i32),
@@ -2137,9 +2137,8 @@ pub struct SaveData {
 /// read as 6% mitigation rather than 6 points of soak, so it is refused by
 /// version instead. `FieldBuffKind::Mitigation` folding into `Mitigation` rides the
 /// same bump.
-/// 31 → 32: `claimed_tiles` removed, `base_grid` added — the base is
-/// leaving the zone surface for its own pocket-dimension coordinate space
-/// (`base_grid::BaseGrid`; see TODO #36, "the base, out of phase"). A field
+/// 31 → 32: `claimed_tiles` removed, `base_grid` added — the base becomes
+/// its own grid (`base_grid::BaseGrid`; see TODO #36). A field
 /// *removed* is exactly the case field-named RON does not excuse from a
 /// bump, the same reasoning `fatigue`'s removal at 30 spent. This is the
 /// only bump the whole migration needs: later tasks in the same slice add

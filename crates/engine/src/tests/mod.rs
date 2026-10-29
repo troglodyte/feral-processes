@@ -67,6 +67,7 @@ mod extraction;
 mod farms;
 mod field;
 mod field_mining;
+mod floor_conflicts;
 mod floor;
 mod gear_combat;
 mod gear_craft;

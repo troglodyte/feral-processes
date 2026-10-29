@@ -316,55 +316,35 @@ fn the_demolish_key_says_when_there_is_nothing_that_way() {
     assert!(
         app.status_line
             .as_deref()
-            .is_some_and(|s| s.contains("Nothing to demolish")),
+            .is_some_and(|s| s.contains("Nothing of yours to demolish")),
         "an empty neighbour has to say so: {:?}",
         app.status_line
     );
 }
 
-/// `d` opens the prompt wherever it is pressed now, and the *direction*
-/// is what refuses. It used to be refused at the keypress, because outside
-/// base space the four directions aimed at four tiles with nothing of the
-/// player's on them — traps made that false for the surface, so the
-/// question moved into `handle_remove_direction_key`'s own branch.
-///
-/// Underground is still nothing-of-yours-to-aim-at, and `destroy_trap`'s
-/// `require_surface` is what says so.
+/// `d` opens the prompt wherever it is pressed, and the *direction* is what
+/// refuses. Underground there is nothing of the player's to aim at, and
+/// `destroy_trap`'s `require_field` is what says so.
 #[test]
-fn the_demolish_key_opens_outside_the_base_and_the_direction_refuses() {
-    for (standing, mut app) in [
-        ("in the Stack", app_inside_a_small_base(243, true)),
-        (
-            "on the open grid",
-            app_owning_a_program_and_an_extractor(2431, &[]),
-        ),
-    ] {
-        assert!(
-            app.game.as_ref().is_some_and(|g| !g.in_base()),
-            "precondition: the fixture really is {standing}"
-        );
-        let before = structure_count(&mut app);
+fn the_demolish_key_opens_in_the_stack_and_the_direction_refuses() {
+    let mut app = app_inside_a_small_base(243, true);
+    assert!(
+        app.game.as_ref().is_some_and(|g| g.is_underground()),
+        "precondition: the fixture really is in the Stack"
+    );
+    let before = structure_count(&mut app);
 
-        app.handle_key(GameKey::Char('d'));
-        assert_eq!(
-            app.mode,
-            Mode::RemoveDirection,
-            "the prompt opens in both spaces now, {standing}"
-        );
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(app.mode, Mode::RemoveDirection);
 
-        app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
 
-        assert_eq!(app.mode, Mode::Playing);
-        assert!(
-            app.status_line.is_some(),
-            "an aim with nothing under it says why, {standing}"
-        );
-        assert_eq!(
-            structure_count(&mut app),
-            before,
-            "and a base-space query must never answer a surface aim, {standing}"
-        );
-    }
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(
+        app.status_line.is_some(),
+        "an aim with nothing under it says why"
+    );
+    assert_eq!(structure_count(&mut app), before);
 }
 
 /// Enter on a roster row posts a worker, and both actions behind it —
@@ -926,19 +906,14 @@ fn node_row(app: &mut App) -> usize {
 ///
 /// `v` for the tile's own name — `t` is trade, and `T` belongs to two
 /// battle screens nothing may document (`crates/engine/EASTER_EGGS.md`).
-/// The surface half is asserted in the same test because the base half alone
-/// passes against a key that fires everywhere — and out there the party's
-/// `Position` is a tile on the zone map, with no cell of base space under it
-/// at all.
 #[test]
-fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
-    use feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH;
+fn v_lays_a_tile_on_mined_ground() {
     use feral_processes_engine::world::Biome;
 
     let mut app =
         app_owning_a_program_and_an_extractor_with_cargo(750, &[], &[("blank_substrate", 1)]);
-    let edge = (STARTING_POCKET_HALF_WIDTH, 0);
-    let cut = (STARTING_POCKET_HALF_WIDTH + 1, 0);
+    let edge = (TEST_POCKET_HALF_WIDTH, 0);
+    let cut = (TEST_POCKET_HALF_WIDTH + 1, 0);
     stand_in_base_at(&mut app, edge.0, edge.1);
 
     // The bump only cuts once the tool is armed — `MiningMode` starts off so
@@ -952,12 +927,12 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     // about is the key, not the wall.
     for _ in 0..20 {
         walk(&mut app, GameKey::Char('l'));
-        if app.game.as_ref().unwrap().base_pos() == Some(cut) {
+        if app.game.as_ref().unwrap().field_pos() == Some(cut) {
             break;
         }
     }
     assert_eq!(
-        app.game.as_ref().unwrap().base_pos(),
+        app.game.as_ref().unwrap().field_pos(),
         Some(cut),
         "the fixture must dig through and stand on the cut cell"
     );
@@ -965,9 +940,9 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
         let tiles = app.game.as_mut().unwrap().view_tiles(1, 1);
         tiles[1][1].biome
     };
-    assert_eq!(
+    assert_ne!(
         under_the_party(&mut app),
-        Biome::Excavated,
+        Biome::Platform,
         "the cut cell must start unfloored, or the tiling below proves nothing"
     );
 
@@ -978,17 +953,6 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
         Biome::Platform,
         "v on carved rock lays a VectorStasis Tile over it"
     );
-
-    let mut outside =
-        app_owning_a_program_and_an_extractor_with_cargo(751, &[], &[("blank_substrate", 1)]);
-    let tick = outside.game.as_ref().unwrap().current_tick();
-    outside.handle_key(GameKey::Char('v'));
-    assert_eq!(
-        outside.game.as_ref().unwrap().current_tick(),
-        tick,
-        "v on the open grid must spend nothing — there is no cell under you"
-    );
-    assert_eq!(outside.mode, Mode::Playing, "and must open no screen");
 }
 
 /// Opens the work order screen from the Build page and walks it to the

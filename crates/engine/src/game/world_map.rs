@@ -35,8 +35,8 @@ impl Game {
     /// footprint eject) passes through.
     ///
     /// **Guarded on `Locale::Surface`**, unlike the neighbouring stocking
-    /// calls: a Stack frame or base space has its own coordinates, and
-    /// marking them would reveal surface chunks the party never stood near.
+    /// calls: a Stack frame has its own coordinates, and marking them would
+    /// reveal surface chunks the party never stood near.
     pub(crate) fn mark_explored_chunks(&mut self) {
         if !matches!(*self.world.resource::<Locale>(), Locale::Surface) {
             return;

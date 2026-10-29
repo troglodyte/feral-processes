@@ -24,7 +24,7 @@ impl Game {
     /// Every refusal lands before anything is spent: game-over or an
     /// active battle, an id `ToolDb` cannot resolve, a tool the player
     /// hasn't researched, an already-installed tool, then a cost they
-    /// cannot pay. In base space the cost is paid off the base's stores
+    /// cannot pay. In the field the cost is paid off the base's stores
     /// first (`pay_from_reach`); elsewhere from the pack.
     pub fn forge_tool(&mut self, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {

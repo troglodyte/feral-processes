@@ -185,7 +185,7 @@ impl Game {
     /// spec §6.
     ///
     /// **`Position` is deliberately left untouched.** A recalled program
-    /// keeps whatever base-space `Position` it held before being posted, and
+    /// keeps whatever field `Position` it held before being posted, and
     /// `drift_idle_staff` walks it from there on its very next beat: if that
     /// tile is still laid floor, `wander_step` continues from it directly.
     /// `game::base::work_orders::entry_tile` — a ring around the Home — is
@@ -756,7 +756,11 @@ mod tests {
                     }
                     let (x, y) = (ax + dx, ay + dy);
                     let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
-                    if !tile.walkable || tile.biome == Biome::Platform {
+                    let floor = game
+                        .world
+                        .resource::<crate::base_grid::BaseGrid>()
+                        .is_floor(x, y);
+                    if !tile.walkable || floor {
                         continue;
                     }
                     if game.find_nest_at(x, y).is_some()
@@ -824,13 +828,13 @@ mod tests {
         let mut game = game(3);
         let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
         // `enter_stack` drops the party down wherever they are standing —
-        // no real link entity is needed to exercise `require_surface`.
+        // no real link entity is needed to exercise `require_field`.
         let player = game.player_entity();
         let pos = *game.world.get::<Position>(player).unwrap();
         game.enter_stack(pos.x, pos.y);
         assert!(game.is_underground());
         assert!(game.found_outpost(tile).is_err());
-        // Deleted-fix check: without `require_surface`, this same call
+        // Deleted-fix check: without `require_field`, this same call
         // would succeed underground, which is exactly the bug this guards.
     }
 
@@ -897,34 +901,71 @@ mod tests {
     }
 
     #[test]
-    fn refuses_within_min_anchor_distance() {
+    fn refuses_within_min_distance_of_the_floor() {
         let mut game = game(7);
-        // The anchor's own tile is guaranteed open ground (the party
-        // started there) and is distance 0 from itself — well inside the
-        // minimum, with no dependence on this seed's generated terrain
-        // elsewhere. Deleted-fix check: without the distance guard this
-        // same call succeeds, since nothing else about the tile refuses it.
-        let tile = game.anchor_position().unwrap();
-        assert!(game.found_outpost(tile).is_err());
+        let (ax, ay) = game.anchor_position().unwrap();
+        game.dev_lay_floor([(ax, ay)]);
+        let tile = (ax + 1, ay);
+        open_ground(&mut game, tile);
+        // Deleted-fix check: without the distance guard this same call
+        // succeeds, since nothing else about the tile refuses it.
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("That's still within reach of the base. Walk further out.".to_string())
+        );
+    }
+
+    /// The minimum distance is to the nearest floor cell, not the anchor: a
+    /// base grown toward a spot is nearer it (ADR 0032). The same tile is
+    /// accepted with only the anchor floored and refused once a floor cell
+    /// reaches within the minimum of it.
+    #[test]
+    fn the_outpost_distance_is_measured_to_the_footprint() {
+        let far = |game: &mut Game| {
+            let (ax, ay) = game.anchor_position().unwrap();
+            game.dev_lay_floor([(ax, ay)]);
+            let tile = (ax + OUTPOST_MIN_ANCHOR_DISTANCE + 5, ay);
+            open_ground(game, tile);
+            (ax, ay, tile)
+        };
+        let mut game = game(17);
+        let (_, _, tile) = far(&mut game);
+        assert_eq!(game.found_outpost(tile), Ok(()), "far from the anchor's floor");
+
+        let mut game = self::game(17);
+        let (ax, ay, tile) = far(&mut game);
+        game.dev_lay_floor([(ax + 6, ay)]);
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("That's still within reach of the base. Walk further out.".to_string()),
+            "a floor cell grown toward the tile brings the base within reach"
+        );
     }
 
     #[test]
-    fn refuses_on_platform_biome() {
+    fn refuses_on_the_bases_floor() {
         let mut game = game(8);
         let (ax, ay) = game.anchor_position().unwrap();
         let tile = (ax + OUTPOST_MIN_ANCHOR_DISTANCE, ay);
+        open_ground(&mut game, tile);
+        game.dev_lay_floor([tile]);
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("The base's own ground holds no outpost.".to_string())
+        );
+    }
+
+    /// Overrides `tile` to plain walkable ground, so a test's tile does not
+    /// depend on the seed's terrain.
+    fn open_ground(game: &mut Game, tile: (i32, i32)) {
         game.world.resource_mut::<WorldMap>().set_override(
             tile.0,
             tile.1,
             crate::world::Tile {
-                biome: Biome::Platform,
+                biome: crate::world::Biome::OpenGrid,
                 walkable: true,
                 rock_shade: None,
             },
-        );
-        assert_eq!(
-            game.found_outpost(tile),
-            Err("The base's own ground holds no outpost.".to_string())
         );
     }
 
@@ -1141,15 +1182,7 @@ mod tests {
         let mut game = game(21);
         let tile = founded_outpost_with_player_standing_there(&mut game);
         let program = staff(&mut game);
-        // `add_companion` refuses outside base space (`require_base`), so
-        // the party join has to happen with the locale swapped in and back
-        // out — `tests::support::stand_in_base`'s effect, restated for
-        // `staff`'s own reason above.
-        game.world
-            .insert_resource(crate::resources::Locale::Base { x: 0, y: 0 });
         game.add_companion(program).unwrap();
-        game.world
-            .insert_resource(crate::resources::Locale::Surface);
 
         let err = game
             .post_to_outpost(tile, program)

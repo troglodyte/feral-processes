@@ -51,10 +51,16 @@ fn a_box_marks_one_plot_with_no_recipe() {
 fn a_box_skips_rock_and_structure_cells() {
     let mut game = farm_base(2);
     let home = *game.structure_tiles().iter().min().unwrap();
-    let rock = (0..)
-        .map(|d| (TEST_POCKET_HALF_WIDTH + d, 0))
-        .find(|c| game.world.resource::<BaseGrid>().is_solid(c.0, c.1))
-        .unwrap();
+    let rock = (TEST_POCKET_HALF_WIDTH + 1, 0);
+    game.world.resource_mut::<WorldMap>().set_override(
+        rock.0,
+        rock.1,
+        Tile {
+            biome: Biome::DataVoid,
+            walkable: false,
+            rock_shade: None,
+        },
+    );
     let (a, b) = (
         (home.0.min(rock.0), home.1.min(rock.1)),
         (home.0.max(rock.0), home.1.max(rock.1)),

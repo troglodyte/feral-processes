@@ -823,14 +823,15 @@ fn u_on_a_bare_program_says_so_rather_than_going_quiet() {
 /// that refuses. A row that simply vanished would take all of that with it
 /// and tell the player nothing.
 #[test]
-fn standing_a_member_down_outside_the_base_refuses_onto_the_status_line() {
+fn standing_a_member_down_underground_refuses_onto_the_status_line() {
     let mut app = app_with_companions_in_the_party(781, 2);
+    go_underground(&mut app);
     let before = roster(&mut app);
     open_via_menu(&mut app, 'p', "Companions");
     assert_eq!(
         app.mode,
         Mode::Companion,
-        "the roster is still readable out here"
+        "the roster is still readable down here"
     );
 
     app.handle_key(GameKey::Char('P'));

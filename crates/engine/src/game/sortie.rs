@@ -67,8 +67,7 @@ impl Game {
     /// standing and every structure has to stand on laid floor, so a Relay
     /// is in the base by construction. "Is the player in the base" is
     /// therefore the whole question, which since the base moved out of
-    /// phase reads as: the party is in base space, standing on
-    /// `BaseCell::Floor`.
+    /// phase reads as: the party is on the base floor (`on_base_floor`).
     ///
     /// Floor and not merely `walkable`, `broker_reach`'s rule: the mast is
     /// reachable from the base's laid ground, not from a corridor mined out
@@ -321,7 +320,7 @@ impl Game {
         Ok(())
     }
 
-    /// Queues the walk a squad is *seen* to make: out through base space's
+    /// Queues the walk a squad is *seen* to make: out through the field's
     /// one door, or in through it.
     ///
     /// **Direction needs no field** — a departure and an arrival are the same
@@ -437,7 +436,7 @@ impl Game {
             (sortie.risk, sortie.members.clone())
         };
         // The pool is drawn against the party's own anchor tile, which is a
-        // real walkable surface tile of this sector — base-space coordinates
+        // real walkable surface tile of this sector — field coordinates
         // are a different space and `habitat_pools` would answer about
         // whatever surface ground happened to share the numbers.
         let (ax, ay) = self.anchor_position().unwrap_or((0, 0));

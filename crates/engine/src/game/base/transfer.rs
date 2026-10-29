@@ -130,8 +130,7 @@ impl Game {
     ///
     /// `&self`: no tick, no log, no RNG. The guards are
     /// the base doors' own, in the same order, each answering with an
-    /// empty offer — game over, an active battle, `require_base`. No
-    /// `require_surface`: `require_base` is the stronger statement.
+    /// empty offer — game over, an active battle, `require_field`.
     ///
     /// **The trade currency is not cargo and gets no row at all**, on either
     /// side — the same exclusion `caravan_shelf` and the stack market's

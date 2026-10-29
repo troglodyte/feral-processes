@@ -12,8 +12,7 @@ pub type KeyGroup = Vec<(String, String)>;
 /// do anything.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapLocale {
-    Base,
-    OpenGrid,
+    Field,
     Stack { market: bool },
 }
 
@@ -29,8 +28,8 @@ fn row(key: &str, label: &str) -> (String, String) {
 ///
 /// **The order is priority, not reading order, and the census is why.**
 /// `the_keybar_fits_the_log_pane` (gui) measures what survives at the
-/// smallest supported window. So the crossing pair and the three screens that
-/// hold the rest come first, and every locale's bar shares those two groups.
+/// smallest supported window. So the three screens that hold the rest come
+/// first (after the Stack's crossing pair, which only it has).
 ///
 /// **`D downed` sits with the screens rather than with the verbs**: it is a
 /// store screen and not a field action — `D` opens the same page from the map
@@ -38,20 +37,14 @@ fn row(key: &str, label: &str) -> (String, String) {
 ///
 /// **`hjkl move` and `. wait` are deliberately not here.** Arrow keys walk as
 /// well as `hjkl` does, so movement is the one verb a player finds without
-/// being told, and `.` does nothing in base space at all. The row they cost
-/// was spent on `<>` instead: that pair is the only crossing in the game with
-/// no glyph on the map leading to it.
-///
-/// **One crossing label for all three locales**, `ascend/descend` rather than
-/// naming the base: `<` is up and `>` is down whether the party is stepping
-/// onto their base or into a stack.
+/// being told.
 ///
 /// `TAB` (expand/collapse the log pane) is not here either: the bar has no
 /// room to spare for it, and `?` is where it is discovered.
 ///
 /// **The verbs are filtered by locale, because a key the bar names and the
-/// place refuses reads as a bug.** `n` cuts only base-space rock; `t` finds a
-/// trader only in base space or on a live Stack stall; `c` is not bound
+/// place refuses reads as a bug.** `n` cuts only field rock; `t` finds a
+/// trader only on the field or on a live Stack stall; `c` is not bound
 /// underground at all. The Stack's own `g` and `o` take the room that frees,
 /// though only about three verbs survive the cut at any supported size —
 /// `o` only at 1920x1080 — so the order of the verbs matters more than
@@ -64,13 +57,9 @@ pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
         _ => Vec::new(),
     };
     verbs.push(row("a", "routine"));
-    match locale {
-        MapLocale::Base => {
-            verbs.push(row("c", "collect"));
-            verbs.push(row("n", if mining { "mine (on)" } else { "mine" }));
-        }
-        MapLocale::OpenGrid => verbs.push(row("c", "collect")),
-        MapLocale::Stack { .. } => {}
+    if locale == MapLocale::Field {
+        verbs.push(row("c", "collect"));
+        verbs.push(row("n", if mining { "mine (on)" } else { "mine" }));
     }
     verbs.push(row("x", "examine"));
     if let MapLocale::Stack { .. } = locale {
@@ -79,21 +68,22 @@ pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
     }
     verbs.push(row("e", "drain"));
     verbs.push(row("r", "recharge"));
-    if locale == MapLocale::Base {
+    if locale == MapLocale::Field {
         verbs.push(row("t", "trade"));
     }
     verbs.push(row("s", "save"));
-    vec![
-        vec![row("< >", "ascend/descend")],
-        vec![
-            row("b", "base"),
-            row("i", "pack"),
-            row("D", "downed"),
-            row("?", "help"),
-            row("Esc", "menu"),
-        ],
-        verbs,
-    ]
+    let screens = vec![
+        row("b", "base"),
+        row("i", "pack"),
+        row("D", "downed"),
+        row("?", "help"),
+        row("Esc", "menu"),
+    ];
+    if let MapLocale::Stack { .. } = locale {
+        vec![vec![row("< >", "ascend/descend")], screens, verbs]
+    } else {
+        vec![screens, verbs]
+    }
 }
 
 impl App {
@@ -133,10 +123,8 @@ impl App {
             MapLocale::Stack {
                 market: game.market_underfoot(),
             }
-        } else if game.in_base() {
-            MapLocale::Base
         } else {
-            MapLocale::OpenGrid
+            MapLocale::Field
         };
         locale_keybar(locale, game.mining())
     }

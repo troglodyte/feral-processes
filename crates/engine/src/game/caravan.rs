@@ -967,15 +967,13 @@ impl Game {
     }
 
     /// Turns a caravan around wherever it is: back onto the anchor tile if it
-    /// was out of phase, and onto `Leaving` either way.
+    /// had crossed onto the floor, and onto `Leaving` either way.
     fn send_caravan_home(&mut self, entity: Entity) {
         let Some(caravan) = self.world.get::<Caravan>(entity).cloned() else {
             return;
         };
-        if caravan.stage.in_base_space() {
-            // Straight back to the anchor's tile on the surface. Phasing out
-            // is not a walk in either direction — `enter_base`/`leave_base`
-            // are one step for the party too.
+        if caravan.stage.inside_the_base() {
+            // Straight back to the anchor's tile rather than walking out.
             let anchor = self.anchor_position().unwrap_or(caravan.arrival_tile);
             if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
                 *pos = Position {
@@ -1022,7 +1020,7 @@ impl Game {
 /// How far past `CARAVAN_SPAWN_DISTANCE_TILES` a caravan's surface search
 /// reaches, so a route that has to go round something still exists.
 ///
-/// Here rather than in `tuning/` for `BASE_EXIT_CELL`'s reason: it is not a
+/// Here rather than in `tuning/`: it is not a
 /// knob, it is the slack a straight-line spawn distance needs to be walkable
 /// at all. `NEST_PATH_SEARCH_MARGIN` is the same idea on the other search.
 const CARAVAN_PATH_MARGIN: i32 = 12;
@@ -1073,7 +1071,7 @@ pub enum CaravanReach {
 impl Game {
     /// Where the player stands in relation to the visiting trader.
     ///
-    /// `AtCaravan` measures **base space**, exactly as `broker_reach` does,
+    /// `AtCaravan` measures **the base floor**, exactly as `broker_reach` does,
     /// and deliberately not the distance to the caravan's own tile: a docked
     /// caravan is standing on the base's laid floor by construction, so its
     /// tile says nothing the base does not. The walk to the counter is

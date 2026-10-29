@@ -93,7 +93,7 @@
   Anything else that starts a fight from a tick inherits the obligation.
 
 - **`nest_aggro_tick` is a reader of the player's `Position` and needs the
-  underground guard** even though it never went through `require_surface`. The
+  underground guard** even though it never went through `require_field`. The
   distinction that matters is whether the code drags the player into
   something, not whether it reads `Position`.
 
@@ -104,7 +104,7 @@
   pressure; a ticking priced rest was the game's only bulk time source.
   `Game::wait` is the only way time passes without an action now. **The trap
   is that `rest` reads as an unguarded `Position` action**, so a
-  `require_base` added "back" deletes the field half silently. **The mirror
+  `require_field` added "back" deletes the field half silently. **The mirror
   trap is app-core's**, and it shipped: `r` was bound on the surface and
   absent from `handle_stack_key`, whose match ends in `_ => {}`, so resting
   underground was a swallowed keypress with no refusal and nothing in the

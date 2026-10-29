@@ -34,10 +34,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A build costs a tamed program exactly when the structure runs a job**, so
   a Shield, a shelf and the Zone Portal are free of it for one reason rather
   than each for its own; a Teardown Rig (`strips`) is the one exempt job.
-- **The Home is free, and the anchor lands on the tile the party founded
-  from while the Home itself still stands on `BASE_EXIT_CELL`** —
-  `Game::move_anchor_to` is the one writer, and founding is its only caller
-  now that a breach no longer relocates the anchor.
+- **The Home is free, and it and the anchor land on the tile the party
+  founded from** — `Game::move_anchor_to` is the anchor's one writer and
+  founding its only caller, and `lay_founding_floor` floors the 3x3 around it.
 - **A zone-portal line is ramped from the zone it was introduced in, and
   `build_cost` is `min_zone: 1`.**
 - **Upgrading is a build request too, and `BuildSite::goal` is the whole of
@@ -74,9 +73,18 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   the whole zone rather than one link.** `spawn_surface_links` shares an
   attempt budget across all three links, so an unplaceable on-ramp yields
   *zero*.
-- **The map draws one space, and `Game::stands_in_base_space` is which.** A
-  `Structure` or a `Tamed` program stands in base space; every other glyph —
-  wild program, nest, Stack entrance, the anchor — is a zone-map fixture.
+- **The base is a floor overlay on the field, and `Game::ground_tile` is
+  where the overlay and the map meet.**
+- **The crew walks on laid floor only, and the player and wild programs on
+  `base_grid::Ground::walkable`, but nothing wild enters floor** —
+  `wander_ai_system` and `pick_habitat_species` refuse it; `habitat_pools`
+  does not.
+- **`field_pos` is where the party stands and `on_base_floor` is "home"**,
+  chosen per site; `require_field`, refusing only the Stack, is the one
+  locale guard.
+- **Floor is refused on a Stack link, a settlement and an outpost
+  (`Game::floor_conflict`), and distance to the base is
+  `footprint::distance_to_floor`.**
 - **The "someone is on this job" mark goes on whichever end of a posting has
   a glyph to wear it**, and `wears_job_mark` / `structure_attended` are the
   two halves — exactly one per posted program at every instant.
@@ -94,28 +102,22 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **An outpost's raid roll rides `raid_check`'s firing branch, after
   `run_raid`, so it inherits `RAID_MIN_ZONE` and is invisible to
   `dev_force_raid`.**
-- **A raid's flash is base-space too, and `render/base.rs` gates both draw
-  sites on `base_pos`.**
+- **A raid's flash draws on the field, where the structures stand.**
 - **The map pane's top-left corner is one box of three sections —
-  researching, base stock, downed store — drawn on the surface map and in
-  base space alone, each silent when it has nothing to say and the two that
+  researching, base stock, downed store — drawn on the field map alone, each silent when it has nothing to say and the two that
   cannot be cut claiming their height before the stock rows take the rest.**
-- **Base space carries its own seed, and it is not `WorldMap::seed()`.**
-  `BaseGrid::seed` is minted once at `Game::new`; the two stay separate
-  because base space and the zone surface are different subsystems, not
-  because the world seed still moves — a breach stopped reseeding it.
-- **A base-space cell's kind is derived, never stored**, `rock::RockDb::
-  kind_at` — an FNV-1a fold of that seed and the **block** the coordinate
-  falls in, reduced through `derive::index`.
+- **Mining is gated by `field_mining::minable` (floor or pending floor
+  orthogonally beside the blocker), and `strike_field_rock` is not.**
+- **A blocker's kind is its biome's, derived and never stored**,
+  `rock::RockDb::kind_at(biome)`.
 - **A swing is capped at `durability / min_swings`, per kind.** The fix for
   a developed player demolishing their own base by clipping a corner —
   `swing_damage` grows all run and the rock does not.
 - **A rock kind authors a brightness, never a hue or a colour.** Hue is one
   fixed signal for passability across the whole run — `biome_tint` no
   longer rotates per sector — and a rock kind may not spend it.
-- **Only an *exposed* face shows its kind, and that is a display rule
-  only.** `BaseGrid::is_exposed` — solid, with an **orthogonal** walkable
-  neighbour — derived per lookup because cutting a cell moves it.
+- **Only a blocker touching floor shows its kind, and that is a display rule
+  only** — `view_tiles_at`'s `touches_floor`, derived per lookup.
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
   by default and off for any save that never said otherwise.
 - **`Tile::open_to_hostiles` is unreachable now, and is kept rather than
@@ -313,12 +315,11 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `CycleModifiers` carries the *class* rather than a finished bonus.
 - **A structure's upgrade tier is bounded twice**, `min(def.max_tier,
   zone)`, checked in that order and both before the materials check.
-- **`DigSite` is the second non-`Structure` entity carrying a base-space
-  `Position`**, after a posted program — so `Structure` being the space tag
-  no longer answers "which space is this?" on its own.
-- **A mark is one verb and the cell under it decides what it means** —
-  marked solid means cut, marked `Open` means floor, and the mark outlives
-  the cut.
+- **`DigSite`'s cycle is `Game::run_dig_crew`, not a bevy system, and its
+  station is a floor face.**
+- **A mark is one verb and the cell under it decides what it means** — a
+  marked blocker means cut then floor, marked walkable ground means floor,
+  and the mark outlives the cut.
 - **A dig site's two unreachable states are not symmetrical.** `BoxedIn` is
   silent (it is the normal interior of any marked block and resolves
   itself); `NoRoute` complains **once**, latched on
@@ -332,7 +333,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `attack_nest`'s reason: rock cannot dodge and identical swings must land
   identical damage.
 - **A cost the *base* incurs is walked to and carried; a cost the *player*
-  incurs is paid from their pack — except at a bench in base space, which
+  incurs is paid from their pack — except at a bench on the base's floor, which
   pays through `Game::pay_from_reach` (base stores first, then the pack).** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
   hauler uses, over the same buffers the stock block counts.
@@ -485,6 +486,6 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **`supply` and `power_upkeep` share one hauling path via `spends_supply()`, but only burners `draws_from_neighbours()`: a supply-only structure gets no beside credit, is never an attached consumer, and is sourced from stores only, with `has_machine_status()` the one component predicate and coils spent per defence event.**
 
-- **Farm wants are appended after dig wants, and `run_farm_crew` drops a tender's `Task` on every landing and every tile/job mismatch** — that, not the quiet-base guard, is what keeps a farm-only base from stranding its tender (`FarmTile` is another non-`Structure` entity with a base-space `Position`).
+- **Farm wants are appended after dig wants, and `run_farm_crew` drops a tender's `Task` on every landing and every tile/job mismatch** — that, not the quiet-base guard, is what keeps a farm-only base from stranding its tender (`FarmTile` is another non-`Structure` entity with a field `Position`).
 - **A base tile holds at most one `FloorItem` of one unit; `floor::spawn_floor_item` is the one writer, `FreeFloor` the one predicate, `nearest_free_cells` the one search, and `Game::set_down` the door for every set-down that must not fail.**
 - **Idle clearing ranks above tidy on `drift_idle_staff`'s fall-through, picks its destination (a Depot with room that accepts the item, else a free stockpile cell) before anything leaves the machine, takes only from a machine the Tend's own attached test (`hauling::wanted_consumer` beside, or an accepting Depot with room beside, unless full) calls a pile, holds `Carrying` plus the unit `Clearing` marker rather than a second load state, and when posted mid-trip shelves the load through `stock::shelve_on_depots` honouring `Game::depot_accepts` (the refund door `return_to_depots` is the same loop without the filter) before setting down the rest.**

@@ -59,7 +59,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **There is one way to arrive *on a cell*, `Game::arrive`.** Corruption
   first (a property of arriving), the fault before the encounter roll.
 - **`Game::run_field_routine` is Stack-only for two of the effects it runs,
-  and `require_surface` is not what does it** — `Phase` and `Jump` read and
+  and `require_field` is not what does it** — `Phase` and `Jump` read and
   write `Locale::Stack`'s own coordinates, so the refusal is
   `Game::stack_pos` returning `None`.
 - **`Trace` is a resource because `descend_to`/`ascend_to` rebuild the

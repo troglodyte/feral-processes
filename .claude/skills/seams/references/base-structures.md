@@ -5,33 +5,28 @@
   then spawns a `BuildSite`; a body posted by `schedule_base_labour` fetches
   the bill of materials by hand, sets it down on the cell, and raises the
   thing at `BUILD_TICKS_PER_MATERIAL` per unit. Founding is exempt because
-  base space does not exist before a Home stands. **Nothing is charged at
+  there is no base, and so no crew, before a Home stands. **Nothing is charged at
   filing**: a shortfall is a *report* from the builder at the site, latched
   on `announced_dry`, and that latch **clears when a source appears**, in
   `build_wants`. A dig site's `announced_dry` clears in `Game::dig_wants`
   for the same reason — a base running dry more than once over a run is the
   common case, not an edge one.
 
-- **The Home is free and the anchor lands where it was founded, while the
-  Home itself still stands on `BASE_EXIT_CELL`.** The two halves live in
-  different spaces: base space has one origin — the pocket is laid around it
-  and `leave_base` refuses to let the party out anywhere else — while the
-  anchor is a zone-surface fixture, so `place_structure` puts it on the tile
-  the party founded from through `Game::move_anchor_to` — its only caller
-  now that the world is persistent and a breach no longer moves the
-  anchor along with a reseeded zone. **The one refusal it needed is a Stack
-  link**: a link tile is walked onto to *descend*, so an anchor sharing one
-  could never be stepped on to be entered, and the check sits with
-  `require_surface` where the door tile is resolved rather than beside the
-  materials check. The cost went to nothing because the wizard's Kit step
-  replaces the class kit — a run that bought gear over fragments could not
-  open a base at all — and the founding path stays generic over
-  `build_cost`, so a mod that prices it back up still works. **The fixture
-  trap it exposed**: app-core's compiler fixture pushed its cargo onto the
-  save's inventory `Vec` as a *second* row for an item the kit already
-  carried, which was invisible only while founding happened to zero the kit's
-  row — `Inventory::count` reads the first matching row and `Game::load`
-  restores the `Vec` verbatim.
+- **The Home is free, and it and the anchor land on the tile the party
+  founded from.** `place_structure` puts both there — `Game::move_anchor_to`
+  is the anchor's one writer and founding its only caller — and
+  `lay_founding_floor` floors that tile and the ring of eight around it,
+  skipping cells nothing can stand on or that `floor_conflict` refuses.
+  **The one refusal it needed is a Stack link**: a link tile is walked onto
+  to *descend*, so a Home sharing one could never be stood on. The cost went
+  to nothing because the wizard's Kit step replaces the class kit — a run
+  that bought gear over fragments could not open a base at all — and the
+  founding path stays generic over `build_cost`, so a mod that prices it back
+  up still works. **The fixture trap it exposed**: app-core's compiler
+  fixture pushed its cargo onto the save's inventory `Vec` as a *second* row
+  for an item the kit already carried, which was invisible only while
+  founding happened to zero the kit's row — `Inventory::count` reads the
+  first matching row and `Game::load` restores the `Vec` verbatim.
 
 - **A zone-portal line is ramped from the zone it was introduced in, and
   `build_cost` is `min_zone: 1`.** The trap: a `zone_build_cost` line
@@ -153,7 +148,7 @@
   not do.** `stock::spend_from_base` teleports a unit off a shelf;
   `construction::Source` is a tile to walk to — any deployed structure's
   output buffer, plus the party's pack, which is a source **only while the
-  party is in base space** and sorts last among equals. The put-back
+  party stands on the base's floor** and sorts last among equals. The put-back
   (`stock::return_to_depots`) is deliberately **narrower than the draw**:
   Depots alone, because a unit pushed into a machine's output reads as
   something that machine produced. What fits nowhere is logged, never
@@ -180,18 +175,22 @@
   `MAX_BUILD_DISTANCE_FROM_HOME`, walked directly rather than
   rejection-sampled; `frames_for` subtracts that radius.
 
-- **The map draws one space, and `Game::stands_in_base_space` is which.** A
-  `Structure` or a `Tamed` program stands in base space; every other glyph
-  — wild program, nest, Stack entrance, the anchor — is a zone-map fixture.
-  `view_entities` and `find_target_in_direction` both select on it, because
-  the map and the examine ray must stay the same set. **It is a second rule
-  beside `drawn_on_surface_map`, not the same one**: that says whether a
-  program's tile is live, this says which space it is live in, and reading
-  the first as the second put the base's roster on the open grid. **The
-  player is in both spaces and is held out**, read through `scan_center` —
-  `view_entities` is the map's only source of the `@`, and its `Position`
-  is pinned to the anchor tile while the party is out of phase. A fixture
-  that wants to *locate* an owned program wants `owned_program_views`.
+- **The base is a floor overlay on the field, and `Game::ground_tile` is
+  where the overlay and the map meet.** Floor reads as `Biome::Platform` for
+  the map, the ground's effects and the step; reading `WorldMap::tile` at
+  any of those sites makes the base's floor bite, carry weather or draw as
+  wild ground. `drawn_on_surface_map` still decides whether a tamed
+  program's tile is live — a party companion's `Position` is the tile it was
+  beaten on. Nothing wild belongs on floor, and that is held at the movers
+  and spawners (`wander_ai_system`, `pick_habitat_species`,
+  `scatter_open_tile`), never in `habitat_pools`, which answers the ground
+  *under* a tile: sorties and sieges draw their foes from it, and a pool that
+  read `Platform` on floor left `run_sorties`' battle loop spinning forever.
+  Two locale reads, chosen per site: `field_pos` where a verb measures from
+  where the party stands, `on_base_floor` where the old code meant "home"
+  (bench stores in reach, free rest, a siege fought rather than resolved).
+  `field_pos` at a "home" site silently gives base-store reach anywhere on
+  the field.
 
 - **The raid clock is spent by a sweep, not by reaching its threshold, and
   both floors hold the pressure rather than forgiving it.**
@@ -241,13 +240,10 @@
   coverage is a second, explicit dev hook that mirrors the gate, never a
   shared call site.
 
-- **A raid's flash is base-space too, and `render/base.rs` gates both draw
-  sites on `base_pos`.** Every `VisualEffect` names a structure's tile, so
-  the queue is base-space by construction — ungated, `tile_flash` and
-  `draw_bursts` painted a raid onto whatever surface ground shared those
-  numbers, usually the party's own tile. Suppressed rather than moved to the
-  anchor: the log pane's flash and the `Raid` line already carry the news.
-  `VisualEffect` has **no** space tag on purpose — one variant is not an axis.
+- **A raid's flash draws on the field, where the structures stand.** Every
+  `VisualEffect` names a structure's tile, and there is one space, so
+  `render/base.rs` draws the queue wherever the map is drawn. `VisualEffect`
+  has **no** space tag on purpose — one variant is not an axis.
 
 - **A deploy is refused onto a cell a body is standing in**, the third refusal
   on `place_structure`'s ladder and its own for the other two's reason: this
@@ -374,3 +370,14 @@
 - **`[c]` opens the structure hub, and `Game::adjacent_structures` is the one answer to what is beside the party: one entry per structure, N,E,S,W by the first side it occupies, each with the pages its capabilities earn.** A second adjacency test in app-core would drift from what the engine offers, and a per-kind page table in app-core would stop a modded structure from getting the union of its capabilities. A structure with only an Info page is never in the cycle, or `c` beside a wall would open a hub with nothing to do.
 - **Destruction records a ruin in `damage_structure` (not `remove_structure`, which is the player's demolish), and `file_ruins` files it as a rebuild site only when no siege runs.** Filing mid-siege would raise a build site on a board still being fought over; a raid files on the next tick.
 - **Build sites are raised lowest production level first (`StructureDb::level`, derived at load from what a structure makes and needs, never authored in assets).** A stored level would let a mod disagree with its own recipes.
+
+- **Floor is refused on a Stack link, a settlement's footprint and an
+  outpost, and the base grows around them.** `Game::floor_conflict` is asked
+  by `lay_tile`, by a dig mark (a mark is a floor request) and again by
+  `crew_lays_tile`, which drops a request something has since claimed. A
+  growing town's `footprint()` leaves floor cells out and `standable_near`
+  skips floor, which is what replaced the old `displace_anchor_at`: a town
+  never moves the base. **Distance to the base is distance to its nearest
+  floor cell**, `footprint::distance_to_floor` — the outpost minimum
+  distance, `raiding_towns` and `town_garrisons` — so with no floor laid no
+  town raids or garrisons at all.

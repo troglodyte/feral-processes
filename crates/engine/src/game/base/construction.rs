@@ -374,8 +374,11 @@ impl Game {
     }
 
     /// The party's pack as a source, or `None` when it holds none of `item`
-    /// or when the party is not standing in the field to be taken from.
+    /// or when the party is not on the base's floor for a builder to walk to.
     fn pack_source(&self, item: &ItemId) -> Option<Source> {
+        if !self.on_base_floor() {
+            return None;
+        }
         let (x, y) = self.field_pos()?;
         let player = self.player_entity();
         let held = self

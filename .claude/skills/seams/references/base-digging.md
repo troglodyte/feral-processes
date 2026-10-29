@@ -1,33 +1,28 @@
 # Seams: The base: digging, rock & the base grid
 
-- **Base space carries its own seed, and it is not `WorldMap::seed()`.**
-  `BaseGrid::seed` is minted at `Game::new` and saved with the grid. The
-  world is persistent now — one `WorldMap`, never reseeded — so the two
-  seeds can no longer diverge in practice, but the field stays separate on
-  purpose: `BaseGrid` is out of phase from the zone surface and has no
-  business reading a resource that belongs to a different subsystem.
-  Before the world went persistent this mattered for a sharper reason —
-  `enter_next_zone` re-minted every zone's map, so a base salted off the
-  world seed would have every rock seam reshuffle on a breach, a half-cut
-  wall reloading as a different kind under an already-spent `Durability`.
-  `base_spaces_seed_and_its_seams_survive_a_breach` still asserts both
-  halves — the world seed and the base's — but neither moves any more, so
-  it also asserts the zone level advanced first, or it would pass against
-  a call that never actually breached.
+- **Mining is gated by `field_mining::minable`, and the strike is not.** A
+  blocker may be cut only when an orthogonal neighbour is laid floor or
+  pending floor (`Game::pending_floor`: a marked `DigSite` with no finish),
+  so the base digs outward from itself and a line of marks queued into the
+  rock is dug in order. The bump in `move_player` and the crew in
+  `run_dig_crew` each ask it; `strike_field_rock` does not, so a third
+  caller that forgets the gate mines anywhere on the map. A cut cell becomes
+  a `WorldMap` override to `Biome::Excavated`, saved with the other
+  overrides; a blocker the base does not touch is an ordinary unwalkable
+  tile, and bumping it spends the step's tick as any wall on the field does.
 
-- **A base-space cell's kind is derived, never stored**, `rock::RockDb::
-  kind_at` — an FNV-1a fold of that seed and the **block** the coordinate
-  falls in, reduced through `derive::index`. Blocked, or kinds are pepper and
-  an exposed face says nothing about what is behind it. `Game::wall_at` is
-  the one door from a coordinate to it; `tuning::BASE_ROCK_DURABILITY` is now
-  only the *fallback* kind's number, and reading it where the question is
-  about a particular wall caps every dense wall in the base at 24.
+- **A blocker's kind is its biome's, derived and never stored**,
+  `rock::RockDb::kind_at(biome)` — Data Void is compacted, Black Ice fused,
+  anything else the ordinary kind. `Game::wall_at` is the one door from a
+  coordinate to it; `tuning::BASE_ROCK_DURABILITY` is only the *fallback*
+  kind's number, and reading it where the question is about a particular
+  wall caps every dense wall at 24.
 
 - **A swing is capped at `durability / min_swings`, per kind.** The fix for a
   developed player demolishing their own base by clipping a corner —
   `swing_damage` grows all run and the rock does not. **Level-independent on
   purpose**: scaling durability with the player is the thing `tuning.rs`
-  forbids. Player and crew meet it identically because `strike_rock` is the
+  forbids. Player and crew meet it identically because `strike_field_rock` is the
   one door.
 
 - **A rock kind authors a brightness, never a hue or a colour.** Hue answers
@@ -40,13 +35,13 @@
   load-bearing: a face darker than the wall around it is harder to see than
   anonymous rock.
 
-- **Only an *exposed* face shows its kind, and that is a display rule
-  only.** `BaseGrid::is_exposed` — solid, with an **orthogonal** walkable
-  neighbour — derived per lookup because cutting a cell moves it.
-  `strike_rock` resolves the true kind regardless, so the
-  "fix" to refuse: resolving unseen rock to the default kind so the two
-  halves agree. The map and the examine ray are asserted against **each
-  other**, never against a string.
+- **Only a blocker touching floor shows its kind, and that is a display rule
+  only.** `view_tiles_at` shades a blocker with an **orthogonal** floor
+  neighbour (`touches_floor`), derived per lookup because laying floor moves
+  it. `strike_field_rock` resolves the true kind regardless, so the "fix" to
+  refuse: resolving unseen rock to the default kind so the two halves agree.
+  The map and the examine ray are asserted against **each other**, never
+  against a string.
 
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
   by default and off for any save that never said otherwise. `run_dig_crew`
@@ -56,8 +51,9 @@
   omitted, the wall never comes down and it reads as the dig being broken.
 
 - **`Tile::open_to_hostiles` is unreachable now, and is kept rather than
-  deleted.** Nothing writes `Biome::Platform` into a `WorldMap` — the base is
-  out of phase and its floor is `BaseGrid` — so the predicate, and
+  deleted.** Nothing writes `Biome::Platform` into a `WorldMap` — the base's
+  floor is the `BaseGrid` overlay, merged in by `Game::ground_tile` — so the
+  predicate, and
   `link_site_free`'s own `Biome::Platform` check, are both dead and both
   deliberately left standing for slice 2/3. The *rule* is what has to be
   re-established there: the base is the one ground hostiles may not enter,
@@ -83,20 +79,21 @@
   qualifies — so raising them empties the ring while leaving it looking
   intact.
 
-- **`DigSite` is the second non-`Structure` entity carrying a base-space
-  `Position`**, after a posted program — so `Structure` being the space tag
-  no longer answers "which space is this?" on its own. Its cycle is
-  `Game::run_dig_crew` and not a bevy system, because `haul_step_system`
-  needs a `Structure` and `task_progress_system` a `ResourceNode` and
-  `Stock`, and because `strike_rock`/`floor_cell` are the one door each to
-  damaging rock and laying floor. The walk is shared —
-  `hauling::step_to_post`.
+- **`DigSite`'s cycle is `Game::run_dig_crew` and not a bevy system**,
+  because `haul_step_system` needs a `Structure` and `task_progress_system`
+  a `ResourceNode` and `Stock`, and because `strike_field_rock`/`floor_cell`
+  are the one door each to cutting rock and laying floor. The walk is shared
+  — `hauling::step_to_post` — and like every crew walk it is on laid floor
+  only: a station must be a floor face, which is why the crew digs a ring at
+  a time.
 
 - **A mark is one verb and the cell under it decides what it means** —
-  marked solid means cut, marked `Open` means floor, and the mark outlives
-  the cut. `toggle_mark_box` reads the **anchor cell** to decide mark versus
-  clear, which is why there is no erase verb and no `Mode` field on
-  `DigSite`. `Floor` takes no mark.
+  a marked blocker means cut then floor, marked walkable ground means floor,
+  and the mark outlives the cut. A mark is a floor request, so
+  `floor_conflict` refuses it on a link, a settlement or an outpost.
+  `toggle_mark_box` reads the **anchor cell** to decide mark versus clear,
+  which is why there is no erase verb and no `Mode` field on `DigSite`.
+  `Floor` takes no mark.
 
 - **A dig site's two unreachable states are not symmetrical.** `BoxedIn` is
   silent (it is the normal interior of any marked block and resolves itself);
@@ -143,8 +140,8 @@
   bounded above by what flooring the cell costs.
 
 - **A cost the *base* incurs is walked to and carried; a cost the *player*
-  incurs is paid from their pack — except at a bench in base space, which
-  pays through `Game::pay_from_reach` (base stores first, then the pack).** The crew's tile is fetched off a shelf
+  incurs is paid from their pack — except at a bench on the base's floor,
+  which pays through `Game::pay_from_reach` (base stores first, then the pack).** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
   hauler uses, over the same buffers the stock strip counts. Depot-only was
   rejected for the draw (it makes the strip a lie about what the base can
@@ -262,5 +259,5 @@
   `a_farm_alone_keeps_its_tender_moving_between_tiles`. There is deliberately
   no `any_plot_sown` term in `queue_is_empty` (an earlier one survived the
   whole suite and only held the empty-queue guard off for ever on any base
-  with a sown plot). `FarmTile` is another non-`Structure` entity carrying a
-  base-space `Position`, after a posted program, `DigSite` and a besieger.
+  with a sown plot). `FarmTile` is another non-`Structure` entity with a field
+  `Position`.

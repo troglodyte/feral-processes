@@ -184,7 +184,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`nest_aggro_tick` is the first code to call `start_battle` from inside
   `tick_inner`**, which is why `rest`'s tick loop needed a battle check.
 - **`nest_aggro_tick` is a reader of the player's `Position` and needs the
-  underground guard** even though it never went through `require_surface`.
+  underground guard** even though it never went through `require_field`.
 - **Resting is priced by locale, never gated by it.** Free inside base
   space, one unit of an `ItemDef::enables_rest` item anywhere else — the
   open grid and the Stack alike — and **no rest advances the clock**, which

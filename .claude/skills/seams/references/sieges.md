@@ -1,16 +1,21 @@
 # Sieges
 
-- **The siege board is built, not `generate`d.** `siege::board::build`
-  flood-fills four-way from `BASE_EXIT_CELL` through `BaseGrid::walkable`,
-  seated in the bounding box of what it found, and the fill's own frontier
-  *is* the wall — nothing here does a separate wall pass, because whatever
-  the fill never reaches simply stays `Blocked`, exactly how `Board::solid`
-  started it. That is also what makes a sealed-off pocket excluded from the
-  board by construction rather than by a check: a cell with no walkable path
-  to the door is never visited, so a player who walled off their far works
-  has genuinely protected it. Rock is never breached, which is why the fill
-  is 4-way and not 8-way — a diagonal step would let the board slip past a
-  wall no corridor was ever cut through.
+- **The siege board is built, not `generate`d, and a siege comes in over
+  the floor's edge.** `siege::board::build` seats the base's laid floor plus
+  `siege_spawn_cells(floor, map)` — walkable non-floor field cells
+  orthogonally next to the floor — in their bounding box; everything else
+  stays `Blocked`, exactly how `Board::solid` started it. The spawn list is a
+  `BTreeSet` walk, so its order is the coordinate order and never a query's.
+  A sealed base (no walkable cell touches its floor) falls back to the first
+  ring of walkable ground a breadth-first walk out through the rock reaches,
+  up to `SIEGE_SPAWN_SEARCH_TILES`; past that there is no board and the clock
+  resolves the siege off-screen. Fallback cells can be cut off from the
+  floor — besiegers that dig are deferred, not forgotten. `open_siege_with`
+  draws one `GameRng` index over the list and seats raider *i* at
+  `spawns[(start + i) % n]`, so the pack arrives together along one stretch
+  of edge, and `siege_door` is `spawns[start]`. The pack's species is drawn
+  at the first spawn cell: `habitat_pools` reads the raw field biome, and the
+  floor itself is habitat for nothing.
 - **A siege never touches `fights_tactically` or `start_battle`.**
   `Game::open_siege` mints its own `BattleSpec` and opens `TacticalBattle`
   directly, so a siege is tactical whatever the player's battle-map profile
@@ -41,21 +46,15 @@
   `TacticalBattle` rather than deserialising one. Membership rides
   `CreatureSave`'s own `siege_cell`/`siege_order`/`besieger`/`stolen_from`
   fields, additive behind `#[serde(default)]`. The player is never one of
-  `SaveData::creatures`, so `SiegeSave` carries `player_order` and
-  `player_cell` as fields of their own — `player_cell` exists at all only
-  because "Base-space `Position` is pinned to the anchor" (an existing
-  seam) means `Position` cannot answer for the party's actual board cell on
-  reload, and `restore` runs *before* `Game::restore_locale`, so
-  `Game::base_pos` has nothing to answer either way at that point.
-- **A besieger is the third base-space `Position` body**, after a posted
-  program and a `DigSite` — the seam "`Structure` no longer answers 'which
-  space is this?' on its own" sharpens further. `Game::stands_in_base_space`
-  is the one door that matters: without its `Besieger` arm, a raider's
-  base-space cell reads as an ordinary zone-surface tile the two coordinate
-  spaces happen to alias onto. Wild-population systems (`ensure_local_
-  population` and its kin) query `Without<Besieger>` for the same reason a
-  besieger must never be counted or respawned against as if it were a
-  surface creature. A capture strips the marker itself:
+  `SaveData::creatures`, so `SiegeSave` carries `player_order` of its own;
+  the player's board cell is re-derived from their `Position` (honest on the
+  field — a tactical fight writes no world `Position`) through `to_board`,
+  falling back to the door, and seated with `place_nearby`. The old
+  `player_cell` field existed only for the anchor pin and went with it.
+- **A besieger is an ordinary field body that the wild-population systems
+  must never count.** `ensure_local_population` and its kin query
+  `Without<Besieger>`, so a besieger is never counted or respawned against
+  as if it were a wild creature. A capture strips the marker itself:
   `Game::decompile_body` converts a besieger in place (never despawns and
   respawns it), removing `(Besieger, Carrying, StolenFrom)` in the same
   breath it removes `Hostile`. The end-of-fight stray sweep in
@@ -75,11 +74,10 @@
   "destroyed" would remove an intact structure from the board on the very
   first swing. The Home is exactly that structure (`raidable: false` in
   `assets/structures/home.ron`, so `spawn_structure` never inserts
-  `Durability` on it at all) and it always stands on `BASE_EXIT_CELL`, the
-  door — so `besieger_turn` and `besieger_walk_toward` test *melee range*
-  to the door rather than equality with it; one body to a cell means the
-  Home itself already occupies the only cell a raider could otherwise stand
-  on to leave.
+  `Durability` on it at all). `besieger_turn` and `besieger_walk_toward`
+  test *melee range* to the door rather than equality with it: the door is
+  a spawn cell another raider may be standing on, and one body to a cell
+  means a carrier could otherwise never arrive to leave.
 - **`TacticalBattle::siege_pack` is two things at once**: the morale-break
   denominator (`siege_morale_broken` reads it as the pack's original size,
   set once at the count `open_siege` actually seated, never

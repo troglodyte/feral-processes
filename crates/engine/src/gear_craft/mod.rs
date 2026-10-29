@@ -72,26 +72,6 @@ impl GearDesign {
     }
 }
 
-/// Where a copy of a design's weapon was found, which is why it cannot be
-/// deleted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DesignHolder {
-    /// Plain copies in the pack, or non-plain ones in the gear ledger.
-    Pack,
-    /// Worn by the player.
-    Worn,
-    /// Worn by a companion.
-    Companion,
-    /// On a trader's buyback shelf.
-    Buyback,
-    /// Set down on a floor or stockpile tile.
-    Floor,
-    /// In a Depot or machine buffer.
-    Stored,
-    /// In the hands of a program or a raider.
-    Carried,
-}
-
 /// Why a design verb was turned down. Typed per ADR 0027: a screen words it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GearCraftRefusal {
@@ -115,9 +95,6 @@ pub enum GearCraftRefusal {
     Compile(CompileError),
     /// An affix neither researched nor salvaged.
     AffixNotKnown(AffixId),
-    NoSuchDesign(u32),
-    /// A copy of the design still exists.
-    InUse(DesignHolder),
     /// The Weapons tree is closed: no weapon is made or taken apart before
     /// `weapon_bench`.
     WeaponTreeClosed,

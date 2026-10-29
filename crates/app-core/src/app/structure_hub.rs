@@ -51,13 +51,9 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Build routine",
             screens: &[Mode::RoutineBuild],
         },
-        StructurePage::Forge => &HubPage {
-            title: "Forge",
-            screens: &[Mode::Forge],
-        },
-        StructurePage::NewDesign => &HubPage {
-            title: "New design",
-            screens: &[Mode::NewDesign],
+        StructurePage::Weapon => &HubPage {
+            title: "Build weapon",
+            screens: &[Mode::WeaponBuild],
         },
         StructurePage::Salvage => &HubPage {
             title: "Salvage",
@@ -235,8 +231,7 @@ impl App {
                 self.mode = Mode::BuildProgram;
             }
             StructurePage::Build => self.mode = Mode::RoutineBuild,
-            StructurePage::Forge => self.mode = Mode::Forge,
-            StructurePage::NewDesign => self.mode = Mode::NewDesign,
+            StructurePage::Weapon => self.mode = Mode::WeaponBuild,
             StructurePage::Salvage => self.mode = Mode::WeaponSalvage,
             StructurePage::Compile => self.mode = Mode::Craft,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,

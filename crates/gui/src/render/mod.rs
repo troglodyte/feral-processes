@@ -1255,9 +1255,8 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             None,
         )),
         Mode::BuiltRoutines => Some((routine_craft::built_page_rows(game, selected), None)),
-        Mode::Forge => Some((gear_craft::forge_page_rows(game, selected), None)),
-        Mode::NewDesign => Some((
-            gear_craft::new_design_page_rows(game, &design_draft, selected),
+        Mode::WeaponBuild => Some((
+            gear_craft::weapon_build_page_rows(game, &design_draft, selected),
             None,
         )),
         Mode::WeaponSalvage => Some((gear_craft::salvage_page_rows(game, selected), None)),
@@ -1322,7 +1321,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             routine_craft::draw_name(&routine_draft, refusal, painter, m)
         }
-        Mode::DesignPick => {
+        Mode::WeaponBuildPick => {
             base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             gear_craft::draw_pick(
                 game,
@@ -1334,7 +1333,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 m,
             )
         }
-        Mode::DesignName => {
+        Mode::WeaponBuildName => {
             base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             gear_craft::draw_name(&design_draft, refusal, painter, m)
         }
@@ -1982,7 +1981,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 170] = [
+    const ALL_MODES: [Mode; 169] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -2018,10 +2017,9 @@ mod tests {
         Mode::RoutineBuildPick,
         Mode::RoutineBuildName,
         Mode::BuiltRoutines,
-        Mode::Forge,
-        Mode::NewDesign,
-        Mode::DesignPick,
-        Mode::DesignName,
+        Mode::WeaponBuild,
+        Mode::WeaponBuildPick,
+        Mode::WeaponBuildName,
         Mode::WeaponSalvage,
         Mode::DevConsole,
         Mode::DevItemPicker,
@@ -2244,13 +2242,12 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 34] = [
+    const NEEDS_PENDING_STATE: [Mode; 33] = [
         // The Workbench pages are drawn only inside the structure hub frame,
         // which the census app never opens.
         Mode::RoutineBuild,
         Mode::BuiltRoutines,
-        Mode::Forge,
-        Mode::NewDesign,
+        Mode::WeaponBuild,
         Mode::WeaponSalvage,
         // Drawn off `App::mod_copy`, which the census app never sets.
         Mode::ModCopy,

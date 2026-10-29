@@ -454,7 +454,7 @@ mod tests {
     use crate::text::ui_metrics;
     use feral_processes_engine::{DifficultyMode, RecipeInput};
 
-    /// Weapons left this list for the Forge, so the Workbench's Compile page
+    /// Weapons left this list for the Build weapon page, so the Workbench's Compile page
     /// says how to reach it — and the `[b]` popup, which never had them,
     /// says nothing.
     #[test]

@@ -1,9 +1,8 @@
-//! The Workbench's weapon-crafting pages (ADR 0031): the Forge, New design
-//! and Salvage, plus the two popups the new-design page opens.
+//! The Workbench's weapon-crafting pages (ADR 0031): Build weapon and
+//! Salvage, plus the two popups the Build weapon page opens.
 //!
-//! Every figure is a view off the engine (`Game::design_rows`,
-//! `design_slot_rows`, `design_part_options`, `design_preview`,
-//! `design_bill`, `salvage_rows`) and every refusal is worded by
+//! Every figure is a view off the engine (`Game::design_slot_rows`,
+//! `design_part_options`, `design_preview`, `salvage_rows`) and every refusal is worded by
 //! app-core, so this file only lays them out. Rows are returned rather than
 //! drawn so the structure hub frames them like any other page.
 
@@ -12,43 +11,11 @@ use super::popup::*;
 use super::routine_craft::{count_label, dim_lines, text_lines};
 use super::*;
 use feral_processes_app_core::{
-    DESIGN_AFFIX_ROW, DESIGN_NAME_ROW, DESIGN_SAVE_ROW, DesignDraft, DesignPicking, affix_label,
+    DESIGN_AFFIX_ROW, DESIGN_COMPILE_ROW, DESIGN_NAME_ROW, DesignDraft, DesignPicking, affix_label,
     design_pick_visible, design_row_category, gear_craft_refusal_line,
 };
 use feral_processes_engine::gear_craft::GearCraftRefusal;
 use feral_processes_engine::views::{DesignPreview, MaterialLine};
-
-/// The Forge: every saved design, Enter builds one and `D` deletes it.
-pub(super) fn forge_page_rows(game: &Game, selected: usize) -> Vec<Row> {
-    let designs = game.design_rows();
-    let mut rows = Vec::new();
-    if designs.is_empty() {
-        rows.push(text_row(
-            "(no designs yet - make one on the New design page)",
-        ));
-    }
-    for (i, design) in designs.iter().enumerate() {
-        rows.push(item_row(design.name.clone(), i == selected));
-        rows.extend(dim_lines(&design.description));
-        rows.extend(dim_lines(&format!("Parts: {}", design.parts.join(", "))));
-        if let Some(power) = design.power {
-            rows.extend(dim_lines(&format!("Rating {power}")));
-        }
-        if let Some(why) = &design.blocked {
-            rows.extend(dim_lines(&gear_craft_refusal_line(game, why)));
-        }
-        if i == selected
-            && let Some(bill) = game.design_bill(design.id)
-        {
-            rows.extend(materials_rows(&bill.materials, &bill.uncraftable));
-        }
-    }
-    push_key_footer(
-        &mut rows,
-        &["Enter build a weapon", "[D] delete a design", "Esc back"],
-    );
-    rows
-}
 
 /// What a build would spend, green where the stock in reach covers it, and
 /// the missing parts no craft can make.
@@ -105,11 +72,15 @@ fn preview_rows(game: &Game, preview: &DesignPreview) -> Vec<Row> {
     rows
 }
 
-/// The new-design page: Frame and modifier rows, affixes, name, Save, then
+/// The Build weapon page: Frame and modifier rows, affixes, name, Compile, then
 /// the preview.
-pub(super) fn new_design_page_rows(game: &Game, draft: &DesignDraft, selected: usize) -> Vec<Row> {
+pub(super) fn weapon_build_page_rows(
+    game: &Game,
+    draft: &DesignDraft,
+    selected: usize,
+) -> Vec<Row> {
     let mut rows = vec![
-        text_row("Enter on a row to choose a part. Name the design, then Save."),
+        text_row("Enter on a row to choose a part. Name the weapon, then Compile."),
         text_row(""),
     ];
     for (i, slot) in game.design_slot_rows(&draft.parts).iter().enumerate() {
@@ -146,7 +117,11 @@ pub(super) fn new_design_page_rows(game: &Game, draft: &DesignDraft, selected: u
     } else {
         TEXT
     };
-    rows.push(colored_item_row("Save", selected == DESIGN_SAVE_ROW, color));
+    rows.push(colored_item_row(
+        "Compile",
+        selected == DESIGN_COMPILE_ROW,
+        color,
+    ));
     rows.extend(preview_rows(game, &preview));
     rows
 }
@@ -326,11 +301,11 @@ mod tests {
             .expect("a Proc exists")
     }
 
-    /// A Forge holding a design that needs a Proc (salvage only), an
+    /// A bench holding a design that needs a Proc (salvage only), an
     /// unresearched Tilt and two known parts, with a double-digit stock of
     /// the known ones, so the Materials block, the uncraftable lines and the
     /// picker notes ("12 held   N <material>") are all measured.
-    fn forge_with_every_kind_of_line() -> (Game, Vec<WeaponPart>) {
+    fn bench_with_every_kind_of_line() -> (Game, Vec<WeaponPart>) {
         let frame = WeaponPart::Frame(Frame::Edge, Version::V1);
         let rider = WeaponPart::Rider(StatusKind::Bleed);
         let parts = vec![
@@ -371,25 +346,25 @@ mod tests {
             .collect()
     }
 
-    /// Every part row, the new-design page, every category list and the
-    /// Forge's Materials and uncraftable lines fit the hub page at the
+    /// Every part row, the Build weapon page, every category list and its
+    /// Materials and uncraftable lines fit the hub page at the
     /// smallest supported window.
     #[test]
     fn the_weapon_pages_fit_the_hub_content_rect() {
-        let (game, parts) = forge_with_every_kind_of_line();
+        let (game, parts) = bench_with_every_kind_of_line();
         let draft = DesignDraft {
             name: "W".repeat(24),
             parts: parts.clone(),
             ..DesignDraft::default()
         };
-        let design = new_design_page_rows(&game, &draft, 0);
+        let design = weapon_build_page_rows(&game, &draft, 0);
         assert!(
             design
                 .iter()
                 .any(|r| row_label_text(r).contains("Materials")),
             "premise: the preview lists a bill"
         );
-        super::super::base_report::assert_rows_fit(&design, "new design");
+        super::super::base_report::assert_rows_fit(&design, "build weapon");
         for category in std::iter::once(Category::Frame).chain(Category::MODIFIERS) {
             let draft = DesignDraft {
                 picking: Some(DesignPicking::Category(category)),
@@ -406,18 +381,10 @@ mod tests {
             super::super::base_report::assert_rows_fit(&rows, "part list");
             super::super::popup::assert_rows_fit(&rows, PopupSize::Large);
         }
-        let forge = forge_page_rows(&game, 0);
         assert!(
-            forge
-                .iter()
-                .any(|r| row_label_text(r).contains("Materials")),
-            "premise: the highlighted design shows its bill"
-        );
-        assert!(
-            forge.iter().any(|r| matches!(r, Row::TextColored(_, RED))),
+            design.iter().any(|r| matches!(r, Row::TextColored(_, RED))),
             "premise: an uncraftable line is drawn"
         );
-        super::super::base_report::assert_rows_fit(&forge, "forge");
         let salvage = salvage_page_rows(&game, 0);
         super::super::base_report::assert_rows_fit(&salvage, "salvage");
     }

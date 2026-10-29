@@ -1,9 +1,9 @@
-//! The Workbench's weapon-crafting pages (ADR 0031): the Forge (designs),
-//! New design and Salvage.
+//! The Workbench's weapon-crafting pages (ADR 0031): Build weapon and
+//! Salvage.
 //!
-//! The new-design page keeps a draft (`DesignDraft`) on `App`; every figure
-//! it shows comes from `Game::design_*` views, and Save calls
-//! `Game::create_design`, so the screen cannot promise what the engine would
+//! The Build weapon page keeps a draft (`DesignDraft`) on `App`; every figure
+//! it shows comes from `Game::design_*` views, and Compile calls
+//! `Game::compile_weapon`, so the screen cannot promise what the engine would
 //! refuse. Every refusal is the engine's typed `GearCraftRefusal`, worded
 //! here by an exhaustive match.
 
@@ -11,22 +11,20 @@ use crate::app::list_filter::filter_matches;
 use crate::*;
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::gear_craft::weapon::{self, Category, WeaponPart};
-use feral_processes_engine::gear_craft::{
-    CompileError, DesignHolder, FitError, GearCraftRefusal, GearPart,
-};
+use feral_processes_engine::gear_craft::{CompileError, FitError, GearCraftRefusal, GearPart};
 
 /// Longest design name the name field takes.
 pub use feral_processes_engine::tuning::GEAR_NAME_MAX as DESIGN_NAME_MAX;
 
-/// The new-design page's rows: the Frame and each modifier category, then
-/// the affixes, the name field and Save.
+/// The Build weapon page's rows: the Frame and each modifier category, then
+/// the affixes, the name field and Compile.
 const CATEGORY_ROWS: usize = 1 + Category::MODIFIERS.len();
 pub const DESIGN_AFFIX_ROW: usize = CATEGORY_ROWS;
 pub const DESIGN_NAME_ROW: usize = CATEGORY_ROWS + 1;
-pub const DESIGN_SAVE_ROW: usize = CATEGORY_ROWS + 2;
+pub const DESIGN_COMPILE_ROW: usize = CATEGORY_ROWS + 2;
 pub const DESIGN_PAGE_ROWS: usize = CATEGORY_ROWS + 3;
 
-/// The category a new-design row opens a list for, or `None` for the rows
+/// The category a Build weapon row opens a list for, or `None` for the rows
 /// that are not categories.
 pub fn design_row_category(row: usize) -> Option<Category> {
     match row {
@@ -36,7 +34,7 @@ pub fn design_row_category(row: usize) -> Option<Category> {
     }
 }
 
-/// What `Mode::DesignPick` is listing.
+/// What `Mode::WeaponBuildPick` is listing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DesignPicking {
     Category(Category),
@@ -44,7 +42,7 @@ pub enum DesignPicking {
 }
 
 /// The weapon being designed. Session state: closing the Workbench discards
-/// it, and nothing is saved until Save.
+/// it, and nothing is built until Compile.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DesignDraft {
     pub parts: Vec<WeaponPart>,
@@ -119,18 +117,6 @@ fn compile_line(why: &CompileError) -> String {
     }
 }
 
-fn holder_line(holder: DesignHolder) -> &'static str {
-    match holder {
-        DesignHolder::Pack => "A weapon built from it is still in your pack.",
-        DesignHolder::Worn => "A weapon built from it is still worn.",
-        DesignHolder::Companion => "A weapon built from it is still worn by a companion.",
-        DesignHolder::Buyback => "A weapon built from it is still on a trader's buyback shelf.",
-        DesignHolder::Floor => "A weapon built from it is still lying on the floor.",
-        DesignHolder::Stored => "A weapon built from it is still in a Depot or machine buffer.",
-        DesignHolder::Carried => "A weapon built from it is still being carried.",
-    }
-}
-
 /// One sentence for why a Workbench weapon verb was refused. Exhaustive on
 /// purpose: a new variant must be worded before this compiles.
 pub fn gear_craft_refusal_line(game: &Game, why: &GearCraftRefusal) -> String {
@@ -155,8 +141,6 @@ pub fn gear_craft_refusal_line(game: &Game, why: &GearCraftRefusal) -> String {
         GearCraftRefusal::AffixNotKnown(a) => {
             format!("You haven't learned {} yet.", affix_label(a))
         }
-        GearCraftRefusal::NoSuchDesign(_) => "That design is gone.".to_string(),
-        GearCraftRefusal::InUse(holder) => holder_line(*holder).to_string(),
         GearCraftRefusal::WeaponTreeClosed => {
             "Research Weapon Fabrication to build and salvage weapons.".to_string()
         }
@@ -191,38 +175,14 @@ impl App {
         self.refuse(line);
     }
 
-    pub(crate) fn handle_forge_key(&mut self, key: GameKey) {
-        let Some(game) = &self.game else { return };
-        let rows = game.design_rows();
-        if key == GameKey::Char('D') {
-            let Some(row) = rows.get(self.menu_selected.min(rows.len().saturating_sub(1))) else {
-                return;
-            };
-            let id = row.id;
-            let Some(game) = &mut self.game else { return };
-            let outcome = game.delete_design(id);
-            self.report_craft(outcome);
-            let left = self.game.as_ref().map_or(0, |g| g.design_rows().len());
-            self.menu_selected = self.menu_selected.min(left.saturating_sub(1));
-            return;
-        }
-        let Some(idx) = self.selected_index(key, rows.len()) else {
-            return;
-        };
-        let id = rows[idx].id;
-        let Some(game) = &mut self.game else { return };
-        let outcome = game.build_design(id);
-        self.report_craft(outcome);
-    }
-
-    pub(crate) fn handle_new_design_key(&mut self, key: GameKey) {
+    pub(crate) fn handle_weapon_build_key(&mut self, key: GameKey) {
         let Some(idx) = self.selected_index(key, DESIGN_PAGE_ROWS) else {
             return;
         };
         self.design_draft.row = idx;
         match idx {
-            DESIGN_NAME_ROW => self.mode = Mode::DesignName,
-            DESIGN_SAVE_ROW => self.save_design(),
+            DESIGN_NAME_ROW => self.mode = Mode::WeaponBuildName,
+            DESIGN_COMPILE_ROW => self.compile_weapon_draft(),
             _ => {
                 let has_frame = self
                     .design_draft
@@ -239,18 +199,18 @@ impl App {
                 }
                 self.design_draft.picking = Some(picking);
                 self.menu_selected = 0;
-                self.mode = Mode::DesignPick;
+                self.mode = Mode::WeaponBuildPick;
             }
         }
     }
 
-    fn save_design(&mut self) {
+    fn compile_weapon_draft(&mut self) {
         let draft = std::mem::take(&mut self.design_draft);
         let Some(game) = &mut self.game else { return };
-        match game.create_design(&draft.name, draft.gear_parts()) {
+        match game.compile_weapon(&draft.name, draft.gear_parts()) {
             Ok(_) => {
                 self.design_draft = DesignDraft {
-                    row: DESIGN_SAVE_ROW,
+                    row: DESIGN_COMPILE_ROW,
                     ..DesignDraft::default()
                 };
                 self.status_line = None;
@@ -367,14 +327,14 @@ impl App {
     fn leave_design_pick(&mut self) {
         self.design_draft.picking = None;
         self.menu_selected = self.design_draft.row;
-        self.mode = Mode::NewDesign;
+        self.mode = Mode::WeaponBuild;
     }
 
     pub(crate) fn handle_design_name_key(&mut self, key: GameKey) {
         match key {
             GameKey::Esc | GameKey::Enter => {
                 self.menu_selected = self.design_draft.row;
-                self.mode = Mode::NewDesign;
+                self.mode = Mode::WeaponBuild;
             }
             GameKey::Backspace => {
                 self.design_draft.name.pop();

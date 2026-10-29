@@ -30,7 +30,7 @@ pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::excavate::{BrushRow, CropRow};
 pub use app::floor_hands::put_down_visible;
 pub use app::gear_craft::{
-    DESIGN_AFFIX_ROW, DESIGN_NAME_MAX, DESIGN_NAME_ROW, DESIGN_PAGE_ROWS, DESIGN_SAVE_ROW,
+    DESIGN_AFFIX_ROW, DESIGN_COMPILE_ROW, DESIGN_NAME_MAX, DESIGN_NAME_ROW, DESIGN_PAGE_ROWS,
     DesignDraft, DesignPicking, affix_label, design_pick_labels, design_pick_visible,
     design_row_category, gear_craft_refusal_line,
 };
@@ -1729,17 +1729,14 @@ pub enum Mode {
     RoutineBuildName,
     /// The Workbench's Built routines page: routines waiting for a slot.
     BuiltRoutines,
-    /// The Workbench's Forge page: the saved weapon designs. Enter builds
-    /// one, `D` deletes it.
-    Forge,
-    /// The Workbench's New design page: the Frame and modifier rows, the
-    /// affixes, the name field and Save. The draft lives in
+    /// The Workbench's Build weapon page: the Frame and modifier rows, the
+    /// affixes, the name field and Compile. The draft lives in
     /// `App::design_draft`.
-    NewDesign,
-    /// The parts that fit one new-design row. Type to filter.
-    DesignPick,
-    /// Typing the design's name.
-    DesignName,
+    WeaponBuild,
+    /// The parts that fit one Build weapon row. Type to filter.
+    WeaponBuildPick,
+    /// Typing the weapon's name.
+    WeaponBuildName,
     /// The Workbench's Salvage page: take an authored weapon apart.
     WeaponSalvage,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
@@ -2518,10 +2515,9 @@ impl Mode {
             | Mode::RoutineBuildPick
             | Mode::RoutineBuildName
             | Mode::BuiltRoutines
-            | Mode::Forge
-            | Mode::NewDesign
-            | Mode::DesignPick
-            | Mode::DesignName
+            | Mode::WeaponBuild
+            | Mode::WeaponBuildPick
+            | Mode::WeaponBuildName
             | Mode::WeaponSalvage
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
@@ -2829,7 +2825,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::StructureAssign => Some(Mode::Structures),
         Mode::MachineRecipeConfirm => Some(Mode::MachineRecipe),
         Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
-        Mode::DesignPick | Mode::DesignName => Some(Mode::NewDesign),
+        Mode::WeaponBuildPick | Mode::WeaponBuildName => Some(Mode::WeaponBuild),
         Mode::CraftQuantity | Mode::Compiling => Some(Mode::Craft),
         _ => None,
     }
@@ -3293,7 +3289,7 @@ pub struct App {
     pub siphon: Option<Entity>,
     /// The routine the Workbench's build page is designing.
     pub routine_draft: RoutineDraft,
-    /// The weapon the Workbench's new-design page is designing.
+    /// The weapon the Workbench's Build weapon page is designing.
     pub design_draft: DesignDraft,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will

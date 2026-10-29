@@ -1,10 +1,9 @@
-//! The Workbench's weapon-crafting pages: Forge, New design and
-//! Salvage, and the Weapons research tab.
+//! The Workbench's weapon-crafting pages: Build weapon and Salvage, and the Weapons research tab.
 
 use super::support::*;
 use crate::*;
 use feral_processes_engine::gear_craft::weapon::{Category, Frame, WeaponPart};
-use feral_processes_engine::gear_craft::{DesignHolder, FitError, GearCraftRefusal, GearPart};
+use feral_processes_engine::gear_craft::{FitError, GearCraftRefusal};
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::routine_craft::{StatusKind, Version};
 
@@ -62,7 +61,7 @@ fn row_of(category: Category) -> usize {
 /// Opens the part list for the row and picks `part` from it.
 fn choose(app: &mut App, row: usize, part: WeaponPart) {
     pick_row(app, row);
-    assert_eq!(app.mode, Mode::DesignPick);
+    assert_eq!(app.mode, Mode::WeaponBuildPick);
     let game = app.game.as_ref().unwrap();
     let options = game.design_part_options(
         part.category(),
@@ -71,74 +70,116 @@ fn choose(app: &mut App, row: usize, part: WeaponPart) {
     );
     let at = options.iter().position(|o| o.part == part).unwrap();
     pick_row(app, at);
-    assert_eq!(app.mode, Mode::NewDesign);
+    assert_eq!(app.mode, Mode::WeaponBuild);
 }
 
-#[test]
-fn a_workbench_hub_has_the_forge_pages_only_once_weapon_bench_is_researched() {
-    let mut app = app_at_a_workbench(81_001);
-    app.handle_key(GameKey::Char('c'));
-    let hub = app.structure_hub.as_ref().unwrap();
-    assert!(!hub.current().pages.contains(&StructurePage::Forge));
-    let mut app = forge_app(81_002);
-    app.handle_key(GameKey::Char('c'));
-    let pages = &app.structure_hub.as_ref().unwrap().current().pages;
-    for page in [
-        StructurePage::Forge,
-        StructurePage::NewDesign,
-        StructurePage::Salvage,
-    ] {
-        assert!(pages.contains(&page), "{page:?} in {pages:?}");
+/// Gives the pack what compiling `parts` takes: each part and the frame's
+/// bill.
+fn fund(app: &mut App, parts: &[WeaponPart]) {
+    let game = app.game.as_mut().unwrap();
+    for part in parts {
+        game.dev_give_item(&ItemId::weapon_part(*part), 1).unwrap();
+        if let WeaponPart::Frame(frame, version) = part {
+            let (item, count) =
+                feral_processes_engine::gear_craft::weapon::frame_bill(*frame, *version);
+            game.dev_give_item(&item, count).unwrap();
+        }
     }
 }
 
+/// Built weapons in the pack.
+fn built_weapons(app: &App) -> u32 {
+    app.game
+        .as_ref()
+        .unwrap()
+        .player_status()
+        .inventory
+        .iter()
+        .filter(|row| row.copy.item.crafted_gear_of().is_some())
+        .map(|row| row.qty)
+        .sum()
+}
+
 #[test]
-fn designing_a_weapon_saves_it_and_the_forge_lists_it() {
+fn a_workbench_hub_has_the_weapon_pages_only_once_weapon_bench_is_researched() {
+    let mut app = app_at_a_workbench(81_001);
+    app.handle_key(GameKey::Char('c'));
+    let hub = app.structure_hub.as_ref().unwrap();
+    assert!(!hub.current().pages.contains(&StructurePage::Weapon));
+    let mut app = forge_app(81_002);
+    app.handle_key(GameKey::Char('c'));
+    let pages = &app.structure_hub.as_ref().unwrap().current().pages;
+    for page in [StructurePage::Weapon, StructurePage::Salvage] {
+        assert!(pages.contains(&page), "{page:?} in {pages:?}");
+    }
+    let titles: Vec<&str> = pages
+        .iter()
+        .map(|p| crate::app::structure_hub::structure_page(*p).title)
+        .collect();
+    assert!(titles.contains(&"Build weapon"), "{titles:?}");
+    assert!(!titles.contains(&"Forge") && !titles.contains(&"New design"));
+}
+
+#[test]
+fn compiling_a_weapon_puts_one_in_the_pack_and_clears_the_draft() {
     let mut app = forge_app(81_003);
-    open_page(&mut app, Mode::NewDesign);
+    open_page(&mut app, Mode::WeaponBuild);
     choose(&mut app, row_of(Category::Frame), edge());
     choose(&mut app, row_of(Category::Rider), bleed());
     assert_eq!(app.design_draft.parts, vec![edge(), bleed()]);
 
     pick_row(&mut app, DESIGN_NAME_ROW);
-    assert_eq!(app.mode, Mode::DesignName);
+    assert_eq!(app.mode, Mode::WeaponBuildName);
     type_text(&mut app, "Leaker");
     app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::NewDesign);
+    assert_eq!(app.mode, Mode::WeaponBuild);
 
-    pick_row(&mut app, DESIGN_SAVE_ROW);
+    fund(&mut app, &[edge(), bleed()]);
+    pick_row(&mut app, DESIGN_COMPILE_ROW);
+    assert_eq!(app.status_line, None);
     assert!(app.design_draft.parts.is_empty(), "the draft resets");
-    let designs = app.game.as_ref().unwrap().design_rows();
-    assert_eq!(designs.len(), 1);
-    assert_eq!(designs[0].name, "Leaker");
+    assert_eq!(app.design_draft.row, DESIGN_COMPILE_ROW);
+    assert_eq!(built_weapons(&app), 1);
 }
 
 #[test]
-fn saving_an_unfinished_design_is_refused_in_words_and_keeps_the_draft() {
-    let mut app = forge_app(81_004);
-    open_page(&mut app, Mode::NewDesign);
+fn a_refused_compile_keeps_the_draft_and_says_why() {
+    let mut app = forge_app(81_014);
+    open_page(&mut app, Mode::WeaponBuild);
     app.design_draft.parts = vec![edge()];
-    pick_row(&mut app, DESIGN_SAVE_ROW);
+    pick_row(&mut app, DESIGN_COMPILE_ROW);
     assert_eq!(app.status_line.as_deref(), Some("Give the design a name."));
     assert_eq!(app.design_draft.parts, vec![edge()]);
+    assert_eq!(built_weapons(&app), 0);
 }
 
 #[test]
 fn a_greyed_part_refuses_with_its_reason_and_the_list_stays_open() {
     let mut app = forge_app(81_005);
-    open_page(&mut app, Mode::NewDesign);
-    app.design_draft.parts = vec![edge()];
-    pick_row(&mut app, row_of(Category::Proc));
-    assert_eq!(app.mode, Mode::DesignPick);
+    let whip = WeaponPart::Frame(Frame::Launcher, Version::V1);
+    let game = app.game.as_mut().unwrap();
+    let _ = game.dev_unlock_research(&whip.node_id());
+    let _ = game.dev_unlock_research(&WeaponPart::Extend.node_id());
+    open_page(&mut app, Mode::WeaponBuild);
+    app.design_draft.parts = vec![whip];
+    // A Launcher already swings at full range, so Extend is listed but greyed.
+    pick_row(&mut app, row_of(Category::Range));
+    assert_eq!(app.mode, Mode::WeaponBuildPick);
     pick_row(&mut app, 0);
-    assert_eq!(app.mode, Mode::DesignPick);
-    assert!(app.status_line.as_deref().unwrap().contains("research"));
+    assert_eq!(app.mode, Mode::WeaponBuildPick);
+    assert!(app.status_line.as_deref().unwrap().contains("full range"));
 }
 
 #[test]
 fn the_part_picker_filters_by_typing_and_esc_clears_before_leaving() {
     let mut app = forge_app(81_006);
-    open_page(&mut app, Mode::NewDesign);
+    let lance = WeaponPart::Frame(Frame::Lance, Version::V1);
+    let _ = app
+        .game
+        .as_mut()
+        .unwrap()
+        .dev_unlock_research(&lance.node_id());
+    open_page(&mut app, Mode::WeaponBuild);
     pick_row(&mut app, row_of(Category::Frame));
     let all = design_pick_visible(
         app.game.as_ref().unwrap(),
@@ -154,9 +195,13 @@ fn the_part_picker_filters_by_typing_and_esc_clears_before_leaving() {
     );
     assert!(!visible.is_empty() && visible.len() < all, "{visible:?}");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::DesignPick, "first Esc clears the filter");
+    assert_eq!(
+        app.mode,
+        Mode::WeaponBuildPick,
+        "first Esc clears the filter"
+    );
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::NewDesign);
+    assert_eq!(app.mode, Mode::WeaponBuild);
 }
 
 #[test]
@@ -175,74 +220,9 @@ fn changing_the_frame_drops_a_modifier_the_new_frame_refuses() {
         .unwrap()
         .dev_unlock_research(&WeaponPart::Extend.node_id());
     // Whip already swings at the longest range, so Extend cannot stay.
-    open_page(&mut app, Mode::NewDesign);
+    open_page(&mut app, Mode::WeaponBuild);
     choose(&mut app, row_of(Category::Frame), whip);
     assert_eq!(app.design_draft.parts, vec![whip]);
-}
-
-#[test]
-fn the_forge_crafts_the_missing_parts_from_materials() {
-    let mut app = forge_app(81_012);
-    let game = app.game.as_mut().unwrap();
-    game.create_design("Plain", vec![GearPart::Weapon(edge())])
-        .unwrap();
-    let id = game.design_rows()[0].id;
-    let (frame, version) = game.gear_designs().remove(0).frame().unwrap();
-    let (item, count) = feral_processes_engine::gear_craft::weapon::frame_bill(frame, version);
-    game.dev_give_item(&item, count).unwrap();
-    let (item, count) = feral_processes_engine::gear_craft::weapon::part_bill(edge());
-    game.dev_give_item(&item, count).unwrap();
-    assert_eq!(game.weapon_parts_held(edge()), 0);
-    open_page(&mut app, Mode::Forge);
-    pick_row(&mut app, 0);
-    assert_eq!(app.status_line, None);
-    let game = app.game.as_ref().unwrap();
-    assert_eq!(game.design_holder(id), Some(DesignHolder::Pack));
-    assert_eq!(game.weapon_parts_held(edge()), 0);
-}
-
-#[test]
-fn the_forge_builds_a_design_and_refuses_deleting_one_with_a_copy_out() {
-    let mut app = forge_app(81_009);
-    let game = app.game.as_mut().unwrap();
-    let id = game
-        .create_design("Plain", vec![GearPart::Weapon(edge())])
-        .unwrap();
-    open_page(&mut app, Mode::Forge);
-    pick_row(&mut app, 0);
-    let line = app.status_line.clone().unwrap();
-    assert!(line.starts_with("Short of"), "{line}");
-
-    let game = app.game.as_mut().unwrap();
-    game.dev_give_item(&ItemId::weapon_part(edge()), 1).unwrap();
-    let (frame, version) = game.gear_designs().remove(0).frame().unwrap();
-    let (item, count) = feral_processes_engine::gear_craft::weapon::frame_bill(frame, version);
-    game.dev_give_item(&item, count).unwrap();
-    pick_row(&mut app, 0);
-    assert_eq!(app.status_line, None);
-    assert_eq!(
-        app.game.as_ref().unwrap().design_holder(id),
-        Some(DesignHolder::Pack)
-    );
-
-    highlight_row(&mut app, 0);
-    app.handle_key(GameKey::Char('D'));
-    let line = app.status_line.clone().unwrap();
-    assert!(line.contains("pack"), "{line}");
-    assert_eq!(app.game.as_ref().unwrap().design_rows().len(), 1);
-}
-
-#[test]
-fn the_forge_deletes_a_design_nothing_holds() {
-    let mut app = forge_app(81_010);
-    app.game
-        .as_mut()
-        .unwrap()
-        .create_design("Plain", vec![GearPart::Weapon(edge())])
-        .unwrap();
-    open_page(&mut app, Mode::Forge);
-    app.handle_key(GameKey::Char('D'));
-    assert!(app.game.as_ref().unwrap().design_rows().is_empty());
 }
 
 #[test]
@@ -267,8 +247,6 @@ fn every_refusal_has_a_plain_sentence() {
         GearCraftRefusal::Fit(FitError::RangeAtMax(Frame::Whip)),
         GearCraftRefusal::Fit(FitError::StunRider),
         GearCraftRefusal::AffixNotKnown("honed".into()),
-        GearCraftRefusal::NoSuchDesign(3),
-        GearCraftRefusal::InUse(DesignHolder::Worn),
         GearCraftRefusal::WeaponTreeClosed,
         GearCraftRefusal::NoCopyHeld,
         GearCraftRefusal::NotSalvageable,

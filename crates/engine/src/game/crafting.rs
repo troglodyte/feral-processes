@@ -611,11 +611,11 @@ impl Game {
     }
 
     /// How many of `item` a bench can draw on: the pack, plus every store
-    /// the base holds while the party stands in the field. Out in a zone
-    /// the base is not in reach, so a bench verb used there sees the pack
-    /// alone.
+    /// the base holds while the party stands on its floor. Away from the
+    /// base its stores are not in reach, so a bench verb used there sees
+    /// the pack alone.
     pub(crate) fn held_in_reach(&self, item: &ItemId) -> u32 {
-        if self.field_pos().is_some() {
+        if self.on_base_floor() {
             return self.stores_hold(item);
         }
         self.world
@@ -627,9 +627,9 @@ impl Game {
     /// `pay_items` for a bench: the whole bill is checked against
     /// `held_in_reach` before a unit moves, then each line is spent base
     /// stock first (`spend_from_stores`), so what the player carries stays
-    /// on them for the field. Outside the field it is `pay_items`.
+    /// on them for the field. Away from the base it is `pay_items`.
     pub(crate) fn pay_from_reach(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
-        if self.field_pos().is_none() {
+        if !self.on_base_floor() {
             return self.pay_items(cost);
         }
         let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();

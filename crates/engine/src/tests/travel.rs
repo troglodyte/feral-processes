@@ -323,9 +323,8 @@ fn gone_once_the_creature_goal_leaves_sight() {
     );
 }
 
-/// The base-space counterpart of the surface detour tests: a route must
-/// avoid solid rock (never floored, so never walkable) and a body standing
-/// in base space (`Game::blocked_tiles`) alike, without a new body scan of
+/// The base's counterpart of the surface detour tests: a route must avoid
+/// rock and a body standing on the floor alike, without a new body scan of
 /// its own.
 #[test]
 fn a_base_route_avoids_solid_rock_and_bodies() {
@@ -341,6 +340,7 @@ fn a_base_route_avoids_solid_rock_and_bodies() {
             }
         }
     }
+    set_rock(&mut game, (4, 0));
     let player = game.player_entity();
     game.world
         .spawn((Tamed { owner: player }, Position { x: 4, y: 1 }));

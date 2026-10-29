@@ -1829,6 +1829,16 @@ impl Game {
         depth: Option<u32>,
         allow_boss: bool,
     ) -> Option<(String, bool)> {
+        // Nothing wild spawns on the base's floor. Asked here rather than in
+        // `habitat_pools`, which answers what lives on the ground *under* a
+        // tile — what a siege or a sortie from the base draws its foes from.
+        if self
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(x, y)
+        {
+            return None;
+        }
         let (candidates, boss_candidates) = self.habitat_pools(x, y, depth, 0)?;
         // The ring turns a boss away the same way it turns a rare tier away:
         // a `BOSS_STAT_MULT` spawn in the nursery falsifies
@@ -1901,9 +1911,7 @@ impl Game {
         depth: Option<u32>,
         step_bonus: u32,
     ) -> Option<(Vec<String>, Vec<String>)> {
-        // `ground_tile`, so the base's floor reads as `Platform`, which no
-        // species lists as habitat: nothing wild spawns on the base.
-        let tile = self.ground_tile(x, y);
+        let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
             return None;
         }

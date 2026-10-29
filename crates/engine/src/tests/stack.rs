@@ -539,7 +539,7 @@ fn deploying_a_structure_is_refused_underground() {
         panic!("a machine should not go up inside the Stack");
     };
     assert!(
-        reason.contains("back at the base"),
+        reason.contains("up on the field"),
         "the refusal should say why, got: {reason}"
     );
 }

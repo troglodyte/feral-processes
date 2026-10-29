@@ -188,7 +188,7 @@ fn the_trickle_mends_the_party_but_not_staff() {
 fn the_trickle_does_nothing_outside_the_base() {
     let mut game = base();
     let player = hurt_player(&mut game, 200, 100);
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
 
     game.run_base_trickle();
 

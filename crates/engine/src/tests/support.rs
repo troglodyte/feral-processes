@@ -268,6 +268,38 @@ pub(crate) fn stand_in_base(game: &mut Game) {
     stand_in_base_at(game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
 }
 
+/// Overrides field `cell` to a blocker (`Biome::DataVoid`), so a test that
+/// needs rock there does not depend on the seed's terrain.
+pub(crate) fn set_rock(game: &mut Game, cell: (i32, i32)) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        cell.0,
+        cell.1,
+        Tile {
+            biome: Biome::DataVoid,
+            walkable: false,
+            rock_shade: None,
+        },
+    );
+}
+
+/// A field cell well clear of the fixture pocket's floor.
+pub(crate) const OFF_THE_FLOOR: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 6, 0);
+
+/// Stands the player on open ground off the base's floor — on the field,
+/// but not home (`Game::on_base_floor` is false).
+pub(crate) fn step_off_the_floor(game: &mut Game) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        OFF_THE_FLOOR.0,
+        OFF_THE_FLOOR.1,
+        Tile {
+            biome: Biome::OpenGrid,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    stand_in_base_at(game, OFF_THE_FLOOR.0, OFF_THE_FLOOR.1);
+}
+
 /// Runs `act` with the party standing at `TEST_HOME_CELL` on the field, and
 /// puts them back where they were — locale and tile — afterwards.
 ///
@@ -1179,7 +1211,7 @@ pub(super) fn stand_an_extraction_bench(game: &mut Game, x: i32, y: i32) -> Enti
 /// Stands the party in base space with a Workbench orthogonally beside it:
 /// the touch a bench recipe is offered under. Returns the bench.
 pub(super) fn touch_a_workbench(game: &mut Game) -> Entity {
-    stand_in_base_at(game, 0, 0);
+    stand_in_base(game);
     spawn_structure_at(game, "workbench", 1, 0)
 }
 

@@ -1964,7 +1964,6 @@ impl ZoneLevel {
 /// can land while the player is four frames down.
 ///
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(from = "SavedLocale")]
 pub enum Locale {
     #[default]
     Surface,
@@ -1989,14 +1988,15 @@ pub enum Locale {
     },
 }
 
-/// `Locale` as a save before ADR 0032 may spell it: with a `Base` arm,
-/// which loads as `Surface` because the base is on the field now.
+/// `Locale` as the save spells it, which before ADR 0032 could be `Base`.
 ///
 /// Temporary — it exists so the checked-in `dev-saves/` keep loading until
 /// they are recaptured, and goes with the `SAVE_FORMAT_VERSION` bump that
-/// recapture comes with.
-#[derive(Deserialize)]
-enum SavedLocale {
+/// recapture comes with. A `Base` cell was the party's base-space tile, and
+/// base-space coordinates are the field's now, so it loads as the player's
+/// `Position` on the field (`Game::load`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum SavedLocale {
     Surface,
     Stack {
         depth: u32,
@@ -2006,17 +2006,18 @@ enum SavedLocale {
         facing: Dir,
         entrance: (i32, i32),
     },
-    #[allow(dead_code)]
     Base {
         x: i32,
         y: i32,
     },
 }
 
-impl From<SavedLocale> for Locale {
-    fn from(saved: SavedLocale) -> Self {
-        match saved {
-            SavedLocale::Surface | SavedLocale::Base { .. } => Locale::Surface,
+impl SavedLocale {
+    /// The live locale, and the field tile an old `Base` locale stood on.
+    pub(crate) fn into_parts(self) -> (Locale, Option<(i32, i32)>) {
+        match self {
+            SavedLocale::Surface => (Locale::Surface, None),
+            SavedLocale::Base { x, y } => (Locale::Surface, Some((x, y))),
             SavedLocale::Stack {
                 depth,
                 frames,
@@ -2024,7 +2025,33 @@ impl From<SavedLocale> for Locale {
                 y,
                 facing,
                 entrance,
-            } => Locale::Stack {
+            } => (
+                Locale::Stack {
+                    depth,
+                    frames,
+                    x,
+                    y,
+                    facing,
+                    entrance,
+                },
+                None,
+            ),
+        }
+    }
+}
+
+impl From<Locale> for SavedLocale {
+    fn from(locale: Locale) -> Self {
+        match locale {
+            Locale::Surface => SavedLocale::Surface,
+            Locale::Stack {
+                depth,
+                frames,
+                x,
+                y,
+                facing,
+                entrance,
+            } => SavedLocale::Stack {
                 depth,
                 frames,
                 x,

@@ -238,9 +238,9 @@ fn every_refusal_leaves_the_pack_the_records_and_the_roster_alone() {
     stand_in_base_at(&mut game, 12, 12);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
-    // Out of base space.
+    // Off the base's floor.
     let (mut game, _) = base_with_a_cell();
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
     // The party standing on the pen itself.

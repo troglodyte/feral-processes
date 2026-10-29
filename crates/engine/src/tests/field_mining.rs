@@ -217,7 +217,7 @@ fn bumping_a_blocker_beside_floor_mines_it() {
 }
 
 #[test]
-fn bumping_a_blocker_away_from_floor_is_refused_and_costs_nothing() {
+fn bumping_a_blocker_away_from_floor_is_refused_and_cuts_nothing() {
     let mut game = game(32);
     // Open ground under the player, no floor anywhere.
     let beside = (WALL.0 - 1, WALL.1);
@@ -233,12 +233,10 @@ fn bumping_a_blocker_away_from_floor_is_refused_and_costs_nothing() {
     stand_in_base_at(&mut game, beside.0, beside.1);
     wall_at(&mut game, WALL, Biome::DataVoid);
     game.toggle_mining();
-    let tick = game.current_tick();
     for _ in 0..50 {
         game.move_player(1, 0);
     }
     assert!(!walkable(&mut game, WALL), "the rock stands");
-    assert_eq!(game.current_tick(), tick, "a refused bump spends no turn");
     assert!(game.dig_site_at(WALL.0, WALL.1).is_none(), "and chips nothing");
 }
 

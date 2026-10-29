@@ -22,10 +22,8 @@ use crate::world::WorldMap;
 /// is not; mined ground is a `WorldMap` override (`Biome::Excavated`), not a
 /// state of this store.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(from = "SavedBaseGrid")]
 pub struct BaseGrid {
-    /// `#[serde(default)]` so a save written before the overlay loads with
-    /// no floor rather than failing; its old `cells`/`seed` are ignored.
-    #[serde(default)]
     floor: BTreeSet<(i32, i32)>,
     /// A decorative finish the dig crew has painted over laid floor — kept
     /// apart from `floor` so a finished cell stays plain floor to every
@@ -37,6 +35,37 @@ pub struct BaseGrid {
     /// the mark in place, and the floor-item search simply finds no free tile.
     #[serde(default)]
     stockpiles: BTreeSet<(i32, i32)>,
+}
+
+/// `BaseGrid` as the save spells it, which before ADR 0032 was base space's
+/// `cells` map (`Floor` and mined `Open` cells, both walkable) and a `seed`.
+///
+/// Temporary — it keeps the checked-in `dev-saves/` loading with their base
+/// intact until they are recaptured, and goes with the `SAVE_FORMAT_VERSION`
+/// bump. Base-space coordinates are the field's now, and every old cell a
+/// body could stand on loads as floor, the one ground the crew walks.
+#[derive(Deserialize)]
+struct SavedBaseGrid {
+    #[serde(default)]
+    floor: BTreeSet<(i32, i32)>,
+    #[serde(default)]
+    cells: BTreeMap<(i32, i32), serde::de::IgnoredAny>,
+    #[serde(default)]
+    finishes: BTreeMap<(i32, i32), FloorId>,
+    #[serde(default)]
+    stockpiles: BTreeSet<(i32, i32)>,
+}
+
+impl From<SavedBaseGrid> for BaseGrid {
+    fn from(saved: SavedBaseGrid) -> Self {
+        let mut floor = saved.floor;
+        floor.extend(saved.cells.into_keys());
+        BaseGrid {
+            floor,
+            finishes: saved.finishes,
+            stockpiles: saved.stockpiles,
+        }
+    }
 }
 
 impl BaseGrid {

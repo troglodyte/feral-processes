@@ -499,6 +499,9 @@ fn a_save_from_before_town_jobs_loads_its_contracts_as_the_brokers() {
 #[test]
 fn a_hint_names_its_own_counter_and_goes_live_at_it() {
     let mut game = game();
+    // The town well clear of where the base will stand, so standing at the
+    // Broker is not also standing at the town: one field holds both.
+    stand_in_base_at(&mut game, 60, 0);
     let key = town_next_to_player(&mut game);
     let item: crate::items::ItemId = ids::CORE_FRAGMENT.into();
 

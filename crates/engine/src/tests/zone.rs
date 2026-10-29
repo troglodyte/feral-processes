@@ -435,39 +435,6 @@ fn breaching_with_a_base_still_populates_the_new_zone() {
     }
 }
 
-/// `Structure` is the space tag: `find_blocking_structure_at` must refuse
-/// to answer at all outside base space, rather than matching a base-space
-/// `Structure`'s position against a surface coordinate that happens to
-/// carry the same numbers. `Game::new`'s spawn point and base space's own
-/// origin are both commonly `(0, 0)` (see the standing note on
-/// `find_walkable_start`), which is exactly the collision this closes —
-/// before it, `game/stack.rs::link_site_free` could refuse a valid Stack
-/// entrance near a base for no reason a player could see.
-#[test]
-fn find_blocking_structure_at_refuses_outside_base_space() {
-    let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, _node) = build_a_base(&mut game);
-    assert!(
-        !game.on_base_floor(),
-        "build_a_base's fixtures return the party to the surface"
-    );
-    let home_pos = *game.world.get::<Position>(home).unwrap();
-
-    assert!(
-        game.find_blocking_structure_at(home_pos.x, home_pos.y)
-            .is_none(),
-        "a Structure's base-space position must not answer a surface-space query, \
-         even when the numbers coincide"
-    );
-
-    stand_in_base_at(&mut game, home_pos.x, home_pos.y);
-    assert_eq!(
-        game.find_blocking_structure_at(home_pos.x, home_pos.y),
-        Some(home),
-        "the same coordinates answer correctly once the query is actually asked from base space"
-    );
-}
-
 #[test]
 fn breaching_preserves_structure_durability_and_node_stock() {
     let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -778,7 +778,7 @@ impl Game {
     pub(crate) fn return_material(&mut self, item: &ItemId, qty: u32) {
         let landed = stock::return_to_depots(self, item, qty);
         let mut spare = qty - landed;
-        if spare > 0 && self.field_pos().is_some() {
+        if spare > 0 && self.on_base_floor() {
             let player = self.player_entity();
             if let Some(mut inv) = self.world.get_mut::<Inventory>(player) {
                 inv.add(item.clone(), spare);

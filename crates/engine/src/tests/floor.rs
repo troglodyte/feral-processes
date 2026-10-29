@@ -390,9 +390,10 @@ fn a_floor_item_inside_the_base_has_a_view_row_naming_it() {
 }
 
 #[test]
-fn a_floor_item_is_not_a_view_row_on_a_zone_surface() {
+fn a_floor_item_is_not_a_view_row_underground() {
     let mut g = game();
     put_item(&mut g, 2, 1, core_unit());
+    descend(&mut g);
     assert!(g.floor_items().is_empty());
 }
 

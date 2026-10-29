@@ -271,10 +271,9 @@ fn dispatch_reach_reports_the_three_states() {
     deploy_relay(&mut game);
     assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
 
-    // Out of base space entirely — on the open grid, where no floor can
-    // answer for the party.
-    game.world
-        .insert_resource(crate::resources::Locale::Surface);
+    // Off the floor entirely — on the open grid, where no floor can answer
+    // for the party.
+    crate::tests::support::step_off_the_floor(&mut game);
     assert_eq!(game.dispatch_reach(), DispatchReach::OffBase);
 }
 
@@ -488,8 +487,7 @@ fn every_refusal_spends_nothing() {
             "off base",
             Box::new(|| {
                 let (mut game, site, staff) = a_base_ready_to_dispatch(4600, 4, 500);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, site, staff[..2].to_vec())
             }),
         ),

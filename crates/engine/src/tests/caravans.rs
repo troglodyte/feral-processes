@@ -928,39 +928,6 @@ fn drawn(game: &mut Game, entity: crate::Entity) -> bool {
         .any(|v| v.entity == entity)
 }
 
-/// Asserted **through `view_entities` from both locales**, never by calling
-/// the predicate directly: the map and the space rule have to be tested
-/// against each other or the two can agree on a wrong answer.
-#[test]
-fn a_caravan_is_drawn_in_exactly_one_space_per_stage() {
-    let mut game = fresh();
-    based(&mut game);
-    let caravan = stand_caravan(&mut game, CaravanStage::Approaching, (3, 0));
-
-    game.world.insert_resource(Locale::Surface);
-    assert!(
-        drawn(&mut game, caravan),
-        "an approaching caravan is out in the sector"
-    );
-    stand_in_base_at(&mut game, 1, 1);
-    assert!(
-        !drawn(&mut game, caravan),
-        "and must not also be inside the base — base space's origin and the \
-         zone spawn point commonly alias, so a wrong-space draw looks right"
-    );
-
-    game.world.get_mut::<Caravan>(caravan).unwrap().stage = CaravanStage::Docked;
-    assert!(
-        drawn(&mut game, caravan),
-        "a docked caravan is standing in the base"
-    );
-    game.world.insert_resource(Locale::Surface);
-    assert!(
-        !drawn(&mut game, caravan),
-        "and is no longer out in the sector"
-    );
-}
-
 /// The two transition ticks are decided, not defaulted: both are spent on
 /// the anchor tile, which is a tile of the zone surface.
 #[test]
@@ -1403,17 +1370,6 @@ fn the_examine_ray_names_what_the_map_draws_of_a_caravan() {
         Some(InspectTarget::Caravan(caravan)),
         "the map drew it and the ray looked straight through"
     );
-
-    // And the other way: out of phase it is on neither.
-    stand_in_base_at(&mut game, anchor.0, anchor.1);
-    assert!(!drawn(&mut game, caravan), "not drawn from inside the base");
-    assert_eq!(
-        look(&mut game),
-        None,
-        "and must not be nameable from inside the base either — base space's \
-         origin and the zone spawn point commonly alias, so an ungated ray \
-         names a trader out in the sector as though it were standing here"
-    );
 }
 
 /// It is a subject to look at, never a subject to fight: no `Creature`, no
@@ -1501,7 +1457,7 @@ fn caravan_reach_reports_the_three_states() {
     stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
 
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_eq!(
         game.caravan_reach(),
         CaravanReach::NotDocked,

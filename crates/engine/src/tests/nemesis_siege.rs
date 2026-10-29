@@ -408,6 +408,8 @@ fn established_base(game: &mut Game) {
             e.insert(Durability { hp: 30, max_hp: 30 });
         }
     }
+    // Away from home until a test stands the party on the floor.
+    step_off_the_floor(game);
 }
 
 fn has_siege_tags(game: &Game, e: Entity) -> bool {
@@ -811,15 +813,16 @@ fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
     let path = std::env::temp_dir().join(format!("feral_nemesis_drop_{}.sav", std::process::id()));
     game.save(&path).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    // A player cell off the board is one `restore` cannot seat the party in,
+    // A board with no open cell is one `restore` cannot seat the party on,
     // which is the case that drops the siege.
-    assert!(text.contains("player_cell: Some("), "save layout moved");
-    let start = text.find("player_cell: Some(").unwrap();
-    let end = start + text[start..].find("),").unwrap() + 2;
+    let siege_at = text.find("siege: Some(").expect("save layout moved");
+    let cells_at = siege_at + text[siege_at..].find("cells: [").expect("save layout moved");
+    let cells_end = cells_at + text[cells_at..].find(']').unwrap();
     let broken = format!(
-        "{}player_cell: Some((9999, 9999)),{}",
-        &text[..start],
-        &text[end..]
+        "{}{}{}",
+        &text[..cells_at],
+        text[cells_at..cells_end].replace("Open", "Blocked"),
+        &text[cells_end..]
     );
     std::fs::write(&path, broken).unwrap();
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();

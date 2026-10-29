@@ -1862,7 +1862,7 @@ pub struct SaveData {
     /// see `resources::Locale`. The frame itself is *not* here: it
     /// regenerates from `seed` and the saved depth, exactly as terrain
     /// regenerates from `seed` alone.
-    pub locale: crate::resources::Locale,
+    pub(crate) locale: crate::resources::SavedLocale,
     /// What the party has learned about each Stack frame walked in this
     /// zone — see `resources::StackMemory`. The one piece of Stack state
     /// that is saved rather than regenerated: a frame is a pure function of
@@ -2064,6 +2064,13 @@ pub struct SaveData {
     /// No `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub outpost_routes: Vec<OutpostRouteSave>,
+}
+
+impl SaveData {
+    /// Where the save puts the party.
+    pub fn set_locale(&mut self, locale: crate::resources::Locale) {
+        self.locale = locale.into();
+    }
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -2507,7 +2514,7 @@ mod tests {
             next_gear_design_id: 0,
             known_affixes: Vec::new(),
             link_sites: Vec::new(),
-            locale: crate::resources::Locale::Surface,
+            locale: crate::resources::Locale::Surface.into(),
             stack_memory: crate::resources::StackMemory::default(),
             stack_memory_tiered: true,
             entered_tiers: crate::resources::EnteredTiers::default(),
@@ -2638,7 +2645,7 @@ mod tests {
             y: 11,
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
-        };
+       }.into();
         // A `BTreeSet` of tuples, which is the same place a text encoding
         // tends to give up.
         // A newtype over an `Option<enum>` with a tuple payload, and the
@@ -3189,7 +3196,7 @@ mod tests {
             y: 11,
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
-        };
+       }.into();
         data.trace = 123;
         save_to_file(&path, &data).unwrap();
         let loaded = load_from_file(&path).unwrap();

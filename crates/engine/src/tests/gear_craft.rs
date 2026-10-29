@@ -919,7 +919,7 @@ fn each_crafted_part_is_receipted_as_a_craft() {
 }
 
 #[test]
-fn a_forge_pays_from_a_depot_before_the_pack_and_not_outside_base_space() {
+fn a_forge_pays_from_a_depot_before_the_pack_and_not_off_the_floor() {
     let (mut game, id) = bare_forge(73_011);
     touch_a_workbench(&mut game);
     give(&mut game, &fragment(), full_bill());
@@ -958,7 +958,7 @@ fn a_forge_pays_from_a_depot_before_the_pack_and_not_outside_base_space() {
         .count(&fragment());
     assert_eq!(carried, 3, "the pack pays only the rest");
 
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_eq!(
         game.design_preview("Leaker", &parts(&[edge(), bleed()]))
             .materials[0]

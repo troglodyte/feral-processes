@@ -120,7 +120,7 @@ fn nothing_is_offered_in_a_battle_or_outside_the_base() {
     game.world.remove_resource::<BattleState>();
     assert_eq!(game.adjacent_structures().len(), 1, "and back after it");
 
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert!(game.adjacent_structures().is_empty());
 }
 

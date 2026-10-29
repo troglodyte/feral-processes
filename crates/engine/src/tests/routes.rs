@@ -333,8 +333,7 @@ fn every_refusal_leaves_stock_and_routes_exactly_as_they_were() {
             "not at the Relay",
             Box::new(|| {
                 let (mut game, item, key) = a_dispatch_ready_base(6100, 20);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, key, vec![(item, 5)], false)
             }),
         ),
@@ -1048,8 +1047,7 @@ fn outpost_dispatch_every_refusal_leaves_routes_exactly_as_they_were() {
             "not at the Relay",
             Box::new(move || {
                 let mut game = an_outpost_ready_base(8000, tile);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, tile)
             }),
         ),

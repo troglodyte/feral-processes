@@ -286,6 +286,7 @@ pub fn wander_ai_system(
     mut query: Query<Wanderer, CanWander>,
     nests: Query<&Position, (With<Nest>, Without<WanderAi>)>,
     mut world: ResMut<WorldMap>,
+    floor: Res<crate::base_grid::BaseGrid>,
     mut rng: ResMut<GameRng>,
 ) {
     for (mut pos, mut ai, guardian) in &mut query {
@@ -318,10 +319,10 @@ pub fn wander_ai_system(
                 continue;
             }
         }
-        // `open_to_hostiles`, not `walkable`: the base slab is the one safe
-        // ground, and a wandering program was the only mover in the game
-        // that did not honour that — see `Tile::open_to_hostiles`.
-        if world.tile(nx, ny).open_to_hostiles() {
+        // The base's floor is the one safe ground: a wild program never
+        // wanders onto it. Floor is an overlay, not a `WorldMap` biome, so it
+        // is asked beside `open_to_hostiles` rather than through it.
+        if world.tile(nx, ny).open_to_hostiles() && !floor.is_floor(nx, ny) {
             pos.x = nx;
             pos.y = ny;
         }

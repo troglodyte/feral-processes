@@ -2117,7 +2117,14 @@ impl Game {
         game.world.insert_resource(data.siege_pressure);
         // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its frame from that map's seed.
-        game.restore_locale(data.locale);
+        let (locale, old_base_cell) = data.locale.into_parts();
+        if let Some((x, y)) = old_base_cell {
+            let player = game.player_entity();
+            if let Some(mut pos) = game.world.get_mut::<Position>(player) {
+                *pos = Position { x, y };
+            }
+        }
+        game.restore_locale(locale);
 
         // After the locale, and after every occupant a footprint's growth
         // could displace — the player, every wild creature, nest, trap,
@@ -3612,7 +3619,7 @@ impl Game {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
             },
-            locale: self.locale(),
+            locale: self.locale().into(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
             stack_memory_tiered: true,
             entered_tiers: self

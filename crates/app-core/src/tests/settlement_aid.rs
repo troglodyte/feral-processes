@@ -49,7 +49,7 @@ fn app_at_an_allied_town(seed: u32) -> (App, SettlementKey) {
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     let anchor = data.anchor.expect("the fixture founded a base");
-    data.locale = Locale::Surface;
+    data.set_locale(Locale::Surface);
     // The town stands well clear of the base, and the party beside it, so
     // the walk home is a real trip.
     let town = (anchor.0 + 30, anchor.1);

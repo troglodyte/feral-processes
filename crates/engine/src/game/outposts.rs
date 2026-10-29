@@ -841,15 +841,17 @@ mod tests {
     #[test]
     fn refuses_when_the_kit_is_still_in_the_pack_on_every_refusal() {
         let mut game = game(4);
-        // The player starts standing at the anchor itself, well inside
-        // `OUTPOST_MIN_ANCHOR_DISTANCE` — that refusal is enough on its own.
+        // The player stands on the base's own floor — that refusal is enough
+        // on its own.
+        let (ax, ay) = game.anchor_position().unwrap();
+        game.dev_lay_floor([(ax, ay)]);
         let id = kit_id(&game);
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(id.clone(), 1);
-        // Too close to the anchor — a refusal that leaves the kit untouched.
+        // On the base's floor — a refusal that leaves the kit untouched.
         game.use_item(&id);
         assert_eq!(
             game.world.get::<Inventory>(player).unwrap().count(&id),

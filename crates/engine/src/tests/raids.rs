@@ -2027,6 +2027,8 @@ fn the_second_sector_is_where_sweeps_begin() {
 /// Puts a Hostile town `dx` east of the anchor and hands back its key.
 fn hostile_neighbour(game: &mut Game, dx: i32) -> crate::settlements::SettlementKey {
     let (ax, ay) = game.anchor_position().expect("a new game has an anchor");
+    // A town raids the base's floor, so the base needs some: the anchor's.
+    game.dev_lay_floor([(ax, ay)]);
     let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
     place_settlement(game, key, ax + dx, ay);
     game.world

@@ -1,7 +1,6 @@
 //! Farm plots: marking a box, the one recipe, and the view.
 
 use super::support::*;
-use crate::base_grid::BaseGrid;
 use crate::components::{CropGrowth, FarmPlot, FarmTile, GlyphColor, Task};
 use crate::crops::CropId;
 use crate::game::base::farm::growth_stage;
@@ -558,6 +557,15 @@ fn farm_wants_go_unserved_when_production_and_digging_take_every_body() {
     game.queue_work_order(crate::WorkOrder::batch(ItemId::from("core_fragment"), 50))
         .unwrap();
     let wall = (TEST_POCKET_HALF_WIDTH + 1, 0);
+    game.world.resource_mut::<WorldMap>().set_override(
+        wall.0,
+        wall.1,
+        Tile {
+            biome: Biome::DataVoid,
+            walkable: false,
+            rock_shade: None,
+        },
+    );
     game.toggle_mark_box(wall, wall, None);
     sown_plot(&mut game, (-3, 2), (-3, 2));
     spawn_tamed(&mut game, 10, 3);

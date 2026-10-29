@@ -15,8 +15,13 @@ use crate::settlements::relations::Standing;
 use crate::tuning::*;
 use crate::*;
 
+/// A new game with one floor cell under the anchor: a town's garrison and
+/// raids measure to the base's floor, so a test about a neighbour needs one.
 fn game() -> Game {
-    Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let anchor = game.anchor_position().unwrap();
+    game.dev_lay_floor([anchor]);
+    game
 }
 
 fn settlement_east_of_player(game: &mut Game) -> SettlementKey {
@@ -1052,17 +1057,15 @@ fn a_spent_gift_reads_as_a_wait_and_never_as_a_number() {
 fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
     let mut game = game();
     super::routes::deploy_relay(&mut game);
-    // Out of base space and standing on the anchor, with the town next to
-    // it: the gift needs the party within a tile of the town, and the relay
-    // line needs a Relay standing — this is the one spot both are true.
+    // Standing on the anchor, with the town next to it: the gift needs the
+    // party within a tile of the town, and the relay line needs a Relay
+    // standing — this is the one spot both are true.
     stand_in_base_at(&mut game, 0, 0);
     let (ax, ay) = game.anchor_position().unwrap();
     let key = SettlementKey { rx: 4, ry: 0 };
-    // `(ax + 1, ay)` would be the Relay's own numeric coordinates, and
-    // `place_settlement` despawns by coordinate without asking which space
-    // the entity is in — base space and the surface share numbers, which is
-    // the coincidence `move_player` documents at length. Placing the town
-    // one tile north instead keeps the Relay standing.
+    // `(ax + 1, ay)` is the Relay's own tile, and `place_settlement`
+    // despawns whatever stands where it lands. One tile north keeps the
+    // Relay standing.
     place_settlement(&mut game, key, ax, ay + 1);
     assert!(
         game.dispatch_reach() != crate::DispatchReach::NoRelay,
@@ -1086,7 +1089,16 @@ fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
     // by `AID_LINES` and reachable by nothing, which is exactly the state
     // the second loop below exists to catch.
     let far = SettlementKey { rx: 9, ry: 0 };
-    place_settlement(&mut game, far, ax + SETTLEMENT_RAID_RADIUS + 1, ay);
+    // Past the raid radius from the floor's far edge, not the anchor: the
+    // radius is measured to the nearest floor cell.
+    let floor_edge = game
+        .world
+        .resource::<crate::base_grid::BaseGrid>()
+        .floor_cells()
+        .map(|(x, _)| x)
+        .max()
+        .unwrap();
+    place_settlement(&mut game, far, floor_edge + SETTLEMENT_RAID_RADIUS + 1, ay);
     set_standing(&mut game, far, SETTLEMENT_HOSTILE_STANDING);
     seen.extend(game.settlement_report(far).aid);
 

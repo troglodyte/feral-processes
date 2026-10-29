@@ -88,7 +88,7 @@ impl Game {
         for &e in &raiders {
             self.world.entity_mut(e).insert(Besieger);
         }
-        if self.field_pos().is_some() {
+        if self.on_base_floor() {
             // Raiders start on the anchor tile, the door they will leave by.
             if let Some((ax, ay)) = self.anchor_position() {
                 for &e in &raiders {

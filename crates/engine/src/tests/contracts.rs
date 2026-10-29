@@ -1278,7 +1278,7 @@ fn deploy_broker(game: &mut Game) {
 /// Out of the base entirely — on the open grid, which is where a party not in
 /// base space is, and where no floor can answer for them.
 fn stand_off_base(game: &mut Game) {
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(game);
 }
 
 /// The far edge of the pocket: in the base, but well outside the arm's-length

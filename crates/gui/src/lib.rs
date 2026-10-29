@@ -1799,14 +1799,14 @@ mod tests {
             frames: 2,
             tier: 1,
         };
-        data.locale = Locale::Stack {
+        data.set_locale(Locale::Stack {
             depth: spec.depth,
             frames: spec.frames,
             x: at.0,
             y: at.1,
             facing,
             entrance: spec.entrance,
-        };
+        });
         save::save_to_file(&path, &data).unwrap();
         app.game = Some(Game::load(&path, &assets).unwrap());
         let _ = std::fs::remove_file(&path);

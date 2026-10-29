@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.27
+
+**Weapons are now built on one Build weapon page that works like Build routine.** Pick a Frame, modifiers, affixes and a name, then Compile: the parts you hold are spent, the missing ones are made from materials, and the weapon goes into your pack. Before, New design only saved a recipe and you built it as a second step on the Forge page; both pages are gone. Part lists now show only what you have researched or are holding, and the preview names every reason Compile would be refused, including a short material bill.
+
 ## 0.20.26
 
 **The Compile screen can now order what a batch is missing.** After picking a recipe and a quantity, press [O] and the base gets a work order for each ingredient you are short of, for exactly the shortfall. Before, you had to note what was missing, leave the screen and file each order by hand on the work order page. An ingredient the base cannot make is named on the screen with the reason, and the ones it can make are still ordered.

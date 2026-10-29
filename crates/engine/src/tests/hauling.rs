@@ -6,7 +6,7 @@ use crate::components::Squeezing;
 use crate::components::{Memories, MemorySubject};
 use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
 use crate::memories::MemoryId;
-use crate::tuning::STARTING_POCKET_HALF_WIDTH;
+use TEST_POCKET_HALF_WIDTH;
 use crate::*;
 
 /// A Home on the player's own tile — walkable by definition — plus enough
@@ -31,7 +31,7 @@ fn base(seed: u32) -> Game {
 /// `place_structure` reports only success, so the entity is found by the
 /// cell it must now be standing on.
 fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     place_now(game, kind, dx, dy).unwrap();
     let (x, y) = (px + dx, py + dy);
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
@@ -44,7 +44,7 @@ fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
 
 /// `deploy` for a configurable machine: stands it and sets it to `recipe`.
 fn deploy_machine(game: &mut Game, kind: &str, recipe: &str, dx: i32, dy: i32) -> Entity {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     place_machine(game, kind, recipe, dx, dy).unwrap();
     let (x, y) = (px + dx, py + dy);
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
@@ -648,7 +648,7 @@ fn a_hauler_carries_a_load_through_a_door() {
     let depot = deploy(&mut game, "depot", 4, 0);
     // Across every floored cell of the column, since the pocket is wider
     // than it is tall and its reach says nothing about this column's height.
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
     let column: Vec<i32> = (-radius..=radius)
         .filter(|&y| {
@@ -2457,7 +2457,7 @@ fn pickup_fixture(seed: u32) -> (Game, Entity, Entity, Entity) {
 #[test]
 fn a_posted_hauler_brings_a_floor_pile_home_to_the_depot() {
     let (mut game, _, depot, _) = pickup_fixture(31);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
     tick_until(&mut game, 600, |g| {
@@ -2471,7 +2471,7 @@ fn a_posted_hauler_brings_a_floor_pile_home_to_the_depot() {
 #[test]
 fn an_unreachable_pile_is_left_alone() {
     let (mut game, node, depot, _) = pickup_fixture(32);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     // Far off the laid floor: no route reaches it.
     pile_on(&mut game, px + 90, py + 90, "cache_grain", 3);
 
@@ -2491,7 +2491,7 @@ fn an_unreachable_pile_is_left_alone() {
 #[test]
 fn a_hauler_with_a_machine_to_clear_does_not_divert_to_a_pile() {
     let (mut game, node, depot, _) = pickup_fixture(33);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
     let cap = capacity_of(&game, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
@@ -2511,7 +2511,7 @@ fn a_hauler_with_a_machine_to_clear_does_not_divert_to_a_pile() {
 #[test]
 fn a_hauler_lifts_one_unit_per_pickup() {
     let (mut game, _, _, worker) = pickup_fixture(34);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
     tick_until(&mut game, 300, |g| {
@@ -2527,7 +2527,7 @@ fn a_hauler_lifts_one_unit_per_pickup() {
 #[test]
 fn a_hauler_never_lifts_gear_or_a_downed_program() {
     let (mut game, _, _, worker) = pickup_fixture(34);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     crate::game::base::floor::spawn_floor_item(
         &mut game.world,
         Position {
@@ -2551,7 +2551,7 @@ fn two_haulers_sent_to_one_pile_conserve_the_total() {
     let second = hauler(&mut game);
     game.assign_cronjob(second, node).unwrap();
     park_at_post(&mut game, second, node);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 2, py + 2, "cache_grain", 3);
 
     tick_until(&mut game, 1000, |g| {
@@ -2572,7 +2572,7 @@ fn a_pile_is_left_alone_when_the_only_accepting_depot_is_walled_in() {
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 1, py + 3, "cache_grain", 3);
 
     for _ in 0..3 * tuning::STRANDED_SET_DOWN_TICKS {
@@ -2591,7 +2591,7 @@ fn a_pile_is_left_alone_when_the_only_accepting_depot_is_walled_in() {
 fn a_farther_pile_is_fetched_when_the_nearest_is_refused() {
     let (mut game, _, depot, _) = pickup_fixture(37);
     game.set_depot_filter(depot, &[ItemId::from(ids::CORE_FRAGMENT)], false);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     pile_on(&mut game, px + 1, py + 1, ids::CORE_FRAGMENT, 2);
     pile_on(&mut game, px + 5, py + 1, "cache_grain", 4);
 
@@ -2625,7 +2625,7 @@ fn a_farther_pile_is_fetched_when_the_nearest_is_walled_in() {
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     unit_on(&mut game, px + 1, py + 2, ids::CORE_FRAGMENT);
     pile_on(&mut game, px + 4, py + 2, "cache_grain", 4);
 

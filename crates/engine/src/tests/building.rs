@@ -3584,7 +3584,7 @@ fn a_base_with_programs(seed: u32, programs: usize) -> Game {
 
 /// The `BuildSite` standing at the party's cell plus `(dx, dy)`, if one is.
 fn filed_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     game.build_site_at(px + dx, py + dy)
 }
 
@@ -4077,7 +4077,7 @@ fn a_site_wiped_with_its_cell_gives_the_program_back_too() {
     let spend = tame_at_zone(&mut game, 1);
     game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
 
     game.clear_pending_build_at(px + 1, py);
 

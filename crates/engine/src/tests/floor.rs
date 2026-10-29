@@ -622,7 +622,7 @@ fn a_program_with_no_floor_goes_to_the_downed_store_then_a_rack() {
 }
 
 fn party_cell(g: &Game) -> (i32, i32) {
-    g.base_pos().expect("standing in base space")
+    g.field_pos().expect("standing in base space")
 }
 
 /// The Home stands on the origin, so the party stands off it where its own

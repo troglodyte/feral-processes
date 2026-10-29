@@ -390,7 +390,7 @@ fn marching_band(game: &mut Game) -> (Entity, Vec<Entity>) {
 /// pocket so a siege board can be built.
 fn established_base(game: &mut Game) {
     set_zone(game, SIEGE_MIN_ZONE.max(2));
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     for _ in 0..BASE_ESTABLISHED_STAFF {
         spawn_tamed(game, 10, 3);
     }

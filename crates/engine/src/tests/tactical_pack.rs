@@ -340,7 +340,7 @@ mod roll {
     fn a_siege_pack_is_rush() {
         use super::super::support::{set_zone, stand_in_base};
         let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         stand_in_base(&mut game);
         set_zone(&mut game, 2);
         assert!(game.open_siege());

@@ -371,7 +371,7 @@ fn a_finished_build_lets_its_spent_program_go() {
         departures(&game, cast.friend, id).is_empty(),
         "committing is reversible, so committing grieves nothing"
     );
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     for _ in 0..600 {
         if game.build_site_at(px + 1, py).is_none() {
             break;
@@ -398,7 +398,7 @@ fn a_finished_build_stamps_the_live_short_label_on_the_grief() {
 
     game.place_structure("extractor", 1, 0, Some(leaving))
         .unwrap();
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let site = game.build_site_at(px + 1, py).unwrap();
     game.consume_site(site);
 
@@ -422,7 +422,7 @@ fn a_committed_then_refunded_program_grieves_nobody() {
 
     game.place_structure("extractor", 1, 0, Some(leaving))
         .unwrap();
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let site = game.build_site_at(px + 1, py).unwrap();
     game.cancel_build_request(site).unwrap();
 

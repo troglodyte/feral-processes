@@ -237,7 +237,7 @@ fn a_zero_offset_is_todays_window() {
 /// laid floor beside them, `deploy_broker`'s shape. A Relay without a Home
 /// does not survive a save the test later loads.
 fn deploy_relay(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(game, "home", 0, 0);
     deploy(game, "relay", 1, 0);
     super::support::stand_in_base_at(game, 1, 1);
@@ -285,7 +285,7 @@ fn dispatch_reach_reports_the_three_states() {
 fn the_far_side_of_the_base_still_reaches_the_relay() {
     let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
-    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let edge = TEST_POCKET_HALF_WIDTH;
     assert!(edge - 1 > 2, "the far edge must be beyond arm's length");
     super::support::stand_in_base_at(&mut game, edge, 0);
     assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
@@ -1615,7 +1615,7 @@ fn a_dispatch_queues_one_walk_out_per_member() {
         );
         assert_eq!(
             walk.path.last(),
-            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            Some(&TEST_HOME_CELL),
             "base space has one door and the walk ends at it"
         );
         assert_walkable_and_contiguous(&game, &walk.path);
@@ -1645,8 +1645,8 @@ fn a_walk_bends_around_solid_rock() {
     // A corridor east out of the pocket and then north, ending at a cell
     // whose straight line back to the door crosses unmined rock.
     let (w, h) = (
-        crate::tuning::STARTING_POCKET_HALF_WIDTH,
-        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+        TEST_POCKET_HALF_WIDTH,
+        TEST_POCKET_HALF_HEIGHT,
     );
     let corridor: Vec<(i32, i32)> = (w - 1..=w + 4)
         .map(|x| (x, h - 1))
@@ -1671,7 +1671,7 @@ fn a_walk_bends_around_solid_rock() {
     assert_eq!(walks.len(), 1);
     let path = &walks[0].path;
     assert_eq!(path.first(), Some(&end));
-    assert_eq!(path.last(), Some(&crate::game::base_space::BASE_EXIT_CELL));
+    assert_eq!(path.last(), Some(&TEST_HOME_CELL));
     assert_walkable_and_contiguous(&game, path);
     let straight = end.0.abs().max(end.1.abs()) as usize + 1;
     assert!(
@@ -1731,7 +1731,7 @@ fn a_return_walks_them_back_in_through_the_door() {
     for (walk, home) in walks.iter().zip(&from) {
         assert_eq!(
             walk.path.first(),
-            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            Some(&TEST_HOME_CELL),
             "a returning body comes in through the door"
         );
         assert_eq!(walk.path.last(), Some(home), "and back to its own tile");

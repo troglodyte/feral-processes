@@ -168,7 +168,7 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
         .into_iter()
         .find(|d| d.work.is_some())
         .expect("at least one workable structure should exist");
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     let structure = game
         .world
         .spawn((

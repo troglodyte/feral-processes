@@ -471,7 +471,7 @@ fn an_approaching_siege_asks_for_the_players_attention() {
 mod board {
     use super::*;
     use crate::base_grid::BaseGrid;
-    use crate::game::base_space::BASE_EXIT_CELL;
+    use TEST_HOME_CELL;
     use crate::game::siege::board::build;
     use crate::tactical::map::BattleCell;
 
@@ -559,7 +559,7 @@ mod board {
     #[test]
     fn the_door_is_in_bounds_and_open() {
         let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         let siege_board = build(&mut game).expect("the starting pocket floors the door");
         assert!(
             siege_board
@@ -607,7 +607,7 @@ mod opening {
     /// A floored pocket and the party standing in it — the minimum a siege
     /// can open on.
     fn ready_base(game: &mut Game) {
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         stand_in_base_at(game, 0, 0);
     }
 
@@ -1387,7 +1387,7 @@ mod raiders_citizenship {
     #[test]
     fn a_besieger_draws_on_the_base_map_and_not_the_surface() {
         let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         let besieger = spawn_besieger_at(&mut game, 2, 0);
 
         let surface: Vec<Entity> = game
@@ -1471,7 +1471,7 @@ mod raiders_steal {
     /// same way (`board::build`), so this fixture and the code under test
     /// always agree about where it is. Returns the door's board cell.
     fn open_pocket_battle(game: &mut Game) -> (i32, i32) {
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         let siege_board = board::build(game).unwrap();
         let spec = BattleSpec {
             world_seed: 1,
@@ -1573,7 +1573,7 @@ mod raiders_steal {
         // The door is more than one turn's walk away, so a beat that does
         // nothing — the turn's allowance spent — hands the turn on as a real
         // round would, or the spent walk is never cleared.
-        let beats = 4 * crate::tuning::STARTING_POCKET_HALF_WIDTH + 4;
+        let beats = 4 * TEST_POCKET_HALF_WIDTH + 4;
         for _ in 0..beats {
             if game.world.get_resource::<TacticalBattle>().is_none() {
                 break;
@@ -1765,7 +1765,7 @@ mod raiders_wreck {
     use crate::world::Biome;
 
     fn open_pocket_battle(game: &mut Game) -> (i32, i32) {
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         let siege_board = board::build(game).unwrap();
         let spec = BattleSpec {
             world_seed: 1,
@@ -1921,7 +1921,7 @@ mod raiders_withdraw {
     /// fixture can pick a pack size independent of how many bodies it
     /// actually seats.
     fn open_pocket_battle(game: &mut Game, pack: u32) -> (i32, i32) {
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         let siege_board = board::build(game).unwrap();
         let spec = BattleSpec {
             world_seed: 1,
@@ -2383,7 +2383,7 @@ mod persist {
     /// besieger's own action budget, so `round`/`turn`/`actions_left` are
     /// none of them a coincidental default.
     fn open_siege_fixture(game: &mut Game) -> Fixture {
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         stand_in_base_at(game, 0, 0);
         let siege_board = board::build(game).unwrap();
 
@@ -3219,7 +3219,7 @@ mod review_findings {
         // on does not move with it.
         {
             let mut grid = game.world.resource_mut::<BaseGrid>();
-            grid.lay_floor(-crate::tuning::STARTING_POCKET_HALF_WIDTH - 1, 0);
+            grid.lay_floor(-TEST_POCKET_HALF_WIDTH - 1, 0);
         }
         let rebuilt_door = crate::game::siege::board::build(&mut game).unwrap().door;
         assert_ne!(

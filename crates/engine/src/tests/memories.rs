@@ -1849,7 +1849,7 @@ fn a_posted_worker(game: &mut Game) -> (Entity, Entity) {
         .unwrap()
         .add(ItemId::from(crate::items::ids::CORE_FRAGMENT), 500);
     stand_in_base(game);
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     place_machine(game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = {
         let mut query = game.world.query::<(Entity, &Position, &Structure)>();

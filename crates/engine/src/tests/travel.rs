@@ -94,7 +94,7 @@ fn walk_route(game: &mut Game, goal: TravelGoal, in_base: bool) -> (Vec<(i32, i3
             return (visited, step);
         };
         let (x, y) = if in_base {
-            game.base_pos().unwrap()
+            game.field_pos().unwrap()
         } else {
             let p = *game.world.get::<Position>(game.player_entity()).unwrap();
             (p.x, p.y)

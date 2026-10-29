@@ -512,7 +512,7 @@ fn a_warded_empty_cell_draws_nothing_from_the_rng() {
         stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
         // `spawn_machine_at` lays the starting pocket, which moves the
         // stream; lay it in both runs so only the cell and its post differ.
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         stand_ample_grid_supply(&mut game);
         let warden = spawn_tamed(&mut game, 10, 3);
         if with_cell {

@@ -12,7 +12,7 @@ fn farm_base(seed: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     place_now(&mut game, "home", 1, 0).unwrap();
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     game
 }
 
@@ -52,7 +52,7 @@ fn a_box_skips_rock_and_structure_cells() {
     let mut game = farm_base(2);
     let home = *game.structure_tiles().iter().min().unwrap();
     let rock = (0..)
-        .map(|d| (crate::tuning::STARTING_POCKET_HALF_WIDTH + d, 0))
+        .map(|d| (TEST_POCKET_HALF_WIDTH + d, 0))
         .find(|c| game.world.resource::<BaseGrid>().is_solid(c.0, c.1))
         .unwrap();
     let (a, b) = (
@@ -133,7 +133,7 @@ fn moss_base(seed: u32, tag: &str) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &scratch).unwrap();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     place_now(&mut game, "home", 1, 0).unwrap();
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     game
 }
 
@@ -252,7 +252,7 @@ fn an_unsown_plot_never_grows() {
 #[test]
 fn a_build_request_on_a_plot_tile_removes_only_that_tile() {
     let mut game = farm_base(13);
-    let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let w = TEST_POCKET_HALF_WIDTH;
     for tile in sown_plot(&mut game, (-3, 2), (-1, 2)) {
         set_growth(&mut game, tile, CropGrowth::Growing { elapsed: 0 });
     }
@@ -551,7 +551,7 @@ fn farm_wants_go_unserved_when_production_and_digging_take_every_body() {
     spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, -4, 0);
     game.queue_work_order(crate::WorkOrder::batch(ItemId::from("core_fragment"), 50))
         .unwrap();
-    let wall = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+    let wall = (TEST_POCKET_HALF_WIDTH + 1, 0);
     game.toggle_mark_box(wall, wall, None);
     sown_plot(&mut game, (-3, 2), (-3, 2));
     spawn_tamed(&mut game, 10, 3);
@@ -705,7 +705,7 @@ fn an_unreachable_plot_tile_is_dropped_silently() {
 #[test]
 fn standing_beside_a_plot_offers_it_on_c() {
     let mut game = farm_base(60);
-    let hw = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let hw = TEST_POCKET_HALF_WIDTH;
     game.toggle_plot_box((hw - 1, 0), (hw - 1, 0));
     let plot = plot_of(&game, (hw - 1, 0));
     let offered = game.adjacent_structures();

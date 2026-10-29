@@ -10,7 +10,7 @@
 
 use super::support::*;
 use crate::floors::FloorId;
-use crate::game::base_space::BASE_EXIT_CELL;
+use TEST_HOME_CELL;
 use crate::*;
 
 fn game(seed: u32) -> Game {
@@ -342,7 +342,7 @@ fn base_space_is_not_underground() {
 
     assert!(!game.is_underground(), "base space is not the Stack");
     assert!(game.in_base());
-    assert_eq!(game.base_pos(), Some((0, 0)));
+    assert_eq!(game.field_pos(), Some((0, 0)));
     assert!(
         game.stack_view().is_none(),
         "there is no frame loaded in base space"
@@ -355,11 +355,11 @@ fn base_space_is_not_underground() {
 #[test]
 fn base_pos_answers_nowhere_but_base_space() {
     let mut game = game(3113);
-    assert_eq!(game.base_pos(), None, "the surface is not base space");
+    assert_eq!(game.field_pos(), None, "the surface is not base space");
     assert!(!game.in_base());
 
     descend(&mut game);
-    assert_eq!(game.base_pos(), None, "the Stack is not base space either");
+    assert_eq!(game.field_pos(), None, "the Stack is not base space either");
     assert!(!game.in_base());
 }
 
@@ -394,7 +394,7 @@ fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
     place_now(&mut game, "recharger_node", 1, 0)
         .expect("floor beside the origin is inside the starting pocket");
     assert_eq!(
-        game.base_pos(),
+        game.field_pos(),
         Some((0, 0)),
         "the party never moved off the exit cell — the Recharger sits one step away"
     );
@@ -637,7 +637,7 @@ fn game_with_a_base(seed: u32) -> Game {
 /// A base-space cell outside the starting pocket: solid rock, and the same
 /// cell whichever test asks. One step north of the pocket's north edge.
 fn solid_rock_north() -> (i32, i32) {
-    (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT - 1)
+    (0, -TEST_POCKET_HALF_HEIGHT - 1)
 }
 
 /// The player's tile on the zone surface.
@@ -666,7 +666,7 @@ fn entering_and_leaving_through_the_anchor_round_trips_the_players_position() {
 
     assert!(game.in_base());
     assert!(!game.is_underground(), "base space is not the Stack");
-    assert_eq!(game.base_pos(), Some((0, 0)), "you arrive at the exit cell");
+    assert_eq!(game.field_pos(), Some((0, 0)), "you arrive at the exit cell");
     assert_eq!(
         player_tile(&game),
         before,
@@ -785,7 +785,7 @@ fn the_way_out_is_only_at_the_exit_cell() {
     game.enter_base().unwrap();
     game.move_player(1, 0);
     assert_eq!(
-        game.base_pos(),
+        game.field_pos(),
         Some((1, 0)),
         "the fixture must walk a tile"
     );
@@ -825,7 +825,7 @@ fn swinging_at_solid_rock_moves_nothing_in_either_space() {
     // different code path from the one this test is about.
     game.toggle_mining();
     // The pocket's north edge, so the step north leaves it.
-    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
+    let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     stand_in_base_at(&mut game, edge.0, edge.1);
     let standing = player_tile(&game);
     let tick = game.current_tick();
@@ -839,7 +839,7 @@ fn swinging_at_solid_rock_moves_nothing_in_either_space() {
     );
     game.move_player(0, -1);
 
-    assert_eq!(game.base_pos(), Some(edge), "solid rock does not give");
+    assert_eq!(game.field_pos(), Some(edge), "solid rock does not give");
     assert_eq!(
         game.current_tick(),
         tick + 1,
@@ -859,7 +859,7 @@ fn walking_onto_floor_moves_only_the_base_space_coordinates() {
 
     game.move_player(1, 0);
 
-    assert_eq!(game.base_pos(), Some((1, 0)));
+    assert_eq!(game.field_pos(), Some((1, 0)));
     assert!(game.current_tick() > tick, "a step in base space is a turn");
     assert_eq!(
         player_tile(&game),
@@ -881,7 +881,7 @@ fn mined_rock_is_walkable_before_it_is_floored() {
 
     game.move_player(0, 1);
 
-    assert_eq!(game.base_pos(), Some((0, 1)));
+    assert_eq!(game.field_pos(), Some((0, 1)));
     assert!(
         !game.world.resource::<base_grid::BaseGrid>().is_floor(0, 1),
         "the fixture cell must be Open and not Floor, or this tests nothing"
@@ -902,7 +902,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     let mut game = game_with_a_base(3129);
     // The pocket's north edge, with a machine beside it: a job to break off,
     // and solid rock one step further north to break it off against.
-    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
+    let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     let node = spawn_extractor(&mut game, edge.0 + 1, edge.1);
     game.enter_base().unwrap();
     // Tools out: a disarmed bump is refused before it can swing, which is a
@@ -921,7 +921,7 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     game.move_player(0, -1);
 
     assert_eq!(
-        game.base_pos(),
+        game.field_pos(),
         Some(edge),
         "the fixture's step must really meet rock, or this proves nothing"
     );
@@ -947,8 +947,8 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
 /// Spelled out here so a change to either constant is a change this test
 /// *sees* rather than one it silently follows.
 fn pocket_cells() -> usize {
-    let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
-    let h = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
+    let w = TEST_POCKET_HALF_WIDTH;
+    let h = TEST_POCKET_HALF_HEIGHT;
     let cut = crate::tuning::PLATFORM_CORNER_CUT;
     let mut n = 0;
     for dy in -h..=h {
@@ -991,7 +991,7 @@ fn a_fresh_run_deploys_its_first_home_from_the_open_grid_and_walks_in() {
 
     game.enter_base()
         .expect("the anchor opens onto the pocket the Home just laid");
-    assert_eq!(game.base_pos(), Some(BASE_EXIT_CELL));
+    assert_eq!(game.field_pos(), Some(BASE_EXIT_CELL));
 }
 
 /// And only the first one. Every later deployment is a base action, refused
@@ -1038,7 +1038,7 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
     );
     assert!(grid.is_floor(0, 0), "including the cell the Home stands on");
     assert!(
-        grid.is_solid(crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0),
+        grid.is_solid(TEST_POCKET_HALF_WIDTH + 1, 0),
         "and it stops: past the radius is unmined rock"
     );
     assert_eq!(
@@ -1099,7 +1099,7 @@ fn a_machine_deploys_onto_pocket_floor() {
     place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
     game.move_player(1, 0);
-    assert_eq!(game.base_pos(), Some((1, 0)), "stepped off the Home tile");
+    assert_eq!(game.field_pos(), Some((1, 0)), "stepped off the Home tile");
 
     place_machine(&mut game, "extractor", "core_fragment", 1, 0)
         .expect("floor two cells east of the origin is inside the pocket");
@@ -1121,7 +1121,7 @@ fn deploying_off_the_pocket_floor_is_refused() {
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
     place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
-    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let edge = TEST_POCKET_HALF_WIDTH;
     game.world.insert_resource(Locale::Base { x: edge, y: 0 });
     assert!(
         game.world
@@ -1180,7 +1180,7 @@ fn a_broker_is_out_of_reach_off_the_floor() {
     );
 
     game.enter_base().unwrap();
-    let outside = crate::tuning::STARTING_POCKET_HALF_WIDTH + 3;
+    let outside = TEST_POCKET_HALF_WIDTH + 3;
     game.world
         .insert_resource(Locale::Base { x: outside, y: 0 });
     assert!(
@@ -1519,7 +1519,7 @@ fn view_tiles_synthesises_the_three_base_biomes() {
     // A cell mined but not floored, just past the starting pocket's edge —
     // `BaseGrid::open` is `pub(crate)` and unused by any gameplay path this
     // slice, so this is the only way to put one on the board at all.
-    let open_at = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+    let open_at = (TEST_POCKET_HALF_WIDTH + 1, 0);
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(open_at.0, open_at.1, 0);
@@ -1528,7 +1528,7 @@ fn view_tiles_synthesises_the_three_base_biomes() {
     // A window wide enough to reach the Open cell just past the pocket and
     // solid rock well beyond it, centred on base space's own origin —
     // `stand_in_base` always lands the party there.
-    let half = crate::tuning::STARTING_POCKET_HALF_WIDTH + 3;
+    let half = TEST_POCKET_HALF_WIDTH + 3;
     let tiles = game.view_tiles(half, half);
     let at = |x: i32, y: i32| tiles[(half + y) as usize][(half + x) as usize];
 
@@ -1759,7 +1759,7 @@ fn game_at_the_frontier(seed: u32) -> Game {
     let mut game = game(seed);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     place_now(&mut game, "home", 1, 0).unwrap();
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     game
 }
 
@@ -1794,7 +1794,7 @@ fn game_at_the_frontier_cutting(seed: u32) -> Game {
     game
 }
 
-const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+const WALL: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 1, 0);
 
 fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
     game.world.resource::<base_grid::BaseGrid>().cell(x, y)
@@ -1836,7 +1836,7 @@ fn a_wall_opens_after_the_swings_its_durability_implies() {
 #[test]
 fn a_swing_at_rock_does_not_move_the_party() {
     let mut game = game_at_the_frontier(3211);
-    let standing = game.base_pos().unwrap();
+    let standing = game.field_pos().unwrap();
 
     game.move_player(1, 0);
 
@@ -1847,7 +1847,7 @@ fn a_swing_at_rock_does_not_move_the_party() {
         "this test is about a swing that does not break through"
     );
     assert_eq!(
-        game.base_pos().unwrap(),
+        game.field_pos().unwrap(),
         standing,
         "a swing at rock moved the party into it"
     );
@@ -1867,8 +1867,8 @@ fn identical_swings_at_rock_do_identical_damage() {
         (wall.durability, wall.swing_cap)
     };
     let (w, h) = (
-        crate::tuning::STARTING_POCKET_HALF_WIDTH,
-        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+        TEST_POCKET_HALF_WIDTH,
+        TEST_POCKET_HALF_HEIGHT,
     );
     let north = (-w..=w)
         .filter(|&x| game.world.resource::<base_grid::BaseGrid>().is_floor(x, h))
@@ -1877,8 +1877,8 @@ fn identical_swings_at_rock_do_identical_damage() {
         .expect("the pocket's north face has a wall of the east wall's kind");
 
     let player = game.player_entity();
-    game.strike_rock(player, east.0, east.1);
-    game.strike_rock(player, north.0, north.1);
+    game.strike_field_rock(player, east.0, east.1);
+    game.strike_field_rock(player, north.0, north.1);
 
     let left = |game: &mut Game, (x, y): (i32, i32)| {
         let site = game
@@ -2308,12 +2308,12 @@ fn a_mark_survives_a_save_round_trip() {
 /// far corner *up-left* of the anchor so the box has to be normalised rather
 /// than assumed ordered.
 const PLAN_ANCHOR: (i32, i32) = (
-    crate::tuning::STARTING_POCKET_HALF_WIDTH + 2,
-    crate::tuning::STARTING_POCKET_HALF_WIDTH + 2,
+    TEST_POCKET_HALF_WIDTH + 2,
+    TEST_POCKET_HALF_WIDTH + 2,
 );
 const PLAN_FAR: (i32, i32) = (
-    crate::tuning::STARTING_POCKET_HALF_WIDTH + 1,
-    crate::tuning::STARTING_POCKET_HALF_WIDTH + 1,
+    TEST_POCKET_HALF_WIDTH + 1,
+    TEST_POCKET_HALF_WIDTH + 1,
 );
 const PLAN_CELLS: [(i32, i32); 4] = [
     PLAN_FAR,
@@ -2438,7 +2438,7 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
 
     game.move_player(1, 0);
     assert_eq!(
-        game.base_pos().unwrap(),
+        game.field_pos().unwrap(),
         WALL,
         "the party stepped onto the cut cell"
     );
@@ -2900,8 +2900,8 @@ fn fragments_for(game: &mut Game, tiles: u32) {
 /// starting pocket's west edge, clear of `WALL` and the exit cell.
 fn fragment_shelf(game: &mut Game) -> Entity {
     let at = Position {
-        x: -crate::tuning::STARTING_POCKET_HALF_WIDTH,
-        y: crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+        x: -TEST_POCKET_HALF_WIDTH,
+        y: TEST_POCKET_HALF_HEIGHT,
     };
     let mut query = game.world.query::<(Entity, &Structure, &Position)>();
     if let Some((e, ..)) = query
@@ -3547,7 +3547,7 @@ fn a_site_that_becomes_reachable_again_can_complain_again() {
     // itself is not part of it — reverting the corridor below has to leave
     // a tile to stand on, or the site would come back as `BoxedIn` and be
     // silent for a different reason than the one under test.
-    let corridor = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1)..STRANDED_STATION.0;
+    let corridor = (TEST_POCKET_HALF_WIDTH + 1)..STRANDED_STATION.0;
     let tick = game.current_tick();
     for x in corridor.clone() {
         game.world
@@ -3637,7 +3637,7 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
     let player = game.player_entity();
     game.toggle_mark_box(target, target, None);
     // One swing, so the site holds progress and survives the unmarking.
-    game.strike_rock(player, target.0, target.1);
+    game.strike_field_rock(player, target.0, target.1);
     let site = game
         .dig_site_at(target.0, target.1)
         .expect("a marked, struck wall has a dig site");
@@ -3646,7 +3646,7 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
     let digger = spawn_tamed(&mut game, 30, 3);
     game.world.entity_mut(digger).insert((
         Position {
-            x: crate::tuning::STARTING_POCKET_HALF_WIDTH,
+            x: TEST_POCKET_HALF_WIDTH,
             y: 0,
         },
         Task {
@@ -3790,7 +3790,7 @@ fn a_crew_swing_queues_the_same_cue() {
     let worker = spawn_tamed(&mut game, 30, 3);
     game.take_effects();
 
-    game.strike_rock(worker, WALL.0, WALL.1);
+    game.strike_field_rock(worker, WALL.0, WALL.1);
 
     assert_eq!(
         mining_cues(&mut game),
@@ -3808,7 +3808,7 @@ fn a_posted_digger(seed: u32, at: (i32, i32)) -> (Game, Entity) {
     let mut game = game_at_the_frontier(seed);
     let player = game.player_entity();
     game.toggle_mark_box(at, at, None);
-    game.strike_rock(player, at.0, at.1);
+    game.strike_field_rock(player, at.0, at.1);
     let site = game
         .dig_site_at(at.0, at.1)
         .expect("a marked, struck wall has a dig site");
@@ -3928,7 +3928,7 @@ fn breaking_through_queues_one_cue_and_not_two() {
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
     for _ in 0..swings - 1 {
-        game.strike_rock(player, WALL.0, WALL.1);
+        game.strike_field_rock(player, WALL.0, WALL.1);
     }
     assert!(
         cell(&game, WALL).is_none(),
@@ -3936,7 +3936,7 @@ fn breaking_through_queues_one_cue_and_not_two() {
     );
     game.take_effects();
 
-    game.strike_rock(player, WALL.0, WALL.1);
+    game.strike_field_rock(player, WALL.0, WALL.1);
 
     assert_eq!(
         mining_cues(&mut game),
@@ -3971,7 +3971,7 @@ fn a_refused_tile_is_reported_once() {
 fn an_unmarked_half_cut_wall_is_not_called_marked() {
     let mut game = game_at_the_frontier(3244);
     let player = game.player_entity();
-    game.strike_rock(player, WALL.0, WALL.1);
+    game.strike_field_rock(player, WALL.0, WALL.1);
     let site = game
         .dig_site_at(WALL.0, WALL.1)
         .expect("a struck wall has a dig site");
@@ -4135,9 +4135,9 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
     // Three cells in open rock, far enough out that nothing walkable
     // touches any of them, and every one of them sorts before `WALL`.
     let buried = [
-        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, -1),
-        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, 0),
-        (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 3, 1),
+        (-TEST_POCKET_HALF_WIDTH - 3, -1),
+        (-TEST_POCKET_HALF_WIDTH - 3, 0),
+        (-TEST_POCKET_HALF_WIDTH - 3, 1),
     ];
     for cell in buried {
         mark(&mut game, cell);
@@ -4176,7 +4176,7 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
     fragments_for(&mut game, 1);
     // A sealed cell of open rock, walled in on every side: it gives its four
     // neighbours a face nothing can route to.
-    let sealed = (-crate::tuning::STARTING_POCKET_HALF_WIDTH - 4, 0);
+    let sealed = (-TEST_POCKET_HALF_WIDTH - 4, 0);
     game.world
         .resource_mut::<base_grid::BaseGrid>()
         .open(sealed.0, sealed.1, 0);
@@ -4328,7 +4328,7 @@ fn deciding_a_walls_kind_draws_no_game_rng() {
 /// the cell at `(x, y)`, driven through the real `strike_rock`.
 fn swings_to_open(game: &mut Game, swinger: Entity, x: i32, y: i32) -> u32 {
     for n in 1..500 {
-        game.strike_rock(swinger, x, y);
+        game.strike_field_rock(swinger, x, y);
         if !game
             .world
             .resource::<crate::base_grid::BaseGrid>()
@@ -4434,7 +4434,7 @@ fn a_half_cut_dense_wall_reloads_with_its_own_ceiling() {
     let mut game = game(7734);
     let player = game.player_entity();
     let (x, y) = solid_cell_of(&game, "fused");
-    game.strike_rock(player, x, y);
+    game.strike_field_rock(player, x, y);
     let before = {
         let site = game.dig_site_at(x, y).expect("a struck wall has a site");
         let d = game.world.get::<Durability>(site).unwrap();
@@ -4577,8 +4577,8 @@ fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
     let game = game_at_the_frontier(9201);
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let (w, h) = (
-        crate::tuning::STARTING_POCKET_HALF_WIDTH,
-        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+        TEST_POCKET_HALF_WIDTH,
+        TEST_POCKET_HALF_HEIGHT,
     );
 
     assert!(
@@ -4654,7 +4654,7 @@ fn cutting_a_cell_exposes_its_neighbours_and_reverting_it_un_exposes_them() {
 #[test]
 fn the_map_and_the_examine_ray_agree_about_a_wall() {
     let mut game = game_at_the_frontier(9203);
-    let (cx, cy) = game.base_pos().expect("the fixture stands in base space");
+    let (cx, cy) = game.field_pos().expect("the fixture stands in base space");
     let named = game
         .describe_base_rock(1, 0, crate::tuning::EXAMINE_RANGE_TILES)
         .expect("the ray must find the frontier wall");
@@ -4686,7 +4686,7 @@ fn the_map_and_the_examine_ray_agree_about_a_wall() {
 #[test]
 fn rock_behind_a_face_is_drawn_anonymous() {
     let mut game = game_at_the_frontier(9204);
-    let (cx, cy) = game.base_pos().unwrap();
+    let (cx, cy) = game.field_pos().unwrap();
     let half = 8;
     let tiles = game.view_tiles(half, half);
     let deep = (WALL.0 + 2, WALL.1);
@@ -4747,7 +4747,7 @@ fn a_posted_digger_is_drawn_on_the_map() {
         .dig_site_at(target.0, target.1)
         .expect("a marked wall has a dig site");
 
-    let digger = spawn_tamed_on_map(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    let digger = spawn_tamed_on_map(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     game.world.entity_mut(digger).insert(Task {
         kind: TaskKind::Excavate,
         target: site,
@@ -5340,7 +5340,7 @@ fn spend_substrate_below_the_count_moves_nothing_from_either_store() {
 #[test]
 fn view_finishes_at_has_view_tiles_ats_own_shape() {
     let mut game = game_at_the_frontier(4400);
-    let (cx, cy) = game.base_pos().unwrap();
+    let (cx, cy) = game.field_pos().unwrap();
     let tiles = game.view_tiles_at((cx, cy), 3, 2);
     let finishes = game.view_finishes_at((cx, cy), 3, 2);
 
@@ -5356,7 +5356,7 @@ fn view_finishes_at_has_view_tiles_ats_own_shape() {
 #[test]
 fn a_finished_cell_lands_at_view_tiles_ats_own_index() {
     let mut game = game_at_the_frontier(4401);
-    let (cx, cy) = game.base_pos().unwrap();
+    let (cx, cy) = game.field_pos().unwrap();
     // The player's own standing tile is already laid floor — the pocket.
     assert!(game.world.resource_mut::<base_grid::BaseGrid>().set_finish(
         cx,
@@ -5674,7 +5674,7 @@ fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
     let mut game = game_with_a_base(3129);
     game.enter_base().unwrap();
     game.toggle_mining();
-    let edge = (0, -crate::tuning::STARTING_POCKET_HALF_HEIGHT);
+    let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     stand_in_base_at(&mut game, edge.0, edge.1);
     let target = (edge.0 + 1, edge.1 - 1);
     assert!(
@@ -5687,7 +5687,7 @@ fn a_diagonal_bump_into_rock_is_refused_without_a_swing() {
 
     game.move_player(1, -1);
 
-    assert_eq!(game.base_pos(), Some(edge));
+    assert_eq!(game.field_pos(), Some(edge));
     assert_eq!(
         game.current_tick(),
         tick,

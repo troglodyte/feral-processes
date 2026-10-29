@@ -498,7 +498,7 @@ fn a_builder_fetches_from_a_stockpile_before_the_pack() {
 #[test]
 fn on_the_pack_s_own_tile_a_stockpile_ranks_before_the_pack() {
     let mut g = game_with_home();
-    let (bx, by) = g.base_pos().unwrap();
+    let (bx, by) = g.field_pos().unwrap();
     g.toggle_stockpile_box((bx, by), (bx, by));
     g.world
         .get_mut::<Inventory>(g.player_entity())

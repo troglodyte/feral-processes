@@ -225,7 +225,7 @@ fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) -> crate::Entity {
 /// A base with a Home, an iso Market and the party standing in it — the
 /// state every caravan question is asked from.
 fn based(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(game, "home", 0, 0);
     deploy(game, "market", 2, 0);
     stand_in_base_at(game, 1, 1);
@@ -336,7 +336,7 @@ fn the_bearing_sequence_does_not_cycle() {
 #[test]
 fn no_market_means_no_visit() {
     let mut game = fresh();
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(&mut game, "home", 0, 0);
     stand_in_base_at(&mut game, 1, 1);
     let arrival = game.visit_at(0).unwrap().arrival_tick;
@@ -1274,7 +1274,7 @@ fn a_base_with_two_markets_always_docks_at_the_same_one() {
     let path = dir.join("save.bin");
 
     let mut game = fresh();
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(&mut game, "home", 0, 0);
     deploy(&mut game, "market", 2, 0);
     deploy(&mut game, "market", -2, 1);
@@ -1498,7 +1498,7 @@ fn caravan_reach_reports_the_three_states() {
 
     // The far edge of the pocket is still the base — the walk to the counter
     // is visibility, not a gate.
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
 
     game.world.insert_resource(Locale::Surface);

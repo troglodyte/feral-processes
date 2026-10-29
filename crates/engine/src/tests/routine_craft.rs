@@ -393,7 +393,7 @@ fn a_finished_build_destroys_the_built_routines_of_the_program_it_spent() {
         "a cancellable order has not yet consumed it"
     );
 
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let site = game.build_site_at(px + 1, py).unwrap();
     game.consume_site(site);
 

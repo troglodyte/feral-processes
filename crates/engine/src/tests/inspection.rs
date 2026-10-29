@@ -245,7 +245,7 @@ fn spawn_marker_staffer(game: &mut Game, start: Position, dx: i32, dy: i32) -> E
 /// ray inside base space.
 fn stand_in_base_and_get_origin(game: &mut Game) -> Position {
     stand_in_base(game);
-    let (x, y) = game.base_pos().expect("stand_in_base just set the locale");
+    let (x, y) = game.field_pos().expect("stand_in_base just set the locale");
     Position { x, y }
 }
 
@@ -1240,7 +1240,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
 
     game.move_player(2, 1);
     assert_eq!(
-        game.base_pos(),
+        game.field_pos(),
         Some((2, 1)),
         "walked there for real, not spawned there"
     );
@@ -1255,7 +1255,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
     );
 
     game.move_player(0, -1);
-    assert_eq!(game.base_pos(), Some((2, 0)));
+    assert_eq!(game.field_pos(), Some((2, 0)));
     assert!(node_at(&mut game).player_adjacent, "one orthogonal step is");
 }
 

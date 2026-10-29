@@ -19,7 +19,7 @@ fn base(seed: u32) -> Game {
 /// A structure of `kind` one cell east of the party, with the `Durability`
 /// a siege or a sweep needs to hurt it.
 fn raidable(game: &mut Game, kind: &str) -> (Entity, i32, i32) {
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let e = spawn_machine_at(game, kind, px + 1, py);
     game.world
         .entity_mut(e)
@@ -82,7 +82,7 @@ fn a_destroyed_structure_records_a_ruin_and_a_demolish_does_not() {
 #[test]
 fn ruins_file_nothing_while_a_siege_runs_and_file_once_it_ends() {
     let mut game = base(2203);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     game.world
         .resource_mut::<Ruins>()
         .0
@@ -140,7 +140,7 @@ fn a_blocked_tile_drops_the_ruin_and_says_so() {
 fn a_rebuild_with_no_job_is_raised_by_the_crew_at_full_cost() {
     let mut game = base(2206);
     spawn_tamed(&mut game, 500, 3);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     game.world
         .resource_mut::<Ruins>()
         .0
@@ -187,7 +187,7 @@ fn a_rebuild_with_no_job_is_raised_by_the_crew_at_full_cost() {
 fn an_awaiting_site_is_never_worked_or_announced_dry_until_a_program_is_committed() {
     let mut game = base(2207);
     spawn_tamed(&mut game, 500, 3);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     game.world
         .resource_mut::<Ruins>()
         .0
@@ -235,7 +235,7 @@ fn an_awaiting_site_is_never_worked_or_announced_dry_until_a_program_is_committe
 fn ruins_and_an_awaiting_site_survive_a_real_save_and_load() {
     let mut game = base(2208);
     spawn_tamed(&mut game, 500, 3);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     game.world
         .resource_mut::<Ruins>()
         .0
@@ -277,7 +277,7 @@ mod adjacent {
     use super::*;
 
     fn file_node_east(game: &mut Game) -> Entity {
-        let (px, py) = game.base_pos().unwrap();
+        let (px, py) = game.field_pos().unwrap();
         game.world
             .resource_mut::<Ruins>()
             .0
@@ -309,7 +309,7 @@ mod adjacent {
     #[test]
     fn a_site_two_tiles_away_or_already_committed_offers_nothing() {
         let mut game = base(2303);
-        let (px, py) = game.base_pos().unwrap();
+        let (px, py) = game.field_pos().unwrap();
         game.world
             .resource_mut::<Ruins>()
             .0
@@ -330,7 +330,7 @@ mod adjacent {
     #[test]
     fn a_depot_and_a_site_are_both_in_the_cycle_site_first() {
         let mut game = base(2306);
-        let (px, py) = game.base_pos().unwrap();
+        let (px, py) = game.field_pos().unwrap();
         spawn_machine_at(&mut game, "depot", px - 1, py);
         let site = file_node_east(&mut game);
         let cycle = game.adjacent_structures();
@@ -343,7 +343,7 @@ mod adjacent {
 #[test]
 fn free_build_raises_a_programless_wreck_at_once_but_a_node_still_waits() {
     let mut game = base(2208);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     game.dev_set_free_build(true);
     {
         let mut ruins = game.world.resource_mut::<Ruins>();

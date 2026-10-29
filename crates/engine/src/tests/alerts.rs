@@ -598,7 +598,7 @@ fn siege_incoming_warns_once_across_repeated_checks() {
 #[test]
 fn opening_a_siege_posts_a_siege_begun_alert() {
     let mut game = Game::new(19304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     stand_in_base_at(&mut game, 0, 0);
     set_zone(&mut game, 2);
 
@@ -761,7 +761,7 @@ fn alert_structure_at(game: &mut Game, x: i32, y: i32) -> Entity {
 #[test]
 fn depots_full_posts_once_across_repeated_failed_hauls() {
     let mut game = alert_base_for_hauling(19403);
-    let (bx, by) = game.base_pos().unwrap();
+    let (bx, by) = game.field_pos().unwrap();
     place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
@@ -839,7 +839,7 @@ fn depots_full_posts_once_across_repeated_failed_hauls() {
 #[test]
 fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
     let mut game = alert_base_for_hauling(19404);
-    let (bx, by) = game.base_pos().unwrap();
+    let (bx, by) = game.field_pos().unwrap();
     place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();
@@ -947,7 +947,7 @@ fn depots_full_posts_again_after_a_successful_deposit_clears_the_latch() {
 #[test]
 fn a_second_bounce_does_not_repost_once_the_latch_correctly_holds() {
     let mut game = alert_base_for_hauling(19405);
-    let (bx, by) = game.base_pos().unwrap();
+    let (bx, by) = game.field_pos().unwrap();
     place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node1 = alert_structure_at(&mut game, bx + 1, by);
     place_machine(&mut game, "extractor", "core_fragment", -1, 0).unwrap();
@@ -1031,7 +1031,7 @@ fn a_second_bounce_does_not_repost_once_the_latch_correctly_holds() {
 #[test]
 fn the_message_does_not_claim_every_depot_is_full_when_one_merely_refuses_the_item() {
     let mut game = alert_base_for_hauling(19406);
-    let (bx, by) = game.base_pos().unwrap();
+    let (bx, by) = game.field_pos().unwrap();
     place_machine(&mut game, "extractor", "core_fragment", 1, 0).unwrap();
     let node = alert_structure_at(&mut game, bx + 1, by);
     place_now(&mut game, "depot", 4, 0).unwrap();

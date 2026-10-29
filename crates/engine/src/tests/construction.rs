@@ -23,13 +23,13 @@ fn base(seed: u32) -> Game {
 
 /// The `BuildSite` standing at the party's cell plus `(dx, dy)`.
 fn site_at(game: &mut Game, dx: i32, dy: i32) -> Entity {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     game.build_site_at(px + dx, py + dy)
         .expect("a request was filed on that cell")
 }
 
 fn structure_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     let (x, y) = (px + dx, py + dy);
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
     query
@@ -485,8 +485,8 @@ fn a_request_no_program_can_reach_does_not_starve_the_base() {
     // laid tile is permanent while bare cut ground is not, so a player who
     // digs out to a spot, floors it, and lets the corridor behind them
     // revert to solid has exactly this.
-    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let far = TEST_POCKET_HALF_WIDTH + 6;
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
         .lay_floor(px + far, py + far);
@@ -530,8 +530,8 @@ fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() 
         .unwrap();
     game.tick();
 
-    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let far = TEST_POCKET_HALF_WIDTH + 6;
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
         grid.lay_floor(px + far, py + far);
@@ -1117,7 +1117,7 @@ fn cancelling_an_upgrade_request_gives_the_delivered_units_back() {
 #[test]
 fn a_part_supplied_upgrade_request_survives_a_reload() {
     let mut game = base(1127);
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     game.world.spawn((
         BuildSite {
             structure: "extractor".to_string(),
@@ -2572,7 +2572,7 @@ fn a_miner_is_raised_before_an_assembler_filed_on_an_earlier_tile() {
     file_build(&mut game, "printer", -1, 0).unwrap();
     file_build(&mut game, "extractor", 1, 0).unwrap();
 
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let mut raised = false;
     for _ in 0..200 {
         game.tick();
@@ -2643,8 +2643,8 @@ fn a_cut_off_miner_does_not_hold_the_assembler_back() {
     let mut game = base(1203);
     builder(&mut game);
     give(&mut game, &ItemId::from(ids::CHARGE_COIL), 4);
-    let far = tuning::STARTING_POCKET_HALF_WIDTH + 6;
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let far = TEST_POCKET_HALF_WIDTH + 6;
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     {
         let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
         grid.lay_floor(px + far, py + far);

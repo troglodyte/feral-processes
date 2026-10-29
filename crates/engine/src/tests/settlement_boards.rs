@@ -39,7 +39,7 @@ fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
 /// `tests/contracts.rs`'s `deploy_broker`, which is private to that module.
 /// Spends no tick, so a seeded board below it is unmoved.
 fn stand_up_broker(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     for (kind, x) in [("home", 0), ("contract_broker", 1)] {
         game.world.spawn((
             crate::components::Structure {

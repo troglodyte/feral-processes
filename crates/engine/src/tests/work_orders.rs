@@ -1735,7 +1735,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     // names it. `place_home` stands the Home on base space's origin, which
     // is where `stand_in_base` puts the party, so the ray leaves from the
     // Home's tile and the first thing on it is the program.
-    let here = game.base_pos().expect("the party is in base space");
+    let here = game.field_pos().expect("the party is in base space");
     let mut pos = game.world.get_mut::<Position>(idle).unwrap();
     pos.x = here.0 + 2;
     pos.y = here.1;
@@ -2440,7 +2440,7 @@ fn standing_jobs_and_digs_still_come_after_every_order() {
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 3);
     game.set_standing_job(node, true, false).unwrap();
-    let wall = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+    let wall = (TEST_POCKET_HALF_WIDTH + 1, 0);
     game.toggle_mark_box(wall, wall, None);
     let site = game
         .dig_site_at(wall.0, wall.1)

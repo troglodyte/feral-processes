@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.20.28
+
+**You can now see how your base staff feel without opening the base menu.** A staff program whose mood is slipping wears a small pip in the bottom-right corner of its tile: dim yellow when it is slipping, yellow when it sulks, red when it has downed tools, and a larger red pip when it is lashing out. The CREW tab counts staff by mood, both on its collapsed bar and in a MOOD row on the open tab. Staff who have downed tools or are lashing out go on the attention list ahead of other warnings, so the status bar and the CREW bar show the alarm. The reasons stay in the base menu's staff report.
+
 ## 0.20.27
 
 **Weapons are now built on one Build weapon page that works like Build routine.** Pick a Frame, modifiers, affixes and a name, then Compile: the parts you hold are spent, the missing ones are made from materials, and the weapon goes into your pack. Before, New design only saved a recipe and you built it as a second step on the Forge page; both pages are gone. Part lists now show only what you have researched or are holding, and the preview names every reason Compile would be refused, including a short material bill.

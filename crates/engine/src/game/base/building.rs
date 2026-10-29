@@ -120,57 +120,27 @@ impl Game {
             return Err("A Home is already deployed. Remove it before building another.".into());
         }
 
-        // Where a deploy is made *from*, and the run's first Home is the one
-        // exception in the game.
-        //
-        // Every other build is a base action: it stands a structure in base
-        // space, beside the ones already there, measured from the cell the
-        // party is standing in. The first Home cannot be, because there is
-        // no base to stand in yet — base space is solid everywhere and the
-        // anchor refuses entry for want of a Home, so a run that had to be
-        // inside to deploy one could never start a base at all. Founding is
-        // therefore an open-grid act.
-        //
-        // **The two halves of it move independently, and that is the whole
-        // of the placement rule.** The Home stands on base space's own
-        // origin whatever direction was pointed — the pocket is laid around
-        // that origin, and a Home somewhere else in it would make
-        // `BASE_EXIT_CELL` a door onto bare floor. The *anchor* is a zone
-        // fixture and goes where the party is standing, so the base opens on
-        // ground the player chose rather than at the sector's arrival point.
-        let founding_door = match structure_id == HOME_STRUCTURE_ID {
-            true => {
-                self.require_surface()?;
-                let standing = *self
-                    .world
-                    .get::<Position>(self.player_entity())
-                    .ok_or_else(|| "You aren't anywhere you can deploy from.".to_string())?;
-                // A link is walked *onto* to descend (`Game::move_player`),
-                // so an anchor sharing a link's tile could never be stepped
-                // on to be entered — the step that would reach it drops the
-                // party into the Stack instead. Refused up here with
-                // `require_surface` rather than beside the materials check:
-                // it is a question about where the door goes, and the door
-                // is decided in this block.
-                if self.find_surface_link_at(standing.x, standing.y).is_some() {
-                    return Err(
-                        "You're standing on a Stack link — an anchor can't share its tile. \
-                         Step off it first."
-                            .into(),
-                    );
-                }
-                Some((standing.x, standing.y))
-            }
-            false => None,
-        };
-        let founding = founding_door.is_some();
+        // Where a deploy is made *from*: the field, measured from the party's
+        // tile. The first Home goes on the tile the party stands on, and the
+        // anchor with it — the base opens on ground the player chose. Every
+        // other build stands beside the party at `(dx, dy)`.
+        self.require_field()?;
+        let (px, py) = self
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
+        let founding = structure_id == HOME_STRUCTURE_ID;
+        // A link is walked *onto* to descend (`Game::move_player`), so a Home
+        // sharing a link's tile could never be stood on.
+        if founding && self.find_surface_link_at(px, py).is_some() {
+            return Err(
+                "You're standing on a Stack link — an anchor can't share its tile. \
+                 Step off it first."
+                    .into(),
+            );
+        }
         let (x, y) = if founding {
-            crate::game::base_space::BASE_EXIT_CELL
+            (px, py)
         } else {
-            self.require_base()?;
-            let (px, py) = self
-                .base_pos()
-                .expect("require_base passed, so the party is in base space");
             (px + dx, py + dy)
         };
 
@@ -290,13 +260,9 @@ impl Game {
                     inv.take(item.clone(), *qty);
                 }
             }
+            self.lay_founding_floor(x, y);
             self.spawn_structure(&def, x, y, None);
-            // The Home is what opens base space, and it opens it exactly
-            // where it stands: the pocket is laid around the origin the Home
-            // was just put on.
-            self.lay_starting_pocket();
-            let (ax, ay) = founding_door.expect("founding, so the door tile was resolved above");
-            self.move_anchor_to(ax, ay);
+            self.move_anchor_to(x, y);
             self.log_base(format!(
                 "You deploy a {}. The anchor settles where you stand.",
                 def.name
@@ -376,7 +342,7 @@ impl Game {
         if !self.has_structure(HOME_STRUCTURE_ID) {
             return Err("Deploy a Home first before building anything else.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
 
         // Row by row, so a call-off returns materials in a fixed order.
         let cells: Vec<(i32, i32)> = (a.1.min(b.1)..=a.1.max(b.1))
@@ -412,7 +378,7 @@ impl Game {
     fn file_walls(&mut self, def: &StructureDef, cells: &[(i32, i32)]) -> WallBox {
         let build_cost = self.structure_build_cost(def);
         let free_build = self.dev_free_build();
-        let party = self.base_pos();
+        let party = self.field_pos();
         let mut painted = WallBox::default();
         for &cell in cells {
             if Some(cell) == party || self.placement_refusal(&[cell], false).is_some() {
@@ -581,10 +547,7 @@ impl Game {
         let blocked = self.blocked_tiles();
         let structures = self.structure_tiles();
         let sites = self.build_site_tiles();
-        let party = match *self.world.resource::<Locale>() {
-            Locale::Base { x, y } => Some((x, y)),
-            _ => None,
-        };
+        let party = self.field_pos();
         let mut claimed = std::collections::HashSet::new();
         for (body, at) in bodies {
             if !footprint.contains(&(at.x, at.y)) {
@@ -604,7 +567,7 @@ impl Game {
                             && party != Some(cell)
                             && !claimed.contains(&cell)
                     },
-                    |cell| grid.walkable(cell.0, cell.1) && !blocked.walls(cell),
+                    |cell| grid.is_floor(cell.0, cell.1) && !blocked.walls(cell),
                 )
                 .first()
                 .copied()
@@ -1126,7 +1089,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
             return Err("That build request is already gone.".into());
         };
@@ -1160,20 +1123,15 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Not right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let (x, y) = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
-        match self.world.resource::<BaseGrid>().cell(x, y) {
-            Some(base_grid::BaseCell::Open { .. }) => {}
-            Some(base_grid::BaseCell::Floor) => {
-                return Err("This cell is already floored.".into());
-            }
-            // Unreachable in play — solid rock is struck rather than stood
-            // in — and worded for the day a fifth way into base space makes
-            // it reachable rather than left to the `Floor` refusal, which
-            // would send the player looking for a tile they already laid.
-            None => return Err("Cut the entropy out first — nothing stands on raw rock.".into()),
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
+        if self.world.resource::<BaseGrid>().is_floor(x, y) {
+            return Err("This cell is already floored.".into());
+        }
+        if let Some(why) = self.floor_conflict(x, y) {
+            return Err(why.into());
         }
 
         let fragment = ItemId::from(ids::CORE_FRAGMENT);
@@ -1218,9 +1176,6 @@ impl Game {
     /// for a Research Station claims the same four cells a standing one
     /// would.
     pub(crate) fn build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         self.base_space_build_site_at(x, y)
     }
 
@@ -1407,7 +1362,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let Some(kind) = self
             .world
             .get::<Structure>(structure)
@@ -1648,7 +1603,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let kind = self
             .world
             .get::<Structure>(structure)
@@ -1958,16 +1913,13 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }
-        // The party's *base* cell, not their `Position` — that is pinned to
-        // the anchor tile on the zone surface the whole time they are in
-        // here, and the machine being worked stands in base space.
         let (hx, hy) = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
         let here = Position { x: hx, y: hy };
         let structure_pos = *self
             .world

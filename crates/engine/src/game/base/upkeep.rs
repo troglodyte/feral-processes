@@ -321,7 +321,7 @@ impl Game {
     }
 
     /// What one town contributes to the fold above — its band's answer if it
-    /// is near enough to the anchor to station anyone, and zero otherwise.
+    /// is near enough to the base's floor to station anyone, and zero otherwise.
     ///
     /// Split out because the town page has to say whether *this* town
     /// garrisons, and `garrison_defense` returns a clamped sum that cannot
@@ -329,9 +329,6 @@ impl Game {
     /// check, so a new condition on the fold cannot leave the page promising
     /// a detachment that no longer arrives.
     pub(crate) fn town_garrisons(&self, key: crate::settlements::SettlementKey) -> u32 {
-        let Some((ax, ay)) = self.anchor_position() else {
-            return 0;
-        };
         let Some(tile) = self
             .world
             .resource::<crate::resources::Settlements>()
@@ -341,7 +338,9 @@ impl Game {
         else {
             return 0;
         };
-        if (tile.0 - ax).abs().max((tile.1 - ay).abs()) > crate::tuning::SETTLEMENT_GARRISON_RADIUS
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        if crate::game::base::footprint::distance_to_floor(floor, tile)
+            .is_none_or(|d| d > crate::tuning::SETTLEMENT_GARRISON_RADIUS)
         {
             return 0;
         }
@@ -354,7 +353,8 @@ impl Game {
     /// author and the log line has to name it.
     ///
     /// Two filters and a discovery rule. The radius is Chebyshev to the
-    /// anchor, as the garrison's is. The band is asked through
+    /// nearest floor cell (`footprint::distance_to_floor`), as the
+    /// garrison's is. The band is asked through
     /// `Standing::sends_raiders`, never restated here. And a town whose
     /// tile has never been resolved is absent from `Settlements` entirely,
     /// so it is excluded by construction rather than by a third check —
@@ -365,10 +365,8 @@ impl Game {
     /// a save round trip. `town_raid_check` picks from this with one draw
     /// and would otherwise be seed-unstable.
     pub(crate) fn raiding_towns(&self) -> Vec<crate::settlements::SettlementKey> {
-        let Some(anchor) = self.anchor_position() else {
-            return Vec::new();
-        };
-        self.raiders_near(anchor)
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        self.raiders_within(|tile| crate::game::base::footprint::distance_to_floor(floor, tile))
     }
 
     /// `raiding_towns`'s own geometry, generalised to any center — an
@@ -376,16 +374,22 @@ impl Game {
     /// tile rather than the anchor, and this is what lets it share the
     /// radius and the `sends_raiders` filter rather than restate them.
     fn raiders_near(&self, center: (i32, i32)) -> Vec<crate::settlements::SettlementKey> {
+        self.raiders_within(|tile| Some((tile.0 - center.0).abs().max((tile.1 - center.1).abs())))
+    }
+
+    /// The towns `distance` puts within `SETTLEMENT_RAID_RADIUS` that send
+    /// raiders; `None` from `distance` is out of range.
+    fn raiders_within(
+        &self,
+        distance: impl Fn((i32, i32)) -> Option<i32>,
+    ) -> Vec<crate::settlements::SettlementKey> {
         let near: Vec<crate::settlements::SettlementKey> = self
             .world
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
             .filter(|(_, known)| {
-                (known.tile.0 - center.0)
-                    .abs()
-                    .max((known.tile.1 - center.1).abs())
-                    <= crate::tuning::SETTLEMENT_RAID_RADIUS
+                distance(known.tile).is_some_and(|d| d <= crate::tuning::SETTLEMENT_RAID_RADIUS)
             })
             .map(|(key, _)| *key)
             .collect();

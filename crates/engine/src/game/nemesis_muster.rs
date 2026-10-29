@@ -88,7 +88,7 @@ impl Game {
         for &e in &raiders {
             self.world.entity_mut(e).insert(Besieger);
         }
-        if self.base_pos().is_some() {
+        if self.field_pos().is_some() {
             // A besieger is a base-space body, and base-space `Position` is
             // pinned to the anchor.
             if let Some((ax, ay)) = self.anchor_position() {

@@ -7,6 +7,16 @@ use crate::items::ItemId;
 use crate::*;
 
 impl Game {
+    /// Lays floor on each of `cells` through `Game::floor_cell`, the one door
+    /// a cell becomes floor through — free and with no adjacency rule, so a
+    /// fixture or the console can stand up a base of any shape.
+    #[doc(hidden)]
+    pub fn dev_lay_floor(&mut self, cells: impl IntoIterator<Item = (i32, i32)>) {
+        for (x, y) in cells {
+            self.floor_cell(x, y);
+        }
+    }
+
     /// Adds `qty` of a plain item to the player's pack. Gear is refused: it
     /// lives in `GearCopies` with rolled affixes, not in `Inventory`.
     #[doc(hidden)]

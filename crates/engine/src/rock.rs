@@ -1,30 +1,12 @@
-//! What a cell of base-space rock is made of.
+//! What a field blocker is made of.
 //!
 //! Content, like species and items — `assets/rock/*.ron`, one file per kind,
 //! so an ore later is a file drop rather than a code change.
 //!
-//! **A wall's kind is a property of the place, and is never stored.**
-//! `base_grid` opens by explaining that there is no `Solid` variant because
-//! "not in the map" already says it, and writing a kind out for every
-//! untouched coordinate would make the sparse map not sparse. So the kind is
-//! derived instead: `RockDb::kind_at` answers for any coordinate whether or
-//! not anything has ever touched it, which is what makes drawing an unmined
-//! wall face possible at all.
-//!
-//! Selection is an FNV-1a fold reduced through `derive::index`, for
-//! `descriptions.rs`'s three reasons: `resources::GameRng` does not survive
-//! a save/load and a draw from it shifts every later roll in the run;
-//! `StdRng`'s sequence is not guaranteed stable across a `rand` upgrade; and
-//! `%` reads only the seed's lowest bit for a small pool, which
-//! anti-correlates neighbouring pools while looking perfectly reasonable.
-//!
-//! **The seed is base space's own**, `BaseGrid::seed`, and not
-//! `WorldMap::seed()`. The world seed changes on every breach
-//! (`enter_next_zone` mints the next zone from `wrapping_add(0x9E37_79B9)`)
-//! while `BaseGrid` *travels* with the run — so salted off the world seed,
-//! every seam in the base would reshuffle each time the player portalled and
-//! a half-cut wall would come back a different kind under its saved
-//! `Durability`.
+//! **A wall's kind is a property of the place, and is never stored.** It is
+//! keyed by the blocker's biome (`RockDb::kind_at`), so any coordinate
+//! answers whether or not anything has ever touched it, which is what makes
+//! describing an unmined wall possible at all.
 
 use crate::world::Biome;
 use std::collections::BTreeMap;
@@ -32,8 +14,6 @@ use std::path::Path;
 
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
-
-use crate::derive::index;
 
 /// How bright a kind may be drawn against `Biome::Entropy`'s own colour.
 ///
@@ -188,13 +168,12 @@ impl RockDb {
     }
 
     /// What a field blocker of this biome is made of: Data Void is compacted
-    /// entropy, Black Ice is fused, and base-space Entropy is the ordinary
-    /// kind. Any other biome is not rock, and answers the fallback.
+    /// entropy, Black Ice is fused, and Entropy is the ordinary kind. Any other biome is not rock, and answers the fallback.
     ///
     /// Keyed by the biome rather than folded from a seed, so the kind of a
     /// field cell is a property of what the world already says is there and
     /// needs no second source of truth. A mod that drops the named file gets
-    /// the fallback, the same tolerance `base_kind_at` has.
+    /// the fallback.
     pub fn kind_at(&self, biome: Biome) -> &RockDef {
         let id = match biome {
             Biome::DataVoid => "compacted",
@@ -207,36 +186,6 @@ impl RockDb {
     /// `kind_at` without the strings.
     pub fn wall_at(&self, biome: Biome) -> Wall {
         self.kind_at(biome).wall()
-    }
-
-    /// What the cell at `(x, y)` in base space is made of.
-    ///
-    /// Total over the roster rather than the first match, so a mod adding a
-    /// kind widens the pool instead of displacing one. Falls back to the
-    /// built-in kind when nothing loaded — every reader tolerates a
-    /// one-kind world, which is the half of "an empty directory is
-    /// supported" that has to hold at the *reader* end.
-    pub fn base_kind_at(&self, seed: u32, x: i32, y: i32) -> &RockDef {
-        let total: u32 = self.defs.values().map(|d| d.weight).sum();
-        if total == 0 {
-            return &self.fallback;
-        }
-        let mut n = index(block_seed(seed, x, y), total as usize) as u32;
-        for def in self.defs.values() {
-            if n < def.weight {
-                return def;
-            }
-            n -= def.weight;
-        }
-        // Unreachable while the weights sum to `total`, and cheaper to state
-        // than to prove at every call site.
-        &self.fallback
-    }
-
-    /// What a swing at `(x, y)` needs to know. `base_kind_at` without the
-    /// strings, which is what every caller in play actually wants.
-    pub fn base_wall_at(&self, seed: u32, x: i32, y: i32) -> Wall {
-        self.base_kind_at(seed, x, y).wall()
     }
 
     /// Every kind in key order — what the asset censuses walk.
@@ -264,35 +213,6 @@ fn def_fault(def: &RockDef) -> Option<String> {
         return Some(format!("shade {} is outside {lo}..={hi}", def.shade));
     }
     None
-}
-
-/// How many tiles across one patch of a single kind is.
-///
-/// Folded per *block* rather than per tile so a run of adjacent cells
-/// resolves to the same kind and a dense kind reads as a seam with an
-/// inside. Per tile it would be salt and pepper: every wall a different
-/// colour, no seam to follow, and an exposed face conveying nothing about
-/// what is behind it.
-const VEIN_BLOCK: i32 = 4;
-
-/// The value `index` reduces: base space's seed and the block a coordinate
-/// falls in.
-///
-/// **Every input goes in a byte at a time.** One XOR-then-multiply round
-/// carries a difference only about the prime's own width upward, so folding
-/// a block coordinate as a single word would leave neighbouring blocks
-/// differing nowhere near bit 63 — which is the bit `derive::index` reads.
-/// That is the measured failure `descriptions::Slot::tags` documents, reached
-/// here by the same route.
-fn block_seed(seed: u32, x: i32, y: i32) -> u64 {
-    crate::derive::fold(
-        crate::derive::FNV_BASIS,
-        &[
-            seed as u64,
-            x.div_euclid(VEIN_BLOCK) as i64 as u64,
-            y.div_euclid(VEIN_BLOCK) as i64 as u64,
-        ],
-    )
 }
 
 #[cfg(test)]
@@ -358,11 +278,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let (db, warnings) = RockDb::load_dir(&dir).unwrap();
         assert!(warnings.is_empty());
-        let kinds: std::collections::BTreeSet<&str> = (0..40)
-            .map(|i| db.base_kind_at(7, i * VEIN_BLOCK, 0).id.as_str())
-            .collect();
+        let kinds: std::collections::BTreeSet<&str> =
+            [Biome::DataVoid, Biome::BlackIce, Biome::Entropy]
+                .into_iter()
+                .map(|b| db.kind_at(b).id.as_str())
+                .collect();
         assert_eq!(kinds.len(), 1, "an empty directory must be uniform");
-        let only = db.base_kind_at(7, 0, 0);
+        let only = db.kind_at(Biome::DataVoid);
         assert!(
             only.min_swings >= 2 && only.swing_cap() < only.durability,
             "the fallback kind must keep the swing floor: the floor is the bug \
@@ -416,71 +338,4 @@ mod tests {
     min_swings: 2,
     shade: 1.0,
 )"#;
-
-    /// A patch has an inside: the cells of one block agree, so an exposed
-    /// face says something about what is behind it.
-    #[test]
-    fn one_block_is_one_kind() {
-        let db = db();
-        for bx in -3..3 {
-            for by in -3..3 {
-                let anchor = db
-                    .base_kind_at(11, bx * VEIN_BLOCK, by * VEIN_BLOCK)
-                    .id
-                    .clone();
-                for dx in 0..VEIN_BLOCK {
-                    for dy in 0..VEIN_BLOCK {
-                        assert_eq!(
-                            db.base_kind_at(11, bx * VEIN_BLOCK + dx, by * VEIN_BLOCK + dy)
-                                .id,
-                            anchor,
-                            "block ({bx},{by}) is not one kind"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    /// The shipped weights must actually produce a mix over a region the
-    /// size of a base, or the roster is decorative.
-    #[test]
-    fn a_base_sized_region_holds_more_than_one_kind() {
-        let db = db();
-        let kinds: std::collections::BTreeSet<&str> = (-24..24)
-            .flat_map(|x| (-24..24).map(move |y| (x, y)))
-            .map(|(x, y)| db.base_kind_at(4242, x, y).id.as_str())
-            .collect();
-        assert!(kinds.len() >= 2, "one kind over a whole base: {kinds:?}");
-    }
-
-    /// Two different base seeds lay their seams out differently, or the
-    /// seed is decorative and every run digs the same base.
-    #[test]
-    fn two_seeds_lay_out_differently() {
-        let db = db();
-        let layout = |seed: u32| -> Vec<String> {
-            (-8..8)
-                .flat_map(|x| (-8..8).map(move |y| (x, y)))
-                .map(|(x, y)| db.base_kind_at(seed, x, y).id.clone())
-                .collect()
-        };
-        assert_ne!(layout(1), layout(2));
-    }
-
-    /// Neighbouring blocks decorrelate — the property `block_seed`'s
-    /// byte-at-a-time fold exists to hold, and the one a shortened fold
-    /// would silently break while every individual answer still looked
-    /// arbitrary.
-    #[test]
-    fn adjacent_blocks_do_not_all_agree() {
-        let db = db();
-        let row: Vec<&str> = (0..40)
-            .map(|b| db.base_kind_at(9, b * VEIN_BLOCK, 0).id.as_str())
-            .collect();
-        assert!(
-            row.iter().collect::<std::collections::BTreeSet<_>>().len() >= 2,
-            "forty adjacent blocks are all one kind: {row:?}"
-        );
-    }
 }

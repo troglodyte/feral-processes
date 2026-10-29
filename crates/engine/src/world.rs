@@ -42,25 +42,18 @@ pub enum Biome {
     Backplane,
     OpenGrid,
     BlackIce,
-    /// Laid base floor — `base_grid::BaseCell::Floor`. **Never produced by
-    /// `classify` and never written into a `WorldMap` any more**: the base
-    /// went out of phase into `base_grid::BaseGrid`, its own coordinate
-    /// space, and this variant survives only as the rendering vocabulary
-    /// `Game::view_tiles` synthesises for it — see that function for the
-    /// three-way mapping. No shipped species lists it as a habitat, which is
-    /// the entire mechanism behind a base being a safe haven:
-    /// `Game::try_spawn_habitat_creature` already bails when both candidate
-    /// pools come back empty, so no spawn-suppression code exists anywhere.
+    /// Laid base floor. **Never produced by `classify` and never written
+    /// into a `WorldMap`**: floor lives in `base_grid::BaseGrid`, an overlay
+    /// keyed by field coordinates, and `Game::ground_tile` merges it over the
+    /// map as this biome. No shipped species lists it as a habitat, so the
+    /// spawners that ask `ground_tile` never put a wild program on it.
     Platform,
-    /// Carved-out base space, not yet floored — `BaseCell::Open`. Walkable,
-    /// like `Platform`, and the same rendering-only status: synthesised by
-    /// `Game::view_tiles`, never written into a `WorldMap`, never produced
-    /// by `classify`.
+    /// A field blocker the base has mined: written as a `WorldMap` override
+    /// by `Game::strike_field_rock`, walkable, and saved with the other
+    /// overrides. Never produced by `classify`.
     Excavated,
-    /// Solid, unmined base space — what `Game::view_tiles` draws for every
-    /// base coordinate `BaseGrid` has no cell for. The base's equivalent of
-    /// a hole in the map: nothing is ever placed there, the same as
-    /// `DataVoid` and `BlackIce` on the surface.
+    /// A blocker no `classify` produces; kept for its rock kind
+    /// (`assets/rock/`) and so old overrides naming it still parse.
     Entropy,
 }
 
@@ -276,6 +269,24 @@ impl WorldMap {
         self.ensure_chunk(cx, cy);
         let (lx, ly) = (x.rem_euclid(CHUNK_SIZE), y.rem_euclid(CHUNK_SIZE));
         self.chunks[&(cx, cy)].tiles[(ly * CHUNK_SIZE + lx) as usize]
+    }
+
+    /// `tile` without generating anything: the override, the cached chunk,
+    /// or the noise sampled straight. `&self`, so a pure rule over the field
+    /// (a crew walk, a siege's spawn cells) can read walkability beside other
+    /// resources without a mutable borrow of the map.
+    pub(crate) fn peek(&self, x: i32, y: i32) -> Tile {
+        if let Some(t) = self.overrides.get(&(x, y)) {
+            return *t;
+        }
+        let (cx, cy) = (x.div_euclid(CHUNK_SIZE), y.div_euclid(CHUNK_SIZE));
+        match self.chunks.get(&(cx, cy)) {
+            Some(chunk) => {
+                let (lx, ly) = (x.rem_euclid(CHUNK_SIZE), y.rem_euclid(CHUNK_SIZE));
+                chunk.tiles[(ly * CHUNK_SIZE + lx) as usize]
+            }
+            None => self.classify(x, y),
+        }
     }
 
     pub fn set_override(&mut self, x: i32, y: i32, tile: Tile) {

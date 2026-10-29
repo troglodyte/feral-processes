@@ -563,18 +563,10 @@ impl Game {
     /// packmate still mid-chase), so the swarm arrives together rather than
     /// one at a time.
     pub(crate) fn pursuit_tick(&mut self) {
-        // Off the surface in *either* direction, not just underground: the
-        // player's `Position` is pinned to the anchor tile in base space as
-        // much as to the entrance tile in the Stack, so a guardian standing
-        // beside that tile would otherwise open a battle on a party that is
-        // out of phase and nowhere near it. `is_underground` stays
-        // Stack-only by design (see `Game::is_underground`), so this is two
-        // questions rather than one.
-        if self.is_game_over().is_some()
-            || self.has_active_battle()
-            || self.is_underground()
-            || self.in_base()
-        {
+        // Underground the player's `Position` is pinned to the entrance tile,
+        // so a guardian standing beside it would otherwise open a battle on a
+        // party four frames down and nowhere near it.
+        if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return;
         }
 
@@ -817,17 +809,6 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return (0, 0);
         }
-        // Base space is its own coordinate space with its own walkability,
-        // and the player's `Position` stays pinned to the anchor tile
-        // throughout — everything below this line is about the zone map and
-        // means nothing in there.
-        if self.in_base() {
-            self.move_in_base(dx, dy);
-            // The base slab is the one safe floor and carries no condition
-            // (`environment_biome_at` refuses `Platform` outright), so there
-            // is never a bite in here to report.
-            return (0, 0);
-        }
         let player = self.player_entity();
         // Any attempt to move ends a job you were working (see
         // `Game::work_structure`) — including one that turns into a fight or
@@ -927,26 +908,52 @@ impl Game {
             self.tick();
             return (0, 0);
         }
-        // **No structure is consulted here.** Every `Structure` stands in
-        // base space — `Structure` is the space tag, and there is exactly
-        // one spawn site — so its `Position` is in a different coordinate
-        // space from the tile being stepped onto. Asking a base-space query
-        // about a surface tile answers by numeric coincidence, and the
-        // coincidence is the common case: `find_walkable_start` returns
-        // `(0, 0)` whenever it can, so the anchor, the zone spawn point and
-        // base space's origin all carry the same numbers, and the pocket
-        // covers the player's own starting tile. Left in, the base's own
-        // Home made the anchor unwalkable, its machines were invisible
-        // walls, and a Portal deployed inside fired a breach from out here.
-        //
-        // Walking onto a Portal breaches from **inside** the base, where the
-        // Portal actually stands — see `Game::move_in_base`.
-        let from = self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome;
-        let walkable = self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable;
+        // The base stands on the field (ADR 0032), so its structures meet
+        // the step here. A barrier refuses it — free, no tick; a Wall comes
+        // down by demolition, not by a shoulder. Every other structure is
+        // walked over.
+        if let Some(wall) = self.barrier_at(nx, ny) {
+            let name = self.entity_label(wall);
+            self.log(format!("The {name} stops you."));
+            return (0, 0);
+        }
+        // Walking onto a Portal is how a run breaches. Consumed before
+        // `enter_next_zone` runs: a portal that travelled would make every
+        // breach after the first free, bypassing its per-zone cost.
+        if let Some(portal) = self.find_zone_portal_at(nx, ny) {
+            // Refused like a barrier: free, no tick, and the portal stands so
+            // the key can be found and the step tried again.
+            let zone = self.world.resource::<ZoneLevel>().0;
+            if let Err(why) = self.phase_key_gate(zone) {
+                self.log(why);
+                return (0, 0);
+            }
+            self.world.despawn(portal);
+            self.enter_next_zone();
+            self.tick();
+            return (0, 0);
+        }
+        // Asked, never acted on: the frontend confirms and calls
+        // `escape_basin`. Refused like the portal when the gate is shut.
+        if self.find_basin_exit_at(nx, ny).is_some() {
+            match self.basin_exit_gate() {
+                Ok(()) => self.raise_basin_exit_prompt(),
+                Err(why) => self.log(why),
+            }
+            return (0, 0);
+        }
+        // A blocker the base touches is rock to cut, and the bump is the
+        // swing (`MiningMode` decides whether it lands). One the base does
+        // not touch is refused below as any unwalkable tile is.
+        if !self.ground().walkable(nx, ny) {
+            let pending = self.pending_floor();
+            if crate::game::field_mining::minable((nx, ny), self.ground(), &pending) {
+                self.bump_rock((nx, ny), dx != 0 && dy != 0);
+                return (0, 0);
+            }
+        }
+        let from = self.ground_tile(pos.x, pos.y).biome;
+        let walkable = self.ground_tile(nx, ny).walkable;
         let mut drag_ticks = 0;
         let mut bite = 0;
         if walkable {
@@ -1176,7 +1183,7 @@ impl Game {
         if epoch_after == epoch_before {
             return;
         }
-        if self.is_underground() || self.in_base() || self.has_active_battle() {
+        if self.is_underground() || self.has_active_battle() {
             return;
         }
         let player = self.player_entity();
@@ -1540,7 +1547,10 @@ impl Game {
         }
         let player = self.player_entity();
         let mut spent = None;
-        if !self.in_base() {
+        // Home is the base's floor: resting there costs no charge and mends
+        // with Patch Routines, out on open ground the reverse.
+        let at_home = self.on_base_floor();
+        if !at_home {
             let Some(charge) = self.rest_charge_in_pack() else {
                 let name = match self.rest_charge_name() {
                     Some(name) => format!("no {name}"),
@@ -1594,7 +1604,7 @@ impl Game {
         // Integrity: in base it is bought with Patch Routines and may fall
         // short; out here the Outlet already paid for a full repair. Rest is
         // never refused either way.
-        let mended: crate::game::base::healing::Mend = if self.in_base() {
+        let mended: crate::game::base::healing::Mend = if at_home {
             let bodies = self.rest_bodies();
             self.mend_with_patches(&bodies)
         } else {

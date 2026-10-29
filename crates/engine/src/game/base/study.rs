@@ -237,7 +237,7 @@ impl Game {
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let grid = self.world.resource::<BaseGrid>();
         Some(walk_field(pen, haul_walk_radius(pocket_radius), |p| {
-            (grid.walkable(p.0, p.1) && (p == start || !blocked.taken(p))).then_some(1)
+            (grid.is_floor(p.0, p.1) && (p == start || !blocked.taken(p))).then_some(1)
         }))
     }
 

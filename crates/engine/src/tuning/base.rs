@@ -142,11 +142,9 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// The radius the surface slab had, a 9x9 box, before the base moved into
-/// its own pocket dimension. `STARTING_POCKET_HALF_WIDTH` and
-/// `STARTING_POCKET_HALF_HEIGHT` size the base now;
-/// this survives only as surface geometry around the anchor, which the
-/// Stack's link placement keeps clear of.
+/// The radius the surface slab had, a 9x9 box. It survives only as field
+/// geometry around the anchor, which the Stack's link placement keeps clear
+/// of.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
 /// Tiles of surface sight a character at baseline attributes has. Slightly
@@ -159,28 +157,6 @@ pub const PERCEPTION_BASE_RADIUS: f32 = 5.0;
 /// rolled low in Analysis and Entropy still sees the tiles beside them.
 pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 
-/// How far the pre-cleared pocket reaches east and west of base space's own
-/// origin when the first Home is deployed — `Game::lay_starting_pocket`,
-/// which lays `BaseCell::Floor` over the chamfered box this,
-/// `STARTING_POCKET_HALF_HEIGHT` and `PLATFORM_CORNER_CUT` describe and
-/// writes nothing into `WorldMap` at all.
-///
-/// 9 gives a 19-cell-wide pocket, double the 9 it opened at when it matched
-/// `MAX_BUILD_DISTANCE_FROM_HOME`'s old slab: at 9 wide the beginner
-/// structures did not all fit, and digging out room for the first handful
-/// was a chore rather than growth.
-///
-/// This is the *starting* size, the way the old constant was the starting
-/// radius: slice 2's mining is what makes floor space something a player
-/// buys, and this is only the ground the run opens with.
-pub const STARTING_POCKET_HALF_WIDTH: i32 = 9;
-
-/// How far the starting pocket reaches north and south of base space's
-/// origin: 9 cells tall, the height it opened at. Separate from
-/// `STARTING_POCKET_HALF_WIDTH` because the base was asked to grow wider,
-/// not bigger — one radius for both made it twice as tall too.
-pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
-
 /// The widest a base was ever meant to get, from when it was a slab stamped
 /// onto the zone surface: `Game::build_radius` clamped here no matter how
 /// many `build_radius_bonus` structures (the Heap Pillar's own) were
@@ -190,8 +166,7 @@ pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
 ///
 /// **All three — `build_radius`, `clear_platform` and the Heap Pillar —
 /// are deleted along with `resources::Platform`.** Base space grows by
-/// laying floor on `base_grid::BaseGrid` now (`Game::lay_starting_pocket`,
-/// slice 2's mining), not by widening a clamped radius, and nothing reads
+/// laying floor on `base_grid::BaseGrid` now (`Game::floor_cell`), not by widening a clamped radius, and nothing reads
 /// this constant as an active ceiling any more.
 ///
 /// Kept rather than deleted: two of this file's own doc comments
@@ -202,17 +177,6 @@ pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
 /// that bound turns out to be — it is a placeholder for "very large," not a
 /// measured figure, and no longer the backstop it was written as.
 pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
-
-/// How deep each of the base slab's four corners is chamfered, in diagonal
-/// steps — the slab is the box above with `Platform::covers` trimming a
-/// triangle off each corner, so at 2 the corner tile and the two beside it
-/// are natural terrain and the base reads as rounded rather than as a
-/// stamped square.
-///
-/// This is footprint, not decoration: `place_structure` measures against
-/// the same predicate, so a cut tile is unbuildable and a raised value
-/// takes buildable ground away. 0 restores the square.
-pub const PLATFORM_CORNER_CUT: i32 = 2;
 
 // ---- Growing the base: rock you cut ----------------------------------
 //
@@ -378,6 +342,12 @@ pub const SIEGE_PRESSURE_PER_ZONE: u32 = 1;
 /// times, not a chore met every session, so its interval is much longer
 /// than the sweep's.
 pub const SIEGE_PRESSURE_THRESHOLD: u32 = 14_400;
+
+/// How many rings a sealed base's siege search walks out through blockers
+/// looking for walkable ground to spawn besiegers on
+/// (`siege::board::siege_spawn_cells`'s fallback) before the siege is
+/// called off for want of anywhere to come from.
+pub const SIEGE_SPAWN_SEARCH_TILES: i32 = 32;
 
 /// How far either side of `SIEGE_PRESSURE_THRESHOLD` a drawn interval may
 /// land, in percent — `RAID_PRESSURE_JITTER_PERCENT`'s reason, drawn once

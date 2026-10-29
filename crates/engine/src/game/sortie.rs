@@ -77,7 +77,7 @@ impl Game {
         if !self.has_relay() {
             return DispatchReach::NoRelay;
         }
-        let Some((x, y)) = self.base_pos() else {
+        let Some((x, y)) = self.field_pos() else {
             return DispatchReach::OffBase;
         };
         if self
@@ -343,7 +343,9 @@ impl Game {
             let Some(tile) = self.world.get::<Position>(member).map(|p| (p.x, p.y)) else {
                 continue;
             };
-            let door = crate::game::base_space::BASE_EXIT_CELL;
+            let Some(door) = self.anchor_position() else {
+                continue;
+            };
             let (from, to) = if outbound { (tile, door) } else { (door, tile) };
             self.queue_transit_walk(ch, color, from, to);
         }

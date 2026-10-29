@@ -13,7 +13,6 @@ use crate::base_grid::BaseGrid;
 use crate::components::{Needs, OffShift, Position, Structure};
 use crate::game::base::hauling::{NoPost, Step, at_station, step_to_post};
 use crate::needs::{NeedDb, NeedId};
-use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
 use bevy_ecs::prelude::Entity;
 
@@ -191,7 +190,7 @@ pub(crate) fn open_tiles(
     let reach = radius.max(1);
     (site.x - reach..=site.x + reach)
         .flat_map(|x| (site.y - reach..=site.y + reach).map(move |y| (x, y)))
-        .filter(|&(x, y)| grid.walkable(x, y) && !taken.contains(&(x, y)))
+        .filter(|&(x, y)| grid.is_floor(x, y) && !taken.contains(&(x, y)))
         .count()
 }
 
@@ -631,11 +630,8 @@ impl Game {
             return Ok(());
         };
         // The party's cell is the one rejection `step_to_post` cannot make
-        // for itself: `Locale` is where the party stands in base space, and
-        // the player's `Position` is pinned to the anchor out on the surface.
-        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
-            && (x, y) == (tile.x, tile.y)
-        {
+        // for itself.
+        if self.field_pos() == Some((tile.x, tile.y)) {
             return Ok(());
         }
         if let Some(mut pos) = self.world.get_mut::<Position>(worker) {

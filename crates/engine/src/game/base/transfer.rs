@@ -153,7 +153,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return Vec::new();
         }
         let currency = self.trade_currency();
@@ -242,7 +242,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return Vec::new();
         }
         self.carrier_slots(racks)
@@ -347,7 +347,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return (Moved::new(), Moved::new());
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return (Moved::new(), Moved::new());
         }
         // Both carrier refusals land here, above the item movers, which is
@@ -563,7 +563,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return;
         }
         if self.reachable_stock().is_empty() {

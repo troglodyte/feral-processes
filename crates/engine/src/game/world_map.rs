@@ -58,7 +58,7 @@ impl Game {
     /// around each outpost, and along each route's corridor. A mark appears
     /// only on a revealed chunk.
     pub fn world_map(&mut self, center_chunk: (i32, i32), radius: i32) -> Option<WorldMapView> {
-        self.require_surface().ok()?;
+        self.require_field().ok()?;
         let party_pos = *self.world.get::<Position>(self.player_entity())?;
         let party_tile = (party_pos.x, party_pos.y);
         let anchor = self.anchor_position();

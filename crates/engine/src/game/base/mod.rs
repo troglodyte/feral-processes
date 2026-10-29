@@ -26,6 +26,7 @@ pub(crate) mod farm;
 pub(crate) mod flight;
 pub(crate) mod floor;
 pub(crate) mod floor_hands;
+pub(crate) mod footprint;
 pub(crate) mod hauling;
 pub(crate) mod healing;
 pub(crate) mod lines;

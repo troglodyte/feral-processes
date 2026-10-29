@@ -99,7 +99,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't place that right now.".into());
         }
-        self.require_surface()?;
+        self.require_field()?;
         let player = self.player_entity();
         let name = self.item_name(item).to_string();
         if self
@@ -167,7 +167,7 @@ impl Game {
     /// a taken decision: the trap is on the ground in front of the player
     /// and the only way to be holding one again is to compile it.
     pub fn destroy_trap(&mut self, dx: i32, dy: i32) -> Result<(), String> {
-        self.require_surface()?;
+        self.require_field()?;
         let player = self.player_entity();
         let pos = *self
             .world
@@ -516,33 +516,14 @@ impl Game {
             .collect()
     }
 
-    /// The `Structure` standing at `(x, y)`, if any — and `None` outright
-    /// whenever the party is not in base space, regardless of what `(x, y)`
-    /// numerically is.
+    /// The `Structure` standing at `(x, y)`, if any.
     ///
-    /// **`Structure` is the space tag** (see
-    /// `seam:structure-is-the-space-tag`): every structure stands in
-    /// `base_grid::BaseGrid`'s coordinate space, never the zone surface, so a
-    /// `Structure` query only ever answers a base-space question. Gating on
-    /// `in_base` closes that generally instead of at each call site —
-    /// `game/stack.rs`'s `link_site_free` used to call this with **surface**
-    /// coordinates while scattering Stack entrances, and with the zone spawn
-    /// point and base space's origin both commonly `(0, 0)`, it silently
-    /// refused valid link sites near a base. The one legitimate caller left
-    /// with `(x, y)` computed while off base (`place_structure`'s founding
-    /// Home) is asking about a base that cannot exist yet — no Home means no
-    /// other structure either, since removing a Home cascades to every
-    /// structure it stands beside — so `None` is the right answer there too,
-    /// not a special case.
     /// **Point-in-footprint, not point-equality.** `(x, y)` need not be a
     /// structure's own anchor — this answers for any cell any standing
     /// structure's footprint covers, so a build, a walk or an examine
     /// pointed at a Research Station's floor cell is answered for the
     /// Station rather than reading as open ground.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         self.structure_footprints()
             .into_iter()
             .find(|(_, p, side)| {
@@ -662,12 +643,8 @@ impl Game {
     }
 
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
-    /// `(x, y)`, if any — checked from `Game::move_in_base` so walking onto
-    /// one breaches the zone. `(x, y)` is a base-space coordinate: a Portal
-    /// is a `Structure`, and every `Structure` stands in base space now, so
-    /// this refuses to answer at all outside it — see
-    /// `find_blocking_structure_at`'s doc for why that guard belongs here
-    /// rather than at each caller.
+    /// `(x, y)`, if any — checked from `Game::move_player` so walking onto
+    /// one breaches the zone.
     pub(crate) fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         self.find_structure_at_where(x, y, |d| d.zone_portal)
     }
@@ -678,18 +655,13 @@ impl Game {
         self.find_structure_at_where(x, y, |d| d.basin_exit)
     }
 
-    /// The structure on base-space `(x, y)` whose def satisfies `wanted`.
-    /// Answers nothing outside base space, where `(x, y)` is another
-    /// coordinate system.
+    /// The structure on `(x, y)` whose def satisfies `wanted`.
     fn find_structure_at_where(
         &mut self,
         x: i32,
         y: i32,
         wanted: impl Fn(&StructureDef) -> bool,
     ) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position, &Structure), ()>();

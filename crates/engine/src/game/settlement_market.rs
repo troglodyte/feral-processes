@@ -70,7 +70,7 @@ impl Game {
     /// is only opened from a surface bump or an `x`), but all four callers
     /// are `pub`.
     pub(crate) fn settlement_reach(&self, key: SettlementKey) -> bool {
-        if self.in_base() || self.is_underground() {
+        if self.is_underground() {
             return false;
         }
         let Some(known) = self.world.resource::<resources::Settlements>().0.get(&key) else {

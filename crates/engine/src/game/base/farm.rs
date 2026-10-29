@@ -326,7 +326,7 @@ impl Game {
     /// Every plot cell for the base map, in `pos` order. Empty outside base
     /// space for `floor_items`' reason: a tile's `Position` is a base cell.
     pub fn farm_tiles(&self) -> Vec<FarmTileView> {
-        if self.base_pos().is_none() {
+        if self.field_pos().is_none() {
             return Vec::new();
         }
         let Some(mut query) = self.world.try_query::<(&Position, &FarmTile)>() else {

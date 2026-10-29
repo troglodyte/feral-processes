@@ -87,7 +87,7 @@ impl Game {
     /// Every Holding Cell the party is orthogonally beside — beside any of
     /// its footprint cells, not only the anchor — in `(x, y)` order.
     fn adjacent_holding_cells(&self) -> Vec<Entity> {
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
         let mut found: Vec<(i32, i32, Entity)> = self
@@ -116,7 +116,7 @@ impl Game {
         if !self.world.resource::<BaseGrid>().is_floor(pen.0, pen.1) {
             return true;
         }
-        if self.base_pos() == Some(pen) {
+        if self.field_pos() == Some(pen) {
             return true;
         }
         self.world.iter_entities().any(|e| {

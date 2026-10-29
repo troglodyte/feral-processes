@@ -119,14 +119,14 @@ impl Game {
         Mend { missing, healed }
     }
 
-    /// One tick of the free floor under paid rest: while the party stands in
-    /// base space and nothing is fighting, everyone a rest would repair
+    /// One tick of the free floor under paid rest: while the party stands on
+    /// the base's floor and nothing is fighting, everyone a rest would repair
     /// regains `BASE_TRICKLE_PER_TICK` Integrity. Costs nothing.
     ///
     /// A `Game` method beside `run_repair_bays` rather than a bevy system,
     /// because `rest_bodies` needs `program_role`, which needs `&Game`.
     pub(crate) fn run_base_trickle(&mut self) {
-        if self.is_game_over().is_some() || !self.in_base() || self.has_active_battle() {
+        if self.is_game_over().is_some() || !self.on_base_floor() || self.has_active_battle() {
             return;
         }
         for body in self.rest_bodies() {

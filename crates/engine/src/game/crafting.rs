@@ -143,7 +143,7 @@ impl Game {
     /// space, where nothing is touched. A structure with no `StructureTier`
     /// reads as tier 1, `best_structure_tier`'s rule.
     pub(crate) fn touched_bench(&self, kind: &str) -> Option<(Entity, u32)> {
-        let (bx, by) = self.base_pos()?;
+        let (bx, by) = self.field_pos()?;
         let here = Position { x: bx, y: by };
         let side = self.structure_footprint(&kind.to_string());
         self.world
@@ -274,7 +274,7 @@ impl Game {
         quantity: u32,
         careful: bool,
     ) -> Result<ShortfallOrders, String> {
-        self.require_base()?;
+        self.require_field()?;
         let short = self.craft_shortfall(result, quantity, careful);
         if short.is_empty() {
             return Err("Nothing is missing.".into());
@@ -615,7 +615,7 @@ impl Game {
     /// the base is not in reach, so a bench verb used there sees the pack
     /// alone.
     pub(crate) fn held_in_reach(&self, item: &ItemId) -> u32 {
-        if self.base_pos().is_some() {
+        if self.field_pos().is_some() {
             return self.stores_hold(item);
         }
         self.world
@@ -629,7 +629,7 @@ impl Game {
     /// stock first (`spend_from_stores`), so what the player carries stays
     /// on them for the field. Outside base space it is `pay_items`.
     pub(crate) fn pay_from_reach(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
-        if self.base_pos().is_none() {
+        if self.field_pos().is_none() {
             return self.pay_items(cost);
         }
         let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();

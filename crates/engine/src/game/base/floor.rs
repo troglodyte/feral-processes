@@ -70,16 +70,13 @@ impl FreeFloor {
     /// Laid floor, walkable, and not spoken for by a structure, a build site
     /// or another floor item.
     pub(crate) fn free(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
-        grid.is_floor(cell.0, cell.1)
-            && grid.walkable(cell.0, cell.1)
-            && !self.walls.walls(cell)
-            && !self.taken.contains(&cell)
+        grid.is_floor(cell.0, cell.1) && !self.walls.walls(cell) && !self.taken.contains(&cell)
     }
 
     /// Whether the search may walk on through `cell`: a structure's anchor
     /// is a wall, so nothing lands behind one that a body could not reach.
     fn crossable(&self, grid: &BaseGrid, cell: (i32, i32)) -> bool {
-        grid.walkable(cell.0, cell.1) && !self.walls.walls(cell)
+        grid.is_floor(cell.0, cell.1) && !self.walls.walls(cell)
     }
 }
 
@@ -298,10 +295,9 @@ impl Game {
     }
 
     /// Every thing on the base floor, for the map and the examine line. Empty
-    /// outside base space: a floor item's `Position` is a base cell, and the
-    /// surface map would draw it on whatever tile shares the coordinates.
+    /// underground, where the map is the frame's.
     pub fn floor_items(&self) -> Vec<FloorItemView> {
-        if self.base_pos().is_none() {
+        if self.field_pos().is_none() {
             return Vec::new();
         }
         let Some(mut query) = self.world.try_query::<(&Position, &FloorItem)>() else {

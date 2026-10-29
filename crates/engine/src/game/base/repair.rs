@@ -11,7 +11,6 @@ use crate::base_ledger::ConsumeSource;
 use crate::components::{Downed, PatchCredit, Position, Stats, Stock, Structure};
 use crate::game::base::hauling::{NoPost, Step, step_to_post};
 use crate::game::base::offshift::in_reach;
-use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
 use crate::tuning::{BAY_ADMISSION_HP_FRACTION, REST_INTEGRITY_PER_PATCH};
 use bevy_ecs::prelude::Entity;
@@ -423,11 +422,8 @@ impl Game {
             return Err(NoPost::NoRoute);
         };
         // The party is the one rejection `step_to_post` cannot make for
-        // itself: `Locale` is where the party stands in base space, and the
-        // player's `Position` is pinned to the anchor out on the surface.
-        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
-            && (x, y) == (tile.x, tile.y)
-        {
+        // itself.
+        if self.field_pos() == Some((tile.x, tile.y)) {
             return Ok(());
         }
         if let Some(mut pos) = self.world.get_mut::<Position>(worker) {

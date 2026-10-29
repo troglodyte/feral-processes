@@ -717,14 +717,8 @@ impl Game {
     /// so the whole base counts as distance zero instead of sitting
     /// part-way out of the ring.
     ///
-    /// The reach is `BaseGrid::radius`, which answers 0 while base space is
-    /// still solid everywhere — so the two branches this used to take are
-    /// one expression, and it gives the same numbers it always did: nothing
-    /// subtracted before a Home is deployed, `STARTING_POCKET_HALF_WIDTH`
-    /// subtracted after. It read `Platform::center`/`radius` until the base
-    /// went out of phase, and that pair is now set by a breach and nothing
-    /// else — so a fresh run silently *shrank* its opening ring by four
-    /// tiles and grew it back on the next save and load.
+    /// The reach is `BaseGrid::radius`, which answers 0 with no floor laid,
+    /// so nothing is subtracted before a Home is deployed.
     ///
     /// `Game::in_opening_ring` is the only consumer. Distance decides
     /// nothing else: it used to scale stats and group size, and a program's
@@ -1400,7 +1394,12 @@ impl Game {
     fn standable_near(&mut self, from: (i32, i32)) -> Option<(i32, i32)> {
         ring_tiles(from, 0, SETTLEMENT_SITE_SEARCH_TILES)
             .into_iter()
-            .find(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
+            // Never on the base's floor: a town is placed around the base,
+            // not over it (ADR 0032).
+            .find(|&(x, y)| {
+                let tile = self.ground_tile(x, y);
+                tile.walkable && tile.biome != crate::world::Biome::Platform
+            })
     }
 
     /// Draws the map entity for a settlement whose record already exists.
@@ -1902,7 +1901,9 @@ impl Game {
         depth: Option<u32>,
         step_bonus: u32,
     ) -> Option<(Vec<String>, Vec<String>)> {
-        let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
+        // `ground_tile`, so the base's floor reads as `Platform`, which no
+        // species lists as habitat: nothing wild spawns on the base.
+        let tile = self.ground_tile(x, y);
         if !tile.walkable {
             return None;
         }
@@ -2059,12 +2060,7 @@ impl Game {
                 y + rng.0.random_range(-radius..=radius),
             )
         };
-        if self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(ox, oy)
-            .open_to_hostiles()
-            && self.find_settlement_at(ox, oy).is_none()
+        if self.ground_tile(ox, oy).open_to_hostiles() && self.find_settlement_at(ox, oy).is_none()
         {
             (ox, oy)
         } else {

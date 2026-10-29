@@ -518,7 +518,7 @@ impl Game {
     /// Stack are both off it, and the Stack's own model is settled.
     fn fights_tactically(&self, pack: &[Entity]) -> bool {
         self.profile().tactical_battles
-            && self.require_surface().is_ok()
+            && self.require_field().is_ok()
             && !pack
                 .iter()
                 .any(|&e| self.world.get::<NestGuardian>(e).is_some())

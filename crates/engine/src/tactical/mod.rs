@@ -10,8 +10,8 @@
 //!
 //! **A battle coordinate lives here and nowhere else.** No world `Position`
 //! is ever written for a body standing on a battle map, the same way the
-//! Stack keeps its coordinates in `resources::Locale` and base space keeps
-//! its own in `Locale::Base`. This module does not import `Position`.
+//! Stack keeps its coordinates in `resources::Locale`. This module does not
+//! import `Position`.
 
 pub mod ai;
 pub mod deploy;
@@ -241,15 +241,16 @@ pub struct TacticalBattle {
     /// set once, at seat time, is what keeps "a siege's own pack" and "a
     /// test's one besieger" from being the same question.
     pub(crate) siege_pack: u32,
-    /// The base-space cell the board's `(0, 0)` maps to, for a siege —
+    /// The field cell the board's `(0, 0)` maps to, for a siege —
     /// `(0, 0)` for every other fight, `siege_pack`'s own "not a siege"
     /// answer. `game::siege::board::SiegeBoard::origin`'s own copy, kept
     /// here because a `SiegeBoard` is a construction-time-only wrapper and
     /// `game::siege::persist::assemble` has only this resource to read a
     /// save back out of.
     pub(crate) siege_origin: (i32, i32),
-    /// `BASE_EXIT_CELL`, in board coordinates — `siege_origin`'s own
-    /// reason, and `game::siege::board::SiegeBoard::door`'s copy.
+    /// Where a siege's besiegers enter and leave, in board coordinates —
+    /// `siege_origin`'s own reason, and `game::siege::board::SiegeBoard::
+    /// door`'s copy.
     pub(crate) siege_door: (i32, i32),
     /// The hostile side's plan. `Rush` from `open`, so a hand-built board and
     /// a restored siege decide as they always have; `open_tactical_battle_at`

@@ -1064,7 +1064,7 @@ impl Game {
         // Stack means walking out alone — that is the point of the guard,
         // and it is only survivable because a Forgiving death benches a
         // program rather than destroying it.
-        self.require_base()?;
+        self.require_field()?;
         let player = self.player_entity();
         let owner = self
             .world
@@ -1353,7 +1353,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         self.remove_companion(creature);
         Ok(())
     }

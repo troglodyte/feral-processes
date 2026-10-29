@@ -366,7 +366,7 @@ impl Occupancy {
         start: (i32, i32),
         arrives: impl Fn((i32, i32)) -> bool,
     ) -> Option<u32> {
-        if !grid.walkable(cell.0, cell.1) {
+        if !grid.is_floor(cell.0, cell.1) {
             return None;
         }
         if cell == start {
@@ -513,7 +513,7 @@ pub(crate) fn station_candidates(
         // one of its own floor cells.
         .filter(|p| !footprint_set.contains(&(p.x, p.y)))
         .filter(|p| seen.insert((p.x, p.y)))
-        .filter(|p| grid.walkable(p.x, p.y) && !taken((p.x, p.y)))
+        .filter(|p| grid.is_floor(p.x, p.y) && !taken((p.x, p.y)))
         .collect();
     candidates.sort_by_key(|p| (p.x, p.y));
     candidates

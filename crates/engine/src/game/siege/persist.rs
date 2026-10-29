@@ -55,12 +55,11 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
         .unwrap_or(0);
     // The player is never one of `SaveData::creatures` — see `save::
     // SiegeSave::player_order`'s doc for why its order needs a field here
-    // of its own; `player_cell` beside it for the same reason.
+    // of its own.
     let player = game.player_entity();
     let player_order = member_of(battle, player)
         .map(|(order, _)| order)
         .unwrap_or(0);
-    let player_cell = Some(battle.cell_of(player).unwrap_or(battle.siege_door));
     Some(SiegeSave {
         spec: battle.spec,
         side: battle.board.side,
@@ -72,7 +71,6 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
         actions_left: battle.actions_left(),
         siege_pack: battle.siege_pack,
         player_order,
-        player_cell,
     })
 }
 
@@ -105,7 +103,7 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     let siege_board = SiegeBoard {
         board: battle.board.clone(),
         origin: saved.origin,
-        door: saved.door,
+        spawns: Vec::new(),
     };
     let structures = game.structure_footprints();
     board::seat_structures(&mut battle, &siege_board, structures, |e| {
@@ -113,29 +111,23 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     });
 
     let mut sorted: Vec<(u32, Entity, (i32, i32))> = members.to_vec();
-    // The player rides `SiegeSave::player_order`/`player_cell` rather than
-    // `members`, that field's own reason: the player is never one of
-    // `SaveData::creatures`. **Not `Position`** — in base space that field
-    // is pinned to the surface anchor tile rather than the party's board
-    // cell (CLAUDE.md, "Base-space Position is pinned to the anchor"), and
-    // this runs before `Game::restore_locale` besides, so `Game::base_pos`
-    // has nothing to answer yet either way. `player_cell` was read straight
-    // off the board at save time, so it needs no re-derivation at all —
-    // `None` only for a save written before the field existed, and
-    // `saved.door` is what that reload always meant to give back.
+    // The player rides `SiegeSave::player_order` rather than `members`, that
+    // field's own reason: the player is never one of `SaveData::creatures`.
+    // Its board cell is its own `Position` (honest on the field, ADR 0032),
+    // loaded before this runs, falling back to the door.
     let player = game.player_entity();
-    let player_cell = saved.player_cell.unwrap_or(saved.door);
+    let player_cell = game
+        .world
+        .get::<crate::components::Position>(player)
+        .and_then(|p| siege_board.to_board((p.x, p.y)))
+        .unwrap_or(saved.door);
     sorted.push((saved.player_order, player, player_cell));
     sorted.sort_by_key(|&(order, _, _)| order);
     for &(_, entity, cell) in &sorted {
         if entity == player {
-            // **`place_nearby`, not a bare `place`.** The Home always
-            // stands on the door — `board::seat_structures` just seated it
-            // as a body above — so a `player_cell` fallen back to
-            // `saved.door` (a save written before this field existed) can
-            // never place exactly there; `Game::open_siege`'s own seating
-            // for the player takes the same "or the nearest free cell to
-            // it" fallback for the same reason.
+            // **`place_nearby`, not a bare `place`.** The player's tile may
+            // be held by a body seated above; `Game::open_siege`'s own
+            // seating takes the same "or the nearest free cell" fallback.
             if !battle.place(entity, cell) {
                 super::place_nearby(&mut battle, cell, entity);
             }

@@ -637,15 +637,7 @@ impl Game {
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
-        world.insert_resource({
-            // Base space's seed is minted once, here, from the run's own
-            // seed — not tracked off `WorldMap::seed()`, which changes on
-            // every breach while this grid travels with the run. See
-            // `BaseGrid::seed`.
-            let mut grid = crate::base_grid::BaseGrid::default();
-            grid.set_seed(seed);
-            grid
-        });
+        world.insert_resource(crate::base_grid::BaseGrid::default());
         // Off when a run starts: the player's bump has to be armed before it
         // destroys terrain. See `resources::MiningMode`.
         world.init_resource::<crate::resources::MiningMode>();

@@ -60,7 +60,7 @@ impl Game {
     /// Empty outside base space, after game over and during a fight, the
     /// guards the transfer offers carry.
     pub fn adjacent_structures(&self) -> Vec<AdjacentStructure> {
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
         if self.is_game_over().is_some() || self.has_active_battle() {

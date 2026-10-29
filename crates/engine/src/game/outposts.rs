@@ -23,14 +23,14 @@ use crate::tuning::{
     OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
 use crate::views::{OutpostCrewRow, OutpostMark, OutpostReport, OutpostYieldRow, TransferRow};
-use crate::world::{Biome, WorldMap};
+use crate::world::WorldMap;
 
 impl Game {
     /// Founds an outpost at `tile` — design spec §9's refusal ladder.
     /// `Game::use_item` is the one caller, and does not take a unit out of
     /// `Inventory` until this returns `Ok`.
     pub fn found_outpost(&mut self, tile: (i32, i32)) -> Result<(), String> {
-        self.require_surface()?;
+        self.require_field()?;
         if self.world.resource::<OutpostDb>().def().is_none() {
             return Err("No outpost design is known.".into());
         }
@@ -39,12 +39,15 @@ impl Game {
         if !map_tile.walkable {
             return Err("Nothing would hold an outpost there.".into());
         }
-        if map_tile.biome == Biome::Platform {
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        if floor.is_floor(x, y) {
             return Err("The base's own ground holds no outpost.".into());
         }
         let biome = map_tile.biome;
-        if let Some((ax, ay)) = self.anchor_position()
-            && (x - ax).abs().max((y - ay).abs()) < OUTPOST_MIN_ANCHOR_DISTANCE
+        // Measured to the base's nearest floor, not its anchor: a base grown
+        // toward a spot is nearer it (ADR 0032).
+        if crate::game::base::footprint::distance_to_floor(floor, tile)
+            .is_some_and(|d| d < OUTPOST_MIN_ANCHOR_DISTANCE)
         {
             return Err("That's still within reach of the base. Walk further out.".into());
         }

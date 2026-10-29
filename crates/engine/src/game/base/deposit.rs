@@ -46,7 +46,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return 0;
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return 0;
         }
         let carried = self.puttable_carried();

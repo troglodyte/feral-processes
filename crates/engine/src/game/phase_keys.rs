@@ -6,7 +6,6 @@
 //! the percent bonuses live here, applied by `phase_keys::apply_key_pct` at
 //! each site that forms a final stat.
 
-use crate::base_grid::BaseGrid;
 use crate::components::PhaseKeys;
 use crate::notifications::NotificationKind;
 use crate::phase_keys::{PhaseKeyDb, PhaseKeyDef, StatPct};
@@ -85,7 +84,7 @@ impl Game {
         if keys.holds(zone) {
             return;
         }
-        let seed = self.world.resource::<BaseGrid>().seed();
+        let seed = self.world.resource::<crate::world::WorldMap>().seed();
         let guaranteed = keys.misses + 1 >= crate::tuning::PHASE_KEY_GUARANTEE_KILLS;
         if guaranteed || phase_key_roll(seed, zone, keys.misses) {
             if self.grant_phase_key(zone) {

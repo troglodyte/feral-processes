@@ -22,11 +22,11 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Not right now.".into());
         }
-        self.require_base()
+        self.require_field()
     }
 
     fn party_cell(&self) -> Option<Position> {
-        self.base_pos().map(|(x, y)| Position { x, y })
+        self.field_pos().map(|(x, y)| Position { x, y })
     }
 
     /// What the player could set down: carried items, then gear copies, then

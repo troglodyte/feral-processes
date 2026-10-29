@@ -1945,8 +1945,8 @@ impl ZoneLevel {
     }
 }
 
-/// Which of the three spaces the player is standing in — the zone surface,
-/// down inside the Stack, or out of phase in base space — and where in it.
+/// Which of the two spaces the player is standing in — the field, or down
+/// inside the Stack — and where in it. The base is on the field (ADR 0032).
 ///
 /// The Stack coordinates live *here* rather than on the player's
 /// `Position` component, and that is the load-bearing decision of the whole
@@ -1963,12 +1963,8 @@ impl ZoneLevel {
 /// free: the base is where it was left, cronjobs keep paying out, and a raid
 /// can land while the player is four frames down.
 ///
-/// `Base` is the same arrangement pointed the other way, and the reason
-/// `Game::require_surface` had to be split: "not in the Stack" and "on the
-/// surface proper" were one condition while there were two locales, and eleven
-/// guarded actions had never had to say which they meant. See
-/// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`.
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(from = "SavedLocale")]
 pub enum Locale {
     #[default]
     Surface,
@@ -1991,18 +1987,53 @@ pub enum Locale {
         /// climbing back up from depth 1.
         entrance: (i32, i32),
     },
-    /// Out of phase, inside the base's own pocket dimension, and where in
-    /// it.
-    ///
-    /// The same trick as `Stack`, for the same reason: the coordinates live
-    /// here and the player's `Position` stays pinned to the anchor tile
-    /// they stepped through, so nothing on the zone surface has to know
-    /// base space exists.
-    ///
-    /// No `entrance` beside them, unlike `Stack`. There is exactly one door
-    /// per zone, auto-placed at the zone's spawn point, so the way back out
-    /// is a query for it rather than a field that could disagree with one.
-    Base { x: i32, y: i32 },
+}
+
+/// `Locale` as a save before ADR 0032 may spell it: with a `Base` arm,
+/// which loads as `Surface` because the base is on the field now.
+///
+/// Temporary — it exists so the checked-in `dev-saves/` keep loading until
+/// they are recaptured, and goes with the `SAVE_FORMAT_VERSION` bump that
+/// recapture comes with.
+#[derive(Deserialize)]
+enum SavedLocale {
+    Surface,
+    Stack {
+        depth: u32,
+        frames: u32,
+        x: i32,
+        y: i32,
+        facing: Dir,
+        entrance: (i32, i32),
+    },
+    #[allow(dead_code)]
+    Base {
+        x: i32,
+        y: i32,
+    },
+}
+
+impl From<SavedLocale> for Locale {
+    fn from(saved: SavedLocale) -> Self {
+        match saved {
+            SavedLocale::Surface | SavedLocale::Base { .. } => Locale::Surface,
+            SavedLocale::Stack {
+                depth,
+                frames,
+                x,
+                y,
+                facing,
+                entrance,
+            } => Locale::Stack {
+                depth,
+                frames,
+                x,
+                y,
+                facing,
+                entrance,
+            },
+        }
+    }
 }
 
 /// How loud the party has been in the stack they are currently in.

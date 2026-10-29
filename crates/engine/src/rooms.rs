@@ -253,9 +253,9 @@ pub fn detect(
         .filter(|p| p.def.barrier || p.def.door)
         .map(|p| p.at)
         .collect();
-    let open = |c: (i32, i32)| grid.walkable(c.0, c.1) && !boundary.contains(&c);
+    let open = |c: (i32, i32)| grid.is_floor(c.0, c.1) && !boundary.contains(&c);
     let mut found = Rooms::default();
-    for (&start, _) in grid.iter() {
+    for start in grid.floor_cells() {
         if found.by_cell.contains_key(&start) || !open(start) {
             continue;
         }
@@ -358,7 +358,7 @@ impl crate::Game {
     /// Every room that has a role, for the Alt overlay. Empty outside base
     /// space, `floor_items`' reason: the cells are base cells.
     pub fn view_rooms(&mut self) -> Vec<RoomView> {
-        if self.base_pos().is_none() {
+        if self.field_pos().is_none() {
             return Vec::new();
         }
         let rooms = of_world(&self.world);

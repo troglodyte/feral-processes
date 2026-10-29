@@ -376,7 +376,7 @@ impl Game {
     /// The party's pack as a source, or `None` when it holds none of `item`
     /// or when the party is not standing in base space to be taken from.
     fn pack_source(&self, item: &ItemId) -> Option<Source> {
-        let (x, y) = self.base_pos()?;
+        let (x, y) = self.field_pos()?;
         let player = self.player_entity();
         let held = self
             .world
@@ -778,7 +778,7 @@ impl Game {
     pub(crate) fn return_material(&mut self, item: &ItemId, qty: u32) {
         let landed = stock::return_to_depots(self, item, qty);
         let mut spare = qty - landed;
-        if spare > 0 && self.base_pos().is_some() {
+        if spare > 0 && self.field_pos().is_some() {
             let player = self.player_entity();
             if let Some(mut inv) = self.world.get_mut::<Inventory>(player) {
                 inv.add(item.clone(), spare);

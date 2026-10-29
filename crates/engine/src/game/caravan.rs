@@ -58,14 +58,8 @@ impl Game {
     }
 
     /// The seed one visit's three independent draws are taken from: the
-    /// base's own seed, the caravan salt and the visit index, folded FNV-1a a
-    /// byte at a time.
-    ///
-    /// **`BaseGrid::seed()`, not `WorldMap::seed()`.** The base's seed is
-    /// minted once at `Game::new` and travels across a breach; the world's is
-    /// re-minted per zone. A rhythm keyed to the world seed would restart
-    /// every time the party moved on, which is the opposite of what a
-    /// recurring visitor to *your base* means.
+    /// run's world seed (minted once at `Game::new`; a breach keeps it), the
+    /// caravan salt and the visit index, folded FNV-1a a byte at a time.
     ///
     /// Byte-at-a-time rather than one XOR-and-multiply per word, for
     /// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves the low
@@ -74,7 +68,7 @@ impl Game {
     pub(crate) fn visit_seed(&self, visit: u64) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
         for word in [
-            self.world.resource::<BaseGrid>().seed() as u64,
+            self.world.resource::<crate::world::WorldMap>().seed() as u64,
             crate::tuning::CARAVAN_SALT,
             visit,
         ] {
@@ -891,12 +885,13 @@ impl Game {
         }
     }
 
-    /// The anchor tile to base space's own door cell, in one tick — the same
-    /// step the party takes through `Game::enter_base`, and the reason
+    /// Onto the anchor tile, where the Home stands, in one tick — the reason
     /// `Docking` is a stage rather than an instant: the trader is drawn
-    /// standing on the anchor for one tick before it goes out of phase.
+    /// standing at the door for one tick before it crosses the floor.
     fn phase_caravan_in(&mut self, entity: Entity) {
-        let (x, y) = crate::game::base_space::BASE_EXIT_CELL;
+        let Some((x, y)) = self.anchor_position() else {
+            return;
+        };
         if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
             *pos = Position { x, y };
         }
@@ -1095,7 +1090,7 @@ impl Game {
         if !docked {
             return CaravanReach::NotDocked;
         }
-        match self.base_pos() {
+        match self.field_pos() {
             Some((x, y))
                 if self
                     .world

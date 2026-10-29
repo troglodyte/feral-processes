@@ -97,7 +97,7 @@ impl Game {
         // The party's base cell rather than their `Position`: every machine
         // with a `Stock` stands in base space, and `Position` is pinned to
         // the anchor tile on the zone surface while the party is in here.
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
         // `iter_entities` rather than a query, for `stock::output_buffers`'
@@ -163,7 +163,7 @@ impl Game {
     /// orthogonally beside the party in base space — asked of the flag and
     /// never of the shipped id, so a mod's second terminal is a file.
     fn indexes_storage_here(&self) -> bool {
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return false;
         };
         self.world.iter_entities().any(|e| {

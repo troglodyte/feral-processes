@@ -1129,7 +1129,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let def = self
             .world
             .resource::<ResearchDb>()

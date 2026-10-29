@@ -35,7 +35,7 @@ use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel
 fn contract_depth(locale: &Locale) -> u32 {
     match locale {
         Locale::Stack { depth, .. } => *depth,
-        Locale::Surface | Locale::Base { .. } => 0,
+        Locale::Surface => 0,
     }
 }
 
@@ -673,15 +673,13 @@ impl Game {
             structures: Vec::new(),
             zone,
         };
-        // Only the species half needs a tile to read from, and it is the
-        // anchor's: the base itself is out of phase now and has no ground on
-        // the zone surface at all, so the door it is reached through is the
-        // whole of its presence in the sector. A run with no anchor has no
-        // doorstep to read and is offered no Hunt — but it can still be asked
-        // to deliver or to build, neither of which is a question about the
-        // ground.
+        // Only the species half needs a tile to read from: a ring around the
+        // anchor just past the floor, the base's doorstep (no species lives
+        // on the floor itself). A run with no anchor has no doorstep to read
+        // and is offered no Hunt — but it can still be asked to deliver or to
+        // build, neither of which is a question about the ground.
         if let Some((cx, cy)) = self.anchor_position() {
-            let band = crate::tuning::STARTING_POCKET_HALF_WIDTH + 1;
+            let band = self.world.resource::<crate::base_grid::BaseGrid>().radius() + 1;
             let perimeter = 8 * band;
             let samples = crate::tuning::CONTRACT_HABITAT_SAMPLES.min(perimeter);
             let mut species: Vec<String> = Vec::new();
@@ -967,7 +965,7 @@ impl Game {
         if !self.has_broker() {
             return BrokerReach::NoBroker;
         }
-        let Some((x, y)) = self.base_pos() else {
+        let Some((x, y)) = self.field_pos() else {
             return BrokerReach::OffBase;
         };
         if self

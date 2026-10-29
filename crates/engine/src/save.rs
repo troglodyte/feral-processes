@@ -415,11 +415,11 @@ pub struct SiegeSave {
     /// Every cell of the board, row-major — `tactical::map::Board::cells`'
     /// own order, which `Board::from_cells` trusts back.
     pub cells: Vec<crate::tactical::map::BattleCell>,
-    /// The base-space cell the board's `(0, 0)` maps to —
+    /// The field cell the board's `(0, 0)` maps to —
     /// `game::siege::board::SiegeBoard::origin`.
     pub origin: (i32, i32),
-    /// `BASE_EXIT_CELL`, in board coordinates — `game::siege::board::
-    /// SiegeBoard::door`.
+    /// Where the besiegers enter and leave, in board coordinates —
+    /// `TacticalBattle::siege_door`.
     pub door: (i32, i32),
     pub round: u32,
     /// The currently-acting body's own `CreatureSave::siege_order` value —
@@ -443,28 +443,6 @@ pub struct SiegeSave {
     /// `SaveData::player`, a singleton restored before the creature array
     /// even runs.
     pub player_order: u32,
-    /// The player's own board cell at save time, read straight off
-    /// `TacticalBattle::cell_of` the way every other body's is.
-    ///
-    /// **Not re-derived from `PlayerSave::position`.** In base space that
-    /// field stays pinned to the surface anchor tile — `Position` is not
-    /// the party's base-space coordinate, `Locale::Base` is (see CLAUDE.md,
-    /// "Base-space Position is pinned to the anchor") — and
-    /// `game::siege::persist::restore` runs before `Game::restore_locale`
-    /// besides, so `Game::base_pos()` has nothing to answer yet either way.
-    ///
-    /// **`Option`, not a bare tuple defaulting to `(0, 0)`.** A save written
-    /// before this field existed has no board cell to give back, and `(0,
-    /// 0)` is not a stand-in for "unknown" — it is an ordinary board
-    /// coordinate a real siege can floor, occupy or leave outside its own
-    /// bounding box, so a bare default silently seats the player wherever
-    /// that coordinate happens to fall (or drops the siege outright when it
-    /// falls on nothing `TacticalBattle::place` will take). `None` reads
-    /// honestly instead, and `persist::restore` falls back to `saved.door`
-    /// — the same "reloads at the door" behaviour the field was always
-    /// meant to have for an old save, spelled correctly this time.
-    #[serde(default)]
-    pub player_cell: Option<(i32, i32)>,
 }
 
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build

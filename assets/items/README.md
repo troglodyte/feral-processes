@@ -317,7 +317,7 @@ any non-finite `taming_potency`, `consume.power`, or
     //
     // **Weapons are designed, not crafted.** No `Weapon` item carries a
     // `craftable` block: a weapon is a drop, an enemy's gear or a trader's
-    // stock, and the only way to make one is the Forge's design flow
+    // stock, and the only way to make one is the Workbench's Build weapon page
     // (`weapon_bench`). `no_authored_weapon_is_craftable` holds the shipped
     // set to it. Armour and modules keep their recipes.
     //

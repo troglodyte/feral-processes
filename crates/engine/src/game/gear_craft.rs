@@ -282,15 +282,6 @@ impl Game {
         Ok(id)
     }
 
-    /// Builds a stored design, for tests that made it with `create_design`.
-    #[cfg(test)]
-    pub(crate) fn build_design(&mut self, id: u32) -> Result<GearCopy, GearCraftRefusal> {
-        self.require_forge_free()?;
-        let design = self.design(id).expect("the test made this design");
-        let plan = self.plan_design(&design)?;
-        self.build_planned(&design, &plan)
-    }
-
     /// `gear_craft::plan_build` over what is in reach now: the one decision
     /// `compile_weapon` acts on and the Build weapon page reports.
     fn plan_design(&self, design: &GearDesign) -> Result<gear_craft::BuildPlan, GearCraftRefusal> {
@@ -323,16 +314,6 @@ impl Game {
             })
             .collect();
         (materials, uncraftable)
-    }
-
-    #[cfg(test)]
-    fn design(&self, id: u32) -> Option<GearDesign> {
-        self.world
-            .resource::<GearDesigns>()
-            .designs
-            .iter()
-            .find(|d| d.id == id)
-            .cloned()
     }
 
     /// Why `copy` cannot be fused, if it cannot: fusion is for drops only.

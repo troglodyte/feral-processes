@@ -3289,7 +3289,7 @@ pub struct App {
     pub siphon: Option<Entity>,
     /// The routine the Workbench's build page is designing.
     pub routine_draft: RoutineDraft,
-    /// The weapon the Workbench's new-design page is designing.
+    /// The weapon the Workbench's Build weapon page is designing.
     pub design_draft: DesignDraft,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will

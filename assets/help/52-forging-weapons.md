@@ -12,7 +12,8 @@ toward punch, a decompiler, or a routine the weapon runs. You can also add affix
 A weapon holds only so many modifiers; research raises the limit.
 
 - Build weapon page. Press Enter on a row to see the parts you can use: researched ones and ones
-  you hold. A part that does not fit is greyed and says why. Name the weapon, then choose Compile.
+  you hold. Type to filter the list. A part that does not fit is greyed and says why.
+  Name the weapon, then choose Compile.
   The preview underneath reads out what the weapon does, its rating, which parts a build uses and
   which you are short of. Under Materials it lists what the build would spend, in green when you have
   enough and red when you are short. Each part in the list shows what it costs to craft.

@@ -44,6 +44,17 @@ fn designed(game: &mut Game) -> u32 {
         .unwrap()
 }
 
+/// Compiles stored design `id` through the production verb, which reuses
+/// the stored design for its name and parts.
+fn compile_id(game: &mut Game, id: u32) -> Result<GearCopy, GearCraftRefusal> {
+    let design = game
+        .gear_designs()
+        .into_iter()
+        .find(|d| d.id == id)
+        .unwrap();
+    game.compile_weapon(&design.name, design.parts)
+}
+
 /// Builds a copy of `id`, supplying whatever it costs.
 fn built(game: &mut Game, id: u32) -> GearCopy {
     let design = game
@@ -57,7 +68,7 @@ fn built(game: &mut Game, id: u32) -> GearCopy {
     let (frame, version) = design.frame().unwrap();
     let (material, count) = frame_bill(frame, version);
     give(game, &material, count);
-    game.build_design(id).unwrap()
+    compile_id(game, id).unwrap()
 }
 
 fn round_trip(game: &mut Game, tag: &str) -> Game {
@@ -190,7 +201,7 @@ fn building_crafts_an_unheld_part_only_once_researched_and_spends_its_bill() {
         .0
         .remove(&edge().node_id());
     assert_eq!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::PartNotResearched(edge()))
     );
     know(&mut game, edge());
@@ -200,7 +211,7 @@ fn building_crafts_an_unheld_part_only_once_researched_and_spends_its_bill() {
     empty_of(&mut game, &frame_item);
     give(&mut game, &frame_item, frame_count + part_count - 1);
     assert!(matches!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::ShortOf { .. })
     ));
     assert_eq!(
@@ -209,7 +220,7 @@ fn building_crafts_an_unheld_part_only_once_researched_and_spends_its_bill() {
         "a refusal spends nothing"
     );
     give(&mut game, &frame_item, 1);
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     assert_eq!(game.held_in_reach(&frame_item), 0, "the bill was spent");
     assert_eq!(
         game.weapon_parts_held(edge()),
@@ -323,7 +334,7 @@ fn a_build_consumes_its_parts_and_the_frame_bill_and_mints_an_ordinary_copy() {
     empty_of(&mut game, &material);
     let have = game.held_in_reach(&material);
     assert!(have < count, "premise: the bill is not already in the pack");
-    let refusal = game.build_design(id).unwrap_err();
+    let refusal = compile_id(&mut game, id).unwrap_err();
     assert!(
         matches!(refusal, GearCraftRefusal::ShortOf { ref item, .. } if *item == material),
         "{refusal:?}"
@@ -335,7 +346,7 @@ fn a_build_consumes_its_parts_and_the_frame_bill_and_mints_an_ordinary_copy() {
     );
 
     give(&mut game, &material, count);
-    let copy = game.build_design(id).unwrap();
+    let copy = compile_id(&mut game, id).unwrap();
     assert_eq!(
         copy,
         GearCopy::plain(ItemId::from(format!("crafted_gear/{id}")))
@@ -347,7 +358,7 @@ fn a_build_consumes_its_parts_and_the_frame_bill_and_mints_an_ordinary_copy() {
     assert_eq!(game.gear_designs().len(), 1, "the design stays");
     assert!(
         matches!(
-            game.build_design(id),
+            compile_id(&mut game, id),
             Err(GearCraftRefusal::ShortOf { ref item, .. }) if *item == material
         ),
         "building again needs the bill again"
@@ -597,7 +608,7 @@ fn a_proc_part_can_never_be_crafted_only_salvaged() {
         .unwrap();
     give(&mut game, &ItemId::from("core_fragment"), 50);
     assert_eq!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::SalvageOnly(proc))
     );
     assert_eq!(game.weapon_parts_held(proc), 0);
@@ -662,7 +673,7 @@ fn full_bill() -> u32 {
 fn a_forge_with_no_parts_builds_from_materials_and_spends_exactly_the_bill() {
     let (mut game, id) = bare_forge(73_001);
     give(&mut game, &fragment(), full_bill() + 5);
-    let copy = game.build_design(id).unwrap();
+    let copy = compile_id(&mut game, id).unwrap();
     assert_eq!(game.count_copies(&copy), 1);
     assert_eq!(game.held_in_reach(&fragment()), 5);
     assert_eq!(game.weapon_parts_held(edge()), 0);
@@ -676,7 +687,7 @@ fn held_parts_are_spent_first_and_only_the_shortfall_is_billed() {
     let (_, edge_part) = crate::gear_craft::weapon::part_bill(edge());
     let need = full_bill() - edge_part;
     give(&mut game, &fragment(), need);
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     assert_eq!(game.held_in_reach(&fragment()), 0);
     assert_eq!(game.weapon_parts_held(edge()), 0);
 }
@@ -692,7 +703,7 @@ fn a_bill_sums_across_the_frame_and_the_crafted_parts_and_a_short_sum_spends_not
     );
     give(&mut game, &fragment(), full_bill() - 1);
     // Each line alone is affordable; only the sum is short.
-    let refusal = game.build_design(id).unwrap_err();
+    let refusal = compile_id(&mut game, id).unwrap_err();
     assert_eq!(
         refusal,
         GearCraftRefusal::ShortOf {
@@ -724,12 +735,12 @@ fn a_held_unresearched_part_is_used_once_but_not_crafted() {
         .remove(&WeaponPart::Extend.node_id());
     give(&mut game, &fragment(), 100);
     give(&mut game, &ItemId::weapon_part(WeaponPart::Extend), 1);
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     assert_eq!(game.weapon_parts_held(WeaponPart::Extend), 0);
     // Needed twice is impossible (a modifier category holds one), so the
     // second build is short of the one it cannot craft.
     assert_eq!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::PartNotResearched(WeaponPart::Extend))
     );
     assert!(
@@ -739,7 +750,7 @@ fn a_held_unresearched_part_is_used_once_but_not_crafted() {
 }
 
 #[test]
-fn the_refusal_order_is_frame_then_proc_then_unresearched_then_short() {
+fn the_refusal_order_is_frame_then_unresearched_then_proc_then_short() {
     let mut game = bench_game(73_005);
     let proc = WeaponPart::Proc(crate::gear_craft::weapon::Proc::CoreDump);
     know(&mut game, edge());
@@ -753,19 +764,20 @@ fn the_refusal_order_is_frame_then_proc_then_unresearched_then_short() {
         .resource_mut::<Research>()
         .0
         .remove(&bleed().node_id());
-    // Proc missing beats unresearched Bleed beats short.
+    // The design check comes first: an unresearched, unheld Bleed beats a
+    // missing Proc, which beats a short bill.
     assert_eq!(
-        game.build_design(id),
-        Err(GearCraftRefusal::SalvageOnly(proc))
-    );
-    give(&mut game, &ItemId::weapon_part(proc), 1);
-    assert_eq!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::PartNotResearched(bleed()))
     );
     know(&mut game, bleed());
+    assert_eq!(
+        compile_id(&mut game, id),
+        Err(GearCraftRefusal::SalvageOnly(proc))
+    );
+    give(&mut game, &ItemId::weapon_part(proc), 1);
     assert!(matches!(
-        game.build_design(id),
+        compile_id(&mut game, id),
         Err(GearCraftRefusal::ShortOf { .. })
     ));
     assert_eq!(game.weapon_parts_held(proc), 1, "nothing was spent");
@@ -795,7 +807,7 @@ fn the_design_bill_and_preview_equal_the_inventory_delta_of_a_forge() {
     let bill = game.design_preview("Leaker", &parts(&[edge(), bleed()]));
     assert!(bill.uncraftable.is_empty());
     let before = game.held_in_reach(&fragment());
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     let spent = before - game.held_in_reach(&fragment());
     let line = &bill.materials[0];
     assert_eq!(line.label, game.item_name(&fragment()).to_string());
@@ -888,7 +900,7 @@ fn each_crafted_part_is_receipted_as_a_craft() {
     game.world
         .resource_mut::<crate::resources::BattleTelemetry>()
         .on = true;
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     let crafted = |part: WeaponPart| -> u32 {
         game.world
             .resource::<crate::resources::BattleTelemetry>()
@@ -929,7 +941,7 @@ fn a_forge_pays_from_a_depot_before_the_pack_and_not_outside_base_space() {
             .have,
         full_bill() + 3
     );
-    game.build_design(id).unwrap();
+    compile_id(&mut game, id).unwrap();
     let shelf = game
         .world
         .get::<Stock>(depot)

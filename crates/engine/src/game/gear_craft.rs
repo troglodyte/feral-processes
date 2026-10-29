@@ -29,6 +29,14 @@ pub enum FusionRefusal {
     CraftedGear,
 }
 
+/// What `Game::decide_compile` settled on.
+struct CompileDecision {
+    design: GearDesign,
+    /// No stored design matches, so a compile stores this one.
+    is_new: bool,
+    plan: gear_craft::BuildPlan,
+}
+
 impl Game {
     /// How many modifiers a design may hold now: the start cap raised by one
     /// for each capacity node researched. Derived from `Research`, so there
@@ -157,8 +165,27 @@ impl Game {
         name: &str,
         parts: Vec<GearPart>,
     ) -> Result<GearCopy, GearCraftRefusal> {
+        let CompileDecision {
+            design,
+            is_new,
+            plan,
+        } = self.decide_compile(name, &parts)?;
+        if is_new {
+            self.store_design(design.clone());
+        }
+        self.build_planned(&design, &plan)
+    }
+
+    /// Everything `compile_weapon` would refuse, in the order it refuses,
+    /// and the plan it would spend when it does not. The preview reads the
+    /// same call, so the page cannot promise a compile the engine declines.
+    fn decide_compile(
+        &self,
+        name: &str,
+        parts: &[GearPart],
+    ) -> Result<CompileDecision, GearCraftRefusal> {
         self.require_forge_free()?;
-        let name = self.check_weapon_design(name, &parts)?;
+        let name = self.check_weapon_design(name, parts)?;
         let stored = self
             .world
             .resource::<GearDesigns>()
@@ -166,14 +193,14 @@ impl Game {
             .iter()
             .find(|d| d.name == name && d.parts == parts)
             .cloned();
-        let design = stored
-            .clone()
-            .unwrap_or_else(|| self.next_design(name, parts));
+        let is_new = stored.is_none();
+        let design = stored.unwrap_or_else(|| self.next_design(name, parts.to_vec()));
         let plan = self.plan_design(&design)?;
-        if stored.is_none() {
-            self.store_design(design.clone());
-        }
-        self.build_planned(&design, &plan)
+        Ok(CompileDecision {
+            design,
+            is_new,
+            plan,
+        })
     }
 
     fn check_weapon_design(
@@ -408,7 +435,7 @@ impl Game {
     }
 
     /// The Build weapon page's preview: exactly what `compile_weapon`
-    /// would refuse and spend for this name and these parts.
+    /// would refuse (`decide_compile`) and spend for this name and these parts.
     pub fn design_preview(&self, name: &str, parts: &[GearPart]) -> DesignPreview {
         let cap = self.gear_part_cap();
         let design = GearDesign {
@@ -435,15 +462,7 @@ impl Game {
             })
             .collect();
         let (materials, uncraftable) = self.bill_of(&design);
-        let blocked = gear_craft::check_design(
-            name,
-            parts,
-            cap,
-            |p| self.weapon_part_usable(p),
-            |a| self.affix_known(a),
-            self.world.resource::<AffixDb>(),
-        )
-        .err();
+        let blocked = self.decide_compile(name, parts).err();
         DesignPreview {
             description: def
                 .as_ref()

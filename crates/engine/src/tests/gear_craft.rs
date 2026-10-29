@@ -439,7 +439,10 @@ fn the_preview_quotes_the_built_weapons_numbers() {
     assert_eq!(preview.description, def.description);
     assert_eq!(preview.range, 1);
     assert_eq!((preview.part_count, preview.part_cap), (1, 2));
-    assert_eq!(preview.blocked, None);
+    assert!(matches!(
+        preview.blocked,
+        Some(GearCraftRefusal::ShortOf { .. })
+    ));
     assert_eq!(
         preview.parts_missing,
         vec![("Edge v1".to_string(), 1), ("Rider: Bleed".to_string(), 1)]
@@ -1050,5 +1053,36 @@ fn an_unresearched_part_is_hidden_unless_held_and_a_misfit_is_greyed() {
         frames
             .iter()
             .all(|o| !matches!(o.unavailable, Some(GearCraftRefusal::PartNotResearched(_))))
+    );
+}
+
+#[test]
+fn the_previews_blocked_is_what_compile_would_refuse() {
+    let proc = WeaponPart::Proc(crate::gear_craft::weapon::Proc::CoreDump);
+    let check = |game: &mut Game, name: &str, parts: Vec<GearPart>| {
+        let blocked = game.design_preview(name, &parts).blocked;
+        assert_eq!(blocked, game.compile_weapon(name, parts).err());
+        blocked
+    };
+    // Short one material: the preview names it.
+    let mut game = funded_for_leaker(74_010);
+    empty_of(&mut game, &fragment());
+    give(&mut game, &fragment(), full_bill() - 1);
+    assert!(matches!(
+        check(&mut game, "Leaker", leaker_parts()),
+        Some(GearCraftRefusal::ShortOf { .. })
+    ));
+    // A Proc that is neither held nor ever salvaged.
+    let mut game = funded_for_leaker(74_011);
+    assert!(check(&mut game, "Dumper", parts(&[edge(), proc])).is_some());
+    // A valid draft is not blocked.
+    let mut game = funded_for_leaker(74_012);
+    assert_eq!(check(&mut game, "Leaker", leaker_parts()), None);
+    // Busy: a battle is running.
+    let mut game = funded_for_leaker(74_013);
+    start_battle_with_a_wild_program(&mut game);
+    assert_eq!(
+        check(&mut game, "Leaker", leaker_parts()),
+        Some(GearCraftRefusal::Busy)
     );
 }

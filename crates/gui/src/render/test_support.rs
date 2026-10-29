@@ -460,14 +460,14 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         StandingIn::Base => {}
         StandingIn::Stack => {
             let entrance = data.player.position;
-            data.set_locale(Locale::Stack {
+            data.locale = Locale::Stack {
                 depth: 1,
                 frames: 2,
                 x: 0,
                 y: 0,
                 facing: feral_processes_engine::stack::Dir::North,
                 entrance,
-            });
+            };
         }
         StandingIn::Surface => {}
     }

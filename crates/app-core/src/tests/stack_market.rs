@@ -55,14 +55,14 @@ pub(crate) fn app_at_a_market(credits: u32) -> App {
         // a full player. Emptying the slot is what makes these tests about
         // the market.
         data.player.routines.clear();
-        data.set_locale(Locale::Stack {
+        data.locale = Locale::Stack {
             depth: spec.depth,
             frames: spec.frames,
             x,
             y,
             facing: Dir::North,
             entrance: spec.entrance,
-        });
+        };
         save::save_to_file(&path, &data).unwrap();
         app.game = Game::load(&path, &assets_dir).ok();
         let _ = std::fs::remove_file(&path);

@@ -459,16 +459,17 @@ pub const SIEGE_SEALED_HOLD_ROUNDS: u32 = 5;
 /// design spec §11.
 pub const MAX_OUTPOSTS: usize = 4;
 
-/// How close a candidate tile must be walked before it may be founded, in
-/// Chebyshev tiles from the base anchor.
+/// How far out a candidate tile must be before an outpost may be founded
+/// there, in Chebyshev tiles to the base's nearest floor cell
+/// (`footprint::distance_to_floor`) — a base grown toward a spot is nearer
+/// it (ADR 0032).
 ///
-/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a field
-/// constant, value 4) — an outpost stands on the *zone surface*, a
-/// different coordinate space at a different scale, and reusing a field
-/// literal there would make an unrelated base-building retune silently move
-/// where an outpost may stand. **A fraction of a region**,
+/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (value 4) — that
+/// bounds a build beside the party, and reusing it here would make an
+/// unrelated base-building retune silently move where an outpost may stand.
+/// **A fraction of a region**,
 /// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against
-/// nothing, and this is close enough to the anchor to reach on foot in one
+/// nothing, and this is close enough to the base to reach on foot in one
 /// session — a quarter of `SETTLEMENT_GARRISON_RADIUS`'s own half-region
 /// reach, so an outpost this close to the base always sits well inside it,
 /// not outside. Unmeasured — see design spec §11.

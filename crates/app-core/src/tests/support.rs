@@ -1654,14 +1654,14 @@ pub(crate) fn app_owning_a_program_and_an_extractor_deep(
         study_yield: None,
     });
     if underground {
-        data.set_locale(Locale::Stack {
+        data.locale = Locale::Stack {
             depth: 1,
             frames: 2,
             x: 1,
             y: 1,
             facing: feral_processes_engine::stack::Dir::North,
             entrance: data.player.position,
-        });
+        };
     }
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -2129,7 +2129,7 @@ pub(crate) fn test_pocket_cells() -> Vec<(i32, i32)> {
 
 /// Writes the party's place into a save: on the field at `(x, y)`.
 pub(crate) fn stand_save_on_field(data: &mut save::SaveData, x: i32, y: i32) {
-    data.set_locale(Locale::Surface);
+    data.locale = Locale::Surface;
     data.player.position = (x, y);
 }
 
@@ -2190,14 +2190,14 @@ pub(crate) fn go_underground(app: &mut App) {
         .save(&path)
         .unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    data.set_locale(Locale::Stack {
+    data.locale = Locale::Stack {
         depth: 1,
         frames: 2,
         x: 1,
         y: 1,
         facing: feral_processes_engine::stack::Dir::North,
         entrance: data.player.position,
-    });
+    };
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
 }
@@ -2427,7 +2427,7 @@ pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App
 
     let mut data = save::load_from_file(&path).unwrap();
     data.player.routines = expand_routines(&mut data, routines);
-    data.set_locale(feral_processes_engine::resources::Locale::Stack {
+    data.locale = feral_processes_engine::resources::Locale::Stack {
         depth: 1,
         frames: 2,
         // Overwritten below by the frame's own entry — the save only has to
@@ -2436,7 +2436,7 @@ pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App
         y: 1,
         facing: feral_processes_engine::stack::Dir::North,
         entrance: data.player.position,
-    });
+    };
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Game::load(&path, &assets_dir).ok();
@@ -2730,14 +2730,14 @@ pub(crate) fn app_underground(seed: u32) -> App {
         tier: 1,
     };
     let entry = generate(spec).entry;
-    data.set_locale(Locale::Stack {
+    data.locale = Locale::Stack {
         depth: spec.depth,
         frames: spec.frames,
         x: entry.0,
         y: entry.1,
         facing: Dir::North,
         entrance: spec.entrance,
-    });
+    };
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -2768,14 +2768,14 @@ pub(crate) fn app_underground_with_no_rest_charge(seed: u32) -> App {
         tier: 1,
     };
     let entry = generate(spec).entry;
-    data.set_locale(Locale::Stack {
+    data.locale = Locale::Stack {
         depth: spec.depth,
         frames: spec.frames,
         x: entry.0,
         y: entry.1,
         facing: Dir::North,
         entrance: spec.entrance,
-    });
+    };
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -3156,7 +3156,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         data.player.position = TEST_HOME_CELL;
         Locale::Surface
     };
-    data.set_locale(locale);
+    data.locale = locale;
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
@@ -3237,7 +3237,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         data.player.position = (TEST_HOME_CELL.0, TEST_HOME_CELL.1 + 1);
         Locale::Surface
     };
-    data.set_locale(locale);
+    data.locale = locale;
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);

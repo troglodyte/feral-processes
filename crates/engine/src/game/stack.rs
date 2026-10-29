@@ -422,8 +422,9 @@ impl Game {
             })
     }
 
-    /// The anchor's tile on the zone surface — the permanent door into base
-    /// space, regardless of which locale the party currently stands in.
+    /// The anchor's tile on the field — where the Home was founded, and the
+    /// base's one fixed point — regardless of which locale the party
+    /// currently stands in.
     ///
     /// `Some` from the moment `Game::new` or `Game::load` finishes: both
     /// constructors spawn the one `components::BaseAnchor` entity and record

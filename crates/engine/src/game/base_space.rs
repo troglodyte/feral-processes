@@ -381,6 +381,8 @@ impl Game {
     /// which take laid floor and skip everything else — `set_mark`'s table.
     pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32), brush: Option<&FinishOrder>) {
         let mut sites = self.dig_sites_by_tile();
+        // Asked once and kept current by `set_mark`, not re-queried per cell.
+        let mut pending = self.pending_floor();
         let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
@@ -390,7 +392,7 @@ impl Game {
             let before = sites.len();
             for y in y0..=y1 {
                 for x in x0..=x1 {
-                    self.set_mark(&mut sites, x, y, marking, brush);
+                    self.set_mark(&mut sites, &mut pending, x, y, marking, brush);
                 }
             }
             if !(marking && brush.is_none()) || sites.len() == before {
@@ -537,6 +539,7 @@ impl Game {
     fn set_mark(
         &mut self,
         sites: &mut HashMap<(i32, i32), Entity>,
+        pending: &mut std::collections::BTreeSet<(i32, i32)>,
         x: i32,
         y: i32,
         marked: bool,
@@ -562,11 +565,10 @@ impl Game {
                     }
                     // A dig mark on a blocker is the dig request itself, so
                     // only adjacency can refuse it here.
-                    let pending = self.pending_floor();
                     if crate::game::base::building::floor_request_refusal(
                         (x, y),
                         self.ground(),
-                        &pending,
+                        pending,
                         true,
                     )
                     .is_some()
@@ -591,6 +593,8 @@ impl Game {
         } else {
             None
         };
+        // `pending_floor`'s own test, kept in step with every write below.
+        let plain = marked && order.is_none();
 
         match sites.get(&(x, y)).copied() {
             Some(site) => {
@@ -602,6 +606,11 @@ impl Game {
                     // never keeps a stale order for a kind it is no longer
                     // asked to be.
                     dig.finish = order;
+                }
+                if plain {
+                    pending.insert((x, y));
+                } else {
+                    pending.remove(&(x, y));
                 }
                 // An unmarked site earns its keep by holding chip progress,
                 // and *both* ends of the meter hold none. A full meter is a
@@ -621,6 +630,7 @@ impl Game {
                 if !keep {
                     self.world.despawn(site);
                     sites.remove(&(x, y));
+                    pending.remove(&(x, y));
                 }
             }
             None if marked => {
@@ -639,6 +649,9 @@ impl Game {
                     Position { x, y },
                 ));
                 sites.insert((x, y), site.id());
+                if plain {
+                    pending.insert((x, y));
+                }
             }
             None => {}
         }

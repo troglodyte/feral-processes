@@ -59,6 +59,8 @@ the same kind and list it here.
 
 **Old saves will not load.** The way a base is stored changed, so saves from before this release are refused, and the `dev-saves/` templates have been recaptured to match. Start a new run, or keep playing the old version for the old save.
 
+**Besiegers who cannot find a way into a walled-in base give up.** If no attacker can reach your floor, they wait outside for 5 rounds and then withdraw: the siege ends with nothing lost and nothing won. Before, the fight could never end.
+
 **Rock kinds come from the ground they sit in.** Data Void rock is compacted, Black Ice is fused and Entropy is ordinary. The `weight` field in `assets/rock/*.ron` no longer does anything, and files that still carry it keep loading.
 
 ## 0.20.29

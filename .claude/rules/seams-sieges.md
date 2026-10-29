@@ -13,6 +13,11 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `siege::board::siege_spawn_cells`, the walkable cells beside its edge in
   coordinate order (a breadth-first fallback for a sealed base), and one
   `GameRng` draw picks the spawn cell the pack starts seating from.
+- **A sealed base's siege withdraws after `SIEGE_SEALED_HOLD_ROUNDS`** —
+  `Game::sealed_siege_withdrawal`, asked once a round from
+  `tactical_round_upkeep`, ends the fight when no besieger has a terrain walk
+  to floor (`raiders::any_reaches_floor`); one open path keeps the whole pack
+  fighting.
 - **A siege never passes through `fights_tactically` or `start_battle`** —
   `Game::open_siege` is its own door, so a siege is always tactical whatever
   the profile toggle says.

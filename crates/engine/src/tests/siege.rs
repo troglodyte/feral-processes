@@ -768,6 +768,117 @@ mod opening {
         assert!(game.world.resource::<TacticalBattle>().siege_pack > 0);
     }
 
+    /// A sealed base: the fixture pocket ringed by rock two cells deep, open
+    /// habitat ground beyond, so the siege board's spawn cells are the
+    /// breadth-first fallback ring with no walk to the floor.
+    fn sealed_base(game: &mut Game) {
+        lay_siege_pocket(game);
+        let (w, h) = (TEST_POCKET_HALF_WIDTH, TEST_POCKET_HALF_HEIGHT);
+        for y in -(h + 6)..=(h + 6) {
+            for x in -(w + 6)..=(w + 6) {
+                if game
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(x, y)
+                {
+                    continue;
+                }
+                let rock = x.abs() <= w + 2 && y.abs() <= h + 2;
+                game.world.resource_mut::<WorldMap>().set_override(
+                    x,
+                    y,
+                    Tile {
+                        biome: if rock {
+                            Biome::DataVoid
+                        } else {
+                            Biome::OpenGrid
+                        },
+                        walkable: !rock,
+                        rock_shade: None,
+                    },
+                );
+            }
+        }
+        stand_in_base_at(game, 0, 0);
+    }
+
+    /// Besiegers that cannot reach the floor hold for
+    /// `SIEGE_SEALED_HOLD_ROUNDS` and withdraw: the fight ends, nobody of
+    /// theirs is left on the map, and nothing was taken or dropped.
+    #[test]
+    fn a_sealed_bases_siege_ends_in_a_withdrawal_after_the_hold() {
+        use crate::tuning::SIEGE_SEALED_HOLD_ROUNDS;
+        let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        sealed_base(&mut game);
+        set_zone(&mut game, 2);
+        let pack_before: Vec<Entity> = {
+            assert!(game.open_siege(), "a sealed base still opens its siege");
+            game.world
+                .resource::<TacticalBattle>()
+                .bodies()
+                .map(|(e, _)| e)
+                .filter(|&e| game.world.get::<Hostile>(e).is_some())
+                .collect()
+        };
+        assert!(!pack_before.is_empty());
+
+        let mut last_round = 0;
+        for _ in 0..10_000 {
+            let Some(battle) = game.world.get_resource::<TacticalBattle>() else {
+                break;
+            };
+            last_round = battle.round;
+            if !game.tactical_ai_turn() {
+                game.tactical_end_turn();
+            }
+        }
+
+        assert!(
+            game.world.get_resource::<TacticalBattle>().is_none(),
+            "a sealed siege must end, not hold forever"
+        );
+        assert_eq!(
+            last_round, SIEGE_SEALED_HOLD_ROUNDS,
+            "the besiegers hold for exactly the hold, then go"
+        );
+        for raider in pack_before {
+            assert!(
+                game.world.get_entity(raider).is_err(),
+                "a withdrawn besieger left a body on the map"
+            );
+        }
+        assert!(
+            game.message_history(200)
+                .iter()
+                .any(|row| row.text.contains("no way in")),
+            "the withdrawal should be announced"
+        );
+    }
+
+    /// A besieger with a walk to the floor holds the whole pack in the
+    /// fight; only when none has one is the base sealed. Terrain alone: the
+    /// one open cell between them is enough.
+    #[test]
+    fn one_open_path_to_the_floor_means_the_base_is_not_sealed() {
+        use crate::game::siege::raiders::any_reaches_floor;
+        use crate::tactical::map::{BattleCell, Board};
+        let mut board = Board::solid(7);
+        // Floor at (1, 1); a besieger at (5, 1) behind a wall at x = 3.
+        for x in 1..=5 {
+            board.set(x, 1, BattleCell::Open);
+        }
+        board.set(3, 1, BattleCell::Blocked);
+        let is_floor = |c: (i32, i32)| c == (1, 1);
+        assert!(!any_reaches_floor(&board, &[(5, 1)], is_floor));
+
+        board.set(3, 1, BattleCell::Open);
+        assert!(any_reaches_floor(&board, &[(5, 1)], is_floor));
+        assert!(
+            any_reaches_floor(&board, &[(5, 1), (6, 6)], is_floor),
+            "one besieger with a path is enough"
+        );
+    }
+
     /// A posted program standing at its machine is on the board at that
     /// cell — nobody is deployed, the base's own arrangement is the opening
     /// position.
@@ -2846,8 +2957,9 @@ mod persist {
         );
     }
 
-    /// The siege fields themselves are additive; the version is 37 because
-    /// ruins (filed after a siege) bumped it, not because sieges did.
+    /// The siege fields themselves were additive; the version moves with
+    /// other features (ruins, the field base), never because a siege
+    /// field was added.
     #[test]
     fn save_format_version_is_unchanged() {
         assert_eq!(
@@ -2861,7 +2973,7 @@ mod persist {
 
 /// Review findings (2026-09-22 `feat/siege` review) fixed against real
 /// doors: `Game::open_siege` on a base with a real Home spawned via
-/// `place_home` at `BASE_EXIT_CELL`, `Game::tactical_ai_beat` for AI turns,
+/// `place_home` at `TEST_HOME_CELL`, `Game::tactical_ai_beat` for AI turns,
 /// and a real `game.save()`/`Game::load()` round trip for the save fix.
 mod review_findings {
     use super::*;
@@ -2879,7 +2991,7 @@ mod review_findings {
     }
 
     /// A real base — `place_home`'s real `spawn_structure` door at
-    /// `BASE_EXIT_CELL` — with the player standing at `player_at` rather
+    /// `TEST_HOME_CELL` — with the player standing at `player_at` rather
     /// than on the door, and a real `Game::open_siege` fired on it.
     fn open_real_siege(seed: u32, player_at: (i32, i32)) -> Game {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

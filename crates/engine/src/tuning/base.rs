@@ -431,8 +431,14 @@ pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
 /// the door with its plunder, `Game::besieger_turn`'s own reading of "down"
 /// — before the rest withdraw unconditionally. Half the pack breaking a
 /// siege is the spec's own figure; there is no quota and no round limit
-/// besides it.
+/// besides it (a sealed base's hold, `SIEGE_SEALED_HOLD_ROUNDS`, aside).
 pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
+
+/// Full rounds a besieging pack holds outside a sealed base — no besieger
+/// with a walk to the floor — before it withdraws. The siege then ends with
+/// nothing lost and nothing won. Picked, not measured: long enough to read
+/// as a siege that tried, short enough not to stall the player.
+pub const SIEGE_SEALED_HOLD_ROUNDS: u32 = 5;
 
 // ---------------------------------------------------------------------------
 // Outposts

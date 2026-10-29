@@ -1944,6 +1944,11 @@ impl Game {
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
         self.reap_tactical_dead(None);
+        // A sealed base's siege withdraws here, once a round; ending the
+        // fight already ran the tick `settle_tactical` owes.
+        if self.sealed_siege_withdrawal() {
+            return;
+        }
         if self.world.get_resource::<TacticalBattle>().is_some() {
             self.tick();
         }

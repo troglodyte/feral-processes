@@ -10,7 +10,14 @@
   ring of walkable ground a breadth-first walk out through the rock reaches,
   up to `SIEGE_SPAWN_SEARCH_TILES`; past that there is no board and the clock
   resolves the siege off-screen. Fallback cells can be cut off from the
-  floor — besiegers that dig are deferred, not forgotten. `open_siege_with`
+  floor, and a fight seated there could never end: `Game::
+  sealed_siege_withdrawal`, asked once a round from `tactical_round_upkeep`,
+  withdraws the whole pack once `SIEGE_SEALED_HOLD_ROUNDS` full rounds have
+  passed and no besieger has a terrain walk to floor
+  (`raiders::any_reaches_floor` — terrain only, so a crowd at a choke is not
+  a seal). No loss, no loot. One besieger with a path keeps the whole pack
+  in the fight; the round counts from the opening, so a path that closes
+  late withdraws at once. Besiegers that dig are deferred, not forgotten. `open_siege_with`
   draws one `GameRng` index over the list and seats raider *i* at
   `spawns[(start + i) % n]` — coordinate order, not a walk along the edge,
   so consecutive raiders share a column rather than a run of edge — and

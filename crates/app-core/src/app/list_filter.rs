@@ -47,7 +47,7 @@ fn is_filter_home(mode: Mode) -> bool {
             | Mode::TradeAction
             | Mode::StackMarket
             | Mode::Craft
-            | Mode::DesignPick
+            | Mode::WeaponBuildPick
             | Mode::PutDown
             | Mode::TacticalItem
     )
@@ -174,7 +174,7 @@ impl App {
             Mode::Inventory => Some(INVENTORY_SLOT_ROWS + inventory_visible(game, &filter).len()),
             Mode::DevItemPicker => Some(dev_item_visible(game, &filter).len()),
             Mode::Craft => Some(craft_visible(at_bench, game, &filter).len()),
-            Mode::DesignPick => {
+            Mode::WeaponBuildPick => {
                 Some(design_pick_visible(game, &self.design_draft, &filter).len() + 1)
             }
             Mode::PutDown => Some(put_down_visible(&game.put_down_options(), &filter).len()),

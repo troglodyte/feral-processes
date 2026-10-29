@@ -21,7 +21,6 @@ use crate::tuning::{
     SETTLEMENT_PATROL_RESPAWN_TICKS, SETTLEMENT_PATROL_RING_MAX, SETTLEMENT_PATROL_RING_MIN,
     SETTLEMENT_PATROL_SIZE,
 };
-use crate::world::WorldMap;
 
 impl Game {
     /// Rolls for a Hostile neighbour to field one more patrol member.
@@ -307,11 +306,7 @@ impl Game {
         (0..ring.len())
             .map(|step| ring[(start + step) % ring.len()])
             .find(|&(x, y)| {
-                self.world
-                    .resource_mut::<WorldMap>()
-                    .tile(x, y)
-                    .open_to_hostiles()
-                    && self.find_settlement_at(x, y).is_none()
+                self.ground_tile(x, y).open_to_hostiles() && self.find_settlement_at(x, y).is_none()
             })
     }
 }

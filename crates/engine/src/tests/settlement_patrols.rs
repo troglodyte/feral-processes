@@ -166,6 +166,38 @@ fn a_patrol_member_never_stands_on_its_towns_own_tile() {
     }
 }
 
+/// Nothing wild enters floor, and a patrol member is wild. The base is a
+/// `BaseGrid` overlay the `WorldMap` never shows, so with every ring cell
+/// floored but one, the patrol must stand on that one — not pick a floor
+/// cell, find no habitat on it and field nobody.
+#[test]
+fn a_patrol_member_stands_on_the_one_ring_cell_that_is_not_floor() {
+    let mut game = game(9105);
+    let (_, town, tile) = town_near_player(&mut game, 4, SETTLEMENT_HOSTILE_STANDING);
+    let (min, max) = (SETTLEMENT_PATROL_RING_MIN, SETTLEMENT_PATROL_RING_MAX);
+    // `ring_tiles` stops short of its max band.
+    let open = (tile.0 + max - 1, tile.1 + max - 1);
+    game.dev_lay_floor(
+        (-max..=max)
+            .flat_map(|dx| (-max..=max).map(move |dy| (dx, dy)))
+            .filter(|&(dx, dy)| dx.abs().max(dy.abs()) >= min)
+            .map(|(dx, dy)| (tile.0 + dx, tile.1 + dy))
+            .filter(|&cell| cell != open),
+    );
+
+    game.field_patrol();
+
+    let stood: Vec<(i32, i32)> = patrol_of(&mut game, town)
+        .into_iter()
+        .map(|(_, pos)| (pos.x, pos.y))
+        .collect();
+    assert_eq!(
+        stood,
+        vec![open],
+        "the patrol must stand on the one open cell"
+    );
+}
+
 /// `SETTLEMENT_PATROL_RING_MIN`'s flat 2 only ever excludes a Server's
 /// radius-1 footprint. A Thriving Mainframe reaches radius 3 — past that
 /// floor — so the ring the patrol fields into can still land on the town's

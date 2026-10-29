@@ -14,7 +14,7 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::floors::{FloorDb, FloorId};
-use crate::world::WorldMap;
+use crate::world::{Biome, Tile, WorldMap};
 
 /// The base's floor overlay on the field.
 ///
@@ -68,6 +68,21 @@ impl BaseGrid {
             max_y = max_y.max(y);
         }
         ((max_x - min_x).max(max_y - min_y) + 1) / 2
+    }
+
+    /// The field tile at `(x, y)` with this floor merged over it: laid floor
+    /// reads as `Biome::Platform`, anything else is `map`'s own tile. For a
+    /// reader holding the two resources apart (a bevy system, a field built
+    /// over `&mut WorldMap`); `Game::ground_tile` is this from a `Game`.
+    pub(crate) fn ground_tile(&self, map: &mut WorldMap, x: i32, y: i32) -> Tile {
+        if self.is_floor(x, y) {
+            return Tile {
+                biome: Biome::Platform,
+                walkable: true,
+                rock_shade: None,
+            };
+        }
+        map.tile(x, y)
     }
 
     /// How many cells are laid floor.

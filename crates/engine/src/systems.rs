@@ -320,9 +320,9 @@ pub fn wander_ai_system(
             }
         }
         // The base's floor is the one safe ground: a wild program never
-        // wanders onto it. Floor is an overlay, not a `WorldMap` biome, so it
-        // is asked beside `open_to_hostiles` rather than through it.
-        if world.tile(nx, ny).open_to_hostiles() && !floor.is_floor(nx, ny) {
+        // wanders onto it. Floor is an overlay, not a `WorldMap` biome, so
+        // the tile is read with it merged over (`BaseGrid::ground_tile`).
+        if floor.ground_tile(&mut world, nx, ny).open_to_hostiles() {
             pos.x = nx;
             pos.y = ny;
         }

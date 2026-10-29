@@ -50,14 +50,15 @@
   fixture that digs by *walking* needs `game_at_the_frontier_cutting`;
   omitted, the wall never comes down and it reads as the dig being broken.
 
-- **`Tile::open_to_hostiles` is unreachable now, and is kept rather than
-  deleted.** Nothing writes `Biome::Platform` into a `WorldMap` — the base's
-  floor is the `BaseGrid` overlay, merged in by `Game::ground_tile` — so the
-  predicate, and
-  `link_site_free`'s own `Biome::Platform` check, are both dead and both
-  deliberately left standing for slice 2/3. The *rule* is what has to be
-  re-established there: the base is the one ground hostiles may not enter,
-  and `walkable` alone was never it.
+- **`Tile::open_to_hostiles` is asked of a floor-merged tile.** Nothing
+  writes `Biome::Platform` into a `WorldMap` — the base's floor is the
+  `BaseGrid` overlay, merged in by `Game::ground_tile` (or
+  `BaseGrid::ground_tile` for a bevy system or a field over `&mut WorldMap`)
+  — so the predicate asked of a bare `WorldMap::tile` lets a wild program
+  onto the base. That is the trap: `pursuit_field`, a patrol's stand, a
+  nemesis follower's step and `link_site_free` all read the bare map once and
+  so all walked or opened onto floor. The base is the one ground hostiles may
+  not enter, and `walkable` alone was never it.
 
 - **Wild population is a property of place, and the density target is what
   "populated" means.** `Game::ensure_local_population` stocks any world chunk

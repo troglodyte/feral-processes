@@ -2127,6 +2127,37 @@ fn with_nowhere_to_put_a_new_link_the_stack_does_not_collapse() {
     );
 }
 
+/// Base floor is an overlay the `WorldMap` never shows, so a replacement
+/// link has to ask the floor itself: a hole into the Stack in the middle of
+/// the base would undo the one safe ground. With the whole band the search
+/// walks floored, nothing opens.
+#[test]
+fn a_replacement_link_never_opens_on_base_floor() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let reach = STACK_COLLAPSE_RELINK_TILES;
+    game.dev_lay_floor(
+        (-reach..=reach)
+            .flat_map(|dy| (-reach..=reach).map(move |dx| (dx, dy)))
+            .filter(|&(dx, dy)| dx.abs().max(dy.abs()) >= STACK_MIN_LINK_TILES)
+            .map(|(dx, dy)| (entrance.0 + dx, entrance.1 + dy)),
+    );
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    for t in entrance_tiles(&mut game) {
+        assert!(
+            before.contains(&t)
+                || !game
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(t.0, t.1),
+            "a replacement link opened on base floor at {t:?}"
+        );
+    }
+}
+
 /// How many times the lair has announced itself — see `Game::rouse_lair`.
 /// The line is a `MessageKind::Outcome`, so it survives the prune when a
 /// battle ends rather than vanishing with the blow-by-blow.

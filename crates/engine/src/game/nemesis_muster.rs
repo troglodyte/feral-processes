@@ -263,12 +263,7 @@ impl Game {
                     continue;
                 }
                 let (nx, ny) = (from.x + sx, from.y + sy);
-                if self
-                    .world
-                    .resource_mut::<crate::world::WorldMap>()
-                    .tile(nx, ny)
-                    .open_to_hostiles()
-                {
+                if self.ground_tile(nx, ny).open_to_hostiles() {
                     let mut pos = self.world.get_mut::<Position>(follower).unwrap();
                     pos.x = nx;
                     pos.y = ny;

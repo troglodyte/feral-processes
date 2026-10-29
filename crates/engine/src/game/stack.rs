@@ -238,9 +238,8 @@ impl Game {
         // can never land directly underfoot. `MAX_BUILD_DISTANCE_FROM_HOME`
         // rather than a live radius: this used to widen with
         // `resources::Platform`'s grown slab so a link could never spawn
-        // *inside* it; `link_site_free`'s own `Biome::Platform` check below
-        // is dead for the same reason, kept rather than deleted. What is
-        // left of the reasoning still holds: since `reach` widens only once one link is
+        // *inside* it; `link_site_free` now refuses laid floor on its own.
+        // What is left of the reasoning still holds: since `reach` widens only once one link is
         // down and the attempt budget is shared across all three, too
         // narrow an on-ramp would not cost the zone its first link — it
         // would cost the zone every link, which reads as a bad seed rather
@@ -286,12 +285,12 @@ impl Game {
     /// link needs from the ground under it, shared by a zone's scatter and
     /// by the replacement `collapse_stack` puts down.
     ///
-    /// Platform tiles are refused rather than merely unlikely: the base is
-    /// the one safe ground in the game, and a hole down into the Stack in
-    /// the middle of it would undo that. **Unreachable now that nothing
-    /// writes `Biome::Platform` into a `WorldMap`** — kept rather than
-    /// deleted, same as `find_blocking_structure_at`'s call below. Keeping
-    /// links off the floor is `Game::floor_conflict`'s job.
+    /// Base floor is refused rather than merely unlikely: the base is the
+    /// one safe ground in the game, and a hole down into the Stack in the
+    /// middle of it would undo that. Asked through `Game::ground_tile`, which
+    /// is where floor reads as `Biome::Platform` — the `WorldMap` alone
+    /// never shows it. `Game::floor_conflict` is the other direction:
+    /// floor refused on a link.
     ///
     /// A nest is checked before an entrance in `move_player`, so a link
     /// sharing a nest's tile is a link that can never be walked into — the
@@ -303,7 +302,7 @@ impl Game {
     /// arm admits nobody, so an entrance under one would be a door nothing
     /// could ever open.
     fn link_site_free(&mut self, x: i32, y: i32) -> bool {
-        let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
+        let tile = self.ground_tile(x, y);
         tile.walkable
             && tile.biome != Biome::Platform
             && self.find_surface_link_at(x, y).is_none()
@@ -415,18 +414,12 @@ impl Game {
     /// (mined ground included, an override there). The one place the two
     /// stores meet for the map, the ground's effects and a step.
     pub(crate) fn ground_tile(&mut self, x: i32, y: i32) -> Tile {
-        if self
-            .world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_floor(x, y)
-        {
-            return Tile {
-                biome: Biome::Platform,
-                walkable: true,
-                rock_shade: None,
-            };
-        }
-        self.world.resource_mut::<WorldMap>().tile(x, y)
+        self.world
+            .resource_scope(|world, mut map: bevy_ecs::prelude::Mut<WorldMap>| {
+                world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .ground_tile(&mut map, x, y)
+            })
     }
 
     /// The anchor's tile on the zone surface — the permanent door into base

@@ -1505,31 +1505,18 @@ fn pursuers_never_step_onto_the_base_platform() {
             }
         }
     }
-    // Stamped after the walkable override (so Platform wins inside the
-    // slab) but before the nest and pursuer are placed. Written directly
-    // through `set_override` rather than `Game::stamp_platform`, which
-    // retired with `resources::Platform` — what this test exercises is
-    // `pursuit_field`'s `Biome::Platform` exclusion, not the (now gone)
-    // production path that used to lay the tile, so any Platform region
-    // does. Sits east of the player, not on top of it: `half - 3` would
-    // have put the player's own tile inside the slab.
+    // Laid through the floor door after the walkable override but before
+    // the nest and pursuer are placed. The base is a `BaseGrid` overlay, so
+    // the `WorldMap` under it stays `OpenGrid` — a chaser reading the map
+    // alone sees no slab at all, which is the bug this pins. Sits east of
+    // the player, not on top of it: `half - 3` would have put the player's
+    // own tile inside the slab.
     let platform_center = (ppos.x + half + 1, ppos.y);
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dx in -half..=half {
-            for dy in -half..=half {
-                map.set_override(
-                    platform_center.0 + dx,
-                    platform_center.1 + dy,
-                    Tile {
-                        biome: Biome::Platform,
-                        walkable: true,
-                        rock_shade: None,
-                    },
-                );
-            }
-        }
-    }
+    game.dev_lay_floor(
+        (-half..=half)
+            .flat_map(|dx| (-half..=half).map(move |dy| (dx, dy)))
+            .map(|(dx, dy)| (platform_center.0 + dx, platform_center.1 + dy)),
+    );
 
     // Wall off the southern detour entirely, so the only way around the
     // slab is north — where the nest sits — instead of leaving dijkstra a
@@ -1576,15 +1563,12 @@ fn pursuers_never_step_onto_the_base_platform() {
         }
         game.tick();
         let pos = *game.world.get::<Position>(guardian).unwrap();
-        let biome = game
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome;
-        assert_ne!(
-            biome,
-            Biome::Platform,
-            "a pursuer must never step onto the base platform, but stands at {pos:?}"
+        assert!(
+            !game
+                .world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(pos.x, pos.y),
+            "a pursuer must never step onto the base floor, but stands at {pos:?}"
         );
     }
 
@@ -1684,8 +1668,8 @@ fn pursuit_tick_is_a_no_op_while_underground() {
 /// docs/superpowers/archive/specs/2026-08-03-nest-aggression-design.md): standing
 /// inside the base slab empties the pursuit field outright, for *any*
 /// pursuer, not just one already too far away to matter. Standing on the
-/// platform's interior makes every one of the player's own neighbours
-/// `Biome::Platform`, so `pursuit_field`'s search can't take a single step
+/// floor's interior makes every one of the player's own neighbours
+/// laid floor, so `pursuit_field`'s search can't take a single step
 /// out of the player's own tile — the same shape as
 /// `pursuit.rs::an_enclosed_origin_yields_a_field_of_just_itself`. A
 /// guardian well inside both the leash and the search box, on open ground
@@ -1693,7 +1677,7 @@ fn pursuit_tick_is_a_no_op_while_underground() {
 /// `Pursuing` — the platform is what did that, not distance, which is what
 /// the previous version of this test (guardian 40 tiles out, past the
 /// 20-tile search box on distance alone) failed to isolate. Verified: with
-/// the Platform stamp below removed, this test fails; restored, it passes.
+/// the floor below removed, this test fails; restored, it passes.
 #[test]
 fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1722,34 +1706,17 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
         }
     }
 
-    // Written directly through `set_override` rather than
-    // `Game::stamp_platform`, which retired with `resources::Platform` —
-    // same substitution as `pursuers_never_step_onto_the_base_platform`
-    // above, at the same radius the old stamp laid.
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        let r = MAX_BUILD_DISTANCE_FROM_HOME;
-        for dx in -r..=r {
-            for dy in -r..=r {
-                map.set_override(
-                    ppos.x + dx,
-                    ppos.y + dy,
-                    Tile {
-                        biome: Biome::Platform,
-                        walkable: true,
-                        rock_shade: None,
-                    },
-                );
-            }
-        }
-    }
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(ppos.x, ppos.y)
-            .biome,
-        Biome::Platform,
-        "test premise: the player must actually be standing inside the slab"
+    // The floor overlay, laid through the floor door at the radius the
+    // old slab stamp used; the `WorldMap` under it stays `OpenGrid`.
+    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+    game.dev_lay_floor(
+        (-r..=r)
+            .flat_map(|dx| (-r..=r).map(move |dy| (dx, dy)))
+            .map(|(dx, dy)| (ppos.x + dx, ppos.y + dy)),
+    );
+    assert!(
+        game.on_base_floor(),
+        "test premise: the player must actually be standing on the floor"
     );
 
     // 10 tiles out: well inside both NEST_AGGRO_LEASH_RADIUS (15) and the

@@ -626,10 +626,10 @@ impl Game {
 
         let player = self.player_entity();
         let player_pos = *self.world.get::<Position>(player).unwrap();
-        let field = {
-            let mut map = self.world.resource_mut::<WorldMap>();
+        let field = self.world.resource_scope(|world, mut map: Mut<WorldMap>| {
             pursuit_field(
                 &mut map,
+                world.resource::<crate::base_grid::BaseGrid>(),
                 (player_pos.x, player_pos.y),
                 // Sized off the **maximum** of the two leashes, never the
                 // nest's alone. They are equal today; relying on that makes
@@ -640,7 +640,7 @@ impl Game {
                 NEST_AGGRO_LEASH_RADIUS.max(crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS)
                     + NEST_PATH_SEARCH_MARGIN,
             )
-        };
+        });
 
         for pursuer in pursuers {
             let Some(mut pos) = self.world.get::<Position>(pursuer).copied() else {
@@ -652,9 +652,10 @@ impl Game {
                 return;
             }
             // This is also how the base ends a chase, zone-wide, and
-            // deliberately so: standing in the platform's interior makes
-            // every one of the player's own neighbours Biome::Platform, so
-            // `field` above never grows past {player: 0} — the same shape
+            // deliberately so: standing in the floor's interior makes every
+            // one of the player's own neighbours laid floor, which
+            // `pursuit_field` refuses, so `field` above never grows past
+            // {player: 0} — the same shape
             // `pursuit_field`'s enclosed-origin case produces. Every
             // pursuer reads as absent from it here, however far off its own
             // chase actually is, not just whichever guardian was closest.

@@ -111,30 +111,20 @@ pub struct Tile {
 }
 
 impl Tile {
-    /// Whether a hostile may stand here: walkable, and not the base slab.
+    /// Whether a hostile may stand here: walkable, and not the base's floor.
     ///
-    /// **Unreachable now that nothing writes `Biome::Platform` into a
-    /// `WorldMap`** — the base floor is `base_grid::BaseGrid`, not a tile
-    /// override. Left as-is rather than deleted; `stamp_platform` (named
-    /// below) no longer exists.
+    /// **Only meaningful on a tile with the floor merged over it** —
+    /// `Game::ground_tile` or `BaseGrid::ground_tile`, where laid floor reads
+    /// as `Biome::Platform`. A bare `WorldMap::tile` never shows floor (the
+    /// base is a `BaseGrid` overlay, ADR 0032), so asking this of one lets a
+    /// wild program onto the base.
     ///
-    /// `walkable` alone is not the rule, and the slab is why. It is the one
-    /// safe ground in the game, established in three places already —
-    /// `Game::maybe_ambush` refuses to roll while the player stands on it,
-    /// `Game::stamp_platform` purges whatever is standing there when the
-    /// floor is laid, and `pursuit_field` keeps a provoked swarm off it.
-    ///
-    /// `wander_ai_system` is the fourth reader and was the one that quietly
-    /// disagreed: it checked `walkable` alone, so an ordinary wild program
-    /// could stroll onto a base that a *pursuing* guardian was forbidden to
-    /// enter. That went unnoticed because `stamp_platform` purges the slab
-    /// as it is laid and the wild population was small enough that few
-    /// programs ever stood next to one — raising the population is what made
-    /// a program adjacent to the edge, and therefore one wander step from
-    /// the inside, the common case rather than the rare one.
-    ///
-    /// One predicate rather than four copies of `walkable && biome !=
-    /// Platform`, because the copy that drifts is the one nobody runs.
+    /// `walkable` alone is not the rule, and the floor is why: it is the one
+    /// safe ground in the game. Every wild mover asks it — `wander_ai_system`,
+    /// `pursuit_field`, a patrol's stand, a nemesis follower's step and a
+    /// spawn's scatter — and one predicate rather than five copies of
+    /// `walkable && !is_floor`, because the copy that drifts is the one
+    /// nobody runs.
     pub(crate) fn open_to_hostiles(&self) -> bool {
         self.walkable && self.biome != Biome::Platform
     }

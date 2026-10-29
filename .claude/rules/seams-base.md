@@ -77,8 +77,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   where the overlay and the map meet.**
 - **The crew walks on laid floor only, and the player and wild programs on
   `base_grid::Ground::walkable`, but nothing wild enters floor** —
-  `wander_ai_system` and `pick_habitat_species` refuse it; `habitat_pools`
-  does not.
+  every wild mover asks `Tile::open_to_hostiles` of floor-merged ground
+  (`Game::ground_tile` / `BaseGrid::ground_tile`), and
+  `pick_habitat_species` refuses it; `habitat_pools` does not.
 - **`field_pos` is where the party stands and `on_base_floor` is "home"**,
   chosen per site; `require_field`, refusing only the Stack, is the one
   locale guard.
@@ -120,8 +121,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   only** — `view_tiles_at`'s `touches_floor`, derived per lookup.
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
   by default and off for any save that never said otherwise.
-- **`Tile::open_to_hostiles` is unreachable now, and is kept rather than
-  deleted.**
+- **`Tile::open_to_hostiles` is asked of a floor-merged tile**, never a
+  bare `WorldMap::tile`, which does not show floor.
 - **Wild population is a property of place, and the density target is what
   "populated" means.** `Game::ensure_local_population` stocks any world
   chunk within `POPULATION_CHUNK_MARGIN` of the player's that

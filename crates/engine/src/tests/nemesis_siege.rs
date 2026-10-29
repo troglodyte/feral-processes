@@ -18,12 +18,7 @@ use crate::*;
 fn open_ground(game: &mut Game) -> (i32, i32) {
     for x in (300..400).step_by(40) {
         for y in (300..700).step_by(7) {
-            let clear = (0..=40).all(|dx| {
-                game.world
-                    .resource_mut::<crate::world::WorldMap>()
-                    .tile(x + dx, y)
-                    .open_to_hostiles()
-            });
+            let clear = (0..=40).all(|dx| game.ground_tile(x + dx, y).open_to_hostiles());
             if clear && game.habitat_pools(x, y, None, 0).is_some() {
                 return (x, y);
             }
@@ -187,6 +182,36 @@ fn a_follower_closes_in_on_a_leader_that_has_moved_away() {
     let l = *game.world.get::<Position>(leader).unwrap();
     let f = *game.world.get::<Position>(follower).unwrap();
     assert!(chebyshev(l, f) <= NEMESIS_FOLLOW_DISTANCE, "{l:?} {f:?}");
+}
+
+/// Nothing wild enters floor: a follower trailing its leader stops at the
+/// base's edge rather than stepping onto the floor overlay the `WorldMap`
+/// never shows.
+#[test]
+fn a_follower_never_steps_onto_base_floor() {
+    let mut game = new_game();
+    let (x, y) = open_ground(&mut game);
+    let leader = nemesis_at(&mut game, x, y);
+    let follower = wild_at(&mut game, x + 1, y);
+    game.world
+        .entity_mut(follower)
+        .insert(NemesisFollower(leader));
+    // A floor band across the whole way between them, rows above and below
+    // included, so the diagonal and the axis steps all meet it.
+    game.dev_lay_floor((x + 3..=x + 6).flat_map(|fx| (y - 2..=y + 2).map(move |fy| (fx, fy))));
+    game.world.get_mut::<Position>(leader).unwrap().x = x + 20;
+
+    for _ in 0..30 {
+        game.nemesis_muster();
+        let f = *game.world.get::<Position>(follower).unwrap();
+        assert!(
+            !game
+                .world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(f.x, f.y),
+            "a follower stepped onto base floor at {f:?}"
+        );
+    }
 }
 
 #[test]

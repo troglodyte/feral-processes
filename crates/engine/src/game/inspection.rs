@@ -117,7 +117,7 @@ impl Game {
                         // always been.
                         rock_shade: grid
                             .is_exposed(x, y)
-                            .then(|| rock.wall_at(seed, x, y).shade),
+                            .then(|| rock.base_wall_at(seed, x, y).shade),
                     });
                 }
                 rows.push(row);

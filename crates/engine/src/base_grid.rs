@@ -48,7 +48,7 @@ pub enum BaseCell {
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BaseGrid {
     cells: BTreeMap<(i32, i32), BaseCell>,
-    /// Base space's own seed, which `rock::RockDb::kind_at` folds to decide
+    /// Base space's own seed, which `rock::RockDb::base_kind_at` folds to decide
     /// what any coordinate is made of.
     ///
     /// **Its own, and deliberately not `WorldMap::seed()`.** The world seed
@@ -101,7 +101,7 @@ impl BaseGrid {
         self.seed = seed;
     }
 
-    /// The seed `rock::RockDb::kind_at` folds. See the field.
+    /// The seed `rock::RockDb::base_kind_at` folds. See the field.
     pub fn seed(&self) -> u32 {
         self.seed
     }

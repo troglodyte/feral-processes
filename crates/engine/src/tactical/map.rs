@@ -8,7 +8,7 @@
 //! (its sequence is not guaranteed stable across a `rand` upgrade, and the
 //! tests below compare whole boards for equality). Every cell is *derived*:
 //! folded through `derive::fold` and reduced through `derive::index`, the
-//! way `rock::RockDb::kind_at` derives base space.
+//! way `rock::RockDb::base_kind_at` derives base space.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 

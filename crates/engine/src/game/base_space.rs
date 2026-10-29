@@ -361,7 +361,7 @@ impl Game {
                 let def = self
                     .world
                     .resource::<crate::rock::RockDb>()
-                    .kind_at(seed, x, y);
+                    .base_kind_at(seed, x, y);
                 let rock_line = format!(
                     "{}. It takes at least {} swings to cut through.",
                     def.name, def.min_swings
@@ -412,7 +412,7 @@ impl Game {
         let seed = self.world.resource::<BaseGrid>().seed();
         self.world
             .resource::<crate::rock::RockDb>()
-            .wall_at(seed, x, y)
+            .base_wall_at(seed, x, y)
     }
 
     /// One tick of cutting at `(x, y)`, for the ear.
@@ -461,6 +461,41 @@ impl Game {
     pub(crate) fn strike_rock(&mut self, swinger: Entity, x: i32, y: i32) {
         let by_player = swinger == self.player_entity();
         let wall = self.wall_at(x, y);
+        let Some(site) = self.swing_at_rock(swinger, x, y, wall) else {
+            return;
+        };
+
+        // Read before the cell is opened rather than after: the swing lands
+        // on this tick, and `mined_at` records it — save format only now,
+        // since nothing reads the tick back.
+        let tick = self.world.resource::<GameClock>().tick;
+        self.world.resource_mut::<BaseGrid>().open(x, y, tick);
+        let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
+        if !marked {
+            self.world.despawn(site);
+        }
+        if by_player {
+            self.log("The entropy gives way, and the cell opens.");
+        } else {
+            self.log_base("Your crew cuts through, and the cell opens.");
+        }
+        self.roll_rock_fragment(by_player);
+    }
+
+    /// One swing of `swinger`'s damage at the rock cell `(x, y)`, spawning
+    /// the `DigSite` that records progress if this is the first. Returns the
+    /// site when the swing broke the cell and `None` while it still stands.
+    ///
+    /// Shared by the base-space strike and the field strike
+    /// (`Game::strike_field_rock`), so rock wears down by one rule in both.
+    pub(crate) fn swing_at_rock(
+        &mut self,
+        swinger: Entity,
+        x: i32,
+        y: i32,
+        wall: crate::rock::Wall,
+    ) -> Option<Entity> {
+        let by_player = swinger == self.player_entity();
         // Capped, and this is the whole of the fix for a developed player
         // demolishing their own base by clipping a corner. `swing_damage`
         // grows all run against rock that does not, so uncapped every cell
@@ -480,9 +515,7 @@ impl Game {
                 ))
                 .id()
         });
-        let Some(mut durability) = self.world.get_mut::<Durability>(site) else {
-            return;
-        };
+        let mut durability = self.world.get_mut::<Durability>(site)?;
         durability.hp = durability.hp.saturating_sub(dmg);
         let still_standing = durability.hp > 0;
         // Above the break/no-break split deliberately: the swing that opens
@@ -493,31 +526,20 @@ impl Game {
             if by_player {
                 self.log(format!("You cut into the entropy for {dmg} damage."));
             }
-            return;
+            return None;
         }
+        Some(site)
+    }
 
-        // Read before the cell is opened rather than after: the swing lands
-        // on this tick, and `mined_at` records it — save format only now,
-        // since nothing reads the tick back.
-        let tick = self.world.resource::<GameClock>().tick;
-        self.world.resource_mut::<BaseGrid>().open(x, y, tick);
-        let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
-        if !marked {
-            self.world.despawn(site);
-        }
-        if by_player {
-            self.log("The entropy gives way, and the cell opens.");
-        } else {
-            self.log_base("Your crew cuts through, and the cell opens.");
-        }
-
+    /// The fragment a broken rock cell may return, at `ROCK_FRAGMENT_CHANCE`.
+    pub(crate) fn roll_rock_fragment(&mut self, by_player: bool) {
         // A live action, not world generation, so `GameRng` is the right
         // stream to draw from: nothing here has to be reproduced by a
         // reload.
         let paid = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0
-                .random_bool(crate::tuning::BASE_MINE_FRAGMENT_CHANCE.clamp(0.0, 1.0) as f64)
+                .random_bool(crate::tuning::ROCK_FRAGMENT_CHANCE.clamp(0.0, 1.0) as f64)
         };
         if paid {
             let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);

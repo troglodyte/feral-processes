@@ -277,7 +277,7 @@ pub const BASE_ROCK_MIN_SWINGS: u32 = 2;
 /// takes `BASE_ROCK_DURABILITY` and `BASE_DIG_TICKS_PER_SWING` in with it,
 /// which is what makes softening the rock or quickening the swing show up
 /// here too.
-pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
+pub const ROCK_FRAGMENT_CHANCE: f32 = 0.25;
 
 /// How many ticks a posted digger spends per swing at a marked cell — one
 /// cycle of `TaskKind::Excavate`, the crew's counterpart to a cronjob's
@@ -314,7 +314,7 @@ pub const FARM_HARVEST_TICKS: u32 = 6;
 /// the plain floor is cheaper than it was as well as quicker; finishes stay
 /// on substrate (`FLOOR_FINISH_COST`) as the Factory-fed decoration.
 ///
-/// Above `BASE_MINE_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
+/// Above `ROCK_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
 /// so a dig plan never floors itself out of its own rubble.
 pub const FLOOR_TILE_COST: u32 = 2;
 

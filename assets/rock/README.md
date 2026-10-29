@@ -12,6 +12,12 @@ falls in and reduces the result to a kind by weight — so kinds come in
 patches with an inside, adding a file widens the pool for the whole map, and
 a wall you have never touched still knows what it is.
 
+**On the field, the kind comes from the biome.** `RockDb::kind_at(biome)`
+maps Data Void to `compacted`, Black Ice to `fused` and Entropy to `entropy`
+by these exact ids; a missing file falls back to the built-in ordinary kind.
+`weight` applies only to base-space rock (`base_kind_at`), which goes away
+when the base moves onto the field.
+
 Drop a file in, restart, and it is in the world. Nothing else to edit.
 
 ## Schema

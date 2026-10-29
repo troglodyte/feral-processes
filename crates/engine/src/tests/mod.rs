@@ -66,6 +66,7 @@ mod exclusive_routines;
 mod extraction;
 mod farms;
 mod field;
+mod field_mining;
 mod floor;
 mod gear_combat;
 mod gear_craft;

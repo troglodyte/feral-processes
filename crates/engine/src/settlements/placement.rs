@@ -9,7 +9,7 @@
 //! there again if they walk away and come back.
 //!
 //! That is only possible because a breach stopped rebuilding the world. It
-//! is the rule `rock::RockDb::kind_at` already follows for base space, and
+//! is the rule `rock::RockDb::base_kind_at` already follows for base space, and
 //! it carries the same three prohibitions: no `resources::GameRng` (a draw
 //! does not survive a save/load and shifts every later roll in the run), no
 //! `StdRng` sequence (not guaranteed stable across a `rand` upgrade, so a

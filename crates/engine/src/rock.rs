@@ -26,6 +26,7 @@
 //! a half-cut wall would come back a different kind under its saved
 //! `Durability`.
 
+use crate::world::Biome;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -186,6 +187,28 @@ impl RockDb {
         Ok((db, warnings))
     }
 
+    /// What a field blocker of this biome is made of: Data Void is compacted
+    /// entropy, Black Ice is fused, and base-space Entropy is the ordinary
+    /// kind. Any other biome is not rock, and answers the fallback.
+    ///
+    /// Keyed by the biome rather than folded from a seed, so the kind of a
+    /// field cell is a property of what the world already says is there and
+    /// needs no second source of truth. A mod that drops the named file gets
+    /// the fallback, the same tolerance `base_kind_at` has.
+    pub fn kind_at(&self, biome: Biome) -> &RockDef {
+        let id = match biome {
+            Biome::DataVoid => "compacted",
+            Biome::BlackIce => "fused",
+            _ => "entropy",
+        };
+        self.defs.get(id).unwrap_or(&self.fallback)
+    }
+
+    /// `kind_at` without the strings.
+    pub fn wall_at(&self, biome: Biome) -> Wall {
+        self.kind_at(biome).wall()
+    }
+
     /// What the cell at `(x, y)` in base space is made of.
     ///
     /// Total over the roster rather than the first match, so a mod adding a
@@ -193,7 +216,7 @@ impl RockDb {
     /// built-in kind when nothing loaded — every reader tolerates a
     /// one-kind world, which is the half of "an empty directory is
     /// supported" that has to hold at the *reader* end.
-    pub fn kind_at(&self, seed: u32, x: i32, y: i32) -> &RockDef {
+    pub fn base_kind_at(&self, seed: u32, x: i32, y: i32) -> &RockDef {
         let total: u32 = self.defs.values().map(|d| d.weight).sum();
         if total == 0 {
             return &self.fallback;
@@ -210,10 +233,10 @@ impl RockDb {
         &self.fallback
     }
 
-    /// What a swing at `(x, y)` needs to know. `kind_at` without the
+    /// What a swing at `(x, y)` needs to know. `base_kind_at` without the
     /// strings, which is what every caller in play actually wants.
-    pub fn wall_at(&self, seed: u32, x: i32, y: i32) -> Wall {
-        self.kind_at(seed, x, y).wall()
+    pub fn base_wall_at(&self, seed: u32, x: i32, y: i32) -> Wall {
+        self.base_kind_at(seed, x, y).wall()
     }
 
     /// Every kind in key order — what the asset censuses walk.
@@ -336,10 +359,10 @@ mod tests {
         let (db, warnings) = RockDb::load_dir(&dir).unwrap();
         assert!(warnings.is_empty());
         let kinds: std::collections::BTreeSet<&str> = (0..40)
-            .map(|i| db.kind_at(7, i * VEIN_BLOCK, 0).id.as_str())
+            .map(|i| db.base_kind_at(7, i * VEIN_BLOCK, 0).id.as_str())
             .collect();
         assert_eq!(kinds.len(), 1, "an empty directory must be uniform");
-        let only = db.kind_at(7, 0, 0);
+        let only = db.base_kind_at(7, 0, 0);
         assert!(
             only.min_swings >= 2 && only.swing_cap() < only.durability,
             "the fallback kind must keep the swing floor: the floor is the bug \
@@ -401,11 +424,14 @@ mod tests {
         let db = db();
         for bx in -3..3 {
             for by in -3..3 {
-                let anchor = db.kind_at(11, bx * VEIN_BLOCK, by * VEIN_BLOCK).id.clone();
+                let anchor = db
+                    .base_kind_at(11, bx * VEIN_BLOCK, by * VEIN_BLOCK)
+                    .id
+                    .clone();
                 for dx in 0..VEIN_BLOCK {
                     for dy in 0..VEIN_BLOCK {
                         assert_eq!(
-                            db.kind_at(11, bx * VEIN_BLOCK + dx, by * VEIN_BLOCK + dy)
+                            db.base_kind_at(11, bx * VEIN_BLOCK + dx, by * VEIN_BLOCK + dy)
                                 .id,
                             anchor,
                             "block ({bx},{by}) is not one kind"
@@ -423,7 +449,7 @@ mod tests {
         let db = db();
         let kinds: std::collections::BTreeSet<&str> = (-24..24)
             .flat_map(|x| (-24..24).map(move |y| (x, y)))
-            .map(|(x, y)| db.kind_at(4242, x, y).id.as_str())
+            .map(|(x, y)| db.base_kind_at(4242, x, y).id.as_str())
             .collect();
         assert!(kinds.len() >= 2, "one kind over a whole base: {kinds:?}");
     }
@@ -436,7 +462,7 @@ mod tests {
         let layout = |seed: u32| -> Vec<String> {
             (-8..8)
                 .flat_map(|x| (-8..8).map(move |y| (x, y)))
-                .map(|(x, y)| db.kind_at(seed, x, y).id.clone())
+                .map(|(x, y)| db.base_kind_at(seed, x, y).id.clone())
                 .collect()
         };
         assert_ne!(layout(1), layout(2));
@@ -450,7 +476,7 @@ mod tests {
     fn adjacent_blocks_do_not_all_agree() {
         let db = db();
         let row: Vec<&str> = (0..40)
-            .map(|b| db.kind_at(9, b * VEIN_BLOCK, 0).id.as_str())
+            .map(|b| db.base_kind_at(9, b * VEIN_BLOCK, 0).id.as_str())
             .collect();
         assert!(
             row.iter().collect::<std::collections::BTreeSet<_>>().len() >= 2,

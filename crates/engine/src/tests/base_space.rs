@@ -1935,7 +1935,7 @@ fn a_swing_costs_a_turn() {
 /// cell may pay a trickle, but never enough to undercut the Mining Node.
 ///
 /// **Stated as a rate, because the per-cell form cannot fail.** A cell pays
-/// at most one fragment — `BASE_MINE_FRAGMENT_CHANCE` is a probability, and
+/// at most one fragment — `ROCK_FRAGMENT_CHANCE` is a probability, and
 /// `strike_rock` clamps it — against the four a Blank Substrate costs, so
 /// "a cut pays less than a floor" passes for every legal value of the knob
 /// and holds nothing. What can actually breach the decision is the payout
@@ -1968,7 +1968,7 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
         })
         .min()
         .unwrap_or(crate::tuning::BASE_ROCK_DURABILITY.div_ceil(per_swing));
-    let per_tick_dug = crate::tuning::BASE_MINE_FRAGMENT_CHANCE / fewest_ticks as f32;
+    let per_tick_dug = crate::tuning::ROCK_FRAGMENT_CHANCE / fewest_ticks as f32;
 
     let structures = game.world.resource::<StructureDb>();
     let work = structures
@@ -4234,7 +4234,7 @@ fn base_spaces_seed_and_its_seams_survive_a_breach() {
         .map(|(x, y)| {
             game.world
                 .resource::<crate::rock::RockDb>()
-                .kind_at(before_base, x, y)
+                .base_kind_at(before_base, x, y)
                 .id
                 .clone()
         })
@@ -4260,7 +4260,7 @@ fn base_spaces_seed_and_its_seams_survive_a_breach() {
         .map(|(x, y)| {
             game.world
                 .resource::<crate::rock::RockDb>()
-                .kind_at(after_base, x, y)
+                .base_kind_at(after_base, x, y)
                 .id
                 .clone()
         })
@@ -4313,7 +4313,7 @@ fn deciding_a_walls_kind_draws_no_game_rng() {
             let _ = probed
                 .world
                 .resource::<crate::rock::RockDb>()
-                .kind_at(seed, x, y);
+                .base_kind_at(seed, x, y);
         }
     }
     let after = draw(&mut probed);
@@ -4349,7 +4349,7 @@ fn solid_cell_of(game: &Game, kind: &str) -> (i32, i32) {
     for r in 1..60 {
         for x in -r..=r {
             for y in -r..=r {
-                if grid.is_solid(x, y) && db.kind_at(seed, x, y).id == kind {
+                if grid.is_solid(x, y) && db.base_kind_at(seed, x, y).id == kind {
                     return (x, y);
                 }
             }
@@ -4671,7 +4671,7 @@ fn the_map_and_the_examine_ray_agree_about_a_wall() {
     let kind = game
         .world
         .resource::<crate::rock::RockDb>()
-        .kind_at(seed, WALL.0, WALL.1);
+        .base_kind_at(seed, WALL.0, WALL.1);
     assert!(
         named.starts_with(&kind.name),
         "{named:?} is not {}",
@@ -4723,7 +4723,9 @@ fn a_swing_at_unseen_rock_meets_its_real_kind() {
     let buried = (-40..40)
         .flat_map(|x| (-40..40).map(move |y| (x, y)))
         .find(|&(x, y)| {
-            grid.is_solid(x, y) && !grid.is_exposed(x, y) && db.kind_at(seed, x, y).id == hard.id
+            grid.is_solid(x, y)
+                && !grid.is_exposed(x, y)
+                && db.base_kind_at(seed, x, y).id == hard.id
         })
         .expect("a buried cell of the hardest kind");
     assert_eq!(game.wall_at(buried.0, buried.1).durability, hard.durability);

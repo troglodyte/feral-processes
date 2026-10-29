@@ -77,7 +77,7 @@ impl Game {
     /// order: the one set both the mending and its empty-stock warning ask
     /// about, so neither speaks for a bench the player is not standing at.
     fn refit_benches_in_reach(&self) -> Vec<(Entity, u32)> {
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
         self.refit_benches()
@@ -174,7 +174,7 @@ impl Game {
     /// stocked bench within `REFIT_REACH`, and a copy that needs it. A pure
     /// read, so the pass and the map's mark ask the one question.
     pub(crate) fn refit_bench_serving(&self) -> Option<Entity> {
-        if self.base_pos().is_none()
+        if self.field_pos().is_none()
             || self.has_active_battle()
             || self.world.resource::<RefitStand>().ticks <= REFIT_IDLE_TICKS
         {
@@ -201,7 +201,7 @@ impl Game {
     }
 
     fn count_refit_stand(&mut self) {
-        let here = self.base_pos();
+        let here = self.field_pos();
         let mut stand = self.world.resource_mut::<RefitStand>();
         match here {
             Some(cell) if stand.cell == Some(cell) => stand.ticks += 1,

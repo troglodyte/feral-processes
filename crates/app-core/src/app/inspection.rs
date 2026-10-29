@@ -94,7 +94,7 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::OutpostVisit;
             }
-            // Nothing standing there — but in base space the ray may still
+            // Nothing standing there — but on the field the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a
             // program standing in front of a seam is the more interesting
@@ -510,7 +510,7 @@ impl App {
     /// **The read is also the release.** Asking `Game::watch_position` every
     /// frame and dropping `App::watching` the moment it answers `None` is
     /// what makes "the program was dissolved / dispatched / taken into the
-    /// party / the party left base space" one rule instead of a list of
+    /// party / the party went underground" one rule instead of a list of
     /// endings that grows a case short. The engine's door already knows all
     /// of them; nothing here restates any.
     pub fn watch_center(&mut self) -> Option<(i32, i32)> {

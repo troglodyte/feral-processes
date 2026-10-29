@@ -130,8 +130,7 @@ impl Game {
     ///
     /// `&self`: no tick, no log, no RNG. The guards are
     /// the base doors' own, in the same order, each answering with an
-    /// empty offer — game over, an active battle, `require_base`. No
-    /// `require_surface`: `require_base` is the stronger statement.
+    /// empty offer — game over, an active battle, `require_field`.
     ///
     /// **The trade currency is not cargo and gets no row at all**, on either
     /// side — the same exclusion `caravan_shelf` and the stack market's
@@ -153,7 +152,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return Vec::new();
         }
         let currency = self.trade_currency();
@@ -242,7 +241,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return Vec::new();
         }
         self.carrier_slots(racks)
@@ -347,7 +346,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return (Moved::new(), Moved::new());
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return (Moved::new(), Moved::new());
         }
         // Both carrier refusals land here, above the item movers, which is
@@ -563,7 +562,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return;
         }
         if self.reachable_stock().is_empty() {

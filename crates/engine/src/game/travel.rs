@@ -1,7 +1,7 @@
 //! `Game::travel_step`: a read-only route query for "walk here" — a click
 //! on the map or a chase after a moving hostile (`travel-on-the-clock`).
 //! `App::update_realtime` is the one caller in app-core, and it spends what
-//! this answers through `move_player` / `move_in_base`, exactly as an
+//! this answers through `move_player`, exactly as an
 //! arrow key does. This module writes nothing to the `World` and draws no
 //! `resources::GameRng` — see the tests for the RNG claim, in the same
 //! shape the Predation no-draw test uses.
@@ -31,7 +31,7 @@ pub enum TravelStep {
     Toward(i32, i32),
     /// Step `(dx, dy)`; the goal is Chebyshev-adjacent, so this is the
     /// route's last step and it is an **ordinary bump** — whatever
-    /// `move_player` / `move_in_base` does there today (fight, visit,
+    /// `move_player` does there today (fight, visit,
     /// swing, wall) happens with nothing added on top, and the caller
     /// clears the travel once it has spent this step.
     Last(i32, i32),
@@ -39,15 +39,13 @@ pub enum TravelStep {
     Arrived,
     /// No route to the goal exists inside the search box.
     NoRoute,
-    /// A `Creature` goal that no longer exists, or now stands in the other
-    /// coordinate space from the one the travel is being asked about.
+    /// A `Creature` goal that no longer exists, or has walked out of sight.
     Gone,
 }
 
 impl Game {
     /// One step of a route toward `goal`, taken from wherever the party is
-    /// standing right now — the surface `Position`, or the base-space cell
-    /// from `Game::base_pos`. Underground always answers `NoRoute`: the
+    /// standing right now. Underground always answers `NoRoute`: the
     /// player's `Position` stays pinned to the Stack entrance for the whole
     /// dive (`resources::Locale`'s own doc), so there is no surface tile to
     /// route from down there.
@@ -61,11 +59,10 @@ impl Game {
         if self.is_underground() {
             return TravelStep::NoRoute;
         }
-        let in_base = self.in_base();
-        let Some(current) = self.travel_origin(in_base) else {
+        let Some(current) = self.field_pos() else {
             return TravelStep::NoRoute;
         };
-        let Some(goal_tile) = self.resolve_travel_goal(goal, in_base) else {
+        let Some(goal_tile) = self.resolve_travel_goal(goal) else {
             return TravelStep::Gone;
         };
 
@@ -85,43 +82,22 @@ impl Game {
         }
 
         let radius = distance + TRAVEL_ROUTE_MARGIN;
-        let field = if in_base {
-            // Bodies alone, not `Game::blocked_tiles` — that set also
-            // refuses every structure's *anchor*, which `Game::move_in_base`
-            // walks over freely; `Game::base_step_blocked` is the same
-            // solid-rock/barrier refusal `move_in_base` itself answers with.
-            let bodies: std::collections::HashSet<(i32, i32)> = self
-                .base_bodies()
-                .into_iter()
-                .map(|(_, p)| (p.x, p.y))
-                .collect();
-            walk_field(goal_tile, radius, |cell| {
-                // The goal cell is exempt from both refusals below — the
-                // field is rooted there, so what it costs to enter never
-                // actually decides anything (`origin` is always inserted at
-                // cost 0), but a goal that a route's own rule would refuse
-                // is a contradiction not worth carrying.
-                if cell == goal_tile {
-                    return Some(1);
-                }
-                (!self.base_step_blocked(cell.0, cell.1) && !bodies.contains(&cell)).then_some(1)
-            })
-        } else {
-            // Collected once for the whole search box rather than asked per
-            // cell — `Game::bump_tiles`' own reason.
-            let obstacles = self.bump_tiles(goal_tile, radius);
-            walk_field(goal_tile, radius, |cell| {
-                if cell == goal_tile {
-                    return Some(1);
-                }
-                let walkable = self
-                    .world
-                    .resource_mut::<WorldMap>()
-                    .tile(cell.0, cell.1)
-                    .walkable;
-                (walkable && !obstacles.contains(&cell)).then_some(1)
-            })
-        };
+        // Collected once for the whole search box rather than asked per
+        // cell — `Game::bump_tiles`' own reason. The base's bodies join them:
+        // a step is never planned through a program standing in the way.
+        let mut obstacles = self.bump_tiles(goal_tile, radius);
+        obstacles.extend(self.base_bodies().into_iter().map(|(_, p)| (p.x, p.y)));
+        let field = walk_field(goal_tile, radius, |cell| {
+            // The goal cell is exempt: the field is rooted there, so what it
+            // costs to enter never decides anything, but a goal a route's own
+            // rule would refuse is a contradiction not worth carrying.
+            if cell == goal_tile {
+                return Some(1);
+            }
+            // `base_step_blocked` is `move_player`'s own refusal (ground
+            // nothing stands on, or a barrier); a machine is walked over.
+            (!self.base_step_blocked(cell.0, cell.1) && !obstacles.contains(&cell)).then_some(1)
+        });
 
         // The player's own neighbour with the lowest field value. Chebyshev
         // distance prices a diagonal like a straight step, so most moves
@@ -144,28 +120,13 @@ impl Game {
             })
     }
 
-    /// The tile the party is walking from, in whichever space `in_base`
-    /// names — `None` only when the surface player entity has somehow lost
-    /// its `Position`, which does not happen in play.
-    fn travel_origin(&self, in_base: bool) -> Option<(i32, i32)> {
-        if in_base {
-            self.base_pos()
-        } else {
-            let player = self.player_entity();
-            self.world.get::<Position>(player).map(|p| (p.x, p.y))
-        }
-    }
-
-    /// Resolves `goal` to a tile in the space `in_base` names, or `None`
-    /// for a `Creature` goal `travel_step` must answer `Gone` for.
-    fn resolve_travel_goal(&self, goal: TravelGoal, in_base: bool) -> Option<(i32, i32)> {
+    /// Resolves `goal` to a tile, or `None` for a `Creature` goal
+    /// `travel_step` must answer `Gone` for.
+    fn resolve_travel_goal(&self, goal: TravelGoal) -> Option<(i32, i32)> {
         match goal {
             TravelGoal::Tile(x, y) => Some((x, y)),
             TravelGoal::Creature(entity) => {
                 self.world.get::<Stats>(entity)?;
-                if self.stands_in_base_space(entity) != in_base {
-                    return None;
-                }
                 // A hostile that walked out of sight is gone to the player,
                 // or steering toward its live tile would give it away.
                 if !self.is_shown(entity, false) {

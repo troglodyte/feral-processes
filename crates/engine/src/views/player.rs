@@ -519,7 +519,7 @@ pub struct ToolRow {
 /// walked away from under the screen closes it rather than drawing a stale
 /// row.
 ///
-/// `tile` is base space and it is the header, `DepotFilterView`'s own
+/// `tile` is a field coordinate and it is the header, `DepotFilterView`'s own
 /// reason: a base may stand two rigs against one cell and the player has to
 /// be told which one they are fitting.
 ///

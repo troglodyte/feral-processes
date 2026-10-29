@@ -61,7 +61,7 @@ pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
 /// rounds in the party's favour.
 pub const REST_INTEGRITY_PER_PATCH: i32 = 40;
 
-/// Integrity the party regains each tick while standing in base space out of
+/// Integrity the party regains each tick while standing on the base floor out of
 /// battle, for free. The floor under paid rest, not a rival to it: at the
 /// world's two ticks a second a hundred points takes under a minute, a
 /// full recovery from near zero a few.
@@ -81,13 +81,13 @@ pub const SUPPLY_BATCH: u32 = 3;
 /// against a default buffer of 20, a clog sheds a quarter and leaves the rest.
 pub const HAUL_CARRY_CAPACITY: u32 = 5;
 
-/// Chebyshev radius of the ring a program *arrives* in base space on,
+/// Chebyshev radius of the ring a program *arrives* on the floor on,
 /// around the Home.
 ///
 /// Not where idle staff live — they wander, `work_orders::wander_step`.
-/// This is the tile `work_orders::entry_tile` hands a body that has no
-/// base-space cell yet, which in an established base is a program that has
-/// just been beaten and still carries the surface tile it was taken on.
+/// This is the tile `work_orders::entry_tile` hands a body that is not on
+/// the floor yet, which in an established base is a program that has
+/// just been beaten and still carries the tile it was taken on.
 /// Outside 1 so an arrival never lands on the Home's own tile, and inside
 /// the starting pocket so a base at its opening size has somewhere to put
 /// one.

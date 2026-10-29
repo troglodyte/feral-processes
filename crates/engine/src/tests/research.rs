@@ -800,11 +800,11 @@ fn unknown_research_is_rejected() {
     assert!(game.work_orders().is_empty());
 }
 
-/// Off the base there is no answer to which machines are standing, so the
+/// Underground there is no answer to which machines are standing, so the
 /// selection refuses rather than answering from the surface entrance tile —
 /// `Game::queue_work_order`'s own reason for the same guard.
 #[test]
-fn selecting_research_off_the_base_is_rejected() {
+fn selecting_research_in_the_stack_is_rejected() {
     let mut game = Game::new(727, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // The **whole** base stood up, so the only thing refusing is the locale.
     // Built from inside and then walked out: with a bare Research Node the
@@ -817,6 +817,7 @@ fn selecting_research_off_the_base_is_rejected() {
         g.abandon_research().unwrap();
     });
 
+    descend(&mut game);
     let err = game.select_research("automation").unwrap_err();
 
     assert!(
@@ -2063,7 +2064,7 @@ fn a_save_written_before_projects_existed_loads_with_none() {
 fn save_format_version_is_unchanged_by_research_projects() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "these fields add no bump of their own; a changed version is a \
          deliberate bump — see the doc comment on SAVE_FORMAT_VERSION"
     );

@@ -918,14 +918,14 @@ fn frame(
     // Effects are drained every frame whether or not they'll be drawn,
     // so a disabled `Fx` can't leave the engine's queue at its cap.
     let in_battle = fx_in_fight(&fe.app);
-    let in_base = fe.app.game.as_ref().is_some_and(|g| g.base_pos().is_some());
+    let at_home = fe.app.game.as_ref().is_some_and(|g| g.on_base_floor());
     let (cues, last_log) = match &mut fe.app.game {
         Some(game) => (FrameCues::take(game), game.message_log(1).pop()),
         None => (FrameCues::default(), None),
     };
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
-    for event in frame_cues(queued, &cues.effects, &cues.tactical_fx, in_base) {
+    for event in frame_cues(queued, &cues.effects, &cues.tactical_fx, at_home) {
         sounds.play(&mut commands, event, volume);
     }
     fe.fx.begin_frame(now, cues, in_battle);
@@ -934,11 +934,11 @@ fn frame(
     if fe.fx.observe_round(round) {
         sounds.play(&mut commands, SoundEvent::RoundEnd, volume);
     }
-    // Not during a fight in the base: battle cues want the room to
-    // themselves. Nor over a death in it, which keeps `base_pos` until the
-    // game-over screen is dismissed. Nor while paused: the machines it
+    // Not during a fight at the base: battle cues want the room to
+    // themselves. Nor over a death there, which keeps the party's tile until
+    // the game-over screen is dismissed. Nor while paused: the machines it
     // stands for are stopped too, and this also silences the drone.
-    let ambient = in_base && !in_battle && fe.app.mode != Mode::GameOver && !fe.app.paused;
+    let ambient = at_home && !in_battle && fe.app.mode != Mode::GameOver && !fe.app.paused;
     if let Some(blip) = fe.ambience.tick(now, ambient) {
         sounds.play_blip(&mut commands, blip, volume * ambience::BLIP_MIX);
     }
@@ -1002,7 +1002,7 @@ fn fx_in_fight(app: &App) -> bool {
 /// crew's swings — and a clip per blow is a machine-gun.
 ///
 /// The one interaction between the two sources is `Step`. A bump into
-/// base-space rock is a swing (`Game::move_in_base`), but it reaches the
+/// field rock is a swing (`Game::move_player`), but it reaches the
 /// engine as `Game::move_player` like any other step, so
 /// `App::after_world_action` queues `Step` for it and cannot tell the
 /// difference. Dropping it here is what keeps the player's own swing from
@@ -1010,7 +1010,7 @@ fn fx_in_fight(app: &App) -> bool {
 ///
 /// What that costs is one swallowed footstep in a frame where the crew cuts
 /// while the player walks somewhere else — inaudible, against app-core
-/// otherwise re-deriving `move_in_base`'s wall branch to answer something
+/// otherwise re-deriving `move_player`'s wall branch to answer something
 /// the engine already knows. A brawl deliberately does *not* suppress it:
 /// two programs fighting across the base has nothing to do with the step the
 /// player just took.
@@ -1018,19 +1018,18 @@ fn fx_in_fight(app: &App) -> bool {
 /// A third, a battle map's reaction, comes off the tactical fx queue and
 /// plays at most once a frame the same way.
 ///
-/// **The two base kinds are heard only from inside base space**, `in_base` being
-/// `Game::base_pos().is_some()`. The queue is base-space by construction —
-/// `render/base.rs` suppresses its flashes everywhere else for that reason —
-/// and a crew keeps cutting while the player is out in the field.
+/// **The two base kinds are heard only from the base's floor**, `at_home`
+/// being `Game::on_base_floor()`: a crew keeps cutting while the player is
+/// out in the field, and the din would follow them across it.
 fn frame_cues(
     queued: Vec<SoundEvent>,
     effects: &[feral_processes_engine::resources::VisualEffect],
     tactical_fx: &[feral_processes_engine::TacticalFxCue],
-    in_base: bool,
+    at_home: bool,
 ) -> Vec<SoundEvent> {
     use feral_processes_engine::EffectKind;
 
-    let sounded = |kind: EffectKind| in_base && effects.iter().any(|e| e.kind == kind);
+    let sounded = |kind: EffectKind| at_home && effects.iter().any(|e| e.kind == kind);
     let mining = sounded(EffectKind::Mine);
     let mut cues: Vec<SoundEvent> = queued
         .into_iter()
@@ -1043,7 +1042,7 @@ fn frame_cues(
     if sounded(EffectKind::Brawl) {
         cues.push(SoundEvent::Hit);
     }
-    // A battle map is not base space, so `in_base` does not gate this one.
+    // A battle map is not the base, so `at_home` does not gate this one.
     if tactical_fx
         .iter()
         .any(|c| c.kind == feral_processes_engine::TacticalFxKind::Reaction)
@@ -1245,7 +1244,7 @@ mod tests {
     }
 
     /// A reaction on a battle map has a clip of its own, heard wherever the
-    /// fight is — a battle map is not base space, so `in_base` has no say.
+    /// fight is — a battle map is not the base, so `at_home` has no say.
     #[test]
     fn a_reaction_is_heard_on_a_battle_map() {
         use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
@@ -1271,7 +1270,7 @@ mod tests {
         );
     }
 
-    /// Every effect the engine queues is base-space, so a crew cutting rock
+    /// Every effect the engine queues is the base's, so a crew cutting rock
     /// or two programs brawling at home is not heard out in the field — and
     /// the step the player just took there is theirs, not a bump into rock.
     #[test]
@@ -1830,14 +1829,14 @@ mod tests {
             })
     }
 
-    /// An `App` with a Home deployed and the party standing in base space,
-    /// reached through `place_structure` and `enter_base` themselves.
+    /// An `App` with a Home deployed and the party standing on it, reached
+    /// through `place_structure` itself.
     ///
     /// The materials are stocked by editing the save, the same trick and for
     /// the same reason as `app_underground`'s locale: a Home costs five Core
     /// Fragments, a fresh run carries none, and the engine deliberately
     /// hands nothing to a caller outside the crate. Everything after that is
-    /// the real path in, so the fixture cannot manufacture a locale the game
+    /// the real path, so the fixture cannot manufacture a state the game
     /// would never produce.
     fn app_in_base(seed: u32) -> App {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -1868,10 +1867,8 @@ mod tests {
         let mut game = Game::load(&path, &assets).unwrap();
         let _ = std::fs::remove_file(&path);
 
-        game.place_structure("home", 1, 0, None)
+        game.place_structure("home", 0, 0, None)
             .expect("the fixture stocked the Home's cost");
-        game.enter_base()
-            .expect("a fresh run starts the player on the anchor");
         app.game = Some(game);
         app
     }
@@ -1922,37 +1919,23 @@ mod tests {
         paint::with_painter(|p| render::draw(app, fx, p, false));
     }
 
-    /// A raid's tile flash is a *base-space* cue and must be drawn in base
-    /// space alone.
-    ///
-    /// Every `VisualEffect` the engine queues names a structure's tile, and
-    /// a structure stands in base space — so drawing one while the pane is
-    /// showing the surface paints it onto whatever unrelated ground happens
-    /// to share those numbers, with no structure there to explain it. The
-    /// same cross-space read `view_entities` and the spawn-point outline
-    /// already refuse.
-    ///
-    /// Both halves put the effect on the pane's own centre tile — base
-    /// space's origin in one, the player's surface `Position` in the other
-    /// — so neither half can pass merely by being scrolled off-screen, and
-    /// dropping the guard makes the surface half paint the flash on the
-    /// party's own tile.
+    /// A raid's tile flash washes the tile it names while the party is home.
     #[test]
-    fn a_raid_flash_draws_in_base_space_and_never_on_the_surface() {
+    fn a_raid_flash_draws_on_the_base() {
         let mut app = app_in_base(4242);
-        let in_base = app
+        let home = app
             .game
             .as_ref()
             .unwrap()
-            .base_pos()
-            .expect("in base space");
+            .field_pos()
+            .expect("on the field");
 
         let mut fx = Fx::new();
         fx.begin_frame(
             0.0,
             FrameCues {
                 effects: vec![VisualEffect {
-                    pos: in_base,
+                    pos: home,
                     kind: EffectKind::Hit,
                 }],
                 ..Default::default()
@@ -1960,7 +1943,7 @@ mod tests {
             false,
         );
         let flash = fx
-            .tile_flash(in_base)
+            .tile_flash(home)
             .expect("a flash queued this frame is live");
         let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
@@ -1968,57 +1951,11 @@ mod tests {
             1,
             "a raid on a structure must wash its tile while the party is home"
         );
-
-        app.game.as_mut().unwrap().leave_base().unwrap();
-        let on_surface = app.game.as_ref().unwrap().player_status().position;
-
-        let mut fx = Fx::new();
-        fx.begin_frame(
-            0.0,
-            FrameCues {
-                effects: vec![VisualEffect {
-                    pos: on_surface,
-                    kind: EffectKind::Hit,
-                }],
-                ..Default::default()
-            },
-            false,
-        );
-        let flash = fx
-            .tile_flash(on_surface)
-            .expect("a flash queued this frame is live");
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
-        assert_eq!(
-            paint::painted_rect_fill_count(&shapes, flash),
-            0,
-            "the zone map draws no structures, so it must draw no structure's raid flash \
-             either — this is the tile the party is standing on"
-        );
-
-        // The wash and the debris are two draw sites reading one queue, so
-        // the guard has to be on both — a rect count alone would leave the
-        // sparks free to keep landing on open ground.
-        let mut quiet = Fx::new();
-        quiet.begin_frame(0.0, FrameCues::default(), false);
-        let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p, false));
-        assert_eq!(
-            paint::painted_line_count(&shapes),
-            paint::painted_line_count(&bare),
-            "an effect queued while the party is on the surface must change nothing \
-             the pane paints, sparks included"
-        );
     }
 
-    /// A squad's departure walk is base-space too, and the gate it sits
-    /// behind is the flash's.
-    ///
-    /// A `TransitCue` names base-space cells, so a walk drawn while the pane
-    /// is showing the zone surface files a squad of glyphs across whatever
-    /// unrelated ground shares those numbers — the party's own tile among
-    /// them. Both halves in one test for the flash's reason: the base half
-    /// alone passes against a draw pass that is never gated at all.
+    /// A squad's departure walk is drawn by the interpolating pass.
     #[test]
-    fn a_departure_walk_draws_in_base_space_and_never_on_the_surface() {
+    fn a_departure_walk_draws_on_the_base() {
         /// A glyph nothing on either map draws, so counting it needs no
         /// control draw to subtract.
         const MARK: char = 'Ж';
@@ -2053,21 +1990,12 @@ mod tests {
             1,
             "a body walking out of the base is drawn"
         );
-
-        app.game.as_mut().unwrap().leave_base().unwrap();
-        assert_eq!(
-            painted(&mut app),
-            0,
-            "the zone map is not base space, so a walk across it must draw nothing"
-        );
     }
 
-    /// A speech mark names a base-space cell, so it draws in base space and
-    /// never over the zone surface; the walk test's two halves, and for its
-    /// reason. Counted against a control frame, because the quote glyph is
-    /// not one nothing else draws on the map.
+    /// A speech mark draws over its cell. Counted against a control frame,
+    /// because the quote glyph is not one nothing else draws on the map.
     #[test]
-    fn a_speech_mark_draws_in_base_space_and_never_on_the_surface() {
+    fn a_speech_mark_draws_on_the_base() {
         let quotes = |app: &mut App, speech: Vec<SpeechCue>| {
             let mut fx = Fx::new();
             fx.begin_frame(
@@ -2094,27 +2022,14 @@ mod tests {
             bare + 1,
             "a conversation in the base is marked"
         );
-
-        app.game.as_mut().unwrap().leave_base().unwrap();
-        let bare = quotes(&mut app, Vec::new());
-        assert_eq!(
-            quotes(&mut app, cue()),
-            bare,
-            "the zone map is not base space, so a mark over its cells would be aliasing"
-        );
     }
 
     /// Cutting tools are a mode the player leaves armed and then forgets,
     /// and the only thing that ever showed it was the line in the log at
     /// the moment it was toggled. So the party's own tile wears a ring
     /// while the bump cuts.
-    ///
-    /// Both halves in one test for the raid flash's reason: the mode
-    /// survives a walk back out through the anchor — nothing disarms it —
-    /// so an ungated ring follows the party onto the zone map, where there
-    /// is no rock to cut and the ring is a claim about nothing.
     #[test]
-    fn armed_cutting_tools_ring_the_party_and_only_in_base_space() {
+    fn armed_cutting_tools_ring_the_party() {
         let mut app = app_in_base(4245);
         let mut fx = Fx::new();
 
@@ -2134,14 +2049,6 @@ mod tests {
             paint::painted_rect_stroke_count(&out, render::CUTTING_OUTLINE),
             1,
             "armed tools must ring the party's tile, and only theirs"
-        );
-
-        app.game.as_mut().unwrap().leave_base().unwrap();
-        let (_, surface) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
-        assert_eq!(
-            paint::painted_rect_stroke_count(&surface, render::CUTTING_OUTLINE),
-            0,
-            "the zone map has no rock to cut, so the ring claims nothing out here"
         );
     }
 

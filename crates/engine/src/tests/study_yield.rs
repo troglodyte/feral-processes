@@ -485,8 +485,7 @@ fn a_carrier_that_cannot_make_progress_gives_up_after_the_patience() {
         .insert(CarryingProgram(program(7)));
     // The party stands on the next corridor cell: the walk waits, as it does
     // for any body in its way.
-    game.world
-        .insert_resource(crate::resources::Locale::Base { x: 22, y: 30 });
+    stand_in_base_at(&mut game, 22, 30);
 
     let patience = crate::tuning::RACK_CARRY_PATIENCE_BEATS;
     for _ in 0..patience / 2 {
@@ -975,8 +974,7 @@ fn a_full_slot_holds_the_study_bar_and_draws_no_rng() {
 fn the_map_marks_a_station_holding_a_spent_program() {
     let (mut game, station, _rack) = base_with_station_and_rack();
     let at = *game.world.get::<Position>(station).unwrap();
-    game.world
-        .insert_resource(crate::resources::Locale::Base { x: 0, y: 0 });
+    stand_in_base_at(&mut game, 0, 0);
     // The fixture spawns no glyph, and the map views only what it draws.
     game.world
         .entity_mut(station)

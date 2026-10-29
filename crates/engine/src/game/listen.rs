@@ -20,7 +20,7 @@ impl Game {
     /// of the nearest thing they have not spent yet, or silence.
     ///
     /// The refusal is `stack_pos` coming back `None`, **not**
-    /// `require_surface`. This reads `Locale::Stack`'s own coordinates and
+    /// `require_field`. This reads `Locale::Stack`'s own coordinates and
     /// facing and never touches `Position`, so it is the `Phase`/`Jump`
     /// case rather than the surface-action case — and by construction it
     /// cannot misreport where the party is, since everything it names is a

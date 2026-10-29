@@ -238,9 +238,9 @@ fn every_refusal_leaves_the_pack_the_records_and_the_roster_alone() {
     stand_in_base_at(&mut game, 12, 12);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
-    // Out of base space.
+    // Off the base's floor.
     let (mut game, _) = base_with_a_cell();
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
     // The party standing on the pen itself.
@@ -261,7 +261,7 @@ fn every_refusal_leaves_the_pack_the_records_and_the_roster_alone() {
     let (mut game, _) = base_with_a_cell();
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
-        .open(PEN.0, PEN.1, 0);
+        .revert(PEN.0, PEN.1);
     assert_refused_untouched(&mut game, 0, JailBlock::NoFreeCell);
 
     // A structure that is not a cell.
@@ -512,7 +512,7 @@ fn a_warded_empty_cell_draws_nothing_from_the_rng() {
         stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
         // `spawn_machine_at` lays the starting pocket, which moves the
         // stream; lay it in both runs so only the cell and its post differ.
-        game.lay_starting_pocket();
+        game.lay_test_pocket();
         stand_ample_grid_supply(&mut game);
         let warden = spawn_tamed(&mut game, 10, 3);
         if with_cell {

@@ -67,8 +67,7 @@ impl Game {
     /// standing and every structure has to stand on laid floor, so a Relay
     /// is in the base by construction. "Is the player in the base" is
     /// therefore the whole question, which since the base moved out of
-    /// phase reads as: the party is in base space, standing on
-    /// `BaseCell::Floor`.
+    /// phase reads as: the party is on the base floor (`on_base_floor`).
     ///
     /// Floor and not merely `walkable`, `broker_reach`'s rule: the mast is
     /// reachable from the base's laid ground, not from a corridor mined out
@@ -77,7 +76,7 @@ impl Game {
         if !self.has_relay() {
             return DispatchReach::NoRelay;
         }
-        let Some((x, y)) = self.base_pos() else {
+        let Some((x, y)) = self.field_pos() else {
             return DispatchReach::OffBase;
         };
         if self
@@ -321,7 +320,7 @@ impl Game {
         Ok(())
     }
 
-    /// Queues the walk a squad is *seen* to make: out through base space's
+    /// Queues the walk a squad is *seen* to make: out through the field's
     /// one door, or in through it.
     ///
     /// **Direction needs no field** — a departure and an arrival are the same
@@ -343,7 +342,9 @@ impl Game {
             let Some(tile) = self.world.get::<Position>(member).map(|p| (p.x, p.y)) else {
                 continue;
             };
-            let door = crate::game::base_space::BASE_EXIT_CELL;
+            let Some(door) = self.anchor_position() else {
+                continue;
+            };
             let (from, to) = if outbound { (tile, door) } else { (door, tile) };
             self.queue_transit_walk(ch, color, from, to);
         }
@@ -434,16 +435,19 @@ impl Game {
             let sortie = &self.world.resource::<crate::resources::Sorties>().0[index];
             (sortie.risk, sortie.members.clone())
         };
-        // The pool is drawn against the party's own anchor tile, which is a
-        // real walkable surface tile of this sector — base-space coordinates
-        // are a different space and `habitat_pools` would answer about
-        // whatever surface ground happened to share the numbers.
+        // The pool is drawn against the anchor's tile, the base's own ground
+        // on the field.
         let (ax, ay) = self.anchor_position().unwrap_or((0, 0));
         let species = {
-            let Some((candidates, _)) = self.habitat_pools(ax, ay, None, risk) else {
-                return;
-            };
+            let candidates = self
+                .habitat_pools(ax, ay, None, risk)
+                .map(|(c, _)| c)
+                .unwrap_or_default();
             if candidates.is_empty() {
+                // Ground that fields nobody (mined ground under the anchor,
+                // say) is a battle fought with no one to fight. Counted, or
+                // `step_sortie`'s `while battles_done < due` never ends.
+                self.world.resource_mut::<crate::resources::Sorties>().0[index].battles_done += 1;
                 return;
             }
             let mut rng = self.world.resource_mut::<crate::resources::GameRng>();

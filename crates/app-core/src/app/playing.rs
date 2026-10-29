@@ -10,15 +10,12 @@ use crate::*;
 /// this line by hand in each.
 ///
 /// `Game::move_player`'s own return says whether an action happened only
-/// indirectly, and on the zone surface assuming an action was fine — every
-/// step there spends a turn, a bounce off a wall included. Base space did
-/// not work that way when it shipped: a step into solid rock was refused
-/// outright and cost nothing, so reporting it as an action would have
-/// cleared the status line explaining an earlier refusal and queued a
-/// footstep for a step that never happened. Slice 2 turned that bounce
-/// into a swing, which does spend a turn — and this function needed no
-/// edit for it, which is the whole argument for reading the clock instead
-/// of assuming per locale.
+/// indirectly, and assuming an action was fine would not be: a step into
+/// solid rock may be refused outright and cost nothing, so reporting it as
+/// an action would clear the status line explaining an earlier refusal and
+/// queue a footstep for a step that never happened. Reading the clock
+/// instead of assuming is what keeps this right when a bounce becomes a
+/// swing that does spend a turn.
 ///
 /// The clock is what all three locales agree on, so that is what this
 /// reads. The game-over clause is the one case a real action leaves the
@@ -207,15 +204,7 @@ impl App {
                 self.mode = Mode::InspectDirection;
                 return;
             }
-            // Demolish, aimed rather than picked from a list. Open in both
-            // spaces now: this used to be refused outside base space because
-            // out there the four directions pointed at nothing ownable — every
-            // `Structure` stands in base space and the player's surface
-            // `Position` is either their own tile or pinned to the Stack
-            // entrance. Traps made that false for the first time, so the
-            // question is no longer *where are you* but *which space decides
-            // what `d` means*, which is `handle_remove_direction_key`'s own
-            // branch.
+            // Demolish, aimed rather than picked from a list.
             GameKey::Char('d') => {
                 self.mode = Mode::RemoveDirection;
                 return;
@@ -227,14 +216,9 @@ impl App {
                 self.mode = Mode::FieldRoutine;
                 return;
             }
-            // The Excavation plan. Refused out here rather than in the mode
-            // itself for the reason `d` above is: the cursor would open over
-            // the player's tile on the open grid, which is a coordinate in a
-            // different space entirely, and every cell it could reach would
-            // refuse a mark. `Game::toggle_mark_box` has no locale guard of
-            // its own because nothing but this mode calls it.
+            // The Excavation plan: its cursor opens over the player's tile.
             GameKey::Char('m') => {
-                match self.game.as_ref().and_then(|g| g.base_pos()) {
+                match self.game.as_ref().and_then(|g| g.field_pos()) {
                     Some(party) => {
                         self.excavate_cursor = Some(party);
                         self.excavate_anchor = None;
@@ -242,33 +226,24 @@ impl App {
                         self.excavate_plot = false;
                         self.mode = Mode::Excavate;
                     }
-                    None => self
-                        .refuse("Nothing to excavate out here — the rock is through the anchor."),
+                    None => self.refuse("Nothing to excavate down here."),
                 }
                 return;
             }
-            // Stockpile zones share the plan's cursor and box, and the plan's
-            // reason for refusing out here.
+            // Stockpile zones share the plan's cursor and box.
             GameKey::Char('z') => {
-                match self.game.as_ref().and_then(|g| g.base_pos()) {
+                match self.game.as_ref().and_then(|g| g.field_pos()) {
                     Some(party) => {
                         self.excavate_cursor = Some(party);
                         self.excavate_anchor = None;
                         self.mode = Mode::Stockpile;
                     }
-                    None => self.refuse(
-                        "Nowhere to mark a stockpile out here — the floor is through the anchor.",
-                    ),
+                    None => self.refuse("Nowhere to mark a stockpile down here."),
                 }
                 return;
             }
             GameKey::Char('t') => {
                 // Underground the same key opens whoever is selling *here*.
-                // The trader list would otherwise scan from a `Position`
-                // pinned to the surface entrance tile and offer to trade
-                // with a base four frames overhead — the same hole the
-                // `base_only` group-menu rows and the `d` refusal above are
-                // each closing at their own door.
                 if self.game.as_ref().is_some_and(|g| g.market_underfoot()) {
                     self.menu_selected = 0;
                     self.mode = Mode::StackMarket;
@@ -278,20 +253,6 @@ impl App {
                     self.refuse("There's nobody selling anything here.");
                     return;
                 }
-                // Closed the same way `d` above is: `Game::view_entities` now
-                // refuses to answer a `Structure` query outside base space
-                // (every trader is one), so the list this used to open on the
-                // open grid would always come back empty — Task 5 left it
-                // noted rather than fixed in
-                // `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`,
-                // and this is the guard flip that note asked for. Both
-                // remaining branches are surface-or-base only,
-                // `is_underground` having already returned above, so `in_base`
-                // cannot collide with the Stack case handled there.
-                if !self.game.as_ref().is_some_and(|g| g.in_base()) {
-                    self.refuse("Nobody's selling out here — the traders are through the anchor.");
-                    return;
-                }
                 // Opening the trader list from the map is a fresh visit, not
                 // the tail of a sale begun in the inventory.
                 self.trade_origin = TradeOrigin::Trader;
@@ -299,20 +260,15 @@ impl App {
                 self.mode = Mode::Trade;
                 return;
             }
-            // Arms the player's own bump into base-space rock. A `return`
+            // Arms the player's own bump into field rock. A `return`
             // rather than a fallthrough for `f`'s reason: picking a tool up
             // is not an action and must not cost a turn.
-            //
-            // Refused out here rather than in the engine for the reason `d`
-            // and `m` are: outside base space there is no rock to cut, and
-            // arming a tool against ground that has none is a keypress with
-            // nothing to show for it.
             GameKey::Char('n') => {
                 match self.game.as_mut() {
-                    Some(game) if game.in_base() => {
+                    Some(game) if !game.is_underground() => {
                         game.toggle_mining();
                     }
-                    _ => self.refuse("Nothing to cut out here — the rock is through the anchor."),
+                    _ => self.refuse("Nothing to cut down here."),
                 }
                 return;
             }
@@ -329,7 +285,7 @@ impl App {
             }
             // Bound up here, beside `L`/`u`/`f` and for their reason: this
             // match runs before the `is_underground()` hand-off below, so
-            // the board opens on the surface, in base space and in the
+            // the board opens on the field and in the
             // Stack alike with no second arm down there to drift from this
             // one. Reading the board is not an action, hence the `return`;
             // `handle_key` marks it read on the way in.
@@ -454,8 +410,7 @@ impl App {
         }
 
         // `y`, not `t`, which is trade. After the Stack hand-off above, so the
-        // picker is only ever asked for from the surface or the base, where
-        // it can say why it refuses.
+        // picker is only ever asked for from the field.
         if key == GameKey::Char('y') {
             self.open_put_down();
             return;
@@ -494,23 +449,8 @@ impl App {
                 _ if let Some((dx, dy)) = step_delta(key) => {
                     stepped(game, dx, dy, &mut ground_bite)
                 }
-                // Zone surface only on this path — the Stack binds its own
-                // `.` below, and base space binds none at all. Falling
-                // through the guard to `_ => false` leaves it a **dead key**:
-                // no turn, no refusal, nothing on the line.
-                //
-                // That is the deliberate exception to what every other
-                // locale-shy key on this screen does. `r`, `<`, `>` and `v`
-                // each hand the engine's own sentence to `App::refuse`,
-                // precisely because a key that appears to do nothing is what
-                // a bug report looks like from outside. Waiting is exempt
-                // because there is no engine refusal to hand over — the
-                // engine will happily tick in base space — so a sentence here
-                // would be app-core's own opinion about time, invented at the
-                // keyboard and with nothing behind it. Base space is time
-                // spent by walking it, and the key reads as absent because
-                // it is.
-                GameKey::Char('.') if !game.in_base() => {
+                // Field only on this path; the Stack binds its own `.` below.
+                GameKey::Char('.') => {
                     game.wait();
                     true
                 }
@@ -551,49 +491,13 @@ impl App {
                         false
                     }
                 },
-                // The same two keys the Stack binds, read the way the
-                // Stack reads them: the pair is *up and down*, not in and
-                // out. Base space is a platform you step onto, so `<` goes
-                // up into it and `>` comes back down to the grid — the
-                // opposite assignment to the Stack's, which is the point,
-                // since a link genuinely goes down and the anchor does not.
-                //
-                // It was `>` in and `<` out, on the reasoning that the
-                // anchor is a door like the link is and one pair should
-                // mean one thing. What that read as in play was backwards:
-                // the keys carry a direction before they carry a role, and
-                // `>` on the anchor said "descend" while the party rose.
-                //
-                // Both are bound in this one block rather than split across
-                // a locale check up here, because the engine already
-                // dispatches: `enter_base` asks `require_surface` and
-                // `leave_base` asks `require_base`, so pressing either in
-                // the wrong place gets the engine's own words rather than a
-                // second opinion from app-core that could disagree with it.
-                GameKey::Char('<') => match game.enter_base() {
-                    Ok(()) => true,
-                    Err(reason) => {
-                        refusal = Some(reason);
-                        false
-                    }
-                },
-                GameKey::Char('>') => match game.leave_base() {
-                    Ok(()) => true,
-                    Err(reason) => {
-                        refusal = Some(reason);
-                        false
-                    }
-                },
                 // Lay a VectorStasis Tile over the carved cell underfoot.
                 // `v` for the tile's own name: `t` is trade, and `T` is
                 // spoken for by two battle screens that nothing may
                 // document — see `crates/engine/EASTER_EGGS.md`, which is
                 // why a key that has to appear in the help screen cannot
                 // have it. Bound in this block rather than behind an
-                // `in_base` check up top for the same reason `>` and `<`
-                // are: `Game::lay_tile` asks `require_base` itself, so
-                // pressing it on the open grid gets the engine's own words
-                // instead of a second opinion from here.
+                // guard up top: `Game::lay_tile` refuses in its own words.
                 GameKey::Char('v') => match game.lay_tile() {
                     Ok(()) => true,
                     Err(reason) => {
@@ -636,7 +540,7 @@ impl App {
     ///
     /// Everything else on the map screen is left alone — the mode keys above
     /// already ran, and the ones that need open grid refuse in the engine
-    /// (see `Game::require_surface`).
+    /// (see `Game::require_field`).
     fn handle_stack_key(&mut self, key: GameKey, is_move_key: bool) {
         // The same `g` that is a no-op on the surface. Checked before the
         // game is borrowed below, and costing no tick: reading your own map
@@ -687,9 +591,8 @@ impl App {
                     true
                 }
                 // Bound here as well as on the surface, because a rest is
-                // priced by locale and not gated by it: `Game::rest` takes
-                // neither `require_surface` nor `require_base`, and burns a
-                // charge underground exactly as it does on the open grid.
+                // priced by locale and not gated by it: `Game::rest` has
+                // no `require_field`, and burns a charge underground exactly as it does on the open grid.
                 // Left out of this block it was not a refusal the player
                 // could read but a dead key falling through `_ => false`.
                 //
@@ -904,46 +807,35 @@ impl App {
                     drag_owed = owed;
                     acted
                 }
-                Walk::Travel { goal, in_base } => {
-                    // The space the travel was set in no longer matches
-                    // where the party stands — a base entrance or exit
-                    // taken by some other means since. `Game::travel_step`
-                    // has no notion of "the wrong space"; it would just
-                    // answer for whichever space it's asked about, so the
-                    // check belongs here, before it's asked at all.
-                    if game.in_base() != in_base {
-                        self.walk = None;
-                        false
-                    } else {
-                        match game.travel_step(goal) {
-                            TravelStep::Toward(dx, dy) => {
-                                let before = current_travel_tile(game, in_base);
-                                let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
-                                drag_owed = owed;
-                                // A route that didn't actually move anybody
-                                // — a hostile stepped onto the planned cell,
-                                // say — would otherwise be asked again next
-                                // tick and answer the same `Toward` forever.
-                                if current_travel_tile(game, in_base) == before {
-                                    self.walk = None;
-                                }
-                                acted
-                            }
-                            TravelStep::Last(dx, dy) => {
+                Walk::Travel { goal } => {
+                    match game.travel_step(goal) {
+                        TravelStep::Toward(dx, dy) => {
+                            let before = game.field_pos();
+                            let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
+                            drag_owed = owed;
+                            // A route that didn't actually move anybody
+                            // — a hostile stepped onto the planned cell,
+                            // say — would otherwise be asked again next
+                            // tick and answer the same `Toward` forever.
+                            if game.field_pos() == before {
                                 self.walk = None;
-                                let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
-                                drag_owed = owed;
-                                acted
                             }
-                            TravelStep::Arrived | TravelStep::Gone => {
-                                self.walk = None;
-                                false
-                            }
-                            TravelStep::NoRoute => {
-                                self.walk = None;
-                                no_route = true;
-                                false
-                            }
+                            acted
+                        }
+                        TravelStep::Last(dx, dy) => {
+                            self.walk = None;
+                            let (acted, owed) = stepped_paced(game, dx, dy, &mut ground_bite);
+                            drag_owed = owed;
+                            acted
+                        }
+                        TravelStep::Arrived | TravelStep::Gone => {
+                            self.walk = None;
+                            false
+                        }
+                        TravelStep::NoRoute => {
+                            self.walk = None;
+                            no_route = true;
+                            false
                         }
                     }
                 }
@@ -951,7 +843,7 @@ impl App {
             // A queued step is spent on the clock's own tick even when it
             // moved nobody — a bounce off base rock with mining off, a
             // barrier, or a walk that found nothing to do (`Arrived`,
-            // `Gone`, `NoRoute`, a space mismatch) all leave `GameClock`
+            // `Gone`, `NoRoute`) all leave `GameClock`
             // exactly where they found it, and `spend_walk_tick` runs once
             // per clock tick. Without this, holding a direction into a wall
             // would freeze the world instead of merely refusing to walk
@@ -992,19 +884,5 @@ impl App {
         if self.mode != Mode::Playing {
             self.walk = None;
         }
-    }
-}
-
-/// The tile the player occupies in `in_base`'s space, `Game::travel_origin`'s
-/// own read — `pub(crate)` to the engine alone, so `spend_walk_tick` asks it
-/// through the two public doors that answer the same question: the base
-/// coordinate stays pinned in `resources::Locale::Base`, and the surface
-/// tile is the one `Position` never goes stale for once underground and
-/// base space are both ruled out (`Game::travel_step`'s own doc).
-fn current_travel_tile(game: &Game, in_base: bool) -> Option<(i32, i32)> {
-    if in_base {
-        game.base_pos()
-    } else {
-        Some(game.player_status().position)
     }
 }

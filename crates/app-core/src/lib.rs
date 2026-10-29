@@ -1081,7 +1081,7 @@ pub enum SoundEvent {
     Victory,
     /// The run ended in `Mode::GameOver`.
     Defeat,
-    /// A swing landed on base-space rock — the player's own bump or a
+    /// A swing landed on field rock — the player's own bump or a
     /// posted digger's cycle.
     ///
     /// **The one variant `App` never pushes.** It comes off the engine's
@@ -1644,7 +1644,7 @@ pub enum Mode {
     /// which is the player's own slots: a rig's tool is the *rig's*.
     RigTool,
     /// What the Extractor, Factory, Assembler or Printer beside the party
-    /// makes — `[c]` beside it in base space. See `App::machine_recipe`.
+    /// makes — `[c]` beside it. See `App::machine_recipe`.
     MachineRecipe,
     /// Asks before a recipe change empties a set machine.
     MachineRecipeConfirm,
@@ -2053,7 +2053,7 @@ pub enum Mode {
     /// rather than lethal. Enter commits, Esc backs out spending nothing,
     /// matching every other second pick.
     FieldRoutineCell,
-    /// The Excavation plan, opened with `m` in base space: a cursor, an
+    /// The Excavation plan, opened with `m`: a cursor, an
     /// anchor and a box, which commit through `Game::toggle_mark_box`.
     ///
     /// **A mode, not an action.** Nothing in it ticks the game, so planning
@@ -2067,7 +2067,7 @@ pub enum Mode {
     /// A farm plot's recipe picker, `[c]` beside the plot. A plan like the
     /// plot tool itself: choosing a row sows the plot and ticks nothing.
     FarmRecipe,
-    /// Zoning stockpiles, `z` in base space: the Excavation plan's cursor and
+    /// Zoning stockpiles, `z`: the Excavation plan's cursor and
     /// box, committing through `Game::toggle_stockpile_box` instead. Like
     /// `Excavate`, a mode and not an action — it spends no turn.
     Stockpile,
@@ -2607,7 +2607,7 @@ impl Mode {
             | Mode::FarmRecipe
             // Opened from the base map only, so it never layers over a fight.
             | Mode::Stockpile
-            // Opened from the build menu in base space, `Stockpile`'s reason.
+            // Opened from the build menu, `Stockpile`'s reason.
             | Mode::WallBox
             // Opened from the base map only, so it never layers over a fight.
             | Mode::PutDown
@@ -3018,13 +3018,13 @@ pub struct App {
     /// which a manual `1`/`2`/`3`/`4` press overrides until the next
     /// crossing.
     pub info_tab: InfoTab,
-    /// Which side of the base boundary `info_tab` was last synced
-    /// against — `true` for base space, `false` for everywhere else
-    /// (surface and the Stack read the same here; see `Game::in_base`).
+    /// Whether the party stood on the base floor when `info_tab` was last
+    /// synced (`Game::on_base_floor`; the bare field and the Stack read the
+    /// same here).
     /// UI bookkeeping only, exactly as [`InfoTab`] is: not saved, and it
     /// exists solely so `sync_info_tab_to_locale` can tell an actual
     /// crossing from staying put.
-    last_in_base: bool,
+    last_on_base_floor: bool,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,
@@ -3076,8 +3076,8 @@ pub struct App {
     /// Where the cell cursor is aimed in `Mode::TacticalAim`, in **battle
     /// map** coordinates.
     ///
-    /// A fourth coordinate space beside `field_cursor`'s frame, the
-    /// Excavation plan's base space and the zone surface. `None` outside
+    /// A separate coordinate space from `field_cursor`'s frame and the
+    /// map's field coordinates. `None` outside
     /// that mode; opening it puts the cursor on the acting body's own cell.
     pub tactical_cursor: Option<(i32, i32)>,
     /// The map or board cell under the pointer this frame, `None` off the
@@ -3123,7 +3123,7 @@ pub struct App {
     /// more: a fight the player did not open hands-off is a fight they can
     /// lose a companion in before they have read the board.
     pub tactical_auto: bool,
-    /// Where the box cursor is aimed, in **base-space** coordinates, shared
+    /// Where the box cursor is aimed, in field coordinates, shared
     /// by `Mode::Excavate`, `Mode::Stockpile` and `Mode::WallBox`. `None`
     /// outside those and
     /// the brush picker —

@@ -16,7 +16,7 @@ fn base_game(seed: u32) -> Game {
 
 fn build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
     place_now(game, kind, dx, dy).unwrap_or_else(|e| panic!("{kind} at ({dx},{dy}): {e}"));
-    let at = game.base_pos().expect("in base space");
+    let at = game.field_pos().expect("in base space");
     structure_at(game, at.0 + dx, at.1 + dy)
 }
 

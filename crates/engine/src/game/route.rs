@@ -442,7 +442,9 @@ impl Game {
         let Some(depot) = self.nearest_depot_tile() else {
             return;
         };
-        let door = crate::game::base_space::BASE_EXIT_CELL;
+        let Some(door) = self.anchor_position() else {
+            return;
+        };
         let (from, to) = if outbound {
             (depot, door)
         } else {

@@ -1014,7 +1014,7 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
 
     let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
     let (px, py) = loaded
-        .base_pos()
+        .field_pos()
         .expect("the party reloads inside the base");
     let site = loaded
         .build_site_at(px + 1, py)

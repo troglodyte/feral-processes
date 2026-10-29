@@ -40,9 +40,15 @@ impl Game {
         };
         let side = (2 * radius + 1) as usize;
         let mut cells = Vec::with_capacity(side * side);
+        // A town grows around the base, never over it: floor is a fixture
+        // the footprint cannot displace (ADR 0032).
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
         for dy in -radius..=radius {
             for dx in -radius..=radius {
-                cells.push((tile.0 + dx, tile.1 + dy));
+                let cell = (tile.0 + dx, tile.1 + dy);
+                if !floor.is_floor(cell.0, cell.1) {
+                    cells.push(cell);
+                }
             }
         }
         cells
@@ -184,11 +190,14 @@ impl Game {
             && self.find_trap_at(x, y).is_none()
             && !self.world.resource::<Outposts>().0.contains_key(&(x, y))
             && !self.player_or_anchor_at(x, y)
+            && !self
+                .world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(x, y)
     }
 
     /// The player's `Position` is a surface tile in every locale — pinned to
-    /// the anchor in base space, to the entrance in the Stack — so it is
-    /// read without a locale check.
+    /// the entrance in the Stack — so it is read without a locale check.
     fn player_or_anchor_at(&self, x: i32, y: i32) -> bool {
         let anchor = self.world.resource::<AnchorEntity>().0;
         [self.player_entity(), anchor].into_iter().any(|entity| {
@@ -198,17 +207,15 @@ impl Game {
         })
     }
 
-    /// `find_wild_creature_at` less a besieger, whose `Position` is a
-    /// base-space cell a surface footprint can only collide with by number.
+    /// The wild program on `(x, y)`, if any.
     fn surface_wild_creature_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         self.wild_creature_positions()
             .into_iter()
-            .find(|(e, p)| p.x == x && p.y == y && !self.stands_in_base_space(*e))
+            .find(|(_, p)| p.x == x && p.y == y)
             .map(|(e, _)| e)
     }
 
-    /// A caravan inside base space is at a base-space cell, for
-    /// `surface_wild_creature_at`'s reason.
+    /// The caravan on `(x, y)`, if any.
     fn surface_caravan_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world
@@ -218,7 +225,7 @@ impl Game {
             .filter(|(_, pos)| pos.x == x && pos.y == y)
             .map(|(entity, _)| entity)
             .collect();
-        hits.into_iter().find(|&e| !self.stands_in_base_space(e))
+        hits.into_iter().next()
     }
 
     /// The nearest free tile outside `key`'s footprint — a displaced
@@ -265,7 +272,6 @@ impl Game {
             self.displace_nest_at(key, x, y);
             self.displace_caravan_at(key, x, y);
             self.displace_player_at(key, x, y);
-            self.displace_anchor_at(key, x, y);
             self.displace_stack_entrance_at(key, x, y);
         }
     }
@@ -332,12 +338,11 @@ impl Game {
         }
     }
 
-    /// Only while `require_surface` holds — a `Position` that merely reads
-    /// as this tile because it is pinned to a Stack entrance or a base
-    /// anchor is not the player standing here, and moving it would fight
-    /// the very pin that keeps it meaningful underground or in the base.
+    /// Only while `require_field` holds — a `Position` that merely reads as
+    /// this tile because it is pinned to a Stack entrance is not the player
+    /// standing here, and moving it would fight the pin underground.
     fn displace_player_at(&mut self, key: SettlementKey, x: i32, y: i32) {
-        if self.require_surface().is_err() {
+        if self.require_field().is_err() {
             return;
         }
         let player = self.player_entity();
@@ -355,36 +360,6 @@ impl Game {
             pos.x = nx;
             pos.y = ny;
         }
-    }
-
-    /// While the party is in base space the player's surface `Position` is
-    /// pinned to the anchor tile, and `move_anchor_to` moves only the
-    /// anchor, so the pin moves here — `leave_base` would otherwise step
-    /// them back onto covered ground. Not inside `move_anchor_to`, whose
-    /// founding caller runs before the party has ever entered base space.
-    fn displace_anchor_at(&mut self, key: SettlementKey, x: i32, y: i32) {
-        let anchor = self.world.resource::<AnchorEntity>().0;
-        let here = self
-            .world
-            .get::<Position>(anchor)
-            .is_some_and(|pos| pos.x == x && pos.y == y);
-        if !here {
-            return;
-        }
-        let Some((nx, ny)) = self.free_tile_outside(key) else {
-            return;
-        };
-        if self.in_base() {
-            let player = self.player_entity();
-            if let Some(mut pos) = self.world.get_mut::<Position>(player)
-                && pos.x == x
-                && pos.y == y
-            {
-                pos.x = nx;
-                pos.y = ny;
-            }
-        }
-        self.move_anchor_to(nx, ny);
     }
 
     /// Relocated the way `collapse_stack` already does it — `erase_stack_

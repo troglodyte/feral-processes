@@ -237,7 +237,7 @@ fn a_zero_offset_is_todays_window() {
 /// laid floor beside them, `deploy_broker`'s shape. A Relay without a Home
 /// does not survive a save the test later loads.
 fn deploy_relay(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(game, "home", 0, 0);
     deploy(game, "relay", 1, 0);
     super::support::stand_in_base_at(game, 1, 1);
@@ -271,10 +271,9 @@ fn dispatch_reach_reports_the_three_states() {
     deploy_relay(&mut game);
     assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
 
-    // Out of base space entirely — on the open grid, where no floor can
-    // answer for the party.
-    game.world
-        .insert_resource(crate::resources::Locale::Surface);
+    // Off the floor entirely — on the open grid, where no floor can answer
+    // for the party.
+    crate::tests::support::step_off_the_floor(&mut game);
     assert_eq!(game.dispatch_reach(), DispatchReach::OffBase);
 }
 
@@ -285,7 +284,7 @@ fn dispatch_reach_reports_the_three_states() {
 fn the_far_side_of_the_base_still_reaches_the_relay() {
     let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
-    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let edge = crate::tests::support::TEST_POCKET_HALF_WIDTH;
     assert!(edge - 1 > 2, "the far edge must be beyond arm's length");
     super::support::stand_in_base_at(&mut game, edge, 0);
     assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
@@ -488,8 +487,7 @@ fn every_refusal_spends_nothing() {
             "off base",
             Box::new(|| {
                 let (mut game, site, staff) = a_base_ready_to_dispatch(4600, 4, 500);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, site, staff[..2].to_vec())
             }),
         ),
@@ -795,6 +793,43 @@ pub(super) fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec
     game.dispatch_sortie(&site, &squad)
         .expect("a legal dispatch");
     (game, squad)
+}
+
+/// A trip from an anchor whose ground fields no species still comes home:
+/// a battle with nobody to fight is counted as fought. It used to return
+/// without counting, and `step_sortie`'s `while battles_done < due` spun
+/// forever on it. Mined ground (`Biome::Excavated`) is what the anchor
+/// really stands on once the base has dug around it.
+#[test]
+fn a_sortie_from_an_anchor_with_no_species_finishes() {
+    let (mut game, _) = a_dispatched_sortie(5000, DifficultyMode::Forgiving);
+    let (ax, ay) = game.anchor_position().expect("an anchor");
+    game.world
+        .resource_mut::<crate::world::WorldMap>()
+        .set_override(
+            ax,
+            ay,
+            crate::world::Tile {
+                biome: crate::world::Biome::Excavated,
+                walkable: true,
+                rock_shade: None,
+            },
+        );
+    let risk = game.world.resource::<Sorties>().0[0].risk;
+    assert!(
+        game.habitat_pools(ax, ay, None, risk).is_none(),
+        "test premise: the anchor's ground fields nobody"
+    );
+
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    for _ in 0..total {
+        game.wait();
+    }
+
+    assert!(
+        game.world.resource::<Sorties>().0.is_empty(),
+        "the trip should have come home"
+    );
 }
 
 /// A sortie's kill banks a downed program onto the trip through
@@ -1569,14 +1604,14 @@ fn stand_squad_in_the_pocket(game: &mut Game, squad: &[Entity]) {
     }
 }
 
-/// Every cell of `path` is walkable base space, and each step is one
+/// Every cell of `path` is laid floor, and each step is one
 /// Chebyshev move from the last — a walker interpolating between two cells
 /// that are not neighbours slides, and one crossing a solid cell walks
 /// through the wall.
 fn assert_walkable_and_contiguous(game: &Game, path: &[(i32, i32)]) {
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     for &(x, y) in path {
-        assert!(grid.walkable(x, y), "({x}, {y}) is not walkable base space");
+        assert!(grid.is_floor(x, y), "({x}, {y}) is not floor");
     }
     for pair in path.windows(2) {
         let (a, b) = (pair[0], pair[1]);
@@ -1615,7 +1650,7 @@ fn a_dispatch_queues_one_walk_out_per_member() {
         );
         assert_eq!(
             walk.path.last(),
-            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            Some(&crate::tests::support::TEST_HOME_CELL),
             "base space has one door and the walk ends at it"
         );
         assert_walkable_and_contiguous(&game, &walk.path);
@@ -1645,8 +1680,8 @@ fn a_walk_bends_around_solid_rock() {
     // A corridor east out of the pocket and then north, ending at a cell
     // whose straight line back to the door crosses unmined rock.
     let (w, h) = (
-        crate::tuning::STARTING_POCKET_HALF_WIDTH,
-        crate::tuning::STARTING_POCKET_HALF_HEIGHT,
+        crate::tests::support::TEST_POCKET_HALF_WIDTH,
+        crate::tests::support::TEST_POCKET_HALF_HEIGHT,
     );
     let corridor: Vec<(i32, i32)> = (w - 1..=w + 4)
         .map(|x| (x, h - 1))
@@ -1671,7 +1706,7 @@ fn a_walk_bends_around_solid_rock() {
     assert_eq!(walks.len(), 1);
     let path = &walks[0].path;
     assert_eq!(path.first(), Some(&end));
-    assert_eq!(path.last(), Some(&crate::game::base_space::BASE_EXIT_CELL));
+    assert_eq!(path.last(), Some(&crate::tests::support::TEST_HOME_CELL));
     assert_walkable_and_contiguous(&game, path);
     let straight = end.0.abs().max(end.1.abs()) as usize + 1;
     assert!(
@@ -1731,7 +1766,7 @@ fn a_return_walks_them_back_in_through_the_door() {
     for (walk, home) in walks.iter().zip(&from) {
         assert_eq!(
             walk.path.first(),
-            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            Some(&crate::tests::support::TEST_HOME_CELL),
             "a returning body comes in through the door"
         );
         assert_eq!(walk.path.last(), Some(home), "and back to its own tile");

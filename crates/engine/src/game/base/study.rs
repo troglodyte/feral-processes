@@ -165,7 +165,7 @@ impl Game {
     /// is aimed at.
     ///
     /// The step rule is `hauling::post_field`'s, character for character,
-    /// because the two have to agree about which tiles a body in base space
+    /// because the two have to agree about which tiles a body in the field
     /// may cross; what differs is which end of the walk the field is rooted
     /// at, `hauling::crew_reach`'s reason for the same duplication — rooted
     /// at the pen rather than at the worker, so `Ok(())` on arrival is a
@@ -237,7 +237,7 @@ impl Game {
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let grid = self.world.resource::<BaseGrid>();
         Some(walk_field(pen, haul_walk_radius(pocket_radius), |p| {
-            (grid.walkable(p.0, p.1) && (p == start || !blocked.taken(p))).then_some(1)
+            (grid.is_floor(p.0, p.1) && (p == start || !blocked.taken(p))).then_some(1)
         }))
     }
 

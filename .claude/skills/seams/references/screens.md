@@ -135,7 +135,7 @@
   `party_menu_rows` must be the *only* source of them. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
-  `require_surface`'s caller list.
+  `require_field`'s caller list.
 - **Every hub — `b`, `i` and `c` — walks one nav rule,
   `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
   takes an arrow or `Esc` back from it.** The structure hub had its own rule
@@ -162,7 +162,7 @@
   header read the same value. Three states rather than two booleans for
   `NoPost::BoxedIn`'s reason, and `ContractRefusal::NotAtBroker` is distinct
   from `NotOffered` because the two leave the player different errands.
-  `AtBroker` measures the **base** — `base_pos` then `BaseGrid::is_floor` —
+  `AtBroker` measures the **base** — `field_pos` then `BaseGrid::is_floor` —
   never the distance to the Broker. `CONTRACT_BOARD_RANGE_TILES` was deleted
   rather than widened: a constant would freeze the desk at the radius a base
   *starts* at. Two traps: the row test must call `broker_reach` and not

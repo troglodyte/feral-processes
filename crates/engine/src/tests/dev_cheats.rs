@@ -15,7 +15,7 @@ fn bare_base(seed: u32) -> Game {
 }
 
 fn structure_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
     query
         .iter(&game.world)
@@ -78,7 +78,7 @@ fn free_build_rebuild_still_consumes_its_program() {
     let mut game = bare_base(9004);
     game.dev_set_free_build(true);
     // A wreck's rebuild site, awaiting its program.
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let mut site = BuildSite::new(StructureId::from("extractor"), vec![]);
     site.awaiting_program = true;
     let site = game.world.spawn((site, Position { x: px + 1, y: py })).id();
@@ -103,7 +103,7 @@ fn free_build_rebuild_still_consumes_its_program() {
 #[test]
 fn rebuild_without_free_build_spends_the_program_but_raises_nothing_yet() {
     let mut game = bare_base(9006);
-    let (px, py) = game.base_pos().unwrap();
+    let (px, py) = game.field_pos().unwrap();
     let mut site = BuildSite::new(StructureId::from("extractor"), vec![]);
     site.awaiting_program = true;
     let site = game.world.spawn((site, Position { x: px + 1, y: py })).id();

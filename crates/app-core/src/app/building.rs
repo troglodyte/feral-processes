@@ -360,16 +360,15 @@ impl App {
                     .game
                     .as_ref()
                     .filter(|g| g.structure_places_by_box(id))
-                    .and_then(|g| g.base_pos());
+                    .and_then(|g| g.field_pos());
                 match painted_from {
                     Some(party) => {
                         self.excavate_cursor = Some(party);
                         self.excavate_anchor = None;
                         self.mode = Mode::WallBox;
                     }
-                    // Outside base space the direction prompt stays, so the
-                    // engine's own "you're not in the base" refusal is what
-                    // the player reads.
+                    // Underground the direction prompt stays, so the
+                    // engine's own refusal is what the player reads.
                     None => {
                         self.pending_structure = Some(id.clone());
                         self.mode = Mode::BuildDirection;
@@ -666,20 +665,6 @@ impl App {
             return;
         };
         let Some(game) = &mut self.game else { return };
-        // **On the surface this is a different question entirely, and it must
-        // not call `Game::adjacent_structure`.** That query is over base-space
-        // `Position`s, and a base-space query asked about a surface tile
-        // answers by numeric coincidence — which is the *common* case, since
-        // `find_walkable_start` returns `(0, 0)` whenever it can, so the
-        // anchor, the zone spawn point and base space's origin all carry the
-        // same numbers. `move_player`'s own long comment records what that
-        // cost last time: invisible walls made of the base's machines.
-        if !game.in_base() {
-            let outcome = game.destroy_trap(dir.0, dir.1);
-            self.report(outcome);
-            self.mode = Mode::Playing;
-            return;
-        }
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
             // A request the crew has not raised yet is called off by the
             // same gesture, because it is the same question the player is
@@ -696,7 +681,10 @@ impl App {
                 self.mode = Mode::Playing;
                 return;
             }
-            self.refuse("Nothing to demolish that way.");
+            // Last, so a trap is only what is left when no machine or request
+            // stands there; the engine words the refusal when nothing does.
+            let outcome = game.destroy_trap(dir.0, dir.1);
+            self.report(outcome);
             self.mode = Mode::Playing;
             return;
         };
@@ -781,7 +769,7 @@ impl App {
     }
 }
 
-pub(crate) const OUT_OF_BASE: &str = "Not from out here — that's back at the base.";
+pub(crate) const OUT_OF_BASE: &str = "Not from down here — that's back at the base.";
 
 /// One row on `Mode::WorkOrders` — either a queued order or the trailing
 /// row that starts a new one.
@@ -882,13 +870,11 @@ impl App {
         }
     }
 
-    /// Refuses, and says so, when the party is not in base space. Work
-    /// orders and the duty table were `Locality::Base` rows hidden outside
-    /// it; reached from the hub they are visible from
-    /// anywhere, so the refusal moves to the keys that change something.
-    /// Reading stays open.
+    /// Refuses, and says so, when the party is underground. Reached from the
+    /// hub the work orders and duty table are visible from anywhere, so the
+    /// refusal sits on the keys that change something. Reading stays open.
     fn refuse_outside_base(&mut self) -> bool {
-        let outside = self.game.as_ref().is_some_and(|g| !g.in_base());
+        let outside = self.game.as_ref().is_some_and(|g| g.is_underground());
         if outside {
             self.refuse(OUT_OF_BASE);
         }

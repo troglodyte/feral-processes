@@ -85,11 +85,8 @@ type DeathRow = (
 /// XP setback applies too (see `progression::apply_setback_xp_penalty`).
 ///
 /// **The anchor, and not the nearest structure.** This used to warp to the
-/// nearest `Structure`'s `Position`, which was the right answer while the
-/// base stood on the zone surface. Every structure is in base space now, so
-/// that position is in a different coordinate space from the player's, and
-/// writing one straight into the other drops the party on whatever surface
-/// tile happens to carry the same numbers — with no walkability check. It is
+/// nearest `Structure`'s `Position`, which is a tile the party cannot be put
+/// on, with no walkability check. It is
 /// the same cross-space write `Game::use_symlink` had, and it gets the same
 /// answer: the anchor is the base's one presence on the zone surface, so a
 /// reboot at your base means a reboot at its door.
@@ -208,8 +205,8 @@ mod tests {
                 },
             ))
             .id();
-        // Structures stand in *base space*, so their `Position` is not a
-        // tile the player can be put on — the anchor is. Both are spawned so
+        // A structure's `Position` is not a tile the player can be put on —
+        // the anchor is. Both are spawned so
         // the assertion below distinguishes the two answers: a warp that
         // still read the nearest structure would land on (1, 1).
         world.spawn((

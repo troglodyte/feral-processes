@@ -14,18 +14,15 @@ use crate::*;
 /// destination — so it carries nothing past the delta. `Travel` re-asks
 /// `Game::travel_step` every tick rather than caching a path, which is what
 /// lets it *follow* a moving hostile instead of walking to wherever it
-/// stood when the travel was set; `in_base` is the space the travel was set
-/// in, so a crossing into the other one ends it (`update_realtime`'s own
-/// check) rather than asking `travel_step` to route through a locale its
-/// `Tile`/`Creature` goal was never resolved against.
+/// stood when the travel was set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Walk {
     Step(i32, i32),
-    Travel { goal: TravelGoal, in_base: bool },
+    Travel { goal: TravelGoal },
 }
 
 impl App {
-    /// The game, when the pointer is over a surface or base map it can act
+    /// The game, when the pointer is over a field map it can act
     /// on: `Mode::Playing` and not underground. Every map-pointer entry
     /// point (`travel_to`, `hover_lines`) is gated through this one call,
     /// so a click and a hover can never disagree about what is under them.
@@ -53,7 +50,6 @@ impl App {
         let Some(game) = self.surface_map_game() else {
             return;
         };
-        let in_base = game.in_base();
         let sight = game.sight_at((x, y));
         let goal = game
             .view_entities_at((x, y), 0, 0)
@@ -64,7 +60,7 @@ impl App {
                     && shown_at(sight, e)
             })
             .map_or(TravelGoal::Tile(x, y), |e| TravelGoal::Creature(e.entity));
-        self.walk = Some(Walk::Travel { goal, in_base });
+        self.walk = Some(Walk::Travel { goal });
     }
 
     /// Where the pending click-travel is headed, for the map to mark — read

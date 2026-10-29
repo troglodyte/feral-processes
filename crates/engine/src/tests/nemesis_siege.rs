@@ -18,12 +18,7 @@ use crate::*;
 fn open_ground(game: &mut Game) -> (i32, i32) {
     for x in (300..400).step_by(40) {
         for y in (300..700).step_by(7) {
-            let clear = (0..=40).all(|dx| {
-                game.world
-                    .resource_mut::<crate::world::WorldMap>()
-                    .tile(x + dx, y)
-                    .open_to_hostiles()
-            });
+            let clear = (0..=40).all(|dx| game.ground_tile(x + dx, y).open_to_hostiles());
             if clear && game.habitat_pools(x, y, None, 0).is_some() {
                 return (x, y);
             }
@@ -187,6 +182,36 @@ fn a_follower_closes_in_on_a_leader_that_has_moved_away() {
     let l = *game.world.get::<Position>(leader).unwrap();
     let f = *game.world.get::<Position>(follower).unwrap();
     assert!(chebyshev(l, f) <= NEMESIS_FOLLOW_DISTANCE, "{l:?} {f:?}");
+}
+
+/// Nothing wild enters floor: a follower trailing its leader stops at the
+/// base's edge rather than stepping onto the floor overlay the `WorldMap`
+/// never shows.
+#[test]
+fn a_follower_never_steps_onto_base_floor() {
+    let mut game = new_game();
+    let (x, y) = open_ground(&mut game);
+    let leader = nemesis_at(&mut game, x, y);
+    let follower = wild_at(&mut game, x + 1, y);
+    game.world
+        .entity_mut(follower)
+        .insert(NemesisFollower(leader));
+    // A floor band across the whole way between them, rows above and below
+    // included, so the diagonal and the axis steps all meet it.
+    game.dev_lay_floor((x + 3..=x + 6).flat_map(|fx| (y - 2..=y + 2).map(move |fy| (fx, fy))));
+    game.world.get_mut::<Position>(leader).unwrap().x = x + 20;
+
+    for _ in 0..30 {
+        game.nemesis_muster();
+        let f = *game.world.get::<Position>(follower).unwrap();
+        assert!(
+            !game
+                .world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(f.x, f.y),
+            "a follower stepped onto base floor at {f:?}"
+        );
+    }
 }
 
 #[test]
@@ -390,7 +415,7 @@ fn marching_band(game: &mut Game) -> (Entity, Vec<Entity>) {
 /// pocket so a siege board can be built.
 fn established_base(game: &mut Game) {
     set_zone(game, SIEGE_MIN_ZONE.max(2));
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     for _ in 0..BASE_ESTABLISHED_STAFF {
         spawn_tamed(game, 10, 3);
     }
@@ -408,6 +433,8 @@ fn established_base(game: &mut Game) {
             e.insert(Durability { hp: 30, max_hp: 30 });
         }
     }
+    // Away from home until a test stands the party on the floor.
+    step_off_the_floor(game);
 }
 
 fn has_siege_tags(game: &Game, e: Entity) -> bool {
@@ -545,7 +572,7 @@ fn the_marching_nemesis_is_chosen_by_what_it_is_not_by_entity_order() {
     };
     let later_cell = mk(&mut game, x + 20, y);
     let earlier_cell = mk(&mut game, x, y);
-    game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+    stand_in_base(&mut game);
     game.nemesis_march_check();
     assert!(has_siege_tags(&game, earlier_cell), "lower cell goes first");
     assert!(!has_siege_tags(&game, later_cell));
@@ -811,15 +838,19 @@ fn a_dropped_siege_save_sends_the_leader_home_instead_of_despawning_it() {
     let path = std::env::temp_dir().join(format!("feral_nemesis_drop_{}.sav", std::process::id()));
     game.save(&path).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    // A player cell off the board is one `restore` cannot seat the party in,
+    // A board with no open cell is one `restore` cannot seat the party on,
     // which is the case that drops the siege.
-    assert!(text.contains("player_cell: Some("), "save layout moved");
-    let start = text.find("player_cell: Some(").unwrap();
-    let end = start + text[start..].find("),").unwrap() + 2;
+    let siege_at = text.find("siege: Some(").expect("save layout moved");
+    let cells_at = siege_at
+        + text[siege_at..]
+            .find("cells: [")
+            .expect("save layout moved");
+    let cells_end = cells_at + text[cells_at..].find(']').unwrap();
     let broken = format!(
-        "{}player_cell: Some((9999, 9999)),{}",
-        &text[..start],
-        &text[end..]
+        "{}{}{}",
+        &text[..cells_at],
+        text[cells_at..cells_end].replace("Open", "Blocked"),
+        &text[cells_end..]
     );
     std::fs::write(&path, broken).unwrap();
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();

@@ -637,15 +637,7 @@ impl Game {
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
-        world.insert_resource({
-            // Base space's seed is minted once, here, from the run's own
-            // seed — not tracked off `WorldMap::seed()`, which changes on
-            // every breach while this grid travels with the run. See
-            // `BaseGrid::seed`.
-            let mut grid = crate::base_grid::BaseGrid::default();
-            grid.set_seed(seed);
-            grid
-        });
+        world.insert_resource(crate::base_grid::BaseGrid::default());
         // Off when a run starts: the player's bump has to be armed before it
         // destroys terrain. See `resources::MiningMode`.
         world.init_resource::<crate::resources::MiningMode>();
@@ -657,6 +649,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.init_resource::<crate::resources::EnteredTiers>();
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::SeenTiles::default());
@@ -726,7 +719,7 @@ impl Game {
         let player = spawn_player(&mut world, start);
         world.insert_resource(PlayerEntity(player));
 
-        // The anchor's permanent door into base space, standing where the
+        // The anchor's permanent door into the field, standing where the
         // player does. Spawned here rather than through a `Game` method —
         // there is no `Game` yet to call one on, the same reason the player
         // above is a bare `world.spawn`.
@@ -1740,6 +1733,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.init_resource::<crate::resources::EnteredTiers>();
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::ExploredChunks::default());
         world.insert_resource(crate::resources::SeenTiles::default());
@@ -2072,6 +2066,7 @@ impl Game {
         } else {
             crate::resources::StackMemory::default()
         });
+        game.world.insert_resource(data.entered_tiers);
         // **Before `restore_settlements`, not after.** That call draws every
         // known town's glyph through `Game::settlement_kind`, which reads
         // `Relation::grown` out of this resource. Restored after, every
@@ -2122,7 +2117,8 @@ impl Game {
         game.world.insert_resource(data.siege_pressure);
         // Last, and after the WorldMap is in place: restoring a Stack
         // locale regenerates its frame from that map's seed.
-        game.restore_locale(data.locale);
+        let locale = data.locale;
+        game.restore_locale(locale);
 
         // After the locale, and after every occupant a footprint's growth
         // could displace — the player, every wild creature, nest, trap,
@@ -3145,7 +3141,7 @@ impl Game {
         let mut dig_query = self.world.query::<(&DigSite, &Position, &Durability)>();
         for (site, pos, durability) in dig_query.iter(&self.world) {
             dig_sites.push(save::DigSiteSave {
-                // Base-space coordinates: a `DigSite` is the one
+                // Field coordinates: a `DigSite` is the one
                 // non-`Structure` entity besides a posted program that
                 // stands in the base's own space.
                 position: (pos.x, pos.y),
@@ -3162,7 +3158,7 @@ impl Game {
         let mut build_query = self.world.query::<(&BuildSite, &Position)>();
         for (site, pos) in build_query.iter(&self.world) {
             build_sites.push(save::BuildSiteSave {
-                // Base-space coordinates, exactly as a `DigSite`'s are.
+                // Field coordinates, exactly as a `DigSite`'s are.
                 position: (pos.x, pos.y),
                 structure: site.structure.clone(),
                 cost: site.cost.clone(),
@@ -3182,9 +3178,9 @@ impl Game {
         let mut caravan_query = self.world.query::<(&Caravan, &Position)>();
         for (caravan, pos) in caravan_query.iter(&self.world) {
             caravans.push(save::CaravanSave {
-                // Surface or base space, per `CaravanStage::in_base_space` —
-                // the component's own `Position` is already in whichever the
-                // stage says, so this copies rather than decides.
+                // The component's own `Position` is already right for the
+                // stage (`CaravanStage::inside_the_base`), so this copies
+                // rather than decides.
                 position: (pos.x, pos.y),
                 stage: caravan.stage,
                 visit: caravan.visit,
@@ -3620,6 +3616,10 @@ impl Game {
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
             stack_memory_tiered: true,
+            entered_tiers: self
+                .world
+                .resource::<crate::resources::EnteredTiers>()
+                .clone(),
             settlements: self
                 .world
                 .resource::<crate::resources::Settlements>()

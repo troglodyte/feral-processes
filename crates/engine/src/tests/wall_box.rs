@@ -197,9 +197,9 @@ fn a_wall_box_raises_walls_at_once_under_free_build() {
 }
 
 #[test]
-fn a_wall_box_is_a_base_action() {
+fn a_wall_box_is_refused_in_the_stack() {
     let mut game = walled_base(5107);
-    game.world.insert_resource(Locale::Surface);
+    descend(&mut game);
 
     assert!(game.place_wall_box((1, 1), (2, 1)).is_err());
     assert!(sites(&mut game).is_empty());

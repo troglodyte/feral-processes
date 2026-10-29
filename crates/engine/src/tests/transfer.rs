@@ -233,8 +233,8 @@ fn nothing_is_offered_while_the_party_cannot_transfer() {
     assert!(game.transfer_offer_at(at).is_empty(), "in a battle");
     game.world.remove_resource::<BattleState>();
 
-    *game.world.resource_mut::<Locale>() = Locale::Surface;
-    assert!(game.transfer_offer_at(at).is_empty(), "out of base space");
+    descend(&mut game);
+    assert!(game.transfer_offer_at(at).is_empty(), "in the Stack");
 }
 
 /// "No Depot beside you" and "a Depot with nothing left" are the two states
@@ -493,10 +493,13 @@ fn a_guarded_refusal_is_silent() {
     game.refuse_transfer();
     game.world.remove_resource::<BattleState>();
 
-    *game.world.resource_mut::<Locale>() = Locale::Surface;
-    game.refuse_transfer();
-
     assert_eq!(lines(&game).len(), before, "no guard says a word");
+
+    // Going down logs its own arrival; the refusal down there adds nothing.
+    descend(&mut game);
+    let underground = lines(&game).len();
+    game.refuse_transfer();
+    assert_eq!(lines(&game).len(), underground, "nor in the Stack");
 }
 
 // The rules below survived the merge of the collect and deposit doors into

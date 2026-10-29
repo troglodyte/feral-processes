@@ -143,7 +143,7 @@ impl Game {
     /// space, where nothing is touched. A structure with no `StructureTier`
     /// reads as tier 1, `best_structure_tier`'s rule.
     pub(crate) fn touched_bench(&self, kind: &str) -> Option<(Entity, u32)> {
-        let (bx, by) = self.base_pos()?;
+        let (bx, by) = self.field_pos()?;
         let here = Position { x: bx, y: by };
         let side = self.structure_footprint(&kind.to_string());
         self.world
@@ -207,7 +207,7 @@ impl Game {
 
     /// The most whole units of `result` the player can compile right now:
     /// what is in reach affords at `craft_cost` (the pack, plus the base's
-    /// stores for a bench recipe in base space; already
+    /// stores for a bench recipe in the field; already
     /// Lean-Compiler-adjusted, and carrying the careful surcharge when
     /// `careful`), and what the reserve can carry at
     /// `hand_craft_power_cost`, whichever runs out first. 0 if `result` has
@@ -274,7 +274,7 @@ impl Game {
         quantity: u32,
         careful: bool,
     ) -> Result<ShortfallOrders, String> {
-        self.require_base()?;
+        self.require_field()?;
         let short = self.craft_shortfall(result, quantity, careful);
         if short.is_empty() {
             return Err("Nothing is missing.".into());
@@ -406,7 +406,7 @@ impl Game {
     /// the quoted refusal name the batch's bill; the *spending* is per unit
     /// (see `advance_hand_craft`), so the two can come apart if something
     /// takes from the pack while the compile runs. That is a real edge —
-    /// a build crew reaches into the player's pack from base space — and
+    /// a build crew reaches into the player's pack from the field — and
     /// the loop ends the batch rather than compiling out of nothing.
     pub fn begin_hand_craft(
         &mut self,
@@ -611,11 +611,11 @@ impl Game {
     }
 
     /// How many of `item` a bench can draw on: the pack, plus every store
-    /// the base holds while the party stands in base space. Out in a zone
-    /// the base is not in reach, so a bench verb used there sees the pack
-    /// alone.
+    /// the base holds while the party stands on its floor. Away from the
+    /// base its stores are not in reach, so a bench verb used there sees
+    /// the pack alone.
     pub(crate) fn held_in_reach(&self, item: &ItemId) -> u32 {
-        if self.base_pos().is_some() {
+        if self.on_base_floor() {
             return self.stores_hold(item);
         }
         self.world
@@ -627,9 +627,9 @@ impl Game {
     /// `pay_items` for a bench: the whole bill is checked against
     /// `held_in_reach` before a unit moves, then each line is spent base
     /// stock first (`spend_from_stores`), so what the player carries stays
-    /// on them for the field. Outside base space it is `pay_items`.
+    /// on them for the field. Away from the base it is `pay_items`.
     pub(crate) fn pay_from_reach(&mut self, cost: &[(ItemId, u32)]) -> Result<(), String> {
-        if self.base_pos().is_none() {
+        if !self.on_base_floor() {
             return self.pay_items(cost);
         }
         let mut need: BTreeMap<&ItemId, u32> = BTreeMap::new();

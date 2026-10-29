@@ -1,15 +1,13 @@
 //! Farm plots from the player's side: `[P]` in the Excavation plan marks
 //! them, `[c]` beside one picks what it grows.
 
-use feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH;
-
 use super::support::*;
 use crate::*;
 
 fn app_at_the_frontier(seed: u32) -> App {
     let mut app = test_app(seed);
     found_the_base(&mut app);
-    stand_in_base_at(&mut app, STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH, 0);
     app
 }
 
@@ -113,7 +111,7 @@ fn the_picker_opens_on_the_current_recipe() {
 #[test]
 fn c_aims_at_a_plot_from_any_side_holding_one_of_its_tiles() {
     let mut app = app_at_the_frontier(6006);
-    let (px, py) = app.game.as_ref().unwrap().base_pos().unwrap();
+    let (px, py) = app.game.as_ref().unwrap().field_pos().unwrap();
     let game = app.game.as_mut().unwrap();
     // One box over the party's own cell, the cell west and the cell north,
     // so the plot sits on two sides; a second plot south makes `[c]` ask.

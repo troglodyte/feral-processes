@@ -463,7 +463,7 @@ impl Game {
         // survivor goes home the same way, living or not and whichever of
         // the five endings this was: out of `Party`, marker stripped, so its
         // role reads `Staff` again and the scheduler reposts it. Its
-        // base-space `Position` was never written, so it resumes where it
+        // field `Position` was never written, so it resumes where it
         // stood. Removal is safe here where it is forbidden mid-fight —
         // nothing indexes `Party` by slot once a fight is over.
         self.send_reinforcements_home();

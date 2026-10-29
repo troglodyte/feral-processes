@@ -1211,7 +1211,7 @@ fn a_deployed_broker_reports_the_flag_and_nothing_else_does() {
     // answer for one outside base space, so this fixture's raw spawns have
     // to land there too, not at the player's surface `Position`.
     stand_in_base(&mut game);
-    let pos = game.base_pos().unwrap();
+    let pos = game.field_pos().unwrap();
     deploy(&mut game, "contract_broker", pos.0 + 1, pos.1);
     deploy(&mut game, "extractor", pos.0 + 2, pos.1);
 
@@ -1269,7 +1269,7 @@ fn the_broker_is_buildable_from_turn_one() {
 /// own save round trip, which
 /// `the_same_rolled_contract_comes_back_after_a_save_and_load` needs.
 fn deploy_broker(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(game, "home", 0, 0);
     deploy(game, "contract_broker", 1, 0);
     stand_in_base_at(game, 1, 1);
@@ -1278,14 +1278,14 @@ fn deploy_broker(game: &mut Game) {
 /// Out of the base entirely — on the open grid, which is where a party not in
 /// base space is, and where no floor can answer for them.
 fn stand_off_base(game: &mut Game) {
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(game);
 }
 
 /// The far edge of the pocket: in the base, but well outside the arm's-length
 /// reach the board used to be reachable from. This is the case the whole rule
 /// exists for.
 fn stand_across_the_base(game: &mut Game) {
-    let edge = crate::tuning::STARTING_POCKET_HALF_WIDTH;
+    let edge = TEST_POCKET_HALF_WIDTH;
     stand_in_base_at(game, edge, 0);
     let broker_gap = edge - 1;
     assert!(
@@ -2622,7 +2622,7 @@ fn broker_reach_reports_the_three_states() {
 fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
     let mut game = fresh();
     deploy_broker(&mut game);
-    let grown = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 3, 0);
+    let grown = (TEST_POCKET_HALF_WIDTH + 3, 0);
     stand_in_base_at(&mut game, grown.0, grown.1);
     assert_eq!(
         game.broker_reach(),

@@ -39,7 +39,7 @@ fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
 /// `tests/contracts.rs`'s `deploy_broker`, which is private to that module.
 /// Spends no tick, so a seeded board below it is unmoved.
 fn stand_up_broker(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     for (kind, x) in [("home", 0), ("contract_broker", 1)] {
         game.world.spawn((
             crate::components::Structure {
@@ -499,6 +499,9 @@ fn a_save_from_before_town_jobs_loads_its_contracts_as_the_brokers() {
 #[test]
 fn a_hint_names_its_own_counter_and_goes_live_at_it() {
     let mut game = game();
+    // The town well clear of where the base will stand, so standing at the
+    // Broker is not also standing at the town: one field holds both.
+    stand_in_base_at(&mut game, 60, 0);
     let key = town_next_to_player(&mut game);
     let item: crate::items::ItemId = ids::CORE_FRAGMENT.into();
 

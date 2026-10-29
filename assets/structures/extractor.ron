@@ -4,7 +4,7 @@
     description: "Pulls a raw resource out of nothing. Set what it pulls beside it with R.",
     glyph: 'X',
     color: Brown,
-    build_cost: [("core_fragment", 12)],
+    build_cost: [("core_fragment", 6)],
     capacity: 20,
     machine: Some((role: Extract, recipes: [
         (produces: "core_fragment", ticks_per_unit: 10, level: Some(1)),

@@ -918,7 +918,7 @@ impl Game {
     /// of two rigs against one cell, which is a door that works until a
     /// base is dense enough and then silently stops.
     pub fn adjacent_teardown_rigs(&self) -> Vec<Entity> {
-        let Some((px, py)) = self.base_pos() else {
+        let Some((px, py)) = self.field_pos() else {
             return Vec::new();
         };
         let mut found: Vec<(i32, i32, Entity)> = self

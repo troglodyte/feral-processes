@@ -2,44 +2,9 @@
 
 use super::support::*;
 use crate::components::Downed;
-use crate::tuning::{
-    MAX_BUILD_DISTANCE_FROM_HOME, STARTING_POCKET_HALF_HEIGHT, STARTING_POCKET_HALF_WIDTH,
-    haul_walk_radius,
-};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, haul_walk_radius};
 use crate::views::PinMark;
 use crate::*;
-
-/// The pocket is a chamfered box, not the square it would be without
-/// `PLATFORM_CORNER_CUT`: that many diagonal steps come off each of the four
-/// corners, so the corner cell and the two beside it are unmined rock.
-/// Checked at all four corners because the shape is written in absolute
-/// values and a sign error would round three of them and leave one square.
-#[test]
-fn the_starting_pocket_has_its_corners_cut() {
-    let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game);
-    let (w, h) = (STARTING_POCKET_HALF_WIDTH, STARTING_POCKET_HALF_HEIGHT);
-
-    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
-    for (sx, sy) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
-        for (dx, dy) in [(w, h), (w - 1, h), (w, h - 1)] {
-            let (dx, dy) = (dx * sx, dy * sy);
-            assert!(
-                grid.is_solid(dx, dy),
-                "({dx}, {dy}) is inside the cut corner and should still be rock"
-            );
-        }
-        // The cells the cut stops at, so a deeper chamfer can't pass by
-        // asserting only on what was removed.
-        for (dx, dy) in [(w - 2, h), (w - 1, h - 1), (w, h - 2)] {
-            let (dx, dy) = (dx * sx, dy * sy);
-            assert!(
-                grid.is_floor(dx, dy),
-                "({dx}, {dy}) is the first cell past the cut and should be laid floor"
-            );
-        }
-    }
-}
 
 /// The cut is footprint, not paint: `place_structure` measures against the
 /// same `BaseGrid::is_floor` the pocket was laid into, so a cell with no
@@ -56,7 +21,7 @@ fn a_cut_corner_is_not_buildable() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 40);
     place_home(&mut game);
-    let (w, h) = (STARTING_POCKET_HALF_WIDTH, STARTING_POCKET_HALF_HEIGHT);
+    let (w, h) = (TEST_POCKET_HALF_WIDTH, TEST_POCKET_HALF_HEIGHT);
 
     let err = game
         .place_structure("assembler", w, h, None)
@@ -205,7 +170,7 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     place_home(&mut game);
 
     // The pocket's east edge, so the next placement lands one cell into rock.
-    stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     let err = game
         .place_structure("assembler", 1, 0, None)
         .expect_err("a cell with no floor under it shouldn't be buildable");
@@ -797,7 +762,7 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         .into_iter()
         .find(|d| d.id == "recharger_node")
         .expect("recharger_node.ron should load");
-    assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 10)]);
+    assert_eq!(def.build_cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 8)]);
     let regen = def
         .power_regen
         .as_ref()
@@ -1556,7 +1521,7 @@ fn a_posted_program_starts_from_the_player() {
     stand_in_base_at(&mut game, player_pos.x, player_pos.y);
     // Tamed far enough out that the old rule would have refused it outright,
     // and far enough that it could never have walked in.
-    let reach = haul_walk_radius(STARTING_POCKET_HALF_WIDTH);
+    let reach = haul_walk_radius(TEST_POCKET_HALF_WIDTH);
     let worker = spawn_tamed_on_map(&mut game, 2, reach + 5);
 
     game.assign_cronjob(worker, structure)
@@ -1578,7 +1543,7 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 2, 0);
     let worker = spawn_tamed_on_map(&mut game, 2, 1);
-    let reach = haul_walk_radius(STARTING_POCKET_HALF_WIDTH);
+    let reach = haul_walk_radius(TEST_POCKET_HALF_WIDTH);
     stand_in_base_at(&mut game, 2, reach + 5);
 
     let err = game
@@ -2776,12 +2741,11 @@ fn a_negative_recovery_rate_never_damages_the_program_it_names() {
     );
 }
 
-/// **The door lands where the party founded from.**
+/// **The base lands where the party founded from.**
 ///
-/// The Home still stands on `BASE_EXIT_CELL` — base space has one origin
-/// and one way out of it — but the anchor it is reached through is a zone
-/// fixture, and pinning that to the sector's arrival point made every run's
-/// base open at the same tile whatever ground the player had walked to.
+/// The Home and the anchor both stand on the tile the party founded from;
+/// pinning them to the sector's arrival point made every run's base open at
+/// the same tile whatever ground the player had walked to.
 #[test]
 fn founding_stands_the_anchor_where_the_party_is() {
     let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2795,10 +2759,15 @@ fn founding_stands_the_anchor_where_the_party_is() {
         Some((7, -3)),
         "the anchor follows the deploy rather than staying at the arrival point"
     );
-    // The claim that matters: the party can step through it from where they
-    // are standing, which is what `enter_base` asks.
-    game.enter_base()
-        .expect("the door is underfoot the moment the Home is up");
+    // The Home stands on the anchor's tile, and founding floors the ring.
+    let home = first_structure(&mut game, "home");
+    let at = *game.world.get::<Position>(home).unwrap();
+    assert_eq!((at.x, at.y), (7, -3));
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(7, -3)
+    );
 }
 
 /// A link is walked *onto* to descend, so an anchor sharing its tile could
@@ -2826,18 +2795,129 @@ fn founding_on_a_stack_link_is_refused() {
     );
 }
 
-/// **The Home is free**, and that is a floor under the run rather than a
-/// discount: the wizard's Kit step can spend the whole allowance on gear, so
-/// a priced Home is a run that can never open a base at all.
+/// Founding costs `HOME_FOUNDING_COST` Core Fragments out of the pack, paid in
+/// code: an empty pack is refused and spends nothing, a stocked one pays
+/// exactly that.
 #[test]
-fn founding_costs_nothing() {
+fn founding_costs_the_founding_fragments() {
     let mut game = Game::new(3603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.entity_mut(player).insert(Inventory::default());
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("an empty pack cannot found a base");
+    assert!(err.contains("Not enough"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
 
-    game.place_structure("home", 0, 0, None)
-        .expect("an empty pack is enough to found a base");
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(fragment.clone(), crate::tuning::HOME_FOUNDING_COST + 3);
+    game.place_structure("home", 0, 0, None).unwrap();
     assert!(game.has_home(), "the Home is standing");
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&fragment),
+        3,
+        "founding spends HOME_FOUNDING_COST and nothing more"
+    );
+}
+
+/// A ring cell that is walkable but refuses floor — here a Stack link —
+/// refuses founding outright, rather than founding a base with a hole in
+/// its first floor.
+#[test]
+fn founding_is_refused_when_a_ring_cell_holds_a_link() {
+    let mut game = Game::new(3605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let link = {
+        let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+        *query
+            .iter(&game.world)
+            .next()
+            .expect("a fresh sector is seeded with links")
+    };
+    let (px, py) = (link.x - 1, link.y);
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                map.set_override(
+                    px + dx,
+                    py + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                        rock_shade: None,
+                    },
+                );
+            }
+        }
+    }
+    stand_player_at(&mut game, px, py);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("a link in the ring refuses founding");
+    assert!(err.contains("link"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
+    assert!(
+        !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(px, py),
+        "a refused founding lays no floor"
+    );
+}
+
+/// The 3x3 must be open ground: a blocker in the ring refuses founding.
+#[test]
+fn founding_is_refused_when_a_ring_cell_is_blocked() {
+    let mut game = Game::new(3604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (px, py) = (40, 40);
+    stand_player_at(&mut game, px, py);
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                map.set_override(
+                    px + dx,
+                    py + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                        rock_shade: None,
+                    },
+                );
+            }
+        }
+        map.set_override(
+            px + 1,
+            py + 1,
+            Tile {
+                biome: Biome::BlackIce,
+                walkable: false,
+                rock_shade: None,
+            },
+        );
+    }
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 20);
+    let err = game
+        .place_structure("home", 0, 0, None)
+        .expect_err("a blocked ring cell refuses founding");
+    assert!(err.contains("no room"), "unexpected refusal: {err}");
+    assert!(!game.has_home());
 }
 
 // ------------------------------------------------------- the program rule
@@ -3584,7 +3664,7 @@ fn a_base_with_programs(seed: u32, programs: usize) -> Game {
 
 /// The `BuildSite` standing at the party's cell plus `(dx, dy)`, if one is.
 fn filed_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
     game.build_site_at(px + dx, py + dy)
 }
 
@@ -3913,7 +3993,7 @@ fn a_program_the_commit_refuses_files_no_order() {
 fn a_bad_cell_is_reported_before_the_program_cost() {
     let mut game = a_base_with_programs(20260908, 2);
     // One step past the pocket's east edge, which is unmined rock.
-    stand_in_base_at(&mut game, STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
 
     let err = game
         .place_structure("extractor", 1, 0, None)
@@ -4077,7 +4157,7 @@ fn a_site_wiped_with_its_cell_gives_the_program_back_too() {
     let spend = tame_at_zone(&mut game, 1);
     game.place_structure("extractor", 1, 0, Some(spend))
         .expect("filed");
-    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    let (px, py) = game.field_pos().expect("the fixture stands in the base");
 
     game.clear_pending_build_at(px + 1, py);
 

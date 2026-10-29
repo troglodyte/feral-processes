@@ -21,7 +21,6 @@ use crate::tuning::{
     SETTLEMENT_PATROL_RESPAWN_TICKS, SETTLEMENT_PATROL_RING_MAX, SETTLEMENT_PATROL_RING_MIN,
     SETTLEMENT_PATROL_SIZE,
 };
-use crate::world::WorldMap;
 
 impl Game {
     /// Rolls for a Hostile neighbour to field one more patrol member.
@@ -54,11 +53,10 @@ impl Game {
     /// reason: the gates belong with the act, so a test that drives this
     /// directly is still testing the gates a player meets.
     pub(crate) fn field_patrol(&mut self) -> Option<Entity> {
-        // The surface in *either* direction, `pursuit_tick`'s guard: the
-        // player's `Position` is pinned to the anchor in base space and to
-        // the entrance tile in the Stack, so a range measured from it would
-        // field patrols around a party that is nowhere near them.
-        if self.is_underground() || self.in_base() {
+        // `pursuit_tick`'s guard: the player's `Position` is pinned to the
+        // entrance tile in the Stack, so a range measured from it would field
+        // patrols around a party that is nowhere near them.
+        if self.is_underground() {
             return None;
         }
         let candidates = self.towns_short_of_a_patrol();
@@ -213,14 +211,9 @@ impl Game {
         }
 
         // `pursuit_tick`'s guard, for its reason: the player's `Position` is
-        // pinned to the anchor in base space and to the entrance tile in the
-        // Stack, so proximity to it means nothing while the party is out of
-        // phase with it.
-        if self.is_game_over().is_some()
-            || self.has_active_battle()
-            || self.is_underground()
-            || self.in_base()
-        {
+        // pinned to the entrance tile in the Stack, so proximity to it means
+        // nothing while the party is down there.
+        if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
             return;
         }
         let player = self.player_entity();
@@ -313,11 +306,7 @@ impl Game {
         (0..ring.len())
             .map(|step| ring[(start + step) % ring.len()])
             .find(|&(x, y)| {
-                self.world
-                    .resource_mut::<WorldMap>()
-                    .tile(x, y)
-                    .open_to_hostiles()
-                    && self.find_settlement_at(x, y).is_none()
+                self.ground_tile(x, y).open_to_hostiles() && self.find_settlement_at(x, y).is_none()
             })
     }
 }

@@ -53,22 +53,14 @@ const CARAVAN_ON_TILE: u8 = 3;
 /// program, not the settlement behind it.
 const SETTLEMENT_ON_TILE: u8 = 4;
 /// Last of the five, `SETTLEMENT_ON_TILE`'s own reason one fixture over: an
-/// outpost never stands in base space, and a wild program standing on its
+/// outpost never stands in the field, and a wild program standing on its
 /// tile is the more immediately actionable answer to `x`.
 const OUTPOST_ON_TILE: u8 = 5;
 
 impl Game {
-    /// The tile grid the map renders — the zone surface, or base space when
-    /// the party is out of phase, both through the one renderer.
-    ///
-    /// `render/base.rs`'s `draw_surface_map` gets its tiles from exactly
-    /// this one call, and nothing else about it changed to make base space
-    /// drawable: dispatching here on `Game::base_pos` is the entire
-    /// relocation, on the gui side. Base space has no `Tile` of its own —
-    /// `base_grid::BaseCell` carries no biome — so this synthesises one per
-    /// cell: `Floor` → `Biome::Platform`, `Open` → `Biome::Excavated`,
-    /// absent (solid) → `Biome::Entropy`, all three walkable exactly as
-    /// `Biome::walkable` already says.
+    /// The tile grid the map renders: the field, with the base's floor
+    /// merged over it as `Biome::Platform` (`Game::ground_tile`). One space,
+    /// one renderer (ADR 0032).
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
         let center = self.scan_center();
         self.view_tiles_at((center.x, center.y), half_w, half_h)
@@ -77,11 +69,8 @@ impl Game {
     /// [`Game::view_tiles`], centred where the caller says rather than on the
     /// party.
     ///
-    /// **The centre moves; the space does not.** Which grid is read is still
-    /// `base_pos`, because that is the party's own locale and the map draws
-    /// one space at a time — `center` only ever names a cell *within* it.
     /// `Game::watch_position` is the one thing that hands this anything but
-    /// `scan_center`, and it refuses outside base space for that reason.
+    /// `scan_center`.
     pub fn view_tiles_at(
         &mut self,
         center: (i32, i32),
@@ -89,51 +78,33 @@ impl Game {
         half_h: i32,
     ) -> Vec<Vec<Tile>> {
         let (cx, cy) = center;
-        if self.base_pos().is_some() {
-            let grid = self.world.resource::<crate::base_grid::BaseGrid>();
-            // Hoisted out of the loop: this runs per tile per frame, and a
-            // resource lookup per cell for a value that cannot change inside
-            // one call is a cost with nothing to show for it.
-            let seed = grid.seed();
-            let rock = self.world.resource::<crate::rock::RockDb>();
-            let mut rows = Vec::new();
-            for ty in -half_h..=half_h {
-                let mut row = Vec::new();
-                for tx in -half_w..=half_w {
-                    let (x, y) = (cx + tx, cy + ty);
-                    let biome = match grid.cell(x, y) {
-                        Some(crate::base_grid::BaseCell::Floor) => Biome::Platform,
-                        Some(crate::base_grid::BaseCell::Open { .. }) => Biome::Excavated,
-                        None => Biome::Entropy,
-                    };
-                    row.push(Tile {
-                        biome,
-                        walkable: biome.walkable(),
-                        // **Exposed faces only.** Colouring every wall would
-                        // hand the player a map of everything they will ever
-                        // dig; colouring the faces with air against them
-                        // makes exposing one the act of prospecting. Rock
-                        // deeper than a face draws as the flat hole it has
-                        // always been.
-                        rock_shade: grid
-                            .is_exposed(x, y)
-                            .then(|| rock.wall_at(seed, x, y).shade),
-                    });
-                }
-                rows.push(row);
-            }
-            return rows;
-        }
-        let mut world_map = self.world.resource_mut::<WorldMap>();
         let mut rows = Vec::new();
         for ty in -half_h..=half_h {
             let mut row = Vec::new();
             for tx in -half_w..=half_w {
-                row.push(world_map.tile(cx + tx, cy + ty));
+                let (x, y) = (cx + tx, cy + ty);
+                let mut tile = self.ground_tile(x, y);
+                // **Exposed faces only**: a blocker the floor touches is rock
+                // the base can cut, so its kind is drawn as a shade. Colouring
+                // every blocker would hand the player a map of everything
+                // they will ever dig; colouring the faces makes growing the
+                // floor the act of prospecting.
+                if !tile.walkable && self.touches_floor(x, y) {
+                    tile.rock_shade = Some(self.wall_at(x, y).shade);
+                }
+                row.push(tile);
             }
             rows.push(row);
         }
         rows
+    }
+
+    /// Whether an orthogonal neighbour of `(x, y)` is laid floor.
+    fn touches_floor(&self, x: i32, y: i32) -> bool {
+        let grid = self.world.resource::<crate::base_grid::BaseGrid>();
+        [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .any(|(dx, dy)| grid.is_floor(x + dx, y + dy))
     }
 
     /// The finish painted over each cell `view_tiles_at` would draw for the
@@ -141,7 +112,7 @@ impl Game {
     /// grids in lockstep without a second coordinate mapping to keep in
     /// sync.
     ///
-    /// **All `None` outside base space**, where there is no `BaseGrid` cell
+    /// **All `None` outside the field**, where there is no `BaseGrid` cell
     /// to ask, and `&self` rather than `&mut self`: unlike `view_tiles_at`,
     /// nothing here mutates a cache, so there is nothing to justify the
     /// wider borrow. An id `FloorDb` does not resolve — a mod that dropped a
@@ -155,7 +126,7 @@ impl Game {
     ) -> Vec<Vec<Option<crate::views::FinishView>>> {
         let (cx, cy) = center;
         let mut rows = Vec::new();
-        if self.base_pos().is_some() {
+        if !self.is_underground() {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             let floors = self.world.resource::<crate::floors::FloorDb>();
             for ty in -half_h..=half_h {
@@ -194,18 +165,13 @@ impl Game {
     /// `is_home` is decided — the demolish menu reads the same field from the
     /// same builder, so the two routes cannot disagree about what a Home is.
     ///
-    /// `None` outside base space, not merely underground: a `Structure`
-    /// only ever stands in base space (`Structure` is the space tag — see
-    /// `find_blocking_structure_at`), so a demolish key pressed anywhere
-    /// else is asking about a tile in a different coordinate space
-    /// entirely. Underground that tile is the base four frames overhead,
+    /// `None` underground: a `Structure` only ever stands on the field, and
+    /// the player's `Position` is pinned to the surface entrance tile down
+    /// there, so the tile asked about would be the base four frames overhead,
     /// reached the same way `find_target_in_direction` used to reach it
-    /// before this guard covered creatures too, because `Position` is
-    /// pinned to the surface entrance tile down there; on the open surface
-    /// it is whatever the numbers happen to alias against base space's own
-    /// origin.
+    /// before this guard covered creatures too.
     pub fn adjacent_structure(&mut self, dx: i32, dy: i32) -> Option<EntityView> {
-        if !self.in_base() {
+        if self.is_underground() {
             return None;
         }
         let center = self.scan_center();
@@ -229,10 +195,10 @@ impl Game {
     /// for all of it — and a single lookup returning either would make the
     /// demolish key decide which by inspecting the view it got back.
     ///
-    /// It carries `adjacent_structure`'s `in_base` gate for that function's
-    /// reason: base-space coordinates must never answer a surface query.
+    /// It carries `adjacent_structure`'s underground gate for that function's
+    /// reason.
     pub fn adjacent_build_site(&mut self, dx: i32, dy: i32) -> Option<Entity> {
-        if !self.in_base() {
+        if self.is_underground() {
             return None;
         }
         let center = self.scan_center();
@@ -361,12 +327,9 @@ impl Game {
     /// written once and never again, and parking the camera on one claims the
     /// program is somewhere it isn't.
     ///
-    /// Refused outside base space, where staff stand: the map draws one
-    /// space at a time (`stands_in_base_space`) and a base-space cell drawn
-    /// over the zone surface is the aliasing every other map-facing view
-    /// already refuses.
+    /// Refused underground, where the field is not drawn.
     pub fn watch_position(&self, entity: Entity) -> Option<(i32, i32)> {
-        self.base_pos()?;
+        self.field_pos()?;
         if !crate::game::party::walks_the_base(
             self.program_role(entity),
             self.world.get::<Task>(entity).map(|t| t.kind),
@@ -375,66 +338,6 @@ impl Game {
         }
         let pos = self.world.get::<Position>(entity)?;
         Some((pos.x, pos.y))
-    }
-
-    /// Whether `entity`'s `Position` is a cell of base space rather than a
-    /// tile of the zone surface — the space tag every map-facing view
-    /// filters on.
-    ///
-    /// **The party's own things stand in base space and everything else
-    /// stands on the surface.** A `Structure` only ever stands on the
-    /// base's floor, which is what makes it *the* space tag (see
-    /// `find_blocking_structure_at`, and `BaseAnchor`'s own doc for why the
-    /// anchor is deliberately not one). A `Tamed` program is posted at a
-    /// machine, hauling between two, or parked around the Home by
-    /// `schedule_base_labour`. Everything else with a `Glyph` — a wild
-    /// program, a nest, a Stack entrance, the anchor — is a fixture of the
-    /// zone map.
-    ///
-    /// The two answers are `Position`s in different coordinate systems that
-    /// freely alias onto each other, which is the whole reason this exists:
-    /// base space's origin and the zone spawn point are both usually
-    /// `(0, 0)`.
-    ///
-    /// A party companion and a posted guard are the two tamed programs
-    /// whose `Position` is never written again, so theirs is the tile they
-    /// were beaten on — out on the surface, or four frames down. Answering
-    /// "base space" for them is still the right answer to the question
-    /// actually being asked: a companion is standing beside you rather than
-    /// where it was caught, and `position_is_honest` is what says so.
-    /// Between them the two rules leave a stale tile drawn in neither space.
-    ///
-    /// The player is in both spaces at once and has no answer here — its
-    /// callers hold it out, and `scan_center` is where its base-space cell
-    /// comes from.
-    /// A caravan is the third arm, and the only one that is **per-stage
-    /// rather than per-entity**: it is the first entity besides the player
-    /// that changes spaces, so the answer is read off `Caravan::stage` and
-    /// not off the component being there at all. Testing for the component
-    /// would pin a trader in one space for its whole visit, and the wrong
-    /// half of that journey would be drawn on a coordinate that aliases onto
-    /// a plausible tile in the other space.
-    pub(crate) fn stands_in_base_space(&self, entity: Entity) -> bool {
-        if let Some(caravan) = self.world.get::<Caravan>(entity) {
-            return caravan.stage.in_base_space();
-        }
-        // A `BuildSite` stands in base space for the same reason a
-        // `Structure` does — it is the structure, a few hundred ticks
-        // early — and it has to be named here rather than left to fall
-        // through, because it is the first entity with a `Glyph` that is
-        // neither. Missing, the map would draw a pending Depot onto
-        // whatever zone-surface tile shared its coordinates.
-        self.world.get::<Structure>(entity).is_some()
-            || self.world.get::<BuildSite>(entity).is_some()
-            || self.world.get::<Tamed>(entity).is_some()
-            // A besieger's `Position` is a base-space cell for the length of
-            // the siege — `components::Besieger`'s own doc — and without this
-            // arm it reads as an ordinary wild `Creature` standing on the
-            // zone surface the two coordinate spaces happen to alias onto.
-            || self
-                .world
-                .get::<crate::components::Besieger>(entity)
-                .is_some()
     }
 
     /// The first creature or structure along the row or column the player is
@@ -490,9 +393,9 @@ impl Game {
     /// your east — and, before this guard covered creatures too, opened a
     /// manifest for a wild program up there as lying "that way". The guard
     /// lives here rather than at the call site for the reason
-    /// `require_surface` exists.
+    /// `require_field` exists.
     ///
-    /// This takes no action and moves nothing, so `require_surface` does not
+    /// This takes no action and moves nothing, so `require_field` does not
     /// apply and never would have caught it. The test for whether a
     /// `Position` reader needs the guard is not "does it act" but "does it
     /// claim something about where the party is" — see `CLAUDE.md`'s
@@ -508,7 +411,6 @@ impl Game {
         if self.is_underground() {
             return None;
         }
-        let in_base = self.in_base();
         let start = self.scan_center();
         // `(dx, dy)` is a cardinal unit vector, so a tile is on the ray
         // exactly when its offset *is* `step` copies of it — which rules out
@@ -520,25 +422,10 @@ impl Game {
             (step >= 1 && step <= max_range && ddx == dx * step && ddy == dy * step).then_some(step)
         };
 
-        // Both queries below run over raw `Position`s, so both are gated on
-        // `Game::stands_in_base_space` agreeing with where the party is —
-        // the same one condition `view_entities` selects on, because the
-        // rule here is that examine names only what the map draws and two
-        // spellings of one rule is how that lapses. A ray aimed across the
-        // open grid could otherwise name a base structure, or a program
-        // parked beside the Home, at whatever surface tile their base-space
-        // cell aliased onto — commonly near `(0, 0)`, since base space's own
-        // origin and the zone spawn point usually share it — and a ray aimed
-        // from inside the base could name a wild program out on the actual
-        // zone surface, the "rays across the zone surface" bug named for
-        // this function.
-        //
-        // `drawn_on_surface_map` is still asked of every creature that
-        // survives the space test, and neither subsumes the other: this one
-        // says which space a `Position` is a tile of, that one says whether
-        // it is a tile the sim keeps up to date.
+        // `drawn_on_surface_map` is asked of every creature: it says whether
+        // a `Position` is a tile the sim keeps up to date.
         let mut candidates: Vec<(i32, u8, Entity)> = Vec::new();
-        if in_base {
+        {
             let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
             candidates.extend(
                 structures
@@ -546,15 +433,10 @@ impl Game {
                     .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, STRUCTURE_ON_TILE, e))),
             );
         }
-        // Gathered in the same walk as the other three, for the reason that
-        // walk exists: two walks and a caller choosing between them would
-        // have to re-derive distance to compare, putting the ray rule in two
-        // places. Gated on `in_base` and not on `stands_in_base_space`
-        // because a build site is *only* ever in base space — the gate is
-        // the same one the structure arm above takes, and for the same
-        // reason: a ray across the open grid must never name one at whatever
-        // surface tile its base-space cell aliased onto.
-        if in_base {
+        // Gathered in the same walk as the other arms: two walks and a
+        // caller choosing between them would have to re-derive distance to
+        // compare, putting the ray rule in two places.
+        {
             let mut sites = self.world.query::<(Entity, &Position, &BuildSite)>();
             candidates.extend(
                 sites
@@ -579,11 +461,6 @@ impl Game {
         // reason the other two are: two walks and a caller choosing between
         // them would have to re-derive distance to compare, putting the ray
         // rule in two places.
-        //
-        // Gated on the same space test, because a caravan is the one entity
-        // that changes spaces mid-visit: ungated, a ray across the open grid
-        // could name a trader standing at a base cell whose coordinates
-        // aliased onto the tile being aimed at.
         {
             let mut caravans = self.world.query::<(Entity, &Position, &Caravan)>();
             let on_ray_now: Vec<(i32, Entity)> = caravans
@@ -591,17 +468,11 @@ impl Game {
                 .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
                 .collect();
             candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
-                (self.stands_in_base_space(e) == in_base && self.is_shown(e, false)).then_some((
-                    step,
-                    CARAVAN_ON_TILE,
-                    e,
-                ))
+                self.is_shown(e, false)
+                    .then_some((step, CARAVAN_ON_TILE, e))
             }));
         }
         candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
-            if self.stands_in_base_space(e) != in_base {
-                return None;
-            }
             // Examine names only what the map shows, so a creature past the
             // player's Perception cannot be addressed by aiming at it.
             if !self.is_shown(e, false) {
@@ -614,11 +485,7 @@ impl Game {
                 e,
             ))
         }));
-        // A settlement carries neither `Creature` nor `Structure` either,
-        // and never stands in base space at all — `stands_in_base_space`
-        // answers `false` for it unconditionally, so the same `== in_base`
-        // gate the caravan arm uses reduces to "only found on the surface"
-        // here, with no case where it could alias onto a base-space ray.
+        // A settlement carries neither `Creature` nor `Structure` either.
         {
             let mut settlements = self
                 .world
@@ -628,23 +495,17 @@ impl Game {
                 .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
                 .collect();
             candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
-                (self.stands_in_base_space(e) == in_base && self.is_shown(e, true)).then_some((
-                    step,
-                    SETTLEMENT_ON_TILE,
-                    e,
-                ))
+                self.is_shown(e, true)
+                    .then_some((step, SETTLEMENT_ON_TILE, e))
             }));
         }
         // An outpost carries no entity at all — `resources::Outposts`' own
         // record lives keyed by tile, not spawned into the ECS — so it takes
         // no `Entity` query. `candidates` carries `Entity::PLACEHOLDER` in
         // its place and the real tile travels alongside in `outpost_tile`,
-        // read back out below. `SETTLEMENT_ON_TILE`'s gate one fixture over:
-        // an outpost never stands in base space, so `!in_base` is the whole
-        // of what `== in_base` reduces to for a fixture with no entity to
-        // ask `stands_in_base_space` about.
+        // read back out below.
         let mut outpost_tile: Option<(i32, i32)> = None;
-        if !in_base {
+        {
             let outposts = self.world.resource::<crate::resources::Outposts>();
             if let Some((step, tile)) = outposts
                 .0
@@ -993,11 +854,9 @@ impl Game {
                 .unwrap_or_else(|| nest.species.clone());
             format!("{species_name} Nest")
         } else if self.world.get::<BaseAnchor>(entity).is_some() {
-            // Unreachable before this task: nothing rendered base space, so
-            // nothing ever asked `view_entities` for a name near the anchor.
-            // `Game::view_tiles` makes that reachable, and the fall-through
-            // below said "You" for it — the same body the player's own
-            // entity gets, on an entity that is never the player.
+            // `Game::view_tiles` makes the anchor reachable by name, and the
+            // fall-through below said "You" for it — the same body the
+            // player's own entity gets, on an entity that is never the player.
             "The Anchor".to_string()
         } else if self.world.get::<SurfaceLink>(entity).is_some() {
             "Stack Entrance".to_string()
@@ -1049,11 +908,7 @@ impl Game {
             // calling it marked is a claim about the plan that is false.
             let marked = dig.marked;
             let at = self.world.get::<Position>(entity).copied();
-            let solid = at.is_none_or(|p| {
-                self.world
-                    .resource::<crate::base_grid::BaseGrid>()
-                    .is_solid(p.x, p.y)
-            });
+            let solid = at.is_none_or(|p| !self.ground().walkable(p.x, p.y));
             let what = match (marked, solid) {
                 (true, true) => "Marked Wall",
                 (true, false) => "Marked Floor",
@@ -1142,47 +997,14 @@ impl Game {
     /// The tile every scan around the party is centered on, **in the
     /// coordinate space the things being scanned live in.**
     ///
-    /// In base space that is the party's base cell, not their `Position`:
-    /// `Position` is pinned to the anchor tile on the zone surface while
-    /// they are out of phase, and every `Structure` stands in base space. A
-    /// scan centered on the pinned tile would list the base only when the
-    /// anchor happened to sit at the same numbers base space's origin does
-    /// — which the zone spawn point usually does, so it would read as
-    /// working and quietly stop the day a sector spawned somewhere else.
+    /// That is the player's `Position`, which is honest on the field; the
+    /// one place it is not is underground, where every scan caller is
+    /// already guarded.
     fn scan_center(&self) -> Position {
-        match self.base_pos() {
-            Some((x, y)) => Position { x, y },
-            None => *self.world.get::<Position>(self.player_entity()).unwrap(),
-        }
+        *self.world.get::<Position>(self.player_entity()).unwrap()
     }
 
-    /// Every entity within `half_w`/`half_h` of `scan_center`, in whichever
-    /// space the party currently occupies.
-    ///
-    /// **Closes the cross-space read generally**, the same ruling
-    /// `find_blocking_structure_at` acts on, and it is one condition rather
-    /// than a gate per kind: an entity is selected exactly when
-    /// `Game::stands_in_base_space` agrees with where the party is. That is
-    /// symmetric on purpose, because the aliasing is. Standing on the
-    /// surface tile that numerically matched a base-space Market's cell
-    /// made `[S]ell` appear on the inventory screen
-    /// (`app_core::traders_in_range`) and the trade calls it led to then
-    /// refused via `require_base`; base space has no wildlife, ever, so a
-    /// wild program's surface tile aliasing inward drew a monster nobody
-    /// was fighting; and in the other direction the base's own roster —
-    /// parked in base-space coordinates by `schedule_base_labour`, which is
-    /// exactly what makes `position_is_honest` true of it — drew scattered
-    /// across the open grid.
-    ///
-    /// **A kind-by-kind gate is what let that last one through**, since
-    /// `Tamed` is the one space tag that had no gate at all and
-    /// `views::drawn_on_surface_map` answers a different question: whether
-    /// a program's `Position` means anything, not which space it means it
-    /// in. Both filters are needed and neither subsumes the other.
-    ///
-    /// The player is held out of the space test — it is in both spaces at
-    /// once — and read through `scan_center` instead, which is the base's
-    /// half of that.
+    /// Every entity within `half_w`/`half_h` of `scan_center`.
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
         let center = self.scan_center();
         self.view_entities_at((center.x, center.y), half_w, half_h)
@@ -1201,7 +1023,6 @@ impl Game {
         half_w: i32,
         half_h: i32,
     ) -> Vec<EntityView> {
-        let in_base = self.in_base();
         let party = self.scan_center();
         let center = Position {
             x: center.0,
@@ -1211,22 +1032,12 @@ impl Game {
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
         let hits: Vec<(Entity, Position, Glyph)> = query
             .iter(&self.world)
-            // The player is read through `scan_center` rather than off its
-            // own `Position`, which stays pinned to the anchor tile on the
-            // zone surface for as long as the party is out of phase (see
-            // `resources::Locale`). This is the map's only source of the
-            // `@` it draws, so reading the pinned tile drew the player at
-            // whatever base-space cell the anchor's surface coordinates
-            // aliased onto and left it there however far the party walked.
-            // A no-op on the surface, where `scan_center` *is* that tile.
+            // The player is read through `scan_center` because this is the
+            // map's only source of the `@` it draws.
             .map(|(e, p, g)| (e, if e == player { party } else { *p }, *g))
             .filter(|(_, p, _)| {
                 (p.x - center.x).abs() <= half_w && (p.y - center.y).abs() <= half_h
             })
-            .collect();
-        let hits: Vec<(Entity, Position, Glyph)> = hits
-            .into_iter()
-            .filter(|(e, _, _)| *e == player || self.stands_in_base_space(*e) == in_base)
             .collect();
         self.build_views(hits)
     }
@@ -1647,19 +1458,14 @@ impl Game {
     /// sits within `MAX_BUILD_DISTANCE_FROM_HOME` of its Home, but the player
     /// wanders, and a roster that thinned out as they walked away would be
     /// worse than none. There is no zone-local trimming to worry about
-    /// either way — a `Structure` is base-space, not zone surface, and a
-    /// breach leaves it exactly where it was (see `enter_next_zone`).
+    /// either way — a breach leaves a `Structure` exactly where it was
+    /// (see `enter_next_zone`).
     ///
     /// Ordered Home first, then grouped by def id, then nearest first inside
     /// a group. Sorting here rather than in the frontend keeps one order for
     /// every consumer.
     pub fn structure_report(&mut self) -> Vec<StructureReport> {
-        // `Game::scan_center`, not the player's `Position` — every
-        // `Structure` this reports on lives in base space, and `Position`
-        // stays pinned to the anchor tile for the whole of a base visit.
-        // `Mode::StructureAssign` only ever opens while `in_base()`
-        // (`app-core`'s `menus.rs`), which is exactly when `center` and the
-        // player's real `Position` disagree.
+        // `Game::scan_center`, the one place a scan's centre is decided.
         let center = self.scan_center();
         let mut structures = self.world.query::<(Entity, &Structure, &Position)>();
         let found: Vec<(Entity, StructureId, Position)> = structures
@@ -2173,10 +1979,10 @@ impl Game {
     /// uses, and for its reason: a second derivation beside it is what would
     /// let the screen and the strip disagree about where a town is.
     ///
-    /// Empty off the zone surface. `Position` is pinned to the entrance tile
-    /// in the Stack and to the anchor in base space, so a bearing taken
+    /// Empty off the field. `Position` is pinned to the entrance tile
+    /// in the Stack, so a bearing taken
     /// there would be frozen while reading as live — the same shape
-    /// `require_surface` gives every other action that reaches through the
+    /// `require_field` gives every other action that reaches through the
     /// player's tile onto the zone map. It is one early return, not a filter
     /// per row.
     ///
@@ -2184,7 +1990,7 @@ impl Game {
     /// nearest-first — `attention`'s rule, so "the first row" is stable
     /// across runs without a second sort.
     pub fn compass_targets(&mut self) -> Vec<CompassRow> {
-        if self.require_surface().is_err() {
+        if self.require_field().is_err() {
             return Vec::new();
         }
         let Some(origin) = self.world.get::<Position>(self.player_entity()).copied() else {

@@ -25,23 +25,24 @@ fn bare_app(seed: u32) -> App {
 }
 
 #[test]
-fn a_new_game_opens_on_crew_since_a_fresh_run_starts_outside_the_base() {
+fn a_new_game_opens_on_crew_since_a_fresh_run_starts_off_the_base_floor() {
     let mut app = bare_app(1900);
     app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "a fresh run has no base to stand in yet"
+        !app.game.as_ref().unwrap().on_base_floor(),
+        "a fresh run has no base floor to stand on yet"
     );
     assert_eq!(app.info_tab, InfoTab::Crew);
 }
 
 #[test]
 fn a_loaded_game_opens_on_the_tab_matching_where_it_left_the_party() {
-    // `stand_in_base` reaches past `App` onto `Locale` through a save/reload
-    // (the only door app-core has), so it is used here purely to build the
+    // `stand_in_base` reaches past `App` through a save/reload (the only
+    // door app-core has), so it is used here purely to build the
     // *save file's* content — the assertion is about `bare_app`'s real
     // `load_game`, not about the fixture's own shortcut.
     let mut source = test_app(1901);
+    found_the_base(&mut source);
     stand_in_base(&mut source);
     let path = scratch_path("info_tab_loaded", 1901);
     source.game.as_mut().unwrap().save(&path).unwrap();
@@ -50,21 +51,18 @@ fn a_loaded_game_opens_on_the_tab_matching_where_it_left_the_party() {
     app.load_game(path.clone());
     let _ = std::fs::remove_file(&path);
 
-    assert!(app.game.as_ref().unwrap().in_base());
+    assert!(app.game.as_ref().unwrap().on_base_floor());
     assert_eq!(app.info_tab, InfoTab::Base);
 }
 
-/// The load-bearing crossing behaviour, both directions in one test — the
-/// same shape as `the_link_keys_walk_out_of_the_base_and_back_in_through_the_anchor`
-/// one file over, which proves `<`/`>` reach `Game::enter_base`/`leave_base`
-/// in the first place.
+/// The load-bearing crossing behaviour, both directions in one test: the
+/// floor's edge is the boundary.
 #[test]
 fn crossing_the_base_boundary_switches_the_tab_both_ways() {
     // Seeded through the real loader for the same reason as the test
-    // above: `app_inside_a_small_base_with_programs` plants `Locale::Base`
-    // by editing a save, which bypasses `install_game`'s sync, so the
-    // tracked "which side" baseline would not match reality without a real
-    // load in between.
+    // above: the fixture edits a save, which bypasses `install_game`'s sync,
+    // so the tracked "which side" baseline would not match reality without
+    // a real load in between.
     let mut source = app_inside_a_small_base_with_programs(1902, false, 0);
     let path = scratch_path("info_tab_crossing", 1902);
     source.game.as_mut().unwrap().save(&path).unwrap();
@@ -74,26 +72,27 @@ fn crossing_the_base_boundary_switches_the_tab_both_ways() {
     let _ = std::fs::remove_file(&path);
     assert_eq!(app.info_tab, InfoTab::Base);
 
-    app.handle_key(GameKey::Char('>'));
+    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH, 0);
+    walk(&mut app, GameKey::Right);
     assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "'>' must reach Game::leave_base"
+        !app.game.as_ref().unwrap().on_base_floor(),
+        "the step east of the pocket's edge is off the floor"
     );
     assert_eq!(
         app.info_tab,
         InfoTab::Crew,
-        "leaving base space must switch the tab to CREW"
+        "leaving the base floor must switch the tab to CREW"
     );
 
-    app.handle_key(GameKey::Char('<'));
+    walk(&mut app, GameKey::Left);
     assert!(
-        app.game.as_ref().unwrap().in_base(),
-        "'<' must reach Game::enter_base"
+        app.game.as_ref().unwrap().on_base_floor(),
+        "stepping back west lands on the floor again"
     );
     assert_eq!(
         app.info_tab,
         InfoTab::Base,
-        "entering base space must switch the tab back to BASE"
+        "stepping back onto the floor must switch the tab back to BASE"
     );
 }
 
@@ -110,7 +109,7 @@ fn a_manual_pick_survives_an_action_that_stays_on_the_same_side() {
     // check rides — without leaving the surface.
     app.handle_key(GameKey::Up);
 
-    assert!(!app.game.as_ref().unwrap().in_base());
+    assert!(!app.game.as_ref().unwrap().on_base_floor());
     assert_eq!(
         app.info_tab,
         InfoTab::Pack,

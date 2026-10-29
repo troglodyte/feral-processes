@@ -1,108 +1,113 @@
-//! The siege board: a flood fill from the base's one door through
-//! `BaseGrid::walkable`, seated in the bounding box of the fill.
+//! The siege board: the base's laid floor plus the field cells besiegers
+//! come in from, seated in the bounding box of the two (ADR 0032, decision 6).
 //!
-//! **The fill's frontier is the wall.** `BaseGrid` solid rock is never
-//! breached (§6 of the design), so nothing here does a separate wall pass —
-//! whatever the fill does not reach reads `Blocked` because `Board::solid`
-//! started every cell that way and only the fill's own cells are opened.
-//! That is also what makes a sealed-off pocket excluded from the board *by
-//! construction*: a cell with no walkable path to the door is simply never
-//! visited, never opened, and so never fought over — a player who walled
-//! off their far works has genuinely protected them, with nothing here
-//! having to check for the case.
+//! **The floor's edge is where a siege comes from.** Besiegers spawn on
+//! walkable field cells orthogonally next to an edge floor tile
+//! (`siege_spawn_cells`), and path inward. Everything not on the board reads
+//! `Blocked` because `Board::solid` started every cell that way.
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet};
 
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::Position;
-use crate::game::base_space::BASE_EXIT_CELL;
 use crate::tactical::TacticalBattle;
 use crate::tactical::map::{BattleCell, Board};
+use crate::world::WorldMap;
 
-/// Four-way — rock is never breached, so a diagonal fill would let the
-/// board slip past a wall no corridor was ever cut through.
 const NEIGHBOURS4: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 
-/// A battle map built from the base rather than generated — `map::generate`
-/// untouched, and this is the one place a siege departs from every other
-/// tactical fight.
+/// A built board and where it sits in field coordinates.
 pub(crate) struct SiegeBoard {
     pub board: Board,
-    /// The base-space cell that maps to the board's `(0, 0)` — the flood
-    /// fill's bounding box's own minimum corner.
+    /// The field cell board `(0, 0)` stands on.
     pub origin: (i32, i32),
-    /// `BASE_EXIT_CELL`, in board coordinates.
-    pub door: (i32, i32),
+    /// Every spawn cell, in board coordinates, in `siege_spawn_cells`'
+    /// coordinate order.
+    pub spawns: Vec<(i32, i32)>,
 }
 
-/// Flood-fills base space from `BASE_EXIT_CELL` and seats the result in the
-/// bounding box of what it found. `None` when the door cell itself is not
-/// walkable — a base that does not exist yet.
-pub(crate) fn build(game: &mut Game) -> Option<SiegeBoard> {
-    let grid = game.world.resource::<BaseGrid>();
-    if !grid.walkable(BASE_EXIT_CELL.0, BASE_EXIT_CELL.1) {
-        return None;
-    }
-
-    let mut filled = BTreeSet::new();
-    filled.insert(BASE_EXIT_CELL);
-    let mut queue = VecDeque::from([BASE_EXIT_CELL]);
-    while let Some((x, y)) = queue.pop_front() {
-        for (dx, dy) in NEIGHBOURS4 {
-            let next = (x + dx, y + dy);
-            if grid.walkable(next.0, next.1) && filled.insert(next) {
-                queue.push_back(next);
+/// The field cells a siege's besiegers spawn on, sorted by coordinate.
+///
+/// Walkable non-floor cells orthogonally next to the floor's edge. A sealed
+/// base — no walkable cell touches its floor — falls back to the nearest
+/// walkable cells outside it: a breadth-first walk out through the blockers,
+/// ring by ring, returning the first ring that holds any, up to
+/// `SIEGE_SPAWN_SEARCH_TILES`. Empty with no floor, or with nothing walkable
+/// in reach. Pure, so the order never depends on query iteration.
+pub(crate) fn siege_spawn_cells(floor: &BaseGrid, map: &WorldMap) -> Vec<(i32, i32)> {
+    let open = |c: (i32, i32)| !floor.is_floor(c.0, c.1) && map.peek(c.0, c.1).walkable;
+    let mut seen: BTreeSet<(i32, i32)> = floor.floor_cells().collect();
+    let mut frontier: Vec<(i32, i32)> = seen.iter().copied().collect();
+    for _ in 0..crate::tuning::SIEGE_SPAWN_SEARCH_TILES {
+        let mut ring = BTreeSet::new();
+        for &(x, y) in &frontier {
+            for (dx, dy) in NEIGHBOURS4 {
+                let next = (x + dx, y + dy);
+                if seen.insert(next) {
+                    ring.insert(next);
+                }
             }
         }
+        let found: Vec<(i32, i32)> = ring.iter().copied().filter(|&c| open(c)).collect();
+        if !found.is_empty() || ring.is_empty() {
+            return found;
+        }
+        frontier = ring.into_iter().collect();
     }
+    Vec::new()
+}
 
-    // `filled` always holds at least `BASE_EXIT_CELL`, so every one of
-    // these has something to answer.
-    let min_x = filled.iter().map(|&(x, _)| x).min().unwrap();
-    let max_x = filled.iter().map(|&(x, _)| x).max().unwrap();
-    let min_y = filled.iter().map(|&(_, y)| y).min().unwrap();
-    let max_y = filled.iter().map(|&(_, y)| y).max().unwrap();
+/// Builds the board from the floor and its spawn cells, `None` with no floor
+/// or nowhere for a siege to come from. The caller picks the siege's own
+/// entry from `spawns`.
+pub(crate) fn build(game: &mut Game) -> Option<SiegeBoard> {
+    let floor = game.world.resource::<BaseGrid>();
+    let map = game.world.resource::<WorldMap>();
+    let spawn_cells = siege_spawn_cells(floor, map);
+    if spawn_cells.is_empty() {
+        return None;
+    }
+    let cells: BTreeSet<(i32, i32)> = floor
+        .floor_cells()
+        .chain(spawn_cells.iter().copied())
+        .collect();
+
+    let min_x = cells.iter().map(|&(x, _)| x).min()?;
+    let max_x = cells.iter().map(|&(x, _)| x).max()?;
+    let min_y = cells.iter().map(|&(_, y)| y).min()?;
+    let max_y = cells.iter().map(|&(_, y)| y).max()?;
     let origin = (min_x, min_y);
-    // The longer edge of the box — a non-square fill is seated inside the
-    // bounding box it needs and the remainder is left `Blocked`, exactly as
-    // `Board::solid` started it.
     let side = (max_x - min_x + 1).max(max_y - min_y + 1);
 
     let mut board = Board::solid(side);
-    for &(x, y) in &filled {
+    for &(x, y) in &cells {
         board.set(x - origin.0, y - origin.1, BattleCell::Open);
     }
-
-    let door = (BASE_EXIT_CELL.0 - origin.0, BASE_EXIT_CELL.1 - origin.1);
+    let spawns: Vec<(i32, i32)> = spawn_cells
+        .iter()
+        .map(|&(x, y)| (x - origin.0, y - origin.1))
+        .collect();
     Some(SiegeBoard {
         board,
         origin,
-        door,
+        spawns,
     })
 }
 
 impl SiegeBoard {
-    /// A base-space cell in board coordinates, or `None` outside the box —
-    /// which includes a cell the fill never reached, since that box is
-    /// exactly what the fill found.
-    pub(crate) fn to_board(&self, base: (i32, i32)) -> Option<(i32, i32)> {
-        let cell = (base.0 - self.origin.0, base.1 - self.origin.1);
+    /// A field cell in board coordinates, or `None` outside the box.
+    pub(crate) fn to_board(&self, field: (i32, i32)) -> Option<(i32, i32)> {
+        let cell = (field.0 - self.origin.0, field.1 - self.origin.1);
         self.board.in_bounds(cell.0, cell.1).then_some(cell)
     }
 
-    /// A board cell in base-space coordinates — the inverse of
-    /// [`to_board`](Self::to_board), and total: every cell of a built board
-    /// has a base-space address, whether or not anything stands there.
-    ///
-    /// `#[allow(dead_code)]` until Task 16's `persist::restore` becomes its
-    /// first production caller, rebuilding a saved body's board cell back
-    /// into base-space `Position` — `study_pen`'s own precedent for a task
-    /// landing a door before the task that walks through it.
-    #[allow(dead_code)]
-    pub(crate) fn to_base(&self, cell: (i32, i32)) -> (i32, i32) {
+    /// A board cell in field coordinates — the inverse of
+    /// [`to_board`](Self::to_board).
+    #[cfg(test)]
+    pub(crate) fn to_field(&self, cell: (i32, i32)) -> (i32, i32) {
         (cell.0 + self.origin.0, cell.1 + self.origin.1)
     }
 }

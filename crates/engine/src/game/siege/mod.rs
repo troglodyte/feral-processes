@@ -37,7 +37,7 @@ use self::offscreen::pack_size;
 impl Game {
     /// Opens a siege on the board built from the base itself, rather than
     /// resolving it off-screen — `Game::siege_check`'s home branch, taken
-    /// whenever `Game::base_pos().is_some()`.
+    /// whenever the party stands on the base's floor.
     ///
     /// **The board is built, not `generate`d** (`board::build`), and
     /// `BattleSpec::side()` is never read on the spec minted here — the
@@ -46,7 +46,7 @@ impl Game {
     /// called: a siege is always tactical, whatever the profile toggle
     /// says.
     ///
-    /// `false` on the same reasons `board::build` and an absent `base_pos`
+    /// `false` on the same reasons `board::build` and an absent `field_pos`
     /// already refuse for — `Game::siege_check` then resolves the siege
     /// off-screen instead of staging it.
     pub(crate) fn open_siege(&mut self) -> bool {
@@ -55,11 +55,32 @@ impl Game {
         if board::build(self).is_none() {
             return false;
         }
-        let Some(player_cell) = self.base_pos() else {
+        let Some(player_cell) = self.field_pos() else {
             return false;
         };
         let zone = self.world.resource::<ZoneLevel>().0;
-        let site = self.anchor_position().unwrap_or(player_cell);
+        // The pack is drawn from the ground it comes in over — the first
+        // spawn cell, in coordinate order, that any species lives on — not
+        // from the floor, which none does. The first cell alone is often
+        // mined ground (`Biome::Excavated`, cut and not yet floored) with an
+        // empty pool. `habitat_pools` draws nothing, so the walk keeps the
+        // RNG stream as it was.
+        let spawns = board::siege_spawn_cells(
+            self.world.resource::<crate::base_grid::BaseGrid>(),
+            self.world.resource::<WorldMap>(),
+        );
+        let site = spawns
+            .iter()
+            .copied()
+            .find(|&(x, y)| {
+                self.habitat_pools(x, y, None, 0)
+                    .is_some_and(|(candidates, _)| !candidates.is_empty())
+            })
+            // No spawn cell fields anyone: the pack comes out empty and the
+            // siege resolves off-screen, rather than being drawn from the
+            // ground under the floor.
+            .or_else(|| spawns.first().copied())
+            .unwrap_or(player_cell);
         let raiders = self.spawn_siege_pack(site, zone);
         if self.open_siege_with(raiders.clone()) {
             return true;
@@ -81,7 +102,7 @@ impl Game {
         let Some(siege_board) = board::build(self) else {
             return false;
         };
-        let Some(player_cell) = self.base_pos() else {
+        let Some(player_cell) = self.field_pos() else {
             return false;
         };
 
@@ -94,7 +115,7 @@ impl Game {
             .biome;
 
         // Read before anything is spawned or seated: every entity that
-        // exists in base space *before* this call is what the fight opens
+        // exists in the field *before* this call is what the fight opens
         // with, raiders excepted.
         let structures = self.structure_footprints();
         // A prisoner is behind bars, not a defender: it occupies its pen
@@ -117,8 +138,18 @@ impl Game {
             siege_board.board.clone(),
         );
 
+        // Where the pack starts seating: one draw over the spawn cells, which
+        // are sorted by `(x, y)` so the choice never rides query order. That
+        // order is not a walk along the floor's edge — consecutive cells
+        // share a column, not a run of edge — so the raiders after the first
+        // fill the next cells of the list, wherever on the edge those lie.
+        let start = {
+            let mut rng = self.world.resource_mut::<crate::resources::GameRng>();
+            rng.0.random_range(0..siege_board.spawns.len())
+        };
+        let entry = |i: usize| siege_board.spawns[(start + i) % siege_board.spawns.len()];
         battle.siege_origin = siege_board.origin;
-        battle.siege_door = siege_board.door;
+        battle.siege_door = entry(0);
 
         // **Structures are seated as bodies, and left out of initiative.**
         // They are obstacles a swing can be aimed at (Task 10), not
@@ -131,7 +162,7 @@ impl Game {
                 self.is_barrier(e)
             });
 
-        // **Every body in base space is seated where it already stands.**
+        // **Every body in the field is seated where it already stands.**
         // Nobody is deployed; a body whose own cell fell outside the fill
         // (a program adopted on the surface that has not drifted in) is
         // simply not seated.
@@ -141,22 +172,22 @@ impl Game {
             }
         }
 
-        // **The player and their party**, at `base_pos` — the door-adjacent
-        // free cells taking the overflow once that cell (and its immediate
-        // neighbours) are spoken for.
+        // **The player and their party**, at the player's own tile — the
+        // free cells around it taking the overflow.
         let party: Vec<Entity> = std::iter::once(self.player_entity())
             .chain(self.world.resource::<Party>().0.iter().copied())
             .filter(|&e| self.creature_alive(e))
             .collect();
         let player_seat = siege_board
             .to_board(player_cell)
-            .unwrap_or(siege_board.door);
+            .unwrap_or(battle.siege_door);
         for entity in party {
             place_nearby(&mut battle, player_seat, entity);
         }
 
-        // **Raiders enter at the door.** One body to a cell means they file
-        // in at and behind it. Counted by what actually seated, not by
+        // **Raiders enter at the floor's edge**, one spawn cell each from the
+        // drawn start onward in list order, filing in beside a cell that is
+        // taken. Counted by what actually seated, not by
         // `raiders.len()` — `TacticalBattle::siege_pack` is
         // `siege::raiders::siege_morale_broken`'s reading of "the pack this
         // fight opened with," and a raider turned away for want of a free
@@ -164,7 +195,9 @@ impl Game {
         let seated: HashSet<Entity> = raiders
             .iter()
             .copied()
-            .filter(|&entity| place_nearby(&mut battle, siege_board.door, entity))
+            .enumerate()
+            .filter(|&(i, entity)| place_nearby(&mut battle, entry(i), entity))
+            .map(|(_, entity)| entity)
             .collect();
         // **Nothing seated is not a siege.** An empty habitat pool
         // (`spawn_siege_pack`'s own doc) or a door with no free cell near it
@@ -174,7 +207,7 @@ impl Game {
         // as "not a siege" to `siege::raiders::siege_morale_broken` and
         // `siege::persist::assemble` alike, so it would neither ever end on
         // a morale break nor ever save. Reported exactly as `board::build`
-        // and an absent `base_pos` already are: `false`, on which
+        // and an absent `field_pos` already are: `false`, on which
         // `Game::siege_check` resolves the siege off-screen instead.
         if seated.is_empty() {
             return false;
@@ -182,10 +215,7 @@ impl Game {
         // A raider spawned but turned away for want of a free cell has
         // nowhere to stand and no fight driving it — left alive it wanders
         // as an ordinary `Hostile` carrying a `Besieger` marker nothing
-        // reads, uncounted by every wild-population census and invisible on
-        // the surface map (`Game::stands_in_base_space`'s "every other
-        // glyph is a zone-map fixture" not being true of a body inside the
-        // base). Despawned here rather than left for a sweep that only runs
+        // reads, uncounted by every wild-population census. Despawned here rather than left for a sweep that only runs
         // when a fight ends, since this one never opened for it to be in.
         for &raider in &raiders {
             if !seated.contains(&raider) {
@@ -213,7 +243,7 @@ impl Game {
         // toward the fight, the "accepted consequence" §5 rules out — before
         // anything here ever ends a turn for the wrap to catch.
         self.skip_disengaged_turns();
-        let text = "Besiegers pour in through the door!".to_string();
+        let text = "Besiegers pour in over the edge of the floor!".to_string();
         self.log_base_kind(crate::resources::MessageKind::Raid, text.clone());
         self.post_alert(AlertKind::SiegeBegun, "siege", text);
         true

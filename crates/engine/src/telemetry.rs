@@ -66,7 +66,7 @@ pub enum Record {
     Extract {
         tick: u64,
         zone: u32,
-        /// The machine's own base-space tile, which is what identifies one
+        /// The machine's own field tile, which is what identifies one
         /// instance from another; `kind` is its `StructureDef` id.
         machine: (i32, i32),
         kind: String,

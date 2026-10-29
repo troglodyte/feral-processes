@@ -81,7 +81,7 @@ pub enum ResearchReadout {
     Stalled { name: String, short_of: String },
 }
 
-/// What the pin mark on one base-space cell says — `Game::view_pinned_at`'s
+/// What the pin mark on one field cell says — `Game::view_pinned_at`'s
 /// per-cell answer, and the renderer's only way to ask.
 ///
 /// **Two states and not two doors.** `Strained` is `Settled` plus the

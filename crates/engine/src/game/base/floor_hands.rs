@@ -22,11 +22,11 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Not right now.".into());
         }
-        self.require_base()
+        self.require_field()
     }
 
     fn party_cell(&self) -> Option<Position> {
-        self.base_pos().map(|(x, y)| Position { x, y })
+        self.field_pos().map(|(x, y)| Position { x, y })
     }
 
     /// What the player could set down: carried items, then gear copies, then
@@ -74,7 +74,7 @@ impl Game {
         self.hands_free()?;
         let party = self
             .party_cell()
-            .expect("hands_free passed, so the party is in base space");
+            .expect("hands_free passed, so the party is on the field");
         let cell = self
             .free_floor_cells(party, 1)
             .first()
@@ -149,7 +149,7 @@ impl Game {
         self.hands_free()?;
         let party = self
             .party_cell()
-            .expect("hands_free passed, so the party is in base space");
+            .expect("hands_free passed, so the party is on the field");
         let e = floor_item_at(&mut self.world, party)
             .ok_or_else(|| "There's nothing here to pick up.".to_string())?;
         let player = self.player_entity();

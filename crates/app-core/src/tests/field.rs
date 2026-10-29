@@ -137,7 +137,7 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     // Through the roster rather than `view_entities`, which is a window onto
     // the map and refuses a `Tamed` program out here: an owned program
     // stands in base space, and its `Position` on the open grid is the tile
-    // it was beaten on (see `Game::stands_in_base_space`).
+    // it was beaten on (see `Game::stands_inside_the_base`).
     let owned = app
         .game
         .as_mut()

@@ -4,7 +4,7 @@
 //! Escaping sets `PhaseKeys::story_complete` and nothing else changes: the
 //! keys stay, the run goes on, and `achievement_system` notices the flag on
 //! the next tick. The prompt is engine state (`PendingBasinExit`) rather than
-//! a return value because the step that raises it is `move_in_base`, deep
+//! a return value because the step that raises it is `move_player`, deep
 //! under `move_player`, which only returns whether a turn passed.
 
 use crate::components::PhaseKeys;

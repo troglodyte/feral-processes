@@ -235,7 +235,7 @@
   without knowing whether it is a nest guardian (out of scope) or a town
   patrol (in scope), and both arrive at the same line — so the decision has
   to look at what is in the pack. `fights_tactically` is that look: the
-  profile toggle, `require_surface` **called** rather than restated, and no
+  profile toggle, `require_field` **called** rather than restated, and no
   `NestGuardian` among the bodies. **The fourth gate is an omission** —
   `arena::stage` calls `begin_battle` directly, so it never passes through
   here and can never be routed *by this*; nests, lairs and raids open their

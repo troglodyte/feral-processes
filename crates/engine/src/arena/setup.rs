@@ -102,14 +102,12 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                     rounds_left: rounds,
                 });
             }
-            // **Authored from inside base space, and back out afterwards.**
-            // `Game::add_companion` is a base verb now — who is in your
-            // party is decided at home — and a scenario's `party:` rows are
-            // a declaration of what the fight opens with rather than a
-            // player standing anywhere. A staged fight runs on the surface,
-            // which is what the restore below keeps true.
+            // **Authored on the field, and the locale restored afterwards.**
+            // `Game::add_companion` refuses in the Stack, and a scenario's
+            // `party:` rows are a declaration of what the fight opens with
+            // rather than a player standing anywhere.
             let outside = game.locale();
-            game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+            game.world.insert_resource(Locale::Surface);
             let party = (|game: &mut Game| -> Result<(), String> {
                 for row in &scenario.party {
                     let program = match &row.spend {

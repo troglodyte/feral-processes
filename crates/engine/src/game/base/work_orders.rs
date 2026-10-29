@@ -777,9 +777,9 @@ fn walk_feeders(
 /// Where the idle staff member at `index` arrives at `tick`, on the
 /// Chebyshev ring of `IDLE_STAFF_RING_TILES` around `center`.
 ///
-/// **The way into base space, not a place to stand.** A program that has
-/// just been beaten carries the surface tile it was beaten on and has never
-/// had a base-space cell of its own; this is the tile that gives it one,
+/// **The way onto the floor, not a place to stand.** A program that has
+/// just been beaten carries the tile it was beaten on and has never
+/// stood on the floor; this is the tile that puts it there,
 /// and `drift_idle_staff` walks it on from there. It is asked only of a
 /// body that is not standing on laid floor, so in an established base it
 /// fires once per program and never again.
@@ -868,7 +868,7 @@ struct WanderBeat {
     occupied: std::collections::HashSet<(i32, i32)>,
     /// Where the idle pool stands, grown with every tile written this beat.
     held: std::collections::HashSet<(i32, i32)>,
-    /// The party's cell when it is in base space.
+    /// The party's cell when it is in the field.
     party: Option<(i32, i32)>,
 }
 
@@ -2300,14 +2300,15 @@ impl Game {
                 .map(|(e, dig, p)| (*p, e, dig.finish.clone()))
                 .collect()
         };
-        let grid = self.world.resource::<BaseGrid>();
+        let ground = self.ground();
+        let grid = ground.floor;
         let mut sites: Vec<(bool, i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
             // A dig mark is always footprint 1 — `structures` (the widened
             // `structure_tiles`) is what carries a real Station's floor
             // cells into this check.
             .filter(|(p, ..)| hauling::has_station(grid, *p, 1, &structures))
-            .map(|(p, e, f)| (grid.is_solid(p.x, p.y), p.x, p.y, e, f))
+            .map(|(p, e, f)| (!ground.walkable(p.x, p.y), p.x, p.y, e, f))
             .collect();
         // Cut/tile sites (`finish: None`) sort before finish/strip sites,
         // open cells before solid ones inside that block, each block by
@@ -2388,7 +2389,7 @@ impl Game {
                 .world
                 .get::<DigSite>(site)
                 .and_then(|d| d.finish.clone());
-            let solid = self.world.resource::<BaseGrid>().is_solid(at.x, at.y);
+            let solid = !self.ground().walkable(at.x, at.y);
             // Which budget the site draws on and what it claims from it now;
             // `claim` is also what it adds to that item's plan order, except
             // for a cut, which claims nothing yet but asks for its tile.
@@ -2594,10 +2595,7 @@ impl Game {
         // spoken for, and a body idling on it is one the raise has to move.
         let mut occupied = self.structure_tiles();
         occupied.extend(self.build_site_tiles());
-        let party = match *self.world.resource::<Locale>() {
-            Locale::Base { x, y } => Some((x, y)),
-            _ => None,
-        };
+        let party = self.field_pos();
         // Where the idle pool is standing as the beat opens, grown with
         // every tile written during it. **Nothing is ever removed**: a
         // vacated tile stays spoken for until the next beat, which costs a
@@ -2874,10 +2872,8 @@ impl Game {
         if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
             return;
         }
-        // The party is the other body standing in base space, read off
-        // `Locale` and never the player's `Position`, which is pinned to
-        // the anchor tile out on the zone surface. A program that steps
-        // onto the party hides the `@`.
+        // The party is the other body standing in the field. A program that
+        // steps onto the party hides the `@`.
         if beat.party == Some((tile.x, tile.y)) {
             return;
         }
@@ -3244,10 +3240,9 @@ impl Game {
         // party underground has its `Position` pinned to the surface
         // entrance tile, so anything claiming something about where the base
         // is has to refuse rather than answer from a tile four frames up.
-        // `require_base` rather than `require_surface` since the base went
-        // out of phase — this reads which machines are standing, and they
-        // stand in base space.
-        self.require_base()?;
+        // This reads which machines are standing, and they stand in the
+        // field.
+        self.require_field()?;
         // A research line is filed whatever stands. The bill is filed once,
         // at selection, and never topped up (`select_research`), so a line
         // refused here for a machine not yet built would never be filed at

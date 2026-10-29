@@ -142,11 +142,9 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// The radius the surface slab had, a 9x9 box, before the base moved into
-/// its own pocket dimension. `STARTING_POCKET_HALF_WIDTH` and
-/// `STARTING_POCKET_HALF_HEIGHT` size the base now;
-/// this survives only as surface geometry around the anchor, which the
-/// Stack's link placement keeps clear of.
+/// The radius the surface slab had, a 9x9 box. It survives only as field
+/// geometry around the anchor, which the Stack's link placement keeps clear
+/// of.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
 /// Tiles of surface sight a character at baseline attributes has. Slightly
@@ -159,28 +157,6 @@ pub const PERCEPTION_BASE_RADIUS: f32 = 5.0;
 /// rolled low in Analysis and Entropy still sees the tiles beside them.
 pub const PERCEPTION_MIN_RADIUS: f32 = 2.0;
 
-/// How far the pre-cleared pocket reaches east and west of base space's own
-/// origin when the first Home is deployed — `Game::lay_starting_pocket`,
-/// which lays `BaseCell::Floor` over the chamfered box this,
-/// `STARTING_POCKET_HALF_HEIGHT` and `PLATFORM_CORNER_CUT` describe and
-/// writes nothing into `WorldMap` at all.
-///
-/// 9 gives a 19-cell-wide pocket, double the 9 it opened at when it matched
-/// `MAX_BUILD_DISTANCE_FROM_HOME`'s old slab: at 9 wide the beginner
-/// structures did not all fit, and digging out room for the first handful
-/// was a chore rather than growth.
-///
-/// This is the *starting* size, the way the old constant was the starting
-/// radius: slice 2's mining is what makes floor space something a player
-/// buys, and this is only the ground the run opens with.
-pub const STARTING_POCKET_HALF_WIDTH: i32 = 9;
-
-/// How far the starting pocket reaches north and south of base space's
-/// origin: 9 cells tall, the height it opened at. Separate from
-/// `STARTING_POCKET_HALF_WIDTH` because the base was asked to grow wider,
-/// not bigger — one radius for both made it twice as tall too.
-pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
-
 /// The widest a base was ever meant to get, from when it was a slab stamped
 /// onto the zone surface: `Game::build_radius` clamped here no matter how
 /// many `build_radius_bonus` structures (the Heap Pillar's own) were
@@ -189,10 +165,10 @@ pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
 /// existed rather than the current shape.
 ///
 /// **All three — `build_radius`, `clear_platform` and the Heap Pillar —
-/// are deleted along with `resources::Platform`.** Base space grows by
-/// laying floor on `base_grid::BaseGrid` now (`Game::lay_starting_pocket`,
-/// slice 2's mining), not by widening a clamped radius, and nothing reads
-/// this constant as an active ceiling any more.
+/// are deleted along with `resources::Platform`.** The base grows by
+/// laying floor on `base_grid::BaseGrid` now (`Game::floor_cell`), not by
+/// widening a clamped radius, and nothing reads this constant as an active
+/// ceiling any more.
 ///
 /// Kept rather than deleted: two of this file's own doc comments
 /// (`STACK_NEAREST_LINK_TILES`, `CONTRACT_HABITAT_SAMPLES`) still reason
@@ -203,24 +179,13 @@ pub const STARTING_POCKET_HALF_HEIGHT: i32 = 4;
 /// measured figure, and no longer the backstop it was written as.
 pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 
-/// How deep each of the base slab's four corners is chamfered, in diagonal
-/// steps — the slab is the box above with `Platform::covers` trimming a
-/// triangle off each corner, so at 2 the corner tile and the two beside it
-/// are natural terrain and the base reads as rounded rather than as a
-/// stamped square.
-///
-/// This is footprint, not decoration: `place_structure` measures against
-/// the same predicate, so a cut tile is unbuildable and a raised value
-/// takes buildable ground away. 0 restores the square.
-pub const PLATFORM_CORNER_CUT: i32 = 2;
-
 // ---- Growing the base: rock you cut ----------------------------------
 //
 // None of these is measured. They are starting values to play and then
 // record under `docs/measurements/` — see the slice 2 section of
 // `docs/superpowers/archive/specs/2026-08-19-base-out-of-phase-design.md`.
 
-/// How much damage one cell of base-space rock absorbs before it opens.
+/// How much damage one cell of field rock absorbs before it opens.
 ///
 /// **Never scaled by zone, depth or level.** The rock is the same rock all
 /// run, so the thing that changes is the player: a wall that takes about
@@ -277,7 +242,7 @@ pub const BASE_ROCK_MIN_SWINGS: u32 = 2;
 /// takes `BASE_ROCK_DURABILITY` and `BASE_DIG_TICKS_PER_SWING` in with it,
 /// which is what makes softening the rock or quickening the swing show up
 /// here too.
-pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
+pub const ROCK_FRAGMENT_CHANCE: f32 = 0.25;
 
 /// How many ticks a posted digger spends per swing at a marked cell — one
 /// cycle of `TaskKind::Excavate`, the crew's counterpart to a cronjob's
@@ -310,13 +275,18 @@ pub const FARM_HARVEST_TICKS: u32 = 6;
 ///
 /// **Fragments, not Blank Substrate**, because the floor is what grows the
 /// base and a Factory sitting between the mine and every tile made expansion
-/// wait on a 12-tick press per cell. Half a substrate's four fragments, so
-/// the plain floor is cheaper than it was as well as quicker; finishes stay
+/// wait on a 12-tick press per cell. One fragment, so
+/// the plain floor is cheap; finishes stay
 /// on substrate (`FLOOR_FINISH_COST`) as the Factory-fed decoration.
 ///
-/// Above `BASE_MINE_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
+/// Above `ROCK_FRAGMENT_CHANCE`'s quarter-fragment a cut cell returns,
 /// so a dig plan never floors itself out of its own rubble.
-pub const FLOOR_TILE_COST: u32 = 2;
+pub const FLOOR_TILE_COST: u32 = 1;
+
+/// Core Fragments the founding Home costs, paid from the pack. Every class
+/// kit must cover it (`classes` test), or a run could never open a base.
+/// Paid in code: a `build_cost` on `home.ron` would be a new schema use.
+pub const HOME_FOUNDING_COST: u32 = 2;
 
 /// How many Blank Substrate a finish costs, on top of the
 /// `FLOOR_TILE_COST` fragments the tile itself already spent —
@@ -378,6 +348,12 @@ pub const SIEGE_PRESSURE_PER_ZONE: u32 = 1;
 /// times, not a chore met every session, so its interval is much longer
 /// than the sweep's.
 pub const SIEGE_PRESSURE_THRESHOLD: u32 = 14_400;
+
+/// How many rings a sealed base's siege search walks out through blockers
+/// looking for walkable ground to spawn besiegers on
+/// (`siege::board::siege_spawn_cells`'s fallback) before the siege is
+/// called off for want of anywhere to come from.
+pub const SIEGE_SPAWN_SEARCH_TILES: i32 = 32;
 
 /// How far either side of `SIEGE_PRESSURE_THRESHOLD` a drawn interval may
 /// land, in percent — `RAID_PRESSURE_JITTER_PERCENT`'s reason, drawn once
@@ -455,8 +431,14 @@ pub const SIEGE_POINTS_PER_CASUALTY: u32 = 10;
 /// the door with its plunder, `Game::besieger_turn`'s own reading of "down"
 /// — before the rest withdraw unconditionally. Half the pack breaking a
 /// siege is the spec's own figure; there is no quota and no round limit
-/// besides it.
+/// besides it (a sealed base's hold, `SIEGE_SEALED_HOLD_ROUNDS`, aside).
 pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
+
+/// Full rounds a besieging pack holds outside a sealed base — no besieger
+/// with a walk to the floor — before it withdraws. The siege then ends with
+/// nothing lost and nothing won. Picked, not measured: long enough to read
+/// as a siege that tried, short enough not to stall the player.
+pub const SIEGE_SEALED_HOLD_ROUNDS: u32 = 5;
 
 // ---------------------------------------------------------------------------
 // Outposts
@@ -477,16 +459,17 @@ pub const SIEGE_MORALE_BREAK_PERCENT: u32 = 50;
 /// design spec §11.
 pub const MAX_OUTPOSTS: usize = 4;
 
-/// How close a candidate tile must be walked before it may be founded, in
-/// Chebyshev tiles from the base anchor.
+/// How far out a candidate tile must be before an outpost may be founded
+/// there, in Chebyshev tiles to the base's nearest floor cell
+/// (`footprint::distance_to_floor`) — a base grown toward a spot is nearer
+/// it (ADR 0032).
 ///
-/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (a base-space
-/// constant, value 4) — an outpost stands on the *zone surface*, a
-/// different coordinate space at a different scale, and reusing a base-space
-/// literal there would make an unrelated base-building retune silently move
-/// where an outpost may stand. **A fraction of a region**,
+/// **Deliberately not `MAX_BUILD_DISTANCE_FROM_HOME`** (value 4) — that
+/// bounds a build beside the party, and reusing it here would make an
+/// unrelated base-building retune silently move where an outpost may stand.
+/// **A fraction of a region**,
 /// `ROUTE_PREDATION_RADIUS`'s reason: a flat number is measured against
-/// nothing, and this is close enough to the anchor to reach on foot in one
+/// nothing, and this is close enough to the base to reach on foot in one
 /// session — a quarter of `SETTLEMENT_GARRISON_RADIUS`'s own half-region
 /// reach, so an outpost this close to the base always sits well inside it,
 /// not outside. Unmeasured — see design spec §11.

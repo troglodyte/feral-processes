@@ -31,10 +31,6 @@ impl App {
     /// refusal to hand over: an empty picker is not an action it can fail.
     pub(crate) fn open_put_down(&mut self) {
         let Some(game) = &self.game else { return };
-        if !game.in_base() {
-            self.refuse("Nothing to put down out here — the floor is through the anchor.");
-            return;
-        }
         if game.put_down_options().is_empty() {
             self.refuse("You're carrying nothing to put down.");
             return;

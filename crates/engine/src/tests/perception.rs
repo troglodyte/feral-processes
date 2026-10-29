@@ -158,10 +158,10 @@ fn a_tick_marks_what_the_player_walked_past() {
 }
 
 #[test]
-fn off_the_surface_every_tile_is_in_sight() {
+fn underground_every_tile_is_in_sight() {
     let mut game = game();
     let (px, py) = player_at(&mut game);
-    stand_in_base(&mut game);
+    descend(&mut game);
     assert_eq!(game.sight_at((px + 500, py - 500)), Sight::InSight);
 }
 

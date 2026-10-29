@@ -59,7 +59,7 @@ pub enum Repeat {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotificationKind {
     // --- Tutorials: `OnceEver`, the first time a mechanic happens to you ---
-    /// The Home is raised and base space exists — `Game::place_structure`.
+    /// The Home is raised and the base floor exists — `Game::place_structure`.
     BaseFounding,
     /// The party drops below the on-ramp for the first time —
     /// `Game::descend_to`.
@@ -270,9 +270,9 @@ impl NotificationKind {
     pub fn def(self) -> NotificationDef {
         match self {
             NotificationKind::BaseFounding => NotificationDef {
-                title: "Base Space",
-                body: "Your Home stands, the base runs out of phase with the zone map. Use the \
-                       home portal to enter phase space.\n\n [b] for the base report: build, craft, \
+                title: "Your Base",
+                body: "Your Home stands, with floor laid around it. Grow the base outward tile \
+                       by tile.\n\n [b] for the base report: build, craft, \
                        and assign entities to structures.\n\n Programs you own and are not in the \
                        party will live and work in the base.",
                 // The same art the zone map now draws the anchor with, so

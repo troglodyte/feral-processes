@@ -106,7 +106,7 @@ fn the_shipped_siphon_is_a_pure_supplier() {
 /// A base with one empty siphon and one staff program standing clear of it.
 fn base_with_a_siphon() -> (Game, Entity, Entity) {
     let mut game = game();
-    stand_in_base(&mut game);
+    stand_in_base_at(&mut game, 0, 0);
     let siphon = spawn_structure_at(&mut game, SIPHON, 3, 3);
     let program = spawn_tamed(&mut game, 100, 5);
     game.world.get_mut::<Position>(program).unwrap().x = 6;
@@ -249,10 +249,10 @@ fn a_siphon_refuses_an_occupied_siphon_and_writes_nothing() {
 }
 
 #[test]
-fn a_siphon_refuses_outside_base_space_and_writes_nothing() {
+fn a_siphon_refuses_in_the_stack_and_writes_nothing() {
     let (mut game, siphon, program) = base_with_a_siphon();
-    game.world.insert_resource(Locale::Surface);
-    assert_refused_untouched(&mut game, program, siphon, "back at the base");
+    descend(&mut game);
+    assert_refused_untouched(&mut game, program, siphon, "up on the field");
 }
 
 #[test]

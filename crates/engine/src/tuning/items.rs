@@ -186,8 +186,8 @@ pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
 /// would still pass a batch projected to finish at a fraction of a point:
 /// the very next background tick starves it, which is the state this
 /// refusal exists to prevent, reached one tick later. Ten points is about
-/// sixty-six ticks at the standing drain — a crossing of base space to a
-/// rest, which is free in there and refills the reserve whole, so the
+/// sixty-six ticks at the standing drain — a walk back to the base floor,
+/// where a rest is free and refills the reserve whole, so the
 /// refusal's advice is actionable rather than a dead end.
 pub const HAND_CRAFT_POWER_FLOOR: f32 = 10.0;
 

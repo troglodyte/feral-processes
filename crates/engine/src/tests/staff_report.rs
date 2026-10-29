@@ -134,7 +134,7 @@ fn coverage_lists_a_boxed_in_bay_and_counts_those_below_critical() {
     for dy in -r..=r {
         for dx in -r..=r {
             let (x, y) = (site.x + dx, site.y + dy);
-            if (dx, dy) == (0, 0) || !game.world.resource::<base_grid::BaseGrid>().walkable(x, y) {
+            if (dx, dy) == (0, 0) || !game.world.resource::<base_grid::BaseGrid>().is_floor(x, y) {
                 continue;
             }
             if kept {

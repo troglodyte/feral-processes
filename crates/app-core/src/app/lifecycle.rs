@@ -49,7 +49,7 @@ impl App {
             status_line: profile_warning,
             log_filter: LogFilter::default(),
             info_tab: InfoTab::default(),
-            last_in_base: false,
+            last_on_base_floor: false,
             history_written: false,
             assets_dir,
             saves_dir,
@@ -592,9 +592,9 @@ impl App {
         self.sync_info_tab_to_locale(true);
     }
 
-    /// Keeps `info_tab` in step with which side of the base boundary the
-    /// party is on: CREW outside, BASE inside — the surface and the Stack
-    /// read as the same "outside" here, matching `Game::in_base`.
+    /// Keeps `info_tab` in step with whether the party stands on the base's
+    /// floor: CREW off it, BASE on it — the bare field and the Stack read as
+    /// the same "outside" here, matching `Game::on_base_floor`.
     ///
     /// One writer for the whole tab, `Game::attention`'s reason: `after_tick`
     /// calls this with `force: false` on every tick, so walking out, walking
@@ -608,19 +608,19 @@ impl App {
     /// unconditionally, where the tick path only writes on an actual change
     /// of side. That difference is also what leaves a manual `1`/`2`/`3`/`4`
     /// press alone — those keys `return` before `after_tick` is ever
-    /// reached, and this only overwrites `info_tab` when `last_in_base`
+    /// reached, and this only overwrites `info_tab` when `last_on_base_floor`
     /// disagrees with where the party now stands.
     pub(crate) fn sync_info_tab_to_locale(&mut self, force: bool) {
         let Some(game) = &self.game else { return };
-        let in_base = game.in_base();
-        if force || in_base != self.last_in_base {
-            self.info_tab = if in_base {
+        let on_floor = game.on_base_floor();
+        if force || on_floor != self.last_on_base_floor {
+            self.info_tab = if on_floor {
                 InfoTab::Base
             } else {
                 InfoTab::Crew
             };
         }
-        self.last_in_base = in_base;
+        self.last_on_base_floor = on_floor;
     }
 
     /// Appends everything the engine recorded since the last tick, one JSON

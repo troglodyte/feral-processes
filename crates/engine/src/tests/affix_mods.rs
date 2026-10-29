@@ -121,10 +121,11 @@ fn apply_pays_exactly_the_apply_cost_and_rekeys_the_copy() {
     assert!(msg.contains("Plated"), "{msg}");
 }
 
-/// In base space the bench pays off a Depot before the pack.
+/// On the base's floor the bench pays off a Depot before the pack.
 #[test]
-fn apply_pays_off_a_depot_first_in_base_space() {
+fn apply_pays_off_a_depot_first_inside_the_base() {
     let mut game = bench_game("mods_depot", 9411);
+    crate::tests::support::stand_in_base(&mut game);
     crate::tests::support::stand_in_base_at(&mut game, 3, 4);
     let mut stock = crate::components::Stock::new(100);
     stock.output.insert(ItemId::from("core_fragment"), 2);

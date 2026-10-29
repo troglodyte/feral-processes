@@ -15,7 +15,7 @@ use crate::*;
 pub struct AwaitingSite {
     pub site: Entity,
     pub structure: StructureId,
-    /// Base-space coordinates.
+    /// Field coordinates.
     pub x: i32,
     pub y: i32,
 }
@@ -31,6 +31,11 @@ pub(crate) enum PlacementRefusal {
     Occupied,
     SiteFiled,
     DigMark,
+    /// A floor request with no laid or pending floor beside it: the base
+    /// grows without gaps.
+    NotAdjacent,
+    /// A floor request on a blocker nobody has dug out yet.
+    NeedsMining,
 }
 
 impl PlacementRefusal {
@@ -40,8 +45,36 @@ impl PlacementRefusal {
             Self::Occupied => "Something is already deployed there.",
             Self::SiteFiled => "Your crew is already set to build something there.",
             Self::DigMark => "There's a dig mark there — clear it before building.",
+            Self::NotAdjacent => "Floor has to join the base — pick a cell next to it.",
+            Self::NeedsMining => "That's solid rock — dig it out before laying floor.",
         }
     }
+}
+
+/// Why a floor request on `cell` is refused, or `None`. Pure over the ground
+/// so the player's tile press and the crew's mark ask the same question.
+///
+/// Adjacency comes first: a request that joins nothing is told so whether or
+/// not the cell is rock. A blocker beside the base is accepted only when it
+/// carries a dig mark (`dig_marked`), because the mark is what gets it mined.
+pub(crate) fn floor_request_refusal(
+    cell: (i32, i32),
+    ground: crate::base_grid::Ground<'_>,
+    pending: &std::collections::BTreeSet<(i32, i32)>,
+    dig_marked: bool,
+) -> Option<PlacementRefusal> {
+    let (x, y) = cell;
+    let adjacent = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| {
+        let n = (x + dx, y + dy);
+        ground.is_floor(n.0, n.1) || pending.contains(&n)
+    });
+    if !adjacent {
+        return Some(PlacementRefusal::NotAdjacent);
+    }
+    if !ground.walkable(x, y) && !dig_marked {
+        return Some(PlacementRefusal::NeedsMining);
+    }
+    None
 }
 
 /// What one `Game::place_wall_box` did.
@@ -120,57 +153,45 @@ impl Game {
             return Err("A Home is already deployed. Remove it before building another.".into());
         }
 
-        // Where a deploy is made *from*, and the run's first Home is the one
-        // exception in the game.
-        //
-        // Every other build is a base action: it stands a structure in base
-        // space, beside the ones already there, measured from the cell the
-        // party is standing in. The first Home cannot be, because there is
-        // no base to stand in yet — base space is solid everywhere and the
-        // anchor refuses entry for want of a Home, so a run that had to be
-        // inside to deploy one could never start a base at all. Founding is
-        // therefore an open-grid act.
-        //
-        // **The two halves of it move independently, and that is the whole
-        // of the placement rule.** The Home stands on base space's own
-        // origin whatever direction was pointed — the pocket is laid around
-        // that origin, and a Home somewhere else in it would make
-        // `BASE_EXIT_CELL` a door onto bare floor. The *anchor* is a zone
-        // fixture and goes where the party is standing, so the base opens on
-        // ground the player chose rather than at the sector's arrival point.
-        let founding_door = match structure_id == HOME_STRUCTURE_ID {
-            true => {
-                self.require_surface()?;
-                let standing = *self
-                    .world
-                    .get::<Position>(self.player_entity())
-                    .ok_or_else(|| "You aren't anywhere you can deploy from.".to_string())?;
-                // A link is walked *onto* to descend (`Game::move_player`),
-                // so an anchor sharing a link's tile could never be stepped
-                // on to be entered — the step that would reach it drops the
-                // party into the Stack instead. Refused up here with
-                // `require_surface` rather than beside the materials check:
-                // it is a question about where the door goes, and the door
-                // is decided in this block.
-                if self.find_surface_link_at(standing.x, standing.y).is_some() {
+        // Where a deploy is made *from*: the field, measured from the party's
+        // tile. The first Home goes on the tile the party stands on, and the
+        // anchor with it — the base opens on ground the player chose. Every
+        // other build stands beside the party at `(dx, dy)`.
+        self.require_field()?;
+        let (px, py) = self
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
+        let founding = structure_id == HOME_STRUCTURE_ID;
+        // A link is walked *onto* to descend (`Game::move_player`), so a Home
+        // sharing a link's tile could never be stood on.
+        if founding && self.find_surface_link_at(px, py).is_some() {
+            return Err(
+                "You're standing on a Stack link — an anchor can't share its tile. \
+                 Step off it first."
+                    .into(),
+            );
+        }
+        // The whole 3x3 must take floor: open ground, and nothing on it that
+        // refuses floor (`Game::floor_conflict`). Refused here rather than
+        // skipped in `lay_founding_floor`, so a base never opens with a hole
+        // in its first floor.
+        if founding {
+            for (rx, ry) in (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| (px + dx, py + dy))) {
+                if !self.ground().walkable(rx, ry) {
                     return Err(
-                        "You're standing on a Stack link — an anchor can't share its tile. \
-                         Step off it first."
+                        "There's no room to found a base here — the ground around you is blocked. \
+                         Try open ground."
                             .into(),
                     );
                 }
-                Some((standing.x, standing.y))
+                if let Some(conflict) = self.floor_conflict(rx, ry) {
+                    return Err(format!("You can't found a base here. {conflict}"));
+                }
             }
-            false => None,
-        };
-        let founding = founding_door.is_some();
+        }
         let (x, y) = if founding {
-            crate::game::base_space::BASE_EXIT_CELL
+            (px, py)
         } else {
-            self.require_base()?;
-            let (px, py) = self
-                .base_pos()
-                .expect("require_base passed, so the party is in base space");
             (px + dx, py + dy)
         };
 
@@ -256,13 +277,18 @@ impl Game {
         let committed_who = offered_label.filter(|_| committed.is_some());
 
         // **The Home is stood up by hand; everything else is a request.**
-        // Founding is the one build with nobody to ask: base space does not
+        // Founding is the one build with nobody to ask: the base does not
         // exist yet, so there is no roster standing in it and no shelf to
         // fetch from. It therefore keeps the original shape entirely — every
         // material out of the player's own pack, refused on the spot when
         // they are short, and the structure standing on the tile before the
         // call returns.
         if founding {
+            let mut build_cost = build_cost;
+            build_cost.push((
+                ItemId::from(ids::CORE_FRAGMENT),
+                crate::tuning::HOME_FOUNDING_COST,
+            ));
             let short: Vec<String> = {
                 let player = self.player_entity();
                 let inv = self.world.get::<Inventory>(player).unwrap();
@@ -290,13 +316,9 @@ impl Game {
                     inv.take(item.clone(), *qty);
                 }
             }
+            self.lay_founding_floor(x, y);
             self.spawn_structure(&def, x, y, None);
-            // The Home is what opens base space, and it opens it exactly
-            // where it stands: the pocket is laid around the origin the Home
-            // was just put on.
-            self.lay_starting_pocket();
-            let (ax, ay) = founding_door.expect("founding, so the door tile was resolved above");
-            self.move_anchor_to(ax, ay);
+            self.move_anchor_to(x, y);
             self.log_base(format!(
                 "You deploy a {}. The anchor settles where you stand.",
                 def.name
@@ -348,7 +370,7 @@ impl Game {
         Ok(())
     }
 
-    /// Paints the box spanned by base-space cells `a` and `b` with Wall
+    /// Paints the box spanned by field cells `a` and `b` with Wall
     /// requests — `Mode::WallBox`'s commit, the Excavation plan's box
     /// applied to building.
     ///
@@ -376,7 +398,7 @@ impl Game {
         if !self.has_structure(HOME_STRUCTURE_ID) {
             return Err("Deploy a Home first before building anything else.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
 
         // Row by row, so a call-off returns materials in a fixed order.
         let cells: Vec<(i32, i32)> = (a.1.min(b.1)..=a.1.max(b.1))
@@ -412,7 +434,7 @@ impl Game {
     fn file_walls(&mut self, def: &StructureDef, cells: &[(i32, i32)]) -> WallBox {
         let build_cost = self.structure_build_cost(def);
         let free_build = self.dev_free_build();
-        let party = self.base_pos();
+        let party = self.field_pos();
         let mut painted = WallBox::default();
         for &cell in cells {
             if Some(cell) == party || self.placement_refusal(&[cell], false).is_some() {
@@ -465,7 +487,7 @@ impl Game {
             .is_some_and(|dev| dev.0)
     }
 
-    /// Stands a filed `BuildSite` on base-space `(x, y)`: the one place a new
+    /// Stands a filed `BuildSite` on field `(x, y)`: the one place a new
     /// request's components are written, shared by `place_structure` and
     /// `file_ruins` so a deploy and a rebuild cannot drift — and so both move
     /// a program standing on the footprint aside the same way.
@@ -581,10 +603,7 @@ impl Game {
         let blocked = self.blocked_tiles();
         let structures = self.structure_tiles();
         let sites = self.build_site_tiles();
-        let party = match *self.world.resource::<Locale>() {
-            Locale::Base { x, y } => Some((x, y)),
-            _ => None,
-        };
+        let party = self.field_pos();
         let mut claimed = std::collections::HashSet::new();
         for (body, at) in bodies {
             if !footprint.contains(&(at.x, at.y)) {
@@ -604,7 +623,7 @@ impl Game {
                             && party != Some(cell)
                             && !claimed.contains(&cell)
                     },
-                    |cell| grid.walkable(cell.0, cell.1) && !blocked.walls(cell),
+                    |cell| grid.is_floor(cell.0, cell.1) && !blocked.walls(cell),
                 )
                 .first()
                 .copied()
@@ -957,7 +976,7 @@ impl Game {
         }
     }
 
-    /// Spawns the finished structure `def` on base-space `(x, y)` and
+    /// Spawns the finished structure `def` on field `(x, y)` and
     /// returns it.
     ///
     /// **The one place a structure's component list is written**, and it has
@@ -1126,7 +1145,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
             return Err("That build request is already gone.".into());
         };
@@ -1147,7 +1166,7 @@ impl Game {
     /// Core Fragments.
     ///
     /// The fragments are raw stock; the tile is what they become underfoot.
-    /// `BaseCell::Floor` stays the code's name for the result — this is the
+    /// "Floor" stays the code's name for the result — this is the
     /// player's word for it, the same way "GC Entropy Sweep" is the player's
     /// word for a raid — and no new item exists for it.
     ///
@@ -1160,20 +1179,20 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Not right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let (x, y) = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
-        match self.world.resource::<BaseGrid>().cell(x, y) {
-            Some(base_grid::BaseCell::Open { .. }) => {}
-            Some(base_grid::BaseCell::Floor) => {
-                return Err("This cell is already floored.".into());
-            }
-            // Unreachable in play — solid rock is struck rather than stood
-            // in — and worded for the day a fifth way into base space makes
-            // it reachable rather than left to the `Floor` refusal, which
-            // would send the player looking for a tile they already laid.
-            None => return Err("Cut the entropy out first — nothing stands on raw rock.".into()),
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
+        if self.world.resource::<BaseGrid>().is_floor(x, y) {
+            return Err("This cell is already floored.".into());
+        }
+        if let Some(why) = self.floor_conflict(x, y) {
+            return Err(why.into());
+        }
+        let pending = self.pending_floor();
+        let dig_marked = self.dig_site_at(x, y).is_some();
+        if let Some(refusal) = floor_request_refusal((x, y), self.ground(), &pending, dig_marked) {
+            return Err(refusal.message().into());
         }
 
         let fragment = ItemId::from(ids::CORE_FRAGMENT);
@@ -1207,20 +1226,17 @@ impl Game {
         Ok(())
     }
 
-    /// The pending `BuildSite` standing on base-space `(x, y)`, if any.
+    /// The pending `BuildSite` standing on field `(x, y)`, if any.
     ///
     /// `find_blocking_structure_at`'s counterpart, and it carries the same
-    /// `in_base` gate for the same reason: a build site's `Position` is in
-    /// base space, so a surface-space query must never be answered by one
-    /// whose coordinates happen to coincide. **Point-in-footprint too**,
+    /// gate for the same reason: a build site's `Position` is a field tile,
+    /// so a query from the Stack must never be answered by one whose
+    /// coordinates happen to coincide. **Point-in-footprint too**,
     /// against the footprint of the structure the site *will become* —
     /// `find_blocking_structure_at`'s rule one tick early, since a request
     /// for a Research Station claims the same four cells a standing one
     /// would.
     pub(crate) fn build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         self.base_space_build_site_at(x, y)
     }
 
@@ -1407,7 +1423,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let Some(kind) = self
             .world
             .get::<Structure>(structure)
@@ -1648,7 +1664,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let kind = self
             .world
             .get::<Structure>(structure)
@@ -1763,11 +1779,10 @@ impl Game {
             self.world.despawn(target);
         }
         // `clear_platform` used to run here, restoring the zone surface
-        // under a demolished Home's slab. The base is out of phase now —
-        // its floor is `BaseGrid`, the player's own dug ground, and
+        // under a demolished Home's slab. The floor is `BaseGrid` now, and
         // `Game::has_home`'s own doc already states the design this
         // implies: demolishing the Home takes every structure with it but
-        // leaves the floor standing, so you can be in base space having
+        // leaves the floor standing, so you can be on the floor having
         // just demolished the Home out from under yourself.
 
         // Route through `grant_loot`, not a direct `add`: demolishing a Home
@@ -1958,16 +1973,13 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }
-        // The party's *base* cell, not their `Position` — that is pinned to
-        // the anchor tile on the zone surface the whole time they are in
-        // here, and the machine being worked stands in base space.
         let (hx, hy) = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
+            .field_pos()
+            .expect("require_field passed, so the party is on the field");
         let here = Position { x: hx, y: hy };
         let structure_pos = *self
             .world

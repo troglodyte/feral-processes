@@ -1226,18 +1226,32 @@ fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 2);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    // A cut corridor running off the pocket's edge, mined and never
-    // floored — open ground that is walkable but not the base's footprint.
-    // Without it `walkable` and `is_floor` answer the same on every tile the
-    // fixture owns, and this test would pass against either rule.
+    // A corridor of open field running off the floor's edge — ground that is
+    // walkable but not the base's footprint. Without it walkable and floor
+    // answer the same on every tile the fixture owns, and this test would
+    // pass against either rule.
     {
-        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
         for x in 4..8 {
-            grid.open(x, 3, 0);
+            game.world.resource_mut::<WorldMap>().set_override(
+                x,
+                3,
+                Tile {
+                    biome: Biome::OpenGrid,
+                    walkable: true,
+                    rock_shade: None,
+                },
+            );
+            game.world
+                .resource_mut::<crate::base_grid::BaseGrid>()
+                .revert(x, 3);
         }
         assert!(
-            grid.walkable(4, 3) && !grid.is_floor(4, 3),
-            "precondition: the corridor is walkable rock, not floor"
+            game.ground().walkable(4, 3)
+                && !game
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(4, 3),
+            "precondition: the corridor is walkable ground, not floor"
         );
     }
 
@@ -1702,7 +1716,7 @@ fn pinning_a_posted_program_frees_its_task_and_walks_to_the_pen() {
 ///
 /// Asked from **inside the base**, which is where an owned program's tile
 /// is a tile: a `Tamed` `Position` is a base-space cell, so neither view
-/// answers for one from the open grid (`Game::stands_in_base_space`, and
+/// answers for one from the open grid (`Game::stands_inside_the_base`, and
 /// `a_program_standing_in_the_base_is_not_drawn_on_the_zone_surface` for
 /// the other half of that).
 #[test]
@@ -1735,7 +1749,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     // names it. `place_home` stands the Home on base space's origin, which
     // is where `stand_in_base` puts the party, so the ray leaves from the
     // Home's tile and the first thing on it is the program.
-    let here = game.base_pos().expect("the party is in base space");
+    let here = game.field_pos().expect("the party is in base space");
     let mut pos = game.world.get_mut::<Position>(idle).unwrap();
     pos.x = here.0 + 2;
     pos.y = here.1;
@@ -2440,7 +2454,7 @@ fn standing_jobs_and_digs_still_come_after_every_order() {
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 3);
     game.set_standing_job(node, true, false).unwrap();
-    let wall = (crate::tuning::STARTING_POCKET_HALF_WIDTH + 1, 0);
+    let wall = (TEST_POCKET_HALF_WIDTH + 1, 0);
     game.toggle_mark_box(wall, wall, None);
     let site = game
         .dig_site_at(wall.0, wall.1)
@@ -2552,7 +2566,7 @@ fn a_standing_order_re_arms_after_the_shelf_drains() {
 
     // Beside the machine rather than on the exit cell: collecting reads the
     // party's *base* cell and takes from its orthogonal neighbours.
-    game.world.insert_resource(Locale::Base { x: 1, y: 0 });
+    stand_in_base_at(&mut game, 1, 0);
     assert!(
         !take_everything_adjacent(&mut game).is_empty(),
         "precondition: the shelf actually drained"
@@ -3912,9 +3926,9 @@ fn a_stations_own_floor_cell_does_not_count_as_a_dig_marks_only_face() {
     place_now(&mut game, "station_face_fixture", 2, 0).unwrap();
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
 
-    // `(4, 0)` is solid rock just past the fixture's own floor cell at
-    // `(3, 0)`. Its other three orthogonal neighbours are reverted to solid
-    // too, so `(3, 0)` — the fixture's own footprint — is the *only* face
+    // `(4, 0)` is unfloored ground just past the fixture's own floor cell
+    // at `(3, 0)`. Its other three orthogonal neighbours are unfloored too,
+    // and a body stands only on floor, so `(3, 0)` — the fixture's own footprint — is the *only* face
     // `has_station` could ever offer it.
     {
         let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
@@ -3925,8 +3939,8 @@ fn a_stations_own_floor_cell_does_not_count_as_a_dig_marks_only_face() {
     }
     game.toggle_mark_box((4, 0), (4, 0), None);
     assert!(
-        game.world.resource::<base_grid::BaseGrid>().is_solid(4, 0),
-        "precondition: the marked cell is solid rock, not floor"
+        !game.world.resource::<base_grid::BaseGrid>().is_floor(4, 0),
+        "precondition: the marked cell is not floor"
     );
 
     let worker = spawn_tamed(&mut game, 10, 3);

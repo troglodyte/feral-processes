@@ -120,9 +120,8 @@
   outer cells are despawned on a shrink, so a `TownPatrol` tether and
   `towns_by_tile` name the centre by `With<SettlementCentre>`; the radius
   never drops below 1, so the centre always exists. Displacement moves
-  surface bodies only (`stands_in_base_space` skips a besieger or a
-  base-space caravan whose coordinates collide by number), carries the
-  player's base-space pin with a displaced anchor, draws no `GameRng`, and
+  field bodies, never the base — a footprint leaves floor cells out and
+  `standable_near` skips floor (ADR 0032) — draws no `GameRng`, and
   never touches an outpost — `found_outpost` refuses within
   `SETTLEMENT_FOOTPRINT_MAX_RADIUS` of a town instead.
 - **A settlement is the fourth arm of `move_player`'s bump ladder, and the
@@ -226,7 +225,7 @@
   `settlement_reach` (`radius + 1` from the centre) — so the cue asks that
   same question. The filter is shared with displacement, so it also refuses
   the player's tile, the anchor, a caravan, a trap and an outpost.
-  **Neither travel door calls `require_surface`**: the Relay is in base
+  **Neither travel door calls `require_field`**: the Relay is in base
   space, so it would refuse the only place an outbound trip can start.
 - **The town page's aid sentences are `pub const` in the engine because the
   census that measures them lives in gui and cannot build a `Game`.**

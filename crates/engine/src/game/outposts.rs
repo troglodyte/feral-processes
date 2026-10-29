@@ -23,14 +23,14 @@ use crate::tuning::{
     OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
 use crate::views::{OutpostCrewRow, OutpostMark, OutpostReport, OutpostYieldRow, TransferRow};
-use crate::world::{Biome, WorldMap};
+use crate::world::WorldMap;
 
 impl Game {
     /// Founds an outpost at `tile` — design spec §9's refusal ladder.
     /// `Game::use_item` is the one caller, and does not take a unit out of
     /// `Inventory` until this returns `Ok`.
     pub fn found_outpost(&mut self, tile: (i32, i32)) -> Result<(), String> {
-        self.require_surface()?;
+        self.require_field()?;
         if self.world.resource::<OutpostDb>().def().is_none() {
             return Err("No outpost design is known.".into());
         }
@@ -39,12 +39,15 @@ impl Game {
         if !map_tile.walkable {
             return Err("Nothing would hold an outpost there.".into());
         }
-        if map_tile.biome == Biome::Platform {
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        if floor.is_floor(x, y) {
             return Err("The base's own ground holds no outpost.".into());
         }
         let biome = map_tile.biome;
-        if let Some((ax, ay)) = self.anchor_position()
-            && (x - ax).abs().max((y - ay).abs()) < OUTPOST_MIN_ANCHOR_DISTANCE
+        // Measured to the base's nearest floor, not its anchor: a base grown
+        // toward a spot is nearer it (ADR 0032).
+        if crate::game::base::footprint::distance_to_floor(floor, tile)
+            .is_some_and(|d| d < OUTPOST_MIN_ANCHOR_DISTANCE)
         {
             return Err("That's still within reach of the base. Walk further out.".into());
         }
@@ -182,7 +185,7 @@ impl Game {
     /// spec §6.
     ///
     /// **`Position` is deliberately left untouched.** A recalled program
-    /// keeps whatever base-space `Position` it held before being posted, and
+    /// keeps whatever field `Position` it held before being posted, and
     /// `drift_idle_staff` walks it from there on its very next beat: if that
     /// tile is still laid floor, `wander_step` continues from it directly.
     /// `game::base::work_orders::entry_tile` — a ring around the Home — is
@@ -753,7 +756,11 @@ mod tests {
                     }
                     let (x, y) = (ax + dx, ay + dy);
                     let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
-                    if !tile.walkable || tile.biome == Biome::Platform {
+                    let floor = game
+                        .world
+                        .resource::<crate::base_grid::BaseGrid>()
+                        .is_floor(x, y);
+                    if !tile.walkable || floor {
                         continue;
                     }
                     if game.find_nest_at(x, y).is_some()
@@ -821,28 +828,30 @@ mod tests {
         let mut game = game(3);
         let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
         // `enter_stack` drops the party down wherever they are standing —
-        // no real link entity is needed to exercise `require_surface`.
+        // no real link entity is needed to exercise `require_field`.
         let player = game.player_entity();
         let pos = *game.world.get::<Position>(player).unwrap();
         game.enter_stack(pos.x, pos.y);
         assert!(game.is_underground());
         assert!(game.found_outpost(tile).is_err());
-        // Deleted-fix check: without `require_surface`, this same call
+        // Deleted-fix check: without `require_field`, this same call
         // would succeed underground, which is exactly the bug this guards.
     }
 
     #[test]
     fn refuses_when_the_kit_is_still_in_the_pack_on_every_refusal() {
         let mut game = game(4);
-        // The player starts standing at the anchor itself, well inside
-        // `OUTPOST_MIN_ANCHOR_DISTANCE` — that refusal is enough on its own.
+        // The player stands on the base's own floor — that refusal is enough
+        // on its own.
+        let (ax, ay) = game.anchor_position().unwrap();
+        game.dev_lay_floor([(ax, ay)]);
         let id = kit_id(&game);
         let player = game.player_entity();
         game.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(id.clone(), 1);
-        // Too close to the anchor — a refusal that leaves the kit untouched.
+        // On the base's floor — a refusal that leaves the kit untouched.
         game.use_item(&id);
         assert_eq!(
             game.world.get::<Inventory>(player).unwrap().count(&id),
@@ -894,34 +903,75 @@ mod tests {
     }
 
     #[test]
-    fn refuses_within_min_anchor_distance() {
+    fn refuses_within_min_distance_of_the_floor() {
         let mut game = game(7);
-        // The anchor's own tile is guaranteed open ground (the party
-        // started there) and is distance 0 from itself — well inside the
-        // minimum, with no dependence on this seed's generated terrain
-        // elsewhere. Deleted-fix check: without the distance guard this
-        // same call succeeds, since nothing else about the tile refuses it.
-        let tile = game.anchor_position().unwrap();
-        assert!(game.found_outpost(tile).is_err());
+        let (ax, ay) = game.anchor_position().unwrap();
+        game.dev_lay_floor([(ax, ay)]);
+        let tile = (ax + 1, ay);
+        open_ground(&mut game, tile);
+        // Deleted-fix check: without the distance guard this same call
+        // succeeds, since nothing else about the tile refuses it.
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("That's still within reach of the base. Walk further out.".to_string())
+        );
+    }
+
+    /// The minimum distance is to the nearest floor cell, not the anchor: a
+    /// base grown toward a spot is nearer it (ADR 0032). The same tile is
+    /// accepted with only the anchor floored and refused once a floor cell
+    /// reaches within the minimum of it.
+    #[test]
+    fn the_outpost_distance_is_measured_to_the_footprint() {
+        let far = |game: &mut Game| {
+            let (ax, ay) = game.anchor_position().unwrap();
+            game.dev_lay_floor([(ax, ay)]);
+            let tile = (ax + OUTPOST_MIN_ANCHOR_DISTANCE + 5, ay);
+            open_ground(game, tile);
+            (ax, ay, tile)
+        };
+        let mut game = game(17);
+        let (_, _, tile) = far(&mut game);
+        assert_eq!(
+            game.found_outpost(tile),
+            Ok(()),
+            "far from the anchor's floor"
+        );
+
+        let mut game = self::game(17);
+        let (ax, ay, tile) = far(&mut game);
+        game.dev_lay_floor([(ax + 6, ay)]);
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("That's still within reach of the base. Walk further out.".to_string()),
+            "a floor cell grown toward the tile brings the base within reach"
+        );
     }
 
     #[test]
-    fn refuses_on_platform_biome() {
+    fn refuses_on_the_bases_floor() {
         let mut game = game(8);
         let (ax, ay) = game.anchor_position().unwrap();
         let tile = (ax + OUTPOST_MIN_ANCHOR_DISTANCE, ay);
+        open_ground(&mut game, tile);
+        game.dev_lay_floor([tile]);
+        assert_eq!(
+            game.found_outpost(tile),
+            Err("The base's own ground holds no outpost.".to_string())
+        );
+    }
+
+    /// Overrides `tile` to plain walkable ground, so a test's tile does not
+    /// depend on the seed's terrain.
+    fn open_ground(game: &mut Game, tile: (i32, i32)) {
         game.world.resource_mut::<WorldMap>().set_override(
             tile.0,
             tile.1,
             crate::world::Tile {
-                biome: Biome::Platform,
+                biome: crate::world::Biome::OpenGrid,
                 walkable: true,
                 rock_shade: None,
             },
-        );
-        assert_eq!(
-            game.found_outpost(tile),
-            Err("The base's own ground holds no outpost.".to_string())
         );
     }
 
@@ -1138,15 +1188,7 @@ mod tests {
         let mut game = game(21);
         let tile = founded_outpost_with_player_standing_there(&mut game);
         let program = staff(&mut game);
-        // `add_companion` refuses outside base space (`require_base`), so
-        // the party join has to happen with the locale swapped in and back
-        // out — `tests::support::stand_in_base`'s effect, restated for
-        // `staff`'s own reason above.
-        game.world
-            .insert_resource(crate::resources::Locale::Base { x: 0, y: 0 });
         game.add_companion(program).unwrap();
-        game.world
-            .insert_resource(crate::resources::Locale::Surface);
 
         let err = game
             .post_to_outpost(tile, program)

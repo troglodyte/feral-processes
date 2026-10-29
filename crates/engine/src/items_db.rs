@@ -221,8 +221,8 @@ pub struct ItemDef {
     #[serde(default)]
     pub grants: Option<crate::abilities::AbilityId>,
     /// Marks this item as a rest charge: one unit is spent by `Game::rest`
-    /// to power down anywhere outside base space. Inside the base a rest is
-    /// free and spends nothing, so this is the field half of the mechanic.
+    /// to power down anywhere off the base floor. On the floor a rest is
+    /// free and spends nothing, so this is the away half of the mechanic.
     ///
     /// A flag rather than a price, and on the *item* rather than in
     /// `tuning/`, because the cost used to live on a structure's

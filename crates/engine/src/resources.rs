@@ -103,7 +103,7 @@ pub struct GameClock {
     pub tick: u64,
 }
 
-/// Whether the player's own step into solid base-space rock is a swing or a
+/// Whether the player's own step into solid field rock is a swing or a
 /// refusal.
 ///
 /// **Off when a run starts.** A step into rock used to be a swing
@@ -786,12 +786,12 @@ pub enum EffectKind {
     Destroyed,
     /// A blow landed in a staff tantrum. **Draws identically to `Hit`** — the
     /// same sparks, the same duration, the same red — and exists only so gui
-    /// can fire a sound cue for it. Teaching gui to sound every base-space
+    /// can fire a sound cue for it. Teaching gui to sound every field
     /// `Hit` instead would be less code and would also give raids audio they
     /// have never had, which is a change to a shipped feature nobody asked
     /// for.
     Brawl,
-    /// A swing landed on base-space rock — the player's bump or a posted
+    /// A swing landed on field rock — the player's bump or a posted
     /// digger's cycle alike, since both go through `Game::strike_rock`.
     ///
     /// **Draws nothing**, which makes it the one kind here that is purely a
@@ -803,7 +803,7 @@ pub enum EffectKind {
     ///
     /// It rides this queue rather than a sound queue of its own because this
     /// is the one channel the engine already has for a tick-driven
-    /// base-space cue, and a new `Resource` beside it would shift bevy's
+    /// field cue, and a new `Resource` beside it would shift bevy's
     /// query iteration order for the sake of one clip.
     Mine,
 }
@@ -825,7 +825,7 @@ pub struct Brawl {
     pub taken: i32,
 }
 
-/// Every fight currently open in base space, and who is too recently out of
+/// Every fight currently open in the field, and who is too recently out of
 /// one to start another.
 ///
 /// Deliberately not serialized, `EffectQueue`'s reason. The cooldown is
@@ -869,7 +869,7 @@ impl EffectQueue {
     }
 }
 
-/// A program walking from one base-space cell to another, for a frontend to
+/// A program walking from one field cell to another, for a frontend to
 /// animate.
 ///
 /// **Purely cosmetic.** Nothing in the simulation is standing at any of
@@ -918,7 +918,7 @@ impl TransitQueue {
 }
 
 /// A conversation that fired, for a frontend to mark over the speaker. In
-/// base-space cells, like `TransitCue`.
+/// field cells, like `TransitCue`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SpeechCue {
     pub cell: (i32, i32),
@@ -1783,7 +1783,7 @@ impl BattleTimeline {
 #[derive(Resource, Default, Clone)]
 pub struct Party(pub Vec<Entity>);
 
-/// Where the player has been standing in base space and for how many
+/// Where the player has been standing in the field and for how many
 /// consecutive ticks, so the Refit Bench can tell a stop from a walk past.
 /// Not a save field: the wait is two ticks and a load restarts it harmlessly.
 #[derive(Resource, Default, Clone, Debug)]
@@ -1945,8 +1945,8 @@ impl ZoneLevel {
     }
 }
 
-/// Which of the three spaces the player is standing in — the zone surface,
-/// down inside the Stack, or out of phase in base space — and where in it.
+/// Which of the two spaces the player is standing in — the field, or down
+/// inside the Stack — and where in it. The base is on the field (ADR 0032).
 ///
 /// The Stack coordinates live *here* rather than on the player's
 /// `Position` component, and that is the load-bearing decision of the whole
@@ -1963,11 +1963,6 @@ impl ZoneLevel {
 /// free: the base is where it was left, cronjobs keep paying out, and a raid
 /// can land while the player is four frames down.
 ///
-/// `Base` is the same arrangement pointed the other way, and the reason
-/// `Game::require_surface` had to be split: "not in the Stack" and "on the
-/// surface proper" were one condition while there were two locales, and eleven
-/// guarded actions had never had to say which they meant. See
-/// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`.
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Locale {
     #[default]
@@ -1991,18 +1986,6 @@ pub enum Locale {
         /// climbing back up from depth 1.
         entrance: (i32, i32),
     },
-    /// Out of phase, inside the base's own pocket dimension, and where in
-    /// it.
-    ///
-    /// The same trick as `Stack`, for the same reason: the coordinates live
-    /// here and the player's `Position` stays pinned to the anchor tile
-    /// they stepped through, so nothing on the zone surface has to know
-    /// base space exists.
-    ///
-    /// No `entrance` beside them, unlike `Stack`. There is exactly one door
-    /// per zone, auto-placed at the zone's spawn point, so the way back out
-    /// is a query for it rather than a field that could disagree with one.
-    Base { x: i32, y: i32 },
 }
 
 /// How loud the party has been in the stack they are currently in.
@@ -2267,6 +2250,19 @@ pub struct FrameMemory {
 /// record here describes a frame that no longer exists.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
+
+/// The tier each Stack link was first entered at, keyed by the link's
+/// surface tile.
+///
+/// Survives the `StackMemory` wipe in `Game::enter_next_zone` on purpose:
+/// that wipe is what lets a link re-tier, and this is what exempts the
+/// links the party has already walked. `Game::frame_spec` reads
+/// `entered_tier.unwrap_or(zone)`, so a link never entered carves at the
+/// current tier and an entered one keeps its maze. Keyed per link rather
+/// than per frame, so a deeper frame first walked after a breach still
+/// belongs to the stack the party entered.
+#[derive(Resource, Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnteredTiers(pub BTreeMap<(i32, i32), u32>);
 
 /// Which world chunks have had their wild population placed — see
 /// `Game::ensure_local_population`. A chunk in here is one the sector has

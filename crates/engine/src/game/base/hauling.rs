@@ -240,7 +240,7 @@ pub(crate) fn nearest_depot(
         .or_else(|| ranked.first().copied())
 }
 
-/// Every cell in base space a walk has to reckon with: the tile each
+/// Every cell in the field a walk has to reckon with: the tile each
 /// deployed structure stands on, and the tile each body the sim walks is
 /// standing in — kept apart, in `Occupancy`, because the two are not the
 /// same obstacle.
@@ -250,7 +250,7 @@ pub(crate) fn nearest_depot(
 /// a base a program walks through while its owner walks around stops reading
 /// as a physical place.
 ///
-/// **A body is squeezed past, never stopped on.** Every walk in base space
+/// **A body is squeezed past, never stopped on.** Every walk in the field
 /// stops at the first tile its arrival test answers for, so with nothing in
 /// the way that is the *same* tile for everyone approaching from the same
 /// side; the save that made bodies count had 71 downed programs standing on
@@ -293,7 +293,7 @@ pub(crate) fn blocked_tiles(
     }
 }
 
-/// What stands in base space, split by what it does to a walk: `walls` (a
+/// What stands in the field, split by what it does to a walk: `walls` (a
 /// structure's anchor) are never crossed, `bodies` are crossed at
 /// `tuning::SQUEEZE_EXTRA_TICKS` extra and never stopped on.
 /// `blocked_tiles` is the one constructor outside tests.
@@ -366,7 +366,7 @@ impl Occupancy {
         start: (i32, i32),
         arrives: impl Fn((i32, i32)) -> bool,
     ) -> Option<u32> {
-        if !grid.walkable(cell.0, cell.1) {
+        if !grid.is_floor(cell.0, cell.1) {
             return None;
         }
         if cell == start {
@@ -513,7 +513,7 @@ pub(crate) fn station_candidates(
         // one of its own floor cells.
         .filter(|p| !footprint_set.contains(&(p.x, p.y)))
         .filter(|p| seen.insert((p.x, p.y)))
-        .filter(|p| grid.walkable(p.x, p.y) && !taken((p.x, p.y)))
+        .filter(|p| grid.is_floor(p.x, p.y) && !taken((p.x, p.y)))
         .collect();
     candidates.sort_by_key(|p| (p.x, p.y));
     candidates
@@ -808,7 +808,7 @@ pub struct HaulLookups<'w> {
     board: ResMut<'w, crate::alerts::AlertBoard>,
 }
 
-/// A body standing in base space that holds no post — what
+/// A body standing in the field that holds no post — what
 /// `HaulGround::idle` reads off each one, aliased for `Hauler`'s
 /// `type_complexity` reason.
 type Bystander = (Entity, &'static Position, &'static Tamed);

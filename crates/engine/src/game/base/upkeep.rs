@@ -200,14 +200,13 @@ impl Game {
     }
 
     /// Drains every `TransitCue` queued since the last call — `take_effects`'
-    /// counterpart for a body walking across base space rather than something
+    /// counterpart for a body walking across the field rather than something
     /// happening on one tile.
     ///
     /// A frontend that draws no walks must still call it so the queue does
-    /// not sit at its cap, and one that is not currently drawing base space
-    /// drops what it gets: a cue names base-space cells, and painting it over
-    /// the zone surface is the cross-space aliasing `base_pos` already gates
-    /// raid flashes against.
+    /// not sit at its cap, and one that is not currently drawing the field
+    /// drops what it gets: a cue names field cells, which mean nothing in the
+    /// Stack.
     pub fn take_transits(&mut self) -> Vec<crate::resources::TransitCue> {
         self.world
             .resource_mut::<crate::resources::TransitQueue>()
@@ -216,8 +215,8 @@ impl Game {
 
     /// Drains every `SpeechCue` queued since the last call — `take_transits`'
     /// counterpart for a conversation. The same two duties hold: a frontend
-    /// that draws no marks must still call it, and one not drawing base space
-    /// drops what it gets, since a cue names base-space cells.
+    /// that draws no marks must still call it, and one not drawing the field
+    /// drops what it gets, since a cue names field cells.
     pub fn take_speech(&mut self) -> Vec<crate::resources::SpeechCue> {
         self.world
             .resource_mut::<crate::resources::SpeechQueue>()
@@ -229,8 +228,8 @@ impl Game {
     ///
     /// A frontend that draws no bolts must still call it, or the queue sits
     /// at its cap forever. A cue names *board* cells, so one drawn anywhere
-    /// but the tactical pane is the same cross-space aliasing `take_transits`
-    /// warns about one space over.
+    /// but the tactical pane paints the wrong cells, as `take_transits` warns
+    /// about for field cues.
     pub fn take_bolts(&mut self) -> Vec<crate::resources::BoltCue> {
         self.world
             .resource_mut::<crate::resources::BoltQueue>()
@@ -321,7 +320,7 @@ impl Game {
     }
 
     /// What one town contributes to the fold above — its band's answer if it
-    /// is near enough to the anchor to station anyone, and zero otherwise.
+    /// is near enough to the base's floor to station anyone, and zero otherwise.
     ///
     /// Split out because the town page has to say whether *this* town
     /// garrisons, and `garrison_defense` returns a clamped sum that cannot
@@ -329,9 +328,6 @@ impl Game {
     /// check, so a new condition on the fold cannot leave the page promising
     /// a detachment that no longer arrives.
     pub(crate) fn town_garrisons(&self, key: crate::settlements::SettlementKey) -> u32 {
-        let Some((ax, ay)) = self.anchor_position() else {
-            return 0;
-        };
         let Some(tile) = self
             .world
             .resource::<crate::resources::Settlements>()
@@ -341,7 +337,9 @@ impl Game {
         else {
             return 0;
         };
-        if (tile.0 - ax).abs().max((tile.1 - ay).abs()) > crate::tuning::SETTLEMENT_GARRISON_RADIUS
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        if crate::game::base::footprint::distance_to_floor(floor, tile)
+            .is_none_or(|d| d > crate::tuning::SETTLEMENT_GARRISON_RADIUS)
         {
             return 0;
         }
@@ -354,7 +352,8 @@ impl Game {
     /// author and the log line has to name it.
     ///
     /// Two filters and a discovery rule. The radius is Chebyshev to the
-    /// anchor, as the garrison's is. The band is asked through
+    /// nearest floor cell (`footprint::distance_to_floor`), as the
+    /// garrison's is. The band is asked through
     /// `Standing::sends_raiders`, never restated here. And a town whose
     /// tile has never been resolved is absent from `Settlements` entirely,
     /// so it is excluded by construction rather than by a third check —
@@ -365,10 +364,8 @@ impl Game {
     /// a save round trip. `town_raid_check` picks from this with one draw
     /// and would otherwise be seed-unstable.
     pub(crate) fn raiding_towns(&self) -> Vec<crate::settlements::SettlementKey> {
-        let Some(anchor) = self.anchor_position() else {
-            return Vec::new();
-        };
-        self.raiders_near(anchor)
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        self.raiders_within(|tile| crate::game::base::footprint::distance_to_floor(floor, tile))
     }
 
     /// `raiding_towns`'s own geometry, generalised to any center — an
@@ -376,16 +373,22 @@ impl Game {
     /// tile rather than the anchor, and this is what lets it share the
     /// radius and the `sends_raiders` filter rather than restate them.
     fn raiders_near(&self, center: (i32, i32)) -> Vec<crate::settlements::SettlementKey> {
+        self.raiders_within(|tile| Some((tile.0 - center.0).abs().max((tile.1 - center.1).abs())))
+    }
+
+    /// The towns `distance` puts within `SETTLEMENT_RAID_RADIUS` that send
+    /// raiders; `None` from `distance` is out of range.
+    fn raiders_within(
+        &self,
+        distance: impl Fn((i32, i32)) -> Option<i32>,
+    ) -> Vec<crate::settlements::SettlementKey> {
         let near: Vec<crate::settlements::SettlementKey> = self
             .world
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
             .filter(|(_, known)| {
-                (known.tile.0 - center.0)
-                    .abs()
-                    .max((known.tile.1 - center.1).abs())
-                    <= crate::tuning::SETTLEMENT_RAID_RADIUS
+                distance(known.tile).is_some_and(|d| d <= crate::tuning::SETTLEMENT_RAID_RADIUS)
             })
             .map(|(key, _)| *key)
             .collect();
@@ -963,12 +966,10 @@ impl Game {
     /// lowest-tiled one that actually contributes `raid_defense`.
     ///
     /// **A `Structure` and never the anchor.** A `VisualEffect` names a
-    /// base-space cell (`render/base.rs` draws the queue only while `base_pos`
-    /// is `Some`), and the anchor is a zone-surface fixture whose tile is also
-    /// the party's pinned `Position` out of phase — so a flash on it paints
-    /// the player's own cell, which is exactly the cross-space aliasing that
-    /// gate was added to close.
-    /// `seam:a-raids-flash-is-base-space-too-and-the-pane-has-to-say-so`
+    /// field cell (`render/base.rs` draws the queue only while `field_pos`
+    /// is `Some`), and the anchor is the tile the Home stands on, so a flash
+    /// on it would paint over the player's own cell when they stand home.
+    /// `seam:a-raids-flash-is-field-too-and-the-pane-has-to-say-so`
     /// records the ambient sweep suppressing its flash rather than moving it
     /// there; this moves it onto something that is genuinely in the right
     /// space instead.

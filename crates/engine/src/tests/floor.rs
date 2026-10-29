@@ -378,7 +378,7 @@ fn name_of(game: &Game, item: &str) -> String {
 }
 
 #[test]
-fn a_floor_item_in_base_space_has_a_view_row_naming_it() {
+fn a_floor_item_inside_the_base_has_a_view_row_naming_it() {
     let mut g = game();
     stand_in_base_at(&mut g, 0, 0);
     put_item(&mut g, 2, 1, core_unit());
@@ -390,9 +390,10 @@ fn a_floor_item_in_base_space_has_a_view_row_naming_it() {
 }
 
 #[test]
-fn a_floor_item_is_not_a_view_row_on_a_zone_surface() {
+fn a_floor_item_is_not_a_view_row_underground() {
     let mut g = game();
     put_item(&mut g, 2, 1, core_unit());
+    descend(&mut g);
     assert!(g.floor_items().is_empty());
 }
 
@@ -622,7 +623,7 @@ fn a_program_with_no_floor_goes_to_the_downed_store_then_a_rack() {
 }
 
 fn party_cell(g: &Game) -> (i32, i32) {
-    g.base_pos().expect("standing in base space")
+    g.field_pos().expect("standing in base space")
 }
 
 /// The Home stands on the origin, so the party stands off it where its own

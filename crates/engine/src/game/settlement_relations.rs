@@ -309,7 +309,7 @@ impl Game {
     /// The gate is `Game::dispatch_reach`, the door a squad and a route
     /// already leave through, so the party has to be standing in the base
     /// they are departing from. That is also why this does *not* call
-    /// `require_surface`: the Relay is in base space, so a surface check
+    /// `require_field`: the Relay is in the field, so a surface check
     /// would refuse the only place the trip can start.
     ///
     /// The trip spends the ticks the walk would have — `move_player` costs

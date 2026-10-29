@@ -198,7 +198,7 @@ impl Game {
     /// through a Stack frame.
     ///
     /// Refused during a battle and after game over, like any other map
-    /// action — but never by `require_surface`. A `FieldBuff` reaches no
+    /// action — but never by `require_field`. A `FieldBuff` reaches no
     /// zone-map state, so it works underground exactly as it does on the
     /// surface; and the two movement routines have the *opposite* problem
     /// from the one that guard exists for. They read and write

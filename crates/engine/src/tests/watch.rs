@@ -22,7 +22,7 @@ fn base(seed: u32) -> Game {
 /// A tamed program the scheduler treats as base staff, standing at `offset`
 /// from base space's origin.
 fn staffer(game: &mut Game, dx: i32, dy: i32) -> Entity {
-    let (ox, oy) = game.base_pos().expect("call from inside base space");
+    let (ox, oy) = game.field_pos().expect("call from inside base space");
     let species = game
         .species_defs()
         .into_iter()
@@ -60,7 +60,7 @@ fn staffer(game: &mut Game, dx: i32, dy: i32) -> Entity {
 #[test]
 fn an_idle_staff_program_can_be_watched_where_it_stands() {
     let mut game = base(1);
-    let origin = game.base_pos().unwrap();
+    let origin = game.field_pos().unwrap();
     let staff = staffer(&mut game, 2, -1);
 
     assert_eq!(
@@ -79,7 +79,7 @@ fn an_idle_staff_program_can_be_watched_where_it_stands() {
 #[test]
 fn a_pinned_program_can_be_watched_where_it_stands() {
     let mut game = base(1);
-    let origin = game.base_pos().unwrap();
+    let origin = game.field_pos().unwrap();
     let subject = staffer(&mut game, 3, 1);
     let station = game.world.spawn_empty().id();
     game.world
@@ -103,7 +103,7 @@ fn a_pinned_program_can_be_watched_where_it_stands() {
 #[test]
 fn a_worker_standing_at_its_post_can_still_be_watched() {
     let mut game = base(1);
-    let (ox, oy) = game.base_pos().unwrap();
+    let (ox, oy) = game.field_pos().unwrap();
     let post = game
         .world
         .spawn((
@@ -192,23 +192,6 @@ fn a_program_the_sim_never_walks_cannot_be_watched() {
     );
 }
 
-/// Staff stand in base space and the map draws one space at a time, so
-/// there is nothing to watch from the surface.
-#[test]
-fn nothing_can_be_watched_from_outside_base_space() {
-    let mut game = base(1);
-    let staff = staffer(&mut game, 1, 0);
-    assert!(game.watch_position(staff).is_some());
-
-    game.leave_base().expect("the party can always step out");
-    assert_eq!(
-        game.watch_position(staff),
-        None,
-        "a base-space cell drawn over the zone surface is the aliasing every \
-         other map-facing view already refuses"
-    );
-}
-
 /// A program that has been dissolved, or was never one, answers nothing
 /// rather than panicking — this is the read the camera makes every frame.
 #[test]
@@ -237,7 +220,7 @@ fn a_program_that_is_gone_cannot_be_watched() {
 #[test]
 fn the_centred_views_are_centred_where_they_are_told() {
     let mut game = base(1);
-    let (ox, oy) = game.base_pos().unwrap();
+    let (ox, oy) = game.field_pos().unwrap();
     let staff = staffer(&mut game, 3, 2);
     let watched = game.watch_position(staff).unwrap();
 

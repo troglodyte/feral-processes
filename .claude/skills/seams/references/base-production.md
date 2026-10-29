@@ -132,7 +132,7 @@
   so its row could never move off zero). A banked pool the player has none
   of is not seeded. Ordered by item id, never by quantity; a claim about the
   base and not about where the party stands, so it needs no
-  `require_surface`. The draw is `hud::stock_block`, `compass_block`'s
+  `require_field`. The draw is `hud::stock_block`, `compass_block`'s
   sibling and built its way: a block inside the pane, from
   `layout::strip_inset` because THREAT's quad hangs into it. **Both budgets
   are measured** — a name past `NAME_COLUMN_CHARS` is cut with an ellipsis

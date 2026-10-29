@@ -6,7 +6,6 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::items::ItemId;
-use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 use feral_processes_engine::settlements::SettlementKey;
 
@@ -67,7 +66,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
     });
     // One tile clear of the Home, the Relay and the Depot — `deploy_relay`'s
     // own note in the engine suite.
-    data.locale = Locale::Base { x: 0, y: -1 };
+    stand_save_on_field(&mut data, 0, -1);
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);

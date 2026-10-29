@@ -99,7 +99,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't place that right now.".into());
         }
-        self.require_surface()?;
+        self.require_field()?;
         let player = self.player_entity();
         let name = self.item_name(item).to_string();
         if self
@@ -167,7 +167,7 @@ impl Game {
     /// a taken decision: the trap is on the ground in front of the player
     /// and the only way to be holding one again is to compile it.
     pub fn destroy_trap(&mut self, dx: i32, dy: i32) -> Result<(), String> {
-        self.require_surface()?;
+        self.require_field()?;
         let player = self.player_entity();
         let pos = *self
             .world
@@ -434,7 +434,7 @@ impl Game {
         crate::game::base::hauling::footprint_tiles(rows.into_iter().map(|(_, p, side)| (p, side)))
     }
 
-    /// Every cell a walk in base space refuses — every deployed structure's
+    /// Every cell a walk in the field refuses — every deployed structure's
     /// **anchor** and every body standing in one — from the `Game` side.
     /// `haul_step_system` builds the same set from its own queries; both go
     /// through `hauling::blocked_tiles` so the two cannot disagree about what
@@ -486,7 +486,7 @@ impl Game {
         }
     }
 
-    /// Every body standing in base space, with the cell it is standing in.
+    /// Every body standing in the field, with the cell it is standing in.
     ///
     /// **The `Game`-side half of `party::walks_the_base`**, which is where the
     /// rule itself lives and why this is a list rather than a predicate: the
@@ -495,9 +495,8 @@ impl Game {
     /// `drift_idle_staff` folds them into a tally to find out who is sharing.
     ///
     /// A program whose `Position` is the surface tile it was beaten on is held
-    /// out by the rule, not by a coordinate test: base space and the zone
-    /// surface alias onto each other freely — both origins are usually
-    /// `(0, 0)` — so a stale tile is indistinguishable from a real one by
+    /// out by the rule, not by a coordinate test: a stale tile can be a real
+    /// floor tile, so it is indistinguishable from a standing body's by
     /// looking at it.
     pub(crate) fn base_bodies(&mut self) -> Vec<(Entity, Position)> {
         let mut query = self
@@ -516,33 +515,14 @@ impl Game {
             .collect()
     }
 
-    /// The `Structure` standing at `(x, y)`, if any — and `None` outright
-    /// whenever the party is not in base space, regardless of what `(x, y)`
-    /// numerically is.
+    /// The `Structure` standing at `(x, y)`, if any.
     ///
-    /// **`Structure` is the space tag** (see
-    /// `seam:structure-is-the-space-tag`): every structure stands in
-    /// `base_grid::BaseGrid`'s coordinate space, never the zone surface, so a
-    /// `Structure` query only ever answers a base-space question. Gating on
-    /// `in_base` closes that generally instead of at each call site —
-    /// `game/stack.rs`'s `link_site_free` used to call this with **surface**
-    /// coordinates while scattering Stack entrances, and with the zone spawn
-    /// point and base space's origin both commonly `(0, 0)`, it silently
-    /// refused valid link sites near a base. The one legitimate caller left
-    /// with `(x, y)` computed while off base (`place_structure`'s founding
-    /// Home) is asking about a base that cannot exist yet — no Home means no
-    /// other structure either, since removing a Home cascades to every
-    /// structure it stands beside — so `None` is the right answer there too,
-    /// not a special case.
     /// **Point-in-footprint, not point-equality.** `(x, y)` need not be a
     /// structure's own anchor — this answers for any cell any standing
     /// structure's footprint covers, so a build, a walk or an examine
     /// pointed at a Research Station's floor cell is answered for the
     /// Station rather than reading as open ground.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         self.structure_footprints()
             .into_iter()
             .find(|(_, p, side)| {
@@ -662,12 +642,8 @@ impl Game {
     }
 
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
-    /// `(x, y)`, if any — checked from `Game::move_in_base` so walking onto
-    /// one breaches the zone. `(x, y)` is a base-space coordinate: a Portal
-    /// is a `Structure`, and every `Structure` stands in base space now, so
-    /// this refuses to answer at all outside it — see
-    /// `find_blocking_structure_at`'s doc for why that guard belongs here
-    /// rather than at each caller.
+    /// `(x, y)`, if any — checked from `Game::move_player` so walking onto
+    /// one breaches the zone.
     pub(crate) fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         self.find_structure_at_where(x, y, |d| d.zone_portal)
     }
@@ -678,18 +654,13 @@ impl Game {
         self.find_structure_at_where(x, y, |d| d.basin_exit)
     }
 
-    /// The structure on base-space `(x, y)` whose def satisfies `wanted`.
-    /// Answers nothing outside base space, where `(x, y)` is another
-    /// coordinate system.
+    /// The structure on `(x, y)` whose def satisfies `wanted`.
     fn find_structure_at_where(
         &mut self,
         x: i32,
         y: i32,
         wanted: impl Fn(&StructureDef) -> bool,
     ) -> Option<Entity> {
-        if !self.in_base() {
-            return None;
-        }
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position, &Structure), ()>();
@@ -704,9 +675,9 @@ impl Game {
             .then_some(entity)
     }
 
-    /// A barrier structure (`StructureDef::barrier`) standing on base-space
+    /// A barrier structure (`StructureDef::barrier`) standing on field
     /// `(x, y)`, if any — `find_zone_portal_at`'s shape, asked by
-    /// `Game::move_in_base` before the step.
+    /// `Game::move_player` before the step.
     pub(crate) fn barrier_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world
@@ -811,7 +782,10 @@ impl Game {
     ///   surviving link keys a `FrameSpec` that now folds in the tier, so
     ///   the frame behind it is re-carved and the memory of the old one —
     ///   which cells were seen, which caches were emptied, which lair was
-    ///   cleared — describes a frame that no longer exists.
+    ///   cleared — describes a frame that no longer exists. A link the
+    ///   party had already entered is the exception: `EnteredTiers` pins
+    ///   its tier, so it re-carves the maze it was entered with, and only
+    ///   the seen/looted history of it is lost.
     pub(crate) fn enter_next_zone(&mut self) {
         self.notify(crate::notifications::NotificationKind::Breach);
 

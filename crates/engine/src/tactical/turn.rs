@@ -854,7 +854,7 @@ impl Game {
     ///
     /// **Every refusal lands before anything is spent**: no fight, nobody
     /// acting, no actions left, the acting body is neither the player nor in
-    /// `Party` (a besieger or other base-space body mid-turn on a siege
+    /// `Party` (a besieger or other field body mid-turn on a siege
     /// board has no pack to reach into), and whatever `consume_item` itself
     /// refuses (no such item, none left in the pack). The last one is asked
     /// through the same call that would spend the item, rather than
@@ -1944,6 +1944,11 @@ impl Game {
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
         self.reap_tactical_dead(None);
+        // A sealed base's siege withdraws here, once a round; ending the
+        // fight already ran the tick `settle_tactical` owes.
+        if self.sealed_siege_withdrawal() {
+            return;
+        }
         if self.world.get_resource::<TacticalBattle>().is_some() {
             self.tick();
         }

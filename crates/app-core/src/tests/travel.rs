@@ -4,7 +4,6 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save;
 
 fn ticks_of(app: &mut App, n: u32) {
@@ -33,7 +32,6 @@ fn travel_to_a_tile_queues_a_travel_and_moves_nothing_yet() {
         app.walk,
         Some(Walk::Travel {
             goal: TravelGoal::Tile(start.0 + 3, start.1),
-            in_base: false,
         })
     );
     assert_eq!(player_pos(&app), start, "travel_to moved the player itself");
@@ -77,7 +75,6 @@ fn travel_to_a_hostiles_tile_queues_a_creature_goal() {
         app.walk,
         Some(Walk::Travel {
             goal: TravelGoal::Creature(hostile),
-            in_base: false,
         })
     );
 }
@@ -207,35 +204,6 @@ fn a_travel_with_no_route_refuses_with_the_status_line() {
     );
 }
 
-/// A crossing from the surface into base space (or back) between the tick
-/// a travel was set and the tick that would spend it ends the walk rather
-/// than routing it through a locale the goal was never resolved against.
-#[test]
-fn a_travel_ends_on_a_change_of_space() {
-    let mut app = test_app(2709);
-    clear_the_area_around_player(&mut app);
-    let start = player_pos(&app);
-    app.travel_to(start.0 + 5, start.1);
-    assert_eq!(
-        app.walk,
-        Some(Walk::Travel {
-            goal: TravelGoal::Tile(start.0 + 5, start.1),
-            in_base: false,
-        })
-    );
-
-    // The same save-edit trick `stand_in_base` uses: the run crosses into
-    // base space by a means other than the walk itself, between the click
-    // and the tick that would have spent it.
-    stand_in_base(&mut app);
-    ticks_of(&mut app, 1);
-
-    assert_eq!(
-        app.walk, None,
-        "a travel set on one side of the base boundary must not survive a crossing to the other"
-    );
-}
-
 /// **The regression finding 3 exists for.** "A travel set while paused
 /// waits for the clock" is the design's own line — `update_realtime` used
 /// to fall through its single `mode != Playing || paused || no game` guard
@@ -357,17 +325,15 @@ fn structure_save(kind: &str, x: i32, y: i32) -> save::StructureSave {
 }
 
 /// **The regression finding 8's "no-progress `Toward` clear" asks for.** A
-/// base-space Portal is the one cell `Game::base_step_blocked` admits to a
-/// route — `Game::move_in_base` breaches on it rather than refusing it —
-/// while never actually landing the party there, since `enter_next_zone`
-/// never touches `Locale::Base`. A `Toward` step onto it therefore ticks
+/// Portal is the one cell the router admits — `Game::move_player` breaches
+/// on it rather than refusing it — while never actually landing the party
+/// there, since `enter_next_zone` moves nobody. A `Toward` step onto it ticks
 /// without moving anybody, and `spend_walk_tick`'s own "did this step make
 /// progress" check is what stops the very next tick asking `travel_step`
 /// the same stalled question forever.
 ///
 /// The corridor is walled on both long sides (`y = ±1`) rather than left
-/// open, or the router — nothing in `Game::base_step_blocked` refuses a
-/// Portal — would just as happily route *around* one it has no reason to
+/// open, or the router would just as happily route *around* one it has no reason to
 /// prefer; the walls are what force the one straight path across it.
 #[test]
 fn a_toward_step_that_makes_no_progress_clears_the_walk() {
@@ -377,7 +343,7 @@ fn a_toward_step_that_makes_no_progress_clears_the_walk() {
     app.game.as_mut().unwrap().save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base { x: -4, y: 0 };
+    stand_save_on_field(&mut data, -4, 0);
     for x in -4..=4 {
         data.structures.push(structure_save("wall", x, 1));
         data.structures.push(structure_save("wall", x, -1));
@@ -391,7 +357,7 @@ fn a_toward_step_that_makes_no_progress_clears_the_walk() {
     ticks_of(&mut app, 8);
 
     assert_eq!(
-        app.game.as_ref().unwrap().base_pos(),
+        app.game.as_ref().unwrap().field_pos(),
         Some((1, 0)),
         "the party must have stalled one cell short of the portal, never having landed on it"
     );
@@ -436,7 +402,6 @@ fn travel_to_a_hostile_outside_sight_queues_a_tile_goal() {
         app.walk,
         Some(Walk::Travel {
             goal: TravelGoal::Tile(start.0 + 8, start.1),
-            in_base: false,
         })
     );
 }

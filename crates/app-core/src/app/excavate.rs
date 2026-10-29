@@ -70,10 +70,9 @@ impl App {
             }
             return BoxKey::Done;
         }
-        let Some(party) = self.game.as_ref().and_then(|g| g.base_pos()) else {
-            // The party left base space out from under the mode — nothing
-            // in here can happen anywhere else, so it closes rather than
-            // drawing over the open grid.
+        let Some(party) = self.game.as_ref().and_then(|g| g.field_pos()) else {
+            // The party went underground out from under the mode — nothing
+            // in here can happen there, so it closes.
             self.excavate_cursor = None;
             self.excavate_anchor = None;
             self.mode = Mode::Playing;

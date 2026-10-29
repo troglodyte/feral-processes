@@ -9,9 +9,15 @@ paths:
 
 One sentence each, the rule alone. The trap is in the `seams` skill; the argument is `seam:<slug>` in the memory graph.
 
-- **The siege board is built, not `generate`d** — `siege::board::build`
-  flood-fills from `BASE_EXIT_CELL` through walkable base-space cells, and
-  the fill's own frontier is the wall.
+- **The siege board is built, not `generate`d** — the floor plus
+  `siege::board::siege_spawn_cells`, the walkable cells beside its edge in
+  coordinate order (a breadth-first fallback for a sealed base), and one
+  `GameRng` draw picks the spawn cell the pack starts seating from.
+- **A sealed base's siege withdraws after `SIEGE_SEALED_HOLD_ROUNDS`** —
+  `Game::sealed_siege_withdrawal`, asked once a round from
+  `tactical_round_upkeep`, ends the fight when no besieger has a terrain walk
+  to floor (`raiders::any_reaches_floor`); one open path keeps the whole pack
+  fighting.
 - **A siege never passes through `fights_tactically` or `start_battle`** —
   `Game::open_siege` is its own door, so a siege is always tactical whatever
   the profile toggle says.
@@ -21,17 +27,15 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`TacticalBattle` still gains no `Serialize`** — a siege in progress is
   assembled into `SiegeSave` (`siege::persist::assemble`/`restore`) with
   membership riding `CreatureSave`'s `siege_cell`/`siege_order`/`besieger`/
-  `stolen_from`, and `player_cell` is saved because base-space `Position` is
-  pinned to the anchor and cannot answer for the party's board cell.
-- **A besieger is the third base-space `Position` body**, after a posted
-  program and a `DigSite` — `stands_in_base_space` is the door, wild
-  population systems exclude it by `Without<Besieger>`, a capture strips the
-  marker in `decompile_body`, and the end-of-fight sweep is `Without<Tamed>`
-  for exactly that reason.
+  `stolen_from`, and the player reseated from their own `Position`.
+- **A besieger is never counted as wild population** — the population
+  systems exclude it by `Without<Besieger>`, a capture strips the marker in
+  `decompile_body`, and the end-of-fight sweep is `Without<Tamed>` for
+  exactly that reason.
 - **Structure damage on the board goes through `damage_structure`** — a
-  `Durability`-less structure (the Home, `raidable: false`, standing on the
-  door cell) is untargetable, and that is also why raiders leave from
-  melee range of the door rather than by stepping onto it.
+  `Durability`-less structure (the Home, `raidable: false`) is untargetable,
+  and raiders leave from melee range of the door rather than by stepping
+  onto it.
 - **`TacticalBattle::siege_pack`, the count actually seated, is both the
   morale-break denominator and the "is this a siege" signal** — `0` reads as
   an ordinary tactical fight everywhere that checks it.

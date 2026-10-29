@@ -245,7 +245,7 @@ fn spawn_marker_staffer(game: &mut Game, start: Position, dx: i32, dy: i32) -> E
 /// ray inside base space.
 fn stand_in_base_and_get_origin(game: &mut Game) -> Position {
     stand_in_base(game);
-    let (x, y) = game.base_pos().expect("stand_in_base just set the locale");
+    let (x, y) = game.field_pos().expect("stand_in_base just set the locale");
     Position { x, y }
 }
 
@@ -745,7 +745,7 @@ fn view_entities_reports_a_con_read_for_hostiles_and_none_for_anyone_else() {
     let hard_view = views.iter().find(|v| v.entity == hard).unwrap();
     // The tamed program is asked for from inside the base, because that is
     // the space its `Position` is a cell of and `view_entities` selects by
-    // space (`Game::stands_in_base_space`). The rule under test — only a
+    // space (`Game::stands_inside_the_base`). The rule under test — only a
     // hostile is difficulty-coloured — is the same on either side of the
     // anchor.
     stand_in_base_at(&mut game, player_pos.x, player_pos.y + 1);
@@ -1240,7 +1240,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
 
     game.move_player(2, 1);
     assert_eq!(
-        game.base_pos(),
+        game.field_pos(),
         Some((2, 1)),
         "walked there for real, not spawned there"
     );
@@ -1255,7 +1255,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
     );
 
     game.move_player(0, -1);
-    assert_eq!(game.base_pos(), Some((2, 0)));
+    assert_eq!(game.field_pos(), Some((2, 0)));
     assert!(node_at(&mut game).player_adjacent, "one orthogonal step is");
 }
 
@@ -1622,6 +1622,20 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
             .map(|(e, ..)| e)
             .expect("the node was just deployed")
     };
+
+    // A wild program `Game::new` stocked on this ground before the floor was
+    // laid would answer the ray first; the base shares the field with them.
+    let wild: Vec<Entity> = game
+        .world
+        .query_filtered::<(Entity, &Position), (With<Creature>, Without<Tamed>)>()
+        .iter(&game.world)
+        .filter(|(_, p)| p.y == start.y && (start.x - 10..start.x).contains(&p.x))
+        .map(|(e, _)| e)
+        .filter(|&e| e != game.player_entity())
+        .collect();
+    for e in wild {
+        game.world.despawn(e);
+    }
 
     let worker = spawn_tamed(&mut game, 20, 5);
     game.assign_cronjob(worker, node).unwrap();
@@ -2381,103 +2395,6 @@ fn a_work_profile_is_none_for_a_species_the_db_never_heard_of() {
     game.world.get_mut::<Creature>(program).unwrap().species = "no_such_species".to_string();
 
     assert!(game.work_profile(program).is_none());
-}
-
-/// "In base space they ray across the zone surface" — the bug carried into
-/// Task 7 for this function. `stand_in_base` puts base space's own origin
-/// at `(0, 0)`, so a wild creature planted on the *zone surface* at `(3, 0)`
-/// lands squarely on the eastward ray once the party phases in, by the same
-/// numeric coincidence `find_walkable_start` and the base's origin usually
-/// share. Before the fix this named it; a tamed one at the same tile is the
-/// control that proves the guard is about wildlife, not about base space
-/// finding nothing at all.
-#[test]
-fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
-    let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .find(|d| !d.is_hybrid())
-        .unwrap()
-        .id;
-    let wild = game
-        .world
-        .spawn((
-            Creature {
-                species: species.clone(),
-            },
-            Position { x: 3, y: 0 },
-            Stats {
-                hp: 1,
-                max_hp: 1,
-                atk: 1,
-                mitigation: 1,
-            },
-        ))
-        .id();
-    stand_in_base(&mut game);
-
-    assert_eq!(
-        game.find_target_in_direction(1, 0, 10),
-        None,
-        "a wild, untamed program on the zone surface must not be named from inside the base"
-    );
-
-    // `Tamed` with no `Task` is what `position_is_honest` reads as an idle
-    // base staffer — an owned program outside the party is staff by
-    // derivation, and that is the only way to make `drawn_on_surface_map`
-    // say yes without also giving it a post to walk to or from.
-    let owner = game.player_entity();
-    game.world.entity_mut(wild).insert(Tamed { owner });
-    assert_eq!(
-        game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Creature(wild)),
-        "the same tile, now tamed, proves the refusal above was about wildlife specifically"
-    );
-}
-
-/// The mirror bug on the surface side, closed generally rather than left
-/// open: `Structure` is the space tag, and `find_target_in_direction`'s own
-/// `Structure` query answered it with no locale check at all, unlike
-/// `find_blocking_structure_at`, `view_entities` and `adjacent_structure`.
-/// A player who breaches, builds a Home, and walks back near the spawn tile
-/// could aim `x` at a base structure drawn nowhere on their screen — base
-/// space's own origin and the zone spawn point are both commonly `(0, 0)`,
-/// which this reproduces deliberately (the player is moved onto the exact
-/// tile the fixture's Mining Node's base-space position numerically
-/// carries) rather than relying on that coincidence to land by luck.
-#[test]
-fn find_target_in_direction_refuses_a_base_structure_seen_from_the_surface() {
-    let mut game = Game::new(3213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (_home, node) = build_a_base(&mut game);
-    assert!(
-        !game.in_base(),
-        "build_a_base's fixtures return the party to the surface"
-    );
-    let node_pos = *game.world.get::<Position>(node).unwrap();
-
-    // Standing one tile west of the node's own coordinates, on the
-    // surface, so the eastward ray runs straight through them.
-    let player = game.player_entity();
-    let start = Position {
-        x: node_pos.x - 1,
-        y: node_pos.y,
-    };
-    {
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x = start.x;
-        pos.y = start.y;
-    }
-    // A wild program spawned on this exact tile would find *it* first and
-    // mask the assertion this test is actually making.
-    clear_creatures_east_of_player(&mut game, start, 10);
-
-    assert_eq!(
-        game.find_target_in_direction(1, 0, 10),
-        None,
-        "a base structure's position must not answer a surface-space ray, \
-         however close the numbers land"
-    );
 }
 
 /// Unreachable before base space rendered at all: nothing ever called

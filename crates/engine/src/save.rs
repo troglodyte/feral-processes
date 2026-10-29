@@ -415,11 +415,11 @@ pub struct SiegeSave {
     /// Every cell of the board, row-major — `tactical::map::Board::cells`'
     /// own order, which `Board::from_cells` trusts back.
     pub cells: Vec<crate::tactical::map::BattleCell>,
-    /// The base-space cell the board's `(0, 0)` maps to —
+    /// The field cell the board's `(0, 0)` maps to —
     /// `game::siege::board::SiegeBoard::origin`.
     pub origin: (i32, i32),
-    /// `BASE_EXIT_CELL`, in board coordinates — `game::siege::board::
-    /// SiegeBoard::door`.
+    /// Where the besiegers enter and leave, in board coordinates —
+    /// `TacticalBattle::siege_door`.
     pub door: (i32, i32),
     pub round: u32,
     /// The currently-acting body's own `CreatureSave::siege_order` value —
@@ -443,28 +443,6 @@ pub struct SiegeSave {
     /// `SaveData::player`, a singleton restored before the creature array
     /// even runs.
     pub player_order: u32,
-    /// The player's own board cell at save time, read straight off
-    /// `TacticalBattle::cell_of` the way every other body's is.
-    ///
-    /// **Not re-derived from `PlayerSave::position`.** In base space that
-    /// field stays pinned to the surface anchor tile — `Position` is not
-    /// the party's base-space coordinate, `Locale::Base` is (see CLAUDE.md,
-    /// "Base-space Position is pinned to the anchor") — and
-    /// `game::siege::persist::restore` runs before `Game::restore_locale`
-    /// besides, so `Game::base_pos()` has nothing to answer yet either way.
-    ///
-    /// **`Option`, not a bare tuple defaulting to `(0, 0)`.** A save written
-    /// before this field existed has no board cell to give back, and `(0,
-    /// 0)` is not a stand-in for "unknown" — it is an ordinary board
-    /// coordinate a real siege can floor, occupy or leave outside its own
-    /// bounding box, so a bare default silently seats the player wherever
-    /// that coordinate happens to fall (or drops the siege outright when it
-    /// falls on nothing `TacticalBattle::place` will take). `None` reads
-    /// honestly instead, and `persist::restore` falls back to `saved.door`
-    /// — the same "reloads at the door" behaviour the field was always
-    /// meant to have for an old save, spelled correctly this time.
-    #[serde(default)]
-    pub player_cell: Option<(i32, i32)>,
 }
 
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build
@@ -1238,7 +1216,7 @@ pub struct FarmPlotSave {
     pub tiles: Vec<FarmTileSave>,
 }
 
-/// One cell of a plot, in **base-space** coordinates like `DigSiteSave`.
+/// One cell of a plot, in **field** coordinates like `DigSiteSave`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FarmTileSave {
     pub position: (i32, i32),
@@ -1246,7 +1224,7 @@ pub struct FarmTileSave {
     pub growth: crate::components::CropGrowth,
 }
 
-/// A cell of base-space rock the player has started on — see
+/// A cell of field rock the player has started on — see
 /// `components::DigSite`, whose `Durability` and mark this carries.
 ///
 /// `announced_stuck` is deliberately absent: it is a crew's "I already said
@@ -1254,7 +1232,7 @@ pub struct FarmTileSave {
 /// exactly when the player should be told again.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DigSiteSave {
-    /// **Base-space** coordinates, not a tile on the zone surface.
+    /// **Field** coordinates, not a tile on the zone surface.
     pub position: (i32, i32),
     pub durability: u32,
     pub marked: bool,
@@ -1289,7 +1267,7 @@ pub struct DigSiteSave {
 /// the bill of materials beside it after a retune.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BuildSiteSave {
-    /// **Base-space** coordinates, not a tile on the zone surface.
+    /// **Field** coordinates, not a tile on the zone surface.
     pub position: (i32, i32),
     pub structure: crate::structures::StructureId,
     /// The bill of materials as it was priced when the request was filed —
@@ -1331,7 +1309,7 @@ pub struct BuildSiteSave {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RuinSave {
     pub kind: crate::structures::StructureId,
-    /// **Base-space** coordinates, `BuildSiteSave::position`'s rule.
+    /// **Field** coordinates, `BuildSiteSave::position`'s rule.
     pub x: i32,
     pub y: i32,
     /// What a wrecked machine was set to — see `resources::Ruin::recipe`.
@@ -1350,7 +1328,7 @@ pub struct RuinSave {
 /// that a retune could put out of step with the first.
 ///
 /// `position` is in **whichever space the stage says**, exactly as the
-/// `Position` component it comes from is — see `CaravanStage::in_base_space`.
+/// `Position` component it comes from is — see `CaravanStage::inside_the_base`.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CaravanSave {
     pub position: (i32, i32),
@@ -1908,6 +1886,11 @@ pub struct SaveData {
     /// shape, two screens up in the same function.
     #[serde(default)]
     pub stack_memory_tiered: bool,
+    /// The tier each entered Stack link was first entered at — see
+    /// `resources::EnteredTiers`. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub entered_tiers: crate::resources::EnteredTiers,
     /// Which world chunks of this zone have had their wild population
     /// placed — see `resources::PopulatedChunks`. Saved rather than derived
     /// because it is history, not geometry: the chunks a run has stocked
@@ -2154,9 +2137,8 @@ pub struct SaveData {
 /// read as 6% mitigation rather than 6 points of soak, so it is refused by
 /// version instead. `FieldBuffKind::Mitigation` folding into `Mitigation` rides the
 /// same bump.
-/// 31 → 32: `claimed_tiles` removed, `base_grid` added — the base is
-/// leaving the zone surface for its own pocket-dimension coordinate space
-/// (`base_grid::BaseGrid`; see TODO #36, "the base, out of phase"). A field
+/// 31 → 32: `claimed_tiles` removed, `base_grid` added — the base becomes
+/// its own grid (`base_grid::BaseGrid`; see TODO #36). A field
 /// *removed* is exactly the case field-named RON does not excuse from a
 /// bump, the same reasoning `fatigue`'s removal at 30 spent. This is the
 /// only bump the whole migration needs: later tasks in the same slice add
@@ -2193,7 +2175,12 @@ pub struct SaveData {
 /// unslotted_routines, next_crafted_id}` are written and a `crafted/<n>` id
 /// may sit in any routine slot; a v38 file would load with its slots naming
 /// nothing and its etched disks unusable.
-pub const SAVE_FORMAT_VERSION: u32 = 39;
+///
+/// 39 → 40: the base returns to the field (ADR 0032). `locale` no longer
+/// has a `Base` arm, `base_grid` holds only floor overlay cells keyed by
+/// field coordinates, and mined ground is a `WorldMap` override; a v39 base
+/// would load as floor over unmined field with the party's base tile lost.
+pub const SAVE_FORMAT_VERSION: u32 = 40;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -2528,6 +2515,7 @@ mod tests {
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
             stack_memory_tiered: true,
+            entered_tiers: crate::resources::EnteredTiers::default(),
             populated_chunks: crate::resources::PopulatedChunks::default(),
             explored_chunks: crate::resources::ExploredChunks::default(),
             seen_tiles: crate::resources::SeenTiles::default(),

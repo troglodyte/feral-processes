@@ -15,6 +15,7 @@ use std::collections::HashMap;
 
 use pathfinding::directed::dijkstra::dijkstra_all;
 
+use crate::base_grid::BaseGrid;
 use crate::world::{NEIGHBOURS, WorldMap};
 
 /// Accumulated step costs from `origin` to every tile reachable within
@@ -26,9 +27,8 @@ use crate::world::{NEIGHBOURS, WorldMap};
 ///
 /// The step rule is a parameter because the callers genuinely disagree about
 /// which tiles are theirs to cross: `pursuit_field` below refuses the ground
-/// the base is safe on, and a hauling program walks base space instead —
-/// a different coordinate space entirely, whose walkability lives in
-/// `BaseGrid` and not in any `Tile`.
+/// the base is safe on, and a hauling program walks the floor instead —
+/// whose walkability lives in `BaseGrid` and not in the `Tile` it covers.
 ///
 /// That is why the rule takes a *coordinate* and reads whatever it likes for
 /// itself, rather than being handed a `Tile`. This function knows how to walk
@@ -38,7 +38,7 @@ use crate::world::{NEIGHBOURS, WorldMap};
 /// `WorldMap::tile` generates chunks lazily.
 ///
 /// **The rule is a cost function and not a predicate**: `None` is refused,
-/// `Some(c)` is what entering that tile costs. Every surface and base-space
+/// `Some(c)` is what entering that tile costs. Every surface and field
 /// caller answers `Some(1)`, which is exactly the uniform field this
 /// returned before; the battle map's `Rough` ground costs two and is why
 /// the shape widened. A predicate cannot say "crossable, but dearly", and
@@ -84,27 +84,27 @@ pub(crate) fn walk_field(
 }
 
 /// `walk_field` for a nest guardian: everything walkable except the base
-/// slab. The slab stays the one safe ground, as `maybe_ambush` and
-/// `stamp_platform` already establish, and a leash measured from the nest
+/// floor. The floor stays the one safe ground, as `maybe_ambush` already
+/// establishes, and a leash measured from the nest
 /// can't guarantee that alone — a nest can stand within leash range of the
 /// base.
 pub(crate) fn pursuit_field(
     map: &mut WorldMap,
+    floor: &BaseGrid,
     origin: (i32, i32),
     radius: i32,
 ) -> HashMap<(i32, i32), u32> {
-    // A guardian's refusal is entirely a property of the terrain it is
-    // standing on, so this reads the tile and nothing else.
+    // A guardian's refusal is entirely a property of the ground it is
+    // standing on: the field tile with the base's floor merged over it,
+    // since the `WorldMap` alone never shows floor.
     walk_field(origin, radius, |(x, y)| {
-        map.tile(x, y).open_to_hostiles().then_some(1)
+        floor.ground_tile(map, x, y).open_to_hostiles().then_some(1)
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Only the fixtures below name a biome now that `pursuit_field` refuses
-    // the slab through `Tile::open_to_hostiles` rather than spelling it out.
     use crate::world::{Biome, Tile};
 
     fn floor() -> Tile {
@@ -123,37 +123,31 @@ mod tests {
         }
     }
 
-    fn platform() -> Tile {
-        Tile {
-            biome: Biome::Platform,
-            walkable: true,
-            rock_shade: None,
-        }
-    }
-
     /// The whole reason `walk_field` takes a step rule: two callers disagree
-    /// about the base slab, and only one of them may cross it.
+    /// about the base floor, and only one of them may cross it. The floor is
+    /// a `BaseGrid` overlay; the `WorldMap` under it is open ground.
     #[test]
-    fn walk_field_crosses_a_platform_that_pursuit_field_refuses() {
+    fn walk_field_crosses_base_floor_that_pursuit_field_refuses() {
         let mut map = WorldMap::new(7);
         for x in -2..=2 {
             for y in -2..=2 {
                 map.set_override(x, y, floor());
             }
         }
-        map.set_override(1, 0, platform());
+        let mut base = BaseGrid::default();
+        base.lay_floor(1, 0);
 
-        let pursued = pursuit_field(&mut map, (0, 0), 2);
+        let pursued = pursuit_field(&mut map, &base, (0, 0), 2);
         assert!(
             !pursued.contains_key(&(1, 0)),
-            "pursuit must still refuse the base slab"
+            "pursuit must still refuse the base floor"
         );
 
         let walked = walk_field((0, 0), 2, |(x, y)| map.tile(x, y).walkable.then_some(1));
         assert_eq!(
             walked.get(&(1, 0)),
             Some(&1),
-            "an ordinary walk must be able to cross the base slab"
+            "an ordinary walk must be able to cross the base floor"
         );
     }
 
@@ -204,7 +198,7 @@ mod tests {
 
         let origin = (0, 0);
         let pursuer = (5, 0);
-        let field = pursuit_field(&mut map, origin, 8);
+        let field = pursuit_field(&mut map, &BaseGrid::default(), origin, 8);
 
         let dead_end = (4, 0);
         let mut neighbour_costs: Vec<((i32, i32), u32)> = NEIGHBOURS
@@ -237,7 +231,7 @@ mod tests {
             }
         }
         let origin = (0, 0);
-        let field = pursuit_field(&mut map, origin, radius);
+        let field = pursuit_field(&mut map, &BaseGrid::default(), origin, radius);
 
         for &(x, y) in field.keys() {
             assert!(
@@ -259,7 +253,7 @@ mod tests {
             map.set_override(origin.0 + dx, origin.1 + dy, wall());
         }
 
-        let field = pursuit_field(&mut map, origin, 8);
+        let field = pursuit_field(&mut map, &BaseGrid::default(), origin, 8);
 
         assert_eq!(field.len(), 1, "callers rely on absence meaning no route");
         assert_eq!(field[&origin], 0);

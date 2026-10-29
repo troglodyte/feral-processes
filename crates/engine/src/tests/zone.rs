@@ -360,16 +360,13 @@ fn warping_to_a_zone_that_is_not_ahead_is_refused() {
     );
 }
 
-/// Base space is a separate coordinate system from the zone surface — Home
-/// sits at `BASE_EXIT_CELL` and a fresh zone's spawn tile is found by the
-/// same `(0, 0)`-first scan, so their numbers coincide by construction and
-/// comparing them proves nothing about which space either belongs to (see
-/// `find_blocking_structure_at`'s doc comment for the same trap on a
-/// different call site). Home and the node are hand-displaced off the
-/// origin before the breach for exactly that reason: left at their real
-/// founding coordinates, both would sit at `(0, 0)` before and after
-/// regardless of whether the deleted reposition block were still here, so
-/// the check would pass either way. What actually matters, and what the old
+/// A fixture's Home sits at the origin and a fresh zone's spawn tile is
+/// found by the same `(0, 0)`-first scan, so their numbers coincide by
+/// construction. Home and the node are hand-displaced off the origin before
+/// the breach for exactly that reason: left at their founding coordinates,
+/// both would sit at `(0, 0)` before and after regardless of whether the
+/// deleted reposition block were still here, so the check would pass either
+/// way. What actually matters, and what the old
 /// version of this test got backwards, is that the breach must leave Home
 /// exactly where it already was rather than relocating it to the new spawn
 /// tile — asserting equality to spawn was asserting the very relocation
@@ -435,39 +432,6 @@ fn breaching_with_a_base_still_populates_the_new_zone() {
     }
 }
 
-/// `Structure` is the space tag: `find_blocking_structure_at` must refuse
-/// to answer at all outside base space, rather than matching a base-space
-/// `Structure`'s position against a surface coordinate that happens to
-/// carry the same numbers. `Game::new`'s spawn point and base space's own
-/// origin are both commonly `(0, 0)` (see the standing note on
-/// `find_walkable_start`), which is exactly the collision this closes —
-/// before it, `game/stack.rs::link_site_free` could refuse a valid Stack
-/// entrance near a base for no reason a player could see.
-#[test]
-fn find_blocking_structure_at_refuses_outside_base_space() {
-    let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, _node) = build_a_base(&mut game);
-    assert!(
-        !game.in_base(),
-        "build_a_base's fixtures return the party to the surface"
-    );
-    let home_pos = *game.world.get::<Position>(home).unwrap();
-
-    assert!(
-        game.find_blocking_structure_at(home_pos.x, home_pos.y)
-            .is_none(),
-        "a Structure's base-space position must not answer a surface-space query, \
-         even when the numbers coincide"
-    );
-
-    stand_in_base_at(&mut game, home_pos.x, home_pos.y);
-    assert_eq!(
-        game.find_blocking_structure_at(home_pos.x, home_pos.y),
-        Some(home),
-        "the same coordinates answer correctly once the query is actually asked from base space"
-    );
-}
-
 #[test]
 fn breaching_preserves_structure_durability_and_node_stock() {
     let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -499,7 +463,7 @@ fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
     let (home, node) = build_a_base(&mut game);
     // Both Home and the node are moved off `(0, 0)` for the same reason
     // `breaching_leaves_every_structures_absolute_position_untouched` does:
-    // Home always founds at `BASE_EXIT_CELL`, itself `(0, 0)`, and
+    // The fixture's Home founds at `(0, 0)`, and
     // `find_walkable_start` always resolves `(0, 0)` too — so the deleted
     // block's `spawn + (node - home)` write reproduces the same absolute
     // number whenever Home is left at its real founding position, even
@@ -1538,31 +1502,18 @@ fn pursuers_never_step_onto_the_base_platform() {
             }
         }
     }
-    // Stamped after the walkable override (so Platform wins inside the
-    // slab) but before the nest and pursuer are placed. Written directly
-    // through `set_override` rather than `Game::stamp_platform`, which
-    // retired with `resources::Platform` — what this test exercises is
-    // `pursuit_field`'s `Biome::Platform` exclusion, not the (now gone)
-    // production path that used to lay the tile, so any Platform region
-    // does. Sits east of the player, not on top of it: `half - 3` would
-    // have put the player's own tile inside the slab.
+    // Laid through the floor door after the walkable override but before
+    // the nest and pursuer are placed. The base is a `BaseGrid` overlay, so
+    // the `WorldMap` under it stays `OpenGrid` — a chaser reading the map
+    // alone sees no slab at all, which is the bug this pins. Sits east of
+    // the player, not on top of it: `half - 3` would have put the player's
+    // own tile inside the slab.
     let platform_center = (ppos.x + half + 1, ppos.y);
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dx in -half..=half {
-            for dy in -half..=half {
-                map.set_override(
-                    platform_center.0 + dx,
-                    platform_center.1 + dy,
-                    Tile {
-                        biome: Biome::Platform,
-                        walkable: true,
-                        rock_shade: None,
-                    },
-                );
-            }
-        }
-    }
+    game.dev_lay_floor(
+        (-half..=half)
+            .flat_map(|dx| (-half..=half).map(move |dy| (dx, dy)))
+            .map(|(dx, dy)| (platform_center.0 + dx, platform_center.1 + dy)),
+    );
 
     // Wall off the southern detour entirely, so the only way around the
     // slab is north — where the nest sits — instead of leaving dijkstra a
@@ -1609,15 +1560,12 @@ fn pursuers_never_step_onto_the_base_platform() {
         }
         game.tick();
         let pos = *game.world.get::<Position>(guardian).unwrap();
-        let biome = game
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome;
-        assert_ne!(
-            biome,
-            Biome::Platform,
-            "a pursuer must never step onto the base platform, but stands at {pos:?}"
+        assert!(
+            !game
+                .world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(pos.x, pos.y),
+            "a pursuer must never step onto the base floor, but stands at {pos:?}"
         );
     }
 
@@ -1717,8 +1665,8 @@ fn pursuit_tick_is_a_no_op_while_underground() {
 /// docs/superpowers/archive/specs/2026-08-03-nest-aggression-design.md): standing
 /// inside the base slab empties the pursuit field outright, for *any*
 /// pursuer, not just one already too far away to matter. Standing on the
-/// platform's interior makes every one of the player's own neighbours
-/// `Biome::Platform`, so `pursuit_field`'s search can't take a single step
+/// floor's interior makes every one of the player's own neighbours
+/// laid floor, so `pursuit_field`'s search can't take a single step
 /// out of the player's own tile — the same shape as
 /// `pursuit.rs::an_enclosed_origin_yields_a_field_of_just_itself`. A
 /// guardian well inside both the leash and the search box, on open ground
@@ -1726,7 +1674,7 @@ fn pursuit_tick_is_a_no_op_while_underground() {
 /// `Pursuing` — the platform is what did that, not distance, which is what
 /// the previous version of this test (guardian 40 tiles out, past the
 /// 20-tile search box on distance alone) failed to isolate. Verified: with
-/// the Platform stamp below removed, this test fails; restored, it passes.
+/// the floor below removed, this test fails; restored, it passes.
 #[test]
 fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1755,34 +1703,17 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
         }
     }
 
-    // Written directly through `set_override` rather than
-    // `Game::stamp_platform`, which retired with `resources::Platform` —
-    // same substitution as `pursuers_never_step_onto_the_base_platform`
-    // above, at the same radius the old stamp laid.
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        let r = MAX_BUILD_DISTANCE_FROM_HOME;
-        for dx in -r..=r {
-            for dy in -r..=r {
-                map.set_override(
-                    ppos.x + dx,
-                    ppos.y + dy,
-                    Tile {
-                        biome: Biome::Platform,
-                        walkable: true,
-                        rock_shade: None,
-                    },
-                );
-            }
-        }
-    }
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(ppos.x, ppos.y)
-            .biome,
-        Biome::Platform,
-        "test premise: the player must actually be standing inside the slab"
+    // The floor overlay, laid through the floor door at the radius the
+    // old slab stamp used; the `WorldMap` under it stays `OpenGrid`.
+    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+    game.dev_lay_floor(
+        (-r..=r)
+            .flat_map(|dx| (-r..=r).map(move |dy| (dx, dy)))
+            .map(|(dx, dy)| (ppos.x + dx, ppos.y + dy)),
+    );
+    assert!(
+        game.on_base_floor(),
+        "test premise: the player must actually be standing on the floor"
     );
 
     // 10 tiles out: well inside both NEST_AGGRO_LEASH_RADIUS (15) and the
@@ -2181,6 +2112,50 @@ fn a_breach_keeps_the_tiles_the_player_changed() {
     );
 }
 
+/// A breach keeps every tile the player changed and every cell of the base's
+/// floor: the `WorldMap` overrides and the `BaseGrid` come out of it equal,
+/// not just one sampled cell.
+#[test]
+fn a_breach_leaves_the_overrides_and_the_floor_unchanged() {
+    let mut game = Game::new(4243, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.lay_test_pocket();
+    let cut = Tile {
+        biome: Biome::Excavated,
+        walkable: true,
+        rock_shade: None,
+    };
+    game.world
+        .resource_mut::<WorldMap>()
+        .set_override(TEST_POCKET_HALF_WIDTH + 1, 0, cut);
+    // `Tile` has no `PartialEq`; what an override says is its biome and
+    // whether it can be stood on.
+    let overrides_of = |game: &Game| {
+        game.world
+            .resource::<WorldMap>()
+            .overrides()
+            .iter()
+            .map(|(&cell, t)| (cell, (t.biome, t.walkable)))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let overrides = overrides_of(&game);
+    let floor = game.world.resource::<crate::base_grid::BaseGrid>().clone();
+    assert!(floor.floor_count() > 0, "test premise: floor is laid");
+
+    breach(&mut game);
+
+    assert_eq!(game.player_status().zone, 2);
+    assert_eq!(
+        overrides_of(&game),
+        overrides,
+        "a breach changed the tile overrides"
+    );
+    assert_eq!(
+        game.world.resource::<crate::base_grid::BaseGrid>(),
+        &floor,
+        "a breach changed the base's floor"
+    );
+}
+
 /// The party stands where it stood. The old breach teleported them onto a
 /// fresh `ZoneSpawnPoint`, which is what made a place impossible to return
 /// to.
@@ -2196,12 +2171,11 @@ fn a_breach_does_not_move_the_party() {
     assert_eq!((after.x, after.y), (before.x, before.y));
 }
 
-/// The base is out of phase, not on the zone surface — a breach must not
-/// touch a `Structure`'s `Position` at all, in either direction.
+/// A breach must not touch a `Structure`'s `Position` at all, in either direction.
 ///
 /// `find_walkable_start` always resolves `(0, 0)` on every generated map
 /// (checked directly: every seed 0..30 breaches to spawn `(0, 0)`), and the
-/// Home is always founded at `BASE_EXIT_CELL`, itself `(0, 0)` — so under an
+/// fixture's Home is founded at `(0, 0)` — so under an
 /// ordinary breach a structure's absolute position and its offset from Home
 /// are the same number, and the old offset-rebuild block reproduced the
 /// right answer by coincidence. Comparing to Home, or trusting an
@@ -2307,6 +2281,43 @@ fn a_breach_clears_the_wild_but_leaves_a_nests_guardian_standing() {
     assert!(
         game.world.get::<Creature>(guardian).is_some(),
         "a breach cleared a nest's own guardian, leaving the nest bare"
+    );
+}
+
+/// What a breach does to nests: an existing nest's guardian keeps the stats
+/// it was rolled with (`clear_local_wild` spares `NestGuardian`), and a nest
+/// spawned after the breach fields its guardian at the new tier.
+#[test]
+fn a_nest_spawned_after_a_breach_fields_the_new_tier() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let guardian_of = |game: &mut Game, nest: Entity| {
+        let mut query = game.world.query::<(Entity, &NestGuardian)>();
+        query
+            .iter(&game.world)
+            .find(|(_, g)| g.nest == nest)
+            .map(|(e, _)| e)
+            .expect("a nest fields a guardian")
+    };
+    let old_nest = game.spawn_nest("scrapper", ppos.x + 4, ppos.y);
+    let old = guardian_of(&mut game, old_nest);
+    let old_hp = game.world.get::<Stats>(old).unwrap().max_hp;
+
+    breach_through_a_portal(&mut game);
+    assert_eq!(game.player_status().zone, 2);
+
+    assert_eq!(
+        game.world.get::<Stats>(old).unwrap().max_hp,
+        old_hp,
+        "an existing guardian keeps the tier it was spawned at"
+    );
+    let new_nest = game.spawn_nest("scrapper", ppos.x - 4, ppos.y);
+    let new = guardian_of(&mut game, new_nest);
+    let new_hp = game.world.get::<Stats>(new).unwrap().max_hp;
+    // Zone 2 doubles base stats; the individual roll cannot close that gap.
+    assert!(
+        new_hp > old_hp,
+        "a nest spawned after the breach should field the new tier: {new_hp} vs {old_hp}"
     );
 }
 
@@ -2431,4 +2442,76 @@ fn a_patrol_member_and_a_nest_guardian_pursue_in_the_same_tick() {
         chebyshev(after_member, ppos) < chebyshev(before_member, ppos),
         "and so did the patrol member, off the same field, in the same tick"
     );
+}
+
+fn surface_link_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+    let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+    let mut tiles: Vec<(i32, i32)> = query.iter(&game.world).map(|p| (p.x, p.y)).collect();
+    tiles.sort();
+    tiles
+}
+
+/// Breaches on populated ground (the wild is deliberately not cleared) with
+/// one link entered and then left, and returns `(entered, never_entered)`.
+fn breach_with_one_link_entered(game: &mut Game) -> ((i32, i32), (i32, i32)) {
+    let links = surface_link_tiles(game);
+    assert!(links.len() >= 2, "a fresh zone scatters several links");
+    let (entered, untouched) = (links[0], links[1]);
+    game.enter_stack(entered.0, entered.1);
+    game.clear_stack();
+    breach_through_a_portal(game);
+    assert_eq!(game.player_status().zone, 2);
+    (entered, untouched)
+}
+
+/// A breach re-carves a link the party never entered at the new tier, and
+/// leaves one they had entered carved at the tier they entered it at.
+#[test]
+fn a_breach_keeps_an_entered_links_tier_and_re_tiers_the_rest() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let links = surface_link_tiles(&mut game);
+    let before = game.frame_spec(1, 3, links[0]);
+    assert_eq!(before.tier, 1);
+
+    let (entered, untouched) = breach_with_one_link_entered(&mut game);
+
+    let kept = game.frame_spec(1, 3, entered);
+    assert_eq!(
+        kept.tier, 1,
+        "an entered link keeps the tier it was entered at"
+    );
+    assert_eq!(kept.rng_seed(), before.rng_seed());
+    assert_eq!(
+        game.frame_spec(1, 3, untouched).tier,
+        2,
+        "a link never entered carves at the new tier"
+    );
+}
+
+/// The kept tier is per link, not per frame: a frame deeper down the same
+/// stack, first walked after the breach, still carves at the entered tier.
+#[test]
+fn an_entered_links_deeper_frames_share_its_tier() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (entered, _) = breach_with_one_link_entered(&mut game);
+    assert_eq!(game.frame_spec(2, 3, entered).tier, 1);
+}
+
+/// `entered_tier` is history, so it must come back from a save.
+#[test]
+fn an_entered_links_tier_survives_a_save_and_load_after_a_breach() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
+    let (entered, untouched) = breach_with_one_link_entered(&mut game);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_entered_tier_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.frame_spec(1, 3, entered).tier, 1);
+    assert_eq!(loaded.frame_spec(1, 3, untouched).tier, 2);
 }

@@ -22,9 +22,12 @@ use crate::components::{Besieger, Carrying, Durability, Stock, StolenFrom, Struc
 use crate::game::pursuit::walk_field;
 use crate::resources::MessageKind;
 use crate::tactical::TacticalBattle;
+use crate::tactical::map::Board;
 use crate::tactical::reach;
 use crate::tactical::turn::StepOutcome;
-use crate::tuning::{HAUL_CARRY_CAPACITY, SIEGE_MORALE_BREAK_PERCENT, TACTICAL_MELEE_RANGE};
+use crate::tuning::{
+    HAUL_CARRY_CAPACITY, SIEGE_MORALE_BREAK_PERCENT, SIEGE_SEALED_HOLD_ROUNDS, TACTICAL_MELEE_RANGE,
+};
 
 impl Game {
     /// `body`'s whole beat, when it is a besieger — the hook
@@ -63,12 +66,12 @@ impl Game {
         let withdrawing = self.siege_morale_broken();
         let carrying = self.world.get::<Carrying>(body).is_some();
 
-        // **Adjacent, not exactly on it.** The Home always stands on the
-        // door (`board::seat_structures` seats it as a body there, and one
-        // body to a cell keeps every other body off that exact cell), so
-        // `from == door` can never hold in real play — a carrier or a
-        // withdrawing besieger would fall through to the generic AI and
-        // fight forever short of the threshold this checks against.
+        // **Adjacent, not exactly on it.** The door is the spawn cell the
+        // pack's first raider was seated on, and one body to a cell keeps
+        // every other body off it while anyone stands there — so testing
+        // `from == door` would leave a carrier or a withdrawing besieger
+        // queued behind whoever holds it, falling through to the generic AI
+        // and fighting on short of the threshold this checks against.
         if reach::gap(&[from], &[door]) <= TACTICAL_MELEE_RANGE && (carrying || withdrawing) {
             return self.besieger_leaves(body, carrying);
         }
@@ -98,6 +101,59 @@ impl Game {
         }
 
         self.besieger_walk_toward(body, door)
+    }
+
+    /// A sealed base's siege ends here: once `SIEGE_SEALED_HOLD_ROUNDS` full
+    /// rounds have passed and no besieger on the board has a walk to the
+    /// floor, every besieger withdraws at once and the fight ends. Nothing
+    /// is lost and nothing won — a pack that cannot reach the floor took
+    /// nothing, and a withdrawal is no kill. `true` when it ended the fight.
+    ///
+    /// Asked from `tactical_round_upkeep`, once a round. The fallback spawn
+    /// ring (`board::siege_spawn_cells`) sits beyond rock the board reads as
+    /// `Blocked`, so without this the fight could never finish. Terrain
+    /// only, never bodies: a crowd at a choke is not a sealed base. A
+    /// besieger that can reach floor fights as normal, so one open path is
+    /// enough to hold the whole pack in the fight.
+    pub(crate) fn sealed_siege_withdrawal(&mut self) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        if battle.siege_pack == 0 || battle.round <= SIEGE_SEALED_HOLD_ROUNDS {
+            return false;
+        }
+        let besiegers: Vec<(Entity, (i32, i32))> = battle
+            .bodies()
+            .filter(|&(e, _)| self.world.get::<Besieger>(e).is_some())
+            .collect();
+        if besiegers.is_empty() {
+            return false;
+        }
+        let origin = battle.siege_origin;
+        let floor = self.world.resource::<crate::base_grid::BaseGrid>();
+        let cells: Vec<(i32, i32)> = besiegers.iter().map(|&(_, cell)| cell).collect();
+        if any_reaches_floor(&battle.board, &cells, |(x, y)| {
+            floor.is_floor(x + origin.0, y + origin.1)
+        }) {
+            return false;
+        }
+        self.log_base_kind(
+            MessageKind::Raid,
+            "The besiegers find no way in and withdraw.".to_string(),
+        );
+        for (body, _) in besiegers {
+            self.world.resource_mut::<TacticalBattle>().remove(body);
+            // A nemesis leader walks out and goes home at teardown, as from
+            // `besieger_leaves`; everyone else is gone.
+            if self
+                .world
+                .get::<crate::components::NemesisHome>(body)
+                .is_none()
+            {
+                self.world.despawn(body);
+            }
+        }
+        self.settle_tactical(None)
     }
 
     /// `SIEGE_MORALE_BREAK_PERCENT` of the besieging pack down — killed, or
@@ -232,11 +288,11 @@ impl Game {
     /// path exists at all, which falls through to the generic AI rather
     /// than standing still.
     ///
-    /// **`target` is never itself in the field.** The Home always stands on
-    /// the door — `besieger_turn`'s own reason for testing melee range
-    /// rather than equality — and one body to a cell excludes an occupied
-    /// cell from `reach::movement_field` entirely, so `reach::path_to`
-    /// aimed at the door directly always answers empty. This walks toward
+    /// **`target` may not be in the field.** A body can be standing on the
+    /// door — `besieger_turn`'s own reason for testing melee range rather
+    /// than equality — and one body to a cell excludes an occupied cell
+    /// from `reach::movement_field` entirely, so `reach::path_to` aimed at
+    /// the door directly can answer empty. This walks toward
     /// whichever reachable cell this turn is strictly closer to the door
     /// **by the walking distance a corridor actually costs**, not by raw
     /// Chebyshev distance to it.
@@ -255,7 +311,7 @@ impl Game {
     /// `game::pursuit::walk_field` — terrain only, not bodies-as-walls, or a
     /// crowd of besiegers queued at their own threshold would wall each
     /// other out of the field they are all reading. `target` (the door) is
-    /// the field's own origin at cost zero, so the Home standing on it is
+    /// the field's own origin at cost zero, so a body standing on it is
     /// never a problem the way it is for a *destination* field. Ties break
     /// on the walk's own cost, then the board's reading order, matching
     /// `reach::path_to`'s own tie-break.
@@ -315,8 +371,8 @@ impl Game {
 
     /// `body` reaches the door and leaves — `Game::tactical_step`'s own
     /// off-board departure exists for a body disengaging on foot, but a
-    /// besieger's door is not reliably at the board's own edge (the flood
-    /// fill's bounding box need not put `BASE_EXIT_CELL` on its boundary),
+    /// besieger's door is not reliably at the board's own edge (the anchor
+    /// tile need not sit on the board's boundary),
     /// so this calls the same removal the edge-step takes directly rather
     /// than depending on that geometry. **What it carried is gone** — no
     /// further bookkeeping, which is what "stolen" means once it is through
@@ -373,6 +429,20 @@ impl Game {
         }
         true
     }
+}
+
+/// Whether any besieger standing on `besiegers` (board cells) has a walk,
+/// over the board's terrain alone, to a cell `is_floor` names.
+pub(crate) fn any_reaches_floor(
+    board: &Board,
+    besiegers: &[(i32, i32)],
+    is_floor: impl Fn((i32, i32)) -> bool,
+) -> bool {
+    besiegers.iter().any(|&from| {
+        walk_field(from, board.side, |(x, y)| board.move_cost(x, y))
+            .keys()
+            .any(|&cell| is_floor(cell))
+    })
 }
 
 /// The goods a besieger was carrying when it died, put back — into the

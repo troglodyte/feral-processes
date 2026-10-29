@@ -1,33 +1,11 @@
-//! Walking in and out of base space through the anchor, and walking around
-//! once inside.
-//!
-//! The counterpart to `game/stack.rs` for the other off-surface locale, and
-//! it plays the same trick for the same reason: the party's base-space
-//! coordinates live on `resources::Locale`, and the player's `Position`
-//! component stays pinned to the anchor tile on the zone surface. See
-//! `resources::Locale` for why that is the load-bearing decision — nothing
-//! on the surface has to know base space exists.
-//!
-//! What that costs is a guard on anything that reaches the zone map through
-//! `Position`, and `enter_base` is itself one of those things: it asks
-//! whether the player is standing on the anchor. Underground the pinned
-//! `Position` *is* the entrance tile, and a run that dived from its own
-//! starting tile dived from the anchor — so that question answers yes four
-//! frames down, and `Game::require_surface` has to be asked first.
+//! The base's own verbs on the field: the dig, floor, finish and stockpile
+//! marks, the dig crew that works them, rock describing and mining mode, and
+//! the cosmetic transit walk. The base has no space of its own (ADR 0032);
+//! everything here is in field coordinates.
 
 use crate::base_grid::BaseGrid;
 use crate::components::Fleeing;
-use crate::resources::Locale;
 use crate::*;
-
-/// The one cell of base space the anchor's door opens onto, and the only
-/// cell you can leave from — base space's own origin, where the Home
-/// stands.
-///
-/// Here rather than in `tuning/`: it is not a knob, it is the origin the
-/// whole coordinate space is defined against, and a base space whose exit
-/// was somewhere else would be a different space rather than a retuned one.
-pub(crate) const BASE_EXIT_CELL: (i32, i32) = (0, 0);
 
 /// The cells a body walks through to get from `from` to `to` inside base
 /// space — `from` first, `to` last — or nothing at all when there is no walk
@@ -37,20 +15,18 @@ pub(crate) const BASE_EXIT_CELL: (i32, i32) = (0, 0);
 /// caravan route's — `Game::queue_transit_walk`. Two things about it are
 /// deliberate.
 ///
-/// It pathfinds on `BaseGrid::walkable` **alone and admits no blocked set**,
+/// It pathfinds on laid floor **alone and admits no blocked set**,
 /// unlike `hauling::post_field`, which refuses tiles other things stand on.
-/// `BASE_EXIT_CELL` is where the Home stands, so a walk that refused occupied
+/// The anchor is where the Home stands, so a walk that refused occupied
 /// tiles could never reach its own destination. A walker ghosting past a
 /// machine for a fraction of a second is invisible; one ghosting through rock
 /// reads as a rendering fault, which is the whole reason a path is computed
 /// rather than the two ends being interpolated between.
 ///
 /// And a walk that does not exist is **nothing**, never a straight line: a
-/// body whose tile is not walkable base space at all is the common case for a
-/// program adopted on the surface that has not drifted yet, since
-/// `entry_tile` is what gives one a base cell.
+/// body whose tile cannot be stood on has no walk to show.
 pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
-    if !grid.walkable(from.0, from.1) || !grid.walkable(to.0, to.1) {
+    if !grid.is_floor(from.0, from.1) || !grid.is_floor(to.0, to.1) {
         return Vec::new();
     }
     if from == to {
@@ -58,7 +34,7 @@ pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) ->
     }
     let reach = crate::tuning::haul_walk_radius(grid.radius());
     let field =
-        crate::game::pursuit::walk_field(to, reach, |p| grid.walkable(p.0, p.1).then_some(1));
+        crate::game::pursuit::walk_field(to, reach, |p| grid.is_floor(p.0, p.1).then_some(1));
     let Some(&start) = field.get(&from) else {
         return Vec::new();
     };
@@ -85,7 +61,7 @@ pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) ->
 }
 
 impl Game {
-    /// Queues one `TransitCue` for a walk between two base-space cells, or
+    /// Queues one `TransitCue` for a walk between two field cells, or
     /// queues nothing when there is no walk between them — `transit_path`'s
     /// own "a walk that does not exist is nothing" rule, carried through
     /// rather than re-checked here.
@@ -101,10 +77,7 @@ impl Game {
         from: (i32, i32),
         to: (i32, i32),
     ) {
-        let path = {
-            let grid = self.world.resource::<BaseGrid>();
-            transit_path(grid, from, to)
-        };
+        let path = transit_path(self.world.resource::<BaseGrid>(), from, to);
         if path.len() < 2 {
             return;
         }
@@ -115,80 +88,6 @@ impl Game {
 }
 
 impl Game {
-    /// Steps through the anchor and out of phase, landing on
-    /// `BASE_EXIT_CELL`.
-    ///
-    /// Refused unless the party is on the zone surface proper, standing on
-    /// the anchor tile, with a Home deployed. That last one is not a
-    /// formality: a new run has no base at all, because
-    /// `Game::place_structure` refuses every structure until a Home exists
-    /// and the Home is player-built. Until one is up, base space is solid
-    /// everywhere and the anchor opens onto nothing — so it says so, in
-    /// wording that shares nothing with the "you are not on the anchor"
-    /// refusal, because those are two different things for a player to fix.
-    ///
-    /// The player's `Position` is not written here, unlike `enter_stack`'s
-    /// pin to the entrance tile. It does not need to be: the guard above is
-    /// that the player is *already* standing on the anchor, and nothing in
-    /// base space moves `Position` — `move_player` dispatches to
-    /// `move_in_base`, which only ever rewrites the locale. The pin is a
-    /// property of the two of them together rather than an assignment that
-    /// would be a no-op the day it was written.
-    pub fn enter_base(&mut self) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Not right now.".into());
-        }
-        self.require_surface()?;
-        let anchor = self
-            .anchor_position()
-            .ok_or_else(|| "There's no anchor in this sector.".to_string())?;
-        let standing = *self
-            .world
-            .get::<Position>(self.player_entity())
-            .ok_or_else(|| "You aren't anywhere you can phase out from.".to_string())?;
-        if (standing.x, standing.y) != anchor {
-            return Err("No anchor here — you phase out from the anchor tile.".into());
-        }
-        if !self.has_structure(HOME_STRUCTURE_ID) {
-            return Err(
-                "The anchor is dark. There's nothing on the other side until you deploy a Home."
-                    .into(),
-            );
-        }
-
-        let (x, y) = BASE_EXIT_CELL;
-        self.world.insert_resource(Locale::Base { x, y });
-        self.log("You step into the anchor and phase out of the sector.");
-        self.tick();
-        Ok(())
-    }
-
-    /// Steps back out through the anchor onto the tile it stands on.
-    ///
-    /// Refused anywhere but `BASE_EXIT_CELL` — base space has one door, not
-    /// one per wall. Nothing has to be restored on the way out beyond the
-    /// locale: unlike `Game::clear_stack`, which also drops the generated
-    /// frame and the Trace built up inside it, base space keeps no
-    /// per-visit state at all. `BaseGrid` is the player's own dug ground and
-    /// outlives every visit, including a breach into the next zone.
-    pub fn leave_base(&mut self) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Not right now.".into());
-        }
-        self.require_base()?;
-        let standing = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
-        if standing != BASE_EXIT_CELL {
-            return Err("The way out is back at the Home — walk to it first.".into());
-        }
-
-        self.world.insert_resource(Locale::Surface);
-        self.log("You phase back in, standing on the anchor.");
-        self.tick();
-        Ok(())
-    }
-
     /// Whether the run has a base at all — a Home standing.
     ///
     /// The one thing a frontend has to be able to ask about the base without
@@ -198,48 +97,11 @@ impl Game {
     /// menu that hid its Deploy row off the base would hide the only way
     /// onto it, so the row asks this.
     ///
-    /// `Game::in_base` is where the party is; this is whether there is a
-    /// base for them to be in. The two are independent — you can stand in
-    /// base space having just demolished the Home out from under yourself.
     pub fn has_home(&self) -> bool {
         self.has_structure(HOME_STRUCTURE_ID)
     }
 
-    /// Lays the pocket the run opens with: `BaseCell::Floor` over the
-    /// chamfered box of `STARTING_POCKET_HALF_WIDTH` by
-    /// `STARTING_POCKET_HALF_HEIGHT` around base space's own origin.
-    ///
-    /// Called from the one site `Game::stamp_platform` used to be called
-    /// from — deploying the first Home — and it is a one-for-one
-    /// replacement for it, which is what keeps the opening playing as it
-    /// did. The shape is the slab's, `PLATFORM_CORNER_CUT` and all, so the
-    /// base still reads as rounded rather than as a stamped square.
-    ///
-    /// **It writes no `WorldMap` tile.** That is the point of the whole
-    /// relocation: `Biome::Platform` stops being stamped into the zone
-    /// surface, and the base's footprint becomes `BaseGrid::is_floor` and
-    /// nothing else.
-    ///
-    /// Idempotent, because `lay_floor` overwrites: a second call re-floors
-    /// cells that are already floored and takes nothing away. Nothing calls
-    /// it twice today — the first Home is the only caller and there is only
-    /// ever one — but a pocket that could be *shrunk* by re-laying it would
-    /// be a much worse thing to have to reason about later.
-    pub(crate) fn lay_starting_pocket(&mut self) {
-        let w = crate::tuning::STARTING_POCKET_HALF_WIDTH;
-        let h = crate::tuning::STARTING_POCKET_HALF_HEIGHT;
-        let cut = crate::tuning::PLATFORM_CORNER_CUT;
-        let mut grid = self.world.resource_mut::<BaseGrid>();
-        for dy in -h..=h {
-            for dx in -w..=w {
-                if dx.abs() + dy.abs() <= w + h - cut {
-                    grid.lay_floor(dx, dy);
-                }
-            }
-        }
-    }
-
-    /// Moves the anchor — base space's one door — onto zone-surface
+    /// Moves the anchor — the base's one fixed point — onto field
     /// `(x, y)`.
     ///
     /// **One writer, two callers with nothing else in common**: founding a
@@ -258,7 +120,7 @@ impl Game {
         }
     }
 
-    /// Every `DigSite` in base space, by the tile it stands on.
+    /// Every `DigSite` in the field, by the tile it stands on.
     ///
     /// The lookup `toggle_mark_box` walks its box against. Built once per
     /// press rather than per cell: bevy's `World::query_filtered` constructs
@@ -266,7 +128,7 @@ impl Game {
     /// tile by tile made one committed 25x25 box cost 625 of those, times a
     /// linear scan that grows with the sites already standing.
     ///
-    /// **The keys are in base space**, so this must never be indexed with a
+    /// **The keys are in the field**, so this must never be indexed with a
     /// zone-surface coordinate — see `components::DigSite`.
     fn dig_sites_by_tile(&mut self) -> HashMap<(i32, i32), Entity> {
         let mut query = self
@@ -278,13 +140,13 @@ impl Game {
             .collect()
     }
 
-    /// The `DigSite` standing on base-space `(x, y)`, if the player has
+    /// The `DigSite` standing on field `(x, y)`, if the player has
     /// started on that wall or marked it.
     ///
     /// For a single tile. Anything walking a region wants
     /// `dig_sites_by_tile` instead, for the reason stated there.
     ///
-    /// **Its `Position` is in base space**, so this must never be reached
+    /// **Its `Position` is in the field**, so this must never be reached
     /// for with a zone-surface coordinate — see `components::DigSite`.
     pub(crate) fn dig_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
@@ -297,7 +159,7 @@ impl Game {
     }
 
     /// What the first wall the player can see in `(dx, dy)` is made of, out
-    /// to `range` — the examine ray's base-space answer.
+    /// to `range` — the examine ray's field answer.
     ///
     /// **Reads the same faces the map colours, and that is the point.** If
     /// the map hid a kind while `x` named it, the hiding would be decorative
@@ -316,8 +178,7 @@ impl Game {
     /// beyond. A finish with no rock in range still answers `Some`, so
     /// examining a fully floored, fully finished room says something.
     pub fn describe_base_rock(&self, dx: i32, dy: i32, range: i32) -> Option<String> {
-        let (bx, by) = self.base_pos()?;
-        let seed = self.world.resource::<BaseGrid>().seed();
+        let (bx, by) = self.field_pos()?;
         let finish_name = {
             let grid = self.world.resource::<BaseGrid>();
             grid.finish_at(bx + dx, by + dy).cloned()
@@ -356,12 +217,9 @@ impl Game {
         for _ in 0..range {
             x += dx;
             y += dy;
-            let grid = self.world.resource::<BaseGrid>();
-            if grid.is_solid(x, y) {
-                let def = self
-                    .world
-                    .resource::<crate::rock::RockDb>()
-                    .kind_at(seed, x, y);
+            if !self.ground().walkable(x, y) {
+                let biome = self.world.resource::<WorldMap>().peek(x, y).biome;
+                let def = self.world.resource::<crate::rock::RockDb>().kind_at(biome);
                 let rock_line = format!(
                     "{}. It takes at least {} swings to cut through.",
                     def.name, def.min_swings
@@ -397,22 +255,16 @@ impl Game {
         armed
     }
 
-    /// What the rock at `(x, y)` in base space is: how much it absorbs, the
-    /// most one swing may take off it, and how bright its face is drawn.
-    ///
-    /// The one door from a coordinate to `rock::RockDb`, so the seed a kind
-    /// is derived from is stated once. **It is `BaseGrid`'s seed and never
-    /// `WorldMap::seed()`** — see the field's own doc for why that
-    /// distinction is load-bearing rather than stylistic.
+    /// What the rock at `(x, y)` is: how much it absorbs, the most one swing
+    /// may take off it, and how bright its face is drawn — keyed by the
+    /// field tile's biome (`RockDb::kind_at`).
     ///
     /// Answers for solid and open cells alike: a kind is a property of the
     /// place, and the place does not stop being made of something once it
     /// has been cut.
     pub(crate) fn wall_at(&self, x: i32, y: i32) -> crate::rock::Wall {
-        let seed = self.world.resource::<BaseGrid>().seed();
-        self.world
-            .resource::<crate::rock::RockDb>()
-            .wall_at(seed, x, y)
+        let biome = self.world.resource::<WorldMap>().peek(x, y).biome;
+        self.world.resource::<crate::rock::RockDb>().wall_at(biome)
     }
 
     /// One tick of cutting at `(x, y)`, for the ear.
@@ -436,31 +288,20 @@ impl Game {
             .push((x, y), EffectKind::Mine);
     }
 
-    /// One swing at the solid base-space cell `(x, y)`, spawning the
-    /// `DigSite` that records the wall's progress if this is the first.
+    /// One swing of `swinger`'s damage at the rock cell `(x, y)`, spawning
+    /// the `DigSite` that records progress if this is the first. Returns the
+    /// site when the swing broke the cell and `None` while it still stands.
     ///
-    /// The shape is `Game::attack_nest`'s, down to sharing its damage
-    /// through `Game::swing_damage`: rock is a thing you wear down by
-    /// bumping into it, it cannot dodge, and identical swings land identical
-    /// damage. What it does *not* share is a `Durability` sized from an
-    /// asset — `tuning::BASE_ROCK_DURABILITY` is the same for every cell in
-    /// every zone at every depth, so the thing that changes as a run goes on
-    /// is the player's swing.
-    ///
-    /// Opening the cell despawns the site **unless it is marked**: a mark
-    /// outlives the cut, because marked solid means cut it and marked `Open`
-    /// means floor it (slice 2, phase B).
-    ///
-    /// **`swinger` is whoever is hitting it**, and the same function serves
-    /// the player's bump and a posted digger's cycle (`Game::run_dig_crew`)
-    /// — one place where rock takes damage, one place where a cell opens,
-    /// one fragment roll. What the swinger decides is the damage, through
-    /// its own `Game::swing_damage`, and the voice: a crew's swings are
-    /// silent and only the break is base news, because a line per swing per
-    /// digger is the log for the rest of the run.
-    pub(crate) fn strike_rock(&mut self, swinger: Entity, x: i32, y: i32) {
+    /// Shared by the field strike and the field strike
+    /// (`Game::strike_field_rock`), so rock wears down by one rule in both.
+    pub(crate) fn swing_at_rock(
+        &mut self,
+        swinger: Entity,
+        x: i32,
+        y: i32,
+        wall: crate::rock::Wall,
+    ) -> Option<Entity> {
         let by_player = swinger == self.player_entity();
-        let wall = self.wall_at(x, y);
         // Capped, and this is the whole of the fix for a developed player
         // demolishing their own base by clipping a corner. `swing_damage`
         // grows all run against rock that does not, so uncapped every cell
@@ -480,9 +321,7 @@ impl Game {
                 ))
                 .id()
         });
-        let Some(mut durability) = self.world.get_mut::<Durability>(site) else {
-            return;
-        };
+        let mut durability = self.world.get_mut::<Durability>(site)?;
         durability.hp = durability.hp.saturating_sub(dmg);
         let still_standing = durability.hp > 0;
         // Above the break/no-break split deliberately: the swing that opens
@@ -493,31 +332,20 @@ impl Game {
             if by_player {
                 self.log(format!("You cut into the entropy for {dmg} damage."));
             }
-            return;
+            return None;
         }
+        Some(site)
+    }
 
-        // Read before the cell is opened rather than after: the swing lands
-        // on this tick, and `mined_at` records it — save format only now,
-        // since nothing reads the tick back.
-        let tick = self.world.resource::<GameClock>().tick;
-        self.world.resource_mut::<BaseGrid>().open(x, y, tick);
-        let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
-        if !marked {
-            self.world.despawn(site);
-        }
-        if by_player {
-            self.log("The entropy gives way, and the cell opens.");
-        } else {
-            self.log_base("Your crew cuts through, and the cell opens.");
-        }
-
+    /// The fragment a broken rock cell may return, at `ROCK_FRAGMENT_CHANCE`.
+    pub(crate) fn roll_rock_fragment(&mut self, by_player: bool) {
         // A live action, not world generation, so `GameRng` is the right
         // stream to draw from: nothing here has to be reproduced by a
         // reload.
         let paid = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0
-                .random_bool(crate::tuning::BASE_MINE_FRAGMENT_CHANCE.clamp(0.0, 1.0) as f64)
+                .random_bool(crate::tuning::ROCK_FRAGMENT_CHANCE.clamp(0.0, 1.0) as f64)
         };
         if paid {
             let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
@@ -553,12 +381,22 @@ impl Game {
     /// which take laid floor and skip everything else — `set_mark`'s table.
     pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32), brush: Option<&FinishOrder>) {
         let mut sites = self.dig_sites_by_tile();
+        // Asked once and kept current by `set_mark`, not re-queried per cell.
+        let mut pending = self.pending_floor();
         let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                self.set_mark(&mut sites, x, y, marking, brush);
+        // Floor must join the base, so a pass can unlock cells an earlier
+        // cell in the box needed first; repeat until a pass marks nothing new.
+        loop {
+            let before = sites.len();
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    self.set_mark(&mut sites, &mut pending, x, y, marking, brush);
+                }
+            }
+            if !(marking && brush.is_none()) || sites.len() == before {
+                break;
             }
         }
     }
@@ -579,9 +417,9 @@ impl Game {
         }
     }
 
-    /// Every stockpile cell, in `(x, y)` order; empty outside base space.
+    /// Every stockpile cell, in `(x, y)` order; empty outside the field.
     pub fn stockpile_cells(&self) -> Vec<(i32, i32)> {
-        if self.base_pos().is_none() {
+        if self.is_underground() {
             return Vec::new();
         }
         self.world
@@ -645,7 +483,7 @@ impl Game {
     /// Every marked cell with the finish it carries: the one list the three
     /// readers above filter, so a mark is a dig or a floor by one test.
     fn marked_sites(&self) -> Vec<(DigMark, Option<FinishOrder>)> {
-        let grid = self.world.resource::<BaseGrid>();
+        let ground = self.ground();
         let mut marks: Vec<(DigMark, Option<FinishOrder>)> = self
             .world
             .iter_entities()
@@ -662,7 +500,7 @@ impl Game {
                         // old wall's `max_hp` against an `hp` of zero, which
                         // would read as a finished bar sitting on a job that
                         // has not started.
-                        cut: (grid.is_solid(p.x, p.y) && dur.max_hp > 0)
+                        cut: (!ground.walkable(p.x, p.y) && dur.max_hp > 0)
                             .then(|| 1.0 - dur.hp as f32 / dur.max_hp as f32),
                     },
                     site.finish.clone(),
@@ -673,7 +511,7 @@ impl Game {
         marks
     }
 
-    /// Whether base-space `(x, y)` is marked. A cell with no `DigSite` is
+    /// Whether field `(x, y)` is marked. A cell with no `DigSite` is
     /// not, which is what makes an untouched wall the unmarked case without
     /// storing anything for it.
     fn is_marked_in(&self, sites: &HashMap<(i32, i32), Entity>, x: i32, y: i32) -> bool {
@@ -701,13 +539,18 @@ impl Game {
     fn set_mark(
         &mut self,
         sites: &mut HashMap<(i32, i32), Entity>,
+        pending: &mut std::collections::BTreeSet<(i32, i32)>,
         x: i32,
         y: i32,
         marked: bool,
         brush: Option<&FinishOrder>,
     ) {
+        let solid = !self.ground().walkable(x, y);
+        // A dig mark is a floor request, so it is refused wherever floor is.
+        if marked && brush.is_none() && self.floor_conflict(x, y).is_some() {
+            return;
+        }
         let grid = self.world.resource::<BaseGrid>();
-        let solid = grid.is_solid(x, y);
         let floor = grid.is_floor(x, y);
 
         // The order to write onto the mark, or `None` to leave this cell
@@ -718,6 +561,18 @@ impl Game {
             match brush {
                 None => {
                     if floor {
+                        return;
+                    }
+                    // A dig mark on a blocker is the dig request itself, so
+                    // only adjacency can refuse it here.
+                    if crate::game::base::building::floor_request_refusal(
+                        (x, y),
+                        self.ground(),
+                        pending,
+                        true,
+                    )
+                    .is_some()
+                    {
                         return;
                     }
                     None
@@ -738,6 +593,8 @@ impl Game {
         } else {
             None
         };
+        // `pending_floor`'s own test, kept in step with every write below.
+        let plain = marked && order.is_none();
 
         match sites.get(&(x, y)).copied() {
             Some(site) => {
@@ -749,6 +606,11 @@ impl Game {
                     // never keeps a stale order for a kind it is no longer
                     // asked to be.
                     dig.finish = order;
+                }
+                if plain {
+                    pending.insert((x, y));
+                } else {
+                    pending.remove(&(x, y));
                 }
                 // An unmarked site earns its keep by holding chip progress,
                 // and *both* ends of the meter hold none. A full meter is a
@@ -768,6 +630,7 @@ impl Game {
                 if !keep {
                     self.world.despawn(site);
                     sites.remove(&(x, y));
+                    pending.remove(&(x, y));
                 }
             }
             None if marked => {
@@ -786,18 +649,21 @@ impl Game {
                     Position { x, y },
                 ));
                 sites.insert((x, y), site.id());
+                if plain {
+                    pending.insert((x, y));
+                }
             }
             None => {}
         }
     }
 
-    /// Lays floor over base-space `(x, y)` and retires the cell's `DigSite`
+    /// Lays floor over field `(x, y)` and retires the cell's `DigSite`
     /// with it.
     ///
-    /// The one place a base-space cell becomes `Floor` in play — `lay_tile`
+    /// The one place a field cell becomes `Floor` in play — `lay_tile`
     /// today, the crew's flooring job next — because a finished cell has
     /// nothing left to record and a mark that outlived the tile would be a
-    /// job no one could ever complete. `lay_starting_pocket` writes the grid
+    /// job no one could ever complete. Founding writes the starting 3x3
     /// directly instead: it runs before anything can have dug.
     pub(crate) fn floor_cell(&mut self, x: i32, y: i32) {
         self.world.resource_mut::<BaseGrid>().lay_floor(x, y);
@@ -880,9 +746,8 @@ impl Game {
             // so `side` here is never anything but the default.
             if !crate::game::base::hauling::at_station(from, target, 1) {
                 let step = {
-                    let grid = self.world.resource::<BaseGrid>();
                     crate::game::base::hauling::step_to_post(
-                        grid,
+                        self.world.resource::<BaseGrid>(),
                         from,
                         target,
                         1,
@@ -913,10 +778,7 @@ impl Game {
             // which half of the one dig verb this is decides whether the
             // tick makes a sound: cutting is mining, flooring and finishing
             // are not.
-            let cutting = self
-                .world
-                .resource::<BaseGrid>()
-                .is_solid(target.x, target.y);
+            let cutting = !self.ground().walkable(target.x, target.y);
             if cutting && !landed {
                 self.cue_mining(target.x, target.y);
             }
@@ -936,7 +798,19 @@ impl Game {
                 .and_then(|d| d.finish.clone());
             match finish {
                 Some(order) => self.crew_finishes(site, target.x, target.y, order),
-                None if cutting => self.strike_rock(worker, target.x, target.y),
+                None if cutting => {
+                    // The crew digs outward from the floor, a mark at a time:
+                    // a blocker no floor or pending floor touches waits until
+                    // one does (plan, resolved questions 1 and 5).
+                    let pending = self.pending_floor();
+                    if crate::game::field_mining::minable(
+                        (target.x, target.y),
+                        self.ground(),
+                        &pending,
+                    ) {
+                        self.strike_field_rock(worker, target.x, target.y);
+                    }
+                }
                 None => self.crew_lays_tile(target.x, target.y),
             }
         }
@@ -1045,6 +919,14 @@ impl Game {
     /// shortage itself on the very next tick — and the mark stays either
     /// way, so the job is simply retried.
     fn crew_lays_tile(&mut self, x: i32, y: i32) {
+        // Something claimed the cell since the mark went down — a town grew
+        // over it, an outpost was raised: the request is dropped, unpaid.
+        if self.floor_conflict(x, y).is_some() {
+            if let Some(site) = self.dig_site_at(x, y) {
+                self.world.despawn(site);
+            }
+            return;
+        }
         let fragment = ItemId::from(crate::items::ids::CORE_FRAGMENT);
         let cost = crate::tuning::FLOOR_TILE_COST;
         if crate::game::base::work_orders::base_holding(self, &fragment) < cost {
@@ -1087,54 +969,19 @@ impl Game {
         true
     }
 
-    /// One step through base space, reached from `Game::move_player` — the
-    /// same four keys, dispatched on locale.
-    ///
-    /// Reads `BaseGrid::walkable` for whether the step lands, and then the
-    /// one thing a step can do besides land: walk onto a Portal and breach.
-    /// `WorldMap` is a different coordinate space entirely and has no say
-    /// here, and solid rock is simply not walkable — there is no way to end
-    /// up standing inside it, so base space needs no analogue of the Stack's
-    /// `die_in_the_rock`.
-    ///
-    /// Nothing *blocks*. A structure standing on a cell is walked over, not
-    /// bumped into, unlike the zone surface — and it has to be, because the
-    /// Home stands on `BASE_EXIT_CELL` and a blocked exit cell is a base
-    /// with no way out of it.
-    ///
-    /// **A step into solid rock is a swing**, and costs the turn the step
-    /// would have — see `Game::strike_rock`. Slice 1 refused it for free, on
-    /// the grounds that base space is walls until the player cuts them and
-    /// brushing against your own corners should not be taxed; slice 2 makes
-    /// cutting them the point, so the wall is a thing you attack instead.
-    ///
-    /// **It still breaks off a posted job**, and that matches the surface:
-    /// `move_player` drops the job before it looks at what is in the way, on
-    /// the grounds that either way you stopped working to do it, and
-    /// `Game::work_structure` promises the player as much when it posts.
-    /// The drop sits above every branch below rather than inside one, which
-    /// is why turning the refusal into a swing did not quietly stop it
-    /// happening.
-    /// Whether base-space `(x, y)` refuses a step outright — solid rock
-    /// (the dead not-walkable case included, `BaseGrid` having no third
-    /// state today) or a barrier — the same two refusals `Game::move_in_base`
-    /// answers with below, before it ever writes `Locale::Base`. **Called by
-    /// both**, rather than restated: `Game::travel_step`'s base route asks
-    /// this instead of `Game::blocked_tiles`, which also refuses every
-    /// structure's own *anchor* — a machine `move_in_base` walks over
-    /// freely, only a barrier or rock actually stopping it.
+    /// Whether `(x, y)` refuses a step outright: ground nothing can stand
+    /// on, or a barrier. `Game::move_player` and `Game::travel_step` both ask
+    /// this rather than `Game::blocked_tiles`, which also refuses every
+    /// structure's own anchor — a machine is walked over, only a barrier or
+    /// rock actually stopping the party.
     pub(crate) fn base_step_blocked(&mut self, x: i32, y: i32) -> bool {
-        let rock_or_unfloored = {
-            let grid = self.world.resource::<BaseGrid>();
-            grid.is_solid(x, y) || !grid.walkable(x, y)
-        };
-        rock_or_unfloored || self.barrier_at(x, y).is_some()
+        !self.ground().walkable(x, y) || self.barrier_at(x, y).is_some()
     }
 
-    /// A bump into solid base-space rock from the player's cell: a swing
+    /// A bump into a minable field blocker from the player's cell: a swing
     /// when the tools are out and the cell is straight ahead, a free refusal
     /// otherwise.
-    fn bump_rock(&mut self, (nx, ny): (i32, i32), diagonal: bool) {
+    pub(crate) fn bump_rock(&mut self, (nx, ny): (i32, i32), diagonal: bool) {
         // Armed first, and this is the whole of the toggle. Slice 2 made
         // every bump a swing, which meant walking a corridor at a
         // developed level took the corridor's corners out with you. A
@@ -1156,71 +1003,7 @@ impl Game {
             return;
         }
         let player = self.player_entity();
-        self.strike_rock(player, nx, ny);
-        self.tick();
-    }
-
-    pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
-        let Some((x, y)) = self.base_pos() else {
-            return;
-        };
-        // Before the wall check, exactly as `move_player` does it.
-        self.break_off_job();
-        let (nx, ny) = (x + dx, y + dy);
-        // Solid rock is hit, not bumped into — the branch sits exactly where
-        // `move_player` holds its nest branch, and for the same reason: the
-        // wall is a thing you attack, and a swing costs the turn a step
-        // would have. There is no new key and no direction prompt.
-        if self.world.resource::<BaseGrid>().is_solid(nx, ny) {
-            self.bump_rock((nx, ny), dx != 0 && dy != 0);
-            return;
-        }
-        // Solid rock already returned above, so this is either the dead
-        // not-walkable case `base_step_blocked`'s own doc names, or a
-        // barrier — which refuses the step as rock does with mining off:
-        // free, no tick — but there is nothing to cut, a Wall comes down by
-        // demolition, not by a shoulder.
-        if self.base_step_blocked(nx, ny) {
-            if let Some(wall) = self.barrier_at(nx, ny) {
-                let name = self.entity_label(wall);
-                self.log(format!("The {name} stops you."));
-            }
-            return;
-        }
-        // The one structure a step in here does anything with. A Portal is a
-        // `Structure` and so stands in base space with the rest of them, and
-        // walking onto it is how a run breaches — the surface branch of
-        // `move_player` used to hold this check, back when the base was on
-        // the surface, and asking it out there now answers about a tile in
-        // another coordinate space entirely.
-        //
-        // Consumed before `enter_next_zone` runs, exactly as it was: a
-        // portal that travelled would make every breach after the first
-        // free, bypassing its per-zone cost.
-        if let Some(portal) = self.find_zone_portal_at(nx, ny) {
-            // Refused like a barrier: free, no tick, and the portal stands
-            // so the key can be found and the step tried again. This is the
-            // check that catches a portal already standing in an old save.
-            let zone = self.world.resource::<ZoneLevel>().0;
-            if let Err(why) = self.phase_key_gate(zone) {
-                self.log(why);
-                return;
-            }
-            self.world.despawn(portal);
-            self.enter_next_zone();
-            self.tick();
-            return;
-        }
-        // Asked, never acted on: the frontend confirms and calls
-        // `escape_basin`. Refused like the portal when the gate is shut.
-        if self.find_basin_exit_at(nx, ny).is_some() {
-            match self.basin_exit_gate() {
-                Ok(()) => self.raise_basin_exit_prompt(),
-                Err(why) => self.log(why),
-            }
-            return;
-        }
-        self.world.insert_resource(Locale::Base { x: nx, y: ny });
+        self.strike_field_rock(player, nx, ny);
         self.tick();
     }
 }

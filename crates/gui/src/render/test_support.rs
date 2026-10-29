@@ -384,7 +384,6 @@ pub(super) fn app_in_base_with_an_extractor(seed: u32) -> App {
     let _cleanup = RemoveOnDrop(&path);
     app.game.as_mut().expect("just set").save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base { x: 0, y: 0 };
     data.structures.push(save::StructureSave {
         recipe: Some("core_fragment".into()),
         kind: "extractor".to_string(),
@@ -458,16 +457,17 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
     game.save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
     match standing {
-        StandingIn::Base => data.locale = Locale::Base { x: 0, y: 0 },
+        StandingIn::Base => {}
         StandingIn::Stack => {
+            let entrance = data.player.position;
             data.locale = Locale::Stack {
                 depth: 1,
                 frames: 2,
                 x: 0,
                 y: 0,
                 facing: feral_processes_engine::stack::Dir::North,
-                entrance: data.player.position,
-            }
+                entrance,
+            };
         }
         StandingIn::Surface => {}
     }
@@ -603,7 +603,6 @@ pub(super) fn game_with_a_workbench_and_designs(
     let _cleanup = RemoveOnDrop(&path);
     game.save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base { x: 0, y: 0 };
     data.gear_designs = designs;
     data.structures.push(save::StructureSave {
         recipe: None,

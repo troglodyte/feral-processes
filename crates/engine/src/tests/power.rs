@@ -952,13 +952,12 @@ fn a_dry_supplier_is_listed_at_zero_and_the_lines_still_reconcile() {
     assert_eq!(line.supply, 0, "dry supplies nothing");
 }
 
-/// A base on the shipped assets with a Home standing and the party inside
-/// base space, which is the only place a supplier can be deployed.
+/// A base on the shipped assets with a Home standing and the party on it.
 fn base_with_home(seed: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 400);
     place_now(&mut game, "home", 1, 0).unwrap();
-    game.enter_base().unwrap();
+    stand_in_base(&mut game);
     game
 }
 

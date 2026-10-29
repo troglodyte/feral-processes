@@ -1831,6 +1831,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
         stack_memory_tiered: true,
+        entered_tiers: Default::default(),
         populated_chunks: crate::resources::PopulatedChunks::default(),
         explored_chunks: crate::resources::ExploredChunks::default(),
         seen_tiles: crate::resources::SeenTiles::default(),
@@ -2472,10 +2473,7 @@ fn a_nest_guardian_is_never_placed_where_it_could_never_step() {
     assert!(!placed.is_empty(), "the nest should have guardians");
     for pos in placed {
         assert!(
-            game.world
-                .resource_mut::<WorldMap>()
-                .tile(pos.x, pos.y)
-                .open_to_hostiles(),
+            game.ground_tile(pos.x, pos.y).open_to_hostiles(),
             "a guardian at ({}, {}) is standing where it can never step",
             pos.x,
             pos.y
@@ -2510,10 +2508,7 @@ fn a_pack_member_is_never_placed_where_it_could_never_step() {
     for e in pack {
         let pos = *game.world.get::<Position>(e).unwrap();
         assert!(
-            game.world
-                .resource_mut::<WorldMap>()
-                .tile(pos.x, pos.y)
-                .open_to_hostiles(),
+            game.ground_tile(pos.x, pos.y).open_to_hostiles(),
             "a pack member at ({}, {}) is standing where it can never step",
             pos.x,
             pos.y

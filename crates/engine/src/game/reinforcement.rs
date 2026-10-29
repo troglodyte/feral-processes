@@ -13,7 +13,7 @@ use crate::tactical::TacticalBattle;
 use crate::*;
 
 impl Game {
-    /// Every charged pod and the base-space tile it stands on, in `(x, y)`
+    /// Every charged pod and the field tile it stands on, in `(x, y)`
     /// order so a tie between two equally near pods resolves the same way
     /// every run — bevy's query order is not stable.
     fn charged_pods(&self) -> Vec<(Entity, (i32, i32))> {
@@ -64,7 +64,7 @@ impl Game {
     }
 
     /// Who drops and through which pod: each callable trooper paired with
-    /// its nearest charged pod by base-space Chebyshev distance, the
+    /// its nearest charged pod by field Chebyshev distance, the
     /// closest pair winning and a tie going to the Base staff table's
     /// order. No `GameRng` draw.
     ///

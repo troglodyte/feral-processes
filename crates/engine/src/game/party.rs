@@ -192,7 +192,7 @@ pub(crate) fn role_of(
     Some(ProgramRole::Staff)
 }
 
-/// Whether the sim walks `creature` around base space, so its `Position` is
+/// Whether the sim walks `creature` around the base floor, so its `Position` is
 /// a cell that body is really standing in rather than the tile it was last
 /// left on.
 ///
@@ -203,9 +203,8 @@ pub(crate) fn role_of(
 /// so it stands wherever it was when it was assigned. `Game::base_bodies`
 /// asks this to decide which cells a walk may not cross and
 /// `Game::watch_position` to decide where a camera may sit; a second copy of
-/// the rule would either block a tile out on the zone surface, which base
-/// space's coordinates alias onto freely, or let the camera follow a body
-/// nothing blocks.
+/// the rule would either block a tile the body is not on, or let the camera
+/// follow a body nothing blocks.
 ///
 /// A free function beside `role_of` and for its reason: `haul_step_system`
 /// has no `Game` and must build the same set from its own queries.
@@ -1064,7 +1063,7 @@ impl Game {
         // Stack means walking out alone — that is the point of the guard,
         // and it is only survivable because a Forgiving death benches a
         // program rather than destroying it.
-        self.require_base()?;
+        self.require_field()?;
         let player = self.player_entity();
         let owner = self
             .world
@@ -1344,7 +1343,7 @@ impl Game {
     ///
     /// **The mover stays guard-free and this wraps it**, rather than the
     /// guard going inside: `wield_program` calls `remove_companion` to stand
-    /// a member down before taking it as a weapon, so a `require_base` in
+    /// a member down before taking it as a weapon, so a `require_field` in
     /// there would refuse wielding in the field as a side effect, through a
     /// function the player never invoked. `take_from_stock` /
     /// `give_to_shelves`'s exact shape, one axis along: the mover is
@@ -1353,7 +1352,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         self.remove_companion(creature);
         Ok(())
     }

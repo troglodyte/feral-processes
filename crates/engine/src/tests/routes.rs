@@ -84,7 +84,7 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
 fn save_format_version_is_unchanged_by_routes() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "routes add no bump of their own; a changed version is a deliberate \
          bump — see the doc comment on SAVE_FORMAT_VERSION"
     );
@@ -141,7 +141,7 @@ fn a_pre_routes_save_loads_with_no_routes() {
 /// laid floor beside them — `tests::sorties::deploy_relay`'s shape,
 /// repeated here rather than shared: each fixture file owns its own.
 pub(super) fn deploy_relay(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy_structure(game, "home", 0, 0);
     deploy_structure(game, "relay", 1, 0);
     super::support::stand_in_base_at(game, 1, 1);
@@ -333,8 +333,7 @@ fn every_refusal_leaves_stock_and_routes_exactly_as_they_were() {
             "not at the Relay",
             Box::new(|| {
                 let (mut game, item, key) = a_dispatch_ready_base(6100, 20);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, key, vec![(item, 5)], false)
             }),
         ),
@@ -519,7 +518,7 @@ fn a_dispatch_queues_one_cargo_walk() {
     assert_eq!(walks.len(), 1, "one cargo cue on departure");
     assert_eq!(
         walks[0].path.last(),
-        Some(&crate::game::base_space::BASE_EXIT_CELL),
+        Some(&crate::tests::support::TEST_HOME_CELL),
         "base space has one door and the walk ends at it"
     );
 }
@@ -1048,8 +1047,7 @@ fn outpost_dispatch_every_refusal_leaves_routes_exactly_as_they_were() {
             "not at the Relay",
             Box::new(move || {
                 let mut game = an_outpost_ready_base(8000, tile);
-                game.world
-                    .insert_resource(crate::resources::Locale::Surface);
+                crate::tests::support::step_off_the_floor(&mut game);
                 (game, tile)
             }),
         ),

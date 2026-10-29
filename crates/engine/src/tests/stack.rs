@@ -539,7 +539,7 @@ fn deploying_a_structure_is_refused_underground() {
         panic!("a machine should not go up inside the Stack");
     };
     assert!(
-        reason.contains("back at the base"),
+        reason.contains("up on the field"),
         "the refusal should say why, got: {reason}"
     );
 }
@@ -639,7 +639,7 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     home_then_descend(&mut game);
     let link = match locale(&game) {
         Locale::Stack { entrance, .. } => entrance,
-        Locale::Surface | Locale::Base { .. } => unreachable!("just descended"),
+        Locale::Surface => unreachable!("just descended"),
     };
     walk_corridors(&mut game, 12);
     let before = map(&game).explored;
@@ -2125,6 +2125,37 @@ fn with_nowhere_to_put_a_new_link_the_stack_does_not_collapse() {
         roused,
         "the guardian roused again after being killed"
     );
+}
+
+/// Base floor is an overlay the `WorldMap` never shows, so a replacement
+/// link has to ask the floor itself: a hole into the Stack in the middle of
+/// the base would undo the one safe ground. With the whole band the search
+/// walks floored, nothing opens.
+#[test]
+fn a_replacement_link_never_opens_on_base_floor() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let reach = STACK_COLLAPSE_RELINK_TILES;
+    game.dev_lay_floor(
+        (-reach..=reach)
+            .flat_map(|dy| (-reach..=reach).map(move |dx| (dx, dy)))
+            .filter(|&(dx, dy)| dx.abs().max(dy.abs()) >= STACK_MIN_LINK_TILES)
+            .map(|(dx, dy)| (entrance.0 + dx, entrance.1 + dy)),
+    );
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    for t in entrance_tiles(&mut game) {
+        assert!(
+            before.contains(&t)
+                || !game
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(t.0, t.1),
+            "a replacement link opened on base floor at {t:?}"
+        );
+    }
 }
 
 /// How many times the lair has announced itself — see `Game::rouse_lair`.

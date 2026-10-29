@@ -433,27 +433,19 @@ mod tests {
     use feral_processes_app_core::{MapLocale, locale_keybar};
     use feral_processes_engine::{DifficultyMode, Game};
 
-    /// The map's bar as base space draws it, for the tests that only need a
+    /// The map's bar as the field draws it, for the tests that only need a
     /// bar on the border.
     static BASE_BAR: std::sync::LazyLock<Vec<KeyGroup>> =
-        std::sync::LazyLock::new(|| locale_keybar(MapLocale::Base, false));
+        std::sync::LazyLock::new(|| locale_keybar(MapLocale::Field, false));
 
     /// The smallest window the design is stated against.
     const SMALLEST: (f32, f32) = (1280.0, 720.0);
 
-    /// What the keybar may never drop, whatever the window. The pair that
-    /// crosses between the three locales, because it is the only one with
-    /// nothing on the map leading to it; the two screens that hold the rest
-    /// of the verbs; and `?`, which is where every key this bar had to cut
+    /// What the keybar may never drop, whatever the window. The two screens
+    /// that hold the rest of the verbs; and `?`, which is where every key this bar had to cut
     /// now lives. A bar that drops `?` strands the keys the four-line block
     /// used to name — and `hjkl` is one of those now.
-    const ESSENTIAL: [&str; 5] = [
-        "< > ascend/descend",
-        "b base",
-        "i pack",
-        "? help",
-        "Esc menu",
-    ];
+    const ESSENTIAL: [&str; 4] = ["b base", "i pack", "? help", "Esc menu"];
 
     fn entry(kind: MessageKind, source: MessageSource) -> LogEntry {
         LogEntry {
@@ -652,8 +644,7 @@ mod tests {
     #[test]
     fn the_keybar_fits_the_log_pane() {
         let locales = [
-            MapLocale::Base,
-            MapLocale::OpenGrid,
+            MapLocale::Field,
             MapLocale::Stack { market: false },
             MapLocale::Stack { market: true },
         ];
@@ -680,6 +671,12 @@ mod tests {
                         drawn.contains(key),
                         "the {locale:?} keybar dropped {key:?} at {w}x{h} — slack {slack:.1}px. \
                          Reorder `locale_keybar`, do not widen the pane."
+                    );
+                }
+                if matches!(locale, MapLocale::Stack { .. }) {
+                    assert!(
+                        drawn.contains("< > ascend/descend"),
+                        "the Stack's crossing pair is cut: {drawn:?}"
                     );
                 }
                 if locale == (MapLocale::Stack { market: true }) {
@@ -1329,6 +1326,6 @@ mod tests {
         // The bar's first segment, which `keybar_segments` orders first
         // precisely so it is the one that never falls past the cut — so this
         // is the token to look for whatever the pane's width.
-        assert!(text.contains("ascend/descend"), "no keybar: {text}");
+        assert!(text.contains("b base"), "no keybar: {text}");
     }
 }

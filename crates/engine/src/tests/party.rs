@@ -168,7 +168,7 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
         .into_iter()
         .find(|d| d.work.is_some())
         .expect("at least one workable structure should exist");
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     let structure = game
         .world
         .spawn((
@@ -2634,28 +2634,23 @@ fn wield_program_refuses_a_posted_program() {
 /// The expedition is the unit of risk: you cannot paper over a wipe by
 /// swapping in fresh bodies four frames down.
 #[test]
-fn joining_the_party_is_refused_outside_base_space() {
+fn joining_the_party_is_refused_in_the_stack() {
     let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
 
-    assert!(
-        game.add_companion(companion).is_err(),
-        "the open grid is not where a party is picked"
-    );
     descend(&mut game);
     assert!(
         game.add_companion(companion).is_err(),
-        "and neither is the Stack"
+        "the Stack is not where a party is picked"
     );
 }
 
 #[test]
-fn standing_down_is_refused_outside_base_space_too() {
+fn standing_down_is_refused_in_the_stack_too() {
     let mut game = Game::new(3602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, companion);
 
-    assert!(game.stand_down_companion(companion).is_err());
     descend(&mut game);
     assert!(game.stand_down_companion(companion).is_err());
     assert!(

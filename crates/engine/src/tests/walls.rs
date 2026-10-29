@@ -23,7 +23,7 @@ fn def(game: &Game, id: &str) -> StructureDef {
 }
 
 fn ready_base(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     stand_in_base_at(game, 0, 0);
 }
 
@@ -58,7 +58,11 @@ fn the_player_cannot_walk_into_a_wall_and_the_bump_is_free() {
 
     game.move_player(1, 0);
 
-    assert_eq!(game.base_pos(), Some((0, 0)), "the wall must stop the step");
+    assert_eq!(
+        game.field_pos(),
+        Some((0, 0)),
+        "the wall must stop the step"
+    );
     assert_eq!(
         game.world.resource::<GameClock>().tick,
         before,
@@ -78,7 +82,7 @@ fn a_structure_that_is_not_a_barrier_is_still_walked_over() {
 
     game.move_player(1, 0);
 
-    assert_eq!(game.base_pos(), Some((1, 0)));
+    assert_eq!(game.field_pos(), Some((1, 0)));
 }
 
 #[test]

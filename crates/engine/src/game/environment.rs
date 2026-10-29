@@ -66,7 +66,7 @@ impl Game {
     /// `&mut self` because `WorldMap::tile` generates its chunk on demand;
     /// nothing here writes anything the caller can observe.
     pub(crate) fn environment_biome_at(&mut self, x: i32, y: i32) -> Option<Biome> {
-        let biome = self.world.resource_mut::<WorldMap>().tile(x, y).biome;
+        let biome = self.ground_tile(x, y).biome;
         if self.world.resource::<ZoneLevel>().0 <= 1 {
             return None;
         }
@@ -87,7 +87,7 @@ impl Game {
     /// `&mut self` because `WorldMap::tile` generates its chunk on demand;
     /// nothing here writes anything the caller can observe.
     pub(crate) fn terrain_at(&mut self, x: i32, y: i32) -> Terrain {
-        let biome = self.world.resource_mut::<WorldMap>().tile(x, y).biome;
+        let biome = self.ground_tile(x, y).biome;
         let Some(biome) = self.environment_biome_at(x, y) else {
             return Terrain {
                 biome,
@@ -179,13 +179,12 @@ impl Game {
     /// the one place in the game that must never read as hostile.
     ///
     /// Reads the player's `Position`, which stays pinned to the surface
-    /// entrance while the party is underground and to the anchor tile while
-    /// they are in base space — `is_underground`/`in_base` are checked
+    /// entrance while the party is underground — `is_underground` is checked
     /// first rather than trusted to fall out of `terrain_at`, or this would
-    /// report the entrance's or the anchor's ground as if the party were
-    /// standing on it.
+    /// report the entrance's ground as if the party were standing on it.
+    /// On the base's floor there is no row at all.
     pub fn terrain_row(&mut self) -> Option<TerrainRow> {
-        if self.is_underground() || self.in_base() {
+        if self.is_underground() || self.on_base_floor() {
             return None;
         }
         let player = self.player_entity();

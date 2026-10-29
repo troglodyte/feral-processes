@@ -46,7 +46,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return 0;
         }
-        if self.require_base().is_err() {
+        if self.require_field().is_err() {
             return 0;
         }
         let carried = self.puttable_carried();
@@ -134,7 +134,7 @@ impl Game {
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and
-    /// `require_base` already, and owns the announcement and the turn. That
+    /// `require_field` already, and owns the announcement and the turn. That
     /// is what lets one screen take and give inside a single action.
     ///
     /// Every clamp lives here: against what the pack holds, against each

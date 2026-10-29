@@ -184,7 +184,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`nest_aggro_tick` is the first code to call `start_battle` from inside
   `tick_inner`**, which is why `rest`'s tick loop needed a battle check.
 - **`nest_aggro_tick` is a reader of the player's `Position` and needs the
-  underground guard** even though it never went through `require_surface`.
+  underground guard** even though it never went through `require_field`.
 - **Resting is priced by locale, never gated by it.** Free inside base
   space, one unit of an `ItemDef::enables_rest` item anywhere else — the
   open grid and the Stack alike — and **no rest advances the clock**, which
@@ -200,7 +200,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`Pursuing` must only ever be inserted alongside `NestGuardian`** — an
   untethered `Pursuing` has no leash and is never cleared.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may
-  step** — `pursuit_field` excludes `Biome::Platform` separately.
+  step** — pursuit, patrols, followers and wandering read floor-merged
+  ground through `BaseGrid::ground_tile`, and `open_to_hostiles`'s
+  `Platform` arm is the single floor rule.
 - **There is one Dijkstra walk on the surface, and the step rule is a
   *cost function*, not a predicate** — `walk_field`, with `pursuit_field` a
   one-line wrapper and every surface and base-space caller answering

@@ -269,7 +269,7 @@ impl Game {
     /// the band's mean plus `effective_atk`, floored at 1.
     ///
     /// The one definition, shared by `Game::attack_nest` and
-    /// `Game::strike_rock` — a nest and a wall of base-space rock are the
+    /// `Game::strike_rock` — a nest and a wall of field rock are the
     /// two things in the game worn down by bumping into them, and a copy of
     /// this formula in either would let them drift. Neither goes through
     /// `battle::resolve_attack`: a structure has no speed and cannot dodge,
@@ -514,11 +514,11 @@ impl Game {
     /// stays abstract with no code written for it. Nests, lairs and raids
     /// likewise open their fights by their own routes.
     ///
-    /// `require_surface` is called rather than restated. Base space and the
-    /// Stack are both off it, and the Stack's own model is settled.
+    /// `require_field` is called rather than restated. The Stack is off it,
+    /// and the Stack's own model is settled.
     fn fights_tactically(&self, pack: &[Entity]) -> bool {
         self.profile().tactical_battles
-            && self.require_surface().is_ok()
+            && self.require_field().is_ok()
             && !pack
                 .iter()
                 .any(|&e| self.world.get::<NestGuardian>(e).is_some())

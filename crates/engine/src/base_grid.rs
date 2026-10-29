@@ -1,14 +1,12 @@
-//! `BaseGrid`: the player base's own coordinate space, separate from
-//! `WorldMap`'s zone surface. A cell absent from the map is solid rock —
-//! there is no `Solid` variant, because "not in the map" already says it,
-//! and storing one for every untouched coordinate would make the sparse
-//! map not sparse. Only `open` and `lay_floor` ever put a cell in.
+//! `BaseGrid`: the base's laid floor, an overlay on the field keyed by
+//! field coordinates. It answers only "is this cell floor" (plus the two
+//! marks painted over floor, finishes and stockpiles); whether a cell can be
+//! stood on is the field's question, asked through `Ground`.
 //!
-//! Keyed `BTreeMap<(i32, i32), BaseCell>` rather than `HashMap`, for the
-//! same reason `Stock` keys by `ItemId` in a `BTreeMap`: whatever iterates
-//! this map — a save encoder, once one exists — must see the same order
-//! run to run, or the same base produces a different save file depending
-//! on insertion history alone.
+//! Keyed by `BTreeSet`/`BTreeMap` rather than hash containers, for the same
+//! reason `Stock` keys by `ItemId` in a `BTreeMap`: whatever iterates it —
+//! the save encoder, `rooms::detect`, `siege_spawn_cells` — must see the same
+//! order run to run.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -16,194 +14,87 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::floors::{FloorDb, FloorId};
+use crate::world::{Biome, Tile, WorldMap};
 
-/// One cell of base space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum BaseCell {
-    /// Carved out but not yet floored: walkable, but not a `Floor` for
-    /// build placement — `Game::place_structure`'s own gate. `mined_at`
-    /// records the tick the cell was cut, and stays a field only because
-    /// removing it would be a `SAVE_FORMAT_VERSION` bump — nothing reads it
-    /// any more. Open ground now stays open forever.
-    Open { mined_at: u64 },
-    /// Carved out and floored: the buildable, walkable base tile.
-    Floor,
-}
-
-/// The player base's pocket-dimension coordinate space.
+/// The base's floor overlay on the field.
 ///
-/// A `Resource` distinct from `WorldMap`: base space is not a zone, has no
-/// biome, and is never generated from a seed. Every coordinate starts and
-/// stays solid until `open` or `lay_floor` puts a cell there.
-///
-/// `Serialize`/`Deserialize` derive straight onto this struct — `cells`
-/// stays private, since serde's derive is generated inside this module and
-/// does not need a public field the way an external encoder would — and it
-/// is embedded directly in `save::SaveData` as `base_grid`, the same way
-/// `resources::StackMemory`/`PopulatedChunks` are: it is saved wholesale
-/// rather than mirrored into a separate save-shaped type, because there is
-/// no engine-internal reason to keep this type out of the save (unlike, say,
-/// `components::TaskKind`, which stays un-derived and gets `save::CronjobKind`
-/// as its mirror instead).
+/// Saved wholesale in `save::SaveData` as `base_grid`. A cell is floor or it
+/// is not; mined ground is a `WorldMap` override (`Biome::Excavated`), not a
+/// state of this store.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BaseGrid {
-    cells: BTreeMap<(i32, i32), BaseCell>,
-    /// Base space's own seed, which `rock::RockDb::kind_at` folds to decide
-    /// what any coordinate is made of.
-    ///
-    /// **Its own, and deliberately not `WorldMap::seed()`.** The world seed
-    /// was reseeded on every breach when this was written, so salting off it
-    /// would have reshuffled every seam in the base each time the player
-    /// portalled, bringing a half-cut wall back as a different kind under
-    /// its already-saved `Durability`. The world is persistent now and that
-    /// seed no longer moves, so the hazard is history — but the separation
-    /// stays, because base space and the zone surface are different spaces
-    /// and one should not be able to reshape the other by accident.
-    ///
-    /// `#[serde(default)]`, so a save written before rock kinds existed
-    /// loads at 0 — a valid, deterministic layout rather than a special
-    /// case, and additive, so this costs no `SAVE_FORMAT_VERSION` bump.
-    #[serde(default)]
-    seed: u32,
-    /// A decorative finish the dig crew has painted over laid floor — never
-    /// stored on `BaseCell` itself, because `BaseCell` is what every existing
-    /// reader (`is_floor`, `wander_step`'s leash, structure placement) still
-    /// asks, and a finished cell must stay a plain `Floor` to every one of
-    /// them.
-    ///
-    /// `#[serde(default)]`, additive under field-named RON — no
-    /// `SAVE_FORMAT_VERSION` bump.
+    floor: BTreeSet<(i32, i32)>,
+    /// A decorative finish the dig crew has painted over laid floor — kept
+    /// apart from `floor` so a finished cell stays plain floor to every
+    /// reader that asks `is_floor`.
     #[serde(default)]
     finishes: BTreeMap<(i32, i32), FloorId>,
-    /// Cells the player has zoned as a stockpile: a fourth mark beside the
-    /// dig, floor and finish marks, and like a finish never stored in
-    /// `cells`, so `is_floor`, `walkable` and structure placement keep
-    /// answering for a plain `Floor`. A zone is a standing preference, not a
-    /// property of the cell: building over a marked cell leaves the mark in
-    /// place, and the floor-item search simply finds no free tile there.
-    ///
-    /// `#[serde(default)]`, additive under field-named RON — no
-    /// `SAVE_FORMAT_VERSION` bump.
+    /// Cells the player has zoned as a stockpile: a standing preference over
+    /// floor, not a property of the cell. Building over a marked cell leaves
+    /// the mark in place, and the floor-item search simply finds no free tile.
     #[serde(default)]
     stockpiles: BTreeSet<(i32, i32)>,
 }
 
 impl BaseGrid {
-    /// The cell at `(x, y)`, or `None` for solid rock.
-    pub fn cell(&self, x: i32, y: i32) -> Option<BaseCell> {
-        self.cells.get(&(x, y)).copied()
-    }
-
-    /// Mints base space's seed. `Game::new` is the one caller — a base has
-    /// one layout for the whole run, and re-seeding it mid-run would move
-    /// the seams under a base already dug into them.
-    pub(crate) fn set_seed(&mut self, seed: u32) {
-        self.seed = seed;
-    }
-
-    /// The seed `rock::RockDb::kind_at` folds. See the field.
-    pub fn seed(&self) -> u32 {
-        self.seed
-    }
-
-    /// Whether `(x, y)` is a rock face with air against it: solid, with at
-    /// least one **orthogonal** walkable neighbour.
-    ///
-    /// Orthogonal rather than 8-way — a diagonal neighbour does not expose a
-    /// face. Derived per lookup and never cached: cutting or flooring a
-    /// cell changes the exposure of its four neighbours, and a cached flag
-    /// would need keeping in step with every open and floor.
-    pub fn is_exposed(&self, x: i32, y: i32) -> bool {
-        self.is_solid(x, y)
-            && [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                .iter()
-                .any(|(dx, dy)| self.walkable(x + dx, y + dy))
-    }
-
-    /// Whether `(x, y)` is laid floor. `Open` does not count — mined rock
-    /// is walkable but not yet floored.
+    /// Whether `(x, y)` is laid floor.
     pub fn is_floor(&self, x: i32, y: i32) -> bool {
-        matches!(self.cell(x, y), Some(BaseCell::Floor))
+        self.floor.contains(&(x, y))
     }
 
-    /// Whether `(x, y)` is solid rock: absent from the map.
-    pub fn is_solid(&self, x: i32, y: i32) -> bool {
-        self.cell(x, y).is_none()
-    }
-
-    /// Whether a program can stand on `(x, y)`: `Open` or `Floor`, either
-    /// carved-out state.
-    pub fn walkable(&self, x: i32, y: i32) -> bool {
-        matches!(
-            self.cell(x, y),
-            Some(BaseCell::Open { .. } | BaseCell::Floor)
-        )
-    }
-
-    /// Lays floor at `(x, y)`, replacing whatever was there — `Open`
-    /// included, so a mined tile that gets floored does not stack the two
-    /// states.
-    ///
-    /// Two callers in gameplay: `Game::lay_starting_pocket`, the pocket the
-    /// run opens with when its first Home goes down, and `Game::floor_cell`,
-    /// which is the one door a cell becomes floor through in play.
+    /// Lays floor at `(x, y)`. `Game::floor_cell` is the one door a cell
+    /// becomes floor through in play; founding is the other.
     pub(crate) fn lay_floor(&mut self, x: i32, y: i32) {
-        self.cells.insert((x, y), BaseCell::Floor);
+        self.floor.insert((x, y));
     }
 
-    /// Carves `(x, y)` out of solid rock: walkable, not floored.
-    ///
-    /// `Game::strike_rock` is the one caller in play — the swing that takes
-    /// a wall's last durability — which is what makes `mined_at` the tick
-    /// the wall came down. Save format only now; nothing measures a window
-    /// from it any more.
-    pub(crate) fn open(&mut self, x: i32, y: i32, tick: u64) {
-        self.cells.insert((x, y), BaseCell::Open { mined_at: tick });
-    }
-
-    /// How far the carved-out space reaches from base space's origin: the
-    /// largest Chebyshev distance of any cell in it, and 0 while everything
-    /// is still solid.
+    /// Half the larger side of the floor's bounding box, rounded up, and 0
+    /// with no floor: how far apart two cells of the base can be, halved.
     ///
     /// Bounds the Dijkstra field a posted worker walks (`tuning::
-    /// haul_walk_radius`), which is why it is measured rather than taken
-    /// from `STARTING_POCKET_HALF_WIDTH`: a walk bounded by the size the pocket
-    /// *started* at would refuse postings across a base the player has since
-    /// mined outward, which is a machine you can see from your Home and
-    /// cannot staff.
-    ///
-    /// Walked rather than cached, the same argument `Game::build_radius`
-    /// makes about deriving over stored state: a cell opened or floored
-    /// changes this answer, and a cached one would need keeping in step
-    /// with both.
+    /// haul_walk_radius` doubles it), which is why it is measured rather
+    /// than fixed: a walk bounded by the size the base *started* at would
+    /// refuse postings across a base grown since. Walked rather than cached:
+    /// every laid cell changes it.
     pub(crate) fn radius(&self) -> i32 {
-        self.cells
-            .keys()
-            .map(|&(x, y)| x.abs().max(y.abs()))
-            .max()
-            .unwrap_or(0)
+        let Some(&(x0, y0)) = self.floor.first() else {
+            return 0;
+        };
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (x0, x0, y0, y0);
+        for &(x, y) in &self.floor {
+            min_x = min_x.min(x);
+            max_x = max_x.max(x);
+            min_y = min_y.min(y);
+            max_y = max_y.max(y);
+        }
+        ((max_x - min_x).max(max_y - min_y) + 1) / 2
     }
 
-    /// How many cells are laid floor — the cheapest assertion that a base
-    /// was actually stamped into this space.
+    /// The field tile at `(x, y)` with this floor merged over it: laid floor
+    /// reads as `Biome::Platform`, anything else is `map`'s own tile. For a
+    /// reader holding the two resources apart (a bevy system, a field built
+    /// over `&mut WorldMap`); `Game::ground_tile` is this from a `Game`.
+    pub(crate) fn ground_tile(&self, map: &mut WorldMap, x: i32, y: i32) -> Tile {
+        if self.is_floor(x, y) {
+            return Tile {
+                biome: Biome::Platform,
+                walkable: true,
+                rock_shade: None,
+            };
+        }
+        map.tile(x, y)
+    }
+
+    /// How many cells are laid floor.
     pub fn floor_count(&self) -> usize {
-        self.cells
-            .values()
-            .filter(|c| matches!(c, BaseCell::Floor))
-            .count()
+        self.floor.len()
     }
 
-    /// Takes `(x, y)` back out of the map: solid rock again, and absent
-    /// rather than chipped, because absent is what this module means by
-    /// solid. Nothing in play calls this any more — open ground stays open
-    /// forever — so it survives only for test fixtures that need to put a
-    /// cell back to solid by hand.
-    ///
-    /// Also drops any finish on the cell: "a finish implies floor" is a
-    /// property of this store while the game is running, not only at load.
+    /// Takes `(x, y)` back off the floor, and any finish with it. Nothing in
+    /// play un-floors a cell; test fixtures do.
     #[cfg(test)]
     pub(crate) fn revert(&mut self, x: i32, y: i32) {
-        self.cells.remove(&(x, y));
+        self.floor.remove(&(x, y));
         self.finishes.remove(&(x, y));
     }
 
@@ -268,7 +159,7 @@ impl BaseGrid {
                 ));
                 return false;
             }
-            if !matches!(self.cells.get(&(x, y)), Some(BaseCell::Floor)) {
+            if !self.floor.contains(&(x, y)) {
                 warnings.push(format!(
                     "dropped floor finish {id:?} at ({x}, {y}): the cell is not laid floor"
                 ));
@@ -279,10 +170,32 @@ impl BaseGrid {
         warnings
     }
 
-    /// The map in key order — the deterministic iteration this type exists
-    /// to guarantee. `tests::base_grid` walks it to check the order itself,
-    /// and `rooms::detect` seeds its flood fill from it.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&(i32, i32), &BaseCell)> {
-        self.cells.iter()
+    /// Every floor cell in `(x, y)` order — the deterministic iteration
+    /// this type exists to guarantee.
+    pub(crate) fn floor_cells(&self) -> impl Iterator<Item = (i32, i32)> + '_ {
+        self.floor.iter().copied()
+    }
+}
+
+/// The field as the base walks it: the floor overlay over the `WorldMap`.
+///
+/// One borrow of each resource, so the pure crew and siege rules can ask
+/// walkability without `&mut WorldMap` (`WorldMap::peek` generates nothing).
+#[derive(Clone, Copy)]
+pub(crate) struct Ground<'a> {
+    pub floor: &'a BaseGrid,
+    pub map: &'a WorldMap,
+}
+
+impl Ground<'_> {
+    /// Whether a body can stand on `(x, y)`: laid floor, or a walkable field
+    /// tile. Floor counts on its own so a fixture that lays floor needs no
+    /// override under it; in play floor only goes on walkable ground.
+    pub(crate) fn walkable(&self, x: i32, y: i32) -> bool {
+        self.floor.is_floor(x, y) || self.map.peek(x, y).walkable
+    }
+
+    pub(crate) fn is_floor(&self, x: i32, y: i32) -> bool {
+        self.floor.is_floor(x, y)
     }
 }

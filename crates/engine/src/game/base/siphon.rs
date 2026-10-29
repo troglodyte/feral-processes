@@ -53,7 +53,7 @@ impl Game {
         if self.siphon_holder(siphon).is_some() {
             return Err("That Power Siphon is already holding a program.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         // A posted program is `Staff`, so the role check never saw its
         // `Task`: freeing it here is what stops the scheduler's stale post
         // (`pin_subject`'s reason). A carried kill is put back first, as a

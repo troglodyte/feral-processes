@@ -2,8 +2,8 @@
 
 - **The player's `Position` stays on the surface while underground.** Stack
   coordinates and facing live in `resources::Locale`; `Position` is pinned to
-  the entrance tile. `Game::require_surface` guards the eleven actions that
-  reach the zone map through it. The test for whether a `Position` reader
+  the entrance tile. `Game::require_field` guards the actions that reach the
+  field through it. The test for whether a `Position` reader
   needs the guard is not "does it act" but **"does it claim something about
   where the party is"** — a read-only screen falls into the same hole.
 - **Examine names only what the surface map draws, and that rule is one
@@ -14,8 +14,8 @@
   equal minima, which is where bevy's unstable iteration order leaks in.
   Nests, surface links and zone portals draw a glyph and carry neither
   `Creature` nor `Structure`, so the ray looks through them: a known gap, in
-  `TODO.md`. It answers honesty only — which *space* a tile belongs to is
-  `stands_in_base_space`, under **The base**.
+  `TODO.md`. It answers honesty only; there is one space (the base is a floor overlay
+  on the field, under **The base**).
 - **`run_symlink` is the one action that leaves the Stack instead of being
   refused by it**, and it is a field routine rather than a key of its own.
   It calls `clear_stack` and *then* teleports — the locale drops only after
@@ -102,7 +102,7 @@
   first. `a_jump_fires_the_arrival_tail` asserts behaviour, not that a
   function was called.
 - **`Game::run_field_routine` is Stack-only for two of the effects it runs,
-  and `require_surface` is not what does it** — `Phase` and `Jump` read and
+  and `require_field` is not what does it** — `Phase` and `Jump` read and
   write `Locale::Stack`'s own coordinates, so the refusal is `Game::stack_pos`
   returning `None`. `Symlink` deliberately makes no `movement_routine_pos`
   call at all; it is the way out and runs on both sides of the ground.

@@ -7,9 +7,7 @@
 //! what is here is the square that latch now moves.
 
 use super::support::*;
-use crate::components::{
-    Besieger, CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap,
-};
+use crate::components::{CaravanStage, Position, Settlement, SettlementCentre, TownPatrol, Trap};
 use crate::resources::{FrameMemory, Outposts, Settlements, StackMemory, Standings, Visit};
 use crate::settlements::SettlementKey;
 use crate::tuning::*;
@@ -630,29 +628,31 @@ fn the_player_under_a_growing_footprint_ends_up_outside_it() {
     );
 }
 
+/// A town grows around the base, never over it: a footprint covering base
+/// floor leaves those cells out, and the anchor stays where it was founded
+/// (ADR 0032 deleted the displacement that used to move it).
 #[test]
-fn the_base_anchor_under_a_growing_footprint_moves_outside_it() {
+fn a_growing_footprint_leaves_the_base_floor_out() {
     let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let centre = (ppos.x + 1, ppos.y);
-    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
-    // Founded before the settlement is placed: the anchor lands wherever the
-    // party stands at founding (`Game::move_anchor_to`'s one caller), which
-    // is `ppos` here — one tile from the centre the settlement is about to
-    // materialize at.
     place_home(&mut game);
+    let centre = (TEST_POCKET_HALF_WIDTH + 1, 0);
+    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
     let key = SettlementKey { rx: 35, ry: 0 };
     place_settlement(&mut game, key, centre.0, centre.1);
 
     game.sync_settlement_footprint(key);
 
     let footprint = footprint_set(&mut game, key);
-    let anchor = game.world.resource::<AnchorEntity>().0;
-    let pos = *game.world.get::<Position>(anchor).unwrap();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     assert!(
-        !footprint.contains(&(pos.x, pos.y)),
-        "the base anchor ended up inside the footprint that grew over it"
+        footprint.iter().all(|&(x, y)| !grid.is_floor(x, y)),
+        "a settlement cell landed on base floor"
     );
+    assert!(
+        grid.is_floor(TEST_POCKET_HALF_WIDTH, 0),
+        "test premise: the footprint reaches the floor's edge"
+    );
+    assert_eq!(game.anchor_position(), Some(TEST_HOME_CELL));
 }
 
 /// `free_tile_outside` is `relay_landing`'s own search, widened with two
@@ -1157,52 +1157,6 @@ fn a_load_defers_a_stack_entrance_a_footprint_covers_until_the_party_surfaces() 
     );
 }
 
-/// The player's surface `Position` is pinned to the anchor while in base
-/// space, so displacing the anchor must carry the pin with it.
-#[test]
-fn a_player_inside_base_space_leaves_onto_the_anchors_new_tile_after_a_footprint_displaces_it() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let centre = (ppos.x + 1, ppos.y);
-    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
-    // Founded before the settlement is placed, `the_base_anchor_under_a_
-    // growing_footprint_moves_outside_it`'s own setup: the anchor lands at
-    // `ppos`, one tile from the centre the settlement is about to
-    // materialize at, so growing the footprint covers it.
-    place_home(&mut game);
-    game.enter_base()
-        .expect("test premise: founded on the anchor, Home just deployed");
-    assert!(
-        game.in_base(),
-        "test premise: the party is inside base space"
-    );
-
-    let key = SettlementKey { rx: 36, ry: 0 };
-    place_settlement(&mut game, key, centre.0, centre.1);
-    game.sync_settlement_footprint(key);
-
-    let footprint = footprint_set(&mut game, key);
-    let anchor = game.world.resource::<AnchorEntity>().0;
-    let new_anchor_pos = *game.world.get::<Position>(anchor).unwrap();
-    assert!(
-        !footprint.contains(&(new_anchor_pos.x, new_anchor_pos.y)),
-        "test premise: the anchor moved outside the footprint that grew over it"
-    );
-
-    game.leave_base()
-        .expect("test premise: still standing at BASE_EXIT_CELL");
-    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    assert_eq!(
-        (player_pos.x, player_pos.y),
-        (new_anchor_pos.x, new_anchor_pos.y),
-        "leaving base space put the player somewhere other than the anchor's new tile"
-    );
-    assert!(
-        !footprint.contains(&(player_pos.x, player_pos.y)),
-        "leaving base space left the player inside the footprint that displaced the anchor"
-    );
-}
-
 /// Displacement fills the nearest free ring cell, so the player standing on
 /// it must count as occupied or a displaced body lands on them.
 #[test]
@@ -1228,23 +1182,4 @@ fn a_displaced_creature_never_lands_on_the_player() {
     let pos = *game.world.get::<Position>(creature).unwrap();
     assert_ne!((pos.x, pos.y), first, "the creature landed on the player");
     assert!(!footprint_set(&mut game, key).contains(&(pos.x, pos.y)));
-}
-
-/// A besieger's `Position` is a base-space cell, so a footprint whose
-/// surface coordinates happen to match it must leave it alone.
-#[test]
-fn a_besieger_is_not_displaced_by_a_surface_footprint() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let centre = (ppos.x + 100, ppos.y);
-    carve_open(&mut game, centre, SETTLEMENT_RADIUS_SERVER + 4);
-    let key = SettlementKey { rx: 41, ry: 0 };
-    place_settlement(&mut game, key, centre.0, centre.1);
-    let besieger = spawn_wild_without_routine(&mut game, "scrapper", centre.0 + 1, centre.1);
-    game.world.entity_mut(besieger).insert(Besieger);
-
-    game.sync_settlement_footprint(key);
-
-    let pos = *game.world.get::<Position>(besieger).unwrap();
-    assert_eq!((pos.x, pos.y), (centre.0 + 1, centre.1));
 }

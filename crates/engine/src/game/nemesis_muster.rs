@@ -88,9 +88,8 @@ impl Game {
         for &e in &raiders {
             self.world.entity_mut(e).insert(Besieger);
         }
-        if self.base_pos().is_some() {
-            // A besieger is a base-space body, and base-space `Position` is
-            // pinned to the anchor.
+        if self.on_base_floor() {
+            // Raiders start on the anchor tile, the door they will leave by.
             if let Some((ax, ay)) = self.anchor_position() {
                 for &e in &raiders {
                     let mut pos = self.world.get_mut::<Position>(e).unwrap();
@@ -264,12 +263,7 @@ impl Game {
                     continue;
                 }
                 let (nx, ny) = (from.x + sx, from.y + sy);
-                if self
-                    .world
-                    .resource_mut::<crate::world::WorldMap>()
-                    .tile(nx, ny)
-                    .open_to_hostiles()
-                {
+                if self.ground_tile(nx, ny).open_to_hostiles() {
                     let mut pos = self.world.get_mut::<Position>(follower).unwrap();
                     pos.x = nx;
                     pos.y = ny;

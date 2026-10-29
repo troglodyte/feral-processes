@@ -48,8 +48,8 @@ enum Source {
     Shelf(Entity, Position),
     /// A floor item lying on a stockpile cell.
     Stockpile(Entity, Position),
-    /// The party's own pack, reachable only while the party is standing in
-    /// base space — a builder walks over and takes it out of your hands, so
+    /// The party's own pack, reachable only while the party is standing on
+    /// the field — a builder walks over and takes it out of your hands, so
     /// there has to be a pair of hands there to take it from. Four frames
     /// down the Stack the pack is simply not a source, and the site waits.
     Pack(Position),
@@ -374,9 +374,12 @@ impl Game {
     }
 
     /// The party's pack as a source, or `None` when it holds none of `item`
-    /// or when the party is not standing in base space to be taken from.
+    /// or when the party is not on the base's floor for a builder to walk to.
     fn pack_source(&self, item: &ItemId) -> Option<Source> {
-        let (x, y) = self.base_pos()?;
+        if !self.on_base_floor() {
+            return None;
+        }
+        let (x, y) = self.field_pos()?;
         let player = self.player_entity();
         let held = self
             .world
@@ -778,7 +781,7 @@ impl Game {
     pub(crate) fn return_material(&mut self, item: &ItemId, qty: u32) {
         let landed = stock::return_to_depots(self, item, qty);
         let mut spare = qty - landed;
-        if spare > 0 && self.base_pos().is_some() {
+        if spare > 0 && self.on_base_floor() {
             let player = self.player_entity();
             if let Some(mut inv) = self.world.get_mut::<Inventory>(player) {
                 inv.add(item.clone(), spare);

@@ -217,11 +217,7 @@ fn a_step_that_moves_nobody_still_spends_the_clocks_tick() {
     // One cell east of the pocket's east edge is solid rock and mining is
     // off by default — every eastward bump from the edge refuses for free,
     // spending no tick of its own.
-    stand_in_base_at(
-        &mut app,
-        feral_processes_engine::tuning::STARTING_POCKET_HALF_WIDTH,
-        0,
-    );
+    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH, 0);
     let start_tick = tick_of(&app);
 
     const HELD_SECONDS: u32 = 3;
@@ -388,172 +384,6 @@ fn c_reaches_the_transfer_action() {
     );
 }
 
-/// `<` and `>` are the anchor's two doors on the map screen — the same pair
-/// the Stack already binds for its link, rather than a third set of keys for
-/// a third way of going somewhere.
-///
-/// **The sense is the opposite of the Stack's, and that is the assertion.**
-/// The pair reads as up and down before it reads as in and out, and base
-/// space is a platform the party steps *onto*: `<` rises into it, `>` drops
-/// back to the grid. Bound the other way round it told the player they were
-/// descending into a base that stands above the ground they left.
-///
-/// Driven out and back in, because a fixture with a Home standing is the
-/// only one that can be entered at all: the anchor leads nowhere until one
-/// is deployed. Going out first also proves the entry half is not passing on
-/// a locale the fixture handed it.
-#[test]
-fn the_link_keys_walk_out_of_the_base_and_back_in_through_the_anchor() {
-    let mut app = app_inside_a_small_base_with_programs(215, false, 1);
-    assert!(
-        app.game.as_ref().unwrap().in_base(),
-        "the fixture must start inside the base"
-    );
-
-    app.handle_key(GameKey::Char('>'));
-    assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "'>' must reach Game::leave_base — down off the platform"
-    );
-
-    app.handle_key(GameKey::Char('<'));
-    assert!(
-        app.game.as_ref().unwrap().in_base(),
-        "'<' must reach Game::enter_base — up onto the platform"
-    );
-}
-
-/// A refused crossing puts the engine's own words on the status line. Wired
-/// the way the Stack path already wires `o` and `Z`: a refusal is not an
-/// action, so it must not be cleared by the bookkeeping that follows one.
-///
-/// The refusal asserted on is the *no Home* one specifically — a fresh run
-/// starts standing on the anchor, so anything about position would mean the
-/// key had reached something other than `Game::enter_base`.
-#[test]
-fn a_refused_crossing_reports_the_engines_own_reason() {
-    let mut app = test_app(216);
-
-    app.handle_key(GameKey::Char('<'));
-
-    assert!(!app.game.as_ref().unwrap().in_base());
-    let said = app.status_line.clone().expect("a refused key says why");
-    assert!(
-        said.contains("deploy a Home"),
-        "the status line must carry the engine's refusal, got: {said}"
-    );
-}
-
-/// `.` is a zone-surface and Stack verb, and does nothing at all in base
-/// space — no turn, no refusal, nothing on the line. A **dead key**, not a
-/// refused one, which is the deliberate exception to the rule the rest of
-/// this screen follows: `r`, `<`, `>` and `v` all hand the engine's own
-/// sentence to `App::refuse` rather than fall through. Base space is time
-/// you spend by walking it, and a key that stands still there is meant to
-/// read as not being a key at all.
-///
-/// The surface half is the control, and is not optional: a `.` arm that had
-/// been deleted outright rather than gated would pass the base assertions
-/// below without it.
-#[test]
-fn waiting_is_a_dead_key_in_base_space() {
-    let mut app = test_app(219);
-
-    let surface_tick = app.game.as_ref().unwrap().current_tick();
-    app.handle_key(GameKey::Char('.'));
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        surface_tick + 1,
-        "the control: `.` on the zone surface still spends the turn"
-    );
-
-    stand_in_base(&mut app);
-    // Set *after* the fixture is in place, so what it proves is that the
-    // keypress left it standing — `App::after_world_action` clears this line
-    // on any real action, so a `.` that still ticked would wipe it.
-    app.status_line = Some("an earlier refusal".to_string());
-    let tick = app.game.as_ref().unwrap().current_tick();
-
-    app.handle_key(GameKey::Char('.'));
-
-    assert_eq!(
-        app.game.as_ref().unwrap().current_tick(),
-        tick,
-        "`.` must spend no turn in base space"
-    );
-    assert_eq!(
-        app.status_line.as_deref(),
-        Some("an earlier refusal"),
-        "and must say nothing of its own — a dead key, not a refusal"
-    );
-}
-
-/// `stepped` reads the clock rather than assuming, and slice 2 is what
-/// makes that pay: a movement key into base-space rock used to be refused
-/// for free and is a swing now (`Game::strike_rock`), so the same keypress
-/// changed from no action to one — without a line of app-core changing.
-/// The status line explaining an earlier refusal clears, because something
-/// really happened.
-///
-/// The surface half is the control: the identical keypress there is an
-/// action too, so a `stepped` that always answered `true` would pass this
-/// twice over — which is why the turn is asserted as well as the line.
-#[test]
-fn a_swing_at_rock_in_base_space_is_an_action() {
-    let mut inside = app_inside_a_small_base_with_programs(217, false, 1);
-    assert!(
-        inside.game.as_ref().is_some_and(|g| g.in_base()),
-        "the fixture must start inside the base, where the rock is"
-    );
-    // The pocket's north edge, so the step up leaves it and meets rock.
-    stand_in_base_at(
-        &mut inside,
-        0,
-        -feral_processes_engine::tuning::STARTING_POCKET_HALF_HEIGHT,
-    );
-    // Armed first: a disarmed bump is refused for free, which is the whole
-    // of `MiningMode`. What this test is about is that an *armed* swing is
-    // an action.
-    inside.handle_key(GameKey::Char('n'));
-    inside.status_line = Some("an earlier refusal".to_string());
-    let _ = inside.take_sounds();
-    let tick = inside.game.as_ref().unwrap().current_tick();
-
-    walk(&mut inside, GameKey::Up);
-
-    assert_eq!(
-        inside.game.as_ref().unwrap().current_tick(),
-        tick + 1,
-        "a swing at rock spends the turn a step would have"
-    );
-    assert_eq!(
-        inside.status_line, None,
-        "and clears the line, because something really happened"
-    );
-    assert_eq!(
-        inside.take_sounds().len(),
-        1,
-        "and cues the movement key's one sound, as shoving at a wall on the \
-         surface already does"
-    );
-
-    let mut outside = test_app(218);
-    outside.status_line = Some("an earlier refusal".to_string());
-    let _ = outside.take_sounds();
-
-    walk(&mut outside, GameKey::Up);
-
-    assert_eq!(
-        outside.status_line, None,
-        "the control: a real step on the open grid still clears the line"
-    );
-    assert_eq!(
-        outside.take_sounds().len(),
-        1,
-        "and still plays exactly one sound"
-    );
-}
-
 /// `n` arms and disarms the player's own bump into rock, and costs no turn
 /// doing it: picking a tool up is not an action, so the handler `return`s
 /// rather than falling through to the tick.
@@ -579,13 +409,11 @@ fn n_toggles_the_players_bump_and_spends_no_turn() {
     );
 }
 
-/// Out on the surface there is no rock to cut, so `n` says so rather than
-/// arming a tool that can never fire — the same refusal `d` and `m` make,
-/// and for the same reason.
+/// Underground there is no rock to cut, so `n` says so rather than arming a
+/// tool that can never fire.
 #[test]
-fn n_is_refused_outside_base_space() {
-    let mut app = test_app(9102);
-    assert!(!app.game.as_ref().unwrap().in_base());
+fn n_is_refused_underground() {
+    let mut app = app_underground(9102);
 
     app.handle_key(GameKey::Char('n'));
 
@@ -593,7 +421,7 @@ fn n_is_refused_outside_base_space() {
     assert!(
         app.status_line
             .as_deref()
-            .is_some_and(|s| s.contains("through the anchor")),
+            .is_some_and(|s| s.contains("Nothing to cut")),
         "no refusal shown: {:?}",
         app.status_line
     );

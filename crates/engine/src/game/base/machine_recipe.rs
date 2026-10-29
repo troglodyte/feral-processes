@@ -92,7 +92,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
         }
-        self.require_base()?;
+        self.require_field()?;
         let placed = self
             .placed(machine)
             .filter(|p| p.def.machine.is_some())

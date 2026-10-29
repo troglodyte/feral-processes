@@ -35,8 +35,8 @@ impl Game {
     /// footprint eject) passes through.
     ///
     /// **Guarded on `Locale::Surface`**, unlike the neighbouring stocking
-    /// calls: a Stack frame or base space has its own coordinates, and
-    /// marking them would reveal surface chunks the party never stood near.
+    /// calls: a Stack frame has its own coordinates, and marking them would
+    /// reveal surface chunks the party never stood near.
     pub(crate) fn mark_explored_chunks(&mut self) {
         if !matches!(*self.world.resource::<Locale>(), Locale::Surface) {
             return;
@@ -58,7 +58,7 @@ impl Game {
     /// around each outpost, and along each route's corridor. A mark appears
     /// only on a revealed chunk.
     pub fn world_map(&mut self, center_chunk: (i32, i32), radius: i32) -> Option<WorldMapView> {
-        self.require_surface().ok()?;
+        self.require_field().ok()?;
         let party_pos = *self.world.get::<Position>(self.player_entity())?;
         let party_tile = (party_pos.x, party_pos.y);
         let anchor = self.anchor_position();

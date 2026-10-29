@@ -153,7 +153,7 @@ pub enum TaskKind {
     /// a guard doesn't produce anything even if its target happens to have
     /// a `ResourceNode`.
     Guard,
-    /// Posted to a marked `DigSite` in base space: cut the wall, then floor
+    /// Posted to a marked `DigSite` in the field: cut the wall, then floor
     /// what the cut opened — see `Game::run_dig_crew`.
     ///
     /// **The one task kind whose `target` is not a `Structure`**, which is
@@ -166,7 +166,7 @@ pub enum TaskKind {
     /// and floors through `Game::floor_cell` rather than keeping a second
     /// copy of either.
     Excavate,
-    /// Posted to a `BuildSite` in base space: fetch what the structure
+    /// Posted to a `BuildSite` in the field: fetch what the structure
     /// costs, set it down on the cell, then raise it — see
     /// `Game::run_build_crew`.
     ///

@@ -40,7 +40,7 @@
   naming `"relay"` in Rust puts content in the engine and makes a mod's
   second dispatch structure impossible. `issues_contracts`' shape and
   argument. **`Game::dispatch_reach` measures the base, never the distance to
-  the mast** — `base_pos` then `BaseGrid::is_floor`. Three states,
+  the mast** — `field_pos` then `BaseGrid::is_floor`. Three states,
   `NoPost::BoxedIn`'s rule.
 - **The board is derived and the whole record travels.** Recomputed from the
   world seed, `ZoneLevel` and the clock epoch, the Broker board's rule: no

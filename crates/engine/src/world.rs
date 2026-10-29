@@ -42,25 +42,18 @@ pub enum Biome {
     Backplane,
     OpenGrid,
     BlackIce,
-    /// Laid base floor — `base_grid::BaseCell::Floor`. **Never produced by
-    /// `classify` and never written into a `WorldMap` any more**: the base
-    /// went out of phase into `base_grid::BaseGrid`, its own coordinate
-    /// space, and this variant survives only as the rendering vocabulary
-    /// `Game::view_tiles` synthesises for it — see that function for the
-    /// three-way mapping. No shipped species lists it as a habitat, which is
-    /// the entire mechanism behind a base being a safe haven:
-    /// `Game::try_spawn_habitat_creature` already bails when both candidate
-    /// pools come back empty, so no spawn-suppression code exists anywhere.
+    /// Laid base floor. **Never produced by `classify` and never written
+    /// into a `WorldMap`**: floor lives in `base_grid::BaseGrid`, an overlay
+    /// keyed by field coordinates, and `Game::ground_tile` merges it over the
+    /// map as this biome. No shipped species lists it as a habitat, so the
+    /// spawners that ask `ground_tile` never put a wild program on it.
     Platform,
-    /// Carved-out base space, not yet floored — `BaseCell::Open`. Walkable,
-    /// like `Platform`, and the same rendering-only status: synthesised by
-    /// `Game::view_tiles`, never written into a `WorldMap`, never produced
-    /// by `classify`.
+    /// A field blocker the base has mined: written as a `WorldMap` override
+    /// by `Game::strike_field_rock`, walkable, and saved with the other
+    /// overrides. Never produced by `classify`.
     Excavated,
-    /// Solid, unmined base space — what `Game::view_tiles` draws for every
-    /// base coordinate `BaseGrid` has no cell for. The base's equivalent of
-    /// a hole in the map: nothing is ever placed there, the same as
-    /// `DataVoid` and `BlackIce` on the surface.
+    /// A blocker no `classify` produces; kept for its rock kind
+    /// (`assets/rock/`) and so old overrides naming it still parse.
     Entropy,
 }
 
@@ -100,10 +93,9 @@ impl Biome {
 pub struct Tile {
     pub biome: Biome,
     pub walkable: bool,
-    /// How bright this cell's rock face is drawn, for a base-space cell that
+    /// How bright this cell's rock face is drawn, for a field cell that
     /// is an *exposed* face — solid, with air orthogonally against it. `None`
-    /// everywhere on the zone surface, and on every base cell that is walked
-    /// on or buried behind another.
+    /// on every cell that is walked on or buried behind another.
     ///
     /// **Deliberately `#[serde(skip)]`.** `Tile` lands in the save through
     /// `SaveData::tile_overrides`, and this is a derived display value
@@ -119,32 +111,20 @@ pub struct Tile {
 }
 
 impl Tile {
-    /// Whether a hostile may stand here: walkable, and not the base slab.
+    /// Whether a hostile may stand here: walkable, and not the base's floor.
     ///
-    /// **Unreachable now that nothing writes `Biome::Platform` into a
-    /// `WorldMap`** — the base is out of phase and its floor is
-    /// `base_grid::BaseGrid`, not a tile override. Left as-is rather than
-    /// deleted; slice 2/3 is where the slab-era readers below get replaced
-    /// with a base-space equivalent of this rule, and `stamp_platform`
-    /// (named below) no longer exists.
+    /// **Only meaningful on a tile with the floor merged over it** —
+    /// `Game::ground_tile` or `BaseGrid::ground_tile`, where laid floor reads
+    /// as `Biome::Platform`. A bare `WorldMap::tile` never shows floor (the
+    /// base is a `BaseGrid` overlay, ADR 0032), so asking this of one lets a
+    /// wild program onto the base.
     ///
-    /// `walkable` alone is not the rule, and the slab is why. It is the one
-    /// safe ground in the game, established in three places already —
-    /// `Game::maybe_ambush` refuses to roll while the player stands on it,
-    /// `Game::stamp_platform` purges whatever is standing there when the
-    /// floor is laid, and `pursuit_field` keeps a provoked swarm off it.
-    ///
-    /// `wander_ai_system` is the fourth reader and was the one that quietly
-    /// disagreed: it checked `walkable` alone, so an ordinary wild program
-    /// could stroll onto a base that a *pursuing* guardian was forbidden to
-    /// enter. That went unnoticed because `stamp_platform` purges the slab
-    /// as it is laid and the wild population was small enough that few
-    /// programs ever stood next to one — raising the population is what made
-    /// a program adjacent to the edge, and therefore one wander step from
-    /// the inside, the common case rather than the rare one.
-    ///
-    /// One predicate rather than four copies of `walkable && biome !=
-    /// Platform`, because the copy that drifts is the one nobody runs.
+    /// `walkable` alone is not the rule, and the floor is why: it is the one
+    /// safe ground in the game. Every wild mover asks it — `wander_ai_system`,
+    /// `pursuit_field`, a patrol's stand, a nemesis follower's step and a
+    /// spawn's scatter — and one predicate rather than five copies of
+    /// `walkable && !is_floor`, because the copy that drifts is the one
+    /// nobody runs.
     pub(crate) fn open_to_hostiles(&self) -> bool {
         self.walkable && self.biome != Biome::Platform
     }
@@ -278,6 +258,24 @@ impl WorldMap {
         self.chunks[&(cx, cy)].tiles[(ly * CHUNK_SIZE + lx) as usize]
     }
 
+    /// `tile` without generating anything: the override, the cached chunk,
+    /// or the noise sampled straight. `&self`, so a pure rule over the field
+    /// (a crew walk, a siege's spawn cells) can read walkability beside other
+    /// resources without a mutable borrow of the map.
+    pub(crate) fn peek(&self, x: i32, y: i32) -> Tile {
+        if let Some(t) = self.overrides.get(&(x, y)) {
+            return *t;
+        }
+        let (cx, cy) = (x.div_euclid(CHUNK_SIZE), y.div_euclid(CHUNK_SIZE));
+        match self.chunks.get(&(cx, cy)) {
+            Some(chunk) => {
+                let (lx, ly) = (x.rem_euclid(CHUNK_SIZE), y.rem_euclid(CHUNK_SIZE));
+                chunk.tiles[(ly * CHUNK_SIZE + lx) as usize]
+            }
+            None => self.classify(x, y),
+        }
+    }
+
     pub fn set_override(&mut self, x: i32, y: i32, tile: Tile) {
         self.overrides.insert((x, y), tile);
     }
@@ -338,11 +336,11 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
                     Biome::Backplane => 'm',
                     Biome::OpenGrid => 'o',
                     Biome::Platform => 'p',
-                    // Base-space rendering vocabulary only — `classify`
+                    // Field rendering vocabulary only — `classify`
                     // never produces either, so this map capture can never
                     // actually reach them.
                     Biome::Excavated | Biome::Entropy => {
-                        unreachable!("classify never produces a base-space biome")
+                        unreachable!("classify never produces Excavated or Entropy")
                     }
                 });
             }

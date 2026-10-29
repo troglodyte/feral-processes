@@ -74,7 +74,7 @@ fn touching_picks_the_highest_tier_then_the_lowest_tile() {
     );
     game.world.entity_mut(a).insert(StructureTier(2));
     assert_eq!(game.touched_bench("workbench"), Some((a, 2)));
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_eq!(game.touched_bench("workbench"), None);
 }
 

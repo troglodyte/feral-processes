@@ -23,7 +23,7 @@ use bevy_ecs::prelude::{Entity, With};
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{Downed, Fleeing, Position, Task, TaskKind};
-use crate::resources::{Brawls, GameClock, Locale};
+use crate::resources::{Brawls, GameClock};
 use crate::rooms;
 use crate::tuning::{TANTRUM_FLEE_LINGER_TICKS, TANTRUM_FLEE_TILES};
 use crate::world::NEIGHBOURS;
@@ -190,8 +190,8 @@ impl Game {
 
         let mut taken = self.structure_tiles();
         taken.extend(self.build_site_tiles());
-        if let Locale::Base { x, y } = *self.world.resource::<Locale>() {
-            taken.insert((x, y));
+        if let Some(party) = self.field_pos() {
+            taken.insert(party);
         }
         let blocked = self.blocked_tiles();
         let rigid = blocked.clone().rigid();
@@ -307,10 +307,7 @@ impl Game {
         if (here.x, here.y) == goal {
             return;
         }
-        let party = match *self.world.resource::<Locale>() {
-            Locale::Base { x, y } => Some((x, y)),
-            _ => None,
-        };
+        let party = self.field_pos();
         let field = crate::game::base::hauling::crew_reach(
             self.world.resource::<BaseGrid>(),
             Position {

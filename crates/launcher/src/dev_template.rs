@@ -847,7 +847,7 @@ mod tests {
 
     /// Loading is not the bar for `siege` either: a template that merely
     /// loads next to a base tests nothing about a siege, since every one of
-    /// the three ingredients — being *in* base space, a clock already inside
+    /// the three ingredients — being at the base, a clock already inside
     /// its warning band, and a turret actually standing — can each go
     /// missing on its own and leave the save opening fine.
     #[test]
@@ -858,9 +858,9 @@ mod tests {
         let _ = std::fs::remove_file(&out);
 
         assert!(
-            game.in_base(),
-            "a siege is fought on the base's own board — a party on the surface \
-             or in the Stack cannot be besieged"
+            game.on_base_floor(),
+            "a siege is fought on the base's own board — a party in the Stack \
+             cannot be besieged"
         );
         assert!(
             game.siege_warned(),

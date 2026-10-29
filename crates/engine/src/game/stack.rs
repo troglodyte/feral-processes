@@ -238,12 +238,8 @@ impl Game {
         // can never land directly underfoot. `MAX_BUILD_DISTANCE_FROM_HOME`
         // rather than a live radius: this used to widen with
         // `resources::Platform`'s grown slab so a link could never spawn
-        // *inside* it, but the base is out of phase now and nothing a build
-        // does touches the zone surface — `link_site_free`'s own
-        // `Biome::Platform` check below is dead for the same reason, kept
-        // rather than deleted because slice 2/3 is where this whole
-        // avoidance gets a base-space replacement. What is left of the
-        // reasoning still holds: since `reach` widens only once one link is
+        // *inside* it; `link_site_free` now refuses laid floor on its own.
+        // What is left of the reasoning still holds: since `reach` widens only once one link is
         // down and the attempt budget is shared across all three, too
         // narrow an on-ramp would not cost the zone its first link — it
         // would cost the zone every link, which reads as a bad seed rather
@@ -289,13 +285,12 @@ impl Game {
     /// link needs from the ground under it, shared by a zone's scatter and
     /// by the replacement `collapse_stack` puts down.
     ///
-    /// Platform tiles are refused rather than merely unlikely: the base is
-    /// the one safe ground in the game, and a hole down into the Stack in
-    /// the middle of it would undo that. **Unreachable now that nothing
-    /// writes `Biome::Platform` into a `WorldMap`** — kept rather than
-    /// deleted, same as `find_blocking_structure_at`'s call below (which now
-    /// refuses to answer outside base space and so is always `None` here);
-    /// slice 2/3 is where this gets a `BaseGrid`-aware replacement.
+    /// Base floor is refused rather than merely unlikely: the base is the
+    /// one safe ground in the game, and a hole down into the Stack in the
+    /// middle of it would undo that. Asked through `Game::ground_tile`, which
+    /// is where floor reads as `Biome::Platform` — the `WorldMap` alone
+    /// never shows it. `Game::floor_conflict` is the other direction:
+    /// floor refused on a link.
     ///
     /// A nest is checked before an entrance in `move_player`, so a link
     /// sharing a nest's tile is a link that can never be walked into — the
@@ -307,7 +302,7 @@ impl Game {
     /// arm admits nobody, so an entrance under one would be a door nothing
     /// could ever open.
     fn link_site_free(&mut self, x: i32, y: i32) -> bool {
-        let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
+        let tile = self.ground_tile(x, y);
         tile.walkable
             && tile.biome != Biome::Platform
             && self.find_surface_link_at(x, y).is_none()
@@ -373,44 +368,69 @@ impl Game {
         ));
     }
 
-    /// Strictly "down inside the Stack", and deliberately **not** "not on
-    /// the surface" — base space is off the surface too and must not answer
-    /// yes here, or every Stack rule in the game (no Power supply, Trace,
-    /// the frame view) would start applying to the base.
+    /// Whether the party is down inside the Stack.
     pub fn is_underground(&self) -> bool {
         matches!(self.world.resource::<Locale>(), Locale::Stack { .. })
     }
 
-    /// Whether the party is out of phase, inside base space.
-    pub fn in_base(&self) -> bool {
-        matches!(self.world.resource::<Locale>(), Locale::Base { .. })
+    /// The party's tile on the field, or `None` underground, where the
+    /// player's `Position` is pinned to the entrance and answers for nothing
+    /// the party can reach.
+    ///
+    /// The base is on the field (ADR 0032), so this is also where every base
+    /// action measures from: deploying beside the party, collecting from an
+    /// adjacent machine, working a bench.
+    pub fn field_pos(&self) -> Option<(i32, i32)> {
+        if self.is_underground() {
+            return None;
+        }
+        self.world
+            .get::<Position>(self.player_entity())
+            .map(|p| (p.x, p.y))
     }
 
-    /// The party's cell in base space, or `None` anywhere else.
-    ///
-    /// The mirror of `stack_pos`, and the refusal mechanism for anything
-    /// base-only in the same way: a `None` here is what makes a base-space
-    /// action impossible from the surface, rather than a second guard
-    /// somewhere else that could disagree with this one.
-    ///
-    /// `pub` for the same reason `stack_pos_xy` is: base space has no
-    /// facing and no depth, so this one pair is the whole of "where the
-    /// party is standing" that a frontend has to ask for.
-    pub fn base_pos(&self) -> Option<(i32, i32)> {
-        match *self.world.resource::<Locale>() {
-            Locale::Base { x, y } => Some((x, y)),
-            Locale::Surface | Locale::Stack { .. } => None,
+    /// Whether the party stands on the base's laid floor: home, for the
+    /// rules that want it — mending, the siege clock
+    /// fighting rather than resolving offscreen, the ground's bite and a
+    /// patrol's challenge both staying out.
+    pub fn on_base_floor(&self) -> bool {
+        self.field_pos().is_some_and(|(x, y)| {
+            self.world
+                .resource::<crate::base_grid::BaseGrid>()
+                .is_floor(x, y)
+        })
+    }
+
+    /// The floor overlay and the field together, for the pure walk rules.
+    pub(crate) fn ground(&self) -> crate::base_grid::Ground<'_> {
+        crate::base_grid::Ground {
+            floor: self.world.resource::<crate::base_grid::BaseGrid>(),
+            map: self.world.resource::<WorldMap>(),
         }
     }
 
-    /// The anchor's tile on the zone surface — the permanent door into base
-    /// space, regardless of which locale the party currently stands in.
+    /// The field tile at `(x, y)` with the base merged over it: laid floor
+    /// reads as `Biome::Platform`, everything else is the `WorldMap`'s tile
+    /// (mined ground included, an override there). The one place the two
+    /// stores meet for the map, the ground's effects and a step.
+    pub(crate) fn ground_tile(&mut self, x: i32, y: i32) -> Tile {
+        self.world
+            .resource_scope(|world, mut map: bevy_ecs::prelude::Mut<WorldMap>| {
+                world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .ground_tile(&mut map, x, y)
+            })
+    }
+
+    /// The anchor's tile on the field — where the Home was founded, and the
+    /// base's one fixed point — regardless of which locale the party
+    /// currently stands in.
     ///
     /// `Some` from the moment `Game::new` or `Game::load` finishes: both
     /// constructors spawn the one `components::BaseAnchor` entity and record
     /// it in `resources::AnchorEntity` before returning. `None` here would
     /// mean that bookkeeping has gone missing, not a normal outcome the way
-    /// `base_pos`'s `None` is.
+    /// `field_pos`'s `None` is.
     ///
     /// A plain resource-then-component read rather than a query, so this can
     /// stay `&self` — `World::query_filtered` needs `&mut World` to build,
@@ -421,51 +441,20 @@ impl Game {
         self.world.get::<Position>(anchor).map(|p| (p.x, p.y))
     }
 
-    /// `Err` unless the party is on the zone surface proper — for actions
-    /// that reach into the **zone map** through the player's `Position`.
+    /// `Err` while the party is down in the Stack — for actions that reach
+    /// the field through the player's `Position`, which underground is
+    /// pinned to the entrance tile. The base and the wild are one space now
+    /// (ADR 0032), so this one guard replaces the old surface/base split;
+    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` has
+    /// that split's history.
     ///
-    /// In both of the other two locales that `Position` is pinned: to the
-    /// Stack entrance tile while underground, and to the anchor tile while
-    /// in base space (see `resources::Locale`). So these would otherwise
-    /// operate on a tile out in the wild that the player is nowhere near:
-    /// `use_symlink` teleporting the pinned entrance somewhere else and
-    /// changing where climbing back up puts you, worst of all.
-    ///
-    /// **This guard used to mean "not in the Stack",** which was the same
-    /// condition while there were two locales. It is not any more, and the ten
-    /// sites that turned out to mean base space rather than the surface moved
-    /// to `require_base`.
-    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` carries
-    /// the table; adding a caller here means asserting the action belongs to
-    /// the *wild*, not to the base.
-    ///
-    /// Party and inventory management deliberately isn't on this list.
-    /// Fusing programs, installing routines, crafting, equipping and
-    /// spending perk points all work fine four frames down, and stopping to
-    /// sort your gear in the Stack is a thing the genre expects.
-    pub(crate) fn require_surface(&self) -> Result<(), String> {
+    /// Party and inventory management deliberately isn't guarded: fusing,
+    /// installing routines, crafting, equipping and spending perk points all
+    /// work four frames down.
+    pub(crate) fn require_field(&self) -> Result<(), String> {
         match *self.world.resource::<Locale>() {
             Locale::Surface => Ok(()),
-            Locale::Stack { .. } => Err("Not down here — that needs open grid.".into()),
-            Locale::Base { .. } => Err("Not in here — that needs open grid.".into()),
-        }
-    }
-
-    /// `Err` unless the party is in base space — for actions that reach
-    /// into the **base** through the player's `Position`: deploying,
-    /// upgrading, demolishing, working a machine by hand, collecting from
-    /// one, filing a work order, and every counter a deployed trader keeps.
-    ///
-    /// The counterpart to `require_surface` and the larger half of what it
-    /// used to cover. Every `Structure` lives in base space, so an action
-    /// about a structure asked from the zone surface is asking about a tile
-    /// in another space entirely — the same misread `require_surface`
-    /// already refused underground, one locale over.
-    pub(crate) fn require_base(&self) -> Result<(), String> {
-        match *self.world.resource::<Locale>() {
-            Locale::Base { .. } => Ok(()),
-            Locale::Surface => Err("Not out here — that's back at the base.".into()),
-            Locale::Stack { .. } => Err("Not down here — that's back at the base.".into()),
+            Locale::Stack { .. } => Err("Not down here — that's back up on the field.".into()),
         }
     }
 
@@ -492,12 +481,12 @@ impl Game {
     ///
     /// The radius is the base's own reach, exactly as
     /// `distance_from_danger_origin` reads it and for the same reason: with
-    /// nothing carved out of base space there is no safe territory to
+    /// nothing carved out of the field there is no safe territory to
     /// measure from and the walk is the whole distance. `BaseGrid::radius`
     /// answers 0 in that case, so the branch this used to take is folded
     /// into the number.
     ///
-    /// It read `Platform::radius` until the base went out of phase, and that
+    /// It read `Platform::radius` until the base became `BaseGrid`, and that
     /// value is set by a breach and nothing else now — so every link near a
     /// fresh run's base ran *deeper* than it should, and shallower again
     /// after a save and load.
@@ -520,12 +509,30 @@ impl Game {
             frames,
             // The world map is persistent, so the seed above is fixed for
             // the whole run and the tier is the only thing left that moves
-            // a surviving entrance's frame. Read live rather than stored on
-            // the link, which is a bare marker: `components::SurfaceLink`
-            // has no fields and every other Stack difficulty term reads
-            // `ZoneLevel` the same way.
-            tier: self.world.resource::<ZoneLevel>().0,
+            // a surviving entrance's frame. A link the party has entered
+            // keeps the tier it was entered at (`resources::EnteredTiers`,
+            // which outlives the breach's `StackMemory` wipe); any other
+            // carves at the live `ZoneLevel`.
+            tier: self
+                .world
+                .resource::<crate::resources::EnteredTiers>()
+                .0
+                .get(&entrance)
+                .copied()
+                .unwrap_or(self.world.resource::<ZoneLevel>().0),
         }
+    }
+
+    /// Pins `entrance` to the current tier the first time the party goes
+    /// through it. Before the frame is generated, so that frame is carved
+    /// from the pinned tier.
+    fn record_entered_tier(&mut self, entrance: (i32, i32)) {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        self.world
+            .resource_mut::<crate::resources::EnteredTiers>()
+            .0
+            .entry(entrance)
+            .or_insert(zone);
     }
 
     /// Generates the frame for `depth` and puts the party on the cell
@@ -548,6 +555,7 @@ impl Game {
         entrance: (i32, i32),
         landing: impl FnOnce(&stack::Frame) -> (i32, i32),
     ) {
+        self.record_entered_tier(entrance);
         let level = stack::generate(self.frame_spec(depth, frames, entrance));
         let (x, y) = landing(&level);
         let mut tally = self.world.resource_mut::<crate::resources::RunTally>();
@@ -685,6 +693,10 @@ impl Game {
             .resource_mut::<StackMemory>()
             .0
             .retain(|&(tile, _), _| tile != entrance);
+        self.world
+            .resource_mut::<crate::resources::EnteredTiers>()
+            .0
+            .remove(&entrance);
     }
 
     /// The nearest legal tile to `from` a replacement link may stand on, or
@@ -740,7 +752,7 @@ impl Game {
     /// Stack.
     pub(crate) fn stack_pos(&self) -> Option<StackPos> {
         match *self.world.resource::<Locale>() {
-            Locale::Surface | Locale::Base { .. } => None,
+            Locale::Surface => None,
             Locale::Stack {
                 depth,
                 frames,
@@ -1176,6 +1188,7 @@ impl Game {
             ..
         } = locale
         {
+            self.record_entered_tier(entrance);
             let level = stack::generate(self.frame_spec(depth, frames, entrance));
             // A frame is regenerated, not saved, so a change to the generator
             // moves the walls under an old save — and a party restored into

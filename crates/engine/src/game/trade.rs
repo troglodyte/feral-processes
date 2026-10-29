@@ -62,7 +62,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if qty == 0 {
             return Err("Sell at least 1.".into());
         }
@@ -374,7 +374,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if qty == 0 {
             return Err("Buy back at least 1.".into());
         }
@@ -392,9 +392,8 @@ impl Game {
     /// through `settlement_buyback_unit_cost` rather than a structure's
     /// fixed `sell_rate`.
     ///
-    /// **No `require_base`.** A settlement stands on the zone surface, not
-    /// in base space, so `Game::settlement_reach` is the gate here — the
-    /// same one `Game::commit_settlement_basket` checks.
+    /// **No `require_field`.** `Game::settlement_reach` is the gate here —
+    /// the same one `Game::commit_settlement_basket` checks.
     pub fn settlement_buy_back(
         &mut self,
         key: crate::settlements::SettlementKey,
@@ -715,7 +714,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if self.program_sell_divisor(structure).is_none() {
             return Err("That trader doesn't deal in programs.".into());
         }
@@ -791,7 +790,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         if qty == 0 {
             return Err("Buy at least 1.".into());
         }

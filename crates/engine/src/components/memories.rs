@@ -61,12 +61,10 @@ pub struct Memory {
 /// reordering them is not a save-format change (unlike `perks::Perk`, which
 /// bincode encodes positionally).
 ///
-/// **`BaseTile`, not `Place`.** Base space and surface space are the same two
-/// integers meaning different things, and reading one as the other is what
-/// put the base's roster on the open grid. Naming the space in the type is
-/// what stops that recurring. A *surface* variant, when content asks for one,
-/// needs no wipe either: the world is persistent, so a surface tile is as
-/// permanent as a base tile and a memory keyed to one stays true.
+/// **`BaseTile`, not `Place`.** It names a field tile the base stands on. A
+/// *surface* variant, when content asks for one, needs no wipe either: the
+/// world is persistent, so a surface tile is as permanent as a base tile and
+/// a memory keyed to one stays true.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum MemorySubject {
     /// About nothing in particular — a memory of an event, not of a thing.
@@ -74,7 +72,7 @@ pub enum MemorySubject {
     Program(ProgramId),
     Species(SpeciesId),
     Structure(StructureId),
-    /// **Base-space** coordinates, never a tile on the zone surface.
+    /// **Field** coordinates, never a tile on the zone surface.
     BaseTile {
         x: i32,
         y: i32,

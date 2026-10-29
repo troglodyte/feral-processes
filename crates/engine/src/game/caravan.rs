@@ -58,14 +58,8 @@ impl Game {
     }
 
     /// The seed one visit's three independent draws are taken from: the
-    /// base's own seed, the caravan salt and the visit index, folded FNV-1a a
-    /// byte at a time.
-    ///
-    /// **`BaseGrid::seed()`, not `WorldMap::seed()`.** The base's seed is
-    /// minted once at `Game::new` and travels across a breach; the world's is
-    /// re-minted per zone. A rhythm keyed to the world seed would restart
-    /// every time the party moved on, which is the opposite of what a
-    /// recurring visitor to *your base* means.
+    /// run's world seed (minted once at `Game::new`; a breach keeps it), the
+    /// caravan salt and the visit index, folded FNV-1a a byte at a time.
     ///
     /// Byte-at-a-time rather than one XOR-and-multiply per word, for
     /// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves the low
@@ -74,7 +68,7 @@ impl Game {
     pub(crate) fn visit_seed(&self, visit: u64) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
         for word in [
-            self.world.resource::<BaseGrid>().seed() as u64,
+            self.world.resource::<crate::world::WorldMap>().seed() as u64,
             crate::tuning::CARAVAN_SALT,
             visit,
         ] {
@@ -891,12 +885,13 @@ impl Game {
         }
     }
 
-    /// The anchor tile to base space's own door cell, in one tick — the same
-    /// step the party takes through `Game::enter_base`, and the reason
+    /// Onto the anchor tile, where the Home stands, in one tick — the reason
     /// `Docking` is a stage rather than an instant: the trader is drawn
-    /// standing on the anchor for one tick before it goes out of phase.
+    /// standing at the door for one tick before it crosses the floor.
     fn phase_caravan_in(&mut self, entity: Entity) {
-        let (x, y) = crate::game::base_space::BASE_EXIT_CELL;
+        let Some((x, y)) = self.anchor_position() else {
+            return;
+        };
         if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
             *pos = Position { x, y };
         }
@@ -972,15 +967,13 @@ impl Game {
     }
 
     /// Turns a caravan around wherever it is: back onto the anchor tile if it
-    /// was out of phase, and onto `Leaving` either way.
+    /// had crossed onto the floor, and onto `Leaving` either way.
     fn send_caravan_home(&mut self, entity: Entity) {
         let Some(caravan) = self.world.get::<Caravan>(entity).cloned() else {
             return;
         };
-        if caravan.stage.in_base_space() {
-            // Straight back to the anchor's tile on the surface. Phasing out
-            // is not a walk in either direction — `enter_base`/`leave_base`
-            // are one step for the party too.
+        if caravan.stage.inside_the_base() {
+            // Straight back to the anchor's tile rather than walking out.
             let anchor = self.anchor_position().unwrap_or(caravan.arrival_tile);
             if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
                 *pos = Position {
@@ -1027,7 +1020,7 @@ impl Game {
 /// How far past `CARAVAN_SPAWN_DISTANCE_TILES` a caravan's surface search
 /// reaches, so a route that has to go round something still exists.
 ///
-/// Here rather than in `tuning/` for `BASE_EXIT_CELL`'s reason: it is not a
+/// Here rather than in `tuning/`: it is not a
 /// knob, it is the slack a straight-line spawn distance needs to be walkable
 /// at all. `NEST_PATH_SEARCH_MARGIN` is the same idea on the other search.
 const CARAVAN_PATH_MARGIN: i32 = 12;
@@ -1078,7 +1071,7 @@ pub enum CaravanReach {
 impl Game {
     /// Where the player stands in relation to the visiting trader.
     ///
-    /// `AtCaravan` measures **base space**, exactly as `broker_reach` does,
+    /// `AtCaravan` measures **the base floor**, exactly as `broker_reach` does,
     /// and deliberately not the distance to the caravan's own tile: a docked
     /// caravan is standing on the base's laid floor by construction, so its
     /// tile says nothing the base does not. The walk to the counter is
@@ -1095,7 +1088,7 @@ impl Game {
         if !docked {
             return CaravanReach::NotDocked;
         }
-        match self.base_pos() {
+        match self.field_pos() {
             Some((x, y))
                 if self
                     .world

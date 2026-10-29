@@ -147,7 +147,7 @@ pub fn room_work_scale(band: RoomBand) -> f64 {
     ROOM_WORK_SCALE[band as usize]
 }
 
-/// A structure standing in base space: its anchor and its def.
+/// A structure standing in the field: its anchor and its def.
 pub struct PlacedStructure<'a> {
     pub at: (i32, i32),
     pub def: &'a StructureDef,
@@ -253,9 +253,9 @@ pub fn detect(
         .filter(|p| p.def.barrier || p.def.door)
         .map(|p| p.at)
         .collect();
-    let open = |c: (i32, i32)| grid.walkable(c.0, c.1) && !boundary.contains(&c);
+    let open = |c: (i32, i32)| grid.is_floor(c.0, c.1) && !boundary.contains(&c);
     let mut found = Rooms::default();
-    for (&start, _) in grid.iter() {
+    for start in grid.floor_cells() {
         if found.by_cell.contains_key(&start) || !open(start) {
             continue;
         }
@@ -358,7 +358,7 @@ impl crate::Game {
     /// Every room that has a role, for the Alt overlay. Empty outside base
     /// space, `floor_items`' reason: the cells are base cells.
     pub fn view_rooms(&mut self) -> Vec<RoomView> {
-        if self.base_pos().is_none() {
+        if self.field_pos().is_none() {
             return Vec::new();
         }
         let rooms = of_world(&self.world);
@@ -469,15 +469,6 @@ mod tests {
         let r = run(&g, &[(&wall, (2, 0))], (99, 99));
         assert_eq!(r.rooms.len(), 2);
         assert!(r.room_at(2, 0).is_none());
-    }
-
-    #[test]
-    fn open_cells_count_toward_a_room() {
-        let mut g = block(2, 1);
-        g.open(2, 0, 0);
-        let r = run(&g, &[], (99, 99));
-        assert_eq!(r.rooms.len(), 1);
-        assert_eq!(r.rooms[0].cells.len(), 3);
     }
 
     #[test]

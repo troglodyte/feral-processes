@@ -225,7 +225,7 @@ fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) -> crate::Entity {
 /// A base with a Home, an iso Market and the party standing in it — the
 /// state every caravan question is asked from.
 fn based(game: &mut Game) {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(game, "home", 0, 0);
     deploy(game, "market", 2, 0);
     stand_in_base_at(game, 1, 1);
@@ -336,7 +336,7 @@ fn the_bearing_sequence_does_not_cycle() {
 #[test]
 fn no_market_means_no_visit() {
     let mut game = fresh();
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(&mut game, "home", 0, 0);
     stand_in_base_at(&mut game, 1, 1);
     let arrival = game.visit_at(0).unwrap().arrival_tick;
@@ -928,51 +928,18 @@ fn drawn(game: &mut Game, entity: crate::Entity) -> bool {
         .any(|v| v.entity == entity)
 }
 
-/// Asserted **through `view_entities` from both locales**, never by calling
-/// the predicate directly: the map and the space rule have to be tested
-/// against each other or the two can agree on a wrong answer.
-#[test]
-fn a_caravan_is_drawn_in_exactly_one_space_per_stage() {
-    let mut game = fresh();
-    based(&mut game);
-    let caravan = stand_caravan(&mut game, CaravanStage::Approaching, (3, 0));
-
-    game.world.insert_resource(Locale::Surface);
-    assert!(
-        drawn(&mut game, caravan),
-        "an approaching caravan is out in the sector"
-    );
-    stand_in_base_at(&mut game, 1, 1);
-    assert!(
-        !drawn(&mut game, caravan),
-        "and must not also be inside the base — base space's origin and the \
-         zone spawn point commonly alias, so a wrong-space draw looks right"
-    );
-
-    game.world.get_mut::<Caravan>(caravan).unwrap().stage = CaravanStage::Docked;
-    assert!(
-        drawn(&mut game, caravan),
-        "a docked caravan is standing in the base"
-    );
-    game.world.insert_resource(Locale::Surface);
-    assert!(
-        !drawn(&mut game, caravan),
-        "and is no longer out in the sector"
-    );
-}
-
 /// The two transition ticks are decided, not defaulted: both are spent on
 /// the anchor tile, which is a tile of the zone surface.
 #[test]
 fn the_transition_stages_stand_on_the_surface() {
     for stage in [CaravanStage::Docking, CaravanStage::Leaving] {
         assert!(
-            !stage.in_base_space(),
+            !stage.inside_the_base(),
             "{stage:?} is spent standing on the anchor, out in the sector"
         );
     }
     for stage in [CaravanStage::Crossing, CaravanStage::Docked] {
-        assert!(stage.in_base_space(), "{stage:?} is inside");
+        assert!(stage.inside_the_base(), "{stage:?} is inside");
     }
 }
 
@@ -1021,7 +988,7 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
 fn caravans_cost_no_save_format_bump() {
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "a caravan field adds no bump of its own; a changed version is a deliberate bump"
     );
 }
@@ -1274,7 +1241,7 @@ fn a_base_with_two_markets_always_docks_at_the_same_one() {
     let path = dir.join("save.bin");
 
     let mut game = fresh();
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     deploy(&mut game, "home", 0, 0);
     deploy(&mut game, "market", 2, 0);
     deploy(&mut game, "market", -2, 1);
@@ -1403,17 +1370,6 @@ fn the_examine_ray_names_what_the_map_draws_of_a_caravan() {
         Some(InspectTarget::Caravan(caravan)),
         "the map drew it and the ray looked straight through"
     );
-
-    // And the other way: out of phase it is on neither.
-    stand_in_base_at(&mut game, anchor.0, anchor.1);
-    assert!(!drawn(&mut game, caravan), "not drawn from inside the base");
-    assert_eq!(
-        look(&mut game),
-        None,
-        "and must not be nameable from inside the base either — base space's \
-         origin and the zone spawn point commonly alias, so an ungated ray \
-         names a trader out in the sector as though it were standing here"
-    );
 }
 
 /// It is a subject to look at, never a subject to fight: no `Creature`, no
@@ -1498,10 +1454,10 @@ fn caravan_reach_reports_the_three_states() {
 
     // The far edge of the pocket is still the base — the walk to the counter
     // is visibility, not a gate.
-    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_HALF_WIDTH, 0);
+    stand_in_base_at(&mut game, TEST_POCKET_HALF_WIDTH, 0);
     assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
 
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
     assert_eq!(
         game.caravan_reach(),
         CaravanReach::NotDocked,
@@ -1707,7 +1663,7 @@ fn caravan_memory_survives_a_save_and_load() {
     );
     assert_eq!(
         crate::save::SAVE_FORMAT_VERSION,
-        39,
+        40,
         "the caravan fields add no bump of their own; the version stays at the current pin"
     );
 }

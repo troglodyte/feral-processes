@@ -484,3 +484,25 @@ fn a_class_view_carries_its_bonuses_as_axis_and_multiplier() {
     assert!(!want.is_empty());
     assert_eq!(view.bonuses, want);
 }
+
+/// A class kit that cannot pay for founding is a run that never opens a base.
+#[test]
+fn every_class_kit_covers_the_founding_cost() {
+    let (db, _) = ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+    let mut checked = 0;
+    for def in db.iter() {
+        let fragments: u32 = def
+            .kit
+            .iter()
+            .filter(|(item, _)| item.as_str() == ids::CORE_FRAGMENT)
+            .map(|(_, n)| *n)
+            .sum();
+        assert!(
+            fragments >= crate::tuning::HOME_FOUNDING_COST,
+            "{:?} kit holds {fragments} fragments",
+            def.class
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no class kit was checked");
+}

@@ -180,14 +180,6 @@ fn the_compass_is_empty_off_the_zone_surface() {
         "on the surface it lists"
     );
 
-    stand_in_base(&mut game);
-    assert!(
-        game.compass_targets().is_empty(),
-        "in base space `Position` is pinned to the anchor, so a bearing would \
-         be frozen while reading as live"
-    );
-
-    game.world.insert_resource(Locale::Surface);
     descend(&mut game);
     assert!(
         game.compass_targets().is_empty(),

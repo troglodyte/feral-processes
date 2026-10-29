@@ -142,7 +142,7 @@ fn a_depot_is_out_of_reach_outside_base_space() {
         9,
         &[(disk.clone(), 1), (material.clone(), count)],
     );
-    game.world.insert_resource(Locale::Surface);
+    step_off_the_floor(&mut game);
 
     assert_eq!(game.blank_disks_held(), 0);
     assert!(game.build_routine("Mender", &[heal()]).is_err());

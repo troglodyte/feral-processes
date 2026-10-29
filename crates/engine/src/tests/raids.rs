@@ -1918,6 +1918,7 @@ fn raid_check_never_targets_a_dig_site_even_as_the_only_durability_holder() {
     for e in existing {
         game.world.despawn(e);
     }
+    game.dev_lay_floor([(3, 4)]);
     game.toggle_mark_box((4, 4), (4, 4), None);
     let site = game.dig_site_at(4, 4).expect("marking spawns a dig site");
     let full = game.world.get::<Durability>(site).unwrap().hp;
@@ -2027,6 +2028,8 @@ fn the_second_sector_is_where_sweeps_begin() {
 /// Puts a Hostile town `dx` east of the anchor and hands back its key.
 fn hostile_neighbour(game: &mut Game, dx: i32) -> crate::settlements::SettlementKey {
     let (ax, ay) = game.anchor_position().expect("a new game has an anchor");
+    // A town raids the base's floor, so the base needs some: the anchor's.
+    game.dev_lay_floor([(ax, ay)]);
     let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
     place_settlement(game, key, ax + dx, ay);
     game.world

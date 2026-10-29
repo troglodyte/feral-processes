@@ -218,29 +218,101 @@ pub(crate) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
-/// Puts the party out of phase, in base space, without walking there —
-/// nothing can walk there until the anchor's door is built.
-///
-/// Deliberately leaves everything else alone, the player's `Position`
-/// included, so a base stood up while on the surface still lines up with
-/// the party standing in it and the only thing this changes is which guard
-/// an action meets (`Game::require_base` against `Game::require_surface`).
-pub(crate) fn stand_in_base(game: &mut Game) {
-    game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+/// Where every fixture founds its base: the field's origin, so a test's base
+/// cells and field cells are the same numbers the old base-space fixtures
+/// used (ADR 0032 put the base on the field).
+pub(crate) const TEST_HOME_CELL: (i32, i32) = (0, 0);
+
+/// The fixture pocket `lay_test_pocket` floors: half-width and half-height
+/// around `TEST_HOME_CELL`, chamfered by `TEST_POCKET_CORNER_CUT`. The 19x9
+/// pocket a run used to open with, kept as test ground so a fixture has room
+/// to stand machines without growing the floor tile by tile.
+pub(crate) const TEST_POCKET_HALF_WIDTH: i32 = 9;
+pub(crate) const TEST_POCKET_HALF_HEIGHT: i32 = 4;
+pub(crate) const TEST_POCKET_CORNER_CUT: i32 = 2;
+
+/// Every cell of the fixture pocket, row by row.
+pub(crate) fn test_pocket_cells() -> Vec<(i32, i32)> {
+    let (w, h) = (TEST_POCKET_HALF_WIDTH, TEST_POCKET_HALF_HEIGHT);
+    let mut cells = Vec::new();
+    for dy in -h..=h {
+        for dx in -w..=w {
+            if dx.abs() + dy.abs() <= w + h - TEST_POCKET_CORNER_CUT {
+                cells.push((TEST_HOME_CELL.0 + dx, TEST_HOME_CELL.1 + dy));
+            }
+        }
+    }
+    cells
 }
 
-/// Runs `act` from inside base space and comes back out to wherever the
-/// party was standing before.
+impl Game {
+    /// Floors the fixture pocket (`test_pocket_cells`) — free, through the
+    /// one floor door, whatever the field under it is.
+    pub(crate) fn lay_test_pocket(&mut self) {
+        self.dev_lay_floor(test_pocket_cells());
+    }
+}
+
+/// Stands the player on `TEST_HOME_CELL` on the field — where a fixture's
+/// Home stands — out of the Stack if they were in it, and floors the fixture
+/// pocket first if nothing is laid there: standing in the base means standing
+/// on its floor (`Game::on_base_floor`).
+pub(crate) fn stand_in_base(game: &mut Game) {
+    let floored = game
+        .world
+        .resource::<crate::base_grid::BaseGrid>()
+        .is_floor(TEST_HOME_CELL.0, TEST_HOME_CELL.1);
+    if !floored {
+        game.lay_test_pocket();
+    }
+    stand_in_base_at(game, TEST_HOME_CELL.0, TEST_HOME_CELL.1);
+}
+
+/// Overrides field `cell` to a blocker (`Biome::DataVoid`), so a test that
+/// needs rock there does not depend on the seed's terrain.
+pub(crate) fn set_rock(game: &mut Game, cell: (i32, i32)) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        cell.0,
+        cell.1,
+        Tile {
+            biome: Biome::DataVoid,
+            walkable: false,
+            rock_shade: None,
+        },
+    );
+}
+
+/// A field cell well clear of the fixture pocket's floor.
+pub(crate) const OFF_THE_FLOOR: (i32, i32) = (TEST_POCKET_HALF_WIDTH + 6, 0);
+
+/// Stands the player on open ground off the base's floor — on the field,
+/// but not home (`Game::on_base_floor` is false).
+pub(crate) fn step_off_the_floor(game: &mut Game) {
+    game.world.resource_mut::<WorldMap>().set_override(
+        OFF_THE_FLOOR.0,
+        OFF_THE_FLOOR.1,
+        Tile {
+            biome: Biome::OpenGrid,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    stand_in_base_at(game, OFF_THE_FLOOR.0, OFF_THE_FLOOR.1);
+}
+
+/// Runs `act` with the party standing at `TEST_HOME_CELL` on the field, and
+/// puts them back where they were — locale and tile — afterwards.
 ///
 /// For a fixture that has to *build* a base before a test about something
-/// else entirely — a breach, a raid, a dive. Deploying is a base action now
-/// (`Game::require_base`), so a test that stands a machine up and then walks
-/// the surface has to cross twice, the same as the player does.
+/// else entirely — a breach, a raid, a dive — measured from the Home's tile.
 pub(crate) fn from_inside_the_base<T>(game: &mut Game, act: impl FnOnce(&mut Game) -> T) -> T {
     let outside = game.locale();
+    let player = game.player_entity();
+    let tile = *game.world.get::<Position>(player).unwrap();
     stand_in_base(game);
     let done = act(game);
     game.world.insert_resource(outside);
+    *game.world.get_mut::<Position>(player).unwrap() = tile;
     done
 }
 
@@ -249,10 +321,9 @@ pub(crate) fn from_inside_the_base<T>(game: &mut Game, act: impl FnOnce(&mut Gam
 /// Puts `creature` in the party from inside base space, and comes back out
 /// to wherever the party was standing.
 ///
-/// Party assignment is a base verb (`Game::require_base`), so a test about
-/// anything else has to cross twice, the same as the player does — this is
-/// `from_inside_the_base`'s reason one verb along, and it is spelled as a
-/// fixture rather than inlined 130 times.
+/// Party assignment refuses in the Stack (`Game::require_field`), so a test
+/// about a dive enlists from the field — `from_inside_the_base`'s reason one
+/// verb along, spelled as a fixture rather than inlined 130 times.
 pub(crate) fn enlist(game: &mut Game, creature: Entity) {
     from_inside_the_base(game, |g| g.add_companion(creature))
         .unwrap_or_else(|e| panic!("enlisting a companion: {e}"));
@@ -851,6 +922,14 @@ pub(super) fn file_build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Resul
         let zone = game.world.resource::<ZoneLevel>().0;
         game.grant_phase_key(zone);
     }
+    // The Home founds where the party stands, so every fixture founds on
+    // `TEST_HOME_CELL` and gets the fixture pocket around it — the ground
+    // its coordinates were written against.
+    if kind == "home" {
+        from_inside_the_base(game, |g| g.place_structure(kind, dx, dy, None))?;
+        game.lay_test_pocket();
+        return Ok(());
+    }
     let program = build_program(game, &kind.to_string(), 1);
     game.place_structure(kind, dx, dy, program)
 }
@@ -1132,7 +1211,7 @@ pub(super) fn stand_an_extraction_bench(game: &mut Game, x: i32, y: i32) -> Enti
 /// Stands the party in base space with a Workbench orthogonally beside it:
 /// the touch a bench recipe is offered under. Returns the bench.
 pub(super) fn touch_a_workbench(game: &mut Game) -> Entity {
-    stand_in_base_at(game, 0, 0);
+    stand_in_base(game);
     spawn_structure_at(game, "workbench", 1, 0)
 }
 
@@ -1147,7 +1226,9 @@ pub(super) fn place_machine(
     dy: i32,
 ) -> Result<Entity, String> {
     place_now(game, kind, dx, dy)?;
-    let (bx, by) = game.base_pos().expect("a test places machines in the base");
+    let (bx, by) = game
+        .field_pos()
+        .expect("a test places machines from the field");
     let machine = game
         .world
         .query::<(Entity, &Structure, &Position)>()
@@ -1169,7 +1250,7 @@ pub(super) fn spawn_machine_with_recipe_at(
     x: i32,
     y: i32,
 ) -> Entity {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     let def = game
         .structure_defs()
         .into_iter()
@@ -1199,7 +1280,7 @@ pub(super) fn set_recipe_researched(
     let item = ItemId::from(recipe);
     // Setting is a base action; a fixture out on the surface crosses in and
     // back so the call is not what the test is about.
-    if game.base_pos().is_some() {
+    if game.field_pos().is_some() {
         game.set_machine_recipe(machine, &item)
     } else {
         from_inside_the_base(game, |g| g.set_machine_recipe(machine, &item))
@@ -1690,7 +1771,7 @@ pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
 /// `MachineStatus` is skipped by `task_progress_system`'s query and
 /// silently produces nothing.
 pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     let def = game
         .structure_defs()
         .into_iter()
@@ -1777,21 +1858,36 @@ pub(super) fn breach_through_a_portal(game: &mut Game) {
     // what the breach does.
     let zone = game.world.resource::<ZoneLevel>().0;
     game.grant_phase_key(zone);
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
+    // The first pocket cell east of a standing spot whose step nothing on
+    // the field would answer first — the base shares the field with links,
+    // programs and towns, and a fixture's portal must not land on one.
+    let clear = |game: &mut Game, x: i32, y: i32| {
+        game.find_wild_creature_at(x, y).is_none()
+            && game.find_nest_at(x, y).is_none()
+            && game.find_surface_link_at(x, y).is_none()
+            && game.find_settlement_at(x, y).is_none()
+            && game.find_trap_at(x, y).is_none()
+    };
+    let x = (0..TEST_POCKET_HALF_WIDTH)
+        .chain(-TEST_POCKET_HALF_WIDTH..0)
+        .find(|&x| clear(game, x, 0) && clear(game, x + 1, 0))
+        .expect("a pocket row with two clear cells");
     game.world.spawn((
         Structure {
             kind: "portal".to_string(),
         },
-        Position { x: 1, y: 0 },
+        Position { x: x + 1, y: 0 },
     ));
-    stand_in_base_at(game, 0, 0);
+    stand_in_base_at(game, x, 0);
     game.move_player(1, 0);
 }
 
-/// Puts the party in base space on `(x, y)` — `stand_in_base`, at a chosen
-/// cell rather than at the exit.
+/// Stands the player on field `(x, y)` — `stand_in_base`, at a chosen cell
+/// rather than at the Home — out of the Stack if they were in it.
 pub(crate) fn stand_in_base_at(game: &mut Game, x: i32, y: i32) {
-    game.world.insert_resource(Locale::Base { x, y });
+    game.world.insert_resource(Locale::Surface);
+    stand_player_at(game, x, y);
 }
 
 /// Stands `worker` on the tile east of `structure` — a post it can work
@@ -1849,24 +1945,20 @@ pub(super) fn stall_alerts(game: &Game, status: MachineStatus) -> u32 {
         .sum()
 }
 
-/// Deploys the run's first Home, which lands on base space's own origin and
-/// lays the starting pocket around it — `place_structure` refuses anything
-/// else until a Home exists, so most structure-placement tests need this
-/// first.
+/// Deploys the run's first Home on `TEST_HOME_CELL` and floors the fixture
+/// pocket around it — `place_structure` refuses anything else until a Home
+/// exists, so most structure-placement tests need this first. The player is
+/// stood on the Home's tile to found it and put back where they were.
 ///
-/// No offsets, because the founding deploy takes none: wherever the player
-/// points, the first Home stands on `BASE_EXIT_CELL`. It is also the one
-/// build made from the open grid, so this deliberately does *not* route
-/// through `from_inside_the_base` — there is no inside yet.
-///
-/// Nothing is stocked first: the Home is free, so a fixture that topped the
-/// pack up for it would leave every downstream inventory count carrying
-/// materials the test never asked for.
+/// The founding fragments are given first and are exactly what founding
+/// takes, so every downstream inventory count is as the test left it.
 pub(super) fn place_home(game: &mut Game) {
-    let outside = game.locale();
-    game.world.insert_resource(Locale::Surface);
+    give(
+        game,
+        &ItemId::from(ids::CORE_FRAGMENT),
+        crate::tuning::HOME_FOUNDING_COST,
+    );
     place_now(game, "home", 0, 0).unwrap();
-    game.world.insert_resource(outside);
 }
 
 /// A 2x2 (or `footprint`-wide) fixture registered under `id`, cloned off
@@ -2420,8 +2512,8 @@ pub(super) fn stand_in_base_beside_home(game: &mut Game) {
             kind: "home".to_string(),
         },
         Position {
-            x: crate::game::base_space::BASE_EXIT_CELL.0,
-            y: crate::game::base_space::BASE_EXIT_CELL.1,
+            x: TEST_HOME_CELL.0,
+            y: TEST_HOME_CELL.1,
         },
     ));
     stand_in_base(game);
@@ -2684,7 +2776,7 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
 /// a node short of those reads as a rate that moved rather than as a fixture
 /// missing a component.
 pub(super) fn spawn_extractor(game: &mut Game, x: i32, y: i32) -> Entity {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     game.world
         .spawn((
             Structure {
@@ -2708,7 +2800,7 @@ pub(super) fn spawn_market(game: &mut Game) -> Entity {
 /// The same, at a chosen tile — for tests about the buyback shelf, which is
 /// keyed by the tile its trader stands on.
 pub(super) fn spawn_market_at(game: &mut Game, x: i32, y: i32) -> Entity {
-    game.lay_starting_pocket();
+    game.lay_test_pocket();
     let kind = game
         .structure_defs()
         .into_iter()
@@ -3167,28 +3259,26 @@ pub(super) fn held_any(game: &Game, item: &ItemId) -> u32 {
 /// be fixture noise that hides what they are actually asserting.
 ///
 /// **Composed from the shipping primitives, never a copy of the removed
-/// body.** `require_base`, `accepts_a_program`, `post_reach` and
+/// body.** `require_field`, `accepts_a_program`, `post_reach` and
 /// `post_worker` are the same four the scheduler goes through, so a test
 /// that passes here is a test about a posting the live game could make.
 /// A hand-copied body would be the second copy `CLAUDE.md` records drifting
 /// four times.
 ///
-/// `require_base` rather than `require_surface` since the base went out of
-/// phase: a posting is about a machine, and every machine stands in base
-/// space. `Game::queue_work_order`, the live queue this stands in for,
-/// carries the same guard.
+/// `require_field`: `Game::queue_work_order`, the live queue this stands in
+/// for, carries the same guard.
 impl Game {
     pub(super) fn assign_cronjob(
         &mut self,
         worker: Entity,
         structure: Entity,
     ) -> Result<(), String> {
-        self.require_base()?;
+        self.require_field()?;
         if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
         let (fx, fy) = self
-            .base_pos()
+            .field_pos()
             .ok_or_else(|| "You aren't anywhere you can post a program from.".to_string())?;
         let from = Position { x: fx, y: fy };
         let target = *self
@@ -3243,7 +3333,7 @@ impl Game {
         // a locale the base's own actions refuse. `Game::set_standing_job`,
         // the live route, carries no locale guard of its own; this fixture
         // is deliberately the stricter of the two.
-        self.require_base()?;
+        self.require_field()?;
         let kind = self
             .world
             .get::<Structure>(structure)

@@ -307,22 +307,19 @@ pub struct Durability {
     pub max_hp: u32,
 }
 
-/// A cell of base-space rock the player has started on: the one
+/// A cell of field rock the player has started on: the one
 /// representation of rock-in-progress, carrying `Durability` on the same
 /// entity the way a nest does.
 ///
 /// **Spawned lazily** — by the first swing at a wall, or by marking one —
-/// which is why `base_grid::BaseCell` gains no `Rock` variant: absent from
-/// `BaseGrid` still means solid and untouched, and a parallel cell variant
-/// would have to be kept in step with this entity. It despawns when the cell
-/// opens, unless it is marked: a mark outlives the cut, because marked solid
-/// means *cut it* and marked `Open` means *floor it*, one verb running a wall
-/// all the way to finished floor.
+/// which is why `BaseGrid` has no rock cell: a field blocker is just the
+/// `WorldMap` tile, and a parallel cell variant would have to be kept in step
+/// with this entity. It despawns when the cell opens, unless it is marked: a
+/// mark outlives the cut, because marked solid means *cut it* and marked
+/// open means *floor it*, one verb running a wall all the way to finished
+/// floor.
 ///
-/// **Its `Position` is in base space, not on the zone surface.** That widens
-/// the space rule this repo otherwise holds — a `Structure` is the space tag,
-/// with posted programs the one prior exception — so anything reading a
-/// `Position` off one of these must already know which locale it is in. See
+/// **Its `Position` is on a field tile that is not yet floor.** See
 /// `seam:a-digsite-is-the-second-non-structure-entity-standing-in`; 0.13.0
 /// shipped two fixes for exactly this bug class, and a wrong-space read is
 /// silent.
@@ -368,7 +365,7 @@ pub struct FarmPlot {
     pub recipe: Option<crate::crops::CropId>,
 }
 
-/// One cell of a plot, in **base space** like a `DigSite`: a task targets one
+/// One cell of a plot, in **field** coordinates like a `DigSite`: a task targets one
 /// `Entity`, so the crew's target is the cell. The renderer draws it from
 /// `Game::farm_tiles`, so it carries no `Glyph`.
 #[derive(Component, Clone, Copy, Debug)]
@@ -414,10 +411,8 @@ pub const BUILD_SITE_GLYPH: char = '^';
 /// the resolved bill of materials, what has been carried to the spot so
 /// far, and how far along the raising of it is.
 ///
-/// **Its `Position` is in base space**, on the cell the finished structure
-/// will occupy — `DigSite`'s rule and `DigSite`'s warning. It is the third
-/// non-`Structure` entity to carry a base-space `Position`, so anything
-/// reading one off it must already know which locale it is in.
+/// **Its `Position` is in the field**, on the cell the finished structure
+/// will occupy — `DigSite`'s rule.
 ///
 /// **Everything a future build-order screen needs is here or derived from
 /// here**, which is why the cost is carried rather than looked up: the

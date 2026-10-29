@@ -241,9 +241,10 @@ pub(in crate::render) struct PaneData<'a> {
     /// habitat ring.
     pub contracts: &'a [ContractRow],
     pub shielded: bool,
-    /// Base space only: out on the surface there is no base to report on, so
-    /// the BASE pane says where the base is instead of drawing empty blocks.
-    pub in_base: bool,
+    /// Whether there is a base to report on (a Home stands and the party is
+    /// not underground); otherwise the BASE pane says so instead of drawing
+    /// empty blocks.
+    pub has_base: bool,
 }
 
 /// One pack row, with its name already built.
@@ -342,10 +343,8 @@ const BASE_ROW_FIXED_CHARS: usize = 1 + 3;
 /// handoff's guess at a model, per the spec.
 fn base_rows(d: &PaneData) -> Vec<Row> {
     let mut out = vec![head("BASE", 'b', "base")];
-    if !d.in_base {
-        out.push(text(vec![dim(
-            "no base space \u{2014} you are on the surface",
-        )]));
+    if !d.has_base {
+        out.push(text(vec![dim("no base to report on")]));
         return out;
     }
 
@@ -766,8 +765,8 @@ fn mood_pieces(moods: &MoodCounts) -> Vec<Piece> {
 pub(in crate::render) fn summary(tab: InfoTab, d: &PaneData) -> String {
     match tab {
         InfoTab::Base => {
-            if !d.in_base {
-                return "on the surface".to_string();
+            if !d.has_base {
+                return "no base".to_string();
             }
             let workable = d.structures.iter().filter(|s| s.workable).count();
             let held: u32 = d.stock.iter().map(|r| r.qty).sum();
@@ -917,7 +916,7 @@ mod tests {
             },
             contracts,
             shielded: true,
-            in_base: true,
+            has_base: true,
         }
     }
 

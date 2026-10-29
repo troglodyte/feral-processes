@@ -717,14 +717,8 @@ impl Game {
     /// so the whole base counts as distance zero instead of sitting
     /// part-way out of the ring.
     ///
-    /// The reach is `BaseGrid::radius`, which answers 0 while base space is
-    /// still solid everywhere — so the two branches this used to take are
-    /// one expression, and it gives the same numbers it always did: nothing
-    /// subtracted before a Home is deployed, `STARTING_POCKET_HALF_WIDTH`
-    /// subtracted after. It read `Platform::center`/`radius` until the base
-    /// went out of phase, and that pair is now set by a breach and nothing
-    /// else — so a fresh run silently *shrank* its opening ring by four
-    /// tiles and grew it back on the next save and load.
+    /// The reach is `BaseGrid::radius`, which answers 0 with no floor laid,
+    /// so nothing is subtracted before a Home is deployed.
     ///
     /// `Game::in_opening_ring` is the only consumer. Distance decides
     /// nothing else: it used to scale stats and group size, and a program's
@@ -1163,7 +1157,7 @@ impl Game {
     /// Measured before the change: zero to two programs per box across 240
     /// tiles of walked ground (`docs/measurements/`).
     ///
-    /// Deliberately *not* guarded by `Game::require_surface` or an
+    /// Deliberately *not* guarded by `Game::require_field` or an
     /// `is_underground` check, unlike `power_regen_system` and
     /// `pursuit_tick`. Those refuse because they would otherwise reach the
     /// party through a `Position` pinned to the entrance tile. This one makes
@@ -1250,7 +1244,7 @@ impl Game {
     /// rather than whether it has been visited.
     ///
     /// Makes no claim about where the party is beyond which regions are near
-    /// them, so it needs no `require_surface` guard for the reason
+    /// them, so it needs no `require_field` guard for the reason
     /// `ensure_local_population` states: it stocks ground, and the surface
     /// keeps existing while the party is below.
     pub(crate) fn ensure_local_settlements(&mut self) {
@@ -1400,7 +1394,12 @@ impl Game {
     fn standable_near(&mut self, from: (i32, i32)) -> Option<(i32, i32)> {
         ring_tiles(from, 0, SETTLEMENT_SITE_SEARCH_TILES)
             .into_iter()
-            .find(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
+            // Never on the base's floor: a town is placed around the base,
+            // not over it (ADR 0032).
+            .find(|&(x, y)| {
+                let tile = self.ground_tile(x, y);
+                tile.walkable && tile.biome != crate::world::Biome::Platform
+            })
     }
 
     /// Draws the map entity for a settlement whose record already exists.
@@ -1538,7 +1537,7 @@ impl Game {
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
         loop {
             let hostiles: Vec<(Entity, (i32, i32))> = {
-                // `Without<Besieger>` — a besieger's `Position` is a base-space
+                // `Without<Besieger>` — a besieger's `Position` is a field
                 // cell for the length of the siege, not a zone-surface one,
                 // and it is neither ambient population nor culled the way a
                 // wild pack is. A nemesis and its band are filtered out here, not
@@ -1603,9 +1602,9 @@ impl Game {
     /// why the ground around a besieged nest is crowded.
     pub(crate) fn local_hostile_count(&mut self, x: i32, y: i32) -> usize {
         // `Without<Besieger>` for `components::Besieger`'s own reason: its
-        // `Position` aliases a base-space cell onto whatever zone-surface
-        // tile shares its coordinates, so counting it here would let a siege
-        // silently choke off ordinary wild spawns near the base.
+        // it is a base fixture rather than wild population, so counting it
+        // here would let a siege silently choke off ordinary wild spawns
+        // near the base.
         let mut query = self
             .world
             .query_filtered::<&Position, (With<Hostile>, Without<crate::components::Besieger>)>();
@@ -1830,6 +1829,16 @@ impl Game {
         depth: Option<u32>,
         allow_boss: bool,
     ) -> Option<(String, bool)> {
+        // Nothing wild spawns on the base's floor. Asked here rather than in
+        // `habitat_pools`, which answers what lives on the ground *under* a
+        // tile — what a siege or a sortie from the base draws its foes from.
+        if self
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(x, y)
+        {
+            return None;
+        }
         let (candidates, boss_candidates) = self.habitat_pools(x, y, depth, 0)?;
         // The ring turns a boss away the same way it turns a rare tier away:
         // a `BOSS_STAT_MULT` spawn in the nursery falsifies
@@ -2059,12 +2068,7 @@ impl Game {
                 y + rng.0.random_range(-radius..=radius),
             )
         };
-        if self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(ox, oy)
-            .open_to_hostiles()
-            && self.find_settlement_at(ox, oy).is_none()
+        if self.ground_tile(ox, oy).open_to_hostiles() && self.find_settlement_at(ox, oy).is_none()
         {
             (ox, oy)
         } else {

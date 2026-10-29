@@ -144,7 +144,7 @@ fn founding_the_base_opens_the_tutorial() {
     assert_eq!(app.mode, Mode::Notification);
     assert_eq!(
         app.pending_notification.as_ref().map(|n| n.title.as_str()),
-        Some("Base Space")
+        Some("Your Base")
     );
 }
 

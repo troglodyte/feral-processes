@@ -1116,9 +1116,9 @@ impl Game {
     /// the top of the queue.
     ///
     /// Every refusal lands **before anything is written** —
-    /// `commit_caravan_basket`'s rule. `require_base` is in the ladder for
+    /// `commit_caravan_basket`'s rule. `require_field` is in the ladder for
     /// `queue_work_order`'s reason: this reads which machines are standing,
-    /// and they stand in base space.
+    /// and they stand in the field.
     ///
     /// The materials are filed **once, at selection, and never topped up.** A
     /// per-tick refile would make `cancel_work_order` a no-op on exactly the
@@ -1129,7 +1129,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_base()?;
+        self.require_field()?;
         let def = self
             .world
             .resource::<ResearchDb>()
@@ -1227,7 +1227,7 @@ impl Game {
     /// destructive. Only completion removes an entry.
     pub fn abandon_research(&mut self) -> Result<(), String> {
         // `select_research`'s first rung, and abandoning needs it for the same
-        // reason: it logs and rewrites the queue. `require_base` is
+        // reason: it logs and rewrites the queue. `require_field` is
         // deliberately **not** here — a project is picked at the base because
         // that is where the machines are, but giving one up is a decision the
         // player may reach four frames down the Stack, and the screen is

@@ -1710,7 +1710,7 @@ fn the_ground_is_named_at_zone_one() {
 /// price — no structure in reach, no item spent — because the walk home is
 /// what the rest costs.
 #[test]
-fn resting_in_base_space_spends_nothing() {
+fn resting_inside_the_base_spends_nothing() {
     let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     {
@@ -1744,7 +1744,7 @@ fn resting_in_base_space_spends_nothing() {
 /// no rest advances the clock, so a base rest cannot be spammed to farm
 /// production, raid pressure or need decay.
 #[test]
-fn a_rest_in_base_space_does_not_advance_the_clock() {
+fn a_rest_inside_the_base_does_not_advance_the_clock() {
     let mut game = Game::new(3211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     *game.world.get_mut::<PowerReserve>(player).unwrap() =

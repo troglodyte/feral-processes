@@ -87,14 +87,3 @@ fn o_with_nothing_underfoot_refuses() {
         Some("There's nothing here to pick up.")
     );
 }
-
-#[test]
-fn y_on_the_zone_surface_refuses() {
-    let mut app = test_app(6106);
-    app.handle_key(GameKey::Char('y'));
-    assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(
-        app.status_line.as_deref(),
-        Some("Nothing to put down out here — the floor is through the anchor.")
-    );
-}

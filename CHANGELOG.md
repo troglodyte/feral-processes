@@ -53,15 +53,21 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.21.0
 
 **Your base now stands on the open field instead of in a separate room.** Found a Home wherever you are standing: it costs 2 core fragments and lays a 3x3 patch of floor around you. Build, haul and defend on the same ground you explore, and mine blockers beside your floor to widen the base. Before, the base was its own pocket you walked into and out of, with its own rock.
 
 **Old saves will not load.** The way a base is stored changed, so saves from before this release are refused, and the `dev-saves/` templates have been recaptured to match. Start a new run, or keep playing the old version for the old save.
 
-**A siege that can't reach your floor gives up.** If walls leave the attackers no way into your base, they wait outside for a few rounds and then leave. Before, the fight could never end.
+**A siege that can't reach your floor gives up.** If the rock around your base leaves the attackers no way onto your floor, they wait outside for a few rounds and then leave. Before, the fight could never end.
 
 **Rock kinds come from the ground they sit in.** Data Void rock is compacted, Black Ice is fused and Entropy is ordinary. The `weight` field in `assets/rock/*.ron` no longer does anything, and files that still carry it keep loading.
+
+**Building is cheaper, and the base grows outward.** A floor tile costs 1 fragment, an extractor 6, and a depot, research node or recharger node 8 each. New floor has to touch floor you already have, so a base grows from its Home rather than in scattered patches.
+
+**A Stack link you have entered keeps its depth after a breach.** Links you never entered open at the new zone's tier; the ones you already explored carve the same maze as before. Before, every link re-carved at the new tier.
+
+**Wild programs stay off your floor, and a sortie from barren ground finishes.** Chasers, patrols and wanderers no longer cross base floor, and a Stack link can no longer open on it. A sortie from a base whose ground hosts no species used to freeze the game; it now comes back empty-handed.
 
 ## 0.20.29
 

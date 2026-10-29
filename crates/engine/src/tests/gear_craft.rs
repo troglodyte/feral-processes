@@ -4,8 +4,8 @@
 use super::support::*;
 use crate::affixes::AffixId;
 use crate::gear_craft::weapon::{Category, Frame, WeaponPart, frame_bill};
-use crate::gear_craft::{DesignHolder, FitError, GearCraftRefusal, GearPart};
-use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
+use crate::gear_craft::{FitError, GearCraftRefusal, GearPart};
+use crate::resources::{GearDesigns, KnownAffixes, Research};
 use crate::routine_craft::{StatusKind, Version};
 use crate::tuning::QUALITY_DEFAULT;
 use crate::*;
@@ -373,152 +373,6 @@ fn a_built_weapon_is_worth_less_than_everything_the_build_consumed() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 4: delete
-// ---------------------------------------------------------------------------
-
-#[test]
-fn a_design_with_no_copy_can_be_deleted_and_leaves_the_tier() {
-    let mut game = bench_game(71_020);
-    let id = designed(&mut game);
-    game.delete_design(id).unwrap();
-    assert!(game.gear_designs().is_empty());
-    assert!(def(&game, &format!("crafted_gear/{id}")).is_none());
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::NoSuchDesign(id))
-    );
-    let next = designed(&mut game);
-    assert_ne!(next, id, "an id is never reused");
-}
-
-#[test]
-fn delete_is_refused_while_a_plain_copy_is_in_the_pack() {
-    let mut game = bench_game(71_021);
-    let id = designed(&mut game);
-    built(&mut game, id);
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Pack))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_non_plain_copy_is_in_the_gear_ledger() {
-    let mut game = bench_game(71_022);
-    let id = designed(&mut game);
-    let rare = GearCopy {
-        rarity: Rarity::Gold,
-        ..GearCopy::plain(ItemId::from(format!("crafted_gear/{id}")))
-    };
-    game.add_copies(&rare, 1);
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Pack))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_the_player_wears_it() {
-    let mut game = bench_game(71_023);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    let player = game.player_entity();
-    game.equip(player, &copy).unwrap();
-    assert_eq!(game.count_copies(&copy), 0, "premise: only worn now");
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Worn))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_companion_wears_it() {
-    let mut game = bench_game(71_024);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    let pet = game
-        .adopt_program("scrapper", 4, 4, 1.0)
-        .expect("a shipped species");
-    game.equip(pet, &copy).unwrap();
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Companion))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_trader_holds_it_for_buyback() {
-    let mut game = bench_game(71_025);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    let market = spawn_market_at(&mut game, 5, 5);
-    from_inside_the_base(&mut game, |g| g.sell_item(market, copy.clone(), 1)).unwrap();
-    assert_eq!(game.count_copies(&copy), 0, "premise: sold");
-    assert!(
-        game.world
-            .resource::<BuybackLedger>()
-            .0
-            .values()
-            .flatten()
-            .any(|(c, _)| *c == copy)
-    );
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Buyback))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_copy_lies_on_a_floor_tile() {
-    let mut game = bench_game(71_026);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    game.take_copies(&copy, 1);
-    game.world
-        .spawn(components::FloorItem(items::FloorThing::Item(
-            copy.item.clone(),
-        )));
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Floor))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_copy_sits_in_a_depot() {
-    let mut game = bench_game(71_027);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    game.take_copies(&copy, 1);
-    let depot = spawn_machine_at(&mut game, "depot", 4, 0);
-    let mut stock = game.world.get_mut::<components::Stock>(depot).unwrap();
-    *stock.output.entry(copy.item.clone()).or_default() += 1;
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Stored))
-    );
-}
-
-#[test]
-fn delete_is_refused_while_a_body_carries_a_copy() {
-    let mut game = bench_game(71_028);
-    let id = designed(&mut game);
-    let copy = built(&mut game, id);
-    game.take_copies(&copy, 1);
-    let hauler = game
-        .adopt_program("scrapper", 4, 4, 1.0)
-        .expect("a shipped species");
-    game.world.entity_mut(hauler).insert(components::Carrying {
-        item: copy.item.clone(),
-        qty: 1,
-    });
-    assert_eq!(
-        game.delete_design(id),
-        Err(GearCraftRefusal::InUse(DesignHolder::Carried))
-    );
-}
-
-// ---------------------------------------------------------------------------
 // Task 5: the save
 // ---------------------------------------------------------------------------
 
@@ -567,28 +421,6 @@ fn a_design_a_worn_copy_and_a_known_affix_survive_a_save_and_load() {
         .get::<components::Equipment>(loaded.player_entity())
         .unwrap();
     assert_eq!(worn.weapon.as_ref().unwrap().copy, copy);
-    assert_eq!(
-        loaded.design_holder(id),
-        Some(DesignHolder::Worn),
-        "the worn copy still blocks a delete"
-    );
-}
-
-#[test]
-fn a_deleted_design_is_gone_from_the_save_and_the_tier() {
-    let mut game = bench_game(71_031);
-    let id = designed(&mut game);
-    let keep = designed(&mut game);
-    game.delete_design(id).unwrap();
-    let loaded = round_trip(&mut game, "gear_craft_delete");
-    assert!(def(&loaded, &format!("crafted_gear/{id}")).is_none());
-    assert!(def(&loaded, &format!("crafted_gear/{keep}")).is_some());
-    assert_eq!(loaded.world.resource::<GearDesigns>().designs.len(), 1);
-    assert_eq!(
-        loaded.world.resource::<GearDesigns>().next_id,
-        keep,
-        "the counter survives, so a deleted id is not reused"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -596,25 +428,15 @@ fn a_deleted_design_is_gone_from_the_save_and_the_tier() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_designs_list_and_the_preview_quote_the_same_numbers() {
+fn the_preview_quotes_the_built_weapons_numbers() {
     let mut game = bench_game(71_040);
     let id = designed(&mut game);
     empty_of(&mut game, &ItemId::from(ids::CORE_FRAGMENT));
-    let row = game.design_rows().remove(0);
-    assert_eq!(row.id, id);
-    assert_eq!(
-        row.parts,
-        vec!["Edge v1".to_string(), "Rider: Bleed".into()]
-    );
-    assert!(row.power.is_some());
-    assert!(matches!(
-        row.blocked,
-        Some(GearCraftRefusal::ShortOf { .. })
-    ));
+    let def = def(&game, &format!("crafted_gear/{id}")).unwrap();
 
     let preview = game.design_preview("Leaker", &parts(&[edge(), bleed()]));
-    assert_eq!(preview.power, row.power, "one rating, two pages");
-    assert_eq!(preview.description, row.description);
+    assert!(preview.power.is_some());
+    assert_eq!(preview.description, def.description);
     assert_eq!(preview.range, 1);
     assert_eq!((preview.part_count, preview.part_cap), (1, 2));
     assert_eq!(preview.blocked, None);
@@ -650,13 +472,11 @@ fn a_part_that_does_not_fit_is_greyed_with_the_reason() {
     let options = game.design_part_options(Category::Frame, &[], 0);
     let edge_option = options.iter().find(|o| o.part == edge()).unwrap();
     assert_eq!(edge_option.unavailable, None);
-    let locked = options
-        .iter()
-        .find(|o| o.part == WeaponPart::Frame(Frame::Lance, Version::V1))
-        .unwrap();
-    assert_eq!(
-        locked.unavailable,
-        Some(GearCraftRefusal::PartNotResearched(locked.part))
+    assert!(
+        options
+            .iter()
+            .all(|o| o.part != WeaponPart::Frame(Frame::Lance, Version::V1)),
+        "an unresearched, unheld part is not offered"
     );
 
     let on_launcher = game.design_part_options(Category::Range, &[launcher], 0);
@@ -812,7 +632,7 @@ fn a_bill_short_only_in_sum_names_the_item() {
 }
 
 // ---------------------------------------------------------------------------
-// Forge crafts the missing parts
+// A compile crafts the missing parts
 // ---------------------------------------------------------------------------
 
 fn fragment() -> ItemId {
@@ -870,11 +690,6 @@ fn a_bill_sums_across_the_frame_and_the_crafted_parts_and_a_short_sum_spends_not
     give(&mut game, &fragment(), full_bill() - 1);
     // Each line alone is affordable; only the sum is short.
     let refusal = game.build_design(id).unwrap_err();
-    assert_eq!(
-        game.design_rows()[0].blocked.as_ref(),
-        Some(&refusal),
-        "the list quotes the plan's own sum, not Forge's second check"
-    );
     assert_eq!(
         refusal,
         GearCraftRefusal::ShortOf {
@@ -974,10 +789,8 @@ fn the_design_bill_and_preview_equal_the_inventory_delta_of_a_forge() {
     let (mut game, id) = bare_forge(73_006);
     give(&mut game, &ItemId::weapon_part(bleed()), 1);
     give(&mut game, &fragment(), 100);
-    let bill = game.design_bill(id).unwrap();
-    let preview = game.design_preview("Leaker", &parts(&[edge(), bleed()]));
-    assert_eq!(preview.materials, bill.materials);
-    assert!(bill.uncraftable.is_empty() && preview.uncraftable.is_empty());
+    let bill = game.design_preview("Leaker", &parts(&[edge(), bleed()]));
+    assert!(bill.uncraftable.is_empty());
     let before = game.held_in_reach(&fragment());
     game.build_design(id).unwrap();
     let spent = before - game.held_in_reach(&fragment());
@@ -989,19 +802,14 @@ fn the_design_bill_and_preview_equal_the_inventory_delta_of_a_forge() {
 
 #[test]
 fn a_design_with_every_part_held_bills_only_the_frame() {
-    let (mut game, id) = bare_forge(73_007);
+    let (mut game, _) = bare_forge(73_007);
     for part in [edge(), bleed()] {
         give(&mut game, &ItemId::weapon_part(part), 1);
     }
-    let bill = game.design_bill(id).unwrap();
+    let bill = game.design_preview("Leaker", &parts(&[edge(), bleed()]));
     let (_, frame) = frame_bill(Frame::Edge, Version::V1);
     assert_eq!(bill.materials.len(), 1);
     assert_eq!(bill.materials[0].need, frame);
-    assert_eq!(
-        game.design_preview("Leaker", &parts(&[edge(), bleed()]))
-            .materials,
-        bill.materials
-    );
 }
 
 #[test]
@@ -1010,10 +818,8 @@ fn a_bill_lists_what_can_never_be_crafted() {
     let proc = WeaponPart::Proc(crate::gear_craft::weapon::Proc::CoreDump);
     know(&mut game, edge());
     know(&mut game, proc);
-    let id = game
-        .create_design("Dumper", parts(&[edge(), proc]))
-        .unwrap();
-    let bill = game.design_bill(id).unwrap();
+    let dumper = parts(&[edge(), proc]);
+    let bill = game.design_preview("Dumper", &dumper);
     assert_eq!(
         bill.uncraftable,
         vec![format!("{} — salvage a weapon first", proc.label())]
@@ -1024,7 +830,7 @@ fn a_bill_lists_what_can_never_be_crafted() {
         .remove(&edge().node_id());
     give(&mut game, &ItemId::weapon_part(proc), 1);
     assert_eq!(
-        game.design_bill(id).unwrap().uncraftable,
+        game.design_preview("Dumper", &dumper).uncraftable,
         vec![format!("{} — research first", edge().label())]
     );
 }
@@ -1115,7 +921,9 @@ fn a_forge_pays_from_a_depot_before_the_pack_and_not_outside_base_space() {
         ))
         .id();
     assert_eq!(
-        game.design_bill(id).unwrap().materials[0].have,
+        game.design_preview("Leaker", &parts(&[edge(), bleed()]))
+            .materials[0]
+            .have,
         full_bill() + 3
     );
     game.build_design(id).unwrap();
@@ -1136,5 +944,111 @@ fn a_forge_pays_from_a_depot_before_the_pack_and_not_outside_base_space() {
     assert_eq!(carried, 3, "the pack pays only the rest");
 
     game.world.insert_resource(Locale::Surface);
-    assert_eq!(game.design_bill(id).unwrap().materials[0].have, 3);
+    assert_eq!(
+        game.design_preview("Leaker", &parts(&[edge(), bleed()]))
+            .materials[0]
+            .have,
+        3
+    );
+}
+
+// ---------------------------------------------------------------------------
+// compile_weapon: the one verb the Build weapon page calls
+// ---------------------------------------------------------------------------
+
+fn leaker_parts() -> Vec<GearPart> {
+    parts(&[edge(), bleed()])
+}
+
+/// A bench with both parts researched and the pack holding exactly the
+/// preview's material bill.
+fn funded_for_leaker(seed: u32) -> Game {
+    let mut game = bench_game(seed);
+    for part in [edge(), bleed()] {
+        know(&mut game, part);
+    }
+    empty_of(&mut game, &fragment());
+    let preview = game.design_preview("Leaker", &leaker_parts());
+    for line in &preview.materials {
+        assert_eq!(line.need, full_bill(), "premise: one material pays all");
+    }
+    give(&mut game, &fragment(), full_bill());
+    game
+}
+
+#[test]
+fn a_compile_mints_one_copy_and_spends_exactly_the_previews_bill() {
+    let mut game = funded_for_leaker(74_001);
+    let need = game.design_preview("Leaker", &leaker_parts()).materials[0].need;
+    let copy = game.compile_weapon("Leaker", leaker_parts()).unwrap();
+    assert_eq!(game.count_copies(&copy), 1);
+    assert_eq!(game.held_in_reach(&fragment()), full_bill() - need);
+    assert_eq!(game.gear_designs().len(), 1);
+}
+
+#[test]
+fn a_refused_compile_stores_no_design_and_spends_nothing() {
+    let mut game = funded_for_leaker(74_002);
+    empty_of(&mut game, &fragment());
+    give(&mut game, &fragment(), full_bill() - 1);
+    let refusal = game.compile_weapon("Leaker", leaker_parts()).unwrap_err();
+    assert!(matches!(refusal, GearCraftRefusal::ShortOf { .. }));
+    assert!(game.gear_designs().is_empty());
+    assert_eq!(game.world.resource::<GearDesigns>().next_id, 0);
+    assert_eq!(game.held_in_reach(&fragment()), full_bill() - 1);
+
+    let mut game = bench_game(74_003);
+    empty_of(&mut game, &fragment());
+    give(&mut game, &fragment(), full_bill() * 2);
+    assert_eq!(
+        game.compile_weapon("Leaker", leaker_parts()),
+        Err(GearCraftRefusal::PartNotResearched(edge()))
+    );
+    assert!(game.gear_designs().is_empty());
+    assert_eq!(game.held_in_reach(&fragment()), full_bill() * 2);
+}
+
+#[test]
+fn compiling_one_weapon_twice_shares_an_item_id_and_one_design() {
+    let mut game = funded_for_leaker(74_004);
+    give(&mut game, &fragment(), full_bill());
+    let first = game.compile_weapon("Leaker", leaker_parts()).unwrap();
+    let second = game.compile_weapon(" Leaker ", leaker_parts()).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(game.count_copies(&first), 2);
+    assert_eq!(game.gear_designs().len(), 1);
+}
+
+#[test]
+fn the_same_name_with_different_parts_is_a_second_design() {
+    let mut game = funded_for_leaker(74_005);
+    give(&mut game, &fragment(), full_bill());
+    let a = game.compile_weapon("Leaker", leaker_parts()).unwrap();
+    let b = game.compile_weapon("Leaker", parts(&[edge()])).unwrap();
+    assert_ne!(a.item, b.item);
+    assert_eq!(game.gear_designs().len(), 2);
+}
+
+#[test]
+fn an_unresearched_part_is_hidden_unless_held_and_a_misfit_is_greyed() {
+    let mut game = bench_game(74_006);
+    know(&mut game, edge());
+    let listed = |game: &Game, category, part: WeaponPart| {
+        game.design_part_options(category, &[edge()], 0)
+            .into_iter()
+            .find(|o| o.part == part)
+    };
+    assert!(listed(&game, Category::Rider, bleed()).is_none());
+    give(&mut game, &ItemId::weapon_part(bleed()), 1);
+    assert!(listed(&game, Category::Rider, bleed()).is_some());
+    // A researched part that cannot fit stays, with its reason.
+    let frames = game.design_part_options(Category::Frame, &[edge()], 0);
+    assert!(frames.iter().all(|o| o.part == edge()
+        || o.unavailable.is_none()
+        || matches!(o.unavailable, Some(GearCraftRefusal::Fit(_)))));
+    assert!(
+        frames
+            .iter()
+            .all(|o| !matches!(o.unavailable, Some(GearCraftRefusal::PartNotResearched(_))))
+    );
 }

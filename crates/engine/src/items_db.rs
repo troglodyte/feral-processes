@@ -734,7 +734,7 @@ impl ItemDb {
 
     /// Mints one item per weapon part (ADR 0031), `weapon_part/<key>`, the
     /// same arrangement as `synthesise_parts`: no `craftable` (the Workbench
-    /// verb `Game::build_design` crafts the shortfall, because the bill and
+    /// verb `Game::compile_weapon` crafts the shortfall, because the bill and
     /// the research gate are per part) and no `droppable`.
     pub fn synthesise_weapon_parts(&mut self) -> Vec<String> {
         let mut warnings = Vec::new();

@@ -1,6 +1,6 @@
 //! The decision half of a build: what a design spends, and which parts the
-//! player lacks. Pure, so the Forge preview and `Game::build_design` share
-//! one answer.
+//! player lacks. Pure, so the Build weapon preview and
+//! `Game::compile_weapon` share one answer.
 
 use std::collections::BTreeMap;
 

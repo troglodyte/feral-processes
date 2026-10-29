@@ -1,5 +1,5 @@
-//! What the Workbench's weapon-crafting pages draw (ADR 0031): the designs
-//! list, the new-design rows and part picker, the live preview, and the
+//! What the Workbench's weapon-crafting pages draw (ADR 0031): the Build
+//! weapon rows and part picker, the live preview, and the
 //! salvage list. Every figure is read off the engine, so a page can
 //! never promise a part the build would refuse.
 
@@ -9,21 +9,7 @@ use crate::gear_craft::weapon::Category;
 use crate::gear_craft::{GearCraftRefusal, WeaponPart};
 use crate::items::{EquipmentStats, GearCopy};
 
-/// One row of the Forge's designs list.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DesignRow {
-    pub id: u32,
-    pub name: String,
-    /// The parts, labelled, frame first, then any affixes.
-    pub parts: Vec<String>,
-    pub description: String,
-    /// `design_power`, the rating the ceiling is held to.
-    pub power: Option<i32>,
-    /// Why Build would be refused right now, or `None`.
-    pub blocked: Option<GearCraftRefusal>,
-}
-
-/// One row of the new-design page: a category and what fills it.
+/// One row of the Build weapon page: a category and what fills it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesignSlotRow {
     pub category: Category,
@@ -69,7 +55,7 @@ pub struct DesignPreview {
     pub parts_used: Vec<(String, u32)>,
     /// Parts needed and not held, with how many short.
     pub parts_missing: Vec<(String, u32)>,
-    /// What Forge spends crafting the missing parts plus the frame; empty
+    /// What Compile spends crafting the missing parts plus the frame; empty
     /// without a Frame.
     pub materials: Vec<MaterialLine>,
     /// Missing parts that cannot be crafted, as the full red line.
@@ -77,16 +63,8 @@ pub struct DesignPreview {
     /// Modifiers in the design (affixes included) and the most it may hold.
     pub part_count: usize,
     pub part_cap: usize,
-    /// Why saving or building would be refused, or `None`.
+    /// Why Compile would be refused, or `None`.
     pub blocked: Option<GearCraftRefusal>,
-}
-
-/// What building a design from nothing but materials takes: the Forge's
-/// bill under the highlighted design.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DesignBill {
-    pub materials: Vec<MaterialLine>,
-    pub uncraftable: Vec<String>,
 }
 
 /// One row of the Salvage page: a pack copy that can be taken apart.

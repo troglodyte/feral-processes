@@ -4,24 +4,21 @@
 //! copy of its weapon.
 //!
 //! Each verb is gather, decide, apply. The decisions are `gear_craft`'s pure
-//! `check_design` and `plan_build`, so the Forge page previews exactly what
+//! `check_design` and `plan_build`, so the Build weapon page previews exactly what
 //! these refuse and spend. Every refusal is typed (ADR 0027) and lands
 //! before anything is spent.
 
 use crate::affixes::{AffixDb, AffixId};
 use crate::base_ledger::LootSource;
-use crate::components::{Equipment, FloorItem, GearCopies};
 use crate::game::gear_power::ReferenceFoe;
 use crate::gear_craft::weapon::Category;
 use crate::gear_craft::{
-    self, DesignHolder, GearCraftRefusal, GearDesign, GearPart, WeaponPart, capacity_node_id,
+    self, GearCraftRefusal, GearDesign, GearPart, WeaponPart, capacity_node_id,
 };
-use crate::items::FloorThing;
-use crate::resources::{BuybackLedger, GearDesigns, KnownAffixes, Research};
+use crate::resources::{GearDesigns, KnownAffixes, Research};
 use crate::tuning::{GEAR_PART_CAP_MAX, GEAR_PART_CAP_START};
 use crate::views::{
-    DesignAffixOption, DesignBill, DesignPartOption, DesignPreview, DesignRow, DesignSlotRow,
-    MaterialLine, SalvageRow,
+    DesignAffixOption, DesignPartOption, DesignPreview, DesignSlotRow, MaterialLine, SalvageRow,
 };
 use crate::*;
 
@@ -149,43 +146,74 @@ impl Game {
         Ok(parts)
     }
 
-    /// Saves a weapon design named `name` from `parts`, returning its id.
-    /// The parts are not spent: a design is a recipe, a build spends.
-    pub fn create_design(
+    /// Compiles one ordinary copy of the weapon `parts` make, named `name`
+    /// (ADR 0031): spends the parts held, crafts the rest from materials,
+    /// pays the frame's bill and mints one tier-0 copy into cargo. All or
+    /// nothing. A design with this name and these parts is reused, so two
+    /// compiles of one weapon share an item id; otherwise one is stored,
+    /// and only after every refusal has been ruled out.
+    pub fn compile_weapon(
         &mut self,
         name: &str,
         parts: Vec<GearPart>,
-    ) -> Result<u32, GearCraftRefusal> {
+    ) -> Result<GearCopy, GearCraftRefusal> {
         self.require_forge_free()?;
-        let name = gear_craft::check_design(
+        let name = self.check_weapon_design(name, &parts)?;
+        let stored = self
+            .world
+            .resource::<GearDesigns>()
+            .designs
+            .iter()
+            .find(|d| d.name == name && d.parts == parts)
+            .cloned();
+        let design = stored
+            .clone()
+            .unwrap_or_else(|| self.next_design(name, parts));
+        let plan = self.plan_design(&design)?;
+        if stored.is_none() {
+            self.store_design(design.clone());
+        }
+        self.build_planned(&design, &plan)
+    }
+
+    fn check_weapon_design(
+        &self,
+        name: &str,
+        parts: &[GearPart],
+    ) -> Result<String, GearCraftRefusal> {
+        gear_craft::check_design(
             name,
-            &parts,
+            parts,
             self.gear_part_cap(),
             |p| self.weapon_part_usable(p),
             |a| self.affix_known(a),
             self.world.resource::<AffixDb>(),
-        )?;
-        let mut designs = self.world.resource_mut::<GearDesigns>();
-        designs.next_id += 1;
-        let id = designs.next_id;
-        designs.designs.push(GearDesign {
-            id,
-            name: name.clone(),
-            slot: EquipmentSlot::Weapon,
-            parts,
-        });
-        self.sync_crafted_gear();
-        self.log(format!("You save the design {name}."));
-        Ok(id)
+        )
     }
 
-    /// Builds one copy of design `id`: spends the parts held, crafts the
-    /// rest from materials, pays the frame's bill, and mints one Ordinary,
-    /// tier-0 copy into cargo. All or nothing.
-    pub fn build_design(&mut self, id: u32) -> Result<GearCopy, GearCraftRefusal> {
-        self.require_forge_free()?;
-        let design = self.design(id).ok_or(GearCraftRefusal::NoSuchDesign(id))?;
-        let plan = self.plan_design(&design)?;
+    /// The design `name` and `parts` would become, under the next free id.
+    fn next_design(&self, name: String, parts: Vec<GearPart>) -> GearDesign {
+        GearDesign {
+            id: self.world.resource::<GearDesigns>().next_id + 1,
+            name,
+            slot: EquipmentSlot::Weapon,
+            parts,
+        }
+    }
+
+    fn store_design(&mut self, design: GearDesign) {
+        let mut designs = self.world.resource_mut::<GearDesigns>();
+        designs.next_id = design.id;
+        designs.designs.push(design);
+        self.sync_crafted_gear();
+    }
+
+    /// Spends `plan` and mints the copy of `design`.
+    fn build_planned(
+        &mut self,
+        design: &GearDesign,
+        plan: &gear_craft::BuildPlan,
+    ) -> Result<GearCopy, GearCraftRefusal> {
         self.pay_gear_bill(&plan.bill)?;
         // Crafted parts pass through the pack so each is receipted as a
         // craft, the way crafting one by hand was.
@@ -199,7 +227,7 @@ impl Game {
             .map(|(part, count)| (ItemId::weapon_part(*part), *count))
             .collect();
         self.pay_gear_bill(&parts)?;
-        let copy = GearCopy::plain(gear_craft::weapon::item_id(id));
+        let copy = GearCopy::plain(gear_craft::weapon::item_id(design.id));
         self.grant_loot(copy.item.clone(), 1, LootSource::Craft);
         let name = &design.name;
         let crafted: u32 = plan.craft.iter().map(|(_, n)| n).sum();
@@ -211,8 +239,33 @@ impl Game {
         Ok(copy)
     }
 
+    /// Stores a design without building it, for tests that need one to
+    /// exist before its weapon does.
+    #[cfg(test)]
+    pub(crate) fn create_design(
+        &mut self,
+        name: &str,
+        parts: Vec<GearPart>,
+    ) -> Result<u32, GearCraftRefusal> {
+        self.require_forge_free()?;
+        let name = self.check_weapon_design(name, &parts)?;
+        let design = self.next_design(name, parts);
+        let id = design.id;
+        self.store_design(design);
+        Ok(id)
+    }
+
+    /// Builds a stored design, for tests that made it with `create_design`.
+    #[cfg(test)]
+    pub(crate) fn build_design(&mut self, id: u32) -> Result<GearCopy, GearCraftRefusal> {
+        self.require_forge_free()?;
+        let design = self.design(id).expect("the test made this design");
+        let plan = self.plan_design(&design)?;
+        self.build_planned(&design, &plan)
+    }
+
     /// `gear_craft::plan_build` over what is in reach now: the one decision
-    /// `build_design` acts on and the Forge pages report.
+    /// `compile_weapon` acts on and the Build weapon page reports.
     fn plan_design(&self, design: &GearDesign) -> Result<gear_craft::BuildPlan, GearCraftRefusal> {
         gear_craft::plan_build(&gear_craft::BuildInput {
             design,
@@ -222,60 +275,30 @@ impl Game {
         })
     }
 
-    /// What Forge would spend on design `id` from materials alone, and what
-    /// it can never craft. Shown even when the build would be refused, so
-    /// every shortfall is on the page at once.
-    pub fn design_bill(&self, id: u32) -> Option<DesignBill> {
-        let design = self.design(id)?;
-        Some(self.bill_of(&design))
-    }
-
-    fn bill_of(&self, design: &GearDesign) -> DesignBill {
+    fn bill_of(&self, design: &GearDesign) -> (Vec<MaterialLine>, Vec<String>) {
         if design.frame().is_none() {
-            return DesignBill {
-                materials: Vec::new(),
-                uncraftable: Vec::new(),
-            };
+            return (Vec::new(), Vec::new());
         }
         let (_, craft) = gear_craft::split_held(design, &|p| self.weapon_parts_held(p));
-        DesignBill {
-            materials: gear_craft::material_bill(design, &craft)
-                .iter()
-                .map(|(item, need)| MaterialLine {
-                    label: self.item_name(item).to_string(),
-                    have: self.held_in_reach(item),
-                    need: *need,
-                })
-                .collect(),
-            uncraftable: gear_craft::uncraftable(&craft, &|p| self.weapon_part_known(p))
-                .into_iter()
-                .map(|part| match part {
-                    WeaponPart::Proc(_) => format!("{} — salvage a weapon first", part.label()),
-                    _ => format!("{} — research first", part.label()),
-                })
-                .collect(),
-        }
+        let materials = gear_craft::material_bill(design, &craft)
+            .iter()
+            .map(|(item, need)| MaterialLine {
+                label: self.item_name(item).to_string(),
+                have: self.held_in_reach(item),
+                need: *need,
+            })
+            .collect();
+        let uncraftable = gear_craft::uncraftable(&craft, &|p| self.weapon_part_known(p))
+            .into_iter()
+            .map(|part| match part {
+                WeaponPart::Proc(_) => format!("{} — salvage a weapon first", part.label()),
+                _ => format!("{} — research first", part.label()),
+            })
+            .collect();
+        (materials, uncraftable)
     }
 
-    /// Deletes design `id`, which is refused while a copy of its weapon
-    /// exists anywhere: a copy whose item has no def would be stranded.
-    pub fn delete_design(&mut self, id: u32) -> Result<(), GearCraftRefusal> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err(GearCraftRefusal::Busy);
-        }
-        let design = self.design(id).ok_or(GearCraftRefusal::NoSuchDesign(id))?;
-        if let Some(holder) = self.design_holder(id) {
-            return Err(GearCraftRefusal::InUse(holder));
-        }
-        self.world
-            .resource_mut::<GearDesigns>()
-            .designs
-            .retain(|d| d.id != id);
-        self.sync_crafted_gear();
-        self.log(format!("You delete the design {}.", design.name));
-        Ok(())
-    }
-
+    #[cfg(test)]
     fn design(&self, id: u32) -> Option<GearDesign> {
         self.world
             .resource::<GearDesigns>()
@@ -283,81 +306,6 @@ impl Game {
             .iter()
             .find(|d| d.id == id)
             .cloned()
-    }
-
-    /// Where a copy of design `id`'s weapon is, if one is anywhere: the
-    /// pack or gear ledger, worn by the player, worn by a companion, a
-    /// trader's buyback shelf, set down on a floor tile, in a Depot or
-    /// machine buffer, or in a body's hands.
-    pub fn design_holder(&self, id: u32) -> Option<DesignHolder> {
-        let item = gear_craft::weapon::item_id(id);
-        let player = self.player_entity();
-        let in_pack = self
-            .world
-            .get::<Inventory>(player)
-            .is_some_and(|inv| inv.count(&item) > 0)
-            || self
-                .world
-                .get::<GearCopies>(player)
-                .is_some_and(|c| c.copies.iter().any(|(copy, _)| copy.item == item));
-        if in_pack {
-            return Some(DesignHolder::Pack);
-        }
-        let wears = |equipment: &Equipment| {
-            EquipmentSlot::ALL
-                .into_iter()
-                .filter_map(|slot| equipment.get(slot))
-                .any(|worn| worn.copy.item == item)
-        };
-        if self.world.get::<Equipment>(player).is_some_and(wears) {
-            return Some(DesignHolder::Worn);
-        }
-        let companion_wears = self
-            .world
-            .iter_entities()
-            .filter(|e| e.id() != player)
-            .any(|e| e.get::<Equipment>().is_some_and(wears));
-        if companion_wears {
-            return Some(DesignHolder::Companion);
-        }
-        let shelved = self
-            .world
-            .resource::<BuybackLedger>()
-            .0
-            .values()
-            .flatten()
-            .any(|(copy, _)| copy.item == item);
-        if shelved {
-            return Some(DesignHolder::Buyback);
-        }
-        let on_floor = self
-            .world
-            .iter_entities()
-            .filter_map(|e| e.get::<FloorItem>())
-            .any(|floor| match &floor.0 {
-                FloorThing::Item(i) => *i == item,
-                FloorThing::Gear(copy) => copy.item == item,
-                FloorThing::Program(_) => false,
-            });
-        if on_floor {
-            return Some(DesignHolder::Floor);
-        }
-        // `hauling::pickup_errand` moves a floor copy into any unfiltered
-        // Depot, and a raider or hauler holds one in `Carrying` mid-trip.
-        let stored = self.world.iter_entities().any(|e| {
-            e.get::<Stock>()
-                .is_some_and(|s| s.output.contains_key(&item) || s.input.contains_key(&item))
-        });
-        if stored {
-            return Some(DesignHolder::Stored);
-        }
-        self.world
-            .iter_entities()
-            .any(|e| {
-                e.get::<Carrying>()
-                    .is_some_and(|c| c.item == item && c.qty > 0)
-            })
-            .then_some(DesignHolder::Carried)
     }
 
     /// Why `copy` cannot be fused, if it cannot: fusion is for drops only.
@@ -377,7 +325,7 @@ impl Game {
     }
 }
 
-/// The views the Forge pages draw.
+/// The views the Build weapon page draws.
 impl Game {
     /// `design_power` of a def, priced against the reference foe.
     fn design_rating(&self, def: &crate::items_db::ItemDef) -> Option<i32> {
@@ -385,37 +333,7 @@ impl Game {
         gear_craft::design_power(def, &foe)
     }
 
-    /// The Forge's designs list: each design with its parts, what it reads
-    /// as, how strong it is and whether a build would be refused now.
-    pub fn design_rows(&self) -> Vec<DesignRow> {
-        let items = self.world.resource::<ItemDb>();
-        self.gear_designs()
-            .into_iter()
-            .map(|design| {
-                let def = items.get(gear_craft::weapon::item_id(design.id).as_str());
-                let mut parts: Vec<String> =
-                    design.weapon_parts().iter().map(|p| p.label()).collect();
-                parts.extend(design.affixes().iter().map(|a| a.0.clone()));
-                DesignRow {
-                    id: design.id,
-                    name: design.name.clone(),
-                    parts,
-                    description: def.map(|d| d.description.clone()).unwrap_or_default(),
-                    power: def.and_then(|d| self.design_rating(d)),
-                    blocked: self.build_block(&design),
-                }
-            })
-            .collect()
-    }
-
-    /// Why building `design` would be refused now, or `None`.
-    fn build_block(&self, design: &GearDesign) -> Option<GearCraftRefusal> {
-        self.require_forge_free()
-            .err()
-            .or_else(|| self.plan_design(design).err())
-    }
-
-    /// The new-design page's rows: the frame and each modifier category,
+    /// The Build weapon page's rows: the frame and each modifier category,
     /// with what the design in progress puts there.
     pub fn design_slot_rows(&self, parts: &[WeaponPart]) -> Vec<DesignSlotRow> {
         std::iter::once(Category::Frame)
@@ -427,9 +345,9 @@ impl Game {
             .collect()
     }
 
-    /// The list a category's row opens: every part of it, greyed with the
-    /// reason when it does not fit the design as it stands (choosing it
-    /// replaces what already fills the category) or is not yet usable.
+    /// The list a category's row opens: every usable part of it (researched
+    /// or held), greyed with the reason when it does not fit the design as
+    /// it stands (choosing it replaces what already fills the category).
     pub fn design_part_options(
         &self,
         category: Category,
@@ -443,12 +361,11 @@ impl Game {
             .collect();
         WeaponPart::options(category)
             .into_iter()
+            .filter(|part| self.weapon_part_usable(*part))
             .map(|part| {
                 let mut with = rest.clone();
                 with.push(part);
-                let unavailable = if !self.weapon_part_usable(part) {
-                    Some(GearCraftRefusal::PartNotResearched(part))
-                } else if category != Category::Frame
+                let unavailable = if category != Category::Frame
                     && gear_craft::weapon::frame_of(&with).is_err()
                 {
                     // No frame yet: the modifier's own fit is judged once
@@ -490,8 +407,8 @@ impl Game {
             .collect()
     }
 
-    /// The new-design page's preview: exactly what `create_design` and
-    /// `build_design` would refuse and spend for this name and these parts.
+    /// The Build weapon page's preview: exactly what `compile_weapon`
+    /// would refuse and spend for this name and these parts.
     pub fn design_preview(&self, name: &str, parts: &[GearPart]) -> DesignPreview {
         let cap = self.gear_part_cap();
         let design = GearDesign {
@@ -517,7 +434,7 @@ impl Game {
                 (have < *need).then(|| (*p, need - have))
             })
             .collect();
-        let bill = self.bill_of(&design);
+        let (materials, uncraftable) = self.bill_of(&design);
         let blocked = gear_craft::check_design(
             name,
             parts,
@@ -537,8 +454,8 @@ impl Game {
             power: def.as_ref().and_then(|d| self.design_rating(d)),
             parts_used: label(used),
             parts_missing: label(missing),
-            materials: bill.materials,
-            uncraftable: bill.uncraftable,
+            materials,
+            uncraftable,
             part_count: design
                 .weapon_parts()
                 .iter()

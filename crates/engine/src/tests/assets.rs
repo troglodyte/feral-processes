@@ -619,7 +619,7 @@ fn scavenged_gear_is_fragment_only() {
     );
 }
 
-/// Weapons are designed at the Forge, never built from a fixed recipe, so an
+/// Weapons are designed at the Workbench, never built from a fixed recipe, so an
 /// authored weapon is a drop, an enemy's gear or a trader's stock. A
 /// `craftable` block on one would be a second way to make a weapon that
 /// bypasses `weapon_bench` and the design cap.

@@ -189,7 +189,11 @@
   fixture needs an unfloored cell beside the pocket or the two predicates
   agree and it proves nothing. `park_tile` survives as **`entry_tile`**,
   asked only of a body not on floor: a tamed program's `Position` is the
-  surface tile it was beaten on. Three rejections: never onto a tile another
+  surface tile it was beaten on. It lands on the free floor nearest the Home,
+  chosen from `BaseGrid::floor_cells`; it was once a fixed ring
+  `IDLE_STAFF_RING_TILES = 3` out, which the 19x9 test pocket covered and a
+  founded 3x3 never did, so every captured program stood on open ground
+  forever with the whole suite green. Three rejections: never onto a tile another
   idle body holds, never onto the party's cell, and never onto a cell any
   structure's **footprint** covers. That last one read `structures_by_tile` —
   keyed on a structure's own `Position`, the **anchor alone** — until the

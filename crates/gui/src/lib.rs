@@ -122,18 +122,21 @@ const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
 /// Whether `FERAL_DEV_ALT` is set: holds `reveal` down for `--screenshot`,
 /// whose `--keys` cannot carry a modifier. `FERAL_DEV_REVEAL`'s predicate.
 fn dev_alt() -> bool {
-    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        std::env::var_os("FERAL_DEV_ALT").is_some_and(|v| !v.is_empty() && v != "0")
-    });
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| env_on("FERAL_DEV_ALT"));
     *ON
+}
+
+/// Whether the environment variable `name` is set to something other than
+/// empty or `0`.
+fn env_on(name: &str) -> bool {
+    std::env::var_os(name).is_some_and(|v| !v.is_empty() && v != "0")
 }
 
 /// Whether `FERAL_DEV_SHORTCUTS` is set: holds the shortcut sheet up for
 /// `--screenshot`, `dev_alt`'s reason.
 fn dev_shortcuts() -> bool {
-    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        std::env::var_os("FERAL_DEV_SHORTCUTS").is_some_and(|v| !v.is_empty() && v != "0")
-    });
+    static ON: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| env_on("FERAL_DEV_SHORTCUTS"));
     *ON
 }
 
@@ -885,12 +888,17 @@ fn frame(
     // layout instead of assuming QWERTY positions. `TextGate` is what stops
     // the OS auto-repeat riding along that path into the screen the press
     // just opened — `block_held` below cannot reach these.
+    // A release the window never saw (focus lost mid-hold) would leave the
+    // sheet up and the key swallowed for good.
+    fe.sheet_hold.release_if_up(|k| input.keyboard.pressed(k));
     for event in input.typed.read().filter(|e| types_text(e.key_code)) {
         let app = &mut fe.app;
         // `?` is the held shortcut sheet wherever the sheet exists; elsewhere
         // it is ordinary text (a name, a filter) and flows on as before.
         if event.state == bevy::input::ButtonState::Released {
             fe.sheet_hold.release(event.key_code);
+        } else if fe.sheet_hold.swallows(event.key_code) {
+            continue;
         } else if event.text.as_deref().is_some_and(|t| t.contains('?'))
             && app.shortcut_sheet().is_some()
         {

@@ -10,29 +10,34 @@
   one door, returns `bool`, and the queue holds **resolved** values —
   `ActiveContract`'s rule, kept alive by `achievement_system`, which pushes a
   `Notification` built from an achievement's own prose and names no kind.
-- **`def` and the two censuses are matches, and that is load-bearing.**
+- **`def` and the fired-by-site census are matches, and that is load-bearing.**
   `cell_mark`'s rule: a table lookup with a fallback ships a new variant
   blank, a match fails to compile until somebody writes the words. Same for
-  `every_notification_kind_is_fired_by_a_named_site` and
-  `tutorials_latch_and_milestones_do_not` — a `&[(kind, site)]` table is
+  `every_notification_kind_is_fired_by_a_named_site` — a `&[(kind, site)]` table is
   something a new variant can simply be left out of. `all()` is what the
   width and height censuses walk, and its array length catches an addition.
-- **Two repeat policies, and the third was rejected on its name**: once per
-  *run* would latch on the session-only queue and so mean once per
-  *session*. `OnceEver` latches on `achievements::Profile` — not the save
-  file, cross-run, and riding the **existing** `PendingProfileWrites`
-  channel, flushed *below* `after_tick`'s `in_arena()` return, so **"an
-  arena session touches no disk" holds by omission**. Don't add a check.
-  That channel took a second *field*, never a second resource.
-- **`NotificationKind::latch_key`'s strings are a file format; the variant
-  names are not.** They are the ids of the deleted `.ron` files and are
-  already in players' `profile.ron`. Renaming one re-shows that tutorial to
-  everybody, and `Profile::load` discards the *whole* profile — achievements
-  included — on a parse error, which is why `seen_notifications` is a
-  `Vec<String>` and not a typed id: a retired key must be inert, not fatal.
-  The round-trip test cannot see either fault (it writes and reads the same
-  build's keys); `a_profile_written_before_this_refactor_keeps_its_latches`
-  is the one that can.
+- **Tutorials left the enum; the FTUE list is a table, `ftue::ENTRIES`, and
+  that is why its census is a test and not a match.** A trigger id is an
+  asset string (a research, a structure, an item), so no exhaustive match
+  can name them; `gui`'s `shipped()` walks the table so the height census
+  still measures every entry, and a hook with no entry still latches, so it
+  is observable through `Game::ftue_shown`. Milestones are never latched, and the old
+  `Repeat`, `OnceEver` and `seen_notifications` are retired.
+- **Once per run is the `FtuePlayed` set saved with the run** (additive
+  `ftue_played`, no version bump, field-named RON). It is *not* the
+  session-only queue, which is what made the earlier "once per run" policy
+  mean once per session. "Don't show again" (`never`) and the guidance
+  switch are `Profile::ftue`, cross-run, riding `PendingProfileWrites` (a
+  second *field*, `ftue`) so an arena still touches no disk.
+- **`Profile::ftue` is not in `keep_settings_from`, on purpose.** During a
+  run the engine's copy is the truth and `flush_profile_writes` copies it
+  over app-core's, so a UI edit made only on `App::profile` is reverted by
+  the next earn. In a run, D/T and the Options rows call
+  `Game::{ftue_never, set_guidance, reset_guidance}` and flush at once; out
+  of a run (the main menu — `game_menu_in_run` is false, even with an
+  arena's leftover `game`) the app's copy is edited and saved, and the next
+  run installs it. D and T answer only a popup with an `ftue_key`; the hint
+  line shows them only there.
 - **Achievements are a second *source*, not a second door** — built from the
   achievement def's own `name`/`description`, so a per-achievement copy of
   that prose is the copy that drifts.
@@ -59,8 +64,8 @@
   player through `Game::spend_power` *and* through `needs_tick_system`'s flat
   per-tick drain, and the second — how most runs cross — is a bevy system
   with no `Game` to notify from, so `Game::note_low_power` reads the reserve
-  from `tick_inner` instead. `Repeat::OnceEver` is what keeps a state read
-  from being a per-tick alarm. **The threshold is
+  from `tick_inner` instead. The `FtuePlayed` run set is what keeps a state read from being a
+  per-tick alarm. **The threshold is
   `tuning::LOW_POWER_ATTACK_THRESHOLD`**, not a fraction of its own: it is
   half of `POWER_MAX` today, but the number that matters is where
   `battle::power_attack_multiplier` starts docking attacks, or the screen

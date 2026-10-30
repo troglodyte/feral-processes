@@ -515,6 +515,7 @@ impl Game {
         };
         if unit_done {
             self.grant_hand_craft_unit(&item);
+            self.ftue_by_key(&crate::ftue::crafted_key(&item.0));
             self.note_hand_craft(&item, careful, ticks_total);
             let finished = {
                 let mut job = self.world.resource_mut::<crate::resources::HandCraft>();

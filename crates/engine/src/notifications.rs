@@ -1,6 +1,6 @@
 //! What stops play for a moment, in a panel over the map.
 //!
-//! One variant per notification, and the prose beside it. A notification is
+//! One variant per milestone notification, and the prose beside it. A notification is
 //! **not content** — it is a hook into a particular moment in a particular
 //! function, and there is no shape to express in data the way `SpeciesDef`
 //! or `ItemDef` have one. So this module is the whole feature: the enum is
@@ -23,97 +23,15 @@
 
 use crate::components::GlyphColor;
 
-/// Whether a notification may fire more than once.
+/// Every milestone notification the game can raise: news about a moment,
+/// fired every time its site is reached.
 ///
-/// Two policies rather than three. The obvious third — once per *run* —
-/// was considered and rejected: its latch would have to live on the
-/// session-only queue resource, so "once per run" would quietly mean "once
-/// per session" and fire again on every reload. A name that lies is worse
-/// than a missing policy, and this is an additive variant the day something
-/// actually wants it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Repeat {
-    /// Fires every time its site is reached. A breach, a contract landing —
-    /// news about *this* moment, which has happened again.
-    #[default]
-    Always,
-    /// Fires once and never again, on this machine, across every run. The
-    /// latch is `achievements::Profile::seen_notifications`, which is not the
-    /// save file — so a tutorial seen in one run stays seen in the next.
-    OnceEver,
-}
-
-/// Every notification the game can raise.
-///
-/// **The order of these variants is not save format** — unlike `Perk`, which
-/// is bincoded positionally into `PlayerSave`. What reaches disk is
-/// `latch_key`'s string, in `profile.ron`, so these may be reordered and
-/// renamed freely and only that method's arms are load-bearing.
-///
-/// Grouped by what the player is being told: a *tutorial* is the first time
-/// a mechanic happens to them and latches forever, a *milestone* is news
-/// about this moment and repeats. `tutorials_latch_and_milestones_do_not`
-/// holds the two groups to their policies, because getting it backwards is
-/// silent — a tutorial that re-fires reads as a bug in the screen, and a
-/// milestone that fires once reads as one in the trigger.
+/// First-time guidance (a tutorial, lore) is not here — it lives in
+/// `ftue::ENTRIES`, once per run and subject to the player's guidance
+/// settings. Nothing in this enum is latched or reaches disk; `slug`
+/// is only the stable name `Display` and the censuses use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotificationKind {
-    // --- Tutorials: `OnceEver`, the first time a mechanic happens to you ---
-    /// The Home is raised and the base floor exists — `Game::place_structure`.
-    BaseFounding,
-    /// The party drops below the on-ramp for the first time —
-    /// `Game::descend_to`.
-    FirstDescent,
-    /// A GC Entropy Sweep opens on the base — `Game::run_raid`.
-    FirstRaid,
-    /// Raiders out of a Hostile town reach the base — `Game::run_town_raid`.
-    /// Distinct from `FirstRaid`: the sweep is weather and this is a
-    /// consequence, and firing the sweep's copy here would teach the wrong
-    /// lesson.
-    FirstTownRaid,
-    /// A work order is filed and accepted — `Game::queue_work_order`.
-    FirstWorkOrder,
-    /// The player's reserve first crosses under
-    /// `tuning::LOW_POWER_ATTACK_THRESHOLD` — `Game::note_low_power`, read
-    /// off the reserve once a tick rather than fired from a spend.
-    ///
-    /// **The threshold is the attack penalty's own, not a fraction of its
-    /// own.** Power drains passively in `needs_tick_system` and is charged in
-    /// `Game::spend_power`, so a notice hung off spending would miss the way
-    /// most runs cross; and a second constant here would let the screen say
-    /// "your attacks are weakening" on a tick where they are not.
-    LowPower,
-    /// A program of the player's is benched by a Forgiving death with no
-    /// Repair Bay standing — `Game::bench_or_dissolve`.
-    ///
-    /// Gated on the Bay because `Downed` is a one-way door without one, and
-    /// the gate reads `StructureDef::recovery` rather than the Bay's id —
-    /// `dispatches_sorties`' rule.
-    DownedProgram,
-    /// Static reaches the player for the first time — the movement hook in
-    /// `game/turn.rs`, on the step where `Terrain::event` is live on the
-    /// destination tile. Fired at the same site the effect is applied, not
-    /// on the epoch boundary `Game::note_static_turnover` announces from —
-    /// that fires for every biome turnover regardless of where the player
-    /// is standing, and a player three biomes away must not be told
-    /// something happened to them that didn't.
-    FirstStatic,
-    /// The player extracts their first image — `Game::
-    /// extract_image_from_program`, the `Image` tool category's own door
-    /// (todo #100 Task 5).
-    ///
-    /// `OnceEver`: what the player is being told is that the mechanic now
-    /// exists for them, not news about a moment that keeps happening — so it
-    /// groups with the tutorials above, and its `tutorial_learned_image`
-    /// latch key matches that grouping (final review F7; it read
-    /// `milestone_learned_image` from Task 5 through the final review,
-    /// unreleased in every build that shipped it, so the rename cost no
-    /// save). `latch_key`'s own doc is why the string is what matters and
-    /// the variant name and grouping are not — see
-    /// `tutorials_latch_and_milestones_do_not`.
-    LearnedImage,
-
-    // --- Milestones: `Always`, news about a moment that has happened again ---
     /// A portal holds and a new sector resolves — `Game::enter_next_zone`.
     Breach,
     /// The breach that lands on `tuning::RAID_MIN_ZONE` —
@@ -164,7 +82,7 @@ pub enum NotificationKind {
     ///
     /// A milestone rather than a tutorial: it teaches nothing, and it can
     /// happen more than once in a run because a world holds more than one
-    /// town. `Repeat::Always`.
+    /// town.
     SettlementGrown,
     /// A level lands the player exactly on `Game::level_cap` —
     /// `Game::award_player_xp`, the `gain.levels > 0` branch.
@@ -232,7 +150,6 @@ pub struct NotificationDef {
     /// Resolved through `hud::palette::glyph`, the one table a content hue is
     /// drawn from. The renderer does not invent a colour for this screen.
     pub color: GlyphColor,
-    pub repeat: Repeat,
 }
 
 impl NotificationKind {
@@ -240,17 +157,8 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 20] {
+    pub fn all() -> [NotificationKind; 11] {
         [
-            NotificationKind::BaseFounding,
-            NotificationKind::FirstDescent,
-            NotificationKind::FirstRaid,
-            NotificationKind::FirstTownRaid,
-            NotificationKind::FirstWorkOrder,
-            NotificationKind::LowPower,
-            NotificationKind::DownedProgram,
-            NotificationKind::FirstStatic,
-            NotificationKind::LearnedImage,
             NotificationKind::Breach,
             NotificationKind::SweepsBegin,
             NotificationKind::ContractClosed,
@@ -269,123 +177,6 @@ impl NotificationKind {
     /// module doc.
     pub fn def(self) -> NotificationDef {
         match self {
-            NotificationKind::BaseFounding => NotificationDef {
-                title: "Your Base",
-                body: "Your Home stands, with floor laid around it. Grow the base outward tile \
-                       by tile.\n\n [b] for the base report: build, craft, \
-                       and assign entities to structures.\n\n Programs you own and are not in the \
-                       party will live and work in the base.",
-                // The same art the zone map now draws the anchor with, so
-                // the tutorial and the map agree on what to look for. The
-                // prose no longer names a character for the same reason:
-                // `#` is the *fallback*, not what the player will see.
-                sprite: Some("anchor"),
-                glyph: '#',
-                color: GlyphColor::Cyan,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::FirstDescent => NotificationDef {
-                title: "The Stack",
-                body: "Below the zone field, the ground stops becomes a stack (a dungeon). Each \
-                       frame (level) down is more dangerous than the last.\n\n Something is \
-                       scanning your progress, the 'Trace' climbs the deeper and longer you stay, \
-                       and what it draws is not friendly, encounters will become more frequent. \
-                       You sense something big, humming with energy below.\n\nPress [g] for the \
-                       map of the frame you are standing in.",
-                sprite: None,
-                glyph: '>',
-                color: GlyphColor::Cyan,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::FirstRaid => NotificationDef {
-                title: "GC Entropy Sweep",
-                body: "The garbage collector has found your base. A sweep comes to clean up stray \
-                       data, ...your structures, and it will keep coming.\n\nStaff posted at a \
-                       machine defend it, and take damage doing so. There must be a way to defend \
-                       against it.",
-                sprite: None,
-                glyph: '!',
-                color: GlyphColor::Red,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::FirstTownRaid => NotificationDef {
-                title: "They Know Where You Live",
-                body: "A settlement you have wronged has sent people for your stores. They do not \
-                       come to break your machines — they come to carry off what your base runs \
-                       on, and they will keep coming while the grudge stands.\n\nWhat you have \
-                       built to turn a sweep away turns them away too, and so does a neighbour \
-                       who likes you. Standing can be repaired.",
-                sprite: None,
-                glyph: '!',
-                color: GlyphColor::Red,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::FirstWorkOrder => NotificationDef {
-                title: "The Order Is Filed",
-                body: "You have declared to your semi sentient programs what to craft, and what to \
-                       keep in stock. Every tick, the base recomputes which machines that order \
-                       needs, who is free to stand at them, and how far along each one is. \n\nA \
-                       standing order is a level the base keeps topped up rather than a batch it \
-                       fills once. \n\nIf the line stalls, the order screen names the machine it \
-                       is waiting on.",
-                sprite: None,
-                glyph: '&',
-                color: GlyphColor::Yellow,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::LowPower => NotificationDef {
-                title: "Power Low",
-                body: "Your Power reserve is under half. It drains a little every tick whatever \
-                       you are doing, and every routine you run comes out of the same \
-                       pool.\n\nFrom here your own attacks start to weaken, and at zero you \
-                       take Integrity damage every tick until you find some.\n\nPress [e] to \
-                       drain a Power Cell for 25 — two Core Fragments compiles one. [r] powers \
-                       down and fills it outright: free inside your base, one Power Outlet \
-                       anywhere else.",
-                sprite: None,
-                glyph: '%',
-                color: GlyphColor::Yellow,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::DownedProgram => NotificationDef {
-                title: "Program Down",
-                body: "A program of yours went down and is benched. It keeps its levels and \
-                       everything it has learned, but it cannot be put back in your party, take \
-                       a post, or work.\n\nA Repair Bay is what brings one back: a downed \
-                       program walks there itself and is written up to full Integrity a tick at \
-                       a time. Until one stands in your base, benched is where it stays — you \
-                       can still sell it or pull a routine out of it.\n\n[b] for the base \
-                       report, then Deploy a structure on the Build page.",
-                sprite: None,
-                glyph: 'r',
-                color: GlyphColor::Red,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::FirstStatic => NotificationDef {
-                title: "Static",
-                body: "That is Static, not the ground itself — interference riding on \
-                       top of the terrain, tied to the whole biome you are standing in rather \
-                       than to this one tile.\n\nIt runs on its own clock. Given time it clears, \
-                       and something else may settle over the same ground later. There is \
-                       nothing here to switch off.",
-                sprite: None,
-                glyph: '~',
-                color: GlyphColor::Orange,
-                repeat: Repeat::OnceEver,
-            },
-            NotificationKind::LearnedImage => NotificationDef {
-                title: "Image Learned",
-                body: "You captured an image — a downed program's shape and stats, kept for \
-                       later. Run your Emulate routine to wear it for a while: it swaps your \
-                       attack, mitigation, reach and routines for the image's own, and \
-                       everything else about you stays yours.\n\nEvery image you extract is \
-                       another shape to become. You can only wear one at a time, and dropping \
-                       it back off costs a turn.",
-                sprite: None,
-                glyph: 'i',
-                color: GlyphColor::Cyan,
-                repeat: Repeat::OnceEver,
-            },
             NotificationKind::Breach => NotificationDef {
                 title: "Escalation",
                 body: "The portal holds long enough. A new sector resolves around you — new \
@@ -394,7 +185,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '*',
                 color: GlyphColor::Magenta,
-                repeat: Repeat::Always,
             },
             NotificationKind::SweepsBegin => NotificationDef {
                 title: "Sweeps Begin",
@@ -414,7 +204,6 @@ impl NotificationKind {
                 // sweep itself keeps `FirstRaid`'s red `!`.
                 glyph: '^',
                 color: GlyphColor::Blue,
-                repeat: Repeat::Always,
             },
             NotificationKind::ContractClosed => NotificationDef {
                 title: "Contract Closed",
@@ -423,7 +212,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '$',
                 color: GlyphColor::Green,
-                repeat: Repeat::Always,
             },
             NotificationKind::OnboardingComplete => NotificationDef {
                 title: "Mission Complete",
@@ -431,7 +219,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Green,
-                repeat: Repeat::Always,
             },
             NotificationKind::OnboardingMission => NotificationDef {
                 title: "{name}",
@@ -440,7 +227,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Green,
-                repeat: Repeat::Always,
             },
             NotificationKind::SettlementGrown => NotificationDef {
                 title: "It Grew",
@@ -455,7 +241,6 @@ impl NotificationKind {
                 // paints every town in, and its comment there is the reason.
                 glyph: crate::settlements::SettlementKind::Mainframe.glyph(),
                 color: GlyphColor::Orange,
-                repeat: Repeat::Always,
             },
             NotificationKind::LevelCapReached => NotificationDef {
                 title: "Ceiling Reached",
@@ -467,7 +252,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '^',
                 color: GlyphColor::Yellow,
-                repeat: Repeat::Always,
             },
             NotificationKind::ResearchComplete => NotificationDef {
                 title: "Research Complete",
@@ -478,7 +262,6 @@ impl NotificationKind {
                 // on what to look for.
                 glyph: 'R',
                 color: GlyphColor::Cyan,
-                repeat: Repeat::Always,
             },
             NotificationKind::ResearchDiscovered => NotificationDef {
                 title: "Research Discovered",
@@ -489,7 +272,6 @@ impl NotificationKind {
                 // not look like two different systems.
                 glyph: 'R',
                 color: GlyphColor::Cyan,
-                repeat: Repeat::Always,
             },
             NotificationKind::PhaseKeyFound => NotificationDef {
                 title: "Phase Key Recovered",
@@ -497,7 +279,6 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '*',
                 color: GlyphColor::Yellow,
-                repeat: Repeat::Always,
             },
             NotificationKind::ProgramDecompiled => NotificationDef {
                 title: "Program Decompiled",
@@ -508,48 +289,21 @@ impl NotificationKind {
                 // reason: the screen and the machine that did the work agree.
                 glyph: 'J',
                 color: GlyphColor::Red,
-                repeat: Repeat::Always,
             },
         }
     }
 
-    /// The key a `Repeat::OnceEver` sighting is latched under in
-    /// `profile.ron`.
-    ///
-    /// **These strings are a file format and the variant names are not.**
-    /// `Profile::load` discards the *whole* profile — achievements included
-    /// — when it cannot parse, so a player who has already seen a tutorial
-    /// must keep matching the string their file holds. They are the ids the
-    /// deleted `assets/notifications/*.ron` used, unchanged, which is why
-    /// they still carry the `tutorial_`/`milestone_` prefixes the enum
-    /// expresses by grouping instead.
-    pub fn latch_key(self) -> &'static str {
+    /// A stable name for this kind, for `Display` and the censuses.
+    pub fn slug(self) -> &'static str {
         match self {
-            NotificationKind::BaseFounding => "tutorial_base_founding",
-            NotificationKind::FirstDescent => "tutorial_first_descent",
-            NotificationKind::FirstRaid => "tutorial_first_raid",
-            NotificationKind::FirstTownRaid => "tutorial_first_town_raid",
-            NotificationKind::FirstWorkOrder => "tutorial_first_work_order",
-            NotificationKind::FirstStatic => "tutorial_first_static",
-            // New, so no `profile.ron` holds either yet — but they latch, so
-            // these two strings are a file format from here on.
-            NotificationKind::LowPower => "tutorial_low_power",
-            NotificationKind::DownedProgram => "tutorial_downed_program",
-            NotificationKind::LearnedImage => "tutorial_learned_image",
             NotificationKind::Breach => "milestone_breach",
-            // New, and `Always` besides, so nothing is ever latched here.
             NotificationKind::SweepsBegin => "milestone_sweeps_begin",
             NotificationKind::ContractClosed => "milestone_contract",
-            // New, so no `profile.ron` holds it — and `Always` besides, so
-            // nothing is ever latched under it.
             NotificationKind::OnboardingComplete => "onboarding_complete",
             NotificationKind::OnboardingMission => "onboarding_mission",
             NotificationKind::SettlementGrown => "milestone_settlement_grown",
             NotificationKind::LevelCapReached => "milestone_level_cap",
             NotificationKind::ResearchComplete => "milestone_research_complete",
-            // `Always`, so nothing is ever latched under this — but the
-            // match is exhaustive and the string is a file format from here
-            // on all the same.
             NotificationKind::ResearchDiscovered => "milestone_research_discovered",
             NotificationKind::PhaseKeyFound => "milestone_phase_key_found",
             NotificationKind::ProgramDecompiled => "milestone_program_decompiled",
@@ -559,7 +313,7 @@ impl NotificationKind {
 
 impl std::fmt::Display for NotificationKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.latch_key())
+        f.write_str(self.slug())
     }
 }
 
@@ -587,6 +341,9 @@ pub struct Notification {
     /// something the table could ever hold. `None` for every site that has
     /// nothing to add.
     pub detail: Option<String>,
+    /// The FTUE key this popup was raised for, so app-core knows to offer
+    /// "don't show again". `None` for every milestone.
+    pub ftue_key: Option<String>,
 }
 
 impl From<NotificationDef> for Notification {
@@ -598,7 +355,26 @@ impl From<NotificationDef> for Notification {
             glyph: def.glyph,
             color: def.color,
             detail: None,
+            ftue_key: None,
         }
+    }
+}
+
+impl Notification {
+    /// This notification with `{hole}` placeholders filled in its title and
+    /// body and `detail` attached: the one fill both the milestone door and
+    /// the FTUE door go through. A hole nobody names is left standing, so a
+    /// census can see it.
+    pub fn filled(mut self, fills: &[(&str, &str)], detail: Option<String>) -> Self {
+        let fill = |text: &str| {
+            fills.iter().fold(text.to_string(), |text, (hole, value)| {
+                text.replace(&format!("{{{hole}}}"), value)
+            })
+        };
+        self.title = fill(&self.title);
+        self.body = fill(&self.body);
+        self.detail = detail;
+        self
     }
 }
 
@@ -611,24 +387,18 @@ mod tests {
     /// this catches a duplicate standing in for the one that was forgotten.
     #[test]
     fn all_lists_every_kind_exactly_once() {
-        let mut keys: Vec<&str> = NotificationKind::all()
-            .iter()
-            .map(|k| k.latch_key())
-            .collect();
+        let mut keys: Vec<&str> = NotificationKind::all().iter().map(|k| k.slug()).collect();
         keys.sort_unstable();
         let listed = keys.len();
         keys.dedup();
         assert_eq!(keys.len(), listed, "a kind is listed twice in `all`");
     }
 
-    /// The latch key reaches `profile.ron` and a duplicate would make two
-    /// notifications share one sighting — the second silently never firing.
+    /// A duplicate slug makes `Display` and the censuses name two kinds as
+    /// one, so a census failure points at the wrong kind.
     #[test]
-    fn every_latch_key_is_unique_and_non_empty() {
-        let mut keys: Vec<&str> = NotificationKind::all()
-            .iter()
-            .map(|k| k.latch_key())
-            .collect();
+    fn every_slug_is_unique_and_non_empty() {
+        let mut keys: Vec<&str> = NotificationKind::all().iter().map(|k| k.slug()).collect();
         assert!(keys.iter().all(|k| !k.is_empty()));
         keys.sort_unstable();
         keys.dedup();

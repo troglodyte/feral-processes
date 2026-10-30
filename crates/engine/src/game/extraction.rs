@@ -664,7 +664,9 @@ impl Game {
                 tool.name
             ),
         );
-        self.notify(crate::notifications::NotificationKind::LearnedImage);
+        self.ftue(crate::ftue::FtueTrigger::Event(
+            crate::ftue::FtueEvent::LearnedImage,
+        ));
 
         // Quoted once, before the loop — `extract_gear_from_program`'s own
         // reason: a bench demolished mid-extraction must not change what

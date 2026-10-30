@@ -2152,6 +2152,7 @@ pub fn assembler_system(
     mut tasks: Query<(Entity, &mut Task)>,
     db: AssemblerLookups,
     mut instruments: crate::base_ledger::Instruments,
+    mut crafted: ResMut<crate::ftue::PendingCrafted>,
 ) {
     let AssemblerLookups {
         recipes,
@@ -2357,6 +2358,9 @@ pub fn assembler_system(
             .expect("filtered on a production above")
             .clone();
         *stock.output.entry(product.clone()).or_default() += 1;
+        // No `Game` here to fire the FTUE from: `Game` drains this after the
+        // tick, sorted, the way low Power is read.
+        crafted.0.push(product.clone());
         // Emitted here rather than beside the drain above so consumption and
         // production are one event: the inputs came out in the same scope,
         // and splitting them would let the two halves be counted in

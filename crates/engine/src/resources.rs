@@ -1391,20 +1391,21 @@ impl LabourDemand {
 /// per-tick like `RunFeats`, because a failed or skipped drain must not lose
 /// the earn.
 ///
-/// **Two reasons the profile can be dirty, one resource.** A notification
-/// with `Repeat::OnceEver` latches in the profile too, so `seen` accumulates
-/// beside `earned` rather than getting a second resource of its own — two
-/// resources meaning "the profile changed" is two things app-core has to
-/// remember to drain, and the one that drifts is the one nobody runs.
+/// **Two reasons the profile can be dirty, one resource.** An FTUE opt-out
+/// or guidance switch change is flagged beside `earned` rather than getting
+/// a second resource of its own — two resources meaning "the profile
+/// changed" is two things app-core has to remember to drain, and the one
+/// that drifts is the one nobody runs.
 #[derive(Resource, Default)]
 pub struct PendingProfileWrites {
     pub earned: Vec<crate::achievements::AchievementId>,
-    pub seen: Vec<crate::notifications::NotificationKind>,
+    /// The FTUE opt-outs or switch changed.
+    pub ftue: bool,
 }
 
 impl PendingProfileWrites {
     pub fn is_empty(&self) -> bool {
-        self.earned.is_empty() && self.seen.is_empty()
+        self.earned.is_empty() && !self.ftue
     }
 }
 

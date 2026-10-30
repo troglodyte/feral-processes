@@ -310,10 +310,13 @@ impl Game {
                 "You deploy a {}. The anchor settles where you stand.",
                 def.name
             ));
-            // Fired unconditionally: `Repeat::OnceEver` is what makes it
+            // Fired unconditionally: the FTUE run set is what makes it
             // once-only, and a second `if first_time` here would put the
             // policy in two places.
-            self.notify(crate::notifications::NotificationKind::BaseFounding);
+            self.ftue_by_key(&crate::ftue::built_key(&def.id));
+            self.ftue(crate::ftue::FtueTrigger::Event(
+                crate::ftue::FtueEvent::BaseFounding,
+            ));
             self.tick();
             return Ok(());
         }

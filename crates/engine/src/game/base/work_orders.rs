@@ -3300,7 +3300,9 @@ impl Game {
         } else {
             format!("Work order filed: {qty} x {name}.")
         });
-        self.notify(crate::notifications::NotificationKind::FirstWorkOrder);
+        self.ftue(crate::ftue::FtueTrigger::Event(
+            crate::ftue::FtueEvent::FirstWorkOrder,
+        ));
         // Standing only, and below every refusal: the mission asks for the
         // order that keeps working without being asked again, so a one-off
         // must not finish it.

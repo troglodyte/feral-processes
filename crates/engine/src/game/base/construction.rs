@@ -716,6 +716,7 @@ impl Game {
         }
         self.displace_floor_items_from(&footprint);
         self.log_base(format!("Your crew finishes the {}.", def.name));
+        self.ftue_by_key(&crate::ftue::built_key(&def.id));
     }
 
     /// Finishes a just-filed `New` or `Upgrade` site on the spot, for the

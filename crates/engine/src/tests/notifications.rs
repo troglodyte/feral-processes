@@ -3,19 +3,14 @@
 
 use super::support::*;
 use crate::achievements::Profile;
-use crate::notifications::{NotificationKind, Repeat};
+use crate::ftue::{FtueEvent, FtueTrigger};
+use crate::notifications::NotificationKind;
 use crate::resources::{Notifications, PendingProfileWrites};
 use crate::*;
 
-/// Whether the profile has latched `kind`. The store is plain strings on
-/// purpose (`Profile::seen_notifications`), so every assertion about it goes
-/// through `latch_key` rather than restating one.
-fn latched(game: &Game, kind: NotificationKind) -> bool {
-    game.world
-        .resource::<Profile>()
-        .seen_notifications
-        .iter()
-        .any(|seen| seen == kind.latch_key())
+/// The run set key of a named event.
+fn event_key(event: FtueEvent) -> String {
+    FtueTrigger::Event(event).key()
 }
 
 fn fresh() -> Game {
@@ -29,19 +24,23 @@ fn drain(game: &mut Game) {
 }
 
 #[test]
-fn always_queues_every_time_and_once_ever_queues_once() {
+fn milestones_queue_every_time_and_ftue_queues_once_per_run() {
     let mut game = fresh();
     drain(&mut game);
 
     assert!(game.notify(NotificationKind::Breach));
     assert!(game.notify(NotificationKind::Breach));
-    assert_eq!(game.notifications_pending(), 2, "Always does not latch");
+    assert_eq!(
+        game.notifications_pending(),
+        2,
+        "a milestone does not latch"
+    );
     drain(&mut game);
 
-    assert!(game.notify(NotificationKind::FirstRaid));
+    assert!(game.ftue(FtueTrigger::Event(FtueEvent::FirstRaid)));
     assert!(
-        !game.notify(NotificationKind::FirstRaid),
-        "a spent OnceEver latch is the only refusal left"
+        !game.ftue(FtueTrigger::Event(FtueEvent::FirstRaid)),
+        "the run set is the only refusal"
     );
     assert_eq!(game.notifications_pending(), 1);
 }
@@ -82,124 +81,98 @@ fn the_queue_is_first_in_first_out_and_carries_finished_text() {
     assert!(game.take_notification().is_none());
 }
 
-/// The `OnceEver` latch is only worth anything once it reaches disk, and
-/// app-core owns the path — so the engine has to say the profile is dirty.
-/// Without this the tutorial re-fires on every fresh load.
+/// FTUE firing is per run: a new `Game` shows it again, and a save -> load
+/// keeps it spent. Through a real save file, since a same-session second call
+/// passes against a set that is never written.
 #[test]
-fn a_once_ever_notification_dirties_the_profile_and_always_does_not() {
+fn an_ftue_message_is_once_per_run_across_save_and_load() {
     let mut game = fresh();
     drain(&mut game);
-    assert!(
-        !game.take_pending_profile_writes(),
-        "a fresh run has not latched anything yet"
-    );
+    assert!(game.ftue(FtueTrigger::Event(FtueEvent::FirstDescent)));
+    let queued = game.take_notification().expect("queued");
+    assert_eq!(queued.ftue_key.as_deref(), Some("event:first_descent"));
 
-    assert!(game.notify(NotificationKind::Breach));
-    assert!(
-        !game.take_pending_profile_writes(),
-        "an Always notification stores nothing, so nothing needs writing"
-    );
-
-    assert!(game.notify(NotificationKind::FirstRaid));
-    assert!(game.take_pending_profile_writes());
-    assert!(latched(&game, NotificationKind::FirstRaid));
-}
-
-/// The latch has to survive the run it was set in — that is the whole
-/// difference between a tutorial and a milestone. Asserted through a real
-/// profile round trip, because a same-session second call passes against a
-/// latch that is never written anywhere.
-#[test]
-fn a_once_ever_latch_survives_a_profile_round_trip() {
-    let mut game = fresh();
-    game.notify(NotificationKind::FirstDescent);
-    let dir = scratch_assets_dir("notification_profile");
+    let dir = scratch_assets_dir("ftue_run_set");
     std::fs::create_dir_all(&*dir).unwrap();
-    let path = dir.join("profile.ron");
-    game.world.resource::<Profile>().save(&path).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
 
-    let (reloaded, warning) = Profile::load(&path);
-    assert!(warning.is_none(), "{warning:?}");
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert!(loaded.ftue_shown("event:first_descent"));
     assert!(
-        reloaded
-            .seen_notifications
-            .iter()
-            .any(|seen| seen == NotificationKind::FirstDescent.latch_key())
+        !loaded.ftue(FtueTrigger::Event(FtueEvent::FirstDescent)),
+        "a reload is the same run"
     );
 
     let mut next_run = fresh();
-    next_run.world.insert_resource(reloaded);
     drain(&mut next_run);
     assert!(
-        !next_run.notify(NotificationKind::FirstDescent),
-        "a tutorial seen in one run stays seen in the next"
+        next_run.ftue(FtueTrigger::Event(FtueEvent::FirstDescent)),
+        "a new game shows it again"
     );
 }
 
-/// **The latch keys are a file format.** They were the ids of the deleted
-/// `assets/notifications/*.ron`, and a player who has already been shown a
-/// tutorial holds them in `profile.ron` today. Renaming one re-shows that
-/// tutorial to everybody, which nothing else in the suite can see — the
-/// round trip above writes and reads the *same* build's keys and passes
-/// whatever they say.
+/// Guidance off or a "never" key latches the run set but queues nothing, so
+/// turning guidance back on mid-run does not replay what was skipped.
 #[test]
-fn a_profile_written_before_this_refactor_keeps_its_latches() {
-    let dir = scratch_assets_dir("notification_legacy_profile");
-    std::fs::create_dir_all(&*dir).unwrap();
-    let path = dir.join("profile.ron");
-    std::fs::write(
-        &path,
-        "(earned: [], seen_notifications: [\"tutorial_first_descent\", \"tutorial_first_raid\"])",
-    )
-    .unwrap();
-
-    let (profile, warning) = Profile::load(&path);
-    assert!(warning.is_none(), "{warning:?}");
-
+fn a_suppressed_message_is_still_latched() {
     let mut game = fresh();
-    game.world.insert_resource(profile);
     drain(&mut game);
-    assert!(!game.notify(NotificationKind::FirstDescent));
-    assert!(!game.notify(NotificationKind::FirstRaid));
-    assert!(
-        game.notify(NotificationKind::BaseFounding),
-        "one this profile has not seen still fires"
+    game.set_guidance(false);
+    assert!(!game.ftue(FtueTrigger::Event(FtueEvent::FirstRaid)));
+    assert_eq!(game.notifications_pending(), 0);
+    game.set_guidance(true);
+    assert!(!game.ftue(FtueTrigger::Event(FtueEvent::FirstRaid)));
+
+    game.ftue_never("event:first_descent");
+    assert!(!game.ftue(FtueTrigger::Event(FtueEvent::FirstDescent)));
+    assert!(game.ftue_shown("event:first_descent"));
+
+    game.reset_guidance();
+    assert!(game.guidance_enabled());
+    assert!(game.ftue(FtueTrigger::Event(FtueEvent::FirstWorkOrder)));
+}
+
+/// The opt-outs reach the profile and mark it dirty.
+#[test]
+fn ftue_choices_dirty_the_profile() {
+    let mut game = fresh();
+    drain(&mut game);
+    let _ = game.take_pending_profile_writes();
+    game.ftue_never("event:first_raid");
+    assert!(game.take_pending_profile_writes());
+    assert_eq!(
+        game.world.resource::<Profile>().ftue.never,
+        vec!["event:first_raid".to_string()]
     );
 }
 
-/// A key no build has copy for any more must sit there inertly. `load`
-/// discards the *whole* profile on a parse error — achievements included —
-/// which is why `seen_notifications` is `Vec<String>` and not a typed id.
+/// `Profile::ftue` round-trips through `profile.ron`, and a profile from
+/// before the field (carrying the retired `seen_notifications`) still loads
+/// with its achievements and guidance on.
 #[test]
-fn a_retired_latch_key_does_not_cost_the_profile() {
-    let dir = scratch_assets_dir("notification_retired_key");
+fn a_profile_from_before_ftue_still_loads_and_ftue_round_trips() {
+    let dir = scratch_assets_dir("ftue_profile");
     std::fs::create_dir_all(&*dir).unwrap();
     let path = dir.join("profile.ron");
     std::fs::write(
         &path,
-        "(earned: [], seen_notifications: [\"tutorial_gone\"])",
+        "(earned: [(id: \"first_kill\", first_tick: 12)], seen_notifications: [\"tutorial_first_raid\"])",
     )
     .unwrap();
-
     let (profile, warning) = Profile::load(&path);
     assert!(warning.is_none(), "{warning:?}");
-    assert_eq!(
-        profile.seen_notifications,
-        vec!["tutorial_gone".to_string()]
-    );
-}
+    assert_eq!(profile.earned.len(), 1);
+    assert!(profile.ftue.enabled);
+    assert!(profile.ftue.never.is_empty());
 
-/// A profile written before notifications existed has no key for them, and
-/// must load rather than being refused — the `#[serde(default)]` promise.
-#[test]
-fn a_profile_written_before_notifications_still_loads() {
-    let dir = scratch_assets_dir("notification_old_profile");
-    std::fs::create_dir_all(&*dir).unwrap();
-    let path = dir.join("profile.ron");
-    std::fs::write(&path, "(earned: [])").unwrap();
-    let (profile, warning) = Profile::load(&path);
+    let mut profile = profile;
+    profile.ftue.enabled = false;
+    profile.ftue.never.push("event:first_raid".into());
+    profile.save(&path).unwrap();
+    let (back, warning) = Profile::load(&path);
     assert!(warning.is_none(), "{warning:?}");
-    assert!(profile.seen_notifications.is_empty());
+    assert_eq!(back.ftue, profile.ftue);
 }
 
 /// A notification queued while the player is somewhere it must not be drawn
@@ -287,15 +260,6 @@ fn every_notification_kind_is_fired_by_a_named_site() {
     // from their own def and name no kind at all.
     fn site(kind: NotificationKind) -> &'static str {
         match kind {
-            NotificationKind::BaseFounding => "Game::place_structure, founding",
-            NotificationKind::FirstDescent => "Game::descend_to",
-            NotificationKind::FirstRaid => "Game::run_raid",
-            NotificationKind::FirstTownRaid => "Game::run_town_raid",
-            NotificationKind::FirstWorkOrder => "Game::queue_work_order",
-            NotificationKind::FirstStatic => "Game::move_player, the movement hook",
-            NotificationKind::LearnedImage => "Game::extract_image_from_program",
-            NotificationKind::LowPower => "Game::note_low_power, once a tick",
-            NotificationKind::DownedProgram => "Game::bench_or_dissolve, the benched arm",
             NotificationKind::Breach => "Game::enter_next_zone",
             NotificationKind::SweepsBegin => "Game::enter_next_zone, the breach onto RAID_MIN_ZONE",
             NotificationKind::ContractClosed => "Game::complete_contract",
@@ -314,68 +278,6 @@ fn every_notification_kind_is_fired_by_a_named_site() {
 
     for kind in NotificationKind::all() {
         assert!(!site(kind).is_empty(), "{kind} is fired by nothing");
-    }
-}
-
-/// Every tutorial is `OnceEver` and every milestone is `Always`. Getting
-/// this backwards is silent: a tutorial that re-fires reads as a bug in the
-/// screen, and a milestone that fires once reads as one in the trigger.
-///
-/// A second match rather than a fold over the variant names, for the reason
-/// above — and because the grouping the enum expresses with a comment is
-/// exactly what a name-prefix rule used to express with a string.
-#[test]
-fn tutorials_latch_and_milestones_do_not() {
-    for kind in NotificationKind::all() {
-        let expected = match kind {
-            NotificationKind::BaseFounding
-            | NotificationKind::FirstDescent
-            | NotificationKind::FirstRaid
-            | NotificationKind::FirstTownRaid
-            | NotificationKind::FirstWorkOrder
-            | NotificationKind::FirstStatic
-            | NotificationKind::LowPower
-            | NotificationKind::DownedProgram
-            | NotificationKind::LearnedImage => Repeat::OnceEver,
-            // The chain runs on every new game, so a briefing latched across
-            // runs would leave a second playthrough's missions unexplained —
-            // and a world holds more than one town, so a city announcing
-            // itself is news that can happen again inside one run.
-            // ...and the level cap is a different number in every sector,
-            // so reaching one is news again at each of them.
-            NotificationKind::Breach
-            | NotificationKind::SweepsBegin
-            | NotificationKind::ContractClosed
-            | NotificationKind::OnboardingComplete
-            | NotificationKind::OnboardingMission
-            | NotificationKind::SettlementGrown
-            | NotificationKind::LevelCapReached
-            | NotificationKind::ResearchComplete
-            | NotificationKind::ResearchDiscovered
-            | NotificationKind::PhaseKeyFound
-            | NotificationKind::ProgramDecompiled => Repeat::Always,
-        };
-        assert_eq!(kind.def().repeat, expected, "{kind}");
-    }
-}
-
-/// Final review F7: `NotificationKind::LearnedImage`'s latch key read
-/// `milestone_learned_image` despite grouping with the `OnceEver` tutorials
-/// above it — every one of that group's siblings carries a `tutorial_`
-/// prefix, and this one didn't. `latch_key`'s own doc says the string is
-/// what matters, but a string that contradicts its own group's naming is
-/// exactly the kind of drift a census exists to catch — this checks the
-/// convention `tutorials_latch_and_milestones_do_not` checks the policy for.
-#[test]
-fn every_oncever_latch_key_carries_the_tutorial_prefix() {
-    for kind in NotificationKind::all() {
-        if kind.def().repeat == Repeat::OnceEver {
-            assert!(
-                kind.latch_key().starts_with("tutorial_"),
-                "{kind} is OnceEver but its latch key {:?} doesn't carry the group's prefix",
-                kind.latch_key()
-            );
-        }
     }
 }
 
@@ -406,18 +308,15 @@ fn the_queue_does_not_survive_a_save() {
     let _ = loaded.take_pending_profile_writes();
 }
 
-/// Two reasons the profile can be dirty, one resource — so a drain has to
-/// clear both halves or the second one writes the profile forever.
+/// A drain clears the dirty flag or the profile is written forever.
 #[test]
-fn draining_the_profile_channel_clears_both_halves() {
+fn draining_the_profile_channel_clears_it() {
     let mut game = fresh();
-    game.world
-        .resource_mut::<PendingProfileWrites>()
-        .seen
-        .push(NotificationKind::BaseFounding);
+    game.world.resource_mut::<PendingProfileWrites>().ftue = true;
     assert!(game.take_pending_profile_writes());
     assert!(!game.take_pending_profile_writes());
 }
+
 /// A new run opens on its onboarding briefing and **nothing else**. Worth
 /// pinning because `enter_next_zone` fires the breach milestone from its
 /// first line, and anything that later routes world setup through it would
@@ -567,7 +466,7 @@ fn crossing_the_low_power_threshold_notifies_once() {
         1,
         "crossing under is what the player is told about"
     );
-    assert!(latched(&game, NotificationKind::LowPower));
+    assert!(game.ftue_shown(&event_key(FtueEvent::LowPower)));
     drain(&mut game);
 
     for _ in 0..5 {
@@ -592,7 +491,7 @@ fn benching_a_program_with_no_bay_asks_for_one() {
     game.bench_or_dissolve(program);
 
     assert_eq!(game.notifications_pending(), 1, "the bench is the trigger");
-    assert!(latched(&game, NotificationKind::DownedProgram));
+    assert!(game.ftue_shown(&event_key(FtueEvent::DownedProgram)));
 }
 
 /// ...and a base that already has one is not told to build it. The gate is
@@ -716,4 +615,76 @@ fn titles(game: &mut Game) -> Vec<String> {
     std::iter::from_fn(|| game.take_notification())
         .map(|n| n.title)
         .collect()
+}
+
+// --- FTUE trigger hooks. `Game::ftue` latches a key even with no entry, so
+// each hook is observable through `ftue_shown` without a shipped message. ---
+
+#[test]
+fn finishing_research_fires_its_ftue_key() {
+    let mut game = fresh();
+    let def = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .get("automation")
+        .cloned()
+        .expect("automation ships");
+    assert!(!game.ftue_shown("research:automation"));
+    game.grant_research(&def);
+    assert!(game.ftue_shown("research:automation"));
+}
+
+#[test]
+fn a_crew_built_structure_fires_its_ftue_key() {
+    let mut game = fresh();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    assert!(game.ftue_shown("built:home"), "the instant Home path");
+    assert!(!game.ftue_shown("built:depot"));
+    // `place_now` raises through `spawn_structure` directly; the crew's
+    // completion is `finish_site_now`, which runs `complete_new_build`.
+    file_build(&mut game, "depot", 3, 0).unwrap();
+    let site = game
+        .world
+        .query::<(bevy_ecs::prelude::Entity, &BuildSite)>()
+        .iter(&game.world)
+        .map(|(e, _)| e)
+        .next()
+        .expect("the depot is filed");
+    game.finish_site_now(site);
+    assert!(game.ftue_shown("built:depot"), "the crew-built path");
+}
+
+#[test]
+fn hand_crafting_fires_its_ftue_key() {
+    let mut game = fresh();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), ICE_BREAKER_CORE_COST);
+    let key = format!("crafted:{}", ids::ICE_BREAKER);
+    assert!(!game.ftue_shown(&key));
+    game.craft(&ItemId::from(ids::ICE_BREAKER), 1, false)
+        .unwrap();
+    assert!(game.ftue_shown(&key));
+}
+
+/// Stock on hand satisfies an order without anything being made, so it must
+/// not spend the run's `crafted:` message.
+#[test]
+fn stock_that_satisfies_a_work_order_is_not_a_craft() {
+    let mut game = fresh();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let mine = spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5))
+        .unwrap();
+    game.world
+        .get_mut::<crate::components::Stock>(mine)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+    game.tick();
+    assert!(!game.ftue_shown(&format!("crafted:{}", ids::CORE_FRAGMENT)));
 }

@@ -691,7 +691,9 @@ impl Game {
         // rather than the Bay's own id — `dispatches_sorties`' rule, so a
         // mod's own recovery structure answers it too.
         if self.repair_bays().is_empty() {
-            self.notify(crate::notifications::NotificationKind::DownedProgram);
+            self.ftue(crate::ftue::FtueTrigger::Event(
+                crate::ftue::FtueEvent::DownedProgram,
+            ));
         }
         if let Some(id) = program_id {
             self.post_alert(

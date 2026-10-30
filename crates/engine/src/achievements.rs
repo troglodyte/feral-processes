@@ -211,25 +211,15 @@ pub struct Earned {
 pub struct Profile {
     #[serde(default)]
     pub earned: Vec<Earned>,
-    /// Every `Repeat::OnceEver` notification this machine has already shown,
-    /// by `NotificationKind::latch_key`.
-    ///
-    /// Here rather than in the save for the reason the whole struct is here:
-    /// a tutorial seen in one run must stay seen in the next, and the profile
-    /// is the one thing that outlives a run. Additive and
-    /// `#[serde(default)]`, so an existing `profile.ron` keeps parsing.
-    ///
-    /// **Plain strings, deliberately, where every other id in this file is a
-    /// type.** `load` discards the *whole* profile — achievements included —
-    /// when it cannot parse, so a key this build has retired must stay inert
-    /// rather than becoming a parse error that costs a player everything
-    /// they have earned. Nothing reads these back except `see`.
+    /// The FTUE guidance switch and per-message opt-outs; see `ftue`.
+    /// Absent in an old file, which means guidance on. The engine's copy is
+    /// authoritative during a run (not in `keep_settings_from`).
     #[serde(default)]
-    pub seen_notifications: Vec<String>,
+    pub ftue: crate::ftue::FtueGuidance,
     /// The last map avatar the player drew, cross-run — see
     /// `components::PlayerIdentity::icon`.
     ///
-    /// The **encoded string**, `seen_notifications`' reason exactly:
+    /// The **encoded string**, for the reason `ftue`'s keys are strings:
     /// `load` discards the *whole* profile — achievements included — when
     /// it cannot parse, so a form this build cannot decode
     /// (`icon::PlayerIcon::decode` returning `None`) must be inert rather
@@ -243,8 +233,8 @@ pub struct Profile {
     ///
     /// Cross-run rather than per-save for the reason every field here is:
     /// this is a statement about how the player wants to play, not about one
-    /// run. A plain `bool` for `seen_notifications`' reason — `load` discards
-    /// the *whole* profile on a parse failure, so nothing here may become
+    /// run. A plain `bool`: `load` discards the
+    /// *whole* profile on a parse failure, so nothing here may become
     /// unparseable by a later build.
     ///
     /// On for a player who has never chosen — an absent field and an absent
@@ -254,8 +244,8 @@ pub struct Profile {
     pub tactical_battles: bool,
     /// Every run's banked score, summed — see `score` and
     /// `Game::bank_run_score`. Only ever grows; the next character creation
-    /// derives its bonus from it. A plain `u64` for `seen_notifications`'
-    /// reason: `load` discards the whole profile on a parse failure.
+    /// derives its bonus from it. A plain `u64`: `load` discards the whole profile on a
+    /// parse failure.
     #[serde(default)]
     pub lifetime_score: u64,
     /// Master volume in percent, stepped by 10 on the Game menu's Audio
@@ -325,21 +315,6 @@ impl Profile {
             return false;
         }
         self.earned.push(entry);
-        true
-    }
-
-    /// Records a notification as shown, returning `true` on the first
-    /// sighting and `false` — changing nothing — on a repeat.
-    ///
-    /// Deliberately the same shape as `record`: "has this happened before"
-    /// is one question with one answer, and a caller that has to ask
-    /// `contains` first and write second can forget the second half.
-    pub fn see(&mut self, kind: crate::notifications::NotificationKind) -> bool {
-        let key = kind.latch_key();
-        if self.seen_notifications.iter().any(|seen| seen == key) {
-            return false;
-        }
-        self.seen_notifications.push(key.to_string());
         true
     }
 

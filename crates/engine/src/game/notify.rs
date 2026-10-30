@@ -1,9 +1,8 @@
 //! The one door a notification is queued through.
 
 use crate::Game;
-use crate::achievements::Profile;
-use crate::notifications::{Notification, NotificationKind, Repeat};
-use crate::resources::{Notifications, PendingProfileWrites};
+use crate::notifications::{Notification, NotificationKind};
+use crate::resources::Notifications;
 
 impl Game {
     /// Queues `kind`, to take the screen the next time the player is
@@ -39,11 +38,11 @@ impl Game {
         self.queue_notification(kind, fills, detail)
     }
 
-    /// The **one door**. It reads the def, checks the latch and pushes a
-    /// *resolved* value; it draws no RNG and writes no log line. A caller
-    /// fires it unconditionally at its site — the once-only rule is
-    /// `Repeat::OnceEver` and lives here, so a second `if first_time` check
-    /// in Rust would put the policy in two places and let the two disagree.
+    /// The **one door** for milestones. It reads the def and pushes a
+    /// *resolved* value; it draws no RNG and writes no log line. Every call
+    /// queues: once-per-run guidance goes through `Game::ftue`, whose run set
+    /// decides, so a second `if first_time` check at a site would put the
+    /// policy in two places.
     ///
     /// The two extras are **parameters on that one door**, not doors of
     /// their own — `pursuit_field`'s shape over `walk_field`. They are
@@ -52,42 +51,14 @@ impl Game {
     /// re-read the call site, not to add one — `notify` for a site with
     /// nothing to add, `notify_filled` for one that has.
     ///
-    /// **The only way this returns `false` is a spent `OnceEver` latch.**
-    /// It used to have a second refusal — "no file defines this id" — which
-    /// went with the `.ron` catalogue: every `NotificationKind` now has copy
-    /// by construction, so an unknown notification is not a state that
-    /// exists.
+    /// Always `true`: every `NotificationKind` has copy by construction.
     fn queue_notification(
         &mut self,
         kind: NotificationKind,
         fills: &[(&str, &str)],
         detail: Option<String>,
     ) -> bool {
-        let def = kind.def();
-        let fill = |text: &str| {
-            fills.iter().fold(text.to_string(), |text, (key, value)| {
-                text.replace(&format!("{{{key}}}"), value)
-            })
-        };
-        let mut notification = Notification::from(def);
-        notification.title = fill(&notification.title);
-        notification.body = fill(&notification.body);
-        notification.detail = detail;
-        if def.repeat == Repeat::OnceEver {
-            if !self.world.resource_mut::<Profile>().see(kind) {
-                return false;
-            }
-            // The latch is only worth anything once it reaches disk, and
-            // app-core owns the path. This is the same channel an earned
-            // achievement uses, which is what puts the write *below*
-            // `after_tick`'s `in_arena()` early return — so "an arena
-            // session touches no disk" holds here by omission rather than
-            // by a check. Do not add one.
-            self.world
-                .resource_mut::<PendingProfileWrites>()
-                .seen
-                .push(kind);
-        }
+        let notification = Notification::from(kind.def()).filled(fills, detail);
         self.world
             .resource_mut::<Notifications>()
             .push(notification);

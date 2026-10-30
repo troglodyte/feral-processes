@@ -115,7 +115,7 @@ fn rows_per_page_and_kind() {
     let mut app = test_app(9003);
     app.mode = Mode::GameplayOptions;
     let rows = app.option_rows();
-    assert_eq!(rows.len(), 1);
+    assert_eq!(rows.len(), 3);
     assert_eq!(rows[0].key, OptionKey::TacticalBattles);
     assert_eq!(rows[0].kind, OptionKind::Toggle);
     assert_eq!(rows[0].value, "Off");
@@ -232,12 +232,7 @@ fn a_profile_flush_keeps_a_just_changed_setting() {
 
     // Something earned, so the engine reports its profile dirty and the
     // flush replaces the app's copy with the engine's.
-    assert!(
-        app.game
-            .as_mut()
-            .unwrap()
-            .notify(feral_processes_engine::notifications::NotificationKind::FirstRaid)
-    );
+    app.game.as_mut().unwrap().ftue_never("event:first_raid");
     app.after_tick();
 
     assert_eq!(app.profile.volume_percent, 30);
@@ -287,4 +282,112 @@ fn install_profile_carries_the_toggle() {
     let mut game = app.game.take().expect("the fixture has a game");
     game.install_profile(app.profile.clone());
     assert!(game.profile().tactical_battles);
+}
+
+mod guidance {
+    use super::*;
+
+    fn row_value(app: &crate::App, key: OptionKey) -> String {
+        app.option_rows()
+            .into_iter()
+            .find(|r| r.key == key)
+            .unwrap()
+            .value
+    }
+
+    /// Cursor onto `key`'s row.
+    fn select(app: &mut crate::App, key: OptionKey) {
+        app.menu_selected = app.option_rows().iter().position(|r| r.key == key).unwrap();
+    }
+
+    #[test]
+    fn in_a_run_the_switch_reaches_the_engine_and_survives_a_flush() {
+        let mut app = on_page(9031, Mode::GameplayOptions);
+        select(&mut app, OptionKey::Guidance);
+        assert_eq!(row_value(&app, OptionKey::Guidance), "On");
+        app.handle_key(GameKey::Enter);
+        assert_eq!(row_value(&app, OptionKey::Guidance), "Off");
+        assert!(!app.game.as_ref().unwrap().guidance_enabled());
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled);
+
+        app.game.as_mut().unwrap().ftue_never("event:first_raid");
+        app.after_tick();
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled, "a flush reverted the switch");
+        assert!(!app.game.as_ref().unwrap().guidance_enabled());
+    }
+
+    #[test]
+    fn in_a_run_show_all_again_clears_the_opt_outs() {
+        let mut app = on_page(9032, Mode::GameplayOptions);
+        let game = app.game.as_mut().unwrap();
+        game.ftue_never("event:first_raid");
+        game.set_guidance(false);
+        app.after_tick();
+        select(&mut app, OptionKey::ShowAllAgain);
+        app.handle_key(GameKey::Enter);
+        assert!(app.game.as_ref().unwrap().guidance_enabled());
+        assert_eq!(row_value(&app, OptionKey::Guidance), "On");
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(disk.ftue.enabled);
+        assert!(disk.ftue.never.is_empty());
+    }
+
+    #[test]
+    fn from_the_main_menu_the_switch_is_written_and_a_run_starts_with_it() {
+        let mut app = open_from_main_menu(9033);
+        app.hub_on_rail = false;
+        select(&mut app, OptionKey::Guidance);
+        app.handle_key(GameKey::Enter);
+        assert_eq!(row_value(&app, OptionKey::Guidance), "Off");
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled);
+
+        let path = std::env::temp_dir().join("feral_processes_options_9033.bin");
+        app.game.as_mut().unwrap().save(&path).unwrap();
+        app.load_game(path);
+        assert!(!app.game.as_ref().unwrap().guidance_enabled());
+        assert!(!app.profile.ftue.enabled);
+    }
+
+    #[test]
+    fn from_the_main_menu_show_all_again_resets_the_file() {
+        let mut app = open_from_main_menu(9034);
+        app.hub_on_rail = false;
+        app.profile.ftue.enabled = false;
+        app.profile.ftue.never.push("event:first_raid".into());
+        select(&mut app, OptionKey::ShowAllAgain);
+        app.handle_key(GameKey::Enter);
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(disk.ftue.enabled);
+        assert!(disk.ftue.never.is_empty());
+    }
+
+    /// A game can sit behind the main menu (`leave_arena` leaves the arena's
+    /// in place), and the branch must follow `game_menu_in_run`, not
+    /// `game.is_some()`: that game is not the player's run, so its guidance
+    /// stays put and the change lands in the profile on disk.
+    #[test]
+    fn a_leftover_game_behind_the_main_menu_is_not_the_run() {
+        use feral_processes_engine::achievements::Earned;
+        let mut app = open_from_main_menu(9035);
+        assert!(app.game.is_some() && !app.game_menu_in_run);
+        app.hub_on_rail = false;
+        app.profile.record(Earned {
+            id: "first_kill".into(),
+            first_tick: 12,
+            permadeath: false,
+        });
+        select(&mut app, OptionKey::Guidance);
+        app.handle_key(GameKey::Enter);
+
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled, "the change never reached the disk");
+        assert!(
+            app.game.as_ref().unwrap().guidance_enabled(),
+            "the leftover game's guidance was edited"
+        );
+        assert_eq!(disk.earned.len(), 1, "earned was clobbered");
+    }
 }

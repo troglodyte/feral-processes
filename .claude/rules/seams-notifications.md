@@ -13,15 +13,19 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A notification is a table plus a queue plus one equality, and it is not
   content.** `crates/engine/src/notifications.rs` is the whole feature;
   there is no `assets/notifications/`.
-- **`def` and both censuses are exhaustive matches**, `cell_mark`'s rule —
+- **`def` and the fired-by-site census are exhaustive matches**, `cell_mark`'s rule —
   a lookup with a fallback ships a new variant blank.
-- **`NotificationKind::latch_key`'s strings are `profile.ron`'s format and
-  the variant names are not**, which is why `seen_notifications` is a
-  `Vec<String>`: a retired key must be inert, not a parse error that costs
-  the player their achievements.
-- **Two repeat policies, and the third was rejected on its name**: once per
-  *run* would latch on the session-only queue and so mean once per
-  *session*.
+- **Guidance messages are a table, `ftue::ENTRIES`, keyed by trigger
+  strings, not variants of `NotificationKind`** — ids are asset strings
+  (research, structure, item), so the census is a test over the table, not
+  an exhaustive match. Those strings are `profile.ron`'s and the save's
+  format, kept as `Vec<String>` so a retired key is inert.
+- **Once-per-run is the run set saved with the run; "never" and the
+  guidance switch live in `Profile::ftue`, and the engine's copy is
+  authoritative during a run** — it is deliberately not in
+  `keep_settings_from`, so an Options edit or D/T in a run goes through
+  `Game` and `flush_profile_writes`, and only out of a run is the app's copy
+  edited directly.
 - **Achievements are a second *source*, not a second door** — built from the
   achievement def's own `name`/`description`, so a per-achievement copy of
   that prose is the copy that drifts.

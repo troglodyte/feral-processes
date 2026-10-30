@@ -992,7 +992,7 @@ pub struct CreatureSave {
     /// `components::Duties` and `duties::Duty::name`. Only meaningful when
     /// `tamed` is true.
     ///
-    /// Names rather than the enum directly, `NotificationKind::latch_key`'s
+    /// Names rather than the enum directly, `ftue::FtueGuidance`'s
     /// reason: a duty retired from a later build must load inert rather
     /// than fail the parse. An unknown name is dropped silently on load,
     /// and an empty list (every save written before this feature, and
@@ -1843,6 +1843,13 @@ pub struct SaveData {
     /// The counter the next `crafted/<n>` id is minted from.
     #[serde(default)]
     pub next_crafted_id: u32,
+    /// The FTUE keys already handled this run — see `ftue::FtuePlayed`.
+    /// Sorted (it is a `BTreeSet`) so a save is deterministic. Additive
+    /// behind `#[serde(default)]`, so an older file loads with nothing shown
+    /// and each message appears once more: the save is field-named RON and
+    /// needs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub ftue_played: Vec<String>,
     /// The weapon designs the player has made (ADR 0031). Their items are
     /// derived on load by `ItemDb::set_crafted_gear`, never saved.
     #[serde(default)]
@@ -2508,6 +2515,7 @@ mod tests {
             crafted_routines: Vec::new(),
             unslotted_routines: Vec::new(),
             next_crafted_id: 0,
+            ftue_played: Vec::new(),
             gear_designs: Vec::new(),
             next_gear_design_id: 0,
             known_affixes: Vec::new(),

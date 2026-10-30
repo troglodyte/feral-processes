@@ -706,6 +706,8 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        world.insert_resource(crate::ftue::FtuePlayed::default());
+        world.insert_resource(crate::ftue::PendingCrafted::default());
         // Both doors, deliberately: a loaded game must collect telemetry too,
         // and this is not saved (dev output, not run state) so `load` has
         // nothing to restore it from.
@@ -1801,6 +1803,10 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        world.insert_resource(crate::ftue::FtuePlayed(
+            data.ftue_played.iter().cloned().collect(),
+        ));
+        world.insert_resource(crate::ftue::PendingCrafted::default());
         // See `Game::new`'s copy: both doors, and nothing restores it.
         world.insert_resource(crate::resources::BattleTelemetry::default());
         world.insert_resource(data.base_ledger.clone());
@@ -2505,7 +2511,7 @@ impl Game {
                 });
             }
             // An unknown name (a duty retired since the file was written)
-            // is dropped silently, `latch_key`'s rule — and if every name
+            // is dropped silently, as an unknown FTUE key is — and if every name
             // was unknown, the resulting empty set is not inserted at all,
             // so the program reads as unrestricted rather than as
             // explicitly (and meaninglessly) barred from nothing.
@@ -3593,6 +3599,13 @@ impl Game {
                 .world
                 .resource::<crate::resources::CraftedRoutines>()
                 .next_id,
+            ftue_played: self
+                .world
+                .resource::<crate::ftue::FtuePlayed>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
             gear_designs: self
                 .world
                 .resource::<crate::resources::GearDesigns>()
@@ -3783,8 +3796,8 @@ impl Game {
     ///
     /// The engine decides what happened; app-core owns the path and does the
     /// writing. A bool rather than the ids because no caller has ever read
-    /// them — and there are two kinds now (a rung earned, a notification
-    /// seen), so a single typed list could only carry one of them honestly.
+    /// them — and there are two kinds now (a rung earned, a guidance
+    /// setting changed), so a single typed list could only carry one of them honestly.
     pub fn take_pending_profile_writes(&mut self) -> bool {
         let mut pending = self
             .world
@@ -3793,7 +3806,7 @@ impl Game {
             return false;
         }
         pending.earned.clear();
-        pending.seen.clear();
+        pending.ftue = false;
         true
     }
 

@@ -271,7 +271,7 @@
   without cutting the other turns a five-second stare into two and a half
   minutes. Read the two together or a retune of either ships a wait nobody
   measured.
-- **Engine test fixtures live in `crates/engine/src/tests/support.rs`.** Look
+- **Engine test fixtures live in `crates/engine/src/tests/support/`.** Look
   there before writing a new one.
 
 - **A contract is delivered where it was signed, and

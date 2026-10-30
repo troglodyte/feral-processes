@@ -2137,7 +2137,7 @@ fn fusing_all_pairs_crosses_quality_in_one_pass() {
 /// every `affixes:` line rewritten back into the singular `affix:` form is
 /// byte-for-byte what the previous release wrote.
 ///
-/// The RON-fragment tests in `save.rs` prove `affixes_from_save` in
+/// The RON-fragment tests in `save/tests.rs` prove `affixes_from_save` in
 /// isolation; this proves the four sites actually call it, on all three
 /// routes an affix travels — the player's flat slot fields, a companion's
 /// `EquippedItemSave`, and a carried `GearCopySave`.

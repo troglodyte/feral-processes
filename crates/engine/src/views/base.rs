@@ -144,7 +144,7 @@ impl StructureReport {
     /// why both colour it yellow and why `Game::attention` counts it.
     ///
     /// Here rather than spelled out at each reader: the renderer's copy of
-    /// this lived in `render/building.rs` and the attention model is in the
+    /// this lived in `render/building/` and the attention model is in the
     /// engine, so the two are in different crates and nothing would fail to
     /// compile when one drifted.
     pub fn is_idle(&self) -> bool {

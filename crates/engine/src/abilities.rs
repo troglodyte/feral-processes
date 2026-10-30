@@ -382,7 +382,7 @@ impl AffinityKind {
 ///
 /// **No serde derive.** `Ord` is what `Tampered`'s `BTreeMap` needs to key
 /// on this; `Tampered` itself carries no serde derive and appears nowhere in
-/// `save.rs`, so there is nothing here for a mod or a save to round-trip.
+/// `save/`, so there is nothing here for a mod or a save to round-trip.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TamperSlot {
     Temperature,
@@ -944,7 +944,7 @@ pub struct AbilityDef {
     ///
     /// **Read only by the effects that roll to hit** — `Damage` and `Drain`.
     /// Every other effect lands without a roll, so authoring this on one is
-    /// inert; the census in `tests/assets.rs` is what holds the shipped
+    /// inert; the census in `tests/assets/` is what holds the shipped
     /// roster to authoring it exactly where it means something.
     ///
     /// **Flat, not scaled by level**, unlike every magnitude beside it. A

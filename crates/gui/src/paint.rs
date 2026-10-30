@@ -28,7 +28,7 @@ use bevy_egui::egui;
 /// Straight RGBA, each channel 0.0–1.0, non-premultiplied.
 ///
 /// A local type rather than the backend's own so the palette in
-/// `render/mod.rs` and the colour math in `render/base.rs` and `fx.rs`
+/// `render/mod.rs` and the colour math in `render/base/` and `fx.rs`
 /// survive a backend swap untouched — those are the parts with real
 /// reasoning in them (see `biome_tint` and `structure_condition`).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -70,7 +70,7 @@ impl Rect {
 /// visible pixels actually occupy, not the layout advance.
 ///
 /// That is what the previous backend's `measure_text` reported and what the
-/// callers assume: `render/base.rs` centres a glyph in its tile by it, so
+/// callers assume: `render/base/` centres a glyph in its tile by it, so
 /// using the advance width instead would push every map glyph off-centre by
 /// its side bearing.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1190,7 +1190,7 @@ mod tests {
         });
     }
 
-    /// `render/base.rs` centres a map glyph in its tile by the measured width,
+    /// `render/base/` centres a map glyph in its tile by the measured width,
     /// so a measurement that reported the layout advance instead of the ink
     /// would push every glyph off-centre by its side bearing. Ink is narrower
     /// than advance for a monospace face at any normal glyph.

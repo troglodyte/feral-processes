@@ -164,7 +164,7 @@ impl Specialty {
 /// does today. Standing (Phase 4) is the second hook and is deliberately
 /// not wired yet — a standing gate added now would be a second price
 /// formula for that phase to unpick.
-/// `every_settlement_shape_is_authored_somewhere` in `tests/assets.rs` is
+/// `every_settlement_shape_is_authored_somewhere` in `tests/assets/sprites_tools.rs` is
 /// what keeps an unreachable variant from shipping — it walks this axis,
 /// `Specialty` and `SettlementKind` alike.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

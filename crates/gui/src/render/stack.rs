@@ -34,7 +34,7 @@ const SHRINK: f32 = 0.58;
 /// concentric rectangles rather than as depth.
 ///
 /// The fog thickens as the player's Power reserve drains, `FOG_FULL` down to
-/// `FOG_EMPTY` — this view's half of the same statement `render/base.rs`'s
+/// `FOG_EMPTY` — this view's half of the same statement `render/base/`'s
 /// `vignette_floor` makes on the surface map, turned down the axis this view
 /// actually has. On a grid "away from the player" is radial; down a corridor
 /// it is depth, so the corridor's edge-darkening *is* its fog.

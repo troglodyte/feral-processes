@@ -103,7 +103,7 @@ pub struct CombatBuff {
 ///
 /// Ticked down in `Game::tick_one_combatant` and cleared in
 /// `game/combat_teardown.rs` beside `CombatBuff` and `AbilityCooldowns`, so
-/// like both of those it appears nowhere in `save.rs` and cost no
+/// like both of those it appears nowhere in `save/` and cost no
 /// `SAVE_FORMAT_VERSION` bump.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Cloaked {
@@ -286,7 +286,7 @@ pub struct Squad {
 ///
 /// Battle-scoped for `Cloaked`'s reason and with `Cloaked`'s consequence —
 /// it is removed in `game/combat_teardown.rs` beside `CombatBuff` and
-/// `AbilityCooldowns`, so it appears nowhere in `save.rs` and cost no
+/// `AbilityCooldowns`, so it appears nowhere in `save/` and cost no
 /// `SAVE_FORMAT_VERSION` bump. Left set, it would follow the wielder out of
 /// one fight and hold their first swing of the next one narrow, which is
 /// the half a player would read as the weapon being broken.
@@ -304,7 +304,7 @@ pub struct ReachCharge {
 
 /// Battle-scoped: a charge routine mid-wind-up. Removed only by
 /// `Game::end_charge`, and in `game/combat_teardown.rs` beside the other
-/// fight-only state, so it appears nowhere in `save.rs`.
+/// fight-only state, so it appears nowhere in `save/`.
 ///
 /// Not `ReachCharge`, which is an unrelated weapon state.
 #[derive(Component, Clone, Debug)]
@@ -334,7 +334,7 @@ pub enum ChargeAim {
 ///
 /// Battle-scoped for `Cloaked`'s reason: no serde derive, dropped in
 /// `game/combat_teardown.rs` beside `CombatBuff` and `AbilityCooldowns`, so
-/// it appears nowhere in `save.rs` and costs no `SAVE_FORMAT_VERSION`
+/// it appears nowhere in `save/` and costs no `SAVE_FORMAT_VERSION`
 /// bump — a fight in progress is never saved.
 #[derive(Component, Clone, Debug)]
 pub struct Emulation {

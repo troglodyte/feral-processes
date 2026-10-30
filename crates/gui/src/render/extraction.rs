@@ -224,7 +224,7 @@ mod tests {
     /// A real `Game` holding `held`, with `tools` installed and `bench`
     /// (a structure kind and its tier) standing if given — through a
     /// save/edit/load round trip, `app_holding_downed_programs`'s reason
-    /// (`crates/app-core/src/tests/support.rs`): the engine exposes no way to
+    /// (`crates/app-core/src/tests/support/`): the engine exposes no way to
     /// hand-place a `DownedProgram` from outside itself, and `Game::world` is
     /// private to it besides — this crate could not reach in even if it
     /// wanted to.

@@ -132,7 +132,7 @@ pub struct ZonePortal(pub u32);
 /// `Game::roster_parts` — the single barrier all four doors into the roster
 /// pass through.
 ///
-/// `Entity` cannot do this job: `save.rs` resolves everything by position or
+/// `Entity` cannot do this job: `save/` resolves everything by position or
 /// by index precisely because entity ids are not stable across a save round
 /// trip. A memory about one specific program needs a name that is, and this
 /// is it.

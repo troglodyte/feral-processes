@@ -98,7 +98,7 @@
   subject and oppose in sign. A digger gets the `Activity` memory and **no**
   `Structure` one — a `DigSite` is the one `Task` target that is not a
   structure, so the arm skips structurally rather than by a check.
-- **`MEMORY_TRIGGERS` in `tests/assets.rs` is the pairing census**, and a def
+- **`MEMORY_TRIGGERS` in `tests/assets/memories.rs` is the pairing census**, and a def
   shipped without a row in it fails the build. There is no `trigger` field to
   derive it from: the catalogue is data and the triggers are Rust.
 - **The memories page is one derivation and has no scroll.** `R` from the
@@ -135,7 +135,7 @@
   `Opinion` — the read nobody thought to protect.
 - **A `mood: 0.0` def is only real content if some `opinion_of` reader can
   still see it**, since it is worth nothing on `Morale` by construction. The
-  census is `OPINION_READ_SUBJECTS` in `tests/assets.rs`
+  census is `OPINION_READ_SUBJECTS` in `tests/assets/memories.rs`
   (`every_memory_mood_is_in_range_and_read_somewhere`), and it is a
   hand-maintained list of the subject kinds `Game::opinion_of` is actually
   asked about — `base/tantrum.rs`, `base/morale.rs`'s drift rejection,

@@ -1504,7 +1504,7 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 /// was beaten on.
 ///
 /// A tamed program's `Position` is written once, at capture, and never
-/// again — `views/` says so and `render/base.rs` refuses to draw a
+/// again — `views/` says so and `render/base/` refuses to draw a
 /// companion because of it. So the stale tile can be anywhere the player has
 /// ever fought, and a walk measured from it strands a worker outside
 /// `haul_walk_radius` of its own machine: `haul_step_system` finds it absent

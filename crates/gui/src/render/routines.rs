@@ -35,7 +35,7 @@ pub(super) fn draw_routine_target(
 /// routine's description, emitted as text, was drawn detached at the bottom
 /// of the popup under the scroll indicator while every other description sat
 /// inline under its own row. It read as missing. `build_menu_rows`
-/// (`render/building.rs`) carries the same fix for the same reason.
+/// (`render/building/`) carries the same fix for the same reason.
 fn description_row(description: &str) -> Row {
     colored_item_row(format!("    {description}"), false, TEXT_DIM)
 }

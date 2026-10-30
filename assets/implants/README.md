@@ -16,7 +16,7 @@ rejection odds and the removal price are `tuning.rs` constants, not data.
 The implant itself lives here. What the player crafts and carries is an item in
 `assets/items/` whose `implant` field names this id. Every implant needs exactly
 one such item, and every item naming an implant needs the implant: a census in
-`tests/assets.rs` holds both.
+`tests/assets/` holds both.
 
 ## Schema
 

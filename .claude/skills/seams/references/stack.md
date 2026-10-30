@@ -7,7 +7,7 @@
   needs the guard is not "does it act" but **"does it claim something about
   where the party is"** — a read-only screen falls into the same hole.
 - **Examine names only what the surface map draws, and that rule is one
-  function**: `views::drawn_on_surface_map`, read by `render/base.rs` and
+  function**: `views::drawn_on_surface_map`, read by `render/base/` and
   `Game::find_target_in_direction` alike. The scan is a **ray one tile wide**
   at `tuning::EXAMINE_RANGE_TILES`, and ties are a *total*
   `(step, kind, entity)` order — `min_by_key` returns the first of several

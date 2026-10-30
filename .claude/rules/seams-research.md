@@ -1,6 +1,7 @@
 ---
 paths:
   - "**/research*"
+  - "**/research/**"
   - "**/routine_tree*"
   - "**/affix_tree*"
 ---

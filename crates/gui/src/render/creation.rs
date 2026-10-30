@@ -381,7 +381,7 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
     let inset = m.pad / 2.0;
     let art = cell.w - inset * 2.0;
     let name = super::player_sprite_name(&choice.sprite);
-    // The same three rungs `render/base.rs` walks for the player's own
+    // The same three rungs `render/base/` walks for the player's own
     // tile, in the same order and with the same neutral tint on the top
     // one — the cell is the only place the player sees their pick before
     // the run starts, so a cell resolving a look differently from the map
@@ -1097,7 +1097,7 @@ pub(in crate::render) mod tests {
     /// The wizard and the map must not be able to disagree about what was
     /// chosen — the cell is the only place the player sees their pick
     /// before the run starts, and it resolves through the same three rungs
-    /// `render/base.rs` walks.
+    /// `render/base/` walks.
     #[test]
     fn the_look_preview_prefers_the_drawn_icon() {
         let mut app = wizard_app();

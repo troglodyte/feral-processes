@@ -1,6 +1,7 @@
 ---
 paths:
   - "**/save*"
+  - "**/save/**"
   - "**/resources*"
   - "**/contracts*"
   - "**/help*"
@@ -98,5 +99,5 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   one per rendered frame** — `COMPILE_TICKS_PER_SECOND`.
 - **And it spends them at the world's own rate**, `COMPILE_TICKS_PER_SECOND`
   derived from `WORLD_SPEED_MULTIPLIER` rather than restated.
-- **Engine test fixtures live in `crates/engine/src/tests/support.rs`.**
+- **Engine test fixtures live in `crates/engine/src/tests/support/`.**
   Look there before writing a new one.

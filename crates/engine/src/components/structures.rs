@@ -688,7 +688,7 @@ mod machine_status_tests {
 
     /// `MachineStatus::ALL` is hand-written, and a hand-written list of an
     /// enum's variants is the kind that ships one short: the census in
-    /// `render/base.rs` that keeps reserved colours off machine states walks
+    /// `render/base/` that keeps reserved colours off machine states walks
     /// it, so a variant missing here is a variant the census silently stops
     /// covering.
     ///

@@ -3,8 +3,8 @@
 //! standing that costs nothing to place.
 //!
 //! `Game`'s ECS `World` is private to the engine crate, so — same as every
-//! analogous fixture in app-core's own `tests/support.rs`
-//! (`crates/app-core/src/tests/support.rs`, see `tame_program_at_zone` and
+//! analogous fixture in app-core's own `tests/support/`
+//! (`crates/app-core/src/tests/support/`, see `tame_program_at_zone` and
 //! `app_owning_a_program_and_an_extractor_deep`) — the only door onto a tamed
 //! `Creature` or a hand-placed structure from outside that crate is a save
 //! round trip: write the game out, edit the `SaveData` by hand, load it back
@@ -230,7 +230,7 @@ pub(super) fn game_with_a_rare_party_companion(
 /// the fixtures is the *roster* and nothing else — a second hand-written
 /// 45-field `CreatureSave` literal beside the first would drift from it on
 /// the next save field, and a fixture short a field reads as the feature
-/// being broken (`tests/support.rs`'s `spawn_tamed` records the same rule).
+/// being broken (`tests/support/field_fixtures.rs`'s `spawn_tamed` records the same rule).
 fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Game {
     game_with_tweaked_programs(fixture, seed, programs, |_| {})
 }

@@ -31,7 +31,7 @@ something. That is the whole reason this file exists.
 Two assertions, because there are only two places a key can reach the
 player:
 
-- `crates/engine/src/tests/assets.rs` —
+- `crates/engine/src/tests/assets/` —
   `no_shipped_help_page_names_a_hidden_key`, over `assets/help/*.md`. The
   manual is the *only* thing in the game that lists key bindings; its
   Controls page covers the map, the Stack, trading and battle in one list.

@@ -8,7 +8,7 @@
   gone. Both are asserted over the real assets.
 - **A zone's material is a content decision, and two censuses are what hold
   it.** Nothing in `ItemDef` says Cache Grain is what zone 2 pays you, so
-  `ZONE_MATERIALS` in `tests/assets.rs` plus
+  `ZONE_MATERIALS` in `tests/assets/zones_weapons.rs` plus
   `every_zone_gated_gear_recipe_asks_for_a_zone_material` and
   `every_upgrade_path_asks_for_a_zone_material` are the whole rule. The
   upgrade half is free in zone 1 because `upgrade_ceiling` is
@@ -37,7 +37,7 @@
   weapon that quietly went single-target reads as a nerf. `Game::swing_reach`
   is the one door that decides whether *this* swing is wide; each model
   converts it with the converter it already has, and `components::ReachCharge`
-  is battle-scoped beside `Cloaked` so nothing reaches `save.rs`. **Three
+  is battle-scoped beside `Cloaked` so nothing reaches `save/`. **Three
   traps.** `attacks_for` loops a Striker's second swing *inside* the turn, so
   the reach is read once in `party_member_attacks` and spent with
   `Option::take` — armed per swing it silently doubles the weapon and

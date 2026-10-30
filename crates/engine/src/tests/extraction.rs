@@ -2881,7 +2881,7 @@ fn install_harness_puller(game: &mut Game) -> ToolId {
 /// `Rarity::Ordinary`, tier 0, no affixes, `quality: QUALITY_DEFAULT` — the
 /// exact shape `GearCopy::is_plain` tests true for — so `held()` only ever
 /// reads `Inventory`, never `GearCopies`, no matter which item it is asked
-/// about (see `tests/support.rs::held_at`). `grant_gear_drop` rolls an
+/// about (see `tests/support/economy_fixtures.rs::held_at`). `grant_gear_drop` rolls an
 /// equippable copy's quality from `QUALITY_DROP_BASE` (70, spread up to 90
 /// — see `tuning::QUALITY_DROP_BASE`'s own doc: "always below" `QUALITY_
 /// DEFAULT`, 100), so a granted equippable copy can never be the exact

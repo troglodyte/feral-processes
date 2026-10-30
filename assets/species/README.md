@@ -174,7 +174,7 @@ is skipped with a warning logged in-game rather than crashing startup.
         (name: "Static Jab", power: 6, damage_type: Some(Voltage)),
         // A new typed move needs a shipped armour resisting its type: the
         // census `every_damage_type_a_shipped_attack_carries_has_armour_resisting_it`
-        // (`tests/assets.rs`) fails without one.
+        // (`tests/assets/`) fails without one.
 
         // Optional per-move; omit `effect` entirely for a plain damage-only
         // move. If set, landing this move has a `chance` (0.0-1.0) to also
@@ -436,7 +436,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // All seventeen shipped species author all five shipped attributes,
     // held by `every_shipped_species_authors_every_attribute` in
-    // `crates/engine/src/tests/assets.rs`. The field itself stays
+    // `crates/engine/src/tests/assets/`. The field itself stays
     // optional, so a mod's species file keeps parsing untouched.
     attributes: {
         "persistence": 58,

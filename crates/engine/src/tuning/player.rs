@@ -226,7 +226,7 @@ pub const KERNEL_RING_MAX: u32 = 3;
 pub const LEVELS_PER_RING: u32 = 2;
 
 /// Ceiling on a single `TalentNode::Stat` node's percentage — asserted over
-/// the real `assets/talents/` by a census in `tests/assets.rs`.
+/// the real `assets/talents/` by a census in `tests/assets/`.
 ///
 /// A developed companion already carries four multiplicative axes (bought
 /// Recompile Kernel tiers, five refactor slots at ~1.28x power, the levels a

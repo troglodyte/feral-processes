@@ -435,7 +435,7 @@ mod tests {
         // over closed enums, so any value that parsed at all passed them. What
         // is actually worth holding — that every *variant* is reachable
         // somewhere in the pool — is a property of the catalogue rather than
-        // of a def, and lives in `tests/assets.rs` as
+        // of a def, and lives in `tests/assets/` as
         // `every_settlement_shape_is_authored_somewhere`.
         for def in shipped().iter() {
             assert!(!def.blurb.trim().is_empty(), "{} has no blurb", def.id);

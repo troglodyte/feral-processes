@@ -756,7 +756,7 @@ fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
 // ─────────────────────────────────────────────────────────────────────────
 
 /// `Cloaked` is battle-scoped exactly as `CombatBuff` and `AbilityCooldowns`
-/// are, which is what keeps it out of `save.rs`. Left set, it would follow
+/// are, which is what keeps it out of `save/`. Left set, it would follow
 /// the player out of one fight and into the next.
 #[test]
 fn a_cloak_does_not_outlive_the_fight_it_was_armed_in() {

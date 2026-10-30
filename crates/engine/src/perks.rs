@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// can ever hold a perk with nothing behind it.
 ///
 /// **The order of these variants is part of the save format.** Saves are
-/// bincode, which encodes an enum positionally (see `save.rs`), so
+/// bincode, which encodes an enum positionally (see `save/`), so
 /// `PlayerSave::unlocked_perks` stores indices into this list — reordering
 /// it would quietly turn one player's Attacker levels into Defender levels
 /// on load. Append new variants at the end, or bump `SAVE_FORMAT_VERSION`.

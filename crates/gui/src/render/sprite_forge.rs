@@ -166,7 +166,7 @@ fn art_label(art: SpriteArt) -> &'static str {
 /// palette table (`super::glyph_color`), or the `PLAYER` role colour for the
 /// one subject that has none. `SpriteSubject::tint`'s own doc comment is
 /// why `player` alone is `Glyph(None)`: its `@` wears a role colour, not an
-/// authored hue, and `render/base.rs` never reads it through `glyph_color`
+/// authored hue, and `render/base/` never reads it through `glyph_color`
 /// either. `super::player_look_color(None)` is the existing door to that
 /// role colour's fallback — reused rather than naming `hud::palette::PLAYER`
 /// a second time.
@@ -1056,7 +1056,7 @@ mod tests {
 
     /// The player subject wears the `PLAYER` role colour, not an authored
     /// `GlyphColor` — `SpriteSubject::tint`'s own doc comment, and the same
-    /// rule `render/base.rs` follows for the real map tile.
+    /// rule `render/base/` follows for the real map tile.
     #[test]
     fn the_player_row_wears_the_player_role_colour_not_an_authored_hue() {
         let mut app = sprite_forge_app();

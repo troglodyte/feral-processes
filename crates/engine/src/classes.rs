@@ -77,7 +77,7 @@ use std::path::Path;
 /// is what this doc comment exists to refuse.
 ///
 /// **The variant order is save format.** `PlayerSave::class` rides the
-/// positional bincode encoding (`save.rs`'s module docs), which stores an
+/// positional bincode encoding (`save/mod.rs`'s module docs), which stores an
 /// enum by variant *index* — so the first five hold their positions and
 /// every existing save reads back unchanged. Append, never reorder, exactly
 /// as `perks::Perk` requires.

@@ -119,7 +119,7 @@ have nothing to say beside the number.
 still may not say what it does to the sim: a gloss that says an attribute
 "increases" or "reduces" something is a claim the player will test, and it
 would sit beside a `does` that has to be exact. `no_shipped_attribute_claims_an_effect`
-in `crates/engine/src/tests/assets.rs` scans `short` and `meaning` (not
+in `crates/engine/src/tests/assets/` scans `short` and `meaning` (not
 `does`) for words like "increases", "raises", "bonus" and "per point".
 
 The rule used to forbid the claim everywhere, because nothing implemented

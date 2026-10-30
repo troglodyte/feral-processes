@@ -44,5 +44,5 @@ Screens migrate one at a time behind a `Legacy` arm.
 
 - `crates/app-core/src/app/hub.rs` — `HubKind`, `hub_of`, `App::handle_hub_nav`.
 - `crates/app-core/src/app/rig_tool.rs`, `app/depot_filter.rs` — the per-screen precedent.
-- `crates/gui/src/render/mod.rs` — `draw_mode_overlay`; `ALL_MODES`, `NEEDS_PENDING_STATE` in its tests.
+- `crates/gui/src/render/mod.rs` — `draw_mode_overlay`; `ALL_MODES`, `NEEDS_PENDING_STATE` in `render/tests/refusals.rs`.
 - `.claude/rules/seams-screens.md` — the hub rule.

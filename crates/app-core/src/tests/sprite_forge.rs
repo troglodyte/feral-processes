@@ -100,7 +100,7 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
     );
     assert!(
         names.contains(&"anchor"),
-        "the name hardcoded at render/base.rs:1379"
+        "the name hardcoded at render/base/surface_map.rs"
     );
 
     let mut sorted = names.clone();
@@ -158,10 +158,10 @@ fn sprite_subjects_lists_every_floor_finish_with_its_shade_tint() {
 /// placeholder — checked against two real shipped defs (`assets/species/
 /// cipher.ron`, `assets/structures/printer.ron`, both `color: Cyan`)
 /// rather than trusting the loader wired the field through — and the two
-/// hardcoded subjects must land on exactly the values `render/base.rs`
+/// hardcoded subjects must land on exactly the values `render/base/`
 /// actually draws them in: `None` for the player (a role colour, not a
 /// `GlyphColor`) and `Some(Gray)` for the anchor (its literal spawned
-/// colour, `game/lifecycle.rs`).
+/// colour, `game/lifecycle/new.rs`).
 #[test]
 fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
     use feral_processes_engine::components::GlyphColor;

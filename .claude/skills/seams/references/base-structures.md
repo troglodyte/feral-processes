@@ -60,7 +60,7 @@
   `max_deployed` slot. Both destruction paths must go through
   `clear_pending_build_at`, the Home cascade included, or delivered units
   stand on a cell nothing occupies. The builder wears the job mark itself
-  (`wears_job_mark`, `Excavate`'s rule). `render/base.rs` tests
+  (`wears_job_mark`, `Excavate`'s rule). `render/base/` tests
   `is_structure` **before** `build.is_some()`, or an upgrading machine draws
   as a bare slab. And the bill is quoted through `Game::upgrade_cost` and
   `build_cost_display`, the pack no longer being the store the verb reads —
@@ -121,7 +121,7 @@
   materials, crew, ticks, all unchanged, and it is the first `BuildSite`
   reachable with `program: None`, which is why `return_build_holdings` and
   both `build_quality_of` call sites already had to handle the `Option`.
-  `the_shipped_program_cost_follows_the_job` in `tests/assets.rs` is the
+  `the_shipped_program_cost_follows_the_job` in `tests/assets/memories.rs` is the
   census, written over the fields a structure authors for some *other*
   purpose so it stays a statement about content rather than a re-derivation.
 
@@ -245,7 +245,7 @@
 
 - **A raid's flash draws on the field, where the structures stand.** Every
   `VisualEffect` names a structure's tile, and there is one space, so
-  `render/base.rs` draws the queue wherever the map is drawn. `VisualEffect`
+  `render/base/` draws the queue wherever the map is drawn. `VisualEffect`
   has **no** space tag on purpose — one variant is not an axis.
 
 - **A deploy is refused onto a cell a body is standing in**, the third refusal

@@ -28,7 +28,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   Credit-per-tick rate the recipe ceiling cannot see.
 - **A zone's material is a content decision, and two censuses are what hold
   it.** Nothing in `ItemDef` says Cache Grain is what zone 2 pays you, so
-  `ZONE_MATERIALS` in `tests/assets.rs` plus
+  `ZONE_MATERIALS` in `tests/assets/zones_weapons.rs` plus
   `every_zone_gated_gear_recipe_asks_for_a_zone_material` and
   `every_upgrade_path_asks_for_a_zone_material` are the whole rule.
 - **A research node's material bill may only name what that node's own

@@ -62,6 +62,6 @@ Stop moving specs on landing and add a check that every repo path and `paths:` g
 Arrows and hjkl to a direction is written out nine times in app-core (`app/building.rs:371`, `app/field.rs:97` among them).
 Digit, Backspace and empty-means-one entry is rewritten in `trade.rs`, `crafting.rs`, `inventory.rs` and `building.rs`, each with its own string field.
 The gui must call five `App` per-frame updates in the right order (`update_realtime`, `advance_reveal`, `advance_tactical`, `advance_status`, `advance_compile`; `crates/gui/src/lib.rs:850`); one `App::advance(dt)` would own the order.
-`crates/app-core/src/tests/support.rs` holds sixteen full `CreatureSave` literals and the struct has no `Default`, so each new save field is sixteen edits.
-`new_with` and `load` in `crates/engine/src/game/lifecycle.rs` each seat about a hundred resources in separately maintained lists with no test that the two sets match; a census test is the cheapest guard.
+`crates/app-core/src/tests/support/creatures.rs` holds sixteen full `CreatureSave` literals and the struct has no `Default`, so each new save field is sixteen edits.
+`new_with` and `load` in `crates/engine/src/game/lifecycle/{new,load}.rs` each seat about a hundred resources in separately maintained lists with no test that the two sets match; a census test is the cheapest guard.
 `Fx` in `crates/gui/src/fx.rs` holds effect timelines and view state (camera, row positions, `map_click`) in one struct; map clicks go through it, the sprite editor recomputes its layout and the world map has its own handler.

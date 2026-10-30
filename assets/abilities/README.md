@@ -692,7 +692,7 @@ by hunt-only files. Adding a version tag to an existing name is fine and
 costs nothing (`sandbox` and `memory_leak` both picked one up when their
 families became ladders); **renaming an `id` is not**, per the rule above.
 
-Two more tests in `crates/engine/src/tests/assets.rs` hold the naming scheme
+Two more tests in `crates/engine/src/tests/assets/` hold the naming scheme
 itself over the shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
 and `no_two_shipped_abilities_share_a_display_name`. Neither looks at
 files outside this repo, so **a mod is free to ignore the scheme**; the

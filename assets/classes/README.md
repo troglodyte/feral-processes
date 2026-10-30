@@ -38,7 +38,7 @@ the player is about to buy for themselves two screens later is noise.
 
 Price a kit against that allowance all the same —
 `the_creation_allowance_sits_inside_the_class_kit_band` in
-`crates/engine/src/tests/assets.rs` is what holds the two in a band, and a
+`crates/engine/src/tests/assets/` is what holds the two in a band, and a
 kit far outside it makes the Kit step either a free upgrade over this class
 or a punishment for using it.
 
@@ -89,7 +89,7 @@ very far apart at level 1.
 
 All eight shipped classes author all six shipped attributes, held by
 `every_shipped_class_authors_every_attribute` in
-`crates/engine/src/tests/assets.rs`. The field itself stays optional, so a
+`crates/engine/src/tests/assets/`. The field itself stays optional, so a
 mod's class file keeps parsing untouched. An attribute a class authors at
 the def's `base` (every shipped class does this for Analysis, at 10) adds
 nothing to that attribute's stats.

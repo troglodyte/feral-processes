@@ -22,7 +22,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 - [ ] `pub(crate)` where nothing outside calls: many engine `pub mod`s and `Game` methods have no caller in app-core, gui or launcher, so dead-code warnings never fire. From [0010](0010-hygiene-backlog.md).
 - [ ] Newtype the four `String` id aliases (`AbilityId`, `StructureId`, `SpeciesId`, `ResearchId`). `StructureId` first needs a plan for the minted `"settlement/<id>"` key that `.claude/rules/seams-ground.md` relies on. No save-format change. From [0010](0010-hygiene-backlog.md).
-- [ ] `new_with` and `load` in `game/lifecycle.rs` each seat the resources from separate lists with no test that they match; add a census test. From [0010](0010-hygiene-backlog.md).
+- [ ] `new_with` and `load` in `game/lifecycle/{new,load}.rs` each seat the resources from separate lists with no test that they match; add a census test. From [0010](0010-hygiene-backlog.md).
 
 ## app-core and gui
 
@@ -31,7 +31,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 - [ ] `.claude/rules/drawing-seam.md` still says `render/` is ~3,000 lines with fifteen operations; it is tens of thousands, and `Painter` has more. From [0009](0009-layout-separate-from-paint.md).
 - [ ] Arrows and hjkl to a direction is written out many times in app-core (`app/building.rs`, `app/field.rs` among them); digit entry with Backspace and empty-means-one is rewritten in `trade.rs`, `crafting.rs`, `inventory.rs` and `building.rs`. From [0010](0010-hygiene-backlog.md).
 - [ ] The gui calls five `App` per-frame updates in order (`update_realtime`, `advance_reveal`, `advance_tactical`, `advance_status`, `advance_compile`); one `App::advance(dt)` would own the order. From [0010](0010-hygiene-backlog.md).
-- [ ] `crates/app-core/src/tests/support.rs` holds sixteen full `CreatureSave` literals; a `Default` or a builder makes a new save field one edit. From [0010](0010-hygiene-backlog.md).
+- [ ] `crates/app-core/src/tests/support/creatures.rs` holds sixteen full `CreatureSave` literals; a `Default` or a builder makes a new save field one edit. From [0010](0010-hygiene-backlog.md).
 - [ ] `Fx` (`crates/gui/src/fx.rs`) holds effect timelines and view state (camera, row positions, `map_click`) in one struct. From [0010](0010-hygiene-backlog.md).
 
 ## Docs

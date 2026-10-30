@@ -77,30 +77,47 @@ standing, one keypress away.
 
 ## Behaviour details (my calls; the user can override)
 
-- The popup closes on Esc or `?`. Other keys do nothing while it's open,
-  so you can't act from behind it by accident.
+- **The popup shows only while `?` is held down** (decided by the user).
+  Releasing the key hides it, and a quick tap flashes it. It follows Alt's
+  label overlay: gui's frame loop knows a key is held (`reveal`,
+  `crates/gui/src/lib.rs`, passed to `render::draw`), and the overlay is
+  drawn from that alone. No `Mode` and no press goes to app-core. `?` is
+  typed text and layout-dependent, so gui records the physical `KeyCode`
+  whose press produced `?` and clears it when that key's release arrives
+  (`keys.rs`'s `TextGate` already tracks press and release by `KeyCode`).
+  Releasing Shift first does not hide it. The `?` character is consumed in
+  gui and never reaches `App::handle_key`, so app-core binds `?` nowhere.
+- **What it shows is app-core's**: one call (e.g. `App::shortcut_sheet()
+  -> Option<…>`) returns the current area's table, or `None` where `?` is
+  not live. gui draws whatever comes back and nothing when it is `None`.
+- Keys pressed while `?` is held go through as normal. Nothing is
+  swallowed, because a held overlay is not a screen.
 - It's titled with the area, e.g. "SHORTCUTS — BASE", and grouped the way
   the manual's controls page groups keys (moving, actions, screens).
 - Base inherits field: the Base list is the Field list plus the base-only
   keys (`v`, the excavation plan `m`, and so on), not a separate list that
   has to be kept in step by hand.
-- A battle's popup describes the battle screen as it stands when `?` is
-  pressed. It doesn't change during the opponent's turn or under
-  auto-attack. Inside a battle, `?` is handled before the per-state key
-  handling, the same way `f` and `1`/`2`/`3` are bound once at the top of
-  `handle_playing_key`.
+- A battle's popup lists every key that battle screen binds, across all
+  of its states (aim, a charge decision, auto-attack), rather than only the
+  current state's bar. That way it doesn't flicker while held through the
+  opponent's turn.
 - On the main menu, `?` does nothing new. The manual is reached through
   `[O]` → Manual.
 - **`?` is live only on the map (`Mode::Playing`) and the two battle
-  screens.** Everywhere else it is unbound, as it is today.
+  screens**, which means `shortcut_sheet()` is `Some` only there. gui
+  swallows the `?` character only while the sheet is `Some`. Elsewhere it
+  passes through as today, so text entry (names, filters) still takes a
+  typed `?`.
 - **The manual returns to the game menu.** Today Esc from `Mode::Help`
   goes through `close_screen` to wherever `?` was pressed. Now the manual's
   only door is the game menu, so Esc from the index reopens the game menu
   on its Manual page. That covers both entries (in a run, and from `[O]` on
   the main menu, which opens the same `Hub::GameMenu`). The tests that
   expect `?` to give `Mode::Help` (`tests/menus.rs`, `tests/stack.rs`) are
-  rewritten to reach the manual through the game menu, and new tests assert
-  that `?` opens the popup.
+  rewritten to reach the manual through the game menu. New app-core tests
+  assert `shortcut_sheet()` for each area and `None` off the map. A gui
+  test drives the hold: press shows it, release hides it, and Shift
+  released first still shows it.
 - **"In the base" for `v` is an engine predicate**, not app-core
   recomputing it. Add something like `Game::in_base_reach` (laid floor, or
   orthogonally beside it), with the adjacency answered by the same
@@ -146,6 +163,5 @@ when it lands (no save format change).
   real handlers. The handlers win where they disagree, and the popup lists
   what the handlers actually bind.
 - Which segments get cut from the bars to fit `?` and `v`.
-- The popup's module name and `Mode` variant, and whether it is a `Mode`
-  or a flag over the current mode. It has to draw over the battle screens
-  as well as the map.
+- The popup's module name and table type. It has to draw over the battle
+  screens as well as the map.

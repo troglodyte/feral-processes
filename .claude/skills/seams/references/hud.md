@@ -268,7 +268,7 @@
   `tile_origin_px`, `map_cell`'s zoom ladder, the palette, `ConRead`, the
   sprite fallback and the vignette, and a second grid beside it is all of
   that again forever with nothing making the two agree. What is *not*
-  inherited is the loop — `render/tactical.rs` is a smaller sibling and not
+  inherited is the loop — `render/tactical/` is a smaller sibling and not
   a copy, since a battle map has no biomes, structures, build sites, depots,
   haul marks or posted workers — and the rules the two genuinely share are
   called across the seam, which is why `ConRead` and `tile_origin_px` are

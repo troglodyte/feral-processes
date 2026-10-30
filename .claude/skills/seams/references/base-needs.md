@@ -336,7 +336,7 @@
   tile identifies a structure and does not identify a patient: at the shipped
   `RecoveryDef::radius` of `0` the patient stands *on* the Bay, and past `0`
   one Bay mends several bodies and a single mark on the building says nothing
-  about which. `render/base.rs` passes the tile's `actor` and not its
+  about which. `render/base/` passes the tile's `actor` and not its
   `structure`, which is also the glyph the tile draws — an actor takes the
   glyph off a structure — so at radius `0` the mark lands on the same cell it
   always did, over the body. **The colour moved with it**: `palette::HEALTHY`,

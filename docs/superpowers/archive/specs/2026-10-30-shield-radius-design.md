@@ -1,6 +1,6 @@
 # Shields cover a radius
 
-ADR: [0035](../../adr/0035-shields-cover-a-radius.md) (Agreed).
+ADR: [0035](../../../adr/0035-shields-cover-a-radius.md) (Agreed).
 
 ## Intent
 

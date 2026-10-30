@@ -148,3 +148,15 @@
   player decompiled mid-fight only loses the march. Drop the exemption at any
   one site and the leader is deleted, left wandering the base as a besieger,
   or escalated twice.
+
+- **A fought siege's damage to the defending side is cut by
+  `Game::siege_shields_over`** — "enemy hit" means damage to a non-hostile
+  body while `siege_pack > 0` (every source on a siege board is the
+  besiegers', and a tantrum never runs in a battle). Bodies cut it in
+  `combat_damage`; structures through `shielded_structure_damage` (never
+  below 1 for a landed hit). Each Shield that softened anything is recorded
+  by anchor in `TacticalBattle::shields_softened` (saved in `SiegeSave`) and
+  pays one coil in `spend_softening_shields` at teardown, not per hit; a
+  destroyed Shield is simply not found. The off-screen
+  `resolve_siege_offscreen` still reads the base-wide `structure_raid_defense`,
+  so radius means nothing to a siege fought off-screen.

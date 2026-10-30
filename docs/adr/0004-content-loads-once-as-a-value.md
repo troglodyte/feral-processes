@@ -11,7 +11,7 @@
 Nothing is cached: each of the thousands of test `Game` constructions re-parses about six hundred `.ron` files, and `Game::load` re-parses too.
 
 Because the door is a path, tests build fixtures by copying files.
-`copy_shipped_assets` in `crates/engine/src/tests/support.rs` copies a hand-kept list of about sixteen asset directories, while the loader also reads others, and a missing directory is silent.
+`copy_shipped_assets` in `crates/engine/src/tests/support/scratch_assets.rs` copies a hand-kept list of about sixteen asset directories, while the loader also reads others, and a missing directory is silent.
 So a fixture tests a game without that content and nothing complains.
 A test fixture species is also injected into the production loader under `#[cfg(test)]` (`SpeciesDb::insert`, `SpeciesDb::retain`).
 
@@ -36,5 +36,5 @@ One crate, no save-format bump; `Game::new`'s signature for app-core and launche
 ## Evidence
 
 - `crates/engine/src/game/lifecycle.rs` — `load_asset_dbs`, `AssetDbs`.
-- `crates/engine/src/tests/support.rs` — `copy_shipped_assets`.
+- `crates/engine/src/tests/support/scratch_assets.rs` — `copy_shipped_assets`.
 - Memory: `engine-test-fixture-copies-a-subset-of-asset-dirs`.

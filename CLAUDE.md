@@ -158,6 +158,9 @@ When a schema changes:
   fix warnings, don't silence them.
 - `Result`/`?` over panics in engine code; `unwrap`/`expect` only in tests,
   true invariants, or startup config.
+- Line-level style not covered here follows Google's Rust style guide, minus
+  the exceptions in `docs/adr/0034-google-rust-style-guide-as-reference.md`;
+  apply it to code you're already changing, never as a sweep.
 - Small functions over reflexive `.clone()`; explicit error types over
   `Box<dyn Error>`.
 

@@ -101,6 +101,7 @@ Do not duplicate between them; point instead.
 | [0031](0031-player-gear-is-built-from-designs-over-a-slot-generic-frame.md) | Player gear is built from designs over a slot-generic frame | Accepted (0.20.8) | the user, 2026-10-26 | Builder; Strategy per slot |
 | [0032](0032-base-returns-to-the-field.md) | The base returns to the field; a breach re-tiers the field in place | Agreed | user, on Claude's proposal | — |
 | [0033](0033-founding-floor-grows-around-rock.md) | Founding floor grows around rock | Agreed | user | — |
+| [0034](0034-google-rust-style-guide-as-reference.md) | Google's Rust style guide is the reference, with listed exceptions | Accepted (0.21.6) | user, on Claude's proposal | — |
 
 ## Pattern index
 

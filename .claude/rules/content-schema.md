@@ -9,7 +9,7 @@ paths:
   - "crates/engine/src/species*"
   - "crates/engine/src/structures*"
   - "crates/engine/src/abilities*"
-  - "crates/engine/src/tests/assets.rs"
+  - "crates/engine/src/tests/assets/**"
 ---
 
 # Content directories: the non-obvious parts
@@ -31,7 +31,7 @@ that are not in any one README.
   class's tree is a file. `Accuracy` is read on demand alongside `Affinity`
   (no `Stats` field to bake into). The tier count is fixed at
   `KERNEL_RING_MAX * LEVELS_PER_RING` tiers of two choices each, or the tree is
-  skipped with a warning; six censuses in `src/tests/assets.rs` (`mod
+  skipped with a warning; six censuses in `src/tests/assets/zones_weapons.rs` (`mod
   talents`) hold shipped trees to the design, so a new node kind costs every
   tree an existing choice.
 - **Effects** (`assets/effects/*.ron`) are read by gui only, never the engine;

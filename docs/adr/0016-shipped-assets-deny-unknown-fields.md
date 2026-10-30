@@ -37,4 +37,4 @@ Not built yet: it is in [backlog.md](backlog.md).
 
 - `crates/engine/src/save.rs`, `research.rs`, `achievements.rs` — the existing `deny_unknown_fields`.
 - `SpeciesDb::load_dir` (`crates/engine/src/species.rs`) — the skip-and-warn pattern.
-- `every_shipped_asset_file_loads_without_a_warning` (`crates/engine/src/tests/assets.rs`).
+- `every_shipped_asset_file_loads_without_a_warning` (`crates/engine/src/tests/assets/startup.rs`).

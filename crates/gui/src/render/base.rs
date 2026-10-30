@@ -2379,7 +2379,7 @@ mod tests {
     /// What `render::draw` paints for `app`, as plain text runs.
     fn drawn_text(app: &mut feral_processes_app_core::App) -> Vec<String> {
         let mut fx = Fx::new();
-        let (_, shapes) = with_painter(|p| crate::render::draw(app, &mut fx, p, false));
+        let (_, shapes) = with_painter(|p| crate::render::draw(app, &mut fx, p, false, false));
         painted_text(&shapes)
     }
 

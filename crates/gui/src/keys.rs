@@ -127,9 +127,70 @@ impl TextGate {
     }
 }
 
+/// Which key is holding the shortcut sheet up.
+///
+/// Remembers the physical key, not the character: `?` is Shift plus another
+/// key, and the player may let go of Shift first. Only the release of the
+/// key that produced the `?` hides the sheet.
+pub struct SheetHold {
+    key: Option<KeyCode>,
+}
+
+impl SheetHold {
+    pub fn new() -> Self {
+        Self { key: None }
+    }
+
+    /// A repeat of the held key lands here again and changes nothing.
+    pub fn press(&mut self, key: KeyCode) {
+        self.key = Some(key);
+    }
+
+    pub fn release(&mut self, key: KeyCode) {
+        if self.key == Some(key) {
+            self.key = None;
+        }
+    }
+
+    pub fn held(&self) -> bool {
+        self.key.is_some()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pressing_the_key_shows_the_sheet_and_releasing_it_hides_it() {
+        let mut hold = SheetHold::new();
+        assert!(!hold.held());
+        hold.press(KeyCode::Slash);
+        assert!(hold.held());
+        hold.release(KeyCode::Slash);
+        assert!(!hold.held());
+    }
+
+    #[test]
+    fn releasing_shift_first_keeps_the_sheet_up() {
+        let mut hold = SheetHold::new();
+        hold.press(KeyCode::Slash);
+        hold.release(KeyCode::ShiftLeft);
+        assert!(hold.held());
+        hold.release(KeyCode::Slash);
+        assert!(!hold.held());
+    }
+
+    #[test]
+    fn os_repeat_keeps_it_held() {
+        let mut hold = SheetHold::new();
+        for _ in 0..10 {
+            hold.press(KeyCode::Slash);
+        }
+        assert!(hold.held());
+        hold.release(KeyCode::Slash);
+        assert!(!hold.held());
+    }
 
     /// Feeds `gate` a press of `key` producing `text`, recording every
     /// character delivered into `seen`. `changed` is what the game does with

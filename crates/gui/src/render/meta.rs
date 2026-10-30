@@ -58,6 +58,13 @@ pub(super) fn options_page_rows(app: &App) -> Vec<Row> {
         rows.push(text_row("the original back."));
         return rows;
     }
+    if app.mode == Mode::ManualOptions {
+        rows.push(text_row("The player's manual, one page per topic."));
+        rows.push(text_row(""));
+        rows.push(text_row("Hold ? on the map or in a fight to see every"));
+        rows.push(text_row("key that works where you are."));
+        return rows;
+    }
     for (i, row) in app.option_rows().iter().enumerate() {
         let value = match row.kind {
             OptionKind::Toggle => row.value.clone(),

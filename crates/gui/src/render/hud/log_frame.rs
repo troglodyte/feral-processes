@@ -445,7 +445,7 @@ mod tests {
     /// that hold the rest of the verbs; and `?`, which is where every key this bar had to cut
     /// now lives. A bar that drops `?` strands the keys the four-line block
     /// used to name — and `hjkl` is one of those now.
-    const ESSENTIAL: [&str; 4] = ["b base", "i pack", "? help", "Esc menu"];
+    const ESSENTIAL: [&str; 4] = ["b base", "i pack", "? keys", "Esc menu"];
 
     fn entry(kind: MessageKind, source: MessageSource) -> LogEntry {
         LogEntry {
@@ -645,6 +645,7 @@ mod tests {
     fn the_keybar_fits_the_log_pane() {
         let locales = [
             MapLocale::Field,
+            MapLocale::Base,
             MapLocale::Stack { market: false },
             MapLocale::Stack { market: true },
         ];

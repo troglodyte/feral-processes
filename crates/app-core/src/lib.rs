@@ -409,6 +409,8 @@ pub struct OptionRow {
 pub enum OptionKind {
     Toggle,
     Level,
+    /// Enter does the thing; there is no value to show.
+    Action,
 }
 
 /// Which setting a row is. An enum rather than the row's index so
@@ -420,6 +422,8 @@ pub enum OptionKey {
     Volume,
     Effects,
     PerfOverlay,
+    Guidance,
+    ShowAllAgain,
 }
 
 /// One row of the manual's index.

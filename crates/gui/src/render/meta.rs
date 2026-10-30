@@ -66,14 +66,12 @@ pub(super) fn options_page_rows(app: &App) -> Vec<Row> {
         return rows;
     }
     for (i, row) in app.option_rows().iter().enumerate() {
-        let value = match row.kind {
-            OptionKind::Toggle => row.value.clone(),
-            OptionKind::Level => format!("\u{25c0} {} \u{25b6}", row.value),
+        let line = match row.kind {
+            OptionKind::Toggle => format!("{}: {}", row.label, row.value),
+            OptionKind::Level => format!("{}: \u{25c0} {} \u{25b6}", row.label, row.value),
+            OptionKind::Action => row.label.clone(),
         };
-        rows.push(item_row(
-            format!("{}: {value}", row.label),
-            i == app.menu_selected,
-        ));
+        rows.push(item_row(line, i == app.menu_selected));
     }
     if app.mode == Mode::GameplayOptions {
         rows.push(text_row(""));

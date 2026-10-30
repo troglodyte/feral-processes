@@ -139,11 +139,24 @@ impl App {
                     self.profile.perf_overlay,
                 ),
             ],
-            Mode::GameplayOptions => vec![toggle(
-                OptionKey::TacticalBattles,
-                "Tactical surface battles",
-                self.profile.tactical_battles,
-            )],
+            Mode::GameplayOptions => vec![
+                toggle(
+                    OptionKey::TacticalBattles,
+                    "Tactical surface battles",
+                    self.profile.tactical_battles,
+                ),
+                toggle(
+                    OptionKey::Guidance,
+                    "Guidance messages",
+                    self.profile.ftue.enabled,
+                ),
+                OptionRow {
+                    key: OptionKey::ShowAllAgain,
+                    label: "Show every guidance message again".to_string(),
+                    value: String::new(),
+                    kind: OptionKind::Action,
+                },
+            ],
             _ => Vec::new(),
         }
     }
@@ -163,7 +176,9 @@ impl App {
             return;
         };
         match (key, row.kind) {
-            (GameKey::Enter, OptionKind::Toggle) => self.toggle_option(row.key),
+            (GameKey::Enter, OptionKind::Toggle | OptionKind::Action) => {
+                self.toggle_option(row.key)
+            }
             (GameKey::Left, OptionKind::Level) => self.step_volume(-VOLUME_STEP),
             (GameKey::Right, OptionKind::Level) => self.step_volume(VOLUME_STEP),
             _ => {
@@ -178,12 +193,50 @@ impl App {
             OptionKey::TacticalBattles => {
                 self.profile.tactical_battles = !self.profile.tactical_battles;
             }
+            OptionKey::Guidance => {
+                let on = !self.profile.ftue.enabled;
+                self.change_guidance(|g| g.set_guidance(on), |f| f.enabled = on);
+                return;
+            }
+            OptionKey::ShowAllAgain => {
+                self.change_guidance(Game::reset_guidance, |f| *f = Default::default());
+                return;
+            }
             OptionKey::Effects => self.profile.effects = !self.profile.effects,
             OptionKey::PerfOverlay => self.profile.perf_overlay = !self.profile.perf_overlay,
             // A Level row: `handle_options_key` sends Enter on it nowhere.
             OptionKey::Volume => return,
         }
         self.commit_settings();
+    }
+
+    /// Edits the FTUE guidance settings and writes them out.
+    ///
+    /// Two homes, because `Profile::ftue` is deliberately not in
+    /// `keep_settings_from`: during a run the engine's copy is the truth and
+    /// every flush copies it over this one, so an edit made only here would
+    /// be reverted by the next earn. In a run the edit goes to the engine
+    /// and `flush_profile_writes` brings it back and saves. Out of a run
+    /// (the main menu, where an arena's leftover `game` is not the run)
+    /// there is no engine copy to honour: edit the file's copy and save, and
+    /// the next run installs it.
+    fn change_guidance(
+        &mut self,
+        in_run: impl FnOnce(&mut Game),
+        out_of_run: impl FnOnce(&mut feral_processes_engine::ftue::FtueGuidance),
+    ) {
+        match &mut self.game {
+            Some(game) if self.game_menu_in_run => {
+                in_run(game);
+                self.flush_profile_writes();
+            }
+            _ => {
+                out_of_run(&mut self.profile.ftue);
+                if let Err(e) = self.profile.save(&self.profile_path) {
+                    self.status_line = Some(format!("Could not write profile: {e}"));
+                }
+            }
+        }
     }
 
     fn step_volume(&mut self, delta: i16) {

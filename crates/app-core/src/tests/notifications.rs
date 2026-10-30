@@ -165,3 +165,75 @@ fn enter_dismisses_a_notification() {
     assert_ne!(app.mode, Mode::Notification);
     assert!(app.pending_notification.is_none());
 }
+
+mod ftue_keys {
+    use super::*;
+    use feral_processes_engine::achievements::Profile;
+    use feral_processes_engine::ftue::{FtueEvent, FtueTrigger};
+
+    const KEY: &str = "event:first_raid";
+
+    /// A guidance popup on screen, over a fresh profile file.
+    fn on_a_guidance_popup(seed: u32) -> App {
+        let mut app = test_app(seed);
+        let game = app.game.as_mut().expect("a fixture with a game");
+        assert!(game.ftue(FtueTrigger::Event(FtueEvent::FirstRaid)));
+        app.handle_key(GameKey::Char('.'));
+        assert_eq!(app.mode, Mode::Notification);
+        app
+    }
+
+    #[test]
+    fn d_opts_this_message_out_and_it_reaches_disk() {
+        let mut app = on_a_guidance_popup(9111);
+        app.handle_key(GameKey::Char('d'));
+        assert_eq!(app.mode, Mode::Playing);
+        assert!(
+            app.game
+                .as_ref()
+                .unwrap()
+                .profile()
+                .ftue
+                .never
+                .contains(&KEY.to_string())
+        );
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert_eq!(disk.ftue.never, [KEY]);
+        assert!(disk.ftue.enabled);
+    }
+
+    #[test]
+    fn t_turns_guidance_off_and_it_survives_the_next_flush() {
+        let mut app = on_a_guidance_popup(9112);
+        app.handle_key(GameKey::Char('T'));
+        assert_eq!(app.mode, Mode::Playing);
+        assert!(!app.game.as_ref().unwrap().guidance_enabled());
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled);
+        // A later earn flushes the engine's copy over the app's.
+        app.game
+            .as_mut()
+            .unwrap()
+            .ftue_never("event:first_town_raid");
+        app.after_tick();
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled);
+        assert_eq!(disk.ftue.never, ["event:first_town_raid"]);
+        assert!(!app.profile.ftue.enabled);
+    }
+
+    #[test]
+    fn a_milestone_notification_ignores_d_and_t() {
+        let mut app = test_app(9113);
+        queue(
+            &mut app,
+            feral_processes_engine::notifications::NotificationKind::Breach,
+        );
+        app.handle_key(GameKey::Char('.'));
+        assert_eq!(app.mode, Mode::Notification);
+        app.handle_key(GameKey::Char('d'));
+        app.handle_key(GameKey::Char('t'));
+        assert_eq!(app.mode, Mode::Notification);
+        assert!(app.game.as_ref().unwrap().guidance_enabled());
+    }
+}

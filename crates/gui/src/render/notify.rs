@@ -29,6 +29,18 @@ const BODY_WIDTH_FRACTION: f32 = 0.84;
 
 const HINT: &str = "Enter or Esc continue";
 
+/// A guidance popup's hint: it alone answers D and T. The handler takes
+/// either case, so the brackets name the capital a player reads.
+const FTUE_HINT: &str = "[Enter] Dismiss   [D] Don't show again   [T] Turn off guidance";
+
+fn hint_for(note: &Notification) -> &'static str {
+    if note.ftue_key.is_some() {
+        FTUE_HINT
+    } else {
+        HINT
+    }
+}
+
 /// The panel for a `w` x `h` window, centred.
 pub(super) fn panel_rect(w: f32, h: f32) -> Rect {
     let (pw, ph) = (w * PANEL_FRACTION, h * PANEL_FRACTION);
@@ -59,6 +71,7 @@ fn block_height(
     title: &str,
     body_lines: usize,
     detail_lines: usize,
+    hint: &str,
 ) -> f32 {
     let title_h = painter.measure_ui(title, m.title() + 6).height;
     // Zero for the common case of no detail, so the block does not grow for
@@ -68,7 +81,7 @@ fn block_height(
     } else {
         m.gap + detail_lines as f32 * m.line_height
     };
-    let hint_h = painter.measure_ui(HINT, m.small()).height;
+    let hint_h = painter.measure_ui(hint, m.small()).height;
     m.line_height * ART_CELLS
         + m.gap
         + title_h
@@ -100,7 +113,15 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
 
     let columns = body_columns(painter, panel, body_size);
     let (lines, detail) = wrapped(&note.body, note.detail.as_deref(), columns);
-    let block = block_height(painter, m, &note.title, lines.len(), detail.len());
+    let hint_text = hint_for(note);
+    let block = block_height(
+        painter,
+        m,
+        &note.title,
+        lines.len(),
+        detail.len(),
+        hint_text,
+    );
     let mut y = panel.y + ((panel.h - block) / 2.0).max(m.pad);
 
     // A sprite fills its square from a **top-left**; a glyph is drawn from a
@@ -157,9 +178,15 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
             painter.ui(line, centre_x(width), y, body_size, color);
         }
     }
-    let hint = painter.measure_ui(HINT, m.small());
+    let hint = painter.measure_ui(hint_text, m.small());
     y += m.gap * 2.0 + hint.height;
-    painter.ui(HINT, centre_x(hint.width), y, m.small(), super::TEXT_DIM);
+    painter.ui(
+        hint_text,
+        centre_x(hint.width),
+        y,
+        m.small(),
+        super::TEXT_DIM,
+    );
 }
 
 /// Wraps the body at `columns`, keeping blank lines between paragraphs.
@@ -239,6 +266,23 @@ mod tests {
         milestones.chain(guidance)
     }
 
+    /// Only a guidance popup advertises the keys only it answers.
+    #[test]
+    fn only_a_guidance_popup_offers_the_opt_outs() {
+        let mut note = Notification {
+            title: String::new(),
+            body: String::new(),
+            sprite: None,
+            glyph: 'x',
+            color: GlyphColor::Cyan,
+            detail: None,
+            ftue_key: None,
+        };
+        assert!(!hint_for(&note).contains("[D]"));
+        note.ftue_key = Some("event:first_raid".into());
+        assert!(hint_for(&note).contains("[D]") && hint_for(&note).contains("[T]"));
+    }
+
     /// A blank line between paragraphs and nowhere else. Wrapping the whole
     /// body in one call swallows every `\n\n`, which reads as the writer
     /// having forgotten the break rather than as the renderer eating it.
@@ -278,7 +322,7 @@ mod tests {
             let columns = body_columns(p, panel, m.font_size);
             for (kind, def) in shipped() {
                 let (lines, detail) = wrapped(def.body, Some(&detail), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len());
+                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{} is {block}px of notification (with the widest shipped contract \
@@ -332,7 +376,7 @@ mod tests {
                     .replace("{objective}", &mission.objective_line)
                     .replace("{description}", &mission.description);
                 let (lines, _) = wrapped(&body, None, columns);
-                let block = block_height(p, &m, &mission.name, lines.len(), 0);
+                let block = block_height(p, &m, &mission.name, lines.len(), 0, FTUE_HINT);
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s briefing is {block}px in a {}px panel ({} lines) — this \
@@ -399,7 +443,7 @@ mod tests {
                     "{kind} has a hole this census does not fill: {body:?}"
                 );
                 let (lines, detail) = wrapped(&body, Some(&row.reward_line), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len());
+                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s completion screen is {block}px in a {}px panel ({} lines) — this \
@@ -451,7 +495,7 @@ mod tests {
                     "the research alert has a hole this census does not fill: {body:?}"
                 );
                 let (lines, detail) = wrapped(&body, node.unlocks.as_deref(), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len());
+                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s research alert is {block}px in a {}px panel ({} lines) — this \

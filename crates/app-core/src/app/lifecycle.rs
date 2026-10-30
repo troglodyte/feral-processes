@@ -554,8 +554,30 @@ impl App {
     /// waiting a tick for `after_tick`, a tick that does not come until the
     /// player acts.
     pub(crate) fn handle_notification_key(&mut self, key: GameKey) {
-        if !matches!(key, GameKey::Esc | GameKey::Enter) {
-            return;
+        let opt_out = match key {
+            GameKey::Esc | GameKey::Enter => false,
+            GameKey::Char(c) if matches!(c.to_ascii_lowercase(), 'd' | 't') => true,
+            _ => return,
+        };
+        if opt_out {
+            // Only a guidance popup carries a key; D and T on a milestone
+            // notice are no keys at all, like any other that is not Esc or
+            // Enter.
+            let ftue_key = self
+                .pending_notification
+                .as_ref()
+                .and_then(|n| n.ftue_key.clone());
+            let (Some(game), Some(ftue_key)) = (self.game.as_mut(), ftue_key) else {
+                return;
+            };
+            if matches!(key, GameKey::Char('d' | 'D')) {
+                game.ftue_never(&ftue_key);
+            } else {
+                game.set_guidance(false);
+            }
+            // Now rather than at the next tick: nothing about dismissing a
+            // popup is guaranteed to reach `after_tick`.
+            self.flush_profile_writes();
         }
         self.pending_notification = None;
         self.mode = Mode::Playing;
@@ -667,7 +689,7 @@ impl App {
     /// Immediately, not at run end: a permadeath run that ends badly must not
     /// lose what it proved. A failed write costs the profile update and
     /// nothing else — it must never take the run down with it.
-    fn flush_profile_writes(&mut self) {
+    pub(crate) fn flush_profile_writes(&mut self) {
         let Some(game) = &mut self.game else { return };
         if !game.take_pending_profile_writes() {
             return;

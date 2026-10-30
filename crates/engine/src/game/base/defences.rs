@@ -126,6 +126,29 @@ impl Game {
         Some(crate::shields::radius_at(def.shield_radius.as_ref()?, tier))
     }
 
+    /// Queues a flash of a Shield's circle: on the field, and on the siege
+    /// board too (shifted by the siege's origin) while a siege is fought.
+    #[allow(dead_code)] // the sweep calls it next
+    pub(crate) fn cue_shield_flash(&mut self, anchor: (i32, i32), radius: u32) {
+        let kind = crate::resources::EffectKind::Shielded { radius };
+        self.world
+            .resource_mut::<crate::resources::EffectQueue>()
+            .push(anchor, kind);
+        if !self.siege_running() {
+            return;
+        }
+        let origin = self
+            .world
+            .resource::<crate::tactical::TacticalBattle>()
+            .siege_origin;
+        self.world
+            .resource_mut::<crate::resources::TacticalFxQueue>()
+            .push(
+                (anchor.0 - origin.0, anchor.1 - origin.1),
+                crate::resources::TacticalFxKind::Shielded { radius },
+            );
+    }
+
     /// The sweep defence the structures add, armed ones only.
     pub(crate) fn structure_raid_defense(&self) -> u32 {
         self.armed_defences().iter().map(|d| d.raid_defense).sum()

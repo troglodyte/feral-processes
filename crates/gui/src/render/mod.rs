@@ -86,6 +86,9 @@ mod score;
 mod settlement;
 mod settlement_board;
 mod settlement_market;
+// Drawn by the hover, preview and flash callers that follow.
+#[allow(dead_code)]
+mod shield_circle;
 mod shortcuts;
 mod social;
 mod splice_rig;

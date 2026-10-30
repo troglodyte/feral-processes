@@ -375,6 +375,21 @@ impl Painter {
         );
     }
 
+    #[allow(dead_code)] // first used by the shield circle
+    pub fn circle(&self, cx: f32, cy: f32, r: f32, color: Color) {
+        self.painter
+            .circle_filled(egui::pos2(cx, cy), r, to_egui(color));
+    }
+
+    #[allow(dead_code)] // first used by the shield circle
+    pub fn circle_stroke(&self, cx: f32, cy: f32, r: f32, thickness: f32, color: Color) {
+        self.painter.circle_stroke(
+            egui::pos2(cx, cy),
+            r,
+            egui::Stroke::new(thickness, to_egui(color)),
+        );
+    }
+
     pub fn line(&self, x1: f32, y1: f32, x2: f32, y2: f32, thickness: f32, color: Color) {
         self.painter.line_segment(
             [egui::pos2(x1, y1), egui::pos2(x2, y2)],
@@ -859,6 +874,27 @@ pub(crate) fn painted_rect_fill_count(
             _ => false,
         })
         .count()
+}
+
+/// Every circle `with_painter` recorded, as `(radius, fill alpha, stroke
+/// width)`. A filled circle has stroke width 0 and an outlined one fill 0.
+#[cfg(test)]
+pub(crate) fn painted_circles(shapes: &[egui::epaint::ClippedShape]) -> Vec<(f32, f32, f32)> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Circle(c) => Some((
+                c.radius,
+                f32::from(c.fill.a()) / 255.0,
+                if c.stroke.color.a() > 0 {
+                    c.stroke.width
+                } else {
+                    0.0
+                },
+            )),
+            _ => None,
+        })
+        .collect()
 }
 
 /// How many line segments `with_painter` recorded. The spark bursts a

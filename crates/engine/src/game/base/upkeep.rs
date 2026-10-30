@@ -823,19 +823,25 @@ impl Game {
         // garrison's clamp, so there is always damage for them to have cut.
         // A Shield out of range of the target cut nothing and keeps its coil.
         let cells = self.structure_cells(target);
-        let covering: Vec<Entity> = self
-            .armed_defences()
+        let armed = self.armed_defences();
+        let covering: Vec<&crate::game::base::defences::ArmedDefence> = armed
             .iter()
             .filter(|d| d.raid_defense > 0 && self.defence_covers(d, &cells))
-            .map(|d| d.entity)
             .collect();
-        let circles: Vec<((i32, i32), u32)> = self
-            .armed_defences()
-            .iter()
-            .filter(|d| covering.contains(&d.entity))
-            .filter_map(|d| d.shield.map(|s| (s.anchor, s.radius)))
-            .collect();
-        self.spend_defence_supply(|d| covering.contains(&d.entity));
+        // A Shield flashes only while there was damage left for it to cut;
+        // every covering one still spends its coil.
+        let mut remainder = RAID_DAMAGE.saturating_sub(self.garrison_defense());
+        let mut circles: Vec<((i32, i32), u32)> = Vec::new();
+        for d in &covering {
+            if remainder > 0
+                && let Some(s) = d.shield
+            {
+                circles.push((s.anchor, s.radius));
+            }
+            remainder = remainder.saturating_sub(d.raid_defense);
+        }
+        let paying: Vec<Entity> = covering.iter().map(|d| d.entity).collect();
+        self.spend_defence_supply(|d| paying.contains(&d.entity));
         for (anchor, radius) in circles {
             self.cue_shield_flash(anchor, radius);
         }

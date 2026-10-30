@@ -618,7 +618,12 @@ impl Game {
         let dealt = self.mitigate_incoming_damage_typed(target, dmg, ty);
         if dmg > 0 {
             let shields = self.siege_shields_over(target);
-            self.note_shields_softened(&shields);
+            // Only a hit the Shields actually lowered is theirs to charge
+            // for: a deflection-ignoring type, a capped deflection or a hit
+            // already at the floor of 1 pass through uncut.
+            if !shields.is_empty() && dealt < self.mitigate_inner(target, dmg, ty, None, false) {
+                self.note_shields_softened(&shields);
+            }
         }
         let dealt = self.dead_mans_switch(target, dealt);
         self.lower_hp(target, dealt);
@@ -788,13 +793,30 @@ impl Game {
         ty: Option<DamageType>,
         cut_resist: Option<i32>,
     ) -> i32 {
+        self.mitigate_inner(target, dmg, ty, cut_resist, true)
+    }
+
+    /// `with_shields: false` is the shield-free result, which `apply_damage_typed`
+    /// compares against to see whether the Shields cut anything.
+    fn mitigate_inner(
+        &self,
+        target: Entity,
+        dmg: i32,
+        ty: Option<DamageType>,
+        cut_resist: Option<i32>,
+        with_shields: bool,
+    ) -> i32 {
         let resist = damage::resist_against(self.type_resistances(target), ty);
         let deflection = if ty.is_some_and(|t| damage::ignores_deflection(t, resist)) {
             0
         } else {
             // Shields over a besieged body add to deflection, so they share
             // its cap and the floor of 1.
-            let shield_cut: u32 = self.siege_shields_over(target).iter().map(|s| s.cut).sum();
+            let shield_cut: u32 = if with_shields {
+                self.siege_shields_over(target).iter().map(|s| s.cut).sum()
+            } else {
+                0
+            };
             self.gear_bonus(target).deflection + shield_cut as i32
         };
         // Heat and its kin raise the blow before any cut. Zero skips the

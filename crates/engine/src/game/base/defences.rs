@@ -199,9 +199,12 @@ impl Game {
         if shields.is_empty() || dmg == 0 {
             return dmg;
         }
-        self.note_shields_softened(&shields);
         let cut: u32 = shields.iter().map(|s| s.cut).sum();
-        dmg.saturating_sub(cut).max(1)
+        let dealt = dmg.saturating_sub(cut).max(1);
+        if dealt < dmg {
+            self.note_shields_softened(&shields);
+        }
+        dealt
     }
 
     /// At a siege's end each Shield that softened a hit and still stands

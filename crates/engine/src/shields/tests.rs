@@ -39,4 +39,7 @@ fn covered_tiles_matches_covers() {
 fn a_footprint_corner_is_enough() {
     assert!(!covers_any((0, 0), 4, &footprint_cells_at((4, 3), 2)));
     assert!(covers_any((0, 0), 4, &footprint_cells_at((3, 3), 2)));
+    // The anchor is outside the circle; only a far cell of the footprint is in.
+    assert!(!covers((0, 0), 4, (-5, 0)));
+    assert!(covers_any((0, 0), 4, &footprint_cells_at((-5, 0), 2)));
 }

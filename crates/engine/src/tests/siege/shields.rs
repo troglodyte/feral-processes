@@ -154,6 +154,48 @@ fn shield_cut_shares_the_deflection_cap() {
     let b = hit(&mut game, inside, 20);
     assert_eq!(a, 20 - DEFLECTION_MAX);
     assert_eq!(b, a, "the Shield's cut shares the deflection cap");
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .shields_softened
+            .is_empty(),
+        "a hit the cap left uncut does not charge the Shield"
+    );
+}
+
+#[test]
+fn a_deflection_ignoring_hit_does_not_charge_the_shield() {
+    let mut game = game();
+    open_siege(&mut game);
+    let shield = shield_at(&mut game, SHIELD_AT, 3);
+    let inside = body_at(&mut game, INSIDE, false);
+    game.take_tactical_fx();
+    let magnetic = Some(crate::damage::DamageType::Magnetic);
+    assert_eq!(game.apply_damage_typed(inside, 10, magnetic), 10);
+    assert_eq!(shielded_cues(&mut game), 0);
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .shields_softened
+            .is_empty()
+    );
+    finish(&mut game, true);
+    assert_eq!(coils_in(&game, shield), 3);
+}
+
+#[test]
+fn a_structure_hit_already_at_one_does_not_charge_the_shield() {
+    let mut game = game();
+    open_siege(&mut game);
+    shield_at(&mut game, SHIELD_AT, 3);
+    let wall = wall_at(&mut game, WALL_IN);
+    assert_eq!(game.shielded_structure_damage(wall, 1), 1);
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .shields_softened
+            .is_empty()
+    );
 }
 
 #[test]

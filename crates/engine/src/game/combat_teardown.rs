@@ -483,6 +483,9 @@ impl Game {
         for stray in strays {
             self.world.despawn(stray);
         }
+        // The `TacticalBattle` is still here, and it is what remembers which
+        // Shields softened a hit.
+        self.spend_softening_shields();
         // Beside the stray sweep and for the same reason a besieger has no
         // other ending: nothing outside `TacticalBattle` manages one, so a
         // fight that ends any way but a clean withdrawal (a jack-out, a
@@ -506,9 +509,6 @@ impl Game {
         // did not carry the same guard would still catch a save loaded
         // between the capture and this sweep, or any future writer of
         // `Besieger` that forgets to.
-        // The `TacticalBattle` is still here, and it is what remembers which
-        // Shields softened a hit.
-        self.spend_softening_shields();
         let besiegers: Vec<Entity> = {
             let mut query = self.world.query_filtered::<Entity, (
                 With<Besieger>,

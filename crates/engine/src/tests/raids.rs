@@ -3135,6 +3135,27 @@ fn a_softened_sweep_flashes_its_shield() {
 }
 
 #[test]
+fn a_shield_flashes_only_while_damage_remained_to_cut() {
+    let (mut game, target) = sweep_ground();
+    let shields = [
+        shield_at(&mut game, 5, 2, 3),
+        shield_at(&mut game, 6, 2, 3),
+        shield_at(&mut game, 4, 2, 3),
+    ];
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), 0);
+    let flashes = game
+        .take_effects()
+        .iter()
+        .filter(|e| matches!(e.kind, EffectKind::Shielded { .. }))
+        .count();
+    assert_eq!(flashes, 2, "RAID_DAMAGE {RAID_DAMAGE} is gone after two");
+    for shield in shields {
+        assert_eq!(coils_left(&game, shield), 2, "every covering Shield pays");
+    }
+}
+
+#[test]
 fn an_unarmed_shield_covers_nothing_in_a_sweep() {
     let (mut game, target) = sweep_ground();
     shield_at(&mut game, 5, 2, 0);

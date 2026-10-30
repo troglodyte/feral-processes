@@ -992,7 +992,7 @@ pub struct CreatureSave {
     /// `components::Duties` and `duties::Duty::name`. Only meaningful when
     /// `tamed` is true.
     ///
-    /// Names rather than the enum directly, `NotificationKind::latch_key`'s
+    /// Names rather than the enum directly, `ftue::FtueGuidance`'s
     /// reason: a duty retired from a later build must load inert rather
     /// than fail the parse. An unknown name is dropped silently on load,
     /// and an empty list (every save written before this feature, and

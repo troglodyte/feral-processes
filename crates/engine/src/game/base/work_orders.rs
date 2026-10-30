@@ -3151,9 +3151,6 @@ impl Game {
             if order.announced_stalled && !matches!(standing, OrderStanding::Stalled) {
                 self.set_stall_announced(index, false);
             }
-            if matches!(standing, OrderStanding::Satisfied) {
-                self.ftue_by_key(&crate::ftue::crafted_key(&order.item.0));
-            }
             match standing {
                 OrderStanding::Satisfied if order.standing => {
                     // A level the base holds: reaching it puts the order to

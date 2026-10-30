@@ -281,18 +281,6 @@ fn every_notification_kind_is_fired_by_a_named_site() {
     }
 }
 
-/// Every FtueEvent has exactly one entry.
-#[test]
-fn every_ftue_event_has_exactly_one_entry() {
-    for event in FtueEvent::ALL {
-        let n = crate::ftue::ENTRIES
-            .iter()
-            .filter(|e| e.on == FtueTrigger::Event(event))
-            .count();
-        assert_eq!(n, 1, "{event:?}");
-    }
-}
-
 /// `Notifications` is session state and must never reach the save. Asserted
 /// by pushing one and reloading, because "I did not add a save field" is not
 /// something a round trip can see on its own.
@@ -682,8 +670,10 @@ fn hand_crafting_fires_its_ftue_key() {
     assert!(game.ftue_shown(&key));
 }
 
+/// Stock on hand satisfies an order without anything being made, so it must
+/// not spend the run's `crafted:` message.
 #[test]
-fn a_settled_work_order_fires_its_ftue_key() {
+fn stock_that_satisfies_a_work_order_is_not_a_craft() {
     let mut game = fresh();
     stand_in_base(&mut game);
     place_home(&mut game);
@@ -696,5 +686,5 @@ fn a_settled_work_order_fires_its_ftue_key() {
         .output
         .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
     game.tick();
-    assert!(game.ftue_shown(&format!("crafted:{}", ids::CORE_FRAGMENT)));
+    assert!(!game.ftue_shown(&format!("crafted:{}", ids::CORE_FRAGMENT)));
 }

@@ -263,8 +263,8 @@ fn off_duties_and_staff_rank_survive_a_save_and_load() {
 }
 
 /// A duty retired since the file was written (or a hand-edited name) must
-/// load inert rather than fail the parse — `NotificationKind::latch_key`'s
-/// rule with a second implementor.
+/// load inert rather than fail the parse, as an unknown FTUE key does
+/// (`ftue::FtueGuidance` keeps strings for the same reason).
 #[test]
 fn an_unknown_duty_name_loads_inert() {
     let dir = scratch_assets_dir("duties_unknown_name");

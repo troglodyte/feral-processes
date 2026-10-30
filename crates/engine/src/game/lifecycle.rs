@@ -2511,7 +2511,7 @@ impl Game {
                 });
             }
             // An unknown name (a duty retired since the file was written)
-            // is dropped silently, `latch_key`'s rule — and if every name
+            // is dropped silently, as an unknown FTUE key is — and if every name
             // was unknown, the resulting empty set is not inserted at all,
             // so the program reads as unrestricted rather than as
             // explicitly (and meaninglessly) barred from nothing.
@@ -3796,8 +3796,8 @@ impl Game {
     ///
     /// The engine decides what happened; app-core owns the path and does the
     /// writing. A bool rather than the ids because no caller has ever read
-    /// them — and there are two kinds now (a rung earned, a notification
-    /// seen), so a single typed list could only carry one of them honestly.
+    /// them — and there are two kinds now (a rung earned, a guidance
+    /// setting changed), so a single typed list could only carry one of them honestly.
     pub fn take_pending_profile_writes(&mut self) -> bool {
         let mut pending = self
             .world

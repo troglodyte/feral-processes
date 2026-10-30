@@ -13,8 +13,7 @@
 - **`def` and the two censuses are matches, and that is load-bearing.**
   `cell_mark`'s rule: a table lookup with a fallback ships a new variant
   blank, a match fails to compile until somebody writes the words. Same for
-  `every_notification_kind_is_fired_by_a_named_site` and
-  `tutorials_latch_and_milestones_do_not` — a `&[(kind, site)]` table is
+  `every_notification_kind_is_fired_by_a_named_site` — a `&[(kind, site)]` table is
   something a new variant can simply be left out of. `all()` is what the
   width and height censuses walk, and its array length catches an addition.
 - **Tutorials left the enum; the FTUE list is a table, `ftue::ENTRIES`, and
@@ -22,8 +21,8 @@
   asset string (a research, a structure, an item), so no exhaustive match
   can name them; `gui`'s `shipped()` walks the table so the height census
   still measures every entry, and a hook with no entry still latches, so it
-  is observable through `Game::ftue_shown`. The old `Repeat`, `OnceEver`,
-  `latch_key` and `seen_notifications` are retired.
+  is observable through `Game::ftue_shown`. Milestones are never latched, and the old
+  `Repeat`, `OnceEver` and `seen_notifications` are retired.
 - **Once per run is the `FtuePlayed` set saved with the run** (additive
   `ftue_played`, no version bump, field-named RON). It is *not* the
   session-only queue, which is what made the earlier "once per run" policy
@@ -65,8 +64,8 @@
   player through `Game::spend_power` *and* through `needs_tick_system`'s flat
   per-tick drain, and the second — how most runs cross — is a bevy system
   with no `Game` to notify from, so `Game::note_low_power` reads the reserve
-  from `tick_inner` instead. `Repeat::OnceEver` is what keeps a state read
-  from being a per-tick alarm. **The threshold is
+  from `tick_inner` instead. The `FtuePlayed` run set is what keeps a state read from being a
+  per-tick alarm. **The threshold is
   `tuning::LOW_POWER_ATTACK_THRESHOLD`**, not a fraction of its own: it is
   half of `POWER_MAX` today, but the number that matters is where
   `battle::power_attack_multiplier` starts docking attacks, or the screen

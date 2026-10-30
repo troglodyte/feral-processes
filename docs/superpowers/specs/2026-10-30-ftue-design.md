@@ -104,8 +104,10 @@ This feature absorbs the existing tutorial notifications. "Tutorial" and
   (`game/base/construction.rs`); instantly placed structures (the founding
   Home in `place_structure`) at placement. Upgrades don't count.
 - **`Crafted` fires from every path that makes an item**: hand craft
-  (`game/crafting.rs`), work orders (`game/base/work_orders.rs`
-  `settle_orders`), and machine assembly (`systems.rs` assemble). The
+  (`game/crafting.rs`) and machine assembly (`systems.rs` assemble). A work
+  order is covered by whichever of those makes its item; it has no hook of
+  its own, because a satisfied order means stock is on hand, not that
+  anything was made. The
   assembler runs in a bevy system with no `Game`; the builder picks how
   that reaches the FTUE (e.g. a queued fact drained by `Game` each tick,
   the way low Power is read). One message per item regardless of path.

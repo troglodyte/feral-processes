@@ -83,38 +83,78 @@ fn every_entry_has_words() {
     }
 }
 
+fn entry(on: FtueTrigger) -> FtueEntry {
+    FtueEntry {
+        on,
+        title: "t",
+        body: "b",
+        sprite: None,
+        glyph: 'x',
+        color: GlyphColor::Cyan,
+    }
+}
+
+/// Keys of the entries whose asset id names nothing in `game`'s databases.
+fn unknown_assets(game: &crate::Game, entries: &[FtueEntry]) -> Vec<String> {
+    entries
+        .iter()
+        .filter(|entry| match entry.on {
+            FtueTrigger::Research(id) => game
+                .world
+                .resource::<crate::research::ResearchDb>()
+                .get(id)
+                .is_none(),
+            FtueTrigger::Built(id) => game
+                .world
+                .resource::<crate::structures::StructureDb>()
+                .get(id)
+                .is_none(),
+            FtueTrigger::Crafted(id) => game
+                .world
+                .resource::<crate::items_db::ItemDb>()
+                .get(id)
+                .is_none(),
+            FtueTrigger::Event(_) => false,
+        })
+        .map(|entry| entry.on.key())
+        .collect()
+}
+
+fn test_game() -> crate::Game {
+    use crate::tests::support::test_assets_dir;
+    crate::Game::new(7, crate::DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
 /// A typo in an asset id would fire never. Checked against the loaded
 /// databases, so an unknown id fails `cargo test`.
 #[test]
 fn every_entry_names_a_real_asset() {
-    use crate::Game;
-    use crate::tests::support::test_assets_dir;
-    let game = Game::new(7, crate::DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for entry in ENTRIES {
-        let (kind, found) = match entry.on {
-            FtueTrigger::Research(id) => (
-                "research",
-                game.world
-                    .resource::<crate::research::ResearchDb>()
-                    .get(id)
-                    .is_some(),
-            ),
-            FtueTrigger::Built(id) => (
-                "structure",
-                game.world
-                    .resource::<crate::structures::StructureDb>()
-                    .get(id)
-                    .is_some(),
-            ),
-            FtueTrigger::Crafted(id) => (
-                "item",
-                game.world
-                    .resource::<crate::items_db::ItemDb>()
-                    .get(id)
-                    .is_some(),
-            ),
-            FtueTrigger::Event(_) => continue,
-        };
-        assert!(found, "{} names no such {kind}", entry.on.key());
-    }
+    assert_eq!(unknown_assets(&test_game(), ENTRIES), Vec::<String>::new());
+}
+
+/// `ENTRIES` holds no id-keyed entry yet, so the check above can pass while
+/// checking nothing; this proves the check itself flags each kind.
+#[test]
+fn the_asset_check_flags_a_bad_id_of_each_kind_and_only_those() {
+    let game = test_game();
+    let bad = [
+        entry(FtueTrigger::Research("no_such_research")),
+        entry(FtueTrigger::Built("no_such_structure")),
+        entry(FtueTrigger::Crafted("no_such_item")),
+    ];
+    assert_eq!(
+        unknown_assets(&game, &bad),
+        [
+            "research:no_such_research",
+            "built:no_such_structure",
+            "crafted:no_such_item"
+        ]
+    );
+    let good = [
+        entry(FtueTrigger::Research("ablative")),
+        entry(FtueTrigger::Built("assembler")),
+        entry(FtueTrigger::Crafted("ablative_plating")),
+        entry(FtueTrigger::Event(FtueEvent::FirstRaid)),
+    ];
+    assert_eq!(unknown_assets(&game, &good), Vec::<String>::new());
 }

@@ -247,22 +247,12 @@ mod tests {
             feral_processes_engine::notifications::NotificationDef,
         ),
     > {
-        use feral_processes_engine::notifications::NotificationDef;
         let milestones = NotificationKind::all()
             .into_iter()
             .map(|k| (k.to_string(), k.def()));
-        let guidance = feral_processes_engine::ftue::ENTRIES.iter().map(|e| {
-            (
-                e.on.key(),
-                NotificationDef {
-                    title: e.title,
-                    body: e.body,
-                    sprite: e.sprite,
-                    glyph: e.glyph,
-                    color: e.color,
-                },
-            )
-        });
+        let guidance = feral_processes_engine::ftue::ENTRIES
+            .iter()
+            .map(|e| (e.on.key(), e.def()));
         milestones.chain(guidance)
     }
 

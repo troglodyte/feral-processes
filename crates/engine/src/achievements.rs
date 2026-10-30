@@ -233,8 +233,8 @@ pub struct Profile {
     ///
     /// Cross-run rather than per-save for the reason every field here is:
     /// this is a statement about how the player wants to play, not about one
-    /// run. A plain `bool`:  — `load` discards
-    /// the *whole* profile on a parse failure, so nothing here may become
+    /// run. A plain `bool`: `load` discards the
+    /// *whole* profile on a parse failure, so nothing here may become
     /// unparseable by a later build.
     ///
     /// On for a player who has never chosen — an absent field and an absent
@@ -244,7 +244,8 @@ pub struct Profile {
     pub tactical_battles: bool,
     /// Every run's banked score, summed — see `score` and
     /// `Game::bank_run_score`. Only ever grows; the next character creation
-    /// derives its bonus from it. A plain `u64`: `load` discards the whole profile on a parse failure.
+    /// derives its bonus from it. A plain `u64`: `load` discards the whole profile on a
+    /// parse failure.
     #[serde(default)]
     pub lifetime_score: u64,
     /// Master volume in percent, stepped by 10 on the Game menu's Audio

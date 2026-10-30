@@ -29,7 +29,7 @@ pub enum Duty {
 impl Duty {
     pub const ALL: [Duty; 4] = [Duty::Operate, Duty::Guard, Duty::Dig, Duty::Build];
 
-    /// The save's string form. `latch_key`'s precedent: a name a future
+    /// The save's string form. The precedent is `ftue::FtueGuidance`'s strings: a name a future
     /// build no longer defines must load inert, never fail the parse — see
     /// [`Duty::from_name`].
     pub fn name(&self) -> &'static str {

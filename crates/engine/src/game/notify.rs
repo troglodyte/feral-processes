@@ -58,16 +58,7 @@ impl Game {
         fills: &[(&str, &str)],
         detail: Option<String>,
     ) -> bool {
-        let def = kind.def();
-        let fill = |text: &str| {
-            fills.iter().fold(text.to_string(), |text, (key, value)| {
-                text.replace(&format!("{{{key}}}"), value)
-            })
-        };
-        let mut notification = Notification::from(def);
-        notification.title = fill(&notification.title);
-        notification.body = fill(&notification.body);
-        notification.detail = detail;
+        let notification = Notification::from(kind.def()).filled(fills, detail);
         self.world
             .resource_mut::<Notifications>()
             .push(notification);

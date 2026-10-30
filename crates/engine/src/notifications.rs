@@ -28,7 +28,7 @@ use crate::components::GlyphColor;
 ///
 /// First-time guidance (a tutorial, lore) is not here — it lives in
 /// `ftue::ENTRIES`, once per run and subject to the player's guidance
-/// settings. Nothing in this enum is latched or reaches disk; `latch_key`
+/// settings. Nothing in this enum is latched or reaches disk; `slug`
 /// is only the stable name `Display` and the censuses use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotificationKind {
@@ -294,7 +294,7 @@ impl NotificationKind {
     }
 
     /// A stable name for this kind, for `Display` and the censuses.
-    pub fn latch_key(self) -> &'static str {
+    pub fn slug(self) -> &'static str {
         match self {
             NotificationKind::Breach => "milestone_breach",
             NotificationKind::SweepsBegin => "milestone_sweeps_begin",
@@ -313,7 +313,7 @@ impl NotificationKind {
 
 impl std::fmt::Display for NotificationKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.latch_key())
+        f.write_str(self.slug())
     }
 }
 
@@ -360,6 +360,24 @@ impl From<NotificationDef> for Notification {
     }
 }
 
+impl Notification {
+    /// This notification with `{hole}` placeholders filled in its title and
+    /// body and `detail` attached: the one fill both the milestone door and
+    /// the FTUE door go through. A hole nobody names is left standing, so a
+    /// census can see it.
+    pub fn filled(mut self, fills: &[(&str, &str)], detail: Option<String>) -> Self {
+        let fill = |text: &str| {
+            fills.iter().fold(text.to_string(), |text, (hole, value)| {
+                text.replace(&format!("{{{hole}}}"), value)
+            })
+        };
+        self.title = fill(&self.title);
+        self.body = fill(&self.body);
+        self.detail = detail;
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,10 +387,7 @@ mod tests {
     /// this catches a duplicate standing in for the one that was forgotten.
     #[test]
     fn all_lists_every_kind_exactly_once() {
-        let mut keys: Vec<&str> = NotificationKind::all()
-            .iter()
-            .map(|k| k.latch_key())
-            .collect();
+        let mut keys: Vec<&str> = NotificationKind::all().iter().map(|k| k.slug()).collect();
         keys.sort_unstable();
         let listed = keys.len();
         keys.dedup();
@@ -382,11 +397,8 @@ mod tests {
     /// The latch key reaches `profile.ron` and a duplicate would make two
     /// notifications share one sighting — the second silently never firing.
     #[test]
-    fn every_latch_key_is_unique_and_non_empty() {
-        let mut keys: Vec<&str> = NotificationKind::all()
-            .iter()
-            .map(|k| k.latch_key())
-            .collect();
+    fn every_slug_is_unique_and_non_empty() {
+        let mut keys: Vec<&str> = NotificationKind::all().iter().map(|k| k.slug()).collect();
         assert!(keys.iter().all(|k| !k.is_empty()));
         keys.sort_unstable();
         keys.dedup();

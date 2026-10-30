@@ -3444,7 +3444,7 @@ fn image_extraction_notifies_once_across_two_different_images() {
     assert_eq!(
         game.notifications_pending(),
         0,
-        "a second, different image must not notify again — Repeat::OnceEver"
+        "a second, different image must not notify again — `LearnedImage` is once per run"
     );
 }
 

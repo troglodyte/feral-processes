@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::GlyphColor;
 use crate::items::ItemId;
+use crate::notifications::NotificationDef;
 
 pub use entries::ENTRIES;
 
@@ -134,7 +135,8 @@ pub fn crafted_key(id: &str) -> String {
     format!("crafted:{id}")
 }
 
-/// One authored message. Fields mirror `notifications::NotificationDef`.
+/// One authored message: a trigger and the copy `def` hands to the same
+/// `NotificationDef` machinery the milestones use.
 #[derive(Clone, Copy, Debug)]
 pub struct FtueEntry {
     pub on: FtueTrigger,
@@ -151,9 +153,18 @@ pub struct FtueEntry {
     pub color: GlyphColor,
 }
 
-/// The entry for a trigger, if the list has one.
-pub fn entry_for(trigger: &FtueTrigger) -> Option<&'static FtueEntry> {
-    ENTRIES.iter().find(|entry| entry.on == *trigger)
+impl FtueEntry {
+    /// The copy as a `NotificationDef`, so an entry becomes a `Notification`
+    /// through `Notification::from` like a milestone does.
+    pub fn def(&self) -> NotificationDef {
+        NotificationDef {
+            title: self.title,
+            body: self.body,
+            sprite: self.sprite,
+            glyph: self.glyph,
+            color: self.color,
+        }
+    }
 }
 
 /// What `Profile` keeps: the switch and the per-message opt-outs. Strings,

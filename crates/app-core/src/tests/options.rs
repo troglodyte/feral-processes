@@ -363,4 +363,31 @@ mod guidance {
         assert!(disk.ftue.enabled);
         assert!(disk.ftue.never.is_empty());
     }
+
+    /// A game can sit behind the main menu (`leave_arena` leaves the arena's
+    /// in place), and the branch must follow `game_menu_in_run`, not
+    /// `game.is_some()`: that game is not the player's run, so its guidance
+    /// stays put and the change lands in the profile on disk.
+    #[test]
+    fn a_leftover_game_behind_the_main_menu_is_not_the_run() {
+        use feral_processes_engine::achievements::Earned;
+        let mut app = open_from_main_menu(9035);
+        assert!(app.game.is_some() && !app.game_menu_in_run);
+        app.hub_on_rail = false;
+        app.profile.record(Earned {
+            id: "first_kill".into(),
+            first_tick: 12,
+            permadeath: false,
+        });
+        select(&mut app, OptionKey::Guidance);
+        app.handle_key(GameKey::Enter);
+
+        let (disk, _) = Profile::load(&app.profile_path);
+        assert!(!disk.ftue.enabled, "the change never reached the disk");
+        assert!(
+            app.game.as_ref().unwrap().guidance_enabled(),
+            "the leftover game's guidance was edited"
+        );
+        assert_eq!(disk.earned.len(), 1, "earned was clobbered");
+    }
 }

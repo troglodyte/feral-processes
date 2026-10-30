@@ -1002,8 +1002,7 @@ impl Game {
             // every biome's turnover regardless of where the player is
             // standing, and "you were told" must not come apart from "it
             // happened to you". Unconditional at this site: the once-only
-            // rule is `Repeat::OnceEver`, and it lives inside
-            // `queue_notification`, not here.
+            // rule is the run set `ftue` consults, not a check here.
             if terrain.event.is_some() {
                 self.ftue(crate::ftue::FtueTrigger::Event(
                     crate::ftue::FtueEvent::FirstStatic,

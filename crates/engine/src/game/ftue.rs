@@ -3,7 +3,7 @@
 use crate::Game;
 use crate::achievements::Profile;
 use crate::ftue::{
-    FtueDecision, FtuePlayed, FtueTrigger, PendingCrafted, crafted_key, decide, entry_for,
+    ENTRIES, FtueDecision, FtuePlayed, FtueTrigger, PendingCrafted, crafted_key, decide,
 };
 use crate::notifications::Notification;
 use crate::resources::{Notifications, PendingProfileWrites};
@@ -13,31 +13,14 @@ impl Game {
     /// `true` if it queued. Call sites fire unconditionally; the run set is
     /// what makes it once.
     pub fn ftue(&mut self, trigger: FtueTrigger) -> bool {
-        self.ftue_filled(trigger, &[], None)
+        self.ftue_by_key(&trigger.key())
     }
 
-    /// `ftue`, with `{hole}` placeholders filled and an optional detail line,
-    /// as `notify_filled` does.
-    pub fn ftue_filled(
-        &mut self,
-        trigger: FtueTrigger,
-        fills: &[(&str, &str)],
-        detail: Option<String>,
-    ) -> bool {
-        self.ftue_key_fired(&trigger.key(), entry_for(&trigger), fills, detail)
-    }
-
-    /// The key-keyed core: triggers whose id is only known at run time
-    /// (a research completing, a structure standing) arrive as a key and are
-    /// matched to an entry by it. Latches even with no entry, so every hook is
+    /// The core: triggers whose id is only known at run time (a research
+    /// completing, a structure standing) arrive as a key and are matched to
+    /// an entry by it. Latches even with no entry, so every hook is
     /// observable through `ftue_shown` without a shipped message.
-    pub(crate) fn ftue_key_fired(
-        &mut self,
-        key: &str,
-        entry: Option<&'static crate::ftue::FtueEntry>,
-        fills: &[(&str, &str)],
-        detail: Option<String>,
-    ) -> bool {
+    pub(crate) fn ftue_by_key(&mut self, key: &str) -> bool {
         let decision = decide(
             key,
             &self.world.resource::<FtuePlayed>().0,
@@ -50,33 +33,16 @@ impl Game {
             .resource_mut::<FtuePlayed>()
             .0
             .insert(key.to_string());
+        let entry = ENTRIES.iter().find(|e| e.on.key() == key);
         let (FtueDecision::Show, Some(entry)) = (decision, entry) else {
             return false;
         };
-        let fill = |text: &str| {
-            fills.iter().fold(text.to_string(), |text, (hole, value)| {
-                text.replace(&format!("{{{hole}}}"), value)
-            })
-        };
+        let mut notification = Notification::from(entry.def()).filled(&[], None);
+        notification.ftue_key = Some(key.to_string());
         self.world
             .resource_mut::<Notifications>()
-            .push(Notification {
-                title: fill(entry.title),
-                body: fill(entry.body),
-                sprite: entry.sprite.map(str::to_string),
-                glyph: entry.glyph,
-                color: entry.color,
-                detail,
-                ftue_key: Some(key.to_string()),
-            });
+            .push(notification);
         true
-    }
-
-    /// Fires the entry whose trigger key is `key`, for the hooks that only
-    /// hold a runtime id.
-    pub(crate) fn ftue_by_key(&mut self, key: &str) -> bool {
-        let entry = crate::ftue::ENTRIES.iter().find(|e| e.on.key() == key);
-        self.ftue_key_fired(key, entry, &[], None)
     }
 
     /// Whether `key` has been handled this run — shown or latched. `&self`,

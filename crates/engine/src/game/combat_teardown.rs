@@ -483,6 +483,9 @@ impl Game {
         for stray in strays {
             self.world.despawn(stray);
         }
+        // The `TacticalBattle` is still here, and it is what remembers which
+        // Shields softened a hit.
+        self.spend_softening_shields();
         // Beside the stray sweep and for the same reason a besieger has no
         // other ending: nothing outside `TacticalBattle` manages one, so a
         // fight that ends any way but a clean withdrawal (a jack-out, a

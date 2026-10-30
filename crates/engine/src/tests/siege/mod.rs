@@ -19,6 +19,7 @@ mod clock;
 mod fixtures;
 mod raiders;
 mod reviews;
+mod shields;
 mod turrets_and_persist;
 
 pub(crate) use fixtures::*;

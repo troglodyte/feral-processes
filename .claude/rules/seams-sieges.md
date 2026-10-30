@@ -53,3 +53,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   stolen, nothing broken, nobody benched. Left as-is for playtesting,
   contrary to the design's "missing a siege must not be cheaper."
 - **`siege_pack` can come from a nemesis band (`open_siege_with`), and its leader survives the besieger sweep and the morale-break exit through `NemesisHome`** — `nemesis_return_home` sends it home with grudge +1 via `escalate_nemesis`.
+- **A fought siege's damage to the defending side is cut by `Game::siege_shields_over`** — only Shields whose circle covers the target, each spending one coil in `spend_softening_shields` at the siege's end, while `resolve_siege_offscreen` still reads the base-wide `structure_raid_defense`.

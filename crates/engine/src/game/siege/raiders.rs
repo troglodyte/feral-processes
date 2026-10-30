@@ -258,12 +258,13 @@ impl Game {
     /// Swings at `structure` — Task 10's own structure branch, reused
     /// rather than restated. Nothing new about the damage; the whole of
     /// this task is the priority order above it.
-    fn besieger_wreck(&mut self, body: Entity, structure: Entity) -> bool {
+    pub(crate) fn besieger_wreck(&mut self, body: Entity, structure: Entity) -> bool {
         let Some(round_before) = self.world.get_resource::<TacticalBattle>().map(|b| b.round)
         else {
             return false;
         };
         let dmg = self.swing_damage(body);
+        let dmg = self.shielded_structure_damage(structure, dmg);
         let label = self.entity_label(structure);
         self.damage_structure(structure, dmg, &label, "a siege");
         // **The entity is gone, not merely its `Durability`.** A

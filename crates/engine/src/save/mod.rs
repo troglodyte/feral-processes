@@ -443,6 +443,10 @@ pub struct SiegeSave {
     /// `SaveData::player`, a singleton restored before the creature array
     /// even runs.
     pub player_order: u32,
+    /// `TacticalBattle::shields_softened`: the field anchors of Shields that
+    /// softened a hit, so a reload still charges their one coil at the end.
+    #[serde(default)]
+    pub shields_softened: Vec<(i32, i32)>,
 }
 
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build

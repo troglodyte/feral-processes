@@ -384,3 +384,11 @@
   floor cell**, `footprint::distance_to_floor` — the outpost minimum
   distance, `raiding_towns` and `town_garrisons` — so with no floor laid no
   town raids or garrisons at all.
+
+- **A sweep reads `Game::sweep_defense_for(target)`** — the sum of
+  `raid_defense` over armed defences whose circle covers the target's
+  footprint (a corner is enough; `shields::covers_any`, radius 4 + 2 a tier)
+  plus the garrison. The cut and the coil payers must be the same covering
+  set: a base-wide cut with covering-only payment makes an out-of-range
+  Shield cut for free, and the reverse spends a coil for nothing.
+  `structure_raid_defense` stays the base-wide sum for callers with no target.

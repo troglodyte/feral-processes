@@ -806,6 +806,11 @@ pub enum EffectKind {
     /// field cue, and a new `Resource` beside it would shift bevy's
     /// query iteration order for the sake of one clip.
     Mine,
+    /// A Shield softened a hit; its `pos` is the Shield's anchor, and
+    /// `radius` is its circle, so the renderer can flash the circle.
+    Shielded {
+        radius: u32,
+    },
 }
 
 /// One open fight between two base programs.
@@ -1050,6 +1055,9 @@ pub enum TacticalFxKind {
     /// A prop on this cell was destroyed; `volatile` ones also blast, which
     /// the renderer draws bigger.
     PropDestroyed { volatile: bool },
+    /// A Shield softened a hit; the cue's `pos` is the Shield's board
+    /// anchor, and `radius` is its circle in tiles.
+    Shielded { radius: u32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

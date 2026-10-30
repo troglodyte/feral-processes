@@ -86,6 +86,7 @@ mod score;
 mod settlement;
 mod settlement_board;
 mod settlement_market;
+pub(crate) mod shield_circle;
 mod shortcuts;
 mod social;
 mod splice_rig;

@@ -1092,6 +1092,11 @@ impl Game {
 
     /// The `EntityView` for each of `hits`, whatever selected them.
     fn build_views(&mut self, hits: Vec<(Entity, Position, Glyph)>) -> Vec<EntityView> {
+        let armed_shields: Vec<_> = self
+            .armed_defences()
+            .into_iter()
+            .filter(|d| d.shield.is_some())
+            .collect();
         let worker_by_structure: HashMap<Entity, Entity> = {
             let mut tasks = self.world.query::<(Entity, &Task)>();
             tasks
@@ -1316,6 +1321,10 @@ impl Game {
                                 capacity: s.capacity,
                             })
                     };
+                let shielded = is_structure && !armed_shields.is_empty() && {
+                    let cells = self.structure_cells(entity);
+                    armed_shields.iter().any(|d| self.defence_covers(d, &cells))
+                };
                 EntityView {
                     unconfigured: self.placed(entity).is_some_and(|p| p.is_unconfigured()),
                     making: self
@@ -1335,6 +1344,7 @@ impl Game {
                     is_companion,
                     is_hostile,
                     is_structure,
+                    shielded,
                     is_landmark,
                     is_anchor,
                     is_home,

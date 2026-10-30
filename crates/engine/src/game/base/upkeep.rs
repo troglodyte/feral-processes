@@ -304,7 +304,7 @@ impl Game {
     /// Which towns are near enough to count is `town_garrisons`' question,
     /// not this one's — the page has to ask it per town, so the radius check
     /// lives there and this is the fold over it.
-    fn garrison_defense(&self) -> u32 {
+    pub(crate) fn garrison_defense(&self) -> u32 {
         let towns: Vec<crate::settlements::SettlementKey> = self
             .world
             .resource::<crate::resources::Settlements>()
@@ -817,11 +817,34 @@ impl Game {
             targets[idx]
         };
         let target_label = self.entity_label(target);
-        let raid_damage = RAID_DAMAGE.saturating_sub(self.total_raid_defense());
-        // Spent whenever the sweep lands: the armed structures are what cut
-        // `raid_damage`, and `RAID_DAMAGE` outruns the garrison's clamp, so
-        // there is always damage for them to have cut.
-        self.spend_defence_supply(|d| d.raid_defense > 0);
+        let raid_damage = RAID_DAMAGE.saturating_sub(self.sweep_defense_for(target));
+        // Spent whenever the sweep lands: the armed structures that cover the
+        // target are what cut `raid_damage`, and `RAID_DAMAGE` outruns the
+        // garrison's clamp, so there is always damage for them to have cut.
+        // A Shield out of range of the target cut nothing and keeps its coil.
+        let cells = self.structure_cells(target);
+        let armed = self.armed_defences();
+        let covering: Vec<&crate::game::base::defences::ArmedDefence> = armed
+            .iter()
+            .filter(|d| d.raid_defense > 0 && self.defence_covers(d, &cells))
+            .collect();
+        // A Shield flashes only while there was damage left for it to cut;
+        // every covering one still spends its coil.
+        let mut remainder = RAID_DAMAGE.saturating_sub(self.garrison_defense());
+        let mut circles: Vec<((i32, i32), u32)> = Vec::new();
+        for d in &covering {
+            if remainder > 0
+                && let Some(s) = d.shield
+            {
+                circles.push((s.anchor, s.radius));
+            }
+            remainder = remainder.saturating_sub(d.raid_defense);
+        }
+        let paying: Vec<Entity> = covering.iter().map(|d| d.entity).collect();
+        self.spend_defence_supply(|d| paying.contains(&d.entity));
+        for (anchor, radius) in circles {
+            self.cue_shield_flash(anchor, radius);
+        }
 
         let defender = {
             let mut query = self.world.query::<(Entity, &Task)>();

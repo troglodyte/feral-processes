@@ -598,7 +598,7 @@ fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
             Structure {
                 kind: "shield".to_string(),
             },
-            Position { x: 1, y: 1 },
+            Position { x: 5, y: 3 },
         ));
         charge_defences(&mut game);
         let structure = game
@@ -898,7 +898,7 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
                 Structure {
                     kind: "shield".to_string(),
                 },
-                Position { x: 1, y: 1 },
+                Position { x: 5, y: 3 },
             ));
         }
         charge_defences(&mut game);
@@ -3043,4 +3043,139 @@ fn a_siege_leaves_outposts_untouched() {
         game.world.get::<PostedAt>(program).is_some(),
         "an outpost's crew must not be swept up by a siege's own defender pool"
     );
+}
+
+/// A Shield at `(x, y)` holding `coils` Charge Coils.
+fn shield_at(game: &mut Game, x: i32, y: i32, coils: u32) -> Entity {
+    let mut stock = Stock::new(10);
+    if coils > 0 {
+        stock.input.insert(ItemId::from(ids::CHARGE_COIL), coils);
+    }
+    let shield = spawn_structure_at(game, "shield", x, y);
+    game.world.entity_mut(shield).insert(stock);
+    shield
+}
+
+fn coils_left(game: &Game, e: Entity) -> u32 {
+    game.world
+        .get::<Stock>(e)
+        .and_then(|s| s.input.get(&ItemId::from(ids::CHARGE_COIL)).copied())
+        .unwrap_or(0)
+}
+
+/// A game with one sweepable extractor at (5, 5) and nothing else raidable.
+fn sweep_ground() -> (Game, Entity) {
+    let mut game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, RAID_MIN_ZONE);
+    spawn_min_raid_staff(&mut game);
+    let target = spawn_structure_at(&mut game, "extractor", 5, 5);
+    game.world
+        .entity_mut(target)
+        .insert(Durability { hp: 30, max_hp: 30 });
+    (game, target)
+}
+
+fn hp_lost(game: &Game, target: Entity) -> u32 {
+    30 - game.world.get::<Durability>(target).unwrap().hp
+}
+
+#[test]
+fn a_sweep_outside_every_circle_takes_full_damage() {
+    let (mut game, target) = sweep_ground();
+    shield_at(&mut game, 5, -5, 1);
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), RAID_DAMAGE);
+}
+
+#[test]
+fn a_sweep_inside_the_circle_is_cut_by_two() {
+    let (mut game, target) = sweep_ground();
+    shield_at(&mut game, 5, 2, 1);
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), RAID_DAMAGE - 2);
+}
+
+#[test]
+fn two_covering_shields_hold_the_sweep() {
+    let (mut game, target) = sweep_ground();
+    shield_at(&mut game, 5, 2, 1);
+    shield_at(&mut game, 6, 2, 1);
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), 0);
+    assert!(
+        game.take_effects()
+            .iter()
+            .any(|e| e.pos == (5, 5) && e.kind == EffectKind::Deflected)
+    );
+}
+
+#[test]
+fn only_covering_shields_spend_a_coil() {
+    let (mut game, _) = sweep_ground();
+    let near = shield_at(&mut game, 5, 2, 3);
+    let far = shield_at(&mut game, 5, -5, 3);
+    sweep_now(&mut game);
+    assert_eq!(coils_left(&game, near), 2);
+    assert_eq!(coils_left(&game, far), 3);
+}
+
+#[test]
+fn a_softened_sweep_flashes_its_shield() {
+    let (mut game, _) = sweep_ground();
+    shield_at(&mut game, 5, 2, 1);
+    shield_at(&mut game, 5, -5, 1);
+    sweep_now(&mut game);
+    let flashes: Vec<(i32, i32)> = game
+        .take_effects()
+        .iter()
+        .filter(|e| e.kind == EffectKind::Shielded { radius: 4 })
+        .map(|e| e.pos)
+        .collect();
+    assert_eq!(flashes, vec![(5, 2)]);
+}
+
+#[test]
+fn a_shield_flashes_only_while_damage_remained_to_cut() {
+    let (mut game, target) = sweep_ground();
+    let shields = [
+        shield_at(&mut game, 5, 2, 3),
+        shield_at(&mut game, 6, 2, 3),
+        shield_at(&mut game, 4, 2, 3),
+    ];
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), 0);
+    let flashes = game
+        .take_effects()
+        .iter()
+        .filter(|e| matches!(e.kind, EffectKind::Shielded { .. }))
+        .count();
+    assert_eq!(flashes, 2, "RAID_DAMAGE {RAID_DAMAGE} is gone after two");
+    for shield in shields {
+        assert_eq!(coils_left(&game, shield), 2, "every covering Shield pays");
+    }
+}
+
+#[test]
+fn an_unarmed_shield_covers_nothing_in_a_sweep() {
+    let (mut game, target) = sweep_ground();
+    shield_at(&mut game, 5, 2, 0);
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), RAID_DAMAGE);
+    assert!(
+        !game
+            .take_effects()
+            .iter()
+            .any(|e| matches!(e.kind, EffectKind::Shielded { .. }))
+    );
+}
+
+#[test]
+fn turret_raid_defense_stays_base_wide() {
+    let (mut game, target) = sweep_ground();
+    let turret = spawn_structure_at(&mut game, "turret", 5, -9);
+    let mut stock = Stock::new(10);
+    stock.input.insert(ItemId::from(ids::CHARGE_COIL), 1);
+    game.world.entity_mut(turret).insert(stock);
+    sweep_now(&mut game);
+    assert_eq!(hp_lost(&game, target), RAID_DAMAGE - 1);
 }

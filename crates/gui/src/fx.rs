@@ -479,6 +479,42 @@ fn camera_step(cam: f32, target: f32, dt: f32, max_lag: Option<f32>) -> f32 {
     }
 }
 
+/// A softened hit's flash on a Shield's circle: the fill rises to
+/// `SHIELD_FLASH_PEAK` over `SHIELD_FLASH_RISE` seconds and falls back over
+/// `SHIELD_FLASH_FALL`, both eased.
+const SHIELD_FLASH_PEAK: f32 = 0.25;
+const SHIELD_FLASH_RISE: f64 = 0.12;
+const SHIELD_FLASH_FALL: f64 = 0.35;
+
+pub(crate) fn shield_flash_alpha(elapsed: f64) -> f32 {
+    let t = elapsed as f32;
+    let rise = SHIELD_FLASH_RISE as f32;
+    let fall = SHIELD_FLASH_FALL as f32;
+    let level = if t <= rise {
+        smoothstep(0.0, rise, t)
+    } else {
+        1.0 - smoothstep(rise, rise + fall, t)
+    };
+    SHIELD_FLASH_PEAK * level
+}
+
+/// One Shield's flash in progress: where, how wide, and when it began.
+struct ShieldFlash {
+    anchor: (i32, i32),
+    radius: u32,
+    start: f64,
+}
+
+/// Restarts the flash at `anchor` rather than stacking a second one on it.
+fn push_shield_flash(list: &mut Vec<ShieldFlash>, anchor: (i32, i32), radius: u32, start: f64) {
+    list.retain(|f| f.anchor != anchor);
+    list.push(ShieldFlash {
+        anchor,
+        radius,
+        start,
+    });
+}
+
 fn shield_pulse_alpha(time: f64) -> f32 {
     let mid = (SHIELD_PULSE_MIN + SHIELD_PULSE_MAX) / 2.0;
     let half = (SHIELD_PULSE_MAX - SHIELD_PULSE_MIN) / 2.0;
@@ -592,6 +628,8 @@ fn spark_burst(kind: EffectKind) -> (u32, f32) {
         // `effect_duration`, since `Deflected` shows that no sparks alone
         // still leaves a flash.
         EffectKind::Mine => (0, 0.0),
+        // Drawn as a circle, never as a tile flash.
+        EffectKind::Shielded { .. } => (0, 0.0),
     }
 }
 
@@ -709,6 +747,7 @@ fn effect_duration(kind: EffectKind) -> f64 {
         // a zero-length flash is gone on the frame it arrived. The struck
         // cell's own progress bar is the picture.
         EffectKind::Mine => 0.0,
+        EffectKind::Shielded { .. } => 0.0,
     }
 }
 
@@ -721,6 +760,7 @@ fn effect_color(kind: EffectKind) -> Color {
         // asks what colour it is. Answering `FLASH_RED` anyway rather than
         // panicking, since a cue turning into a crash is the worse failure.
         EffectKind::Mine => FLASH_RED,
+        EffectKind::Shielded { .. } => FLASH_CYAN,
     }
 }
 
@@ -933,6 +973,11 @@ pub struct Fx {
     now: f64,
     flashes: Vec<TileFlash>,
     tactical_flashes: Vec<TileFlash>,
+    /// Shield circles flashing on the field and on the siege board. Their
+    /// own lists rather than `TileFlash`es: a flash here is a circle, not a
+    /// tile, and the two spaces must not be mixed.
+    field_shield_flashes: Vec<ShieldFlash>,
+    board_shield_flashes: Vec<ShieldFlash>,
     cell_marks: Vec<CellMark>,
     /// Board cells a drop trooper landed on, and when. Not a `TileFlash`:
     /// that is keyed by a world `EffectKind`, and a landing is not one.
@@ -995,6 +1040,8 @@ impl Fx {
             now: 0.0,
             flashes: Vec::new(),
             tactical_flashes: Vec::new(),
+            field_shield_flashes: Vec::new(),
+            board_shield_flashes: Vec::new(),
             cell_marks: Vec::new(),
             landings: Vec::new(),
             walkers: Vec::new(),
@@ -1057,6 +1104,10 @@ impl Fx {
         }
         if self.enabled {
             for e in effects {
+                if let EffectKind::Shielded { radius } = e.kind {
+                    push_shield_flash(&mut self.field_shield_flashes, e.pos, radius, now);
+                    continue;
+                }
                 self.flashes.push(TileFlash {
                     pos: e.pos,
                     kind: e.kind,
@@ -1130,6 +1181,9 @@ impl Fx {
                         start: now,
                     }),
                     TacticalFxKind::Landing => self.landings.push((cue.pos, now)),
+                    TacticalFxKind::Shielded { radius } => {
+                        push_shield_flash(&mut self.board_shield_flashes, cue.pos, radius, now);
+                    }
                     // Nothing flies to a prop, so the library effect's travel
                     // is dropped and only its impacts and shake play; the
                     // same bolt path then draws and shakes it with no second
@@ -1155,6 +1209,11 @@ impl Fx {
                 }
             }
         }
+        let shield_life = SHIELD_FLASH_RISE + SHIELD_FLASH_FALL;
+        self.field_shield_flashes
+            .retain(|f| now - f.start < shield_life);
+        self.board_shield_flashes
+            .retain(|f| now - f.start < shield_life);
         self.flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.tactical_flashes
@@ -1553,6 +1612,19 @@ impl Fx {
             Color::new(color.r * tint, color.g * tint, color.b * tint, color.a),
             critical,
         )
+    }
+
+    /// The Shield circles flashing now, as anchor, radius in tiles and fill
+    /// alpha. `in_battle` picks the siege board's list over the field's.
+    pub fn shield_flashes(&self, in_battle: bool) -> Vec<((i32, i32), u32, f32)> {
+        let list = if in_battle {
+            &self.board_shield_flashes
+        } else {
+            &self.field_shield_flashes
+        };
+        list.iter()
+            .map(|f| (f.anchor, f.radius, shield_flash_alpha(self.now - f.start)))
+            .collect()
     }
 
     /// The shield network's ambient outline color, when one is standing.
@@ -2996,6 +3068,42 @@ mod tests {
             (0.0, 0.0),
             "re-enabling must not reveal a camera left behind at the origin"
         );
+    }
+
+    #[test]
+    fn shield_flash_alpha_peaks_soft_and_ends() {
+        assert_eq!(shield_flash_alpha(0.0), 0.0);
+        assert!((shield_flash_alpha(0.12) - 0.25).abs() < 0.01);
+        let mid = shield_flash_alpha(0.30);
+        assert!(mid > 0.0 && mid < 0.25);
+        assert_eq!(shield_flash_alpha(0.47), 0.0);
+        assert_eq!(shield_flash_alpha(5.0), 0.0);
+        for i in 0..=100 {
+            assert!(shield_flash_alpha(i as f64 * 0.01) <= 0.25 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn a_second_flash_restarts_rather_than_stacks() {
+        use feral_processes_engine::VisualEffect;
+        let cue = || FrameCues {
+            effects: vec![VisualEffect {
+                pos: (3, 4),
+                kind: EffectKind::Shielded { radius: 4 },
+            }],
+            ..Default::default()
+        };
+        let mut fx = Fx::new();
+        fx.begin_frame(1.0, cue(), false);
+        fx.begin_frame(1.1, cue(), false);
+        let flashes = fx.shield_flashes(false);
+        assert_eq!(flashes.len(), 1);
+        assert_eq!(flashes[0].0, (3, 4));
+        assert_eq!(flashes[0].1, 4);
+        assert_eq!(flashes[0].2, shield_flash_alpha(0.0));
+        assert!(fx.shield_flashes(true).is_empty());
+        fx.begin_frame(2.0, FrameCues::default(), false);
+        assert!(fx.shield_flashes(false).is_empty());
     }
 
     #[test]

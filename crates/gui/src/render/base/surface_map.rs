@@ -246,7 +246,7 @@ pub(super) fn draw_surface_map(
             if let Some(ev) = structure {
                 machine_status = ev.machine_status;
                 linked_edges = &ev.linked_edges;
-                shielded = true;
+                shielded = ev.shielded;
                 ch = Some(ev.glyph);
                 // Structures wear their raid damage: the glyph dims as
                 // durability drops, and a nearly-destroyed one washes

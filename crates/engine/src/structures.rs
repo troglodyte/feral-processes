@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::GlyphColor;
 use crate::items::ItemId;
+pub use crate::shields::ShieldRadiusDef;
 
 pub type StructureId = String;
 
@@ -378,8 +379,8 @@ pub struct TemporaryDef {
 }
 
 /// How fast a structure patches the rest of the base back up — see
-/// `Game::total_repair_rate`. Deliberately has no `radius`: like
-/// `raid_defense`, a repairer works base-wide from wherever it stands,
+/// `Game::total_repair_rate`. Deliberately has no `radius`: unlike
+/// a Shield's `shield_radius`, a repairer works base-wide from wherever it stands,
 /// which is the only sensible reading given every non-Home structure has
 /// to sit within `MAX_BUILD_DISTANCE_FROM_HOME` of the Home anyway.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -695,15 +696,22 @@ pub struct StructureDef {
     /// against `assets/rooms/*.ron` `requires`. `#[serde(default)]`.
     #[serde(default)]
     pub room_tags: Vec<String>,
-    /// How much this structure reduces raid damage by, for *every* raid
-    /// against *any* deployed structure — not just itself — while it's
-    /// standing (see `Game::raid_check`). Stacks additively across every
-    /// deployed structure with this set, on top of whatever an assigned
+    /// How much this structure reduces raid damage by, for every raid
+    /// against a structure it covers, while it's standing (see
+    /// `Game::raid_check`). Base-wide unless `shield_radius` is set, which
+    /// limits it to a circle. Stacks additively across every covering
+    /// structure with this set, on top of whatever an assigned
     /// worker/guard already mitigates. `#[serde(default)]` so existing
     /// structure files (including mods) without this field contribute
     /// nothing, same as before it existed.
     #[serde(default)]
     pub raid_defense: u32,
+    /// If set, `raid_defense` covers only a circle around this structure,
+    /// growing with its tier — see `shields::covers`. Without it a defence is
+    /// base-wide. `#[serde(default)]` so existing structure files keep
+    /// their base-wide reach.
+    #[serde(default)]
+    pub shield_radius: Option<ShieldRadiusDef>,
     /// If set, this structure is a siege turret — see
     /// `game::siege::turrets::turret_defense` and `Game::fire_turrets`. Only
     /// meaningful during a siege; outside one it is an ordinary structure

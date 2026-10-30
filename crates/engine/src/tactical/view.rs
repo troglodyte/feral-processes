@@ -295,6 +295,13 @@ pub struct TacticalView {
     /// facts, but a screen reads the spoken name and the sprite key here
     /// rather than reaching into `PropCell`.
     pub props: Vec<PropView>,
+    /// Where the siege board's cell `(0, 0)` stands on the field, so a field
+    /// position (a Shield's anchor) maps to a board cell by subtraction.
+    /// `(0, 0)` off a siege.
+    pub siege_origin: (i32, i32),
+    /// Whether this board is a siege of the base, the only board whose cells
+    /// map onto field tiles at all.
+    pub siege: bool,
 }
 
 impl TacticalView {
@@ -404,6 +411,8 @@ impl Game {
         let battle = self.world.resource::<TacticalBattle>();
         let board = battle.board.clone();
         let round = battle.round;
+        let siege_origin = battle.siege_origin;
+        let siege = battle.siege_pack > 0;
         let ground = if battle.siege_pack > 0 {
             Biome::Platform
         } else {
@@ -524,6 +533,8 @@ impl Game {
             charge_aims,
             ground,
             props,
+            siege_origin,
+            siege,
         })
     }
 

@@ -17,6 +17,7 @@ pub(crate) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         is_companion: false,
         is_hostile: false,
         is_structure: true,
+        shielded: false,
         is_landmark: false,
         is_anchor: false,
         is_home: false,

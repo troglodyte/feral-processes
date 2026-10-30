@@ -50,6 +50,9 @@ pub struct EntityView {
     pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
+    /// Whether this structure stands inside the circle of an armed Shield
+    /// (`Game::defence_covers` decides), which the map outlines.
+    pub shielded: bool,
     /// Whether this entity is a fixture that stays drawn (dim) once seen:
     /// a settlement, the base anchor, a nest or a Stack link. Creatures,
     /// caravans, patrols and traps are not; they show only in sight. Read

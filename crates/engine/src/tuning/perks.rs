@@ -192,11 +192,8 @@ pub const TARGET_LOCK_ACCURACY_PER_LEVEL: i32 = 2;
 /// Durability `Perk::Failover` adds per level to every damaged structure's
 /// mend each `STRUCTURE_REGEN_INTERVAL`, base-wide.
 ///
-/// Sized against the Patch Node's `repair.amount` rather than against
-/// `RAID_DAMAGE`: this is the same rate a building contributes, so a level is
-/// deliberately a fraction of what deploying one is worth. What the perk
-/// actually buys is that a base with no Patch Node standing stops taking
-/// permanent damage at all.
+/// Failover is no longer offered (ADR 0036): a Patch Node's circle replaced
+/// the base-wide mend, so the picker withdraws the perk.
 pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
 
 // ─────────────────────────────────────────────────────────────────────────

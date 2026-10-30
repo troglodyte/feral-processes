@@ -154,7 +154,7 @@ pub const BASTION_DEF_MULTIPLIER: i32 = 2;
 
 /// Durability a posted **Medic** restores to the structure it guards, per
 /// `STRUCTURE_REGEN_INTERVAL` — on top of whatever the base's Patch Nodes
-/// restore to everything.
+/// restore to the structures their circles cover.
 ///
 /// Per structure rather than a contribution to a Patch Node's circle, which
 /// is what makes *where* it stands a decision about what to protect. Flat

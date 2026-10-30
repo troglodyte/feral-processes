@@ -40,6 +40,7 @@ impl Game {
         let mut targets: Vec<(Entity, u32)> = battle
             .bodies()
             .map(|(entity, _)| entity)
+            // Deliberately the same rule as Shields' `siege_shields_over`.
             .filter(|&e| self.world.get::<Hostile>(e).is_none())
             .filter_map(|e| {
                 let cells: Vec<(i32, i32)> = battle

@@ -1500,15 +1500,15 @@ fn a_patch_node_mends_a_structure_whose_edge_cell_it_covers() {
     let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let amount = patch_node_amount(&game);
     spawn_patch_node(&mut game, 1, 30);
-    // Anchor (11, 7) is 4 tiles from the node (covered); the footprint's far
-    // column, x = 12, is 5 tiles (not).
+    // Anchor (2, 7) is 5 tiles from the node (not covered); the footprint's
+    // next column, x = 3, is 4 tiles (covered).
     let structure = game
         .world
         .spawn((
             Structure {
                 kind: "research_node".to_string(),
             },
-            Position { x: 11, y: 7 },
+            Position { x: 2, y: 7 },
             Durability { hp: 10, max_hp: 60 },
         ))
         .id();
@@ -1639,7 +1639,7 @@ fn post_guard(game: &mut Game, species: &str, structure: Entity) -> Entity {
 }
 
 /// The Medic base job, and the case that matters most: a base with no Patch
-/// Node repairs *nothing at all* — a Patch Node is the only source
+/// Node repairs *nothing at all* — a Patch Node is the main source
 /// and raid damage is otherwise permanent. A posted Medic is a second
 /// source, so this asserts against a total of zero rather than against a
 /// base-wide rate it might merely be adding to.
@@ -1805,7 +1805,7 @@ fn a_single_shield_reduces_raid_damage_without_erasing_it() {
 }
 
 /// A repairer overshooting a nearly-full structure must clamp, not wrap.
-/// Tier 5 restores far more than the 1 point missing here.
+/// Two nodes cover it, so the mend (2 x amount) exceeds the 1 point missing.
 #[test]
 fn structure_regen_does_not_exceed_max_durability() {
     let mut game = Game::new(103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1819,7 +1819,8 @@ fn structure_regen_does_not_exceed_max_durability() {
             Durability { hp: 29, max_hp: 30 },
         ))
         .id();
-    spawn_patch_node(&mut game, 5, 30);
+    spawn_patch_node(&mut game, 1, 30);
+    spawn_patch_node(&mut game, 1, 30);
     game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
 
     game.structure_regen();

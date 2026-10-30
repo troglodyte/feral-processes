@@ -49,7 +49,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `Obfuscation` | Obfuscation | 3 | -10% to every Trace rise, floor 1 | Game::raise_trace |
 | `ProcessPool` | Process Pool | 3 | +1 tamed program you may own | Game::pet_capacity |
 | `Teardown` | Teardown | 4 | +1 unit out of every teardown | Game::extraction_yield |
-| `Failover` | Failover | 2 | +1 Durability per repair interval | Game::total_repair_rate |
+| `Failover` | Failover | 2 | +1 Durability per repair interval (withdrawn, ADR 0036) | `perks::repair_rate_bonus` |
 | `TightenTolerances` | Tighten Tolerances | 3 | +5pp on a compiled copy's quality floor | Game::craft_quality_floor |
 | `TargetLock` | Target Lock | 3 | +2 Accuracy on every attack you make | Game::accuracy_bonus |
 

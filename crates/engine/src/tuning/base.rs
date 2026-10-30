@@ -331,6 +331,10 @@ pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
 /// that says so.
 pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Sieges
+// ─────────────────────────────────────────────────────────────────────────
+
 /// A fought siege's Patch Node pulses every this many rounds (ADR 0036).
 /// Decided by `TacticalBattle::round` alone, so a save loaded mid-siege
 /// cannot double-pulse and no new state is saved.
@@ -340,10 +344,6 @@ pub const PATCH_SIEGE_PULSE_ROUNDS: u32 = 2;
 /// pulse. Small on purpose: it helps a long siege, it does not out-heal a
 /// pack.
 pub const PATCH_SIEGE_HEAL: u32 = 2;
-
-// ─────────────────────────────────────────────────────────────────────────
-// Sieges
-// ─────────────────────────────────────────────────────────────────────────
 
 /// How much pressure one tick of a sector adds to `resources::SiegePressure`,
 /// per sector level — `RAID_PRESSURE_PER_ZONE`'s shape, and `1` for the same

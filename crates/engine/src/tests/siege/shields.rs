@@ -27,6 +27,11 @@ fn coil() -> ItemId {
 
 /// An open 30x30 siege board whose `(0, 0)` is field `ORIGIN`.
 fn open_siege(game: &mut Game) {
+    open_siege_with_player(game, (29, 29));
+}
+
+/// `open_siege` with the player seated at board cell `player_at`.
+fn open_siege_with_player(game: &mut Game, player_at: (i32, i32)) {
     let mut board = Board::solid(30);
     for y in 0..30 {
         for x in 0..30 {
@@ -45,7 +50,7 @@ fn open_siege(game: &mut Game) {
     battle.siege_pack = 1;
     battle.siege_origin = ORIGIN;
     let player = game.player_entity();
-    battle.place(player, (29, 29));
+    battle.place(player, player_at);
     game.world.insert_resource(battle);
 }
 
@@ -232,4 +237,224 @@ fn a_shield_destroyed_mid_siege_stops_protecting() {
     game.world.resource_mut::<TacticalBattle>().remove(shield);
     assert_eq!(hit(&mut game, inside, 10), 10);
     assert_eq!(coils_in(&game, shield), 0);
+}
+
+// ---------------------------------------------------------------------
+// Structure hits, the coil at the end, and persistence.
+
+use crate::game::combat_teardown::FightVerdict;
+
+const WALL_IN: (i32, i32) = (13, 10);
+const WALL_OUT: (i32, i32) = (25, 20);
+
+fn wall_at(game: &mut Game, at: (i32, i32)) -> Entity {
+    let wall = spawn_structure_at(game, "depot", at.0, at.1);
+    game.world.entity_mut(wall).insert(Durability {
+        hp: 200,
+        max_hp: 200,
+    });
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place(wall, on_board(at));
+    wall
+}
+
+fn durability(game: &Game, e: Entity) -> u32 {
+    game.world.get::<Durability>(e).unwrap().hp
+}
+
+fn creature_with_atk(game: &mut Game, at: (i32, i32), atk: i32, hostile: bool) -> Entity {
+    let e = body_at(game, at, hostile);
+    game.world.get_mut::<Stats>(e).unwrap().atk = atk;
+    game.world.entity_mut(e).insert(Creature {
+        species: GENERIC_SPECIES_ID.to_string(),
+    });
+    e
+}
+
+/// Durability lost by a wall at `wall` to one `tactical_attack` from an
+/// adjacent actor.
+fn swing_loss(wall: (i32, i32), hostile: bool, atk: i32) -> u32 {
+    let mut game = game();
+    let beside = (wall.0, wall.1 + 1);
+    // The player stands on the actor's cell unless a hostile takes it.
+    open_siege_with_player(&mut game, if hostile { (29, 29) } else { on_board(beside) });
+    shield_at(&mut game, SHIELD_AT, 3);
+    let wall = wall_at(&mut game, wall);
+    let player = game.player_entity();
+    let actor = if hostile {
+        creature_with_atk(&mut game, beside, atk, true)
+    } else {
+        game.world.get_mut::<Stats>(player).unwrap().atk = atk;
+        player
+    };
+    let mut battle = game.world.resource_mut::<TacticalBattle>();
+    battle.set_initiative(vec![actor, player]);
+    battle.set_actions_left(2);
+    assert!(
+        game.tactical_attack(wall),
+        "the swing must land on the wall"
+    );
+    200 - durability(&game, wall)
+}
+
+#[test]
+fn a_structure_hit_under_a_shield_loses_two() {
+    let out = swing_loss(WALL_OUT, true, 20);
+    let inside = swing_loss(WALL_IN, true, 20);
+    assert!(out > 2);
+    assert_eq!(inside, out - 2);
+}
+
+#[test]
+fn a_structure_hit_is_never_cut_to_zero() {
+    // The natural swing averages 5, so atk -3 lands a 2: all of it cut.
+    assert_eq!(swing_loss(WALL_OUT, true, -3), 2);
+    assert_eq!(swing_loss(WALL_IN, true, -3), 1);
+}
+
+#[test]
+fn the_player_hitting_a_structure_is_not_shielded() {
+    assert_eq!(
+        swing_loss(WALL_IN, false, 20),
+        swing_loss(WALL_OUT, false, 20)
+    );
+}
+
+#[test]
+fn a_besieger_wrecking_under_a_shield_loses_two() {
+    let wreck = |wall: (i32, i32)| {
+        let mut game = game();
+        open_siege(&mut game);
+        shield_at(&mut game, SHIELD_AT, 3);
+        let wall = wall_at(&mut game, wall);
+        let raider = creature_with_atk(&mut game, (30 - 1, 28), 20, true);
+        let player = game.player_entity();
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        battle.set_initiative(vec![raider, player]);
+        battle.set_actions_left(2);
+        assert!(game.besieger_wreck(raider, wall));
+        200 - durability(&game, wall)
+    };
+    assert_eq!(wreck(WALL_IN), wreck(WALL_OUT) - 2);
+}
+
+fn finish(game: &mut Game, won: bool) {
+    let player = game.player_entity();
+    let verdict = FightVerdict {
+        won,
+        rounds: 1,
+        outmatched: false,
+        lair: None,
+    };
+    game.finish_fight(player, None, verdict);
+}
+
+#[test]
+fn a_shield_that_softened_spends_one_coil_at_the_end() {
+    for won in [true, false] {
+        let mut game = game();
+        open_siege(&mut game);
+        let shield = shield_at(&mut game, SHIELD_AT, 3);
+        let inside = body_at(&mut game, INSIDE, false);
+        for _ in 0..4 {
+            hit(&mut game, inside, 10);
+        }
+        assert_eq!(coils_in(&game, shield), 3, "nothing is spent mid-siege");
+        finish(&mut game, won);
+        assert_eq!(coils_in(&game, shield), 2, "won: {won}");
+    }
+}
+
+#[test]
+fn a_shield_that_softened_nothing_spends_nothing() {
+    let mut game = game();
+    open_siege(&mut game);
+    let shield = shield_at(&mut game, SHIELD_AT, 3);
+    let outside = body_at(&mut game, OUTSIDE, false);
+    hit(&mut game, outside, 10);
+    finish(&mut game, true);
+    assert_eq!(coils_in(&game, shield), 3);
+}
+
+#[test]
+fn a_softening_shield_destroyed_before_the_end_spends_nothing_and_does_not_panic() {
+    let mut game = game();
+    open_siege(&mut game);
+    let shield = shield_at(&mut game, SHIELD_AT, 3);
+    let spare = shield_at(&mut game, (10, 12), 3);
+    let inside = body_at(&mut game, INSIDE, false);
+    hit(&mut game, inside, 10);
+    game.damage_structure(shield, 500, "Shield", "a siege");
+    game.world.resource_mut::<TacticalBattle>().remove(shield);
+    finish(&mut game, true);
+    assert!(game.world.get::<Structure>(shield).is_none());
+    assert_eq!(coils_in(&game, spare), 2, "the survivor softened it too");
+}
+
+#[test]
+fn softened_shields_survive_a_mid_siege_reload() {
+    let mut game = game();
+    game.lay_test_pocket();
+    stand_in_base_at(&mut game, 0, 0);
+    open_siege_with_player(&mut game, on_board((0, 0)));
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "shield")
+        .unwrap();
+    let shield = game.spawn_structure(&def, SHIELD_AT.0, SHIELD_AT.1, None);
+    game.world
+        .get_mut::<Stock>(shield)
+        .unwrap()
+        .input
+        .insert(coil(), 3);
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place(shield, on_board(SHIELD_AT));
+    let staff = spawn_tamed(&mut game, 100, 3);
+    {
+        let mut pos = game.world.get_mut::<Position>(staff).unwrap();
+        (pos.x, pos.y) = INSIDE;
+    }
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place(staff, on_board(INSIDE));
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, staff]);
+    hit(&mut game, staff, 10);
+    assert!(
+        game.world
+            .resource::<TacticalBattle>()
+            .shields_softened
+            .contains(&SHIELD_AT)
+    );
+
+    let scratch = scratch_assets_dir("shield_softened_reload");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    assert!(loaded.in_tactical_battle(), "the siege must reload");
+    assert!(
+        loaded
+            .world
+            .resource::<TacticalBattle>()
+            .shields_softened
+            .contains(&SHIELD_AT),
+        "the softened set must survive the reload"
+    );
+    let shield = loaded
+        .world
+        .query::<(Entity, &Structure)>()
+        .iter(&loaded.world)
+        .find(|(_, s)| s.kind == "shield")
+        .map(|(e, _)| e)
+        .expect("the shield reloaded");
+    assert_eq!(coils_in(&loaded, shield), 3);
+    finish(&mut loaded, true);
+    assert_eq!(coils_in(&loaded, shield), 2, "exactly one coil, once");
 }

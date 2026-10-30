@@ -192,6 +192,50 @@ impl Game {
         }
     }
 
+    /// A hit on a siege-board structure, less what the Shields over it cut:
+    /// never below 1 for a landed hit. Records and flashes each Shield.
+    pub(crate) fn shielded_structure_damage(&mut self, structure: Entity, dmg: u32) -> u32 {
+        let shields = self.siege_shields_over(structure);
+        if shields.is_empty() || dmg == 0 {
+            return dmg;
+        }
+        self.note_shields_softened(&shields);
+        let cut: u32 = shields.iter().map(|s| s.cut).sum();
+        dmg.saturating_sub(cut).max(1)
+    }
+
+    /// At a siege's end each Shield that softened a hit and still stands
+    /// spends its one coil. A Shield destroyed since has no stock to spend
+    /// from, so it is simply not found.
+    pub(crate) fn spend_softening_shields(&mut self) {
+        let Some(battle) = self.world.get_resource::<crate::tactical::TacticalBattle>() else {
+            return;
+        };
+        if battle.siege_pack == 0 || battle.shields_softened.is_empty() {
+            return;
+        }
+        let anchors = battle.shields_softened.clone();
+        let db = self.world.resource::<StructureDb>();
+        let mut payers: Vec<Entity> = self
+            .world
+            .iter_entities()
+            .filter(|e| {
+                let is_shield = e
+                    .get::<Structure>()
+                    .and_then(|s| db.get(&s.kind))
+                    .is_some_and(|d| d.shield_radius.is_some());
+                is_shield
+                    && e.get::<Position>()
+                        .is_some_and(|p| anchors.contains(&(p.x, p.y)))
+            })
+            .map(|e| e.id())
+            .collect();
+        payers.sort();
+        for entity in payers {
+            crate::game::base::stock::spend_supply(self, entity, ConsumeSource::Defence);
+        }
+    }
+
     /// What cuts a sweep against `target`: every armed defence that covers
     /// its footprint, plus the garrison. The one sum the sweep reads, so a
     /// Shield out of range adds nothing.

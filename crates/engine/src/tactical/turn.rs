@@ -665,7 +665,12 @@ impl Game {
             .is_some()
         {
             let round_before = self.world.resource::<TacticalBattle>().round;
-            let dmg = self.swing_damage(actor);
+            let mut dmg = self.swing_damage(actor);
+            // Only the besiegers' blows are softened: the player breaking
+            // their own wall takes the full figure.
+            if self.world.get::<Hostile>(actor).is_some() {
+                dmg = self.shielded_structure_damage(target, dmg);
+            }
             let label = self.entity_label(target);
             self.damage_structure(target, dmg, &label, "a siege");
             // **The entity is gone, not merely its `Durability`.** A

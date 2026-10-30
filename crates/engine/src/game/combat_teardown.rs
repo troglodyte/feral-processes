@@ -506,6 +506,9 @@ impl Game {
         // did not carry the same guard would still catch a save loaded
         // between the capture and this sweep, or any future writer of
         // `Besieger` that forgets to.
+        // The `TacticalBattle` is still here, and it is what remembers which
+        // Shields softened a hit.
+        self.spend_softening_shields();
         let besiegers: Vec<Entity> = {
             let mut query = self.world.query_filtered::<Entity, (
                 With<Besieger>,

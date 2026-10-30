@@ -71,6 +71,7 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
         actions_left: battle.actions_left(),
         siege_pack: battle.siege_pack,
         player_order,
+        shields_softened: battle.shields_softened.iter().copied().collect(),
     })
 }
 
@@ -99,6 +100,7 @@ pub(crate) fn restore(game: &mut Game, saved: SiegeSave, members: &[(u32, Entity
     battle.siege_pack = saved.siege_pack;
     battle.siege_origin = saved.origin;
     battle.siege_door = saved.door;
+    battle.shields_softened = saved.shields_softened.iter().copied().collect();
 
     let siege_board = SiegeBoard {
         board: battle.board.clone(),

@@ -210,16 +210,33 @@ mod tests {
         panel_rect(1280.0, 720.0)
     }
 
-    /// Every notification the engine can raise, paired with its copy. The
-    /// census walks `NotificationKind::all` rather than a directory now, so
-    /// a new variant is measured here the moment it compiles.
+    /// Every notification and FTUE message the engine can raise, paired
+    /// with its copy. The census walks `NotificationKind::all` and
+    /// `ftue::ENTRIES`, so a new variant or entry is measured here the
+    /// moment it compiles.
     fn shipped() -> impl Iterator<
         Item = (
-            NotificationKind,
+            String,
             feral_processes_engine::notifications::NotificationDef,
         ),
     > {
-        NotificationKind::all().into_iter().map(|k| (k, k.def()))
+        use feral_processes_engine::notifications::NotificationDef;
+        let milestones = NotificationKind::all()
+            .into_iter()
+            .map(|k| (k.to_string(), k.def()));
+        let guidance = feral_processes_engine::ftue::ENTRIES.iter().map(|e| {
+            (
+                e.on.key(),
+                NotificationDef {
+                    title: e.title,
+                    body: e.body,
+                    sprite: e.sprite,
+                    glyph: e.glyph,
+                    color: e.color,
+                },
+            )
+        });
+        milestones.chain(guidance)
     }
 
     /// A blank line between paragraphs and nowhere else. Wrapping the whole
@@ -486,6 +503,7 @@ mod tests {
             glyph: '>',
             color: GlyphColor::Cyan,
             detail: None,
+            ftue_key: None,
         }
     }
 
@@ -636,7 +654,7 @@ mod tests {
         }
         assert_eq!(
             seen,
-            NotificationKind::all().len(),
+            NotificationKind::all().len() + feral_processes_engine::ftue::ENTRIES.len(),
             "the census walked none"
         );
     }

@@ -808,7 +808,9 @@ impl Game {
         // Here rather than in `raid_check`, which can decide a sweep happens
         // and then find nothing standing to sweep. This is the first line
         // after a sweep is real.
-        self.notify(crate::notifications::NotificationKind::FirstRaid);
+        self.ftue(crate::ftue::FtueTrigger::Event(
+            crate::ftue::FtueEvent::FirstRaid,
+        ));
         let target = {
             let mut rng = self.world.resource_mut::<GameRng>();
             let idx = rng.0.random_range(0..targets.len());
@@ -909,7 +911,9 @@ impl Game {
         // Before the outcome branches, `run_raid`'s placement: the lesson is
         // "something you did caused this", and a raid turned away is still a
         // raid that happened.
-        self.notify(crate::notifications::NotificationKind::FirstTownRaid);
+        self.ftue(crate::ftue::FtueTrigger::Event(
+            crate::ftue::FtueEvent::FirstTownRaid,
+        ));
 
         let cut = self.total_raid_defense() * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT;
         let percent = crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT.saturating_sub(cut);

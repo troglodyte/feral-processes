@@ -402,6 +402,7 @@ impl Game {
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.
         self.note_low_power();
+        self.drain_pending_crafted();
         // Last of the `note_*` block: a pass's firsthand memories are
         // written before its hearsay competes with them at
         // `MEMORY_CAP_PER_PROGRAM`, where eviction drops the weakest.
@@ -498,7 +499,7 @@ impl Game {
         self.note_static_turnover(epoch_before);
     }
 
-    /// Tells the player once, ever, that their Power reserve has gone under
+    /// Tells the player once a run that their Power reserve has gone under
     /// `tuning::LOW_POWER_ATTACK_THRESHOLD`.
     ///
     /// **A state read once a tick rather than a hook on a spend**, which is
@@ -507,7 +508,7 @@ impl Game {
     /// routine, and `needs_tick_system` drains a flat rate every tick
     /// whatever the player is doing. The second is how most runs cross the
     /// line, and it is a bevy system with no `Game` to notify from. One read
-    /// after the schedule covers both, and `Repeat::OnceEver` is what keeps
+    /// after the schedule covers both, and the FTUE run set is what keeps
     /// it from being a per-tick alarm — the reserve sits under the threshold
     /// for as long as the player leaves it there.
     fn note_low_power(&mut self) {
@@ -517,7 +518,9 @@ impl Game {
             .get::<PowerReserve>(player)
             .is_some_and(|r| r.get() < crate::tuning::LOW_POWER_ATTACK_THRESHOLD);
         if low {
-            self.notify(crate::notifications::NotificationKind::LowPower);
+            self.ftue(crate::ftue::FtueTrigger::Event(
+                crate::ftue::FtueEvent::LowPower,
+            ));
         }
     }
 
@@ -1002,7 +1005,9 @@ impl Game {
             // rule is `Repeat::OnceEver`, and it lives inside
             // `queue_notification`, not here.
             if terrain.event.is_some() {
-                self.notify(crate::notifications::NotificationKind::FirstStatic);
+                self.ftue(crate::ftue::FtueTrigger::Event(
+                    crate::ftue::FtueEvent::FirstStatic,
+                ));
             }
             if terrain.biome != from {
                 // The condition's name joins the crossing line rather than

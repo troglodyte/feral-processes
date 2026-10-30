@@ -1591,6 +1591,9 @@ impl Game {
             &[("name", &def.name), ("description", &def.description)],
             unlocks,
         );
+        // After the milestone, so the player reads "research complete" and
+        // then the guidance.
+        self.ftue_by_key(&crate::ftue::research_key(&def.id));
         self.note_deed(crate::contracts::Deed::FinishedResearch);
         self.grant_research_knowledge(def);
         let cleared_active = {

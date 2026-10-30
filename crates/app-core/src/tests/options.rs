@@ -232,12 +232,7 @@ fn a_profile_flush_keeps_a_just_changed_setting() {
 
     // Something earned, so the engine reports its profile dirty and the
     // flush replaces the app's copy with the engine's.
-    assert!(
-        app.game
-            .as_mut()
-            .unwrap()
-            .notify(feral_processes_engine::notifications::NotificationKind::FirstRaid)
-    );
+    app.game.as_mut().unwrap().ftue_never("event:first_raid");
     app.after_tick();
 
     assert_eq!(app.profile.volume_percent, 30);

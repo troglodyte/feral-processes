@@ -1399,12 +1399,13 @@ impl LabourDemand {
 #[derive(Resource, Default)]
 pub struct PendingProfileWrites {
     pub earned: Vec<crate::achievements::AchievementId>,
-    pub seen: Vec<crate::notifications::NotificationKind>,
+    /// The FTUE opt-outs or switch changed.
+    pub ftue: bool,
 }
 
 impl PendingProfileWrites {
     pub fn is_empty(&self) -> bool {
-        self.earned.is_empty() && self.seen.is_empty()
+        self.earned.is_empty() && !self.ftue
     }
 }
 

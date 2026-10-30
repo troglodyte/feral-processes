@@ -26,6 +26,7 @@ pub mod disposition;
 pub mod duties;
 pub mod environment;
 pub mod floors;
+pub mod ftue;
 mod game;
 pub mod gear_craft;
 pub mod handles;

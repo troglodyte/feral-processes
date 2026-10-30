@@ -706,6 +706,8 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        world.insert_resource(crate::ftue::FtuePlayed::default());
+        world.insert_resource(crate::ftue::PendingCrafted::default());
         // Both doors, deliberately: a loaded game must collect telemetry too,
         // and this is not saved (dev output, not run state) so `load` has
         // nothing to restore it from.
@@ -1801,6 +1803,10 @@ impl Game {
         // only one. See `grant_profile_rewards`.
         world.insert_resource(crate::achievements::Profile::default());
         world.insert_resource(crate::resources::PendingProfileWrites::default());
+        world.insert_resource(crate::ftue::FtuePlayed(
+            data.ftue_played.iter().cloned().collect(),
+        ));
+        world.insert_resource(crate::ftue::PendingCrafted::default());
         // See `Game::new`'s copy: both doors, and nothing restores it.
         world.insert_resource(crate::resources::BattleTelemetry::default());
         world.insert_resource(data.base_ledger.clone());
@@ -3593,6 +3599,13 @@ impl Game {
                 .world
                 .resource::<crate::resources::CraftedRoutines>()
                 .next_id,
+            ftue_played: self
+                .world
+                .resource::<crate::ftue::FtuePlayed>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
             gear_designs: self
                 .world
                 .resource::<crate::resources::GearDesigns>()
@@ -3793,7 +3806,7 @@ impl Game {
             return false;
         }
         pending.earned.clear();
-        pending.seen.clear();
+        pending.ftue = false;
         true
     }
 

@@ -3151,6 +3151,9 @@ impl Game {
             if order.announced_stalled && !matches!(standing, OrderStanding::Stalled) {
                 self.set_stall_announced(index, false);
             }
+            if matches!(standing, OrderStanding::Satisfied) {
+                self.ftue_by_key(&crate::ftue::crafted_key(&order.item.0));
+            }
             match standing {
                 OrderStanding::Satisfied if order.standing => {
                     // A level the base holds: reaching it puts the order to
@@ -3300,7 +3303,9 @@ impl Game {
         } else {
             format!("Work order filed: {qty} x {name}.")
         });
-        self.notify(crate::notifications::NotificationKind::FirstWorkOrder);
+        self.ftue(crate::ftue::FtueTrigger::Event(
+            crate::ftue::FtueEvent::FirstWorkOrder,
+        ));
         // Standing only, and below every refusal: the mission asks for the
         // order that keeps working without being asked again, so a one-off
         // must not finish it.

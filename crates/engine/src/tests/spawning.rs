@@ -1824,6 +1824,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         crafted_routines: Vec::new(),
         unslotted_routines: Vec::new(),
         next_crafted_id: 0,
+        ftue_played: Vec::new(),
         gear_designs: Vec::new(),
         next_gear_design_id: 0,
         known_affixes: Vec::new(),

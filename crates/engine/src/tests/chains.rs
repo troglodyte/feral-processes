@@ -1600,3 +1600,21 @@ fn a_completed_assembly_reaches_the_ledger_with_its_inputs() {
         "the drained inputs ride the same event, priced off the item's own recipe"
     );
 }
+
+/// The assembler is a bevy system with no `Game`: it pushes the product to
+/// `PendingCrafted` and `Game` fires `Crafted` after the tick.
+#[test]
+fn an_assembled_item_fires_its_ftue_key() {
+    let mut game = game_with_assembler("chain_ftue", 1016);
+    let batch = per_batch(&game);
+    assembler_at(&mut game, 40, 40, true);
+    feeder_at(&mut game, 41, 40, batch * 50);
+    let key = format!("crafted:{}", ids::POWER_CELL);
+    assert!(!game.ftue_shown(&key));
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert!(game.ftue_shown(&key));
+}

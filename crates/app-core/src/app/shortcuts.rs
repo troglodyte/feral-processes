@@ -78,6 +78,7 @@ fn field_groups() -> Vec<ShortcutGroup> {
     let mut moving = vec![
         ("↑↓←→", "move"),
         ("hjkl", "move"),
+        ("numpad 1379", "step diagonally"),
         (".", "wait a turn"),
         ("g", "world map"),
     ];
@@ -125,8 +126,8 @@ fn base_groups() -> Vec<ShortcutGroup> {
 
 fn stack_groups() -> Vec<ShortcutGroup> {
     let mut moving = vec![
-        ("↑↓←→", "forward, turn, turn, about-face"),
-        ("hjkl", "forward, turn, turn, about-face"),
+        ("↑↓←→", "forward, about-face, turn left, turn right"),
+        ("hjkl", "turn left, about-face, forward, turn right"),
         ("< >", "ascend / descend"),
         (".", "wait a turn"),
         ("g", "frame map"),
@@ -160,7 +161,7 @@ fn tactical_groups() -> Vec<ShortcutGroup> {
             &[
                 ("↑↓←→ numpad", "step, or move the aim cursor"),
                 ("Enter", "confirm the aim"),
-                ("Esc", "cancel the aim"),
+                ("Esc", "cancel the aim / clear the target"),
             ],
         ),
         group(
@@ -180,7 +181,7 @@ fn tactical_groups() -> Vec<ShortcutGroup> {
             &[
                 ("R", "resolve"),
                 ("A", "auto-attack"),
-                ("any key", "stop auto-attack"),
+                ("any other key", "stop auto-attack"),
                 ("?", "hold: this list"),
             ],
         ),
@@ -197,7 +198,7 @@ fn classic_groups() -> Vec<ShortcutGroup> {
                 ("s", "special"),
                 ("r", "revert an emulation"),
                 ("u", "use item"),
-                ("Esc", "back out of a choice"),
+                ("Esc", "undo the last pick"),
             ],
         ),
         group("Charging", &[("h", "hold"), ("x", "release")]),

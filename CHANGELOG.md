@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.3
+
+**Hold `?` on the map or in a fight to see every shortcut that works where you are.** The bottom bar only has room for a few keys, so keys like `v` (lay a floor tile) were hard to find. The list is different for the base, the field, the Stack and battle, and it closes when you let go of `?`. Every map and battle bar now starts with `? keys`, and `v lay tile` shows on the bar when you are in the base.
+
+**The manual has moved to the Esc menu, on its own Manual page.** `?` no longer opens it. From the main menu, `[O]` opens the same menu. The base help page now says a floor tile costs one Core Fragment, not two.
+
 ## 0.21.2
 
 **Founding a Home now lays a 5x5 patch of floor instead of a 3x3.** Before, founding was refused if any tile of the patch was rock or a Stack link. Now the floor grows around anything in the way and makes up the missing tiles on the open side, so founding beside rock gives you as much floor as founding on open ground. In a tight pocket you get whatever fits. It still costs 2 core fragments.

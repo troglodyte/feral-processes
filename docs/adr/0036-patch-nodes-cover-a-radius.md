@@ -1,6 +1,6 @@
 # 0036 A Patch Node repairs a radius that grows with its tier
 
-- Status: Agreed
+- Status: Accepted (0.21.8)
 - Decided by: user, on Claude's proposal
 - Date: 2026-10-30
 - Pattern: —

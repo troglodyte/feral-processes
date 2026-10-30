@@ -103,7 +103,7 @@ Do not duplicate between them; point instead.
 | [0033](0033-founding-floor-grows-around-rock.md) | Founding floor grows around rock | Agreed | user | — |
 | [0034](0034-google-rust-style-guide-as-reference.md) | Google's Rust style guide is the reference, with listed exceptions | Accepted (0.21.6) | user, on Claude's proposal | — |
 | [0035](0035-shields-cover-a-radius.md) | A Shield covers a radius that grows with its tier | Accepted (0.21.7) | user, on Claude's proposal | — |
-| [0036](0036-patch-nodes-cover-a-radius.md) | A Patch Node repairs a radius that grows with its tier | Agreed | user, on Claude's proposal | — |
+| [0036](0036-patch-nodes-cover-a-radius.md) | A Patch Node repairs a radius that grows with its tier | Accepted (0.21.8) | user, on Claude's proposal | — |
 
 ## Pattern index
 

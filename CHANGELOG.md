@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.8
+
+**A Patch Node now repairs only the structures inside its circle, and upgrading it widens the circle.** Before, every Patch Node repaired every structure at the base, and each upgrade repaired faster. Now a node covers 4 tiles at Mk1, growing by 2 a tier to 12 at Mk5, and repairs 1 Durability at a time at every tier. A structure counts as covered if any part of it is inside the circle, and overlapping nodes add together. A green + shows on a structure when a node repairs it.
+
+**In a siege you fight yourself, a Patch Node heals inside its circle every other round.** Staff and structures in the circle regain 2 each pulse per covering node, never past their maximum. Enemies are never healed, and a destroyed node stops pulsing.
+
+**You can see the circle.** Hovering a Patch Node shows its circle in light green, and deploying or upgrading one previews it, the same way Shields show theirs in blue.
+
+**The Failover perk is no longer offered.** Levels you already hold keep repairing the whole base.
+
 ## 0.21.7
 
 **A Shield now protects only the ground inside its circle, and that circle grows each time you upgrade it.** Before, every Shield at the base cut every GC Entropy Sweep wherever it stood. Existing Shields now cover only their circle: 4 tiles at Mk1, growing by 2 a tier to 12 at Mk5. Sweeps that hit outside every circle land in full, and only the Shields that covered the target spend a coil.

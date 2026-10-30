@@ -17,6 +17,7 @@ use crate::*;
 mod board_and_opening;
 mod clock;
 mod fixtures;
+mod patch;
 mod raiders;
 mod reviews;
 mod shields;

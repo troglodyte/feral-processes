@@ -8,16 +8,16 @@ use crate::tactical::map::{BattleCell, BattleSpec, Board};
 use crate::world::Biome;
 
 /// Field coordinates map to the board by this shift.
-const ORIGIN: (i32, i32) = (2, 3);
-const SHIELD_AT: (i32, i32) = (10, 10);
-const INSIDE: (i32, i32) = (11, 10);
-const OUTSIDE: (i32, i32) = (25, 10);
+pub(super) const ORIGIN: (i32, i32) = (2, 3);
+pub(super) const SHIELD_AT: (i32, i32) = (10, 10);
+pub(super) const INSIDE: (i32, i32) = (11, 10);
+pub(super) const OUTSIDE: (i32, i32) = (25, 10);
 
-fn game() -> Game {
+pub(super) fn game() -> Game {
     Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-fn on_board(field: (i32, i32)) -> (i32, i32) {
+pub(super) fn on_board(field: (i32, i32)) -> (i32, i32) {
     (field.0 - ORIGIN.0, field.1 - ORIGIN.1)
 }
 
@@ -26,7 +26,7 @@ fn coil() -> ItemId {
 }
 
 /// An open 30x30 siege board whose `(0, 0)` is field `ORIGIN`.
-fn open_siege(game: &mut Game) {
+pub(super) fn open_siege(game: &mut Game) {
     open_siege_with_player(game, (29, 29));
 }
 
@@ -78,7 +78,7 @@ fn coils_in(game: &Game, shield: Entity) -> u32 {
 }
 
 /// A plain body (no mitigation) seated at field `at`.
-fn body_at(game: &mut Game, at: (i32, i32), hostile: bool) -> Entity {
+pub(super) fn body_at(game: &mut Game, at: (i32, i32), hostile: bool) -> Entity {
     let mut e = game.world.spawn(Stats {
         hp: 1000,
         max_hp: 1000,
@@ -289,7 +289,7 @@ use crate::game::combat_teardown::FightVerdict;
 const WALL_IN: (i32, i32) = (13, 10);
 const WALL_OUT: (i32, i32) = (25, 20);
 
-fn wall_at(game: &mut Game, at: (i32, i32)) -> Entity {
+pub(super) fn wall_at(game: &mut Game, at: (i32, i32)) -> Entity {
     let wall = spawn_structure_at(game, "depot", at.0, at.1);
     game.world.entity_mut(wall).insert(Durability {
         hp: 200,
@@ -301,7 +301,7 @@ fn wall_at(game: &mut Game, at: (i32, i32)) -> Entity {
     wall
 }
 
-fn durability(game: &Game, e: Entity) -> u32 {
+pub(super) fn durability(game: &Game, e: Entity) -> u32 {
     game.world.get::<Durability>(e).unwrap().hp
 }
 

@@ -1946,6 +1946,9 @@ impl Game {
         // taking a turn. Ahead of the reap below, so a besieger a turret
         // kills is swept the same beat it fell.
         self.fire_turrets();
+        // After the turrets and before the reap, so a heal lands before a
+        // body the round's damage would otherwise have just finished.
+        self.pulse_patch_nodes();
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
         self.reap_tactical_dead(None);

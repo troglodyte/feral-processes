@@ -1075,19 +1075,66 @@ fn standing_jobs_survive_a_save_but_not_a_demolition() {
 
 use crate::game::base::work_orders::{entry_tile, wander_step};
 
+/// The 3x3 a founding lays around `home`, plus one cell two out east.
+fn founded_floor(home: Position) -> Vec<(i32, i32)> {
+    let mut floor: Vec<(i32, i32)> = (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (home.x + dx, home.y + dy)))
+        .collect();
+    floor.push((home.x + 2, home.y));
+    floor.sort();
+    floor
+}
+
 #[test]
 fn entry_tile_is_a_pure_function_of_its_arguments() {
     let home = Position { x: 4, y: 7 };
+    let floor = founded_floor(home);
+    let arrive = |index, step| entry_tile(floor.iter().copied(), home, index, step, |_| true);
 
-    assert_eq!(entry_tile(home, 0, 12), entry_tile(home, 0, 12));
-    assert_eq!(entry_tile(home, 3, 99), entry_tile(home, 3, 99));
+    assert_eq!(arrive(0, 12), arrive(0, 12));
+    assert_eq!(arrive(3, 99), arrive(3, 99));
 }
 
 #[test]
 fn two_staff_arrive_on_different_tiles_at_the_same_tick() {
     let home = Position { x: 0, y: 0 };
+    let floor = founded_floor(home);
+    let free = |c: (i32, i32)| c != (home.x, home.y);
 
-    assert_ne!(entry_tile(home, 0, 5), entry_tile(home, 1, 5));
+    assert_ne!(
+        entry_tile(floor.iter().copied(), home, 0, 5, free),
+        entry_tile(floor.iter().copied(), home, 1, 5, free)
+    );
+}
+
+/// A founded base is only the 3x3 around its Home, and an arrival has to
+/// land inside it — the bug was a fixed ring three out that never did.
+#[test]
+fn an_arrival_on_a_founded_base_lands_beside_the_home() {
+    let home = Position { x: 0, y: 0 };
+    let floor = founded_floor(home);
+    for index in 0..8 {
+        let tile = entry_tile(floor.iter().copied(), home, index, 0, |c| c != (0, 0)).unwrap();
+        assert_eq!(tile.x.abs().max(tile.y.abs()), 1, "index {index}: {tile:?}");
+    }
+}
+
+/// With every cell beside the Home built on, the arrival goes further out
+/// rather than holding off the floor.
+#[test]
+fn an_arrival_skips_taken_cells_for_the_next_nearest() {
+    let home = Position { x: 0, y: 0 };
+    let floor = founded_floor(home);
+    let free = |(x, y): (i32, i32)| x.abs().max(y.abs()) > 1;
+
+    assert_eq!(
+        entry_tile(floor.iter().copied(), home, 0, 0, free),
+        Some(Position { x: 2, y: 0 })
+    );
+    assert_eq!(
+        entry_tile(floor.iter().copied(), home, 0, 0, |_| false),
+        None
+    );
 }
 
 #[test]

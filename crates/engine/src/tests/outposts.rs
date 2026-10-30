@@ -200,12 +200,12 @@ fn posted_crew_survives_a_save_and_load() {
 /// `recall_from_outpost` leaves `Position` untouched, and pinning where a
 /// recalled program's *next drift beat* takes it is what proves what that
 /// buys: on laid floor, `game::base::work_orders::wander_step` continues
-/// from the tile the program already stands on — `entry_tile`, a fixed ring
-/// around the Home, is only the fallback for a body that is *not* on laid
-/// floor (a program downed in the Stack, say), not the ordinary path a
+/// from the tile the program already stands on — `entry_tile`, the free
+/// floor nearest the Home, is only the fallback for a body that is *not* on
+/// laid floor (a program downed in the Stack, say), not the ordinary path a
 /// recall takes.
 #[test]
-fn a_recalled_program_wanders_from_where_it_stood_not_from_the_home_ring() {
+fn a_recalled_program_wanders_from_where_it_stood_not_from_beside_the_home() {
     let mut game = Game::new(7015, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
     let tile = (500, 500);
@@ -214,15 +214,13 @@ fn a_recalled_program_wanders_from_where_it_stood_not_from_the_home_ring() {
         .0
         .insert(tile, a_founded_outpost());
     let program = spawn_tamed(&mut game, 10, 3);
-    // Laid floor by `place_home`'s starting pocket (`STARTING_POCKET_HALF_WIDTH`
-    // 9), but at Chebyshev distance 1 from the Home — far enough from
-    // `IDLE_STAFF_RING_TILES`' own ring (radius 3) that no point on it can
-    // land within a `wander_step`'s single-tile reach of here, so a wrongly
-    // invoked `entry_tile` fallback cannot be mistaken for the real path by
-    // sheer proximity.
+    // Laid floor by the test pocket, at Chebyshev distance 5 from the Home —
+    // far enough from the free cells beside it, where `entry_tile` lands,
+    // that a wrongly invoked fallback cannot be mistaken for the real path
+    // by sheer proximity.
     {
         let mut pos = game.world.get_mut::<Position>(program).unwrap();
-        pos.x = 1;
+        pos.x = 5;
         pos.y = 1;
     }
     game.world.entity_mut(program).insert(PostedAt(tile));
@@ -230,7 +228,7 @@ fn a_recalled_program_wanders_from_where_it_stood_not_from_the_home_ring() {
     game.recall_from_outpost(program).unwrap();
     assert_eq!(
         *game.world.get::<Position>(program).unwrap(),
-        Position { x: 1, y: 1 },
+        Position { x: 5, y: 1 },
         "recalling must not itself move the program"
     );
 
@@ -239,12 +237,12 @@ fn a_recalled_program_wanders_from_where_it_stood_not_from_the_home_ring() {
     game.drift_idle_staff_for_test(&[program], &amenities, &bays);
 
     let after = *game.world.get::<Position>(program).unwrap();
-    let drift = (after.x - 1).abs().max((after.y - 1).abs());
+    let drift = (after.x - 5).abs().max((after.y - 1).abs());
     assert!(
         drift <= 1,
         "a recalled program on laid floor must wander from where it stood \
-         (Chebyshev distance <= 1 of (1, 1)), not jump onto the Home's own \
-         ring: got {after:?}"
+         (Chebyshev distance <= 1 of (5, 1)), not jump beside the Home: \
+         got {after:?}"
     );
 }
 

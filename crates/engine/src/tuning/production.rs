@@ -81,18 +81,6 @@ pub const SUPPLY_BATCH: u32 = 3;
 /// against a default buffer of 20, a clog sheds a quarter and leaves the rest.
 pub const HAUL_CARRY_CAPACITY: u32 = 5;
 
-/// Chebyshev radius of the ring a program *arrives* on the floor on,
-/// around the Home.
-///
-/// Not where idle staff live — they wander, `work_orders::wander_step`.
-/// This is the tile `work_orders::entry_tile` hands a body that is not on
-/// the floor yet, which in an established base is a program that has
-/// just been beaten and still carries the tile it was taken on.
-/// Outside 1 so an arrival never lands on the Home's own tile, and inside
-/// the starting pocket so a base at its opening size has somewhere to put
-/// one.
-pub const IDLE_STAFF_RING_TILES: i32 = 3;
-
 /// How many ticks an idle program holds a tile before drifting to a
 /// neighbouring one.
 ///

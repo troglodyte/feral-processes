@@ -774,8 +774,8 @@ fn walk_feeders(
     }
 }
 
-/// Where the idle staff member at `index` arrives at `tick`, on the
-/// Chebyshev ring of `IDLE_STAFF_RING_TILES` around `center`.
+/// Where the idle staff member at `index` arrives this `step`: the `free`
+/// floor cell nearest `home`, or `None` when every floor cell is taken.
 ///
 /// **The way onto the floor, not a place to stand.** A program that has
 /// just been beaten carries the tile it was beaten on and has never
@@ -784,22 +784,30 @@ fn walk_feeders(
 /// body that is not standing on laid floor, so in an established base it
 /// fires once per program and never again.
 ///
-/// Staff are spread around the ring by index and stepped together on
-/// `IDLE_STAFF_STEP_TICKS`, so a pool arriving at once does not pile onto
-/// one tile. `stack::ring_offset` is this repo's single definition of a
-/// Chebyshev ring and is what is walked here rather than a second copy of
-/// the maths.
-pub(crate) fn entry_tile(center: Position, index: usize, tick: u64) -> Position {
-    let band = crate::tuning::IDLE_STAFF_RING_TILES.max(1);
-    let perimeter = 8 * band;
-    let spread = index as i64 * perimeter as i64 / 4;
-    let step = (tick / crate::tuning::IDLE_STAFF_STEP_TICKS) as i64;
-    let along = (spread + step + index as i64).rem_euclid(perimeter as i64) as i32;
-    let (dx, dy) = crate::game::stack::ring_offset(band, along);
-    Position {
-        x: center.x + dx,
-        y: center.y + dy,
-    }
+/// **Chosen from the floor, never laid out around the Home.** A fixed ring
+/// at a radius is floor only once the base has grown out to it, and a
+/// founded base is the 3x3 around its Home — a ring that missed it stranded
+/// every captured program on open ground.
+///
+/// Ties at the nearest distance rotate by index and step, so a candidate
+/// refused for a reason that is about the body (a grudge, a bond) is not
+/// offered again every beat.
+pub(crate) fn entry_tile(
+    floor: impl Iterator<Item = (i32, i32)>,
+    home: Position,
+    index: usize,
+    step: u64,
+    free: impl Fn((i32, i32)) -> bool,
+) -> Option<Position> {
+    let distance = |(x, y): (i32, i32)| (x - home.x).abs().max((y - home.y).abs());
+    let candidates: Vec<(i32, i32)> = floor.filter(|&c| free(c)).collect();
+    let nearest = candidates.iter().map(|&c| distance(c)).min()?;
+    let band: Vec<(i32, i32)> = candidates
+        .into_iter()
+        .filter(|&c| distance(c) == nearest)
+        .collect();
+    let (x, y) = band[(index as u64).wrapping_add(step) as usize % band.len()];
+    Some(Position { x, y })
 }
 
 /// The eight neighbours of a tile plus a ninth outcome that is standing
@@ -862,7 +870,6 @@ pub(crate) fn wander_step(from: Position, index: usize, step: u64) -> Option<Pos
 /// pool may not step, and the clock the step is drawn from.
 struct WanderBeat {
     home: Position,
-    tick: u64,
     step: u64,
     /// Every structure and build-site footprint cell.
     occupied: std::collections::HashSet<(i32, i32)>,
@@ -2549,8 +2556,8 @@ impl Game {
     /// laid floor.** One that is drifts on from there, through
     /// `wander_step`. One that is not has no cell in this space to walk
     /// from — a freshly beaten program carries the surface tile it was
-    /// taken on — and takes `entry_tile` instead, arriving on the ring
-    /// before it walks anywhere.
+    /// taken on — and takes `entry_tile` instead, arriving on the nearest
+    /// free floor before it walks anywhere.
     ///
     /// Four rejections stand between a body and the tile it is offered,
     /// and a rejected candidate is simply not taken: the program holds its
@@ -2572,8 +2579,8 @@ impl Game {
         bays: &repair::Bays,
     ) {
         let Some(home) = self.home_position() else {
-            // No Home means no base to wander, and no origin for the
-            // arrival ring to be laid out around either.
+            // No Home means no base to wander, and nothing to measure an
+            // arrival's nearest floor from either.
             return;
         };
         let tick = self.world.resource::<GameClock>().tick;
@@ -2611,7 +2618,6 @@ impl Game {
             .collect();
         let mut beat = WanderBeat {
             home,
-            tick,
             step,
             occupied,
             held,
@@ -2687,7 +2693,7 @@ impl Game {
             // space to walk from.** A program beaten on the surface — or
             // downed four frames underground — carries that surface tile as
             // its `Position`, and the wander's `entry_tile` arm below is
-            // what puts such a body on the ring. Gating this arm on laid
+            // what puts such a body on the floor. Gating this arm on laid
             // floor is what keeps that the *one* arrival path: taken above
             // it, a program downed in the Stack would ask for a route from
             // a tile in a different coordinate space every beat forever.
@@ -2707,7 +2713,7 @@ impl Game {
             // floor for `Downed`'s exact reason: a program pinned the moment
             // it stepped out of the Stack carries that surface tile as its
             // `Position`, and the wander's `entry_tile` arm below is what
-            // puts it on the ring first. `Err` is dropped the same way — it
+            // puts it on the floor first. `Err` is dropped the same way — it
             // holds where it stands and keeps `UnderStudy`, since nothing
             // else may free a subject but `Game::unpin_subject`.
             if !sharing && on_floor && self.world.get::<components::UnderStudy>(worker).is_some() {
@@ -2853,10 +2859,19 @@ impl Game {
                 // The beat it spends standing still.
                 None => return,
             },
-            // A leashed body has arrived somewhere already; the ring is for
+            // A leashed body has arrived somewhere already; arriving is for
             // a body with no cell in this space at all.
             None if leash.is_some() => return,
-            None => entry_tile(beat.home, index, beat.tick),
+            None => {
+                let grid = self.world.resource::<BaseGrid>();
+                let free = |c: (i32, i32)| {
+                    !beat.occupied.contains(&c) && !beat.held.contains(&c) && beat.party != Some(c)
+                };
+                match entry_tile(grid.floor_cells(), beat.home, index, beat.step, free) {
+                    Some(tile) => tile,
+                    None => return,
+                }
+            }
         };
         if leash.is_some_and(|(site, radius)| !offshift::in_reach(tile, site, radius)) {
             return;

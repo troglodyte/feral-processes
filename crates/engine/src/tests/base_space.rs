@@ -4982,3 +4982,31 @@ fn floor_request_refusals_on_blockers() {
         Some(R::NotAdjacent)
     );
 }
+
+/// A program taken on open ground carries that tile, and has to find its way
+/// onto a base founded at the real 3x3 — not the wider test pocket, whose
+/// floor reached the old arrival ring and hid that a founded base's never did.
+#[test]
+fn a_program_captured_off_the_floor_arrives_on_a_freshly_founded_base() {
+    let mut game = game(3150);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    ready_to_found(&mut game);
+    game.place_structure("home", 0, 0, None).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    *game.world.get_mut::<Position>(pet).unwrap() = Position {
+        x: TEST_HOME_CELL.0 + 7,
+        y: TEST_HOME_CELL.1 + 4,
+    };
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    let at = *game.world.get::<Position>(pet).unwrap();
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(at.x, at.y),
+        "a captured program should be on the base's floor by now: {at:?}"
+    );
+}

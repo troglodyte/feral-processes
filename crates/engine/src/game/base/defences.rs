@@ -21,7 +21,6 @@ pub(crate) struct ArmedDefence {
     pub entity: Entity,
     pub raid_defense: u32,
     pub turret_damage: u32,
-    #[allow(dead_code)] // read by `defence_covers` once the sweep calls it
     pub shield: Option<ShieldReach>,
 }
 
@@ -71,7 +70,6 @@ impl Game {
     }
 
     /// The cells a structure stands on; empty when it has no `Position`.
-    #[allow(dead_code)] // the sweep calls it next
     pub(crate) fn structure_cells(&self, e: Entity) -> Vec<(i32, i32)> {
         match self.world.get::<Position>(e) {
             Some(p) => {
@@ -83,7 +81,6 @@ impl Game {
 
     /// Whether `d` protects a structure standing on `cells`. A base-wide
     /// defence always does.
-    #[allow(dead_code)] // the sweep calls it next
     pub(crate) fn defence_covers(&self, d: &ArmedDefence, cells: &[(i32, i32)]) -> bool {
         d.shield
             .is_none_or(|s| crate::shields::covers_any(s.anchor, s.radius, cells))
@@ -128,7 +125,6 @@ impl Game {
 
     /// Queues a flash of a Shield's circle: on the field, and on the siege
     /// board too (shifted by the siege's origin) while a siege is fought.
-    #[allow(dead_code)] // the sweep calls it next
     pub(crate) fn cue_shield_flash(&mut self, anchor: (i32, i32), radius: u32) {
         let kind = crate::resources::EffectKind::Shielded { radius };
         self.world
@@ -147,6 +143,20 @@ impl Game {
                 (anchor.0 - origin.0, anchor.1 - origin.1),
                 crate::resources::TacticalFxKind::Shielded { radius },
             );
+    }
+
+    /// What cuts a sweep against `target`: every armed defence that covers
+    /// its footprint, plus the garrison. The one sum the sweep reads, so a
+    /// Shield out of range adds nothing.
+    pub(crate) fn sweep_defense_for(&self, target: Entity) -> u32 {
+        let cells = self.structure_cells(target);
+        let structures: u32 = self
+            .armed_defences()
+            .iter()
+            .filter(|d| self.defence_covers(d, &cells))
+            .map(|d| d.raid_defense)
+            .sum();
+        structures + self.garrison_defense()
     }
 
     /// The sweep defence the structures add, armed ones only.

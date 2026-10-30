@@ -77,7 +77,7 @@ fn a_sweep_spends_one_coil_from_each_contributing_defence() {
     let mut game = game();
     set_zone(&mut game, RAID_MIN_ZONE);
     spawn_min_raid_staff(&mut game);
-    let shield = defence(&mut game, "shield", 1, 3);
+    let shield = defence(&mut game, "shield", 5, 3);
     let turret = defence(&mut game, "turret", 2, 3);
     let dry = defence(&mut game, "shield", 3, 0);
     spawn_structure_at(&mut game, "extractor", 5, 5);

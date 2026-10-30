@@ -1,7 +1,7 @@
 # 0035 A Shield covers a radius that grows with its tier
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: user, on Claude's proposal
 - Date: 2026-10-30
 - Pattern: —
 - Depends on: [0019](0019-content-defaults-to-rust.md), [0032](0032-base-returns-to-the-field.md)

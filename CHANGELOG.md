@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.5
+
+**Nothing changes in play; this release reorganises more of the code.** The files most often edited, at 4,000 to 8,600 lines each, are now folders split by subsystem: the test fixtures, the saved-game loader and the renderer's base, battle-map and build screens. The game builds and behaves exactly as in 0.21.4, and saves are unaffected. The loader is now a short ordered list of restore steps, with nothing reordered.
+
 ## 0.21.4
 
 **Guidance messages now show once per run, and you can turn them off.** Before, each tutorial message showed once ever on this computer. Now it shows once per run, and reloading a save does not show it again. On a guidance message, press `D` to never see that message again or `T` to turn guidance off. The Gameplay options page can turn guidance back on, or show every message again. Milestone news, such as a finished research, is not affected.

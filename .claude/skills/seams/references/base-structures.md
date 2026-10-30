@@ -121,7 +121,7 @@
   materials, crew, ticks, all unchanged, and it is the first `BuildSite`
   reachable with `program: None`, which is why `return_build_holdings` and
   both `build_quality_of` call sites already had to handle the `Option`.
-  `the_shipped_program_cost_follows_the_job` in `tests/assets.rs` is the
+  `the_shipped_program_cost_follows_the_job` in `tests/assets/memories.rs` is the
   census, written over the fields a structure authors for some *other*
   purpose so it stays a statement about content rather than a re-derivation.
 

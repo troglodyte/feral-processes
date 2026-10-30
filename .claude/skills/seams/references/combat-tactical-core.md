@@ -79,7 +79,7 @@
   `def.shape` directly: it is `None` for every routine in the game, so a
   reader that skips the door resolves the entire roster to nothing and the
   failure is silent — a routine that quietly becomes single-target reads as
-  a nerf rather than a bug. Two censuses in `tests/assets.rs` close it, one
+  a nerf rather than a bug. Two censuses in `tests/assets/abilities.rs` close it, one
   of them a second `match` pinning the derivation table. Three constants and
   not one for the derived radii, because "one group" and "everything" are
   different sizes and the party's own is the widest. Not to be confused with
@@ -429,7 +429,7 @@
   and leaves the defender's, because only landed damage reaches
   `apply_damage` — so a cloak cannot be flushed out by swinging at where you
   guess it is. `breaks_cloak` is exhaustive on `cell_mark`'s rule, with a
-  second copy of the table in `tests/assets.rs` so flipping an arm is a
+  second copy of the table in `tests/assets/abilities.rs` so flipping an arm is a
   decision taken twice. **The upkeep had to be extracted first**:
   `tick_combatant_upkeep` was three verbatim copies of the same block, so a
   fourth thing to age meant writing it three more times, and the drift that

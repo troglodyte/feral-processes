@@ -86,6 +86,7 @@ mod score;
 mod settlement;
 mod settlement_board;
 mod settlement_market;
+mod shortcuts;
 mod social;
 mod splice_rig;
 mod world_map;
@@ -631,7 +632,7 @@ fn draw_status_banner(status: &str, painter: &Painter, m: &Metrics) {
     painter.ui(status, m.inset, baseline, m.font_size, RED);
 }
 
-pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
+pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool, shortcuts: bool) {
     let m = ui_metrics(painter.screen_h());
     painter.clear(SCREEN_BG);
     // Cloned rather than borrowed because most of the arms below want `app`
@@ -654,6 +655,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
         | Mode::AudioOptions
         | Mode::GraphicsOptions
         | Mode::SpriteOptions
+        | Mode::ManualOptions
         | Mode::QuitRunConfirm => draw_game_menu_page(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
@@ -877,6 +879,9 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
             draw_playing_base(app, fx, on_the_map, painter, &m, reveal);
             draw_mode_overlay(app, refusal, painter, &m);
         }
+    }
+    if shortcuts && let Some(sheet) = app.shortcut_sheet() {
+        shortcuts::draw_shortcuts(&sheet, painter, &m);
     }
     if let Some(status) = &app.status_line
         && needs_status_banner(app.mode)
@@ -1981,7 +1986,7 @@ mod tests {
     }
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 170] = [
+    const ALL_MODES: [Mode; 171] = [
         Mode::Dossier,
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
@@ -2134,6 +2139,7 @@ mod tests {
         Mode::AudioOptions,
         Mode::GraphicsOptions,
         Mode::SpriteOptions,
+        Mode::ManualOptions,
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
@@ -2302,7 +2308,7 @@ mod tests {
     fn refusals_drawn(app: &mut feral_processes_app_core::App, fx: &mut Fx, mode: Mode) -> usize {
         app.mode = mode;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
-        let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p, false));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p, false, false));
         crate::paint::painted_text(&shapes)
             .iter()
             .filter(|t| t.contains(CENSUS_REFUSAL))
@@ -2350,7 +2356,7 @@ mod tests {
         // The list's popup: the graph draws no highlighted rows.
         app.research_graph_view = false;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
         let drawn = crate::paint::painted_text(&shapes);
 
         let at = |want: &str| drawn.iter().position(|t| t.contains(want));
@@ -2392,7 +2398,7 @@ mod tests {
             dy: 0,
         });
         app.status_line = None;
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
         let drawn = crate::paint::painted_text(&shapes);
 
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
@@ -2446,7 +2452,7 @@ mod tests {
             to_tier: 2,
         });
         app.status_line = None;
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
         let drawn = crate::paint::painted_text(&shapes);
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
         assert!(
@@ -2469,7 +2475,8 @@ mod tests {
         for mode in [Mode::Playing, Mode::Research, Mode::Inventory, Mode::Battle] {
             app.mode = mode;
             app.status_line = None;
-            let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
             assert!(
                 !crate::paint::painted_text(&shapes)
                     .iter()
@@ -2830,6 +2837,7 @@ mod tests {
             Mode::AudioOptions,
             Mode::GraphicsOptions,
             Mode::SpriteOptions,
+            Mode::ManualOptions,
             Mode::QuitRunConfirm,
         ]
         .into_iter()

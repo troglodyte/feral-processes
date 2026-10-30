@@ -1,7 +1,7 @@
 # In-game help pages
 
 Every `.md` file in this directory is one page of the manual the player
-reads with `?` inside the game. Adding a topic is dropping a file in here —
+reads from the Manual page of the game menu (Esc) inside the game. Adding a topic is dropping a file in here —
 no Rust change, no rebuild, no registration anywhere.
 
 Loaded by `HelpDb::load_dir` (`crates/engine/src/help.rs`). This file is the

@@ -31,13 +31,33 @@ fn app_in_base(seed: u32) -> App {
 
 #[test]
 fn the_field_offers_mining_and_trade() {
-    let app = app_in_base(5101);
+    let mut app = test_app(5101);
+    found_the_base(&mut app);
+    stand_in_base_at(&mut app, 40, 40);
     let keys = keys(&app);
     for key in ["b", "c", "n", "t", "s"] {
         assert!(keys.contains(&key.to_string()), "{key} missing: {keys:?}");
     }
     for stack_only in ["< >", "g"] {
         assert!(!keys.contains(&stack_only.to_string()), "{keys:?}");
+    }
+}
+
+/// `v` can succeed only on floor or beside it, so only the Base locale
+/// names it.
+#[test]
+fn v_lay_tile_shows_only_in_reach_of_the_base() {
+    let app = app_in_base(5109);
+    assert_eq!(label(&app, "v").as_deref(), Some("lay tile"));
+
+    let mut away = test_app(5110);
+    found_the_base(&mut away);
+    stand_in_base_at(&mut away, 40, 40);
+    assert_eq!(label(&away, "v"), None, "{:?}", keys(&away));
+
+    for market in [false, true] {
+        let bar = locale_keybar(MapLocale::Stack { market }, false);
+        assert!(bar.iter().flatten().all(|(k, _)| k != "v"));
     }
 }
 
@@ -85,7 +105,7 @@ fn watching_a_program_takes_over_the_bar() {
     app.watching = Some(staff);
     assert!(app.watch_center().is_some(), "fixture is not watching");
 
-    assert_eq!(keys(&app), ["↑↓←→", "Esc", "Space", ","]);
+    assert_eq!(keys(&app), ["?", "↑↓←→", "Esc", "Space", ","]);
     assert_eq!(label(&app, "Esc").as_deref(), Some("stop watching"));
 
     app.handle_key(GameKey::Esc);
@@ -124,7 +144,7 @@ fn a_walk_in_progress_takes_over_the_bar() {
     app.paused = true;
     app.travel_to(x + 3, y);
 
-    assert_eq!(keys(&app), ["Esc", "Space", ","]);
+    assert_eq!(keys(&app), ["?", "Esc", "Space", ","]);
     assert_eq!(label(&app, "Esc").as_deref(), Some("stop walking"));
     assert_eq!(label(&app, "Space").as_deref(), Some("resume"));
 
@@ -144,26 +164,33 @@ fn the_excavate_plan_keeps_its_own_bar() {
     assert_eq!(app.map_keybar(), vec![app.plan_keybar().unwrap()]);
 }
 
-/// Every locale's bar keeps the screens first (after the Stack's crossing
-/// pair), which is what `the_keybar_fits_the_log_pane` measures the cut
-/// against.
+/// Every locale's bar leads with `?` (the cut takes segments from the end,
+/// so it goes last), then the screens, which is what
+/// `the_keybar_fits_the_log_pane` measures the cut against.
 #[test]
-fn every_locale_bar_leads_with_the_screens() {
+fn every_locale_bar_leads_with_the_key_list_then_the_screens() {
     for locale in [
         MapLocale::Field,
+        MapLocale::Base,
         MapLocale::Stack { market: false },
         MapLocale::Stack { market: true },
     ] {
         for mining in [false, true] {
             let bar = locale_keybar(locale, mining);
-            let screens_at = if matches!(locale, MapLocale::Stack { .. }) {
-                assert_eq!(bar[0], [("< >".into(), "ascend/descend".into())]);
-                1
-            } else {
-                0
-            };
-            let screens: Vec<&str> = bar[screens_at].iter().map(|(k, _)| k.as_str()).collect();
-            assert_eq!(screens, ["b", "i", "D", "?", "Esc"], "{locale:?}");
+            let flat: Vec<&str> = bar.iter().flatten().map(|(k, _)| k.as_str()).collect();
+            assert_eq!(flat[0], "?", "{locale:?}");
+            let screens: Vec<&str> = bar
+                .iter()
+                .find(|g| g.iter().any(|(k, _)| k == "b"))
+                .unwrap()
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .filter(|k| *k != "?")
+                .collect();
+            assert_eq!(screens, ["b", "i", "D", "Esc"], "{locale:?}");
+            if matches!(locale, MapLocale::Stack { .. }) {
+                assert_eq!(bar[0][1], ("< >".into(), "ascend/descend".into()));
+            }
         }
     }
 }

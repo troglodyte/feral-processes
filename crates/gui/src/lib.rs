@@ -45,7 +45,7 @@ use feral_processes_app_core::{
     App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
 };
 use fx::{FrameCues, Fx};
-use keys::{KeyRepeat, TextGate};
+use keys::{KeyRepeat, SheetHold, TextGate};
 use paint::{Color, Painter};
 use sounds::{AMBIENT_BLIPS, AmbientDrone, SoundBank};
 pub use sprites::install_library as install_sprite_library;
@@ -122,9 +122,21 @@ const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
 /// Whether `FERAL_DEV_ALT` is set: holds `reveal` down for `--screenshot`,
 /// whose `--keys` cannot carry a modifier. `FERAL_DEV_REVEAL`'s predicate.
 fn dev_alt() -> bool {
-    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        std::env::var_os("FERAL_DEV_ALT").is_some_and(|v| !v.is_empty() && v != "0")
-    });
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| env_on("FERAL_DEV_ALT"));
+    *ON
+}
+
+/// Whether the environment variable `name` is set to something other than
+/// empty or `0`.
+fn env_on(name: &str) -> bool {
+    std::env::var_os(name).is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// Whether `FERAL_DEV_SHORTCUTS` is set: holds the shortcut sheet up for
+/// `--screenshot`, `dev_alt`'s reason.
+fn dev_shortcuts() -> bool {
+    static ON: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| env_on("FERAL_DEV_SHORTCUTS"));
     *ON
 }
 
@@ -195,6 +207,7 @@ struct Frontend {
     fx: Fx,
     key_repeat: KeyRepeat,
     text_gate: TextGate,
+    sheet_hold: SheetHold,
     last_mode: Mode,
     perf: perf::PerfMeter,
     sprite_pointer: SpritePointer,
@@ -664,6 +677,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             fx: Fx::new(),
             key_repeat: KeyRepeat::new(),
             text_gate: TextGate::new(),
+            sheet_hold: SheetHold::new(),
             last_mode,
             perf: perf::PerfMeter::new(),
             sprite_pointer: SpritePointer::default(),
@@ -874,8 +888,23 @@ fn frame(
     // layout instead of assuming QWERTY positions. `TextGate` is what stops
     // the OS auto-repeat riding along that path into the screen the press
     // just opened — `block_held` below cannot reach these.
+    // A release the window never saw (focus lost mid-hold) would leave the
+    // sheet up and the key swallowed for good.
+    fe.sheet_hold.release_if_up(|k| input.keyboard.pressed(k));
     for event in input.typed.read().filter(|e| types_text(e.key_code)) {
         let app = &mut fe.app;
+        // `?` is the held shortcut sheet wherever the sheet exists; elsewhere
+        // it is ordinary text (a name, a filter) and flows on as before.
+        if event.state == bevy::input::ButtonState::Released {
+            fe.sheet_hold.release(event.key_code);
+        } else if fe.sheet_hold.swallows(event.key_code) {
+            continue;
+        } else if event.text.as_deref().is_some_and(|t| t.contains('?'))
+            && app.shortcut_sheet().is_some()
+        {
+            fe.sheet_hold.press(event.key_code);
+            continue;
+        }
         fe.text_gate
             .feed(event.key_code, event.state, event.text.as_deref(), |c| {
                 let before = app.mode;
@@ -946,7 +975,13 @@ fn frame(
     // Timed whether or not the readout is on: a meter fed only while it is
     // visible reports the first second after the overlay is switched on as a cold start every time.
     let started = std::time::Instant::now();
-    render::draw(&mut fe.app, &mut fe.fx, &painter, reveal);
+    render::draw(
+        &mut fe.app,
+        &mut fe.fx,
+        &painter,
+        reveal,
+        fe.sheet_hold.held() || dev_shortcuts(),
+    );
     // `draw_battle` takes them in a battle; this empties what a frame that
     // left battle queued, which no draw would ever take.
     let _ = fe.app.take_pending_impacts();
@@ -1916,7 +1951,7 @@ mod tests {
         };
         fx.begin_frame(now, cues, in_battle);
         fx.observe_log(last_log.as_ref());
-        paint::with_painter(|p| render::draw(app, fx, p, false));
+        paint::with_painter(|p| render::draw(app, fx, p, false, false));
     }
 
     /// A raid's tile flash washes the tile it names while the party is home.
@@ -1945,7 +1980,7 @@ mod tests {
         let flash = fx
             .tile_flash(home)
             .expect("a flash queued this frame is live");
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false, false));
         assert_eq!(
             paint::painted_rect_fill_count(&shapes, flash),
             1,
@@ -1977,7 +2012,7 @@ mod tests {
             // A frame in, so the body is off its first cell and being drawn
             // by the interpolating pass rather than sitting on a tile.
             fx.begin_frame(0.06, FrameCues::default(), false);
-            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false));
+            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false, false));
             paint::painted_text(&shapes)
                 .iter()
                 .filter(|t| t.contains(MARK))
@@ -2006,7 +2041,7 @@ mod tests {
                 },
                 false,
             );
-            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false));
+            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false, false));
             let mark = fx::SPEECH_GLYPH.to_string();
             paint::painted_text(&shapes)
                 .iter()
@@ -2033,7 +2068,7 @@ mod tests {
         let mut app = app_in_base(4245);
         let mut fx = Fx::new();
 
-        let (_, away) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
+        let (_, away) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false, false));
         assert_eq!(
             paint::painted_rect_stroke_count(&away, render::CUTTING_OUTLINE),
             0,
@@ -2044,7 +2079,7 @@ mod tests {
             app.game.as_mut().unwrap().toggle_mining(),
             "the fixture starts with the tools away"
         );
-        let (_, out) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
+        let (_, out) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false, false));
         assert_eq!(
             paint::painted_rect_stroke_count(&out, render::CUTTING_OUTLINE),
             1,

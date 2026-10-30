@@ -22,8 +22,8 @@ Everything past that first pocket is solid, and you cut it out yourself.
   compacted rock at least three and fused rock at least four, and your level shortens the count down
   to that floor and no further. The rock comes in patches, so thickness varies from cell to cell,
   not from zone to zone. A cell that opens sometimes shakes a Core Fragment loose.
-- A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for two
-  Core Fragments, and only laid tile is buildable. Bare cut ground stays open, but nothing can
+- A cut cell is not floor yet. v lays a VectorStasis Tile on the cell you are standing on for one
+  Core Fragment, and only laid tile is buildable. Bare cut ground stays open, but nothing can
   stand on it until it is floored.
 - m opens the Excavation plan. The cursor costs no time at all: space drops one corner, moving
   previews a rectangle, and space again commits it. Starting the box on a cell that is already

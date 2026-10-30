@@ -13,7 +13,12 @@ pub type KeyGroup = Vec<(String, String)>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapLocale {
     Field,
-    Stack { market: bool },
+    /// The field while the party can lay floor: on it or orthogonally
+    /// beside it (`Game::in_base_reach`). Everything Field has, plus `v`.
+    Base,
+    Stack {
+        market: bool,
+    },
 }
 
 fn row(key: &str, label: &str) -> (String, String) {
@@ -23,8 +28,8 @@ fn row(key: &str, label: &str) -> (String, String) {
 /// The map's own bar for `locale`, in priority order — the renderer takes
 /// the longest prefix that fits, so what is last here is what goes first.
 ///
-/// What is not here is in the manual (`?`), the discoverable home for it,
-/// and `f` and `L` sit on the filter strip on the opposite border.
+/// What is not here is in the shortcut popup (hold `?`), the discoverable
+/// home for it, and `f` and `L` sit on the filter strip on the opposite border.
 ///
 /// **The order is priority, not reading order, and the census is why.**
 /// `the_keybar_fits_the_log_pane` (gui) measures what survives at the
@@ -40,7 +45,10 @@ fn row(key: &str, label: &str) -> (String, String) {
 /// being told.
 ///
 /// `TAB` (expand/collapse the log pane) is not here either: the bar has no
-/// room to spare for it, and `?` is where it is discovered.
+/// room to spare for it, and the `?` popup is where it is discovered.
+///
+/// **`?` leads every map bar** because the bar cuts from the end, so it is
+/// the last segment to go.
 ///
 /// **The verbs are filtered by locale, because a key the bar names and the
 /// place refuses reads as a bug.** `n` cuts only field rock; `t` finds a
@@ -57,7 +65,13 @@ pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
         _ => Vec::new(),
     };
     verbs.push(row("a", "routine"));
-    if locale == MapLocale::Field {
+    let field = matches!(locale, MapLocale::Field | MapLocale::Base);
+    if locale == MapLocale::Base {
+        // Right after the first verb: the bar keeps only about three, and
+        // `v` is the one key the player could not find.
+        verbs.push(row("v", "lay tile"));
+    }
+    if field {
         verbs.push(row("c", "collect"));
         verbs.push(row("n", if mining { "mine (on)" } else { "mine" }));
     }
@@ -68,7 +82,7 @@ pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
     }
     verbs.push(row("e", "drain"));
     verbs.push(row("r", "recharge"));
-    if locale == MapLocale::Field {
+    if field {
         verbs.push(row("t", "trade"));
     }
     verbs.push(row("s", "save"));
@@ -76,13 +90,18 @@ pub fn locale_keybar(locale: MapLocale, mining: bool) -> Vec<KeyGroup> {
         row("b", "base"),
         row("i", "pack"),
         row("D", "downed"),
-        row("?", "help"),
         row("Esc", "menu"),
     ];
     if let MapLocale::Stack { .. } = locale {
-        vec![vec![row("< >", "ascend/descend")], screens, verbs]
+        vec![
+            vec![row("?", "keys"), row("< >", "ascend/descend")],
+            screens,
+            verbs,
+        ]
     } else {
-        vec![screens, verbs]
+        let mut lead = vec![row("?", "keys")];
+        lead.extend(screens);
+        vec![lead, verbs]
     }
 }
 
@@ -107,12 +126,16 @@ impl App {
         // itself, and the camera stays held for when the popup closes.
         let on_map = self.mode == Mode::Playing;
         if on_map && self.watching.is_some() {
-            let mut rows = vec![row("↑↓←→", "step"), row("Esc", "stop watching")];
+            let mut rows = vec![
+                row("?", "keys"),
+                row("↑↓←→", "step"),
+                row("Esc", "stop watching"),
+            ];
             clock(&mut rows);
             return vec![rows];
         }
         if on_map && let Some(Walk::Travel { .. }) = self.walk {
-            let mut rows = vec![row("Esc", "stop walking")];
+            let mut rows = vec![row("?", "keys"), row("Esc", "stop walking")];
             clock(&mut rows);
             return vec![rows];
         }
@@ -123,6 +146,8 @@ impl App {
             MapLocale::Stack {
                 market: game.market_underfoot(),
             }
+        } else if game.in_base_reach() {
+            MapLocale::Base
         } else {
             MapLocale::Field
         };

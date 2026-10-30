@@ -54,6 +54,9 @@ player:
   build their prompt from. Nothing claims these letters today; the test is
   what fails if a future battle action does.
 
+- `crates/app-core/src/tests/shortcuts.rs` — `no_sheet_lists_a_hidden_key`,
+  over every area's `?` shortcut sheet.
+
 There is one more: `crates/gui/src/render/party.rs` holds the companion
 screen's help lines to never naming `W` or the verb for it. It predates this
 file and covers only that screen.

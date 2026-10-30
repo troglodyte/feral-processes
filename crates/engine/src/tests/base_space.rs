@@ -393,6 +393,31 @@ fn on_base_floor_answers_only_for_laid_floor_on_the_field() {
     assert_eq!(game.field_pos(), None, "the Stack is not the field");
 }
 
+/// `v` can only succeed on floor or beside it, so the bar's "in the base"
+/// is that reach: orthogonal neighbours count, diagonals and distance do not.
+#[test]
+fn in_base_reach_is_floor_and_its_orthogonal_neighbours() {
+    let mut game = game(3115);
+    place_home(&mut game);
+    let (fx, fy) = FAR_FIELD;
+    game.floor_cell(fx, fy);
+
+    stand_in_base_at(&mut game, fx, fy);
+    assert!(game.in_base_reach(), "on laid floor");
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        stand_in_base_at(&mut game, fx + dx, fy + dy);
+        assert!(game.in_base_reach(), "orthogonal neighbour {dx},{dy}");
+    }
+    stand_in_base_at(&mut game, fx + 1, fy + 1);
+    assert!(!game.in_base_reach(), "diagonal is out of reach");
+    stand_in_base_at(&mut game, fx + 5, fy);
+    assert!(!game.in_base_reach(), "far away");
+
+    stand_in_base(&mut game);
+    descend(&mut game);
+    assert!(!game.in_base_reach(), "underground");
+}
+
 /// A Recharger's radius is measured from the party's field tile, and
 /// `recharger_node.ron`'s own description reads "while you stand anywhere
 /// on your base" — so a Recharger beside the party standing on the base

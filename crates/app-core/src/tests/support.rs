@@ -4173,3 +4173,22 @@ pub(crate) fn put_in_pack(app: &mut App, item: &str, qty: u32) {
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
 }
+
+/// Reaches the manual's index the only way the player can: the game menu's
+/// Manual page, from the map (Esc) or the main menu (`[O]`).
+pub(crate) fn open_manual(app: &mut App) {
+    if app.mode == Mode::MainMenu {
+        app.handle_key(GameKey::Char('o'));
+    } else {
+        app.handle_key(GameKey::Esc);
+    }
+    for _ in 0..8 {
+        if app.mode == Mode::ManualOptions {
+            break;
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::ManualOptions, "no Manual page in the menu");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Help);
+}

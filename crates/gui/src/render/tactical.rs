@@ -1590,7 +1590,7 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
             ("X".to_string(), "release".to_string()),
             ("E".to_string(), "end turn".to_string()),
             ("R".to_string(), "resolve".to_string()),
-            ("A".to_string(), "auto-attack".to_string()),
+            ("A".to_string(), "auto".to_string()),
         ];
     }
     let mut rows = vec![
@@ -1628,7 +1628,8 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(St
         // Last, because `strip::fitting` drops from the end and this is the
         // row that may go — but it does not go at 1280x720, which is
         // `the_action_bar_fits_the_log_pane`'s measurement and not a hope.
-        ("A".to_string(), "auto-attack".to_string()),
+        // "auto", not "auto-attack": the leading `?` took the room.
+        ("A".to_string(), "auto".to_string()),
     ]);
     if view.acted {
         // The auto and resolve rows survive a spent turn: arming either is
@@ -1680,6 +1681,9 @@ pub(super) fn keybar_rows(
     cursor: Option<(i32, i32)>,
 ) -> Vec<(String, String)> {
     let mut rows = action_bar(mode, view, auto);
+    // First of the keys, so it is the last to be cut; the aim readout below
+    // is a description rather than a key and still leads.
+    rows.insert(0, ("?".to_string(), "keys".to_string()));
     if mode == Mode::TacticalAim
         && let Some(row) = aim_readout(view, cursor)
     {
@@ -2387,7 +2391,7 @@ mod tests {
         let mut app = crate::render::test_support::playing_app_around(game);
         app.mode = Mode::TacticalResult;
         let mut fx = Fx::new();
-        let (_, shapes) = with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
+        let (_, shapes) = with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false, false));
         let painted = painted_text(&shapes);
 
         assert!(
@@ -3750,17 +3754,17 @@ mod tests {
             (
                 Mode::TacticalBattle,
                 false,
-                action_bar(Mode::TacticalBattle, &view, false),
+                keybar_rows(Mode::TacticalBattle, &view, false, None),
             ),
             (
                 Mode::TacticalBattle,
                 true,
-                action_bar(Mode::TacticalBattle, &view, true),
+                keybar_rows(Mode::TacticalBattle, &view, true, None),
             ),
             (
                 Mode::TacticalAim,
                 false,
-                action_bar(Mode::TacticalAim, &view, false),
+                keybar_rows(Mode::TacticalAim, &view, false, None),
             ),
             (
                 Mode::TacticalAim,
@@ -3801,6 +3805,81 @@ mod tests {
                         "{mode:?}'s bar (auto {auto}) overhangs its pane by {slack:.1}px"
                     );
                 });
+            }
+        }
+    }
+
+    /// Every key a battle-map bar names is on the `?` sheet, so the popup
+    /// never omits a key the bar advertises. The bar states are the whole of
+    /// `keybar_rows`: the aim cursor, a charger's decision, auto-attack, the
+    /// wild side's turn, and the board open and spent.
+    #[test]
+    fn every_key_on_a_tactical_bar_is_on_the_sheet() {
+        use feral_processes_app_core::{ShortcutArea, shortcut_sheet_for};
+        use feral_processes_engine::views::FormLook;
+
+        let sheet = shortcut_sheet_for(ShortcutArea::TacticalMap);
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.player_turn = true;
+        view.acted = false;
+        let acting = acting_body(&view).expect("someone acts").entity;
+
+        let mut states: Vec<(&str, Vec<(String, String)>)> = Vec::new();
+        states.push((
+            "aim",
+            keybar_rows(Mode::TacticalAim, &view, false, Some((0, 0))),
+        ));
+        states.push(("auto", keybar_rows(Mode::TacticalBattle, &view, true, None)));
+        states.push((
+            "plain",
+            keybar_rows(Mode::TacticalBattle, &view, false, None),
+        ));
+        let mut form = view.clone();
+        for b in form.bodies.iter_mut().filter(|b| b.entity == acting) {
+            b.form = Some(FormLook {
+                glyph: 'x',
+                sprite: None,
+            });
+        }
+        states.push((
+            "emulating",
+            keybar_rows(Mode::TacticalBattle, &form, false, None),
+        ));
+        let mut spent = view.clone();
+        spent.acted = true;
+        states.push((
+            "spent",
+            keybar_rows(Mode::TacticalBattle, &spent, false, None),
+        ));
+        let mut charging = view.clone();
+        for b in charging.bodies.iter_mut().filter(|b| b.entity == acting) {
+            b.charge = Some((1, 3));
+        }
+        states.push((
+            "charging",
+            keybar_rows(Mode::TacticalBattle, &charging, false, None),
+        ));
+        let mut wild = view.clone();
+        wild.player_turn = false;
+        states.push((
+            "wild",
+            keybar_rows(Mode::TacticalBattle, &wild, false, None),
+        ));
+
+        for (state, rows) in states {
+            // A leading readout row has no key; `?` leads the keyed rows.
+            let first = rows.iter().find(|(k, _)| !k.is_empty());
+            assert_eq!(
+                first.map(|(k, _)| k.as_str()),
+                Some("?"),
+                "`?` leads the {state} bar: {rows:?}"
+            );
+            for (key, _) in rows.iter().filter(|(k, _)| !k.is_empty()) {
+                assert!(
+                    sheet.lists(key),
+                    "the {state} bar names {key:?}, which the sheet does not list"
+                );
             }
         }
     }

@@ -1276,7 +1276,7 @@ mod tests {
         app.handle_key(GameKey::Char(' '));
         let mut fx = crate::fx::Fx::new();
         let (_, shapes) =
-            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
+            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false, false));
         let want = canvas::palette_color(SPRITE_PALETTE[0]);
         assert_eq!(
             crate::paint::painted_rect_fill_count(&shapes, want),
@@ -1294,7 +1294,7 @@ mod tests {
         assert_eq!(app.mode, Mode::CreateCharacter);
         let mut fx = crate::fx::Fx::new();
         let (_, shapes) =
-            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
+            crate::paint::with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false, false));
         let drawn = crate::paint::painted_text(&shapes).join("\n");
         assert!(drawn.contains("Draw your avatar"), "{drawn}");
         assert!(drawn.contains("Enter keep"), "{drawn}");

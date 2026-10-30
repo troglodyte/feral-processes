@@ -28,6 +28,10 @@ const SPRITES: HubPage = HubPage {
     title: "Sprites",
     screens: &[Mode::SpriteOptions],
 };
+const MANUAL: HubPage = HubPage {
+    title: "Manual",
+    screens: &[Mode::ManualOptions],
+};
 const SAVE_AND_QUIT: HubPage = HubPage {
     title: "Save & quit",
     screens: &[Mode::QuitRunConfirm],
@@ -42,7 +46,7 @@ impl HubKind for GameMenu {
 
     /// The Save & quit page exists only while there is a run to save.
     fn pages(&self, app: &App) -> Vec<&'static HubPage> {
-        let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS, &SPRITES];
+        let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS, &SPRITES, &MANUAL];
         if app.game_menu_in_run {
             pages.push(&SAVE_AND_QUIT);
         }
@@ -61,22 +65,23 @@ impl HubKind for GameMenu {
         match (app.mode, app.hub_on_rail, app.quit_unsaved_pending) {
             (Mode::QuitRunConfirm, false, true) => vec![("y", "quit"), ("n", "stay")],
             (Mode::QuitRunConfirm, false, false) => vec![("Enter", "pick")],
-            (Mode::SpriteOptions, true, _) => vec![("Enter", "open")],
+            (Mode::SpriteOptions | Mode::ManualOptions, true, _) => vec![("Enter", "open")],
             _ => Vec::new(),
         }
     }
 
-    /// Enter or Right on the Sprites rail entry opens the picker, instead
-    /// of stepping onto a page with nothing to select.
+    /// Enter or Right on the Sprites or Manual rail entry opens its screen,
+    /// instead of stepping onto a page with nothing to select.
     fn key(&self, app: &mut App, key: GameKey) -> bool {
-        if app.mode == Mode::SpriteOptions
-            && app.hub_on_rail
-            && matches!(key, GameKey::Enter | GameKey::Right)
-        {
-            app.open_sprite_forge();
-            return true;
+        if !app.hub_on_rail || !matches!(key, GameKey::Enter | GameKey::Right) {
+            return false;
         }
-        false
+        match app.mode {
+            Mode::SpriteOptions => app.open_sprite_forge(),
+            Mode::ManualOptions => app.open_manual(),
+            _ => return false,
+        }
+        true
     }
 
     /// Back to wherever the menu was opened from.
@@ -90,6 +95,13 @@ impl HubKind for GameMenu {
 }
 
 impl App {
+    /// The manual's only door. `menu_origin` makes `close_screen` return to
+    /// the Manual page, the way `open_sprite_forge` does for its picker.
+    pub(crate) fn open_manual(&mut self) {
+        self.menu_origin = Some(Mode::ManualOptions);
+        self.mode = Mode::Help;
+    }
+
     /// Opens the menu, remembering whether a run is behind it. Recorded here
     /// rather than read off `game`, because `leave_arena` returns to the main
     /// menu with the arena's game still in place — a Save page there would

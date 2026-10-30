@@ -35,7 +35,8 @@ Your menus and stores:
   the rail, and [ and ] turn pages from anywhere. Esc on the rail leaves for wherever you opened
   it from. b reopens the page you left. The Overview shows where the base is short, and Enter
   opens the highlighted page.
-- ? — this manual
+- ? — hold it on the map or in a fight to see every key that works where you stand. The manual
+  you are reading is in the Esc menu, on its Manual page.
 - i — your inventory and your party, a rail of pages like the base report's: Items (your pack),
   Phase keys, Downed programs and Tools, then Companions (your roster), Programs (manifests,
   fuse, refactor, develop), Routines (install, etch, extract) and Perks. The rail and page keys
@@ -59,7 +60,8 @@ Acting on the world:
 - a — call a routine
 - x — examine a direction
 - d — demolish a direction
-- v — lay a VectorStasis Tile on the cell you are standing on
+- v — lay a VectorStasis Tile on the cell you are standing on. The bottom bar shows it when you are
+  on laid floor or right beside it
 - n — cutting tools out, or away again: with them out, walking into rock cuts it yourself, and your
   own tile wears a blue ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
@@ -98,7 +100,7 @@ Reading and housekeeping:
   own turn
 - , — cycle the world's speed: x1, x2, x4
 - s — save
-- Esc — Game menu: gameplay, audio and graphics settings, and Save & quit
+- Esc — Game menu: gameplay, audio, graphics and sprite settings, this manual, and Save & quit
 - +/- — zoom
 
 On the companions screen, < and > move the highlighted member along the battle line; the front slot

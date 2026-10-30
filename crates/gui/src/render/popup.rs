@@ -588,7 +588,6 @@ pub(super) fn popup_fractions(size: PopupSize) -> (f32, f32) {
 /// built entirely out of text rows — the gear inspect page — has no scroll
 /// and simply loses its tail, in silence. This is what a height test
 /// measures such a page against.
-#[cfg(test)]
 pub(super) fn popup_max_rows(screen_h: f32, size: PopupSize, m: &Metrics) -> usize {
     let chrome = m.line_height * 2.0 + m.inset;
     ((screen_h * popup_fractions(size).1 - chrome) / m.line_height)

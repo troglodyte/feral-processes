@@ -87,15 +87,15 @@ fn draw_row_flash(fx: &Fx, target: ImpactTarget, row: Rect, painter: &Painter) {
 /// screen actually draws instead of a second copy of this line — the same
 /// reason the tactical screen's `action_bar` is its own function.
 pub(super) fn action_bar_line(options: &[ActionOption], party_commands: &[PartyCommand]) -> String {
-    let mut actions: Vec<String> = options
-        .iter()
-        .map(|o| match &o.unavailable {
-            None => o.label.clone(),
-            Some(reason) => format!("{} ({reason})", o.label),
-        })
-        .collect();
+    // Bare `[?]` and a two-space join: the worst-case line already filled the
+    // screen, and `the_group_action_bar_fits_the_screen` is the bound.
+    let mut actions: Vec<String> = vec!["[?]".to_string()];
+    actions.extend(options.iter().map(|o| match &o.unavailable {
+        None => o.label.clone(),
+        Some(reason) => format!("{} ({reason})", o.label),
+    }));
     actions.extend(party_commands.iter().map(|c| c.label.clone()));
-    actions.join("   ")
+    actions.join("  ")
 }
 
 /// One status as drawn: its tag, with the stack count only once there is
@@ -2059,6 +2059,60 @@ mod tests {
                     taken - avail
                 );
             });
+        }
+    }
+
+    /// Every key the group fight's bar names is on the `?` sheet. The keys
+    /// are read out of the bar's own `[k]` brackets (`[D] all defend` and
+    /// `[x] release` are the irregular spellings), so a label that stops
+    /// bracketing its key makes this fail rather than skip it. Party
+    /// commands are the engine's own (`battle_party_commands`); the option
+    /// labels are copies of what `battle_action_options` and
+    /// `charge_action_options` author.
+    #[test]
+    fn every_key_on_the_group_bar_is_on_the_sheet() {
+        use feral_processes_app_core::{ShortcutArea, shortcut_sheet_for};
+        use feral_processes_engine::battle::{ActionKind, TargetSpec};
+
+        let assets_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let game = feral_processes_engine::Game::new(
+            0,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            &assets_dir,
+        )
+        .expect("the assets parse");
+        let option = |kind, key, label: &str| ActionOption {
+            kind,
+            key,
+            label: label.to_string(),
+            detail: String::new(),
+            target: TargetSpec::None,
+            unavailable: None,
+        };
+        let options = vec![
+            option(ActionKind::Attack, 'a', "[a]ttack"),
+            option(ActionKind::Defend, 'd', "[d]efend"),
+            option(ActionKind::Special, 's', "[s]pecial"),
+            option(ActionKind::UseItem, 'u', "[u]se item"),
+            option(ActionKind::Revert, 'r', "[r]evert"),
+            option(ActionKind::ChargeHold, 'h', "[h]old"),
+            option(ActionKind::ChargeRelease, 'x', "[x] release"),
+        ];
+        let line = action_bar_line(&options, &game.battle_party_commands());
+        let sheet = shortcut_sheet_for(ShortcutArea::ClassicBattle);
+
+        let keys: Vec<&str> = line
+            .split('[')
+            .skip(1)
+            .filter_map(|rest| rest.split_once(']').map(|(k, _)| k))
+            .collect();
+        assert_eq!(keys.len(), 12, "a bracketed key went missing: {line:?}");
+        assert_eq!(keys[0], "?", "`?` leads the bar: {line:?}");
+        for key in keys {
+            assert!(
+                sheet.lists(key),
+                "the bar names [{key}], which the sheet does not list: {line:?}"
+            );
         }
     }
 

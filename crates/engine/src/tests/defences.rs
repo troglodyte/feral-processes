@@ -284,3 +284,37 @@ fn a_shield_upgrades_without_a_program() {
     upgrade_now(&mut game, shield).unwrap();
     assert_eq!(game.world.get::<StructureTier>(shield).unwrap().0, 2);
 }
+
+/// A glyphed depot, so the map's view scan can see it.
+fn visible_depot(game: &mut Game, x: i32) -> Entity {
+    let depot = spawn_structure_at(game, "depot", x, 1);
+    game.world.entity_mut(depot).insert(Glyph {
+        ch: 'D',
+        color: GlyphColor::White,
+    });
+    depot
+}
+
+fn view_of_structure(game: &mut Game, entity: Entity) -> EntityView {
+    game.view_entities(40, 40)
+        .into_iter()
+        .find(|v| v.entity == entity)
+        .expect("the structure is in view")
+}
+
+#[test]
+fn outline_flag_marks_only_covered_structures() {
+    let mut game = game();
+    let shield = defence(&mut game, "shield", 1, 1);
+    let near = visible_depot(&mut game, 3);
+    let far = visible_depot(&mut game, 30);
+
+    assert!(view_of_structure(&mut game, near).shielded);
+    assert!(!view_of_structure(&mut game, far).shielded);
+
+    game.world.get_mut::<Stock>(shield).unwrap().input.clear();
+    assert!(
+        !view_of_structure(&mut game, near).shielded,
+        "an unarmed Shield outlines nothing"
+    );
+}

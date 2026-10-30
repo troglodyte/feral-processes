@@ -49,6 +49,7 @@ pub use app::rig_tool::RigToolScreen;
 pub use app::routine_craft::{
     BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
+pub use app::shields::{ShieldCircle, ShieldCircleStyle};
 pub use app::shortcuts::{ShortcutArea, ShortcutGroup, ShortcutSheet, shortcut_sheet_for};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{

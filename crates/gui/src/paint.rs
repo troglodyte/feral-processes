@@ -375,13 +375,11 @@ impl Painter {
         );
     }
 
-    #[allow(dead_code)] // first used by the shield circle
     pub fn circle(&self, cx: f32, cy: f32, r: f32, color: Color) {
         self.painter
             .circle_filled(egui::pos2(cx, cy), r, to_egui(color));
     }
 
-    #[allow(dead_code)] // first used by the shield circle
     pub fn circle_stroke(&self, cx: f32, cy: f32, r: f32, thickness: f32, color: Color) {
         self.painter.circle_stroke(
             egui::pos2(cx, cy),
@@ -892,6 +890,19 @@ pub(crate) fn painted_circles(shapes: &[egui::epaint::ClippedShape]) -> Vec<(f32
                     0.0
                 },
             )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The centre of every circle `with_painter` recorded, in the same order as
+/// `painted_circles`.
+#[cfg(test)]
+pub(crate) fn painted_circle_centres(shapes: &[egui::epaint::ClippedShape]) -> Vec<(f32, f32)> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Circle(c) => Some((c.center.x, c.center.y)),
             _ => None,
         })
         .collect()

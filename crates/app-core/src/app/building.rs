@@ -730,7 +730,12 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        let Some(tier) = found.tier else {
+        // `handle_build_direction_key`'s own test: a structure that runs no
+        // job has nothing for a program to do, so it upgrades on the spot.
+        let needs_program = game
+            .structure_kind(found.entity)
+            .is_none_or(|kind| game.structure_needs_program(&kind));
+        let Some(tier) = found.tier.filter(|_| needs_program) else {
             let outcome = game.upgrade_structure(found.entity, None);
             self.report(outcome);
             self.mode = Mode::Playing;

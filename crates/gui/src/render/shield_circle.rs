@@ -1,7 +1,9 @@
 //! A Shield's circle: how it is styled and drawn, shared by the hover, the
 //! deploy and upgrade previews, and the flash a softened hit raises.
 
+use super::base::tile_origin_px;
 use super::*;
+use feral_processes_app_core::{ShieldCircle, ShieldCircleStyle};
 
 const SHIELD_BLUE: (f32, f32, f32) = (0.4, 0.8, 1.0);
 const HOVER_FILL_ALPHA: f32 = 0.12;
@@ -44,6 +46,36 @@ pub(crate) fn draw_shield_circle(
     }
 }
 
+/// Draws the pane's Shield circles and the flashes of softened hits, over
+/// the map `fx.map_click()` describes (set by whichever map drew this
+/// frame). `in_battle` picks the siege board's flashes over the field's.
+pub(crate) fn draw_shield_circles(
+    fx: &Fx,
+    painter: &Painter,
+    circles: &[ShieldCircle],
+    in_battle: bool,
+) {
+    let Some(lay) = fx.map_click() else { return };
+    let tile = lay.tile_px;
+    let centre_of = |anchor: (i32, i32)| {
+        let (px, py) = tile_origin_px(anchor, lay.center, lay.half, lay.off, tile, lay.pane);
+        (px + tile / 2.0, py + tile / 2.0)
+    };
+    painter.clipped(lay.pane.x, lay.pane.y, lay.pane.w, lay.pane.h, |p| {
+        for (anchor, radius, alpha) in fx.shield_flashes(in_battle) {
+            let style = CircleStyle::Flash(alpha);
+            draw_shield_circle(p, centre_of(anchor), radius as f32 * tile, style);
+        }
+        for c in circles {
+            let style = match c.style {
+                ShieldCircleStyle::Hover => CircleStyle::Hover,
+                ShieldCircleStyle::Preview => CircleStyle::Preview,
+            };
+            draw_shield_circle(p, centre_of(c.anchor), c.radius as f32 * tile, style);
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,5 +100,32 @@ mod tests {
         let circles = painted_circles(&shapes);
         assert_eq!(circles.len(), 1);
         assert!(circles[0].1 == 0.0 && circles[0].2 > 0.0);
+    }
+
+    #[test]
+    fn a_hovered_shield_draws_a_circle_on_the_surface_map() {
+        use crate::paint::painted_circle_centres;
+        let mut fx = Fx::new();
+        let pane = Rect::new(10.0, 20.0, 400.0, 300.0);
+        fx.set_map_click(Some(MapClickLayout {
+            pane,
+            center: (5, 5),
+            half: (6, 4),
+            off: (0.0, 0.0),
+            tile_px: 32.0,
+        }));
+        let circle = ShieldCircle {
+            anchor: (7, 4),
+            radius: 4,
+            style: ShieldCircleStyle::Hover,
+        };
+        let (_, shapes) = with_painter(|p| draw_shield_circles(&fx, p, &[circle], false));
+        let circles = painted_circles(&shapes);
+        assert_eq!(circles.len(), 2, "one fill and one stroke");
+        assert!(circles.iter().all(|c| c.0 == 128.0));
+        let (px, py) = tile_origin_px((7, 4), (5, 5), (6, 4), (0.0, 0.0), 32.0, pane);
+        for (x, y) in painted_circle_centres(&shapes) {
+            assert_eq!((x, y), (px + 16.0, py + 16.0));
+        }
     }
 }

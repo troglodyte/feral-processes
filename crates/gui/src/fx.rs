@@ -482,12 +482,10 @@ fn camera_step(cam: f32, target: f32, dt: f32, max_lag: Option<f32>) -> f32 {
 /// A softened hit's flash on a Shield's circle: the fill rises to
 /// `SHIELD_FLASH_PEAK` over `SHIELD_FLASH_RISE` seconds and falls back over
 /// `SHIELD_FLASH_FALL`, both eased.
-#[allow(dead_code)] // read once the map draws flashes
 const SHIELD_FLASH_PEAK: f32 = 0.25;
 const SHIELD_FLASH_RISE: f64 = 0.12;
 const SHIELD_FLASH_FALL: f64 = 0.35;
 
-#[allow(dead_code)] // read once the map draws flashes
 pub(crate) fn shield_flash_alpha(elapsed: f64) -> f32 {
     let t = elapsed as f32;
     let rise = SHIELD_FLASH_RISE as f32;
@@ -501,7 +499,6 @@ pub(crate) fn shield_flash_alpha(elapsed: f64) -> f32 {
 }
 
 /// One Shield's flash in progress: where, how wide, and when it began.
-#[allow(dead_code)] // `radius` is read once the map draws flashes
 struct ShieldFlash {
     anchor: (i32, i32),
     radius: u32,
@@ -1619,7 +1616,6 @@ impl Fx {
 
     /// The Shield circles flashing now, as anchor, radius in tiles and fill
     /// alpha. `in_battle` picks the siege board's list over the field's.
-    #[allow(dead_code)] // called once the map draws flashes
     pub fn shield_flashes(&self, in_battle: bool) -> Vec<((i32, i32), u32, f32)> {
         let list = if in_battle {
             &self.board_shield_flashes

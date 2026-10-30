@@ -102,7 +102,7 @@ Do not duplicate between them; point instead.
 | [0032](0032-base-returns-to-the-field.md) | The base returns to the field; a breach re-tiers the field in place | Agreed | user, on Claude's proposal | — |
 | [0033](0033-founding-floor-grows-around-rock.md) | Founding floor grows around rock | Agreed | user | — |
 | [0034](0034-google-rust-style-guide-as-reference.md) | Google's Rust style guide is the reference, with listed exceptions | Accepted (0.21.6) | user, on Claude's proposal | — |
-| [0035](0035-shields-cover-a-radius.md) | A Shield covers a radius that grows with its tier | Agreed | user, on Claude's proposal | — |
+| [0035](0035-shields-cover-a-radius.md) | A Shield covers a radius that grows with its tier | Accepted (0.21.7) | user, on Claude's proposal | — |
 
 ## Pattern index
 

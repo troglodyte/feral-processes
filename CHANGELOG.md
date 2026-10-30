@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.7
+
+**A Shield now protects only the ground inside its circle, and that circle grows each time you upgrade it.** Before, every Shield at the base cut every GC Entropy Sweep wherever it stood. Existing Shields now cover only their circle: 4 tiles at Mk1, growing by 2 a tier to 12 at Mk5. Sweeps that hit outside every circle land in full, and only the Shields that covered the target spend a coil.
+
+**In a siege you fight yourself, a Shield softens enemy hits on staff and structures inside its circle.** Each hit loses 2 per covering Shield. A hit on a body never drops below 1, and the cut shares the body's deflection cap. A Shield that softened anything spends one coil when the siege ends. An unarmed Shield softens nothing. Sieges resolved off-screen still count every Shield at the base.
+
+**You can see the circle.** Hovering a Shield shows its circle. Deploying one previews the circle in each direction, and upgrading one previews the wider circle, without asking for a program. The circle flashes briefly when it softens a hit, and the shield outline now marks only structures inside an armed Shield's circle.
+
 ## 0.21.6
 
 **Nothing changes in play; this release adds a coding-style rule.** Code style questions the project's own rules don't answer now follow Google's Rust style guide, with a listed set of exceptions in `docs/adr/0034-google-rust-style-guide-as-reference.md`. It applies to code as it is changed; no existing code was rewritten.

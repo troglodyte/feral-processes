@@ -1,6 +1,6 @@
 # 0035 A Shield covers a radius that grows with its tier
 
-- Status: Agreed
+- Status: Accepted (0.21.7)
 - Decided by: user, on Claude's proposal
 - Date: 2026-10-30
 - Pattern: —

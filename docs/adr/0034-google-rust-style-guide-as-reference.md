@@ -1,7 +1,7 @@
 # 0034 Google's Rust style guide is the reference, with listed exceptions
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Accepted (0.21.6)
+- Decided by: user, on Claude's proposal
 - Date: 2026-10-30
 - Pattern: —
 - Depends on: [0017](0017-game-is-the-entire-api.md), [0024](0024-code-is-organized-by-domain.md)

@@ -53,4 +53,4 @@ The save format changes; `SAVE_FORMAT_VERSION` is bumped and old saves are not m
 - `crates/engine/src/game/combat.rs` — `Game::actor_abilities`.
 - `crates/engine/src/items_db.rs` — `ItemDb::synthesise_etched_disks`.
 - `crates/engine/src/routine_tree.rs` — `synthesise_nodes`.
-- `crates/engine/src/save.rs` — `SAVE_FORMAT_VERSION`, `PlayerSave.routines`, `SaveData.known_routines`.
+- `crates/engine/src/save/mod.rs` — `SAVE_FORMAT_VERSION`, `PlayerSave.routines`, `SaveData.known_routines`.

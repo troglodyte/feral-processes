@@ -401,6 +401,19 @@ impl Game {
         })
     }
 
+    /// Whether `v` could lay a tile here: on laid floor or on a field cell
+    /// orthogonally beside it. The map bar shows `v` on exactly this, and
+    /// the refusal text explains the cases the press still declines.
+    pub fn in_base_reach(&self) -> bool {
+        let Some((x, y)) = self.field_pos() else {
+            return false;
+        };
+        let grid = self.world.resource::<crate::base_grid::BaseGrid>();
+        [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .any(|(dx, dy)| grid.is_floor(x + dx, y + dy))
+    }
+
     /// The floor overlay and the field together, for the pure walk rules.
     pub(crate) fn ground(&self) -> crate::base_grid::Ground<'_> {
         crate::base_grid::Ground {

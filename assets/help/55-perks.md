@@ -24,8 +24,7 @@ There are twenty-one, and they fall into five jobs.
 - Your economy. Lean Compiler shaves an item off every compile cost, never below one of each. Keen
   Scavenger raises every mining node's success rate. Teardown pulls an extra unit out of every
   teardown, whatever tool is doing the stripping. Tighten Tolerances rolls the quality of everything
-  you compile 5 points higher per level. Failover patches your structures while you are
-  away, with or without a Patch Node.
+  you compile 5 points higher per level.
 - Staying alive out there. Low Power Mode slows your Power drain by a point a level, and enough
   levels stop the drain entirely. Obfuscation makes everything you do in the Stack raise Trace 10%
   less per level — never to nothing.

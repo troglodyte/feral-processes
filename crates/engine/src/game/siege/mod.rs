@@ -15,6 +15,7 @@
 pub(crate) mod board;
 pub(crate) mod clock;
 pub(crate) mod offscreen;
+pub(crate) mod patch;
 pub(crate) mod persist;
 pub(crate) mod raiders;
 pub(crate) mod turrets;

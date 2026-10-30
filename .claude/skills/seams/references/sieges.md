@@ -160,3 +160,10 @@
   destroyed Shield is simply not found. The off-screen
   `resolve_siege_offscreen` still reads the base-wide `structure_raid_defense`,
   so radius means nothing to a siege fought off-screen.
+- **A Patch Node pulses in `tactical_round_upkeep` after `fire_turrets`, on
+  rounds divisible by `PATCH_SIEGE_PULSE_ROUNDS`.** Bodies heal through
+  `restore_hp`; a board structure is not a body, so its `TacticalFxKind::Heal`
+  is cued by hand, and only when HP was restored. Besiegers are never healed.
+  The pulse is decided by `TacticalBattle::round` alone, so nothing is saved
+  and a reload on a pulse round cannot double it. The off-screen
+  `resolve_siege_offscreen` has no rounds and never pulses.

@@ -1,21 +1,22 @@
-//! Which tiles a Shield covers: a circle around its anchor that grows with
-//! its tier. Every consumer (the sweep, the siege board, the outline, the
-//! views) asks here, so the rule lives in one place.
+//! Which tiles a circled structure (a Shield, a Patch Node) covers: a circle
+//! around its anchor that grows with its tier. Every consumer (the sweep, the
+//! siege board, regen, the outline, the views) asks here, so the rule lives
+//! in one place.
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 mod tests;
 
-/// A Shield's reach: `base` tiles at tier 1, `per_tier` more per tier after.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ShieldRadiusDef {
+/// A circled structure's reach: `base` tiles at tier 1, `per_tier` more per tier after.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct RadiusDef {
     pub base: u32,
     pub per_tier: u32,
 }
 
-/// The radius, in tiles, of a Shield at `tier` (tiers start at 1).
-pub fn radius_at(def: &ShieldRadiusDef, tier: u32) -> u32 {
+/// The radius, in tiles, of a circled structure at `tier` (tiers start at 1).
+pub fn radius_at(def: &RadiusDef, tier: u32) -> u32 {
     def.base + def.per_tier * tier.saturating_sub(1)
 }
 

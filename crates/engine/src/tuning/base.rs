@@ -319,8 +319,8 @@ pub const FLOOR_FINISH_COST: u32 = 3;
 /// under `docs/measurements/`.
 pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
 
-/// How often (in ticks) the base's repairers restore `Durability` to
-/// damaged structures — see `Game::structure_regen`.
+/// How often (in ticks) the base's repairers restore `Durability` to the
+/// damaged structures they cover — see `Game::structure_regen`.
 ///
 /// There is deliberately no companion "amount" constant. Structures do not
 /// heal on their own at all: every point of repair comes from a deployed
@@ -334,6 +334,16 @@ pub const STRUCTURE_REGEN_INTERVAL: u64 = 20;
 // ─────────────────────────────────────────────────────────────────────────
 // Sieges
 // ─────────────────────────────────────────────────────────────────────────
+
+/// A fought siege's Patch Node pulses every this many rounds (ADR 0036).
+/// Decided by `TacticalBattle::round` alone, so a save loaded mid-siege
+/// cannot double-pulse and no new state is saved.
+pub const PATCH_SIEGE_PULSE_ROUNDS: u32 = 2;
+
+/// What each Patch Node covering a body or board structure restores per
+/// pulse. Small on purpose: it helps a long siege, it does not out-heal a
+/// pack.
+pub const PATCH_SIEGE_HEAL: u32 = 2;
 
 /// How much pressure one tick of a sector adds to `resources::SiegePressure`,
 /// per sector level — `RAID_PRESSURE_PER_ZONE`'s shape, and `1` for the same

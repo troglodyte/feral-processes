@@ -811,6 +811,12 @@ pub enum EffectKind {
     Shielded {
         radius: u32,
     },
+    /// A Patch Node's circle mended the structure at `pos` by `amount`
+    /// Durability, so the renderer can float a green `+`. Never pushed for
+    /// a structure already full, or one only Failover or a Medic mended.
+    Patched {
+        amount: u32,
+    },
 }
 
 /// One open fight between two base programs.

@@ -167,8 +167,8 @@ The rest of what a base does:
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. Sweeps start in the second sector: the base you raise in sector 1 is
   never swept, so the first one you lose ground to is one you had an escalation to prepare for. A Shield
-  soaks damage off every sweep against everything you own, a Patch Node recompiles damage across the
-  whole base, and a program posted to the structure that gets hit defends it with its own
+  soaks damage off every sweep against everything you own, a Patch Node recompiles damage to the structures
+  inside its circle, and a program posted to the structure that gets hit defends it with its own
   Mitigation.
 - Research is one project at a time, and the base works it. Pick a node on the research screen and
   every Research Station you have deployed staffs itself and starts feeding it; with nothing picked,

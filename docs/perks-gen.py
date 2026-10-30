@@ -30,7 +30,7 @@ P = [
  ("Obfuscation",    "Obfuscation",       3, "-10% to every Trace rise, floor 1",     "OBFUSCATION_REDUCTION_PER_LEVEL = 0.10",    "Game::raise_trace"),
  ("ProcessPool",    "Process Pool",      3, "+1 tamed program you may own",          "PROCESS_POOL_SLOTS_PER_LEVEL = 1",          "Game::pet_capacity"),
  ("Teardown",       "Teardown",          4, "+1 unit out of every teardown",         "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::extraction_yield"),
- ("Failover",       "Failover",          2, "+1 Durability per repair interval",     "FAILOVER_REPAIR_PER_LEVEL = 1",             "Game::total_repair_rate"),
+ ("Failover",       "Failover",          2, "+1 Durability per repair interval (withdrawn, ADR 0036)", "FAILOVER_REPAIR_PER_LEVEL = 1",    "perks::repair_rate_bonus"),
  ("TightenTolerances", "Tighten Tolerances", 3, "+5pp on a compiled copy's quality floor", "QUALITY_PERK_PER_LEVEL = 5",             "Game::craft_quality_floor"),
  ("TargetLock",     "Target Lock",       3, "+2 Accuracy on every attack you make",  "TARGET_LOCK_ACCURACY_PER_LEVEL = 2",        "Game::accuracy_bonus"),
 ]

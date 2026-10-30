@@ -895,6 +895,26 @@ pub(crate) fn painted_circles(shapes: &[egui::epaint::ClippedShape]) -> Vec<(f32
         .collect()
 }
 
+/// The fill (or, for an unfilled circle, stroke) colour of every circle
+/// `with_painter` recorded as `(r, g, b)`, in `painted_circles` order.
+#[cfg(test)]
+pub(crate) fn painted_circle_rgb(shapes: &[egui::epaint::ClippedShape]) -> Vec<(u8, u8, u8)> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Circle(c) => {
+                let col = if c.fill.a() > 0 {
+                    c.fill
+                } else {
+                    c.stroke.color
+                };
+                Some((col.r(), col.g(), col.b()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The centre of every circle `with_painter` recorded, in the same order as
 /// `painted_circles`.
 #[cfg(test)]

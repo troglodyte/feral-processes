@@ -629,7 +629,7 @@ fn spark_burst(kind: EffectKind) -> (u32, f32) {
         // still leaves a flash.
         EffectKind::Mine => (0, 0.0),
         // Drawn as a circle, never as a tile flash.
-        EffectKind::Shielded { .. } => (0, 0.0),
+        EffectKind::Shielded { .. } | EffectKind::Patched { .. } => (0, 0.0),
     }
 }
 
@@ -747,7 +747,8 @@ fn effect_duration(kind: EffectKind) -> f64 {
         // a zero-length flash is gone on the frame it arrived. The struck
         // cell's own progress bar is the picture.
         EffectKind::Mine => 0.0,
-        EffectKind::Shielded { .. } => 0.0,
+        // A Patch Node's mend is a floating mark, not a tile flash.
+        EffectKind::Shielded { .. } | EffectKind::Patched { .. } => 0.0,
     }
 }
 
@@ -760,7 +761,7 @@ fn effect_color(kind: EffectKind) -> Color {
         // asks what colour it is. Answering `FLASH_RED` anyway rather than
         // panicking, since a cue turning into a crash is the worse failure.
         EffectKind::Mine => FLASH_RED,
-        EffectKind::Shielded { .. } => FLASH_CYAN,
+        EffectKind::Shielded { .. } | EffectKind::Patched { .. } => FLASH_CYAN,
     }
 }
 
@@ -979,6 +980,10 @@ pub struct Fx {
     field_shield_flashes: Vec<ShieldFlash>,
     board_shield_flashes: Vec<ShieldFlash>,
     cell_marks: Vec<CellMark>,
+    /// Marks over field tiles (a Patch Node's green `+`). Apart from
+    /// `cell_marks` because that list is board cells and is cleared whenever
+    /// no fight is open, which is exactly when these are drawn.
+    field_marks: Vec<CellMark>,
     /// Board cells a drop trooper landed on, and when. Not a `TileFlash`:
     /// that is keyed by a world `EffectKind`, and a landing is not one.
     landings: Vec<((i32, i32), f64)>,
@@ -1043,6 +1048,7 @@ impl Fx {
             field_shield_flashes: Vec::new(),
             board_shield_flashes: Vec::new(),
             cell_marks: Vec::new(),
+            field_marks: Vec::new(),
             landings: Vec::new(),
             walkers: Vec::new(),
             speech: Vec::new(),
@@ -1106,6 +1112,14 @@ impl Fx {
             for e in effects {
                 if let EffectKind::Shielded { radius } = e.kind {
                     push_shield_flash(&mut self.field_shield_flashes, e.pos, radius, now);
+                    continue;
+                }
+                if let EffectKind::Patched { amount } = e.kind {
+                    self.field_marks.push(CellMark {
+                        pos: e.pos,
+                        kind: MarkKind::Heal(amount as i32),
+                        start: now,
+                    });
                     continue;
                 }
                 self.flashes.push(TileFlash {
@@ -1219,6 +1233,8 @@ impl Fx {
         self.tactical_flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.cell_marks.retain(|m| now - m.start < m.kind.seconds());
+        self.field_marks
+            .retain(|m| now - m.start < m.kind.seconds());
         self.landings
             .retain(|&(_, start)| now - start < LANDING_FLASH_SECONDS);
         self.walkers
@@ -1440,7 +1456,29 @@ impl Fx {
         glyph_px: u16,
         to_px: impl Fn((i32, i32)) -> (f32, f32),
     ) {
-        for mark in &self.cell_marks {
+        self.draw_marks(&self.cell_marks, painter, tile_px, glyph_px, to_px);
+    }
+
+    /// The same marks over field tiles: a Patch Node's green `+`.
+    pub fn draw_field_marks(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        glyph_px: u16,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        self.draw_marks(&self.field_marks, painter, tile_px, glyph_px, to_px);
+    }
+
+    fn draw_marks(
+        &self,
+        marks: &[CellMark],
+        painter: &Painter,
+        tile_px: f32,
+        glyph_px: u16,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        for mark in marks {
             let t = ((self.now - mark.start) / mark.kind.seconds()) as f32;
             if !(0.0..1.0).contains(&t) {
                 continue;
@@ -3104,6 +3142,28 @@ mod tests {
         assert!(fx.shield_flashes(true).is_empty());
         fx.begin_frame(2.0, FrameCues::default(), false);
         assert!(fx.shield_flashes(false).is_empty());
+    }
+
+    #[test]
+    fn a_patch_effect_floats_one_green_plus_on_the_field() {
+        use feral_processes_engine::VisualEffect;
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            1.0,
+            FrameCues {
+                effects: vec![VisualEffect {
+                    pos: (3, 4),
+                    kind: EffectKind::Patched { amount: 1 },
+                }],
+                ..Default::default()
+            },
+            false,
+        );
+        assert_eq!(fx.field_marks.len(), 1);
+        assert_eq!(fx.field_marks[0].pos, (3, 4));
+        assert_eq!(fx.field_marks[0].kind, MarkKind::Heal(1));
+        assert!(fx.flashes.is_empty(), "no tile flash for a mend");
+        assert!(fx.cell_marks.is_empty(), "board marks are a separate list");
     }
 
     #[test]

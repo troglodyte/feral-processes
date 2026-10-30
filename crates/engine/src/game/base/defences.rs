@@ -17,6 +17,25 @@ pub(crate) struct ShieldReach {
     pub cut: u32,
 }
 
+/// Where a Patch Node stands, how far it reaches and what it mends.
+#[derive(Clone, Copy)]
+pub(crate) struct PatchReach {
+    pub entity: Entity,
+    pub anchor: (i32, i32),
+    pub radius: u32,
+    pub amount: u32,
+}
+
+/// What the nodes in `reaches` mend between them on a structure standing on
+/// `cells`: each one whose circle touches any cell adds its `amount`.
+pub(crate) fn patch_mend(reaches: &[PatchReach], cells: &[(i32, i32)]) -> u32 {
+    reaches
+        .iter()
+        .filter(|r| crate::reach::covers_any(r.anchor, r.radius, cells))
+        .map(|r| r.amount)
+        .sum()
+}
+
 /// One armed defence: the structure and the two numbers it adds. `shield` is
 /// `None` for a base-wide defence.
 pub(crate) struct ArmedDefence {
@@ -67,9 +86,68 @@ impl Game {
         let tier = self.world.get::<StructureTier>(entity).map_or(1, |t| t.0);
         Some(ShieldReach {
             anchor: (pos.x, pos.y),
-            radius: crate::shields::radius_at(radius_def, tier),
+            radius: crate::reach::radius_at(radius_def, tier),
             cut: def.raid_defense,
         })
+    }
+
+    /// Every deployed Patch Node, sorted by entity. Derived on each call, so
+    /// a node lost to a raid stops mending with no invalidation step.
+    pub(crate) fn patch_reaches(&self) -> Vec<PatchReach> {
+        let db = self.world.resource::<StructureDb>();
+        let mut reaches: Vec<PatchReach> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let repair = db.get(&e.get::<Structure>()?.kind)?.repair?;
+                let pos = e.get::<Position>()?;
+                let tier = e.get::<StructureTier>().map_or(1, |t| t.0);
+                Some(PatchReach {
+                    entity: e.id(),
+                    anchor: (pos.x, pos.y),
+                    radius: crate::reach::radius_at(&repair.radius, tier),
+                    amount: repair.amount,
+                })
+            })
+            .collect();
+        reaches.sort_by_key(|r| r.entity);
+        reaches
+    }
+
+    /// The radius a Patch Node of `kind` would have at `tier`, for the
+    /// deploy preview. `None` for a kind that repairs nothing.
+    pub fn patch_radius_for(&self, kind: &str, tier: u32) -> Option<u32> {
+        let repair = self.world.resource::<StructureDb>().get(kind)?.repair?;
+        Some(crate::reach::radius_at(&repair.radius, tier))
+    }
+
+    /// Every deployed Patch Node, sorted by anchor, for the circle the map
+    /// draws.
+    pub fn view_patch_nodes(&self) -> Vec<PatchNodeView> {
+        let db = self.world.resource::<StructureDb>();
+        let mut nodes: Vec<PatchNodeView> = self
+            .patch_reaches()
+            .into_iter()
+            .filter_map(|r| {
+                let e = self.world.entity(r.entity);
+                let def = db.get(&e.get::<Structure>()?.kind)?;
+                let radius_def = def.repair?.radius;
+                let tier = e.get::<StructureTier>().map_or(1, |t| t.0);
+                let next_radius = def
+                    .upgrade
+                    .as_ref()
+                    .filter(|u| tier < self.upgrade_ceiling(u))
+                    .map(|_| crate::reach::radius_at(&radius_def, tier + 1));
+                Some(PatchNodeView {
+                    entity: r.entity,
+                    anchor: r.anchor,
+                    radius: r.radius,
+                    next_radius,
+                })
+            })
+            .collect();
+        nodes.sort_by_key(|n| (n.anchor, n.entity));
+        nodes
     }
 
     /// The cells a structure stands on; empty when it has no `Position`.
@@ -86,7 +164,7 @@ impl Game {
     /// defence always does.
     pub(crate) fn defence_covers(&self, d: &ArmedDefence, cells: &[(i32, i32)]) -> bool {
         d.shield
-            .is_none_or(|s| crate::shields::covers_any(s.anchor, s.radius, cells))
+            .is_none_or(|s| crate::reach::covers_any(s.anchor, s.radius, cells))
     }
 
     /// Every deployed Shield, armed or not, sorted by anchor.
@@ -104,7 +182,7 @@ impl Game {
                     .upgrade
                     .as_ref()
                     .filter(|u| tier < self.upgrade_ceiling(u))
-                    .map(|_| crate::shields::radius_at(radius_def, tier + 1));
+                    .map(|_| crate::reach::radius_at(radius_def, tier + 1));
                 Some(ShieldView {
                     entity: e.id(),
                     anchor: reach.anchor,
@@ -123,7 +201,7 @@ impl Game {
     /// preview. `None` for a kind with no circle.
     pub fn shield_radius_for(&self, kind: &str, tier: u32) -> Option<u32> {
         let def = self.world.resource::<StructureDb>().get(kind)?;
-        Some(crate::shields::radius_at(def.shield_radius.as_ref()?, tier))
+        Some(crate::reach::radius_at(def.shield_radius.as_ref()?, tier))
     }
 
     /// Queues a flash of a Shield's circle: on the field, and on the siege
@@ -174,7 +252,7 @@ impl Game {
         self.armed_defences()
             .into_iter()
             .filter_map(|d| d.shield)
-            .filter(|s| crate::shields::covers_any(s.anchor, s.radius, &cells))
+            .filter(|s| crate::reach::covers_any(s.anchor, s.radius, &cells))
             .collect()
     }
 

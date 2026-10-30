@@ -154,14 +154,14 @@ pub const BASTION_DEF_MULTIPLIER: i32 = 2;
 
 /// Durability a posted **Medic** restores to the structure it guards, per
 /// `STRUCTURE_REGEN_INTERVAL` — on top of whatever the base's Patch Nodes
-/// restore to everything.
+/// restore to the structures their circles cover.
 ///
-/// Per structure rather than a contribution to `Game::total_repair_rate`,
-/// which is what makes *where* it stands a decision about what to protect.
-/// Flat rather than scaled by the program's level, because the figure wants
-/// a base played with one posted rather than a formula: 2 beats a Mk1 Patch
-/// Node on that one structure and loses to a Mk3 across a whole base, which
-/// is the trade it should be.
+/// Per structure rather than a contribution to a Patch Node's circle, which
+/// is what makes *where* it stands a decision about what to protect. Flat
+/// rather than scaled by the program's level, because the figure wants a
+/// base played with one posted rather than a formula: 2 beats one Patch Node
+/// on that one structure and loses to several overlapping across a whole
+/// base, which is the trade it should be.
 pub const MEDIC_REPAIR_PER_INTERVAL: u32 = 2;
 
 /// Divisor applied to the *lesser* of two fused programs' stats: a fusion

@@ -681,23 +681,26 @@ is skipped with a warning logged in-game rather than crashing startup.
     temporary: Some((max_ticks: 20)),
 
     // Optional; can be left out entirely (defaults to repairing nothing).
-    // If set, this structure restores `per_tier` Durability to *every*
-    // deployed structure — itself included — every 20 ticks, multiplied by
-    // its own upgrade tier. It stacks additively across every deployed
-    // structure that sets this, the same way `raid_defense` does, so a
-    // tier-2 repairer and a tier-3 repairer restore five between them.
+    // If set, this structure restores `amount` Durability every 20 ticks to
+    // each structure its circle covers — itself included — where a structure
+    // is covered when any footprint cell lies within `radius` of the anchor
+    // tile's centre (the same rule as `shield_radius`). The radius is `base`
+    // tiles at tier 1 plus `per_tier` for each tier after; the tier never
+    // scales `amount`. Circles stack additively, the same way `raid_defense`
+    // does, so two overlapping repairers restore twice `amount`.
     //
-    // Pair it with `upgrade` or the tier is always 1 and `per_tier` is just
-    // a flat rate. Nests carry Durability too, but a repairer never heals
-    // one — only structures.
+    // Pair it with `upgrade` or the tier is always 1 and the circle never
+    // grows. Nests carry Durability too, but a repairer never heals one —
+    // only structures.
     //
-    // This is how the Patch Node works: `repair: Some((per_tier: 1))` with
+    // This is how the Patch Node works: `repair: Some((amount: 1, radius:
+    // (base: 4, per_tier: 2)))` with
     // no `work` recipe. It is the only source of repair a *structure* can
     // declare — structures do not heal on their own at all — and the other
     // source is not a building: a Medic-class program posted to guard a
     // structure mends that one structure (see `assets/species/README.md`,
     // "Base jobs"). With neither standing, raid damage is permanent.
-    repair: Some((per_tier: 1)),
+    repair: Some((amount: 1, radius: (base: 4, per_tier: 2))),
 
     // Optional; can be left out entirely (defaults to un-upgradeable). If
     // set, the player can upgrade this structure (`U`) through

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::GlyphColor;
 use crate::items::ItemId;
-pub use crate::shields::ShieldRadiusDef;
+pub use crate::reach::RadiusDef;
 
 pub type StructureId = String;
 
@@ -378,17 +378,18 @@ pub struct TemporaryDef {
     pub max_ticks: u32,
 }
 
-/// How fast a structure patches the rest of the base back up — see
-/// `Game::total_repair_rate`. Deliberately has no `radius`: unlike
-/// a Shield's `shield_radius`, a repairer works base-wide from wherever it stands,
-/// which is the only sensible reading given every non-Home structure has
-/// to sit within `MAX_BUILD_DISTANCE_FROM_HOME` of the Home anyway.
+/// How a structure patches the base back up: it mends only the structures
+/// its circle covers (ADR 0036) — see `Game::structure_regen`. Upgrading
+/// widens the circle rather than the mend, so a big base wants several nodes
+/// rather than one tall one.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct RepairDef {
-    /// `Durability` restored to every deployed structure per upgrade tier,
-    /// every `STRUCTURE_REGEN_INTERVAL` ticks. A tier-3 repairer restores
-    /// three times this; two repairers add together.
-    pub per_tier: u32,
+    /// `Durability` restored to every covered structure per
+    /// `STRUCTURE_REGEN_INTERVAL` ticks, whatever the tier. Overlapping
+    /// repairers add together.
+    pub amount: u32,
+    /// The circle it covers, by tier.
+    pub radius: RadiusDef,
 }
 
 /// A structure's upgrade path — see `Game::upgrade_structure`. The cost to
@@ -707,11 +708,11 @@ pub struct StructureDef {
     #[serde(default)]
     pub raid_defense: u32,
     /// If set, `raid_defense` covers only a circle around this structure,
-    /// growing with its tier — see `shields::covers`. Without it a defence is
+    /// growing with its tier — see `reach::covers`. Without it a defence is
     /// base-wide. `#[serde(default)]` so existing structure files keep
     /// their base-wide reach.
     #[serde(default)]
-    pub shield_radius: Option<ShieldRadiusDef>,
+    pub shield_radius: Option<RadiusDef>,
     /// If set, this structure is a siege turret — see
     /// `game::siege::turrets::turret_defense` and `Game::fire_turrets`. Only
     /// meaningful during a siege; outside one it is an ordinary structure
@@ -752,12 +753,11 @@ pub struct StructureDef {
     /// files keep parsing.
     #[serde(default)]
     pub temporary: Option<TemporaryDef>,
-    /// If set, this structure repairs every deployed structure — itself
-    /// included — by `per_tier` times its own upgrade tier, every
-    /// `STRUCTURE_REGEN_INTERVAL` ticks (see `Game::structure_regen`).
-    /// Stacks additively across every deployed structure that sets it, the
-    /// same way `raid_defense` and `pet_slot_bonus` do, and pairs with
-    /// `upgrade` — without one the tier is always 1. `#[serde(default)]` so
+    /// If set, this structure repairs the structures its circle covers —
+    /// itself included — by `amount` every `STRUCTURE_REGEN_INTERVAL` ticks
+    /// (see `Game::structure_regen`). Stacks additively across overlapping
+    /// circles, and pairs with `upgrade` — the tier only widens the circle,
+    /// and without an upgrade it is always 1. `#[serde(default)]` so
     /// existing structure files (including mods) repair nothing, exactly as
     /// before this field existed.
     #[serde(default)]

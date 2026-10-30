@@ -56,7 +56,7 @@ structure but Home, which is exempt at every tier.
 | `=` | Data Cache | 10 `core_fragment` | - | - | - | +5 roster slots while standing |
 | `D` | Depot | 12 `core_fragment` | 200 | - | - | programs stock it and fetch from it |
 | `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage inside its circle, radius 4 + 2 a tier |
-| `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
+| `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability / 20 ticks to structures in its circle, radius 4 + 2 a tier |
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
 | `E` | Line Driver | 30 `core_fragment`, 6 `cache_grain` | - | - | 6 | +6 Grid supply, burns a Power Cell |
 | `b` | Log Analyzer Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |

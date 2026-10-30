@@ -616,6 +616,10 @@ impl Game {
         ty: Option<DamageType>,
     ) -> i32 {
         let dealt = self.mitigate_incoming_damage_typed(target, dmg, ty);
+        if dmg > 0 {
+            let shields = self.siege_shields_over(target);
+            self.note_shields_softened(&shields);
+        }
         let dealt = self.dead_mans_switch(target, dealt);
         self.lower_hp(target, dealt);
         // "An area attack connected." The third and last `break_cloak`
@@ -788,7 +792,10 @@ impl Game {
         let deflection = if ty.is_some_and(|t| damage::ignores_deflection(t, resist)) {
             0
         } else {
-            self.gear_bonus(target).deflection
+            // Shields over a besieged body add to deflection, so they share
+            // its cap and the floor of 1.
+            let shield_cut: u32 = self.siege_shields_over(target).iter().map(|s| s.cut).sum();
+            self.gear_bonus(target).deflection + shield_cut as i32
         };
         // Heat and its kin raise the blow before any cut. Zero skips the
         // arithmetic entirely so an unaffected body's numbers cannot move.

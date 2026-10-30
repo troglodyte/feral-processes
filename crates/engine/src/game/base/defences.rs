@@ -13,6 +13,8 @@ use crate::*;
 pub(crate) struct ShieldReach {
     pub anchor: (i32, i32),
     pub radius: u32,
+    /// What it takes off each hit it covers: the def's `raid_defense`.
+    pub cut: u32,
 }
 
 /// One armed defence: the structure and the two numbers it adds. `shield` is
@@ -66,6 +68,7 @@ impl Game {
         Some(ShieldReach {
             anchor: (pos.x, pos.y),
             radius: crate::shields::radius_at(radius_def, tier),
+            cut: def.raid_defense,
         })
     }
 
@@ -143,6 +146,50 @@ impl Game {
                 (anchor.0 - origin.0, anchor.1 - origin.1),
                 crate::resources::TacticalFxKind::Shielded { radius },
             );
+    }
+
+    /// The armed Shields whose circle covers `target` while a siege is
+    /// fought; empty for any other fight and for a besieger.
+    ///
+    /// "Enemy hit" is implemented as "damage to a non-hostile body during a
+    /// siege": every source of that damage on a siege board is the
+    /// besiegers' (swings, routines, statuses they applied), and a tantrum
+    /// never runs inside a battle.
+    pub(crate) fn siege_shields_over(&self, target: Entity) -> Vec<ShieldReach> {
+        let Some(battle) = self.world.get_resource::<crate::tactical::TacticalBattle>() else {
+            return Vec::new();
+        };
+        if battle.siege_pack == 0 || self.world.get::<Hostile>(target).is_some() {
+            return Vec::new();
+        }
+        let origin = battle.siege_origin;
+        let mut cells: Vec<(i32, i32)> = battle
+            .cells_of(target)
+            .into_iter()
+            .map(|(x, y)| (x + origin.0, y + origin.1))
+            .collect();
+        if cells.is_empty() {
+            cells = self.structure_cells(target);
+        }
+        self.armed_defences()
+            .into_iter()
+            .filter_map(|d| d.shield)
+            .filter(|s| crate::shields::covers_any(s.anchor, s.radius, &cells))
+            .collect()
+    }
+
+    /// Records that these Shields softened a hit this siege (they spend a
+    /// coil when it ends) and flashes each circle.
+    pub(crate) fn note_shields_softened(&mut self, shields: &[ShieldReach]) {
+        for s in shields {
+            if let Some(mut battle) = self
+                .world
+                .get_resource_mut::<crate::tactical::TacticalBattle>()
+            {
+                battle.shields_softened.insert(s.anchor);
+            }
+            self.cue_shield_flash(s.anchor, s.radius);
+        }
     }
 
     /// What cuts a sweep against `target`: every armed defence that covers

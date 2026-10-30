@@ -252,6 +252,9 @@ pub struct TacticalBattle {
     /// `siege_origin`'s own reason, and `game::siege::board::SiegeBoard::
     /// door`'s copy.
     pub(crate) siege_door: (i32, i32),
+    /// Field anchors of the Shields that softened a hit this siege; each
+    /// spends one coil when the siege ends. Saved in `SiegeSave`.
+    pub(crate) shields_softened: std::collections::BTreeSet<(i32, i32)>,
     /// The hostile side's plan. `Rush` from `open`, so a hand-built board and
     /// a restored siege decide as they always have; `open_tactical_battle_at`
     /// is the one seat that rolls it.
@@ -290,6 +293,7 @@ impl TacticalBattle {
             screening: Vec::new(),
             siege_pack: 0,
             siege_origin: (0, 0),
+            shields_softened: std::collections::BTreeSet::new(),
             siege_door: (0, 0),
             pack: pack::PackState::default(),
         }

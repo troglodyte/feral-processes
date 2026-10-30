@@ -786,7 +786,7 @@ fn walk_feeders(
 ///
 /// **Chosen from the floor, never laid out around the Home.** A fixed ring
 /// at a radius is floor only once the base has grown out to it, and a
-/// founded base is the 3x3 around its Home — a ring that missed it stranded
+/// founded base is the small patch around its Home — a ring that missed it stranded
 /// every captured program on open ground.
 ///
 /// Ties at the nearest distance rotate by index and step, so a candidate

@@ -29,7 +29,7 @@ What two spaces cost today:
 - **Base space is retired.**
   - `BaseGrid` becomes a floor overlay keyed by field coordinates.
   - Structures, staff, dig sites, farm tiles and besiegers are ordinary field bodies.
-- **Founding:** the anchor costs Core Fragments and floors exactly one ring, the 8 cells around it.
+- **Founding:** the anchor costs Core Fragments and floors exactly one ring, the 8 cells around it. *Bent by [0033](0033-founding-floor-grows-around-rock.md): 25 cells grown around rock.*
 - **Growth:** tile by tile, paid in fragments. Each new tile must be orthogonally next to existing floor.
 - **Mining:**
   - A blocking field cell must be mined before it can be floored.

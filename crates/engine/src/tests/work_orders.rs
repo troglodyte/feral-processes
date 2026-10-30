@@ -1075,7 +1075,7 @@ fn standing_jobs_survive_a_save_but_not_a_demolition() {
 
 use crate::game::base::work_orders::{entry_tile, wander_step};
 
-/// The 3x3 a founding lays around `home`, plus one cell two out east.
+/// A small floor: the 3x3 around `home`, plus one cell two out east.
 fn founded_floor(home: Position) -> Vec<(i32, i32)> {
     let mut floor: Vec<(i32, i32)> = (-1..=1)
         .flat_map(|dy| (-1..=1).map(move |dx| (home.x + dx, home.y + dy)))
@@ -1107,8 +1107,8 @@ fn two_staff_arrive_on_different_tiles_at_the_same_tick() {
     );
 }
 
-/// A founded base is only the 3x3 around its Home, and an arrival has to
-/// land inside it — the bug was a fixed ring three out that never did.
+/// A base only the 3x3 around its Home, and an arrival has to land
+/// inside it — the bug was a fixed ring three out that never did.
 #[test]
 fn an_arrival_on_a_founded_base_lands_beside_the_home() {
     let home = Position { x: 0, y: 0 };

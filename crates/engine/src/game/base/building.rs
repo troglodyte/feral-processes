@@ -171,23 +171,10 @@ impl Game {
                     .into(),
             );
         }
-        // The whole 3x3 must take floor: open ground, and nothing on it that
-        // refuses floor (`Game::floor_conflict`). Refused here rather than
-        // skipped in `lay_founding_floor`, so a base never opens with a hole
-        // in its first floor.
-        if founding {
-            for (rx, ry) in (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| (px + dx, py + dy))) {
-                if !self.ground().walkable(rx, ry) {
-                    return Err(
-                        "There's no room to found a base here — the ground around you is blocked. \
-                         Try open ground."
-                            .into(),
-                    );
-                }
-                if let Some(conflict) = self.floor_conflict(rx, ry) {
-                    return Err(format!("You can't found a base here. {conflict}"));
-                }
-            }
+        // Only the Home's own tile must take floor: the rest of the founding
+        // floor grows around whatever refuses it (`lay_founding_floor`).
+        if founding && let Some(conflict) = self.floor_conflict(px, py) {
+            return Err(format!("You can't found a base here. {conflict}"));
         }
         let (x, y) = if founding {
             (px, py)

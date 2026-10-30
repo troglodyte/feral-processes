@@ -288,6 +288,10 @@ pub const FLOOR_TILE_COST: u32 = 1;
 /// Paid in code: a `build_cost` on `home.ron` would be a new schema use.
 pub const HOME_FOUNDING_COST: u32 = 2;
 
+/// How many floor cells founding lays, grown from the Home around rock and
+/// anything else that refuses floor: the 5x5 on open ground.
+pub const FOUNDING_FLOOR_CELLS: usize = 25;
+
 /// How many Blank Substrate a finish costs, on top of the
 /// `FLOOR_TILE_COST` fragments the tile itself already spent —
 /// `floors::FloorDb`'s one price, since there is no per-finish `cost` field

@@ -36,7 +36,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   than each for its own; a Teardown Rig (`strips`) is the one exempt job.
 - **The Home costs `HOME_FOUNDING_COST` fragments (paid in code), and it and the anchor land on the tile the party
   founded from** — `Game::move_anchor_to` is the anchor's one writer and
-  founding its only caller, and `lay_founding_floor` floors the 3x3 around it.
+  founding its only caller, and `lay_founding_floor` grows `FOUNDING_FLOOR_CELLS` of floor from it around rock (`footprint::founding_cells`).
 - **A zone-portal line is ramped from the zone it was introduced in, and
   `build_cost` is `min_zone: 1`.**
 - **Upgrading is a build request too, and `BuildSite::goal` is the whole of

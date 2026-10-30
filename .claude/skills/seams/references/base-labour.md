@@ -192,7 +192,7 @@
   surface tile it was beaten on. It lands on the free floor nearest the Home,
   chosen from `BaseGrid::floor_cells`; it was once a fixed ring
   `IDLE_STAFF_RING_TILES = 3` out, which the 19x9 test pocket covered and a
-  founded 3x3 never did, so every captured program stood on open ground
+  founded 3x3 (the floor before ADR 0033) never did, so every captured program stood on open ground
   forever with the whole suite green. Three rejections: never onto a tile another
   idle body holds, never onto the party's cell, and never onto a cell any
   structure's **footprint** covers. That last one read `structures_by_tile` —

@@ -10,7 +10,7 @@
   one door, returns `bool`, and the queue holds **resolved** values —
   `ActiveContract`'s rule, kept alive by `achievement_system`, which pushes a
   `Notification` built from an achievement's own prose and names no kind.
-- **`def` and the two censuses are matches, and that is load-bearing.**
+- **`def` and the fired-by-site census are matches, and that is load-bearing.**
   `cell_mark`'s rule: a table lookup with a fallback ships a new variant
   blank, a match fails to compile until somebody writes the words. Same for
   `every_notification_kind_is_fired_by_a_named_site` — a `&[(kind, site)]` table is

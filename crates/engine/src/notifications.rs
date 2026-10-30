@@ -394,8 +394,8 @@ mod tests {
         assert_eq!(keys.len(), listed, "a kind is listed twice in `all`");
     }
 
-    /// The latch key reaches `profile.ron` and a duplicate would make two
-    /// notifications share one sighting — the second silently never firing.
+    /// A duplicate slug makes `Display` and the censuses name two kinds as
+    /// one, so a census failure points at the wrong kind.
     #[test]
     fn every_slug_is_unique_and_non_empty() {
         let mut keys: Vec<&str> = NotificationKind::all().iter().map(|k| k.slug()).collect();

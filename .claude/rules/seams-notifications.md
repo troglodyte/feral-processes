@@ -13,7 +13,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A notification is a table plus a queue plus one equality, and it is not
   content.** `crates/engine/src/notifications.rs` is the whole feature;
   there is no `assets/notifications/`.
-- **`def` and both censuses are exhaustive matches**, `cell_mark`'s rule —
+- **`def` and the fired-by-site census are exhaustive matches**, `cell_mark`'s rule —
   a lookup with a fallback ships a new variant blank.
 - **Guidance messages are a table, `ftue::ENTRIES`, keyed by trigger
   strings, not variants of `NotificationKind`** — ids are asset strings

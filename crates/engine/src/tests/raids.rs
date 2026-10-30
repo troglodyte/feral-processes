@@ -1521,6 +1521,67 @@ fn a_patch_node_mends_a_structure_whose_edge_cell_it_covers() {
     );
 }
 
+#[test]
+fn a_patch_mend_cues_a_green_plus_on_the_mended_structure() {
+    let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let amount = patch_node_amount(&game);
+    spawn_patch_node(&mut game, 1, 30);
+    damaged_extractor(&mut game, 10, 10);
+    game.take_effects();
+
+    regen_once(&mut game);
+
+    let patched: Vec<_> = game
+        .take_effects()
+        .into_iter()
+        .filter(|e| matches!(e.kind, EffectKind::Patched { .. }))
+        .collect();
+    assert_eq!(patched.len(), 1);
+    assert_eq!(patched[0].pos, (10, 7));
+    assert_eq!(patched[0].kind, EffectKind::Patched { amount });
+}
+
+#[test]
+fn a_full_structure_under_a_patch_node_cues_nothing() {
+    let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_patch_node(&mut game, 1, 30);
+    damaged_extractor(&mut game, 10, 60);
+    game.take_effects();
+
+    regen_once(&mut game);
+
+    assert!(game.take_effects().is_empty());
+}
+
+#[test]
+fn a_failover_only_mend_cues_nothing() {
+    let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    damaged_extractor(&mut game, 10, 10);
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Failover).unwrap();
+    game.take_effects();
+
+    regen_once(&mut game);
+
+    assert!(game.take_effects().is_empty());
+}
+
+/// The cue reports what was restored, not what was on offer.
+#[test]
+fn a_patch_cue_reports_the_hp_actually_restored() {
+    let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_patch_node(&mut game, 1, 30);
+    spawn_patch_node(&mut game, 1, 30);
+    damaged_extractor(&mut game, 10, 59);
+    game.take_effects();
+
+    regen_once(&mut game);
+
+    let kinds: Vec<_> = game.take_effects().into_iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, vec![EffectKind::Patched { amount: 1 }]);
+}
+
 /// The base's third repair source, and the only one that isn't a building or
 /// a posted program. A base with no Patch Node repairs nothing at all — that
 /// is the case `structure_regen`'s early return covers and the case the perk

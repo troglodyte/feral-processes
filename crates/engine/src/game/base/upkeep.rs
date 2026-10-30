@@ -82,8 +82,16 @@ impl Game {
                 + patch
                 + MEDIC_REPAIR_PER_INTERVAL
                     * mended.iter().filter(|&&e| e == structure).count() as u32;
-            if let Some(mut durability) = self.world.get_mut::<Durability>(structure) {
-                durability.hp = (durability.hp + amount).min(durability.max_hp);
+            let Some(mut durability) = self.world.get_mut::<Durability>(structure) else {
+                continue;
+            };
+            let gained = (durability.hp + amount).min(durability.max_hp) - durability.hp;
+            durability.hp += gained;
+            // Only the node's own share is cued, so Failover or a Medic
+            // mending the same structure never reads as a Patch Node.
+            let patched = patch.min(gained);
+            if patched > 0 {
+                self.push_effect(structure, EffectKind::Patched { amount: patched });
             }
         }
     }

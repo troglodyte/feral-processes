@@ -1062,6 +1062,16 @@ pub(super) fn draw_surface_map(
             pane,
         )
     });
+    fx.draw_field_marks(painter, tile_px, glyph_px, |world| {
+        tile_origin_px(
+            world,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
     fx.draw_speech(painter, tile_px, glyph_px, |world| {
         tile_origin_px(
             world,

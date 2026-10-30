@@ -131,7 +131,7 @@ pub(crate) fn draw_playing_base(
         path: app.tactical_hover_path(),
         target: app.tactical_target_cell(),
     };
-    let shield_circles = app.shield_circles();
+    let reach_circles = app.reach_circles();
     let mode = app.mode;
     // A finished tactical fight's results are a popup over the board it was
     // fought on, and `TacticalBattle` went with the fight — so on that
@@ -213,7 +213,7 @@ pub(crate) fn draw_playing_base(
             tile_px,
             glyph_px,
         );
-        shield_circle::draw_shield_circles(fx, painter, &shield_circles, true);
+        reach_circle::draw_reach_circles(fx, painter, &reach_circles, true);
         hud::map_frame::draw_map_frame(
             regions.map_pane,
             terrain,
@@ -282,7 +282,7 @@ pub(crate) fn draw_playing_base(
             watch.unwrap_or(status.position),
             reveal,
         );
-        shield_circle::draw_shield_circles(fx, painter, &shield_circles, false);
+        reach_circle::draw_reach_circles(fx, painter, &reach_circles, false);
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
             regions.map_pane,

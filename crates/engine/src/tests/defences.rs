@@ -335,3 +335,18 @@ fn patch_mend_sums_only_the_nodes_that_cover_the_cells() {
     assert_eq!(patch_mend(&[node(2), node(-3)], &cells), 2);
     assert_eq!(patch_mend(&[node(20)], &cells), 0);
 }
+
+#[test]
+fn view_patch_nodes_reports_radius_by_tier() {
+    let mut game = game();
+    set_zone(&mut game, 5);
+    let node = spawn_structure_at(&mut game, "patch_node", 1, 1);
+    let view = game.view_patch_nodes();
+    assert_eq!(view.len(), 1);
+    assert_eq!((view[0].anchor, view[0].radius), ((1, 1), 4));
+    assert_eq!(view[0].next_radius, Some(6));
+    game.world.entity_mut(node).insert(StructureTier(5));
+    let top = &game.view_patch_nodes()[0];
+    assert_eq!((top.radius, top.next_radius), (12, None));
+    assert!(game.view_shields().is_empty(), "a Patch Node is no Shield");
+}

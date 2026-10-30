@@ -121,6 +121,35 @@ impl Game {
         Some(crate::reach::radius_at(&repair.radius, tier))
     }
 
+    /// Every deployed Patch Node, sorted by anchor, for the circle the map
+    /// draws.
+    pub fn view_patch_nodes(&self) -> Vec<PatchNodeView> {
+        let db = self.world.resource::<StructureDb>();
+        let mut nodes: Vec<PatchNodeView> = self
+            .patch_reaches()
+            .into_iter()
+            .filter_map(|r| {
+                let e = self.world.entity(r.entity);
+                let def = db.get(&e.get::<Structure>()?.kind)?;
+                let radius_def = def.repair?.radius;
+                let tier = e.get::<StructureTier>().map_or(1, |t| t.0);
+                let next_radius = def
+                    .upgrade
+                    .as_ref()
+                    .filter(|u| tier < self.upgrade_ceiling(u))
+                    .map(|_| crate::reach::radius_at(&radius_def, tier + 1));
+                Some(PatchNodeView {
+                    entity: r.entity,
+                    anchor: r.anchor,
+                    radius: r.radius,
+                    next_radius,
+                })
+            })
+            .collect();
+        nodes.sort_by_key(|n| (n.anchor, n.entity));
+        nodes
+    }
+
     /// The cells a structure stands on; empty when it has no `Position`.
     pub(crate) fn structure_cells(&self, e: Entity) -> Vec<(i32, i32)> {
         match self.world.get::<Position>(e) {

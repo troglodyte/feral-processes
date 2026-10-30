@@ -154,3 +154,20 @@ fn listed_keys_are_bound() {
         assert_ne!(app.mode, Mode::Playing, "{key} did not open anything");
     }
 }
+
+/// `crates/engine/EASTER_EGGS.md`: no label may name `W`, `T` or `Z`.
+#[test]
+fn no_sheet_lists_a_hidden_key() {
+    for area in [
+        ShortcutArea::Base,
+        ShortcutArea::Field,
+        ShortcutArea::Stack,
+        ShortcutArea::TacticalMap,
+        ShortcutArea::ClassicBattle,
+    ] {
+        let sheet = shortcut_sheet_for(area);
+        for key in ["W", "T", "Z"] {
+            assert!(!sheet.lists(key), "{area:?} lists the hidden key {key}");
+        }
+    }
+}

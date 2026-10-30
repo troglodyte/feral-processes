@@ -143,7 +143,6 @@ fn stack_groups() -> Vec<ShortcutGroup> {
                 ("a", "call a routine"),
                 ("x", "examine a direction"),
                 ("o", "adopt an orphaned process"),
-                ("Z", "listen"),
                 ("t", "trade, where someone sells"),
                 ("e", "drain a Power Cell"),
                 ("r", "recharge"),

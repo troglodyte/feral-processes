@@ -181,7 +181,7 @@ fn tactical_groups() -> Vec<ShortcutGroup> {
             &[
                 ("R", "resolve"),
                 ("A", "auto-attack"),
-                ("any other key", "stop auto-attack"),
+                ("any key", "stop auto-attack"),
                 ("?", "hold: this list"),
             ],
         ),

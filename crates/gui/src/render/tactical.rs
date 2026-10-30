@@ -3868,7 +3868,13 @@ mod tests {
         ));
 
         for (state, rows) in states {
-            assert_eq!(rows[0].0, "?", "`?` leads the {state} bar: {rows:?}");
+            // A leading readout row has no key; `?` leads the keyed rows.
+            let first = rows.iter().find(|(k, _)| !k.is_empty());
+            assert_eq!(
+                first.map(|(k, _)| k.as_str()),
+                Some("?"),
+                "`?` leads the {state} bar: {rows:?}"
+            );
             for (key, _) in rows.iter().filter(|(k, _)| !k.is_empty()) {
                 assert!(
                     sheet.lists(key),

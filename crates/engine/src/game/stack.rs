@@ -401,7 +401,7 @@ impl Game {
         })
     }
 
-    /// Whether `v` could lay a tile here: on laid floor or on a field cell
+    /// Whether the player is in the base for the bar's purposes: on laid floor or on a field cell
     /// orthogonally beside it. The map bar shows `v` on exactly this, and
     /// the refusal text explains the cases the press still declines.
     pub fn in_base_reach(&self) -> bool {

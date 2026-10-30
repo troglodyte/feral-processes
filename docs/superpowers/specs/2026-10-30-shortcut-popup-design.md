@@ -31,8 +31,9 @@ standing, one keypress away.
    returns to the game menu.
 3. **`?` is the first segment of every bottom bar that has one**, and every
    bar that names it binds it. The bars are the map bar
-   (`App::map_keybar`: the locale bar, the excavation plan bar, the
-   watching bar and the walking bar), the tactical battle bar
+   (`App::map_keybar`: the locale bar, the watching bar and the walking
+   bar; the excavation plan bar is shown only in modes with no sheet, so it
+   does not get `?`), the tactical battle bar
    (`tactical::action_bar` / `keybar_rows`) and the classic battle bar
    (`render/battle.rs`). `?` comes first, and bars cut segments from the end
    (`fitting`), so it is the last thing to go.

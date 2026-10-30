@@ -59,4 +59,4 @@ Patch Nodes become a factor in fought sieges, so siege balance moves. Re-check `
 
 ## Evidence
 
-`RepairDef`, `Game::total_repair_rate`, `STRUCTURE_REGEN_INTERVAL`, `perks::repair_rate_bonus`, `Perk::Failover`, `shields::{ShieldRadiusDef, radius_at, covers, covers_any}`, `TacticalBattle::round`, `TacticalBattle::shields_softened`, `app::shields::ShieldCircle`, `gui/src/render/shield_circle.rs`, `assets/structures/patch_node.ron`.
+`RepairDef`, `Game::total_repair_rate`, `STRUCTURE_REGEN_INTERVAL`, `perks::repair_rate_bonus`, `Perk::Failover`, `reach::{RadiusDef, radius_at, covers, covers_any}`, `TacticalBattle::round`, `TacticalBattle::shields_softened`, `app::reach_circles::ReachCircle`, `gui/src/render/reach_circle.rs`, `assets/structures/patch_node.ron`.

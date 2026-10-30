@@ -392,3 +392,11 @@
   set: a base-wide cut with covering-only payment makes an out-of-range
   Shield cut for free, and the reverse spends a coil for nothing.
   `structure_raid_defense` stays the base-wide sum for callers with no target.
+- **A structure's Patch Node mend is `patch_mend(patch_reaches, structure_cells)`.**
+  A node heals only what its circle covers (`reach::covers_any`: one footprint
+  cell in the circle is enough), 1 per covering node per
+  `STRUCTURE_REGEN_INTERVAL`, however high its tier: tier grows the circle
+  (4/6/8/10/12), not the rate. `patch_reaches` is derived each call, so a lost
+  node stops mending with no invalidation. `Perk::Failover` is withdrawn from
+  the picker (`Perk::is_offered`) but a held level still adds base-wide, so the
+  variant, its def and `repair_rate_bonus` stay.

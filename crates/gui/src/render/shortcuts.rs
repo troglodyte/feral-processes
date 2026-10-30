@@ -146,7 +146,7 @@ mod tests {
         let sheet = shortcut_sheet_for(ShortcutArea::Base);
         let (_, shapes) = crate::paint::with_painter(|p| draw_shortcuts(&sheet, p, &m));
         let drawn = crate::paint::painted_text(&shapes);
-        assert!(drawn.iter().any(|t| *t == sheet.title), "{drawn:#?}");
+        assert!(drawn.contains(&sheet.title), "{drawn:#?}");
         assert!(drawn.iter().any(|t| t.starts_with("v ")), "{drawn:#?}");
     }
 }

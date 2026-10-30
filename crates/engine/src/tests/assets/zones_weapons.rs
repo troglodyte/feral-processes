@@ -70,8 +70,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 6,
-        "expected the six upgradeable structures — the Workbench, the Extractor, the Research Node, the Patch Node, the Teardown Rig and the Quarantine Rack; one that lost its path would drop out of this scan unnoticed"
+        checked, 7,
+        "expected the seven upgradeable structures — the Workbench, the Extractor, the Research Node, the Patch Node, the Teardown Rig, the Quarantine Rack and the Shield; one that lost its path would drop out of this scan unnoticed"
     );
 }
 

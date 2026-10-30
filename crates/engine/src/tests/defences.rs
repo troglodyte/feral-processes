@@ -246,3 +246,41 @@ mod tactical {
         assert_eq!(coils_in(&game, turret), 2, "an empty round costs nothing");
     }
 }
+
+#[test]
+fn view_shields_reports_radius_by_tier() {
+    let mut game = game();
+    set_zone(&mut game, 5);
+    let shield = defence(&mut game, "shield", 1, 1);
+    let view = game.view_shields();
+    assert_eq!(view.len(), 1);
+    assert_eq!((view[0].anchor, view[0].radius), ((1, 1), 4));
+    assert_eq!(view[0].next_radius, Some(6));
+    game.world.entity_mut(shield).insert(StructureTier(3));
+    assert_eq!(game.view_shields()[0].radius, 8);
+    game.world.entity_mut(shield).insert(StructureTier(5));
+    let top = &game.view_shields()[0];
+    assert_eq!((top.radius, top.next_radius), (12, None));
+    assert_eq!(game.shield_radius_for("shield", 2), Some(6));
+    assert_eq!(game.shield_radius_for("extractor", 1), None);
+}
+
+#[test]
+fn an_empty_shield_is_listed_unarmed() {
+    let mut game = game();
+    defence(&mut game, "shield", 1, 0);
+    defence(&mut game, "shield", 2, 1);
+    let armed: Vec<bool> = game.view_shields().iter().map(|s| s.armed).collect();
+    assert_eq!(armed, vec![false, true]);
+}
+
+#[test]
+fn a_shield_upgrades_without_a_program() {
+    let mut game = game();
+    stand_in_base(&mut game);
+    set_zone(&mut game, 2);
+    let shield = defence(&mut game, "shield", 1, 1);
+    stock_upgrade_materials(&mut game, 20);
+    upgrade_now(&mut game, shield).unwrap();
+    assert_eq!(game.world.get::<StructureTier>(shield).unwrap().0, 2);
+}

@@ -55,6 +55,7 @@ pub mod routine_tree;
 pub mod save;
 pub mod score;
 pub mod settlements;
+pub mod shields;
 pub mod situations;
 pub mod sociability;
 pub mod sorties;

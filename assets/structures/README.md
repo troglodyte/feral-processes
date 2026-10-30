@@ -626,7 +626,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // own Mitigation, so the two stack. This is how the
     // Shield structure works: `raid_defense: 2` with no `work` recipe — one
     // Shield halves an ordinary raid, two absorb it entirely.
+    // A defence without `shield_radius` below is base-wide.
     raid_defense: 2,
+
+    // Optional; can be left out entirely (defaults to None, base-wide).
+    // Limits `raid_defense` to the structures inside a circle around this
+    // one: a structure is covered when any footprint cell lies within the
+    // radius of the anchor tile's centre. The radius is `base` tiles at
+    // tier 1 plus `per_tier` for each tier after, so pair it with `upgrade`
+    // to let the circle grow. The Shield sets `(base: 4, per_tier: 2)`.
+    shield_radius: Some((base: 4, per_tier: 2)),
 
     // Optional; can be left out entirely (defaults to None). Marks this
     // structure as a siege turret: during a siege it fires once a round at

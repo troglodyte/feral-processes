@@ -189,10 +189,10 @@ pub const TEARDOWN_SALVAGE_PER_LEVEL: u32 = 1;
 /// while theirs grows with their level.
 pub const TARGET_LOCK_ACCURACY_PER_LEVEL: i32 = 2;
 
-/// Durability `Perk::Failover` adds to `Game::total_repair_rate` per level,
-/// restored to every damaged structure each `STRUCTURE_REGEN_INTERVAL`.
+/// Durability `Perk::Failover` adds per level to every damaged structure's
+/// mend each `STRUCTURE_REGEN_INTERVAL`, base-wide.
 ///
-/// Sized against the Patch Node's `repair.per_tier` rather than against
+/// Sized against the Patch Node's `repair.amount` rather than against
 /// `RAID_DAMAGE`: this is the same rate a building contributes, so a level is
 /// deliberately a fraction of what deploying one is worth. What the perk
 /// actually buys is that a base with no Patch Node standing stops taking

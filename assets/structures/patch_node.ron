@@ -1,11 +1,11 @@
 (
     id: "patch_node",
     name: "Patch Node",
-    description: "Repairs damaged structures across the whole base. 1 Durability per tier every 20 ticks.",
+    description: "Repairs damaged structures within its circle, which grows with each upgrade. 1 Durability every 20 ticks.",
     glyph: '/',
     color: Green,
     build_cost: [("core_fragment", 18), ("power_cell", 4)],
     work: None,
-    repair: Some((per_tier: 1)),
+    repair: Some((amount: 1, radius: (base: 4, per_tier: 2))),
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
 )

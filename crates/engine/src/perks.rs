@@ -104,9 +104,9 @@ pub enum Perk {
     /// a downed program): a flat addend to the unit count, never a second
     /// `GameRng` draw, the same discipline the retired roll followed.
     Teardown,
-    /// Adds `FAILOVER_REPAIR_PER_LEVEL` per level to the base-wide repair
-    /// rate (`Game::total_repair_rate`), which is what a Patch Node
-    /// contributes to — so a base with no repairer at all still mends.
+    /// Adds `FAILOVER_REPAIR_PER_LEVEL` per level to every structure's mend
+    /// in `Game::structure_regen`, base-wide — the one repair that ignores a
+    /// Patch Node's circle. No longer offered (ADR 0036).
     Failover,
     /// Adds `QUALITY_PERK_PER_LEVEL` per level to the floor a compiled copy
     /// of gear rolls its quality off (`Game::craft_quality_floor`) — the

@@ -3,6 +3,7 @@
 
 use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
+use crate::game::base::defences::patch_mend;
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -41,21 +42,19 @@ impl Game {
     }
 
     /// Repairs damaged structures — every `STRUCTURE_REGEN_INTERVAL` ticks,
-    /// every structure below max `Durability` recovers whatever the base's
-    /// repairers restore between them (`total_repair_rate`), and each
-    /// structure a Medic is posted to recovers
-    /// `MEDIC_REPAIR_PER_INTERVAL` more.
+    /// every structure below max `Durability` recovers what the Patch Nodes
+    /// whose circle covers it mend between them (`patch_mend`), plus
+    /// whatever `Perk::Failover` adds base-wide, plus
+    /// `MEDIC_REPAIR_PER_INTERVAL` for each Medic posted to it.
     ///
-    /// Those two are the only sources: nothing heals on its own, so a base
-    /// with neither a repairer standing nor a Medic posted never recovers a
-    /// point and raid damage is permanent.
+    /// Those are the only sources: nothing heals on its own, so a base with
+    /// none of them never recovers a point and raid damage is permanent.
     ///
-    /// The two differ in reach on purpose. A Patch Node is a *building* and
-    /// works base-wide from wherever it stands; a Medic is a *program* and
-    /// mends the one structure it is guarding, so posting it is a decision
-    /// about what to protect rather than a rate added to a pool. Which is
-    /// also why the early return has to ask about both — a base with no
-    /// Patch Node at all is the case a posted Medic is most for.
+    /// The reach differs on purpose. A Patch Node is a *building* with a
+    /// circle that grows with its tier, so where it stands is a decision; a
+    /// Medic is a *program* and mends the one structure it is guarding.
+    /// Failover is the only base-wide source left, which is why the early
+    /// return has to ask about all of them.
     ///
     /// `With<Structure>` is load-bearing, not tidiness: a `Nest` carries
     /// `Durability` too, and an unfiltered pass healed it alongside the
@@ -67,19 +66,25 @@ impl Game {
         if !tick.is_multiple_of(STRUCTURE_REGEN_INTERVAL) {
             return;
         }
-        let base_wide = self.total_repair_rate();
+        let base_wide = crate::perks::repair_rate_bonus(self.player_perks());
+        let reaches = self.patch_reaches();
         let mended = self.medic_posts();
-        if base_wide == 0 && mended.is_empty() {
+        if base_wide == 0 && reaches.is_empty() && mended.is_empty() {
             return;
         }
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &mut Durability), With<Structure>>();
-        for (structure, mut durability) in query.iter_mut(&mut self.world) {
+        let structures: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Structure>>();
+            query.iter(&self.world).collect()
+        };
+        for structure in structures {
+            let patch = patch_mend(&reaches, &self.structure_cells(structure));
             let amount = base_wide
+                + patch
                 + MEDIC_REPAIR_PER_INTERVAL
                     * mended.iter().filter(|&&e| e == structure).count() as u32;
-            durability.hp = (durability.hp + amount).min(durability.max_hp);
+            if let Some(mut durability) = self.world.get_mut::<Durability>(structure) {
+                durability.hp = (durability.hp + amount).min(durability.max_hp);
+            }
         }
     }
 
@@ -109,30 +114,6 @@ impl Game {
             .filter(|&(worker, _)| self.creature_class(worker) == Some(AffinityClass::Medic))
             .map(|(_, structure)| structure)
             .collect()
-    }
-
-    /// `Durability` restored to every deployed structure per regen interval
-    /// by the base's repairers — each one's `RepairDef::per_tier` times its
-    /// own `StructureTier`, summed. Derived on each call rather than cached,
-    /// so a Patch Node lost to a raid stops contributing with no
-    /// invalidation step, the same way `pet_capacity` handles a lost Data
-    /// Cache.
-    pub(crate) fn total_repair_rate(&mut self) -> u32 {
-        let perk = crate::perks::repair_rate_bonus(self.player_perks());
-        let repairers: Vec<(StructureId, u32)> = {
-            let mut query = self.world.query::<(&Structure, Option<&StructureTier>)>();
-            query
-                .iter(&self.world)
-                .map(|(s, tier)| (s.kind.clone(), tier.map_or(1, |t| t.0)))
-                .collect()
-        };
-        let db = self.world.resource::<StructureDb>();
-        repairers
-            .iter()
-            .filter_map(|(kind, tier)| Some((db.get(kind.as_str())?.repair?, tier)))
-            .map(|(repair, tier)| repair.per_tier * tier)
-            .sum::<u32>()
-            + perk
     }
 
     /// Advances every `Nest`'s `pending_respawns` countdown by one tick,

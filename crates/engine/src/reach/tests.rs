@@ -3,7 +3,7 @@ use crate::tactical::footprint_cells_at;
 
 #[test]
 fn radius_grows_two_a_tier() {
-    let d = ShieldRadiusDef {
+    let d = RadiusDef {
         base: 4,
         per_tier: 2,
     };

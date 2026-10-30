@@ -319,8 +319,8 @@ pub const FLOOR_FINISH_COST: u32 = 3;
 /// under `docs/measurements/`.
 pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
 
-/// How often (in ticks) the base's repairers restore `Durability` to
-/// damaged structures — see `Game::structure_regen`.
+/// How often (in ticks) the base's repairers restore `Durability` to the
+/// damaged structures they cover — see `Game::structure_regen`.
 ///
 /// There is deliberately no companion "amount" constant. Structures do not
 /// heal on their own at all: every point of repair comes from a deployed

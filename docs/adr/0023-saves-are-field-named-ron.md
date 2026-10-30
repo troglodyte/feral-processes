@@ -31,6 +31,6 @@ A skipped or defaulted field is invisible to a RON round-trip test, so a new sav
 
 ## Evidence
 
-- `crates/engine/src/save.rs` — `SaveData`, `SAVE_FORMAT_VERSION`.
+- `crates/engine/src/save/mod.rs` — `SaveData`, `SAVE_FORMAT_VERSION`.
 - `.claude/rules/seams-screens.md` — the save rule; trap in the `seams` skill, `references/screens.md`.
 - Memory: `ron-round-trip-cannot-catch-a-skipped-field`.

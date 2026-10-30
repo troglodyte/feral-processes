@@ -24,6 +24,6 @@
     ),
     (
         name: "Workshop",
-        perks: [KeenScavenger, LeanCompiler, Teardown, TightenTolerances, Failover],
+        perks: [KeenScavenger, LeanCompiler, Teardown, TightenTolerances],
     ),
 ]

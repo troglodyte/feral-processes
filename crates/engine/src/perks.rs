@@ -161,6 +161,14 @@ pub enum Perk {
 }
 
 impl Perk {
+    /// Whether the picker lists this perk. `Failover` is withdrawn
+    /// (ADR 0036): a Patch Node now mends only its circle, so a base-wide
+    /// repair perk undercuts it. The variant and its def stay so a save
+    /// holding a level keeps its effect.
+    pub fn is_offered(self) -> bool {
+        self != Perk::Failover
+    }
+
     /// Every perk the engine can apply, in the order the picker lists them.
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
@@ -562,7 +570,7 @@ impl PerkDb {
         for group in &self.groups {
             let mut defs: Vec<&PerkDef> = Vec::new();
             for perk in &group.perks {
-                if placed.contains(perk) {
+                if placed.contains(perk) || !perk.is_offered() {
                     continue;
                 }
                 if let Some(def) = self.defs.get(perk) {
@@ -576,7 +584,7 @@ impl PerkDb {
         }
         let rest: Vec<&PerkDef> = Perk::all()
             .into_iter()
-            .filter(|p| !placed.contains(p))
+            .filter(|p| p.is_offered() && !placed.contains(p))
             .filter_map(|p| self.defs.get(&p))
             .collect();
         if !rest.is_empty() {
@@ -657,8 +665,18 @@ mod tests {
         );
         assert_eq!(
             db.catalogue().count(),
-            Perk::all().len(),
+            Perk::all().iter().filter(|p| p.is_offered()).count(),
             "the sections between them list every perk exactly once"
+        );
+    }
+
+    #[test]
+    fn failover_is_not_offered() {
+        let (db, _) = PerkDb::load_dir(&perk_assets_dir()).unwrap();
+        assert!(!db.catalogue().any(|d| d.id == Perk::Failover));
+        assert!(
+            db.get(Perk::Failover).is_some(),
+            "a held level still resolves"
         );
     }
 

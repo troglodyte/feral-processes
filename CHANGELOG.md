@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.4
+
+**Guidance messages now show once per run, and you can turn them off.** Before, each tutorial message showed once ever on this computer. Now it shows once per run, and reloading a save does not show it again. On a guidance message, press `D` to never see that message again or `T` to turn guidance off. The Gameplay options page can turn guidance back on, or show every message again. Milestone news, such as a finished research, is not affected.
+
 ## 0.21.3
 
 **Hold `?` on the map or in a fight to see every shortcut that works where you are.** The bottom bar only has room for a few keys, so keys like `v` (lay a floor tile) were hard to find. The list is different for the base, the field, the Stack and battle, and it closes when you let go of `?`. Every map and battle bar now starts with `? keys`, and `v lay tile` shows on the bar when you are in the base.

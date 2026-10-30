@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.1
+
+**Programs you capture now join your base.** A program taken out on the field used to stay standing where you caught it once your Home was founded, and never picked up a job. It now steps onto the free floor nearest your Home and gets to work. Saves already holding stuck programs fix themselves within a few moments of loading.
+
 ## 0.21.0
 
 **Your base now stands on the open field instead of in a separate room.** Found a Home wherever you are standing: it costs 2 core fragments and lays a 3x3 patch of floor around you. Build, haul and defend on the same ground you explore, and mine blockers beside your floor to widen the base. Before, the base was its own pocket you walked into and out of, with its own rock.

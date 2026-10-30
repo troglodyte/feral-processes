@@ -63,6 +63,7 @@ mod settlement;
 mod settlement_aid;
 mod settlement_board;
 mod settlement_market;
+mod shortcuts;
 mod siphon;
 mod social_tab;
 mod spend_preview;

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.6
+
+**Nothing changes in play; this release adds a coding-style rule.** Code style questions the project's own rules don't answer now follow Google's Rust style guide, with a listed set of exceptions in `docs/adr/0034-google-rust-style-guide-as-reference.md`. It applies to code as it is changed; no existing code was rewritten.
+
 ## 0.21.5
 
 **Nothing changes in play; this release reorganises more of the code.** The files most often edited, at 4,000 to 8,600 lines each, are now folders split by subsystem: the test fixtures, the saved-game loader and the renderer's base, battle-map and build screens. The game builds and behaves exactly as in 0.21.4, and saves are unaffected. The loader is now a short ordered list of restore steps, with nothing reordered.

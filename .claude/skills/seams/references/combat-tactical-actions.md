@@ -530,7 +530,7 @@ body killed by its own fumble or its own blast has already left the order and
 resurrect it.
 
 Three omissions carry the rest. A squad has no world `Position` and no
-`Tamed`, which is what keeps it out of `save.rs` — so folding must happen
+`Tamed`, which is what keeps it out of `save/` — so folding must happen
 **after** the opening bearing is taken off the original pack, or
 `gather_pack` reads a pack of one and the bearing degenerates, both silently.
 It does carry `Creature` (`group_pack` drops a member without one) and

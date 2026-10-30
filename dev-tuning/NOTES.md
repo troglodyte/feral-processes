@@ -319,7 +319,7 @@ recorded rather than fixed because neither is a tuning question.
 A build died mid-session with `No space left on device` on a tmpfs that was
 15% full — it was **inodes**, not bytes: 1,048,576 of 1,048,576 used.
 
-`scratch_assets_dir` (`crates/engine/src/tests/support.rs`) copies the whole
+`scratch_assets_dir` (`crates/engine/src/tests/support/scratch_assets.rs`) copies the whole
 shipped asset set (~190 files) per test and left cleanup to the caller, so a
 test that panics on a failed assert leaked the lot, and a helper returning a
 bare `Game` had no way to clean up at all. Fixed with an RAII guard,

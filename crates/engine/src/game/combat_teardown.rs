@@ -175,7 +175,7 @@ impl Game {
             c.0.clear();
         }
         // `Cloaked` is battle-scoped exactly as the two above are, which is
-        // what keeps it out of `save.rs` — left set, it would follow the
+        // what keeps it out of `save/` — left set, it would follow the
         // player out of the fight and hide them from the next one.
         self.uncloak(player);
         // `ReachCharge` for the same reason and with the same consequence:
@@ -743,7 +743,7 @@ impl Game {
     /// whatever the spawn roll already spent. It multiplies by the **step**
     /// between the two tiers, `new.stat_mult() / old.stat_mult()`, and
     /// writes the new tier back as the updated receipt. The same class of
-    /// bug already has a guard on the load path (`lifecycle.rs`, loading a
+    /// bug already has a guard on the load path (`game/lifecycle/spawn_saved.rs`, loading a
     /// `CreatureSave`) with the same reasoning — this is the second and
     /// last place a rarity multiplier is allowed to touch `Stats`.
     ///

@@ -41,7 +41,7 @@ item side beyond that: the founding kit is meant to be research-gated (see
 from turn one, which defeats the gate.
 
 Tier 3 (the highest, "complex") should name at least one item this run's
-material census (`ZONE_MATERIALS` in `crates/engine/tests/assets.rs`) treats
+material census (`ZONE_MATERIALS` in `crates/engine/src/tests/assets/zones_weapons.rs`) treats
 as a zone material, the same rule a zone-gated gear recipe follows.
 
 Everything else about an outpost — growth rates, crew caps, integrity,

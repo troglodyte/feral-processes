@@ -116,7 +116,7 @@ pub struct Fallen {
 ///
 /// Bare `#[derive(Resource)]` — no `Default`, no `Serialize` — matching
 /// `BattleState` for the same reason: a fight is never saved, so nothing
-/// here appears in `save.rs` and `SAVE_FORMAT_VERSION` does not move.
+/// here appears in `save/` and `SAVE_FORMAT_VERSION` does not move.
 #[derive(Resource)]
 pub struct TacticalBattle {
     pub spec: BattleSpec,

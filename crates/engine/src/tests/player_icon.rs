@@ -58,7 +58,7 @@ fn a_drawn_icon_survives_a_real_save_and_load_round_trip() {
 /// `SAVE_FORMAT_VERSION` bump — a save written before this feature existed
 /// has no `icon` key at all, and must load with no icon rather than being
 /// refused. Derived from a real save with the key stripped out, the way
-/// `save.rs`'s `a_save_written_before_dig_sites_existed_still_loads` and
+/// `save/tests.rs`'s `a_save_written_before_dig_sites_existed_still_loads` and
 /// `a_save_written_before_caravans_existed_still_loads` both do, so the
 /// fixture cannot drift from what `Game::save` actually writes.
 #[test]

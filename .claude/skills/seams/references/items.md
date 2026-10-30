@@ -37,7 +37,7 @@
   weapon that quietly went single-target reads as a nerf. `Game::swing_reach`
   is the one door that decides whether *this* swing is wide; each model
   converts it with the converter it already has, and `components::ReachCharge`
-  is battle-scoped beside `Cloaked` so nothing reaches `save.rs`. **Three
+  is battle-scoped beside `Cloaked` so nothing reaches `save/`. **Three
   traps.** `attacks_for` loops a Striker's second swing *inside* the turn, so
   the reach is read once in `party_member_attacks` and spent with
   `Option::take` — armed per swing it silently doubles the weapon and

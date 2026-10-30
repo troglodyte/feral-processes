@@ -528,7 +528,7 @@ fn a_nemesis_survives_a_save_load_round_trip() {
 
 /// The compounding guard this task exists to pin: `promote_rarity`'s
 /// multiplier is already baked into `Stats` before the save happens, and
-/// `CreatureSave::rarity` is restored as a tag only (`lifecycle.rs`, beside
+/// `CreatureSave::rarity` is restored as a tag only (`game/lifecycle/spawn_saved.rs`, beside
 /// where `c.rarity` is inserted). If a reload ever re-applied the
 /// multiplier on top of the saved numbers, `after` would differ from
 /// `before` here — this was verified by temporarily reintroducing that

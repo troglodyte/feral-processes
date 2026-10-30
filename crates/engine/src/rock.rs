@@ -18,7 +18,7 @@ use serde::Deserialize;
 /// How bright a kind may be drawn against `Biome::Entropy`'s own colour.
 ///
 /// A *brightness* and not a hue, because the map's one colour rule is that
-/// hue answers "can I walk here" — `render/base.rs` records the consequence
+/// hue answers "can I walk here" — `render/base/` records the consequence
 /// for anything told apart within a band: "brightness rather than hue, since
 /// hue is already spoken for". An authored hue would also fight
 /// `biome_tint`'s per-sector rotation, so a seam would change appearance on

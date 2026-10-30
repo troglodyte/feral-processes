@@ -225,7 +225,7 @@ fn the_tutorial_chain_can_always_afford_its_next_step() {
     let chain = contracts.tutorial_chain();
     assert!(!chain.is_empty(), "the census must walk a real chain");
 
-    // What `Game::new` puts in the pack — see `game/lifecycle.rs`.
+    // What `Game::new` puts in the pack — see `game/lifecycle/new.rs`.
     let mut balance: i64 = 5;
     for def in chain {
         match &def.objective {

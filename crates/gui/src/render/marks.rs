@@ -68,7 +68,7 @@ const IDENTITY_MARK_INSET: f32 = 2.0;
 /// `IDENTITY_MARK` so it reads as a dot and not as a fourth corner badge,
 /// and 0.14 exactly because at the 20 px rung the staffed mark's resting
 /// place is 2.68 px below the dot's top: one hundredth more and the two
-/// share a row at rest (the census in `render/base.rs` pins it).
+/// share a row at rest (the census in `render/base/` pins it).
 const HELD_OUTPUT_MARK: f32 = 0.14;
 
 /// The con earmark's leg, as a fraction of the tile — the right-angled
@@ -85,8 +85,8 @@ pub(super) const CON_MARK: f32 = 0.34;
 /// A rare-spawn tier's bar along a tile's top edge — the surface map's own
 /// channel for "how rare", shared with the tactical board so a silver or
 /// gold body reads the same colour on both grids rather than being drawn
-/// from a second copy of this arithmetic (`render/base.rs` used to inline
-/// it, and `render/tactical.rs` drew nothing at all).
+/// from a second copy of this arithmetic (`render/base/` used to inline
+/// it, and `render/tactical/` drew nothing at all).
 ///
 /// Paints nothing for `Rarity::Ordinary`, `rarity_color`'s own "no reading"
 /// case — the same channel-optional shape `draw_difficulty_mark` and
@@ -247,7 +247,7 @@ pub(super) fn draw_mood_mark(
 }
 
 /// Where a battle-map body's own HP bar sits — the full width of its
-/// footprint's bottom edge, `render/tactical.rs::draw_body`'s own geometry
+/// footprint's bottom edge, `render/tactical/bodies.rs::draw_body`'s own geometry
 /// pulled out here rather than restated: it is what `squad_mark_rect` reads
 /// for its own floor, and a copy kept beside the draw call is the one that
 /// drifts the moment either changes.
@@ -264,7 +264,7 @@ pub(super) fn tactical_hp_bar_rect(px: f32, py: f32, cell_px: f32) -> Rect {
 /// its footprint, not the top-right a stale spec asked for.
 ///
 /// That spec was written before the battle map's in-cover mark shipped
-/// (`render/tactical.rs::draw_body`), which now owns the top-right corner
+/// (`render/tactical/bodies.rs::draw_body`), which now owns the top-right corner
 /// the way `nemesis_mark_rect` owns it on the surface map. By the time this
 /// feature landed every other channel on a battle-map body was already
 /// spoken for — the rarity bar the top edge, the con earmark the top-left,
@@ -368,7 +368,7 @@ pub(super) fn draw_difficulty_mark(
 /// module docs). Handing it `py + RARITY_BAR_PX + IDENTITY_MARK_INSET`
 /// directly floated the ink up into the tile *above*, since a baseline that
 /// low puts almost all of the glyph's ascent above it. Measuring first and
-/// adding the ink height is `render/base.rs`'s own pattern for placing text
+/// adding the ink height is `render/base/`'s own pattern for placing text
 /// by its top rather than its baseline (see the glyph-centring calls
 /// there). The size is half the tile's main glyph — smaller than
 /// `draw_difficulty_mark`'s corner wedge draws, but the corner it borrows
@@ -742,10 +742,10 @@ pub(super) fn outline_open(
 const PIN_MARK_SIDE: f32 = 0.20;
 
 /// The pin mark's own colour. Plain red, outside `hud::palette`'s role
-/// table for `render/base.rs::STRUCTURE_FLOOR_FILL`'s own reason: the palette
+/// table for `render/base/overlay_style.rs::STRUCTURE_FLOOR_FILL`'s own reason: the palette
 /// is addressed by role and neither reserved red fits here. `THREAT` is
 /// hostility and inbound harm, which a program under study is not — the
-/// corner census in `render/base.rs`'s tests is the proof of exactly that —
+/// corner census in `render/base/`'s tests is the proof of exactly that —
 /// and `OFFLINE` means a machine that has stopped resolving itself, not a
 /// fact about a body standing in a pen.
 pub(super) const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
@@ -756,7 +756,7 @@ pub(super) const PIN_MARK_COLOR: Color = Color::new(0.86, 0.18, 0.18, 1.0);
 ///
 /// Flush against the tile-edge ring rather than inset like every other
 /// mark in this file: a Station's floor cell never draws `outline_open`
-/// (`render/base.rs::STRUCTURE_FLOOR_FILL`'s doc), so there is no wall here
+/// (`render/base/overlay_style.rs::STRUCTURE_FLOOR_FILL`'s doc), so there is no wall here
 /// for a flush square to read as painting back in. That flush seat is also
 /// what keeps these apart from the nemesis and patrol marks, which are the
 /// same shape a `IDENTITY_MARK_INSET` further in.
@@ -789,7 +789,7 @@ pub(super) fn pin_mark_rects(px: f32, py: f32, tile_px: f32) -> [Rect; 4] {
 /// edge-of-light tile does not leave them burning.
 ///
 /// **`hide_top_left` suppresses the first corner alone**, extending
-/// `render/base.rs::corner_marker`'s existing "the Alt `?` marker borrows
+/// `render/base/overlay_style.rs::corner_marker`'s existing "the Alt `?` marker borrows
 /// the top-left corner while `reveal` is held" rule rather than inventing a
 /// second arbitration — the caller passes the same `marker` bool that
 /// already gates `draw_unseen_marker`.

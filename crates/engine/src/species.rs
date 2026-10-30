@@ -516,7 +516,7 @@ impl SpeciesDef {
 impl AffinityClass {
     /// Every class, for the censuses that must fail the day a sixth is added
     /// rather than passing because they name five files by hand — see
-    /// `tests/assets.rs`'s talent-tree census. Append here when a variant is
+    /// `tests/assets/`'s talent-tree census. Append here when a variant is
     /// appended above.
     pub const ALL: [AffinityClass; 5] = [
         AffinityClass::Striker,

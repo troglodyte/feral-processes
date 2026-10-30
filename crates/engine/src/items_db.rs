@@ -1229,7 +1229,7 @@ mod tests {
 
         // (id, slot, atk, mitigation, decompiler) for every equippable that
         // ships. Mitigation is percentage points; the damage band, accuracy
-        // and evasion have their own censuses in `tests/assets.rs`.
+        // and evasion have their own censuses in `tests/assets/`.
         let equipment = [
             // Research-gated tier.
             ("monofilament_whip", EquipmentSlot::Weapon, 4, 0, 0),

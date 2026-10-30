@@ -349,7 +349,7 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
 }
 
 /// Regression for M4: a save-loaded wild creature carries `Routines(vec![])`
-/// too (`lifecycle.rs` inserts it in the common creature bundle before the
+/// too (`game/lifecycle/spawn_saved.rs` inserts it in the common creature bundle before the
 /// `if c.tamed` branch), so without an ownership check `install_built`
 /// and `uninstall_routine` would silently accept an entity no menu ever
 /// offers — unlike `extract_routine` and `sell_companion`, which both

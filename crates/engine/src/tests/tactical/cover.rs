@@ -216,7 +216,7 @@ fn a_hostile_in_range_but_blind_steps_into_sight() {
     );
 }
 
-/// The outline this feeds `render/tactical.rs` cannot disagree with the
+/// The outline this feeds `render/tactical/` cannot disagree with the
 /// refusal `tactical_use_routine` gives at the keyboard: a cell out of
 /// range and a cell out of sight are both excluded, and a cell the action
 /// accepts is included.

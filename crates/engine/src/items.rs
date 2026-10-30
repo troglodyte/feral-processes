@@ -142,7 +142,7 @@ pub mod ids {
     /// are still ordinary `.ron` files.
     pub const ROUTINE_DISK: &str = "routine_disk";
     /// Named from Rust because the starting inventory is engine content
-    /// (see `game/lifecycle.rs`) — same reason `CORE_FRAGMENT`, `POWER_CELL`
+    /// (see `game/lifecycle/new.rs`) — same reason `CORE_FRAGMENT`, `POWER_CELL`
     /// and `ICE_BREAKER` are, on the same lines; the id itself lives in
     /// `assets/items/outlet.ron`.
     pub const OUTLET: &str = "outlet";

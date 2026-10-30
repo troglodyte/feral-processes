@@ -102,7 +102,7 @@ fn the_sprite_ladder_is_integer_multiples_of_the_authored_size() {
 }
 
 /// Two sprite names are still hardcoded in Rust rather than reached through
-/// a def's `sprite_name()`: `render/base.rs` draws `"anchor"` for the base
+/// a def's `sprite_name()`: `render/base/surface_map.rs` draws `"anchor"` for the base
 /// anchor tile, and `feral_processes_engine::DEFAULT_PLAYER_SPRITE` (loaded
 /// as `"player"`) is the player's own fallback before the wizard's drawn
 /// icon exists. `every_shipped_sprite_override_resolves_to_a_real_file` in
@@ -116,12 +116,12 @@ fn the_sprite_ladder_is_integer_multiples_of_the_authored_size() {
 /// used to catch.
 #[test]
 fn the_two_hardcoded_sprite_names_are_on_disk() {
-    // Mirrors `crates/gui/src/render/base.rs`'s literal `"anchor"` — that
+    // Mirrors `crates/gui/src/render/base/surface_map.rs`'s literal `"anchor"` — that
     // site names a bare `&str`, not a constant this test can reference.
     let anchor = sprites_dir().join("anchor.png");
     assert!(
         anchor.is_file(),
-        "{} is missing; render/base.rs's anchor draw has no name census to \
+        "{} is missing; render/base/surface_map.rs's anchor draw has no name census to \
          catch this and would silently fall back to `#`",
         anchor.display()
     );

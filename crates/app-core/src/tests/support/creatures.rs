@@ -469,7 +469,7 @@ pub(crate) fn place_outpost_with_staff_programs_east_of_player(
 /// An outpost east of the player already crewed by `n` posted programs,
 /// with `stock` on its shelf — the `c`/`C` key-collision test's fixture
 /// (I2): `outpost: Some(target)` on each `CreatureSave` posts it directly
-/// on load, `game/lifecycle.rs`'s `pending_outpost_crew` path, rather than
+/// on load, `game/lifecycle/spawn_saved.rs`'s `pending_outpost_crew` path, rather than
 /// driving `Mode::OutpostPost`'s picker once per body.
 pub(crate) fn place_outpost_with_crew_and_stock(
     app: &mut App,

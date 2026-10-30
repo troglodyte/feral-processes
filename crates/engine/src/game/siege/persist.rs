@@ -7,7 +7,7 @@
 //! from that record rather than deserialising one — see that type's own
 //! doc for why it does not gain `Serialize` at all. Membership rides
 //! `save::CreatureSave::siege_cell`/`siege_order` the way a sortie's rides
-//! `sortie_index`, `game/lifecycle.rs::restore_sorties`'s reason: entity
+//! `sortie_index`, `game/lifecycle/restore.rs::restore_sorties`'s reason: entity
 //! ids are not stable across a save/load round trip.
 
 use bevy_ecs::prelude::Entity;
@@ -79,7 +79,7 @@ pub(crate) fn assemble(game: &Game) -> Option<SiegeSave> {
 ///
 /// `members` is `(the body's own `CreatureSave::siege_order`, the loaded
 /// entity, its `siege_cell`)` for every body that reloaded successfully —
-/// `game/lifecycle.rs::restore_sorties`'s `sortie_members` shape. **A save
+/// `game/lifecycle/restore.rs::restore_sorties`'s `sortie_members` shape. **A save
 /// whose members all failed to load is dropped rather than restored as an
 /// empty fight nobody can end**, `restore_sorties`'s own rule: a species
 /// file deleted between sessions is rare, and a fight with nobody left to

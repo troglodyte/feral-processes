@@ -58,7 +58,7 @@ pub struct ResearchDef {
     ///
     /// What a node may legally name is bounded by its own `requires`
     /// closure: see `research_materials_are_reachable_from_their_own
-    /// _prerequisites` in `tests/assets.rs`, which is the whole of the rule
+    /// _prerequisites` in `tests/assets/`, which is the whole of the rule
     /// that a bill can never ask for something the tree has not unlocked yet.
     #[serde(default)]
     pub materials: Vec<(ItemId, u32)>,

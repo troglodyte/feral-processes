@@ -970,7 +970,7 @@ impl Game {
     /// lowest-tiled one that actually contributes `raid_defense`.
     ///
     /// **A `Structure` and never the anchor.** A `VisualEffect` names a
-    /// field cell (`render/base.rs` draws the queue only while `field_pos`
+    /// field cell (`render/base/` draws the queue only while `field_pos`
     /// is `Some`), and the anchor is the tile the Home stands on, so a flash
     /// on it would paint over the player's own cell when they stand home.
     /// `seam:a-raids-flash-is-field-too-and-the-pane-has-to-say-so`

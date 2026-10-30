@@ -26,21 +26,21 @@ use crate::app::sprite_editor::{
 use crate::{App, GameKey, Mode};
 
 /// The name `assets/sprites/anchor.png` is looked up under — the one place
-/// this string is authored beside `crates/gui/src/render/base.rs`'s
+/// this string is authored beside `crates/gui/src/render/base/`'s
 /// `Some("anchor")`. There is no `sprite_name()` to call for it: the anchor
 /// is not a def, it is one hand-spawned entity (`components::BaseAnchor`).
 const ANCHOR_SPRITE_NAME: &str = "anchor";
 
 /// The anchor's own glyph — `Glyph { ch: '#', .. }`, written once at spawn
-/// in `Game::new_with`/`Game::load` (`crates/engine/src/game/lifecycle.rs`)
+/// in `Game::new_with`/`Game::load` (`crates/engine/src/game/lifecycle/`)
 /// and not exported as a constant there, since nothing else needs it back.
 const ANCHOR_GLYPH: char = '#';
 
 /// The anchor's own colour — the same `GlyphColor::Gray` written once at the
 /// same spawn site as `ANCHOR_GLYPH`. Unlike the player, the anchor's tile is
-/// never re-coloured by a role: `render/base.rs` reads its glyph colour off
+/// never re-coloured by a role: `render/base/` reads its glyph colour off
 /// `EntityView::color` exactly as it would for a species or a structure, so
-/// this is genuinely "what render/base.rs draws it with," not a second
+/// this is genuinely "what render/base/ draws it with," not a second
 /// guess at it.
 const ANCHOR_GLYPH_COLOR: GlyphColor = GlyphColor::Gray;
 
@@ -99,7 +99,7 @@ pub struct SpriteSubject {
     /// `player` is `Glyph(None)` rather than `Glyph(Some(GlyphColor::Cyan))`,
     /// the colour the player entity happens to spawn with: the HUD seam's
     /// rule is that the player's `@` wears the **`PLAYER` role colour**, not
-    /// an authored hue, and `render/base.rs` never reads
+    /// an authored hue, and `render/base/` never reads
     /// `glyph_color(GlyphColor::Cyan)` for it — reading `Cyan` here and
     /// drawing it through the same table every other subject uses would show
     /// the picker a colour the map never actually paints. `anchor` **is**

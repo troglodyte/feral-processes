@@ -227,7 +227,7 @@ finished chain stays finished and its board stays open.
 
 **A mission must be finishable, or onboarding stops for the rest of the
 run.** The shipped chain is held to that by three tests over the real assets
-in `crates/engine/src/tests/assets.rs`: its build costs never outrun its
+in `crates/engine/src/tests/assets/`: its build costs never outrun its
 payouts, every `Deed` it names has an emit site, and every id it names
 resolves. A mod is not checked, which is the line every content directory
 here draws.

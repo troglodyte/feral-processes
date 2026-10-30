@@ -223,7 +223,7 @@ fn a_reach_is_unavailable_until_its_charge_is_ready() {
 }
 
 /// `ReachCharge` is battle-scoped exactly as `Cloaked`, `CombatBuff` and
-/// `AbilityCooldowns` are, which is what keeps it out of `save.rs`. Left
+/// `AbilityCooldowns` are, which is what keeps it out of `save/`. Left
 /// set, it would follow the wielder out of one fight and hold their first
 /// swing of the next one narrow.
 #[test]

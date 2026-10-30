@@ -2139,7 +2139,7 @@ fn a_town_raid_on_an_empty_store_finds_nothing_and_says_so() {
 /// The effect assertion is the second half. A deflect flash names a
 /// **base-space** cell, so it has to ride a `Structure` — the anchor is a
 /// zone-surface fixture and a flash on its tile paints the party's own cell,
-/// which is the aliasing `render/base.rs`' `base_pos` gate already closed
+/// which is the aliasing `render/base/`' `base_pos` gate already closed
 /// for the ambient sweep. Asserting the *position* and not just the count is
 /// what makes that non-vacuous.
 #[test]

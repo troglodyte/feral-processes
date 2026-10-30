@@ -1253,7 +1253,7 @@ impl Game {
                 // Every glyph on the map carries its species' authored hue —
                 // what this program *is*. How dangerous it is, is a second
                 // reading, and the map spends the glyph's own ink on it
-                // wherever it can (`render/base.rs`'s `ConRead`), falling
+                // wherever it can (`render/base/overlay_style.rs`'s `ConRead`), falling
                 // back to a corner earmark where it cannot. `None` for
                 // anything that is not hostile, so neither can land on a
                 // companion.

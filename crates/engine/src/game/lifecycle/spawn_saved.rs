@@ -234,7 +234,7 @@ pub(super) fn spawn_player_from_save(
             // in the row it didn't find.
             //
             // `fused_gear` is the pre-0.8.9 store and is drained here
-            // rather than read anywhere else — see its doc in `save.rs`
+            // rather than read anywhere else — see its doc in `save/mod.rs`
             // for why the two coexist and when the legacy one goes.
             {
                 let mut carried = GearCopies::default();

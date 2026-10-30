@@ -69,7 +69,7 @@ fn a_stocked_rack_survives_save_and_load() {
 }
 
 /// The def decides whether a rack stands here, not the save —
-/// `durability`'s rule, the arm above `strips` in `lifecycle.rs`.
+/// `durability`'s rule, the arm above `strips` in `game/lifecycle/restore.rs`.
 #[test]
 fn a_structure_that_racks_nothing_gets_no_shelf_and_drops_a_stored_one() {
     let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

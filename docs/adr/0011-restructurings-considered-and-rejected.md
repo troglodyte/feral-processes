@@ -48,7 +48,7 @@ One file does not justify a crate.
 
 ## Shared test-fixture crate
 
-The engine's `tests/support.rs` and app-core's `tests/support/` share five function names at different layers (one drives the World, the other drives `handle_key`).
+The engine's `tests/support/` and app-core's `tests/support/` share five function names at different layers (one drives the World, the other drives `handle_key`).
 They are not duplicates.
 
 ## Continuous integration

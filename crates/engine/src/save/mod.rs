@@ -318,7 +318,7 @@ pub struct SortieSave {
 /// **Carries the whole record**, unlike `SortieSave`: cargo names no entity,
 /// so there is no id whose stability across a save could be a problem, and
 /// `routes::Route`'s membership-free shape needs no reassembly on load — a
-/// straight field-for-field conversion in `game/lifecycle.rs` is the whole of
+/// straight field-for-field conversion in `game/lifecycle/convert.rs` is the whole of
 /// it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RouteSave {

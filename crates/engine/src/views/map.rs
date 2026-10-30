@@ -30,7 +30,7 @@ pub struct EntityView {
     /// *replace* `color` for a hostile, so a tile could say either what a
     /// program is or how dangerous it is, never both — and a boss or a
     /// nemesis gave up the danger read entirely to a reserved hue.
-    /// `render/base.rs`'s `ConRead` spends the glyph's own ink on it wherever
+    /// `render/base/overlay_style.rs`'s `ConRead` spends the glyph's own ink on it wherever
     /// that ink is free and folds it into a top-left earmark where it is
     /// not, `rarity` keeps the top edge and identity rides corner marks.
     /// **Not the bottom edge**, which the con bar held once and
@@ -322,7 +322,7 @@ pub struct EntityView {
 /// `EntityView::position_is_honest` is the value.
 ///
 /// **A pure function shared by two crates rather than a condition written
-/// twice.** `render/base.rs` filters the map with it, and
+/// twice.** `render/base/` filters the map with it, and
 /// `Game::find_target_in_direction` filters its ray with it. They used to
 /// disagree: the ray had no such rule, so aiming at a machine hit the worker
 /// parked in front of it — a program with no glyph on screen — while the

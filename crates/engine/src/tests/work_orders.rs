@@ -3799,7 +3799,7 @@ fn bodies_by_tile(game: &mut Game) -> std::collections::HashMap<(i32, i32), usiz
 /// face.** Both walks stop at the first tile `in_reach` answers for, and with
 /// nothing in the way that is the same cell for everyone approaching from the
 /// same side: the save this was found in had 71 downed programs on one tile,
-/// drawn as a single glyph because `render/base.rs` keeps one `actor` slot per
+/// drawn as a single glyph because `render/base/` keeps one `actor` slot per
 /// cell.
 ///
 /// **Asserted every beat rather than at the end**, which is what makes it a

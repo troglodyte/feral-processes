@@ -120,7 +120,7 @@ pub(super) fn draw_body(
     // free to carry the con rung. `form`'s own sprite outranks `body.sprite`
     // for the same reason `ink` above does.
     //
-    // The player's own rungs are the map's (`render/base.rs`): their drawing,
+    // The player's own rungs are the map's (`render/base/`): their drawing,
     // untinted for that file's reason with only the cloak's fade kept, then
     // the sprite their look names. The player has no species, so without
     // these `body.sprite` is `None` and the `@` was all this board drew.
@@ -170,7 +170,7 @@ pub(super) fn draw_body(
         painter.map(&glyph, tx, ty, body_glyph_px, con.glyph_ink(ink, 1.0));
     }
     // The player-colour outline the surface map's own tile keeps while
-    // emulating — `render/base.rs`'s doc has the argument for why a corner
+    // emulating — `render/base/`'s doc has the argument for why a corner
     // mark would misread as the nemesis mark on that board; this board has
     // no nemesis mark to be confused with, but the same outline keeps the
     // two grids agreeing about what an image looks like.

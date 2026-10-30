@@ -644,7 +644,7 @@ impl Game {
     /// `Game::despawn_nest`) both need to act on this specific nest rather
     /// than requerying the map for it.
     ///
-    /// `Game::load` (`lifecycle.rs`) spawns a restored nest's entity
+    /// `Game::load` (`game/lifecycle/restore.rs`) spawns a restored nest's entity
     /// directly rather than calling this — it must not roll fresh guardians
     /// or spend `GameRng` when it's reconstructing an exact recorded state
     /// — but both it and the `spawn_bare_nest` test fixture build the same
@@ -2165,8 +2165,8 @@ impl Game {
 
 /// The component bundle every nest entity carries — `Nest`, `Position`,
 /// `Glyph`, `Durability` — assembled once so `spawn_nest`, `Game::load`
-/// (`lifecycle.rs`) and the `spawn_bare_nest` test fixture
-/// (`tests/support.rs`) can't drift the way they already had: `hp` and
+/// (`game/lifecycle/load.rs`) and the `spawn_bare_nest` test fixture
+/// (`tests/support/raid_fixtures.rs`) can't drift the way they already had: `hp` and
 /// `pending_respawns` come in as plain values rather than always-fresh
 /// defaults because a restored nest is neither full-health nor
 /// respawn-queue-empty, and `species` comes in as a resolved `SpeciesDef`

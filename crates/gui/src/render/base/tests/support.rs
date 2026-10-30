@@ -295,7 +295,7 @@ pub(super) fn drawn_base_site(
         // runs concurrently in one process. Pid alone gave every thread
         // the same path, so one thread's `remove_file` could land
         // between another's write and its read. See
-        // `app-core/src/tests/support.rs::scratch_path` for the same
+        // `app-core/src/tests/support/common.rs::scratch_path` for the same
         // trap and the same fix.
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

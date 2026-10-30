@@ -205,7 +205,7 @@ fn a_drawing() -> feral_processes_engine::PlayerIcon {
 
 /// The player's own drawing stands on their body on this board as it
 /// does on the map — top rung over a named sprite, in place of the `@`
-/// rather than over it, and untinted for `render/base.rs`'s reason.
+/// rather than over it, and untinted for `render/base/`'s reason.
 #[test]
 fn the_players_drawing_stands_in_for_the_at_sign() {
     use crate::paint::{SpriteTable, with_sprites};

@@ -183,7 +183,7 @@ any non-finite `taming_potency`, `consume.power`, or
     //               each optional). Summed across everything worn and
     //               capped at `tuning::DAMAGE_RESIST_CAP` per type; never
     //               scaled. A new typed weapon needs a shipped armour resisting its
-    //               type: the census (`tests/assets.rs`,
+    //               type: the census (`tests/assets/`,
     //               `every_damage_type_a_shipped_attack_carries_has_armour_resisting_it`)
     //               fails without one.
     //

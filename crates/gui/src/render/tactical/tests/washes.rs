@@ -118,7 +118,7 @@ fn the_placeable_field_is_outlined_along_its_boundary() {
 /// The state every call site but the one above passes — no routine being
 /// aimed, or one aimed that is not a `Radius` shape — draws nothing in
 /// `AIM`: `Game::tactical_placeable_cells` is already empty then, and
-/// `render/base.rs` hands this function exactly what that call returns.
+/// `render/base/` hands this function exactly what that call returns.
 #[test]
 fn an_empty_placeable_set_is_not_outlined() {
     use crate::paint::painted_line_count_in;

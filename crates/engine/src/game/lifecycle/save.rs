@@ -717,7 +717,7 @@ impl Game {
                 .unwrap_or(crate::tuning::QUALITY_DEFAULT),
             module_wear: equipment.module.as_ref().map(|e| e.copy.wear).unwrap_or(0),
             // The legacy store is never written again — see its doc in
-            // `save.rs`. It is `skip_serializing_if` empty, so a save
+            // `save/mod.rs`. It is `skip_serializing_if` empty, so a save
             // from here on carries only `gear_copies`.
             fused_gear: Vec::new(),
             gear_copies,
@@ -842,7 +842,7 @@ impl Game {
                 let p = self.world.resource::<ZoneSpawnPoint>();
                 (p.x, p.y)
             },
-            // Never written again — see the field docs in `save.rs`.
+            // Never written again — see the field docs in `save/mod.rs`.
             buyback: Vec::new(),
             buyback_shelves: self
                 .world

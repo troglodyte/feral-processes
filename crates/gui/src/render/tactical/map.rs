@@ -3,7 +3,7 @@ use super::*;
 /// Everything app-core lays over the board this frame that is not the
 /// fight itself: the aim cursor and the routine it previews, the walk the
 /// pointer is hovering, and the hostile a click has marked. All of it is
-/// app-core state read before the `game` borrow in `render/base.rs`; the
+/// app-core state read before the `game` borrow in `render/base/`; the
 /// board draws it and decides nothing about it.
 #[derive(Default)]
 pub(crate) struct Overlay {
@@ -173,7 +173,7 @@ pub(crate) fn draw_tactical_map(
                 draw_cell_field(painter, field, edge, cell, (px, py), tile_px, wash.color());
             }
         }
-        // A body's own hit, last of the tile's washes — `render/base.rs`'s
+        // A body's own hit, last of the tile's washes — `render/base/`'s
         // own ordering for a raid flash, and the same call: a tactical hit
         // reuses `EffectKind::Hit`'s wash and spark burst rather than
         // inventing a second red.
@@ -366,7 +366,7 @@ pub(crate) fn draw_tactical_map(
         tile_px,
     );
 
-    // The struck body's own debris — `render/base.rs`'s spark burst, reused
+    // The struck body's own debris — `render/base/`'s spark burst, reused
     // rather than restated, cued at the body's cell instead of a raided
     // structure's world tile.
     fx.draw_tactical_bursts(painter, tile_px, |cell| {

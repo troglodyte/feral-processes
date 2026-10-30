@@ -309,7 +309,7 @@ const ROUND_BANNER_SECONDS: f64 = 1.2;
 /// It costs nothing in legibility because the shadow rides `shade` and
 /// never `vig`: glyphs are drawn at full vignette brightness under a cloud,
 /// so nothing standing on the ground dims with it. The vignette floors in
-/// `render/base.rs` are the constrained pair, not this.
+/// `render/base/` are the constrained pair, not this.
 const CLOUD_DEPTH: f32 = 0.30;
 
 /// How fast the field travels, in tiles per second, and in which direction.
@@ -489,7 +489,7 @@ fn shield_pulse_alpha(time: f64) -> f32 {
 ///
 /// Upward only, which is why this is a raised cosine rather than the sine
 /// `shield_pulse_alpha` uses: the mark's rest position is held off the
-/// tile's bottom edge by an inset `render/base.rs` documents as
+/// tile's bottom edge by an inset `render/base/` documents as
 /// load-bearing, and a down-swing would spend it.
 fn staffed_bob_offset(time: f64, phase_key: u64) -> f32 {
     // Wrapped rather than used whole: an entity id climbs into the millions
@@ -3336,7 +3336,7 @@ mod tests {
 
     /// The mark bobs *up* out of its rest position and never below it. Its
     /// rest position is held off the tile's bottom edge by an inset that
-    /// `render/base.rs` documents as load-bearing, and a negative offset
+    /// `render/base/` documents as load-bearing, and a negative offset
     /// would spend that inset.
     /// The build caret's bob straddles its rest position instead of sitting
     /// on top of it.

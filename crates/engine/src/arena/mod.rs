@@ -64,7 +64,7 @@ use crate::*;
 /// see them, and one clamped at `TALENT_START_LEVEL` could not stage the
 /// fight the talent trees exist to change.
 ///
-/// Shared with `tests/support.rs`, which re-exports it — two copies would
+/// Shared with `tests/support/`, which re-exports it — two copies would
 /// be two answers to "what is a level-N companion".
 pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
     if game.world.get::<Player>(entity).is_some() {

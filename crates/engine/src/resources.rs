@@ -2123,7 +2123,7 @@ impl NextProgramId {
 /// **Not saved, and not inserted by either constructor** — `Game::taunt`
 /// defaults it in place, the way `ProfileRewardsPaid` exists only once
 /// something has happened. A resource is persisted by being an explicit
-/// field in `save.rs`, so leaving it out of that struct is the whole of
+/// field in `save/`, so leaving it out of that struct is the whole of
 /// what keeps it transient, and there is nothing here for a
 /// `SAVE_FORMAT_VERSION` bump to be about.
 #[derive(Resource, Clone, Copy, Default, Debug)]

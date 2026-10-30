@@ -29,6 +29,8 @@ A hub is a `HubKind` impl in its own module: what a hub is lives there, never in
 The `tuning`, `components` and `views` split landed in 0.19.16.
 app-core `lib.rs` and gui `render/mod.rs` are not there yet; they shrink as screens are changed ([0014](0014-per-screen-state-and-one-screen-table.md)).
 
+Exception, 2026-10-30 (user override): a one-off standalone split of the hottest oversized files, to cut agent read size and parallel-worktree conflicts. After the 0.19.16 split, edits did not drop but spread out: the busiest `tuning/` file took about a quarter of the old single file's edits. The split covers the engine's and app-core's `tests/support.rs`, the engine's `tests/{assets,tactical,siege,research}.rs`, `game/lifecycle.rs` (with `load` cut into ordered per-domain restore functions), `save.rs` and the gui's `render/{base,tactical,building}.rs` plus the tests in `render/mod.rs`. The standing rule still applies to everything else.
+
 ## Evidence
 
 - `crates/engine/src/tactical/`, `crates/engine/src/settlements/`.

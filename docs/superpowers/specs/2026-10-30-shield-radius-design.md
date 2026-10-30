@@ -14,11 +14,11 @@ In a siege you fight at the base it now does something: hits on what stands unde
 3. Every tile the circle touches, even partly, is covered. *(user)*
 4. **The circle shows** as a solid blue edge with a light see-through blue fill *(user)*:
    - while the pointer hovers a Shield, on the field map and on the siege board *(user: hover; Claude: both maps)*;
-   - in the placement preview when deploying a Shield *(user)*;
-   - when choosing an upgrade for a Shield, at the next tier's radius *(user)*.
+   - in the deploy direction prompt, as a faint edge-only circle around each of the four candidate tiles *(user)*;
+   - in the upgrade direction prompt, as each adjacent Shield's next-tier circle, faint and edge-only *(user)*. A Shield upgrade needs no tamed program, so it skips the program picker *(Claude)*.
 5. **Sweeps:** a sweep's target gets 2 off for each armed Shield covering it. A target outside every circle gets nothing from Shields. *(user)*
 6. **Fought siege:** an enemy hit on a body (staff, the player, a companion) or on a structure under a circle loses 2 for each covering armed Shield. *(user: flat −2, stacking)*
-7. **Flash:** each softened hit flashes that Shield's circle at 25% fill, fading in and out quickly and softly. *(user)*
+7. **Flash:** each softened hit, in a siege or a sweep, flashes that Shield's circle at 25% fill, fading in and out quickly and softly. *(user; sweeps included: Claude)* In a siege, "enemy hit" is implemented as any damage to a non-hostile body during the siege battle *(Claude)*.
 8. **Outline:** the blue pulse on structure outlines shows only on structures covered by an armed Shield. *(user)*
 9. **Coils:** in a fought siege, only an armed Shield protects. A Shield that softened at least one hit spends one Charge Coil when the siege ends. *(user)*
 

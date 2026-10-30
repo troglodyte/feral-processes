@@ -460,7 +460,7 @@ fn any_key_leaves_the_structure_sheet_and_forgets_its_subject() {
 #[test]
 fn the_manual_opens_on_an_index_of_the_shipped_pages() {
     let mut app = test_app(930);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     assert_eq!(app.mode, Mode::Help);
     let rows = app.help_index_rows();
     assert!(
@@ -474,7 +474,7 @@ fn the_manual_opens_on_an_index_of_the_shipped_pages() {
 #[test]
 fn picking_a_topic_opens_that_page() {
     let mut app = test_app(931);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     let first = app.help_index_rows()[0].title.clone();
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::HelpPage);
@@ -490,7 +490,7 @@ fn picking_a_topic_opens_that_page() {
 #[test]
 fn a_followed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
     let mut app = test_app(932);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     let first = app.help_stack[0].clone();
     let link = app.help_page_view().unwrap().links;
@@ -530,7 +530,7 @@ fn a_followed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
 #[test]
 fn tab_down_enter_follows_the_second_link() {
     let mut app = test_app(935);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     let page = app.current_help_page_id();
     let target = app
@@ -545,7 +545,7 @@ fn tab_down_enter_follows_the_second_link() {
 #[test]
 fn enter_follows_the_first_link_when_the_links_are_focused() {
     let mut app = test_app(936);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     let page = app.current_help_page_id();
     let target = app.help_link_target(0).unwrap();
@@ -557,7 +557,7 @@ fn enter_follows_the_first_link_when_the_links_are_focused() {
 #[test]
 fn a_digit_does_not_follow_a_help_link() {
     let mut app = test_app(937);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     let open = app.help_stack.clone();
     app.handle_key(GameKey::Char('1'));
@@ -569,7 +569,7 @@ fn a_digit_does_not_follow_a_help_link() {
 #[test]
 fn tab_back_restores_scrolling() {
     let mut app = test_app(938);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     let idx = app
         .help_index_rows()
         .iter()
@@ -605,7 +605,7 @@ fn a_page_with_no_links_survives_tab_and_arrows() {
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
     app.help_db = db;
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     assert!(app.help_page_view().unwrap().links.is_empty());
     let open = app.help_stack.clone();
@@ -620,11 +620,11 @@ fn a_page_with_no_links_survives_tab_and_arrows() {
 #[test]
 fn esc_on_the_index_closes_the_manual_and_clears_the_trail() {
     let mut app = test_app(933);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     pick_row(&mut app, 0);
     app.mode = Mode::Help;
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::ManualOptions);
     assert!(app.help_stack.is_empty());
 }
 
@@ -633,7 +633,7 @@ fn esc_on_the_index_closes_the_manual_and_clears_the_trail() {
 #[test]
 fn up_and_down_scroll_a_page_without_changing_which_page_is_open() {
     let mut app = test_app(934);
-    app.handle_key(GameKey::Char('?'));
+    open_manual(&mut app);
     // The controls page is the long one, so there is something to scroll.
     let idx = app
         .help_index_rows()
@@ -673,4 +673,48 @@ fn page_keys_jump_a_page_and_stop_at_the_ends() {
     app.selected_index(GameKey::PageUp, len);
     app.selected_index(GameKey::PageUp, len);
     assert_eq!(app.menu_selected, 0, "PageUp parks on the first row");
+}
+
+/// `?` is not bound on the map any more: it is a held popup that gui owns.
+#[test]
+fn question_mark_no_longer_opens_the_manual() {
+    let mut app = test_app(940);
+    app.handle_key(GameKey::Char('?'));
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// Esc from the manual's index comes back to the game menu's Manual page,
+/// and the menu still leaves to wherever it was opened from.
+#[test]
+fn esc_from_the_manual_returns_to_the_game_menu_in_a_run_and_from_the_main_menu() {
+    let mut app = test_app(941);
+    open_manual(&mut app);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::ManualOptions);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    let mut app = test_app(942);
+    app.mode = Mode::MainMenu;
+    open_manual(&mut app);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::ManualOptions);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::MainMenu);
+}
+
+/// The Manual page's rail entry advertises the Enter that opens it.
+#[test]
+fn the_manual_rail_entry_offers_enter() {
+    let mut app = test_app(943);
+    app.handle_key(GameKey::Esc);
+    while app.mode != Mode::ManualOptions {
+        app.handle_key(GameKey::Down);
+    }
+    assert!(
+        Hub::GameMenu
+            .kind()
+            .extra_keys(&app)
+            .contains(&("Enter", "open"))
+    );
 }

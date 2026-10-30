@@ -374,10 +374,6 @@ impl App {
                 self.open_game_menu(true);
                 return;
             }
-            GameKey::Char('?') => {
-                self.mode = Mode::Help;
-                return;
-            }
             // Whichever map is on screen: underground the zone map is not
             // drawn at all, so resizing its tiles from down there would be
             // a keypress with nothing to show for it.

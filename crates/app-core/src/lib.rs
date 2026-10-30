@@ -2451,6 +2451,9 @@ pub enum Mode {
     /// The game menu's Sprites page: what the Sprite Forge is, with Enter on
     /// the rail opening `Mode::SpritePicker`.
     SpriteOptions,
+    /// The game menu's Manual page: Enter on the rail opens `Mode::Help`,
+    /// and Esc from the index comes back here.
+    ManualOptions,
 }
 
 impl Mode {
@@ -2692,6 +2695,7 @@ impl Mode {
             // Opened from the game menu, so it never layers over a fight —
             // and so is the picker's `SpriteEditor`, reachable only from it.
             | Mode::SpriteOptions
+            | Mode::ManualOptions
             | Mode::SpritePicker
             | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers

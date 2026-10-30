@@ -34,7 +34,7 @@ fn app_with_sprite_forge(seed: u32) -> App {
 }
 
 #[test]
-fn the_game_menu_rail_offers_sprites_before_save_and_quit() {
+fn the_game_menu_rail_offers_sprites_and_manual_before_save_and_quit() {
     let mut app = test_app(1);
     app.open_game_menu(true);
     let titles: Vec<_> = Hub::GameMenu
@@ -45,7 +45,14 @@ fn the_game_menu_rail_offers_sprites_before_save_and_quit() {
         .collect();
     assert_eq!(
         titles,
-        ["Gameplay", "Audio", "Graphics", "Sprites", "Save & quit"]
+        [
+            "Gameplay",
+            "Audio",
+            "Graphics",
+            "Sprites",
+            "Manual",
+            "Save & quit"
+        ]
     );
 }
 

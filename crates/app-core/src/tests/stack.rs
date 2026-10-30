@@ -170,14 +170,9 @@ fn a_movement_key_underground_still_queues_a_step_sound() {
 fn the_menu_keys_still_open_their_screens_underground() {
     // Party and inventory management is deliberately available down the
     // Stack — see `Game::require_surface`.
-    for (key, expected) in [
-        (GameKey::Char('i'), Mode::Inventory),
-        (GameKey::Char('?'), Mode::Help),
-    ] {
-        let mut app = app_underground(303);
-        app.handle_key(key);
-        assert_eq!(app.mode, expected, "{key:?} should still open its screen");
-    }
+    let mut app = app_underground(303);
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.mode, Mode::Inventory);
     // And the party pages still reach their screens from down there — the
     // rows are non-surface, so none of them are filtered out.
     let mut app = app_underground(303);

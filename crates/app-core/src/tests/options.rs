@@ -84,16 +84,17 @@ fn q_on_the_map_does_nothing() {
 }
 
 #[test]
-fn a_run_has_five_pages_and_every_one_is_found_by_hub_for() {
+fn a_run_has_six_pages_and_every_one_is_found_by_hub_for() {
     let mut app = test_app(9014);
     app.handle_key(GameKey::Esc);
     let kind = Hub::GameMenu.kind();
-    assert_eq!(kind.pages(&app).len(), 5);
+    assert_eq!(kind.pages(&app).len(), 6);
     for (i, mode) in [
         Mode::GameplayOptions,
         Mode::AudioOptions,
         Mode::GraphicsOptions,
         Mode::SpriteOptions,
+        Mode::ManualOptions,
         Mode::QuitRunConfirm,
     ]
     .into_iter()
@@ -105,7 +106,7 @@ fn a_run_has_five_pages_and_every_one_is_found_by_hub_for() {
         );
     }
     let menu_only = open_from_main_menu(9015);
-    assert_eq!(kind.pages(&menu_only).len(), 4);
+    assert_eq!(kind.pages(&menu_only).len(), 5);
     assert_eq!(menu_only.hub_for(Mode::QuitRunConfirm), None);
 }
 

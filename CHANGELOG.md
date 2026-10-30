@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.2
+
+**Founding a Home now lays a 5x5 patch of floor instead of a 3x3.** Before, founding was refused if any tile of the patch was rock or a Stack link. Now the floor grows around anything in the way and makes up the missing tiles on the open side, so founding beside rock gives you as much floor as founding on open ground. In a tight pocket you get whatever fits. It still costs 2 core fragments.
+
 ## 0.21.1
 
 **Programs you capture now join your base.** A program taken out on the field used to stay standing where you caught it once your Home was founded, and never picked up a job. It now steps onto the free floor nearest your Home and gets to work. Saves already holding stuck programs fix themselves within a few moments of loading.

@@ -16,7 +16,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   coordinates and facing live in `resources::Locale`; `Position` is pinned
   to the entrance tile.
 - **Examine names only what the surface map draws, and that rule is one
-  function**: `views::drawn_on_surface_map`, read by `render/base.rs` and
+  function**: `views::drawn_on_surface_map`, read by `render/base/` and
   `Game::find_target_in_direction` alike.
 - **`run_symlink` is the one action that leaves the Stack instead of being
   refused by it**, and it is a field routine landing on the anchor rather

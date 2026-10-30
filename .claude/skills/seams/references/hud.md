@@ -122,7 +122,7 @@
   a reviewer holding that rule sees flat grey among coloured tiles and
   concludes the tint was dropped by omission. It was not: the player's tile
   is the only one that inherits no hue to protect — no species colour, no
-  `biome_tint`, no damage dimming, verified in `render/base.rs`'s
+  `biome_tint`, no damage dimming, verified in `render/base/`'s
   `is_player` arm — and the drawing is the one sprite whose colours the
   player chose by hand, so multiplying it by an indigo swatch turns most of
   it black. What that costs is the Colour step's swatch on this one tile,
@@ -212,7 +212,7 @@
   body's first row again, at `m.small()` and **above** the refusal, and it
   costs a row through its own `LOG_FILTER_ROWS` — `LOG_TEXT_ROWS` stays the
   *message* count, or SPACE grows the pane by five rows instead of four.
-  `base.rs`'s `log_capacity` subtracts that same constant, never a second
+  `render/base/`'s `log_capacity` subtracts that same constant, never a second
   literal.
 
 - **A pane whose border carries a strip starts its body at
@@ -228,7 +228,7 @@
   pane must buy the height** — `log_h` spends `strip_inset * 2.0` — or
   `LOG_TEXT_ROWS` silently stops meaning four, which is the mutation
   `the_pane_draws_four_message_rows_collapsed_and_eight_expanded` exists for.
-  `base.rs`'s `log_capacity` came into step for free and is asserted by that
+  `render/base/`'s `log_capacity` came into step for free and is asserted by that
   same test; against the old height it under-asked by one in both states. The
   keybar's end was the same fault latent — the floor sat 6.67px inside its
   quad and nothing was clipped only because the row lattice never landed
@@ -253,7 +253,7 @@
   at one they overlap exactly and the log pane's fill — painted later —
   cuts the compass in half. **A block inside the pane costs none of that**:
   it overlays tiles that are still drawn, so `regions` never learns the
-  compass exists, and `base.rs::the_map_is_the_same_size_whether_or_not_a
+  compass exists, and `render/base/tests/compass_block.rs::the_map_is_the_same_size_whether_or_not_a
   _destination_is_picked` compares the map's background fill between the
   two states to hold it. What the block *does* inherit is the body rule
   above — it starts at `layout::strip_inset` below the pane's top edge,

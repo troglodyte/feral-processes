@@ -15,11 +15,16 @@
 - **The Home costs `HOME_FOUNDING_COST` fragments (paid in code), and it and the anchor land on the tile the party
   founded from.** `place_structure` puts both there — `Game::move_anchor_to`
   is the anchor's one writer and founding its only caller — and
-  `lay_founding_floor` floors that tile and the ring of eight around it,
-  skipping cells nothing can stand on or that `floor_conflict` refuses.
-  **The one refusal it needed is a Stack link**: a link tile is walked onto
-  to *descend*, so a Home sharing one could never be stood on. It also refuses unless all eight ring cells
-  are walkable. The cost is small (2) and a test holds every class kit to
+  `lay_founding_floor` grows `FOUNDING_FLOOR_CELLS` (25) of floor from
+  that tile through `footprint::founding_cells`, a pure best-first fill
+  (ADR 0033): four-way through open cells, nearest the Home in a straight
+  line first, ties on `(y, x)`. Rock and `floor_conflict` cells are grown
+  around, never refused, and a pocket lays what fits. **Grown through the
+  patch, never picked by distance alone** — picking the 25 nearest open
+  cells would floor ground behind a thin wall, a detached piece the
+  touch-floor growth rule then cannot reach. **The one refusal is the
+  Home's own tile**: a link is walked onto to *descend*, so a Home sharing
+  one could never be stood on. The cost is small (2) and a test holds every class kit to
   covering it, because the Kit step replaces the default kit. **The fixture trap it exposed**: app-core's compiler
   fixture pushed its cargo onto the save's inventory `Vec` as a *second* row
   for an item the kit already carried, which was invisible only while

@@ -100,6 +100,7 @@ Do not duplicate between them; point instead.
 | [0030](0030-player-sprites-override-shipped-art-per-name.md) | Player sprites override shipped art, per name, from the data folder | Accepted | user, on Claude's proposal | Layered lookup |
 | [0031](0031-player-gear-is-built-from-designs-over-a-slot-generic-frame.md) | Player gear is built from designs over a slot-generic frame | Accepted (0.20.8) | the user, 2026-10-26 | Builder; Strategy per slot |
 | [0032](0032-base-returns-to-the-field.md) | The base returns to the field; a breach re-tiers the field in place | Agreed | user, on Claude's proposal | — |
+| [0033](0033-founding-floor-grows-around-rock.md) | Founding floor grows around rock | Agreed | user | — |
 
 ## Pattern index
 

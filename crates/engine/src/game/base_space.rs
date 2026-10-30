@@ -663,7 +663,7 @@ impl Game {
     /// The one place a field cell becomes `Floor` in play — `lay_tile`
     /// today, the crew's flooring job next — because a finished cell has
     /// nothing left to record and a mark that outlived the tile would be a
-    /// job no one could ever complete. Founding writes the starting 3x3
+    /// job no one could ever complete. Founding writes its starting floor
     /// directly instead: it runs before anything can have dug.
     pub(crate) fn floor_cell(&mut self, x: i32, y: i32) {
         self.world.resource_mut::<BaseGrid>().lay_floor(x, y);

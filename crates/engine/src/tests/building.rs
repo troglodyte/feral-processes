@@ -2826,11 +2826,11 @@ fn founding_costs_the_founding_fragments() {
     );
 }
 
-/// A ring cell that is walkable but refuses floor — here a Stack link —
-/// refuses founding outright, rather than founding a base with a hole in
-/// its first floor.
+/// A cell beside the Home that is walkable but refuses floor — here a Stack
+/// link — is grown around, not refused: the base founds with the link
+/// left bare and the full floor count laid elsewhere.
 #[test]
-fn founding_is_refused_when_a_ring_cell_holds_a_link() {
+fn founding_floor_grows_around_a_link_beside_the_home() {
     let mut game = Game::new(3605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let link = {
         let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
@@ -2863,61 +2863,63 @@ fn founding_is_refused_when_a_ring_cell_holds_a_link() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
 
-    let err = game
-        .place_structure("home", 0, 0, None)
-        .expect_err("a link in the ring refuses founding");
-    assert!(err.contains("link"), "unexpected refusal: {err}");
-    assert!(!game.has_home());
-    assert!(
-        !game
-            .world
-            .resource::<crate::base_grid::BaseGrid>()
-            .is_floor(px, py),
-        "a refused founding lays no floor"
+    game.place_structure("home", 0, 0, None)
+        .expect("a link beside the Home is grown around");
+    assert!(game.has_home());
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    assert!(grid.is_floor(px, py));
+    assert!(!grid.is_floor(link.x, link.y), "the link stays bare");
+    assert_eq!(
+        grid.floor_cells().count(),
+        crate::tuning::FOUNDING_FLOOR_CELLS
     );
 }
 
-/// The 3x3 must be open ground: a blocker in the ring refuses founding.
+/// Rock beside the Home is grown around: the rock stays rock and the floor
+/// still reaches the full count, bulging away from it.
 #[test]
-fn founding_is_refused_when_a_ring_cell_is_blocked() {
+fn founding_floor_grows_around_rock_beside_the_home() {
     let mut game = Game::new(3604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (px, py) = (40, 40);
     stand_player_at(&mut game, px, py);
     {
         let mut map = game.world.resource_mut::<WorldMap>();
-        for dy in -1..=1 {
-            for dx in -1..=1 {
+        for dy in -4..=4 {
+            for dx in -4..=4 {
+                // Rock fills the column east of the Home; the rest is open.
+                let rock = dx == 1;
                 map.set_override(
                     px + dx,
                     py + dy,
                     Tile {
-                        biome: Biome::OpenGrid,
-                        walkable: true,
+                        biome: if rock {
+                            Biome::BlackIce
+                        } else {
+                            Biome::OpenGrid
+                        },
+                        walkable: !rock,
                         rock_shade: None,
                     },
                 );
             }
         }
-        map.set_override(
-            px + 1,
-            py + 1,
-            Tile {
-                biome: Biome::BlackIce,
-                walkable: false,
-                rock_shade: None,
-            },
-        );
     }
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
-    let err = game
-        .place_structure("home", 0, 0, None)
-        .expect_err("a blocked ring cell refuses founding");
-    assert!(err.contains("no room"), "unexpected refusal: {err}");
-    assert!(!game.has_home());
+    game.place_structure("home", 0, 0, None)
+        .expect("rock beside the Home is grown around");
+    assert!(game.has_home());
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let cells: Vec<_> = grid.floor_cells().collect();
+    assert_eq!(cells.len(), crate::tuning::FOUNDING_FLOOR_CELLS);
+    assert!(
+        cells.iter().all(|&(x, _)| x <= px),
+        "nothing floored on or past the rock: {cells:?}"
+    );
+    assert!(game.ground().walkable(px - 3, py) && grid.is_floor(px - 3, py));
 }
 
 // ------------------------------------------------------- the program rule

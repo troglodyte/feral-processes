@@ -661,13 +661,13 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
 // Founding, and deploying onto floor
 // ---------------------------------------------------------------------
 
-/// Stands the party on `TEST_HOME_CELL` with the 3x3 around it forced to
-/// open ground, so founding there lays the whole ring whatever the seed put
-/// under it.
+/// Stands the party on `TEST_HOME_CELL` with the 5x5 around it forced to
+/// open ground, so founding there lays the whole square whatever the seed
+/// put under it.
 fn ready_to_found(game: &mut Game) {
     let mut map = game.world.resource_mut::<WorldMap>();
-    for dy in -1..=1 {
-        for dx in -1..=1 {
+    for dy in -2..=2 {
+        for dx in -2..=2 {
             map.set_override(
                 TEST_HOME_CELL.0 + dx,
                 TEST_HOME_CELL.1 + dy,
@@ -698,12 +698,12 @@ fn the_first_home_stands_on_the_partys_tile_with_the_anchor() {
     assert_eq!(game.anchor_position(), Some(TEST_HOME_CELL));
 }
 
-/// Founding floors exactly the ring around the Home, into `BaseGrid` and
-/// nowhere else. Floor is an overlay: a ring laid *and* a `Biome::Platform`
+/// Founding floors exactly the 5x5 around the Home on open ground, into
+/// `BaseGrid` and nowhere else. Floor is an overlay: a square laid *and* a `Biome::Platform`
 /// stamped into the `WorldMap` would pass a floor-count assertion on its
 /// own, so the overrides are asserted too.
 #[test]
-fn founding_lays_the_ring_and_stamps_no_world_tile() {
+fn founding_lays_the_square_and_stamps_no_world_tile() {
     let mut game = game(3132);
     assert_eq!(
         game.world.resource::<base_grid::BaseGrid>().floor_count(),
@@ -719,13 +719,14 @@ fn founding_lays_the_ring_and_stamps_no_world_tile() {
     let grid = game.world.resource::<base_grid::BaseGrid>();
     assert_eq!(
         grid.floor_count(),
-        9,
-        "the Home's tile and the ring around it"
+        crate::tuning::FOUNDING_FLOOR_CELLS,
+        "the Home's tile and the square around it"
     );
     assert!(grid.is_floor(TEST_HOME_CELL.0, TEST_HOME_CELL.1));
+    assert!(grid.is_floor(TEST_HOME_CELL.0 + 2, TEST_HOME_CELL.1 + 2));
     assert!(
-        !grid.is_floor(TEST_HOME_CELL.0 + 2, TEST_HOME_CELL.1),
-        "and it stops at the ring"
+        !grid.is_floor(TEST_HOME_CELL.0 + 3, TEST_HOME_CELL.1),
+        "and it stops at the square"
     );
     assert_eq!(
         game.world.resource::<WorldMap>().overrides().len(),
@@ -4984,7 +4985,7 @@ fn floor_request_refusals_on_blockers() {
 }
 
 /// A program taken on open ground carries that tile, and has to find its way
-/// onto a base founded at the real 3x3 — not the wider test pocket, whose
+/// onto a base founded at the real founding floor — not the wider test pocket, whose
 /// floor reached the old arrival ring and hid that a founded base's never did.
 #[test]
 fn a_program_captured_off_the_floor_arrives_on_a_freshly_founded_base() {

@@ -1,6 +1,7 @@
 ---
 paths:
   - "**/save*"
+  - "**/save/**"
   - "**/resources*"
   - "**/contracts*"
   - "**/help*"

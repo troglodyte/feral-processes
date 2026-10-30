@@ -22,7 +22,7 @@ None of these needs an ADR unless doing it would hit a trigger in the [README](R
 
 - [ ] `pub(crate)` where nothing outside calls: many engine `pub mod`s and `Game` methods have no caller in app-core, gui or launcher, so dead-code warnings never fire. From [0010](0010-hygiene-backlog.md).
 - [ ] Newtype the four `String` id aliases (`AbilityId`, `StructureId`, `SpeciesId`, `ResearchId`). `StructureId` first needs a plan for the minted `"settlement/<id>"` key that `.claude/rules/seams-ground.md` relies on. No save-format change. From [0010](0010-hygiene-backlog.md).
-- [ ] `new_with` and `load` in `game/lifecycle.rs` each seat the resources from separate lists with no test that they match; add a census test. From [0010](0010-hygiene-backlog.md).
+- [ ] `new_with` and `load` in `game/lifecycle/{new,load}.rs` each seat the resources from separate lists with no test that they match; add a census test. From [0010](0010-hygiene-backlog.md).
 
 ## app-core and gui
 

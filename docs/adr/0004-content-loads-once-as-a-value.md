@@ -7,7 +7,7 @@
 
 ## Context
 
-`load_asset_dbs(&Path)` in `crates/engine/src/game/lifecycle.rs` is already the one loader, but it takes a path and every `*Db::load_dir` reads the disk itself.
+`load_asset_dbs(&Path)` in `crates/engine/src/game/lifecycle/assets.rs` is already the one loader, but it takes a path and every `*Db::load_dir` reads the disk itself.
 Nothing is cached: each of the thousands of test `Game` constructions re-parses about six hundred `.ron` files, and `Game::load` re-parses too.
 
 Because the door is a path, tests build fixtures by copying files.
@@ -35,6 +35,6 @@ One crate, no save-format bump; `Game::new`'s signature for app-core and launche
 
 ## Evidence
 
-- `crates/engine/src/game/lifecycle.rs` — `load_asset_dbs`, `AssetDbs`.
+- `crates/engine/src/game/lifecycle/assets.rs` — `load_asset_dbs`, `AssetDbs`.
 - `crates/engine/src/tests/support.rs` — `copy_shipped_assets`.
 - Memory: `engine-test-fixture-copies-a-subset-of-asset-dirs`.

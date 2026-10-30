@@ -18,6 +18,7 @@ paths:
   - "**/depot*"
   - "**/transfer*"
   - "**/lifecycle*"
+  - "**/lifecycle/**"
   - "**/memories*"
   - "assets/structures/**"
   - "**/rooms*"

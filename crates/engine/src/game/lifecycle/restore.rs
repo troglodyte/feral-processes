@@ -435,6 +435,9 @@ impl Game {
                     ticks_left: s.power_fuel,
                 });
             }
+            if def.battery.is_some() {
+                entity.insert(crate::components::BatteryCharge(s.battery_charge));
+            }
             // Absent rather than defaulted when neither flag is set, so
             // "has a standing job" stays readable as the component's
             // presence — the same invariant `Equipment` keeps.

@@ -409,6 +409,7 @@ fn app_with_a_drop_pod_terminal(
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: Some(charged),
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });

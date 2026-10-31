@@ -96,6 +96,10 @@ pub struct StructureReport {
     /// A drop pod terminal's charge, `None` on every structure that is not
     /// one (`StructureDef::drop_pod`).
     pub pod: Option<PodState>,
+    /// A Battery's `(stored, capacity)` in supply-ticks, `None` on every
+    /// structure that is not one (`StructureDef::battery`). The structure
+    /// sheet prints it as a fraction.
+    pub battery: Option<(u32, u32)>,
     /// A Holding Cell's occupant and clock, `None` on every structure that is
     /// not one (`StructureDef::holds_prisoner`).
     pub prison: Option<PrisonState>,

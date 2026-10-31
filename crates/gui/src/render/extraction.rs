@@ -275,6 +275,7 @@ mod tests {
                 hopper_progress: 0,
                 standing_tool: None,
                 pod_charged: None,
+                battery_charge: 0,
                 incubating: Vec::new(),
                 study_yield: None,
             });

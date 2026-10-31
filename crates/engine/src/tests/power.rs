@@ -1773,3 +1773,54 @@ fn a_charged_battery_keeps_a_machine_lit_until_it_runs_empty() {
     );
     assert_eq!(dark_count(&game), 1, "and the cut returns when it is empty");
 }
+
+#[test]
+fn the_views_report_stored_charge_and_none_without_a_battery() {
+    let mut game = base_with_home(4123);
+    assert_eq!(game.base_battery(), None, "no Battery, no term");
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    place_now(&mut game, "battery", 2, 0).expect("floor two steps out");
+    for _ in 0..5 {
+        game.tick();
+    }
+    let (stored, capacity) = game.base_battery().expect("two Batteries stand");
+    assert_eq!(capacity, 800);
+    assert!(stored > 0);
+    let rows: Vec<_> = game
+        .structure_report()
+        .into_iter()
+        .filter_map(|r| r.battery)
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows.iter().map(|r| r.0).sum::<u32>(), stored);
+}
+
+#[test]
+fn a_batterys_charge_survives_a_save_and_load() {
+    let mut game = base_with_home(4122);
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    let battery = find_structure_by_kind(&mut game, "battery").unwrap();
+    for _ in 0..7 {
+        game.tick();
+    }
+    let before = battery_charge(&game, battery);
+    assert!(before > 0, "the fixture has to bank something");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_battery_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = find_structure_by_kind(&mut loaded, "battery")
+        .expect("the Battery comes back off the save");
+    assert_eq!(
+        battery_charge(&loaded, reloaded),
+        before,
+        "stored charge is state, not something a tick recomputes"
+    );
+}

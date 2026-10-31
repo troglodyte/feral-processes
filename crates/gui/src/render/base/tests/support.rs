@@ -407,6 +407,7 @@ pub(super) fn game_with_a_research_station(seed: u32, anchor: (i32, i32)) -> Gam
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });

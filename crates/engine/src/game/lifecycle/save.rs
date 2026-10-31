@@ -379,7 +379,10 @@ impl Game {
             Option<&crate::components::BuildQuality>,
             Option<&crate::components::DepotFilter>,
             Option<&crate::components::Racked>,
-            Option<&crate::components::DropPod>,
+            (
+                Option<&crate::components::DropPod>,
+                Option<&crate::components::BatteryCharge>,
+            ),
             Option<&crate::components::Incubator>,
             Option<&crate::components::MachineRecipe>,
             Option<&crate::components::StudyYield>,
@@ -399,7 +402,7 @@ impl Game {
             quality,
             filter,
             racked,
-            pod,
+            (pod, battery),
             incubator,
             recipe,
             study_yield,
@@ -432,6 +435,7 @@ impl Game {
                 racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
                 study_yield: study_yield.and_then(|y| y.0.clone()),
                 pod_charged: pod.map(|p| p.charged),
+                battery_charge: battery.map_or(0, |b| b.0),
                 incubating: incubator.map(|i| i.slots.clone()).unwrap_or_default(),
             });
         }

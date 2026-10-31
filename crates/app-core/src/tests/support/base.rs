@@ -155,6 +155,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -295,6 +296,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });
@@ -370,6 +372,7 @@ pub(crate) fn app_beside_a_rebuild_site(seed: u32, depot: bool) -> App {
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });
@@ -441,6 +444,7 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });
@@ -491,6 +495,7 @@ pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -565,6 +570,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });
@@ -666,6 +672,7 @@ pub(super) fn app_at_a_bench(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -729,6 +736,7 @@ pub(crate) fn app_inside_a_base_with_a_production_line(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     };
@@ -779,6 +787,7 @@ pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: vec![None],
         study_yield: None,
     });
@@ -845,6 +854,7 @@ pub(crate) fn app_beside_a_machine_west_and_a_depot_east(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -881,6 +891,7 @@ pub(crate) fn app_between_a_depot_and_a_machine(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -917,6 +928,7 @@ pub(crate) fn app_beside_a_machine_and_two_depots(seed: u32) -> App {
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -978,6 +990,7 @@ pub(crate) fn app_beside_a_machine(seed: u32, kind: &str, recipe: Option<&str>) 
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

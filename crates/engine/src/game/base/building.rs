@@ -1033,6 +1033,9 @@ impl Game {
                 ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
             });
         }
+        if def.battery.is_some() {
+            entity.insert(crate::components::BatteryCharge(0));
+        }
         if let Some(work) = &def.work {
             entity.insert(ResourceNode {
                 resource: work.produces.clone(),

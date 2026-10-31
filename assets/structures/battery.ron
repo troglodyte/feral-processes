@@ -1,0 +1,14 @@
+(
+    id: "battery",
+    name: "Battery",
+    description: "Stores the Power Grid's spare power and gives it back when supply falls short.",
+    glyph: 'Y',
+    color: Yellow,
+    build_cost: [("core_fragment", 12), ("power_cell", 2)],
+    work: None,
+    room_tags: ["workshop"],
+    battery: Some((
+        capacity: 400,
+        rate: 4,
+    )),
+)

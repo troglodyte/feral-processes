@@ -569,6 +569,34 @@ impl Game {
         Some(crate::views::PodState::Recharging { percent })
     }
 
+    /// One Battery's `(stored, capacity)`, or `None` for a structure that is
+    /// not one.
+    fn battery_state(&self, entity: Entity) -> Option<(u32, u32)> {
+        let kind = &self.world.get::<Structure>(entity)?.kind;
+        let capacity = self
+            .world
+            .resource::<StructureDb>()
+            .get(kind)?
+            .battery?
+            .capacity;
+        let stored = self
+            .world
+            .get::<crate::components::BatteryCharge>(entity)
+            .map_or(0, |c| c.0);
+        Some((stored, capacity))
+    }
+
+    /// The base's stored power as `(stored, capacity)` summed over every
+    /// Battery, or `None` with no Battery standing: the Grid header's extra
+    /// term (ADR 0037).
+    pub fn base_battery(&self) -> Option<(u32, u32)> {
+        let mut query = self.world.try_query::<Entity>()?;
+        query
+            .iter(&self.world)
+            .filter_map(|e| self.battery_state(e))
+            .reduce(|(s, c), (s2, c2)| (s + s2, c + c2))
+    }
+
     pub fn structure_manifest(&mut self, entity: Entity) -> Option<StructureReport> {
         self.structure_report()
             .into_iter()
@@ -1575,6 +1603,7 @@ impl Game {
                         }),
                     supply,
                     pod: self.pod_state(entity, pos),
+                    battery: self.battery_state(entity),
                     prison: self.prison_state(entity),
                     line: line_of.get(&entity).copied(),
                 }

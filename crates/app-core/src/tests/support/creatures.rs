@@ -867,6 +867,7 @@ pub(crate) fn app_owning_a_program_and_an_extractor_deep(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -889,6 +890,7 @@ pub(crate) fn app_owning_a_program_and_an_extractor_deep(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -1028,6 +1030,7 @@ pub(crate) fn app_owning_a_program_and_a_station_of(label: &str, kind: &str, see
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -1174,6 +1177,7 @@ pub(crate) fn app_owning_one_deep_program_and_an_extractor(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -1301,6 +1305,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             hopper_progress: 0,
             standing_tool: None,
             pod_charged: None,
+            battery_charge: 0,
             incubating: Vec::new(),
             study_yield: None,
         });
@@ -1581,6 +1586,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

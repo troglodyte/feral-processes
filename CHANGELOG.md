@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Power Cells no longer need any research, and the Power Grid research now unlocks the Battery.** Before, you had to research Power Cells before you could make them. Now they are available from the start. A Battery is a new base structure that stores spare power while the grid has more than it needs and gives it back when the grid runs short, so machines stay lit for longer through a dry spell. The structure screen shows the stored total beside the grid, for example `Grid  12 / 15  ·  Battery 220 / 400`, and a Battery's own line shows its charge.
+
 ## 0.21.8
 
 **A Patch Node now repairs only the structures inside its circle, and upgrading it widens the circle.** Before, every Patch Node repaired every structure at the base, and each upgrade repaired faster. Now a node covers 4 tiles at Mk1, growing by 2 a tier to 12 at Mk5, and repairs 1 Durability at a time at every tier. A structure counts as covered if any part of it is inside the circle, and overlapping nodes add together. A green + shows on a structure when a node repairs it.

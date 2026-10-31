@@ -996,6 +996,11 @@ pub fn power_grid_system(world: &mut World) {
         let items = world.resource::<ItemDb>();
         crate::game::base::power::ledger(world, db, items)
     };
+    for (entity, delta) in &grid.battery_flow {
+        if let Some(mut charge) = world.get_mut::<crate::components::BatteryCharge>(*entity) {
+            charge.0 = charge.0.saturating_add_signed(*delta);
+        }
+    }
     world.insert_resource(PowerGrid {
         supply: grid.supply,
         draw: grid.draw,

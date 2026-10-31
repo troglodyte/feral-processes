@@ -1570,6 +1570,15 @@ pub struct StructureSave {
     /// spent.
     #[serde(default)]
     pub pod_charged: Option<bool>,
+    /// What a `components::BatteryCharge` structure holds, in supply-ticks.
+    /// Live state rather than something a tick recomputes: losing it would
+    /// empty every Battery in the base on each reload. Zero for a structure
+    /// with no battery, and `power_fuel`'s reason for `#[serde(default)]`
+    /// except that zero is the *correct* default here: a save written before
+    /// Batteries existed has none, and a new one starts empty. Additive, so
+    /// no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub battery_charge: u32,
 }
 
 /// `serde`'s default for a machine's build quality — the neutral 1.0, which

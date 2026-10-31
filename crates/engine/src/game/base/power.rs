@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::*;
 
-use crate::components::{Position, PowerFuel, Siphoned, Structure};
+use crate::components::{BatteryCharge, Position, PowerFuel, Siphoned, Structure};
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::structures::{StructureDb, StructureDef};
@@ -37,6 +37,10 @@ pub(crate) struct PowerLedger {
     /// page prints cannot disagree with the totals because it is where they
     /// come from. A supplier that is dry or unsiphoned is listed at zero.
     pub entries: Vec<PowerEntry>,
+    /// What each Battery does this tick, `battery_flow`'s answer keyed by
+    /// entity: positive is charge taken in, negative given out. The ledger
+    /// only reads; `systems::power_grid_system` applies it.
+    pub battery_flow: Vec<(Entity, i32)>,
 }
 
 /// One structure's share of the grid — see `PowerLedger::entries`.
@@ -112,6 +116,51 @@ pub(crate) fn grid_rung(
         .and_then(|p| chain.get(&p.recipe.produces).copied())
 }
 
+/// One Battery's state going into `battery_flow`, in the supply-ticks
+/// `BatteryDef` documents.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Cell {
+    pub charge: u32,
+    pub capacity: u32,
+    pub rate: u32,
+}
+
+/// What each Battery does this tick, in the order `cells` is given: positive
+/// is charge taken in, negative is charge given out (ADR 0037).
+///
+/// Spare supply is shared out in order, each cell taking up to
+/// `min(rate, capacity - charge)`; a shortfall is covered in order, each
+/// giving up to `min(rate, charge)`, and the cells together never give more
+/// than the shortfall. A pure function of plain numbers so the grid's whole
+/// storage rule is testable without a world; the caller sorts the cells by
+/// `(x, y)` so the answer never depends on query order.
+pub(crate) fn battery_flow(supply: u32, draw: u32, cells: &[Cell]) -> Vec<i32> {
+    let mut surplus = supply.saturating_sub(draw);
+    let mut shortfall = draw.saturating_sub(supply);
+    cells
+        .iter()
+        .map(|c| {
+            if surplus > 0 {
+                let taken = surplus.min(c.rate).min(c.capacity.saturating_sub(c.charge));
+                surplus -= taken;
+                taken as i32
+            } else {
+                let given = shortfall.min(c.rate).min(c.charge);
+                shortfall -= given;
+                -(given as i32)
+            }
+        })
+        .collect()
+}
+
+/// The total `battery_flow` gives out, as a positive figure.
+fn discharge(flow: &[i32]) -> u32 {
+    flow.iter()
+        .filter(|f| **f < 0)
+        .map(|f| f.unsigned_abs())
+        .sum()
+}
+
 /// Sums `power_supply` over every deployed structure and `power_draw` over
 /// every one whose def `StructureDef::runs_a_job()` — a machine draws
 /// whether or not anyone is posted to it (see the design spec's "A machine
@@ -149,6 +198,10 @@ pub(crate) fn grid_rung(
 /// while some program's `Siphoned` points at it, so an empty siphon supplies
 /// 0 and draws 0.
 ///
+/// A Battery's discharge is added to `supply` before the cut (ADR 0037), so
+/// the figure returned already includes it; `battery_flow` is the per-cell
+/// answer `power_grid_system` writes back.
+///
 /// A structure whose def is missing from `db` contributes nothing to either
 /// sum and is never dark — the same "an unknown kind is inert" shape the
 /// neighbouring base systems already use, rather than a panic.
@@ -159,6 +212,9 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
     // (entity, rung, (x, y), draw) for every deployed machine, collected
     // before the cut runs so the sort sees the whole base at once.
     let mut machines: Vec<(Entity, u32, (i32, i32), u32)> = Vec::new();
+    // Every Battery, keyed by tile so `battery_flow` visits them in `(x, y)`
+    // order whatever order the world iterates in.
+    let mut batteries: Vec<((i32, i32), Entity, Cell)> = Vec::new();
     // The siphons some program currently holds, collected up front so the
     // loop below asks a set rather than scanning every program per structure.
     let occupied: HashSet<Entity> = world
@@ -201,6 +257,21 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
                 draw: drawn,
             });
         }
+        if let Some(battery) = def.battery {
+            let pos = entity_ref
+                .get::<Position>()
+                .copied()
+                .unwrap_or(Position { x: 0, y: 0 });
+            batteries.push((
+                (pos.x, pos.y),
+                entity_ref.id(),
+                Cell {
+                    charge: entity_ref.get::<BatteryCharge>().map_or(0, |c| c.0),
+                    capacity: battery.capacity,
+                    rate: battery.rate,
+                },
+            ));
+        }
         if runs {
             let pos = entity_ref
                 .get::<Position>()
@@ -229,8 +300,17 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
         .map(|(_, _, _, machine_draw)| machine_draw)
         .sum();
 
+    // The cut runs on everything the Batteries could give, so a Battery
+    // covers a shortfall rather than watching the cut happen; but the cut
+    // lights whole machines only, so they then give just what the lit ones
+    // used past supply — the rest of an offer that fits no machine stays
+    // stored rather than being spent on nothing.
+    batteries.sort_by_key(|(tile, e, _)| (*tile, *e));
+    let cells: Vec<Cell> = batteries.iter().map(|(_, _, c)| *c).collect();
+    let offered = discharge(&battery_flow(supply, draw, &cells));
+
     let mut dark = HashSet::new();
-    let mut budget = supply;
+    let mut budget = supply + offered;
     for (entity, _, _, machine_draw) in machines {
         if budget >= machine_draw {
             budget -= machine_draw;
@@ -238,11 +318,72 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
             dark.insert(entity);
         }
     }
+    // Lowering the budget by what was left over lights the same machines:
+    // each lit one still had at least its own draw plus that leftover ahead
+    // of it, and each dark one had less than its draw already.
+    let used = (supply + offered) - budget;
+    let flow = if draw > supply {
+        battery_flow(supply, used.max(supply), &cells)
+    } else {
+        battery_flow(supply, draw, &cells)
+    };
+    let supply = supply + discharge(&flow);
+    let battery_flow: Vec<(Entity, i32)> = batteries.iter().map(|(_, e, _)| *e).zip(flow).collect();
 
     PowerLedger {
         supply,
         draw,
         dark,
         entries,
+        battery_flow,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cell(charge: u32) -> Cell {
+        Cell {
+            charge,
+            capacity: 10,
+            rate: 4,
+        }
+    }
+
+    #[test]
+    fn no_surplus_and_no_shortfall_moves_nothing() {
+        assert_eq!(battery_flow(5, 5, &[cell(3)]), vec![0]);
+    }
+
+    #[test]
+    fn a_full_battery_takes_nothing() {
+        assert_eq!(battery_flow(9, 1, &[cell(10)]), vec![0]);
+    }
+
+    #[test]
+    fn a_battery_takes_no_more_than_its_headroom() {
+        assert_eq!(battery_flow(9, 1, &[cell(8)]), vec![2]);
+    }
+
+    #[test]
+    fn an_empty_battery_gives_nothing() {
+        assert_eq!(battery_flow(1, 5, &[cell(0)]), vec![0]);
+    }
+
+    #[test]
+    fn a_shortfall_bigger_than_the_total_rate_gives_every_rate() {
+        assert_eq!(battery_flow(0, 20, &[cell(10), cell(10)]), vec![-4, -4]);
+    }
+
+    #[test]
+    fn a_shortfall_is_never_over_covered() {
+        assert_eq!(battery_flow(3, 5, &[cell(10), cell(10)]), vec![-2, 0]);
+    }
+
+    #[test]
+    fn the_first_battery_fills_before_the_second() {
+        assert_eq!(battery_flow(5, 1, &[cell(8), cell(0)]), vec![2, 2]);
+        assert_eq!(battery_flow(3, 1, &[cell(0), cell(0)]), vec![2, 0]);
     }
 }

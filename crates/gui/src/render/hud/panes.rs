@@ -875,6 +875,7 @@ mod tests {
             standing_tool: None,
             supply: None,
             pod: None,
+            battery: None,
             prison: None,
             line: None,
         }

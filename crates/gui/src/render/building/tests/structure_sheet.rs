@@ -118,7 +118,7 @@ fn the_longest_structure_headline_fits_the_structure_sheet() {
 /// machines. A flush grid stays a plain row so red keeps meaning "short".
 #[test]
 fn the_roster_header_reports_the_grid() {
-    let short = grid_header_row(15, 12);
+    let short = grid_header_row(15, 12, None);
     assert_eq!(row_text(&short), "Grid  15 / 12");
     match short {
         Row::TextColored(_, color) => {
@@ -127,12 +127,34 @@ fn the_roster_header_reports_the_grid() {
         Row::Text(_) | Row::Item { .. } => panic!("a grid short of supply should read red"),
     }
 
-    let flush = grid_header_row(12, 15);
+    let flush = grid_header_row(12, 15, None);
     assert_eq!(row_text(&flush), "Grid  12 / 15");
     assert!(
         matches!(flush, Row::Text(_)),
         "a grid with supply to spare should not read red"
     );
+}
+
+/// The stored total rides the same row as the grid, and a base with no
+/// Battery reads exactly as it did before there was one.
+#[test]
+fn the_roster_header_adds_the_battery_total_only_when_there_is_one() {
+    let row = grid_header_row(12, 15, Some((220, 400)));
+    assert_eq!(row_text(&row), "Grid  12 / 15  ·  Battery 220 / 400");
+    assert!(matches!(row, Row::Text(_)));
+    let short = grid_header_row(15, 12, Some((0, 400)));
+    assert!(matches!(short, Row::TextColored(_, RED)));
+}
+
+#[test]
+fn a_battery_sheet_line_shows_its_charge() {
+    let mut s = structure_report(MachineStatus::Running);
+    s.battery = Some((220, 400));
+    let lines: Vec<String> = structure_detail_lines(&s, None, false)
+        .into_iter()
+        .map(|(l, _)| l)
+        .collect();
+    assert!(lines.contains(&"  charge 220/400".to_string()), "{lines:?}");
 }
 
 fn structure_report(status: MachineStatus) -> StructureReport {
@@ -157,6 +179,7 @@ fn structure_report(status: MachineStatus) -> StructureReport {
         standing_tool: None,
         supply: None,
         pod: None,
+        battery: None,
         prison: None,
         line: None,
     }
@@ -371,7 +394,7 @@ fn no_roster_row_overflows_the_content_rect() {
     worst.durability = Some((9999, 9999));
     worst.pod = Some(PodState::Recharging { percent: 99 });
     let mut lines = vec![
-        row_text(&grid_header_row(9999, 9999)).to_string(),
+        row_text(&grid_header_row(9999, 9999, Some((999_999, 999_999)))).to_string(),
         structure_headline(&worst),
     ];
     lines.extend(

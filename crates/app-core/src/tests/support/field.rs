@@ -227,6 +227,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -270,6 +271,7 @@ pub(crate) fn app_beside_a_splice_rig_carrying(seed: u32, pack: &[(&str, u32)]) 
         hopper_progress: 0,
         standing_tool: None,
         pod_charged: None,
+        battery_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

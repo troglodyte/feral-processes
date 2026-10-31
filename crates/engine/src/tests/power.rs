@@ -1822,7 +1822,11 @@ fn a_battery_with_too_little_to_light_a_machine_keeps_its_charge() {
         .0 = 1;
     let db = game.world.resource::<StructureDb>();
     let l = ledger(&game.world, db, game.world.resource::<ItemDb>());
-    assert_eq!(l.dark.len(), 1, "1 stored cannot light a 3-draw machine");
+    assert_eq!(
+        l.dark.len(),
+        1,
+        "the spare 1 plus 1 stored is short of the 3 it needs"
+    );
     assert_eq!(l.battery_flow, vec![(battery, 0)], "so none of it is spent");
 }
 

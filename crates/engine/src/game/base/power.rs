@@ -153,6 +153,14 @@ pub(crate) fn battery_flow(supply: u32, draw: u32, cells: &[Cell]) -> Vec<i32> {
         .collect()
 }
 
+/// The total `battery_flow` gives out, as a positive figure.
+fn discharge(flow: &[i32]) -> u32 {
+    flow.iter()
+        .filter(|f| **f < 0)
+        .map(|f| f.unsigned_abs())
+        .sum()
+}
+
 /// Sums `power_supply` over every deployed structure and `power_draw` over
 /// every one whose def `StructureDef::runs_a_job()` — a machine draws
 /// whether or not anyone is posted to it (see the design spec's "A machine
@@ -292,22 +300,17 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
         .map(|(_, _, _, machine_draw)| machine_draw)
         .sum();
 
-    // Decided on the pre-cut figures, and the discharge counts as supply
-    // before any machine is cut: a Battery covers a shortfall rather than
-    // watching the cut happen.
+    // The cut runs on everything the Batteries could give, so a Battery
+    // covers a shortfall rather than watching the cut happen; but the cut
+    // lights whole machines only, so they then give just what the lit ones
+    // used past supply — the rest of an offer that fits no machine stays
+    // stored rather than being spent on nothing.
     batteries.sort_by_key(|(tile, e, _)| (*tile, *e));
     let cells: Vec<Cell> = batteries.iter().map(|(_, _, c)| *c).collect();
-    let flow = battery_flow(supply, draw, &cells);
-    let discharged: u32 = flow
-        .iter()
-        .filter(|f| **f < 0)
-        .map(|f| f.unsigned_abs())
-        .sum();
-    let battery_flow: Vec<(Entity, i32)> = batteries.iter().map(|(_, e, _)| *e).zip(flow).collect();
-    let supply = supply + discharged;
+    let offered = discharge(&battery_flow(supply, draw, &cells));
 
     let mut dark = HashSet::new();
-    let mut budget = supply;
+    let mut budget = supply + offered;
     for (entity, _, _, machine_draw) in machines {
         if budget >= machine_draw {
             budget -= machine_draw;
@@ -315,6 +318,17 @@ pub(crate) fn ledger(world: &World, db: &StructureDb, items: &ItemDb) -> PowerLe
             dark.insert(entity);
         }
     }
+    // Lowering the budget by what was left over lights the same machines:
+    // each lit one still had at least its own draw plus that leftover ahead
+    // of it, and each dark one had less than its draw already.
+    let used = (supply + offered) - budget;
+    let flow = if draw > supply {
+        battery_flow(supply, used.max(supply), &cells)
+    } else {
+        battery_flow(supply, draw, &cells)
+    };
+    let supply = supply + discharge(&flow);
+    let battery_flow: Vec<(Entity, i32)> = batteries.iter().map(|(_, e, _)| *e).zip(flow).collect();
 
     PowerLedger {
         supply,

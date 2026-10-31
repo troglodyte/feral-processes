@@ -1763,15 +1763,67 @@ fn a_charged_battery_keeps_a_machine_lit_until_it_runs_empty() {
         .0 = 3;
     assert_eq!(dark_count(&game), 0, "stored charge covers the shortfall");
 
-    for _ in 0..3 {
+    for left in [2, 1, 0] {
         game.tick();
+        assert_eq!(
+            battery_charge(&game, battery),
+            left,
+            "one unit a tick, the shortfall and no more"
+        );
     }
-    assert_eq!(
-        battery_charge(&game, battery),
-        0,
-        "one unit a tick was spent"
-    );
     assert_eq!(dark_count(&game), 1, "and the cut returns when it is empty");
+}
+
+#[test]
+fn a_battery_gives_only_what_lights_a_machine() {
+    let mut game = base_with_home(4127);
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    // Home 4 against three Assemblers drawing 3 each: a shortfall of 5, but
+    // the Battery's 4 can only light one more whole machine, which needs 2.
+    for i in 0..3 {
+        place_machine(&mut game, "assembler", "hardened_shell", -1, i * 2)
+            .expect("floor west of the origin");
+    }
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    let battery = find_structure_by_kind(&mut game, "battery").unwrap();
+    game.world
+        .get_mut::<crate::components::BatteryCharge>(battery)
+        .unwrap()
+        .0 = 10;
+    let db = game.world.resource::<StructureDb>();
+    let l = ledger(&game.world, db, game.world.resource::<ItemDb>());
+    assert_eq!(l.dark.len(), 1, "two of three machines fit Home 4 plus 2");
+    assert_eq!(
+        l.battery_flow,
+        vec![(battery, -2)],
+        "the unused 2 stays stored"
+    );
+    assert_eq!(l.supply, 6);
+
+    game.tick();
+    assert_eq!(battery_charge(&game, battery), 8);
+}
+
+#[test]
+fn a_battery_with_too_little_to_light_a_machine_keeps_its_charge() {
+    let mut game = base_with_home(4129);
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    // Home 4 against two Assemblers: 1 stored is short of the 2 the second
+    // needs, so spending it would light nothing.
+    for i in 0..2 {
+        place_machine(&mut game, "assembler", "hardened_shell", -1, i * 2)
+            .expect("floor west of the origin");
+    }
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    let battery = find_structure_by_kind(&mut game, "battery").unwrap();
+    game.world
+        .get_mut::<crate::components::BatteryCharge>(battery)
+        .unwrap()
+        .0 = 1;
+    let db = game.world.resource::<StructureDb>();
+    let l = ledger(&game.world, db, game.world.resource::<ItemDb>());
+    assert_eq!(l.dark.len(), 1, "1 stored cannot light a 3-draw machine");
+    assert_eq!(l.battery_flow, vec![(battery, 0)], "so none of it is spent");
 }
 
 #[test]

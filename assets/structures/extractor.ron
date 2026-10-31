@@ -10,7 +10,7 @@
         (produces: "core_fragment", ticks_per_unit: 10, level: Some(1)),
         (produces: "raw_trace", ticks_per_unit: 10, level: Some(1), research: Some("routine_fabrication")),
         (produces: "cache_grain", ticks_per_unit: 14, level: Some(1), research: Some("cache_coherence")),
-        (produces: "power_cell", ticks_per_unit: 6, research: Some("power_grid"), tierless: true),
+        (produces: "power_cell", ticks_per_unit: 6, tierless: true),
     ])),
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10), ("cache_grain", 1)])),
     power_draw: 1,

@@ -1,7 +1,7 @@
 (
     id: "power_grid",
     name: "Power Grid",
-    description: "Lets an Extractor make Power Cells to keep the base's machines running.",
+    description: "The groundwork for drawing on the base's Grid directly.",
     cost: 10,
     materials: [("core_fragment", 30)],
 )

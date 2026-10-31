@@ -94,7 +94,7 @@ const MACHINE_TABLE: &[MachineRow] = &[
         Some(1),
         false,
     ),
-    ("extractor", "power_cell", 6, Some("power_grid"), None, true),
+    ("extractor", "power_cell", 6, None, None, true),
     (
         "factory",
         "blank_substrate",

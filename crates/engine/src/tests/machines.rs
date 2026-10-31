@@ -221,11 +221,11 @@ fn the_menu_lists_only_researched_recipes() {
     let rows = view_rows(&game, extractor);
     assert_eq!(
         rows.iter().map(|(i, _)| i.clone()).collect::<Vec<_>>(),
-        vec![item("core_fragment")]
+        vec![item("core_fragment"), item("power_cell")]
     );
-    unlock_research_chain(&mut game, "power_grid");
+    unlock_research_chain(&mut game, "routine_fabrication");
     let rows = view_rows(&game, extractor);
-    assert!(rows.iter().any(|(i, _)| *i == item("power_cell")));
+    assert!(rows.iter().any(|(i, _)| *i == item("raw_trace")));
     assert!(!rows.iter().any(|(i, _)| *i == item("cache_grain")));
     let view = game.machine_recipe_view(extractor).unwrap();
     assert_eq!(view.current, Some(item("core_fragment")));
@@ -242,7 +242,6 @@ fn the_menu_lists_only_researched_recipes() {
 #[test]
 fn a_recipe_pace_is_a_band_never_a_number() {
     let mut game = bare_game();
-    unlock_research_chain(&mut game, "power_grid");
     assert_eq!(
         pace_of(&mut game, "extractor", "power_cell"),
         RecipePace::Quick
@@ -272,13 +271,13 @@ fn setting_an_unresearched_recipe_is_refused() {
     let name = game
         .research_defs()
         .into_iter()
-        .find(|d| d.id == "power_grid")
+        .find(|d| d.id == "routine_fabrication")
         .unwrap()
         .name;
     let err = game
-        .set_machine_recipe(extractor, &item("power_cell"))
+        .set_machine_recipe(extractor, &item("raw_trace"))
         .unwrap_err();
-    assert_eq!(err, format!("Power Cell needs {name} researched first."));
+    assert_eq!(err, format!("Raw Trace needs {name} researched first."));
     assert_eq!(
         game.world.get::<MachineRecipe>(extractor),
         Some(&MachineRecipe(Some(item("core_fragment"))))

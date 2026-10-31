@@ -392,6 +392,17 @@ pub struct RepairDef {
     pub radius: RadiusDef,
 }
 
+/// A structure that stores the Grid's spare supply — see `components::
+/// BatteryCharge` and `power::battery_flow` (ADR 0037). Both numbers are in
+/// supply-ticks: one unit of supply held, or moved, for one tick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatteryDef {
+    /// The most it holds, in supply-ticks.
+    pub capacity: u32,
+    /// The most it takes in, or gives out, per tick.
+    pub rate: u32,
+}
+
 /// A structure's upgrade path — see `Game::upgrade_structure`. The cost to
 /// reach tier N is each amount in `cost` multiplied by N, so upgrades get
 /// steadily more expensive without needing a per-tier table.
@@ -762,6 +773,12 @@ pub struct StructureDef {
     /// before this field existed.
     #[serde(default)]
     pub repair: Option<RepairDef>,
+    /// If set, this structure stores the Grid's spare supply and gives it
+    /// back when supply falls short (ADR 0037). It runs no job, so it is
+    /// never cut. `#[serde(default)]` so existing structure files (including
+    /// mods) store nothing, exactly as before this field existed.
+    #[serde(default)]
+    pub battery: Option<BatteryDef>,
     /// If set, this structure can be upgraded through tiers (see
     /// `Game::upgrade_structure`). Each tier multiplies the structure's work
     /// payout and becomes its `ResourceNode::level`, so extraction gets more

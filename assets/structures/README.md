@@ -376,6 +376,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // that makes the first one.
     power_upkeep: Some("power_cell"),
 
+    // Optional; can be left out entirely (defaults to none, a structure that
+    // stores nothing). Makes this structure a Battery (ADR 0037): each tick,
+    // after fuel is burned and before the cut, spare Grid supply charges
+    // Batteries and a shortfall is covered from them, so a Recharger Node
+    // running dry no longer darkens machines at once. Both numbers are in
+    // supply-ticks, one unit of supply held or moved for one tick. `capacity`
+    // is the most it holds; `rate` is the most it takes in or gives out per
+    // tick. Batteries are visited in (x, y) order. It runs no job, so it
+    // draws nothing and is never cut. `battery.ron` is the shipped example,
+    // `capacity: 400, rate: 4`: one Recharger Node's supply for one fuel
+    // window. Unlocked by the `power_grid` research.
+    battery: Some((capacity: 400, rate: 4)),
+
     // Optional; can be left out entirely (defaults to none). An item this
     // structure spends by its own action rather than on a clock: a Shield or
     // Turret spends one charge_coil per defence event, a Repair Bay one

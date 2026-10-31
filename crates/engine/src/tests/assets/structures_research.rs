@@ -737,3 +737,33 @@ fn the_honeypot_is_gated_by_deception_and_nothing_else() {
         "the Assembler's honeypot recipe opens with the same node"
     );
 }
+
+/// **The Battery is a storage structure and nothing else (ADR 0037)**: it
+/// carries the numbers the grid's flow reads, runs no job so it is never cut,
+/// and `power_grid` is the research that unlocks it.
+#[test]
+fn the_battery_stores_power_runs_no_job_and_is_unlocked_by_power_grid() {
+    let game = Game::new(4113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game
+        .world
+        .resource::<StructureDb>()
+        .get("battery")
+        .expect("battery.ron ships");
+    assert_eq!(
+        def.battery,
+        Some(crate::structures::BatteryDef {
+            capacity: 400,
+            rate: 4
+        })
+    );
+    assert!(!def.runs_a_job(), "a Battery must never be cut");
+    let research = game
+        .world
+        .resource::<ResearchDb>()
+        .get("power_grid")
+        .expect("power_grid ships");
+    assert!(
+        research.unlocks_structures.iter().any(|s| s == "battery"),
+        "power_grid should unlock the battery"
+    );
+}

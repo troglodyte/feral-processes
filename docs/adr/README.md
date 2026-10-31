@@ -104,7 +104,7 @@ Do not duplicate between them; point instead.
 | [0034](0034-google-rust-style-guide-as-reference.md) | Google's Rust style guide is the reference, with listed exceptions | Accepted (0.21.6) | user, on Claude's proposal | — |
 | [0035](0035-shields-cover-a-radius.md) | A Shield covers a radius that grows with its tier | Accepted (0.21.7) | user, on Claude's proposal | — |
 | [0036](0036-patch-nodes-cover-a-radius.md) | A Patch Node repairs a radius that grows with its tier | Accepted (0.21.8) | user, on Claude's proposal | — |
-| [0037](0037-batteries-store-spare-grid-supply.md) | A Battery stores the Grid's spare supply and spends it when supply falls short | Agreed | user, on Claude's proposal | — |
+| [0037](0037-batteries-store-spare-grid-supply.md) | A Battery stores the Grid's spare supply and spends it when supply falls short | Accepted (0.21.9) | user, on Claude's proposal | — |
 
 ## Pattern index
 

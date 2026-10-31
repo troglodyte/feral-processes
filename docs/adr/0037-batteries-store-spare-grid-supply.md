@@ -1,6 +1,6 @@
 # 0037 A Battery stores the Grid's spare supply and spends it when supply falls short
 
-- Status: Agreed
+- Status: Accepted (0.21.9)
 - Decided by: user, on Claude's proposal
 - Date: 2026-10-31
 - Pattern: —

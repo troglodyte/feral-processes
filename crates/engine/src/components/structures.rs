@@ -738,3 +738,13 @@ mod machine_status_tests {
         assert_eq!(names.len(), count, "two statuses share a wire name");
     }
 }
+
+/// What a `StructureDef::battery` structure currently holds, in supply-ticks
+/// (ADR 0037). Present exactly on a structure whose def declares `battery`;
+/// `Game::spawn_structure` is the one writer, starting empty, and
+/// `systems::power_grid_system` the only thing that moves it. A hand-spawned
+/// fixture without one reads as an empty cell.
+///
+/// Saved, like `PowerFuel`: it is the state, not something a tick recomputes.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BatteryCharge(pub u32);

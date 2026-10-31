@@ -1687,3 +1687,89 @@ fn a_fuel_carrier_mid_trip_keeps_its_trip_across_a_save_and_load() {
          back with it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// ADR 0037: a Battery stores the Grid's spare supply and spends it when supply
+// falls short.
+// ---------------------------------------------------------------------------
+
+fn battery_charge(game: &Game, battery: Entity) -> u32 {
+    game.world
+        .get::<crate::components::BatteryCharge>(battery)
+        .expect("a Battery carries its charge")
+        .0
+}
+
+#[test]
+fn spare_supply_charges_a_battery_tick_by_tick_and_stops_at_the_cap() {
+    let mut game = base_with_home(4120);
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    let battery = find_structure_by_kind(&mut game, "battery").unwrap();
+    let def = game
+        .world
+        .resource::<StructureDb>()
+        .get("battery")
+        .and_then(|d| d.battery)
+        .unwrap();
+    let before = battery_charge(&game, battery);
+
+    game.tick();
+    let spare = grid_supply(&game);
+    assert!(spare > 0, "the fixture needs spare supply to bank");
+    assert_eq!(
+        battery_charge(&game, battery),
+        before + spare.min(def.rate),
+        "one tick banks the spare supply, up to the Battery's rate"
+    );
+
+    for _ in 0..(def.capacity / def.rate + 5) {
+        game.tick();
+    }
+    assert_eq!(
+        battery_charge(&game, battery),
+        def.capacity,
+        "it fills to its capacity and no further"
+    );
+}
+
+#[test]
+fn a_charged_battery_keeps_a_machine_lit_until_it_runs_empty() {
+    let mut game = base_with_home(4121);
+    super::support::unlock_research_chain(&mut game, "power_grid");
+    // Home 4 against five Mining Nodes drawing 1 each: one is always cut
+    // unless something else covers the shortfall of 1.
+    for i in 0..5 {
+        place_machine(&mut game, "extractor", "core_fragment", -1, i)
+            .expect("floor west of the origin");
+    }
+    place_now(&mut game, "battery", 1, 0).expect("floor beside the origin");
+    let battery = find_structure_by_kind(&mut game, "battery").unwrap();
+    let dark_count = |game: &Game| {
+        let db = game.world.resource::<StructureDb>();
+        ledger(&game.world, db, game.world.resource::<ItemDb>())
+            .dark
+            .len()
+    };
+    assert_eq!(
+        dark_count(&game),
+        1,
+        "without charge one node loses the cut"
+    );
+
+    game.world
+        .get_mut::<crate::components::BatteryCharge>(battery)
+        .unwrap()
+        .0 = 3;
+    assert_eq!(dark_count(&game), 0, "stored charge covers the shortfall");
+
+    for _ in 0..3 {
+        game.tick();
+    }
+    assert_eq!(
+        battery_charge(&game, battery),
+        0,
+        "one unit a tick was spent"
+    );
+    assert_eq!(dark_count(&game), 1, "and the cut returns when it is empty");
+}

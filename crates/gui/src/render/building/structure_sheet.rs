@@ -20,6 +20,7 @@ pub(crate) fn structures_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     let assigned: usize = report.iter().map(|s| s.assignees.len()).sum();
     let idle = StructureReport::idle_count(&report);
     let (draw, supply) = game.base_power();
+    let battery = game.base_battery();
     let mut rows = vec![
         text_row(format!(
             "{} structure{}, {assigned} program{} assigned, {idle} idle",
@@ -27,7 +28,7 @@ pub(crate) fn structures_rows(game: &mut Game, selected: usize) -> Vec<Row> {
             if report.len() == 1 { "" } else { "s" },
             if assigned == 1 { "" } else { "s" },
         )),
-        grid_header_row(draw, supply),
+        grid_header_row(draw, supply, battery),
         text_row(""),
     ];
     if report.is_empty() {
@@ -122,8 +123,11 @@ pub(super) fn status_word(status: MachineStatus) -> &'static str {
 /// `MachineStatus::Unpowered`'s job, not this row's. **"Grid", never
 /// "Power"**: `Power` already names a creature's `PowerReserve` in the status
 /// column, and this pane sits two panels from it.
-pub(super) fn grid_header_row(draw: u32, supply: u32) -> Row {
-    let text = format!("Grid  {draw} / {supply}");
+pub(super) fn grid_header_row(draw: u32, supply: u32, battery: Option<(u32, u32)>) -> Row {
+    let mut text = format!("Grid  {draw} / {supply}");
+    if let Some((stored, capacity)) = battery {
+        text.push_str(&format!("  ·  Battery {stored} / {capacity}"));
+    }
     if draw > supply {
         Row::TextColored(text, RED)
     } else {
@@ -205,6 +209,9 @@ pub(crate) fn structure_detail_lines(
     // ceiling — and dim, because the crew fetches it on its own.
     if let Some((item, capacity)) = &s.supply {
         lines.push((format!("  takes {item}, holds up to {capacity}"), TEXT_DIM));
+    }
+    if let Some((stored, capacity)) = s.battery {
+        lines.push((format!("  charge {stored}/{capacity}"), TEXT_DIM));
     }
     if let Some(line) = buffer_line("in", &s.input, None) {
         lines.push((line, TEXT_DIM));

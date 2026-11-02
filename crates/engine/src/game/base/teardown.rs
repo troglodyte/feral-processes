@@ -15,6 +15,7 @@
 use crate::alerts::AlertBoard;
 use crate::base_grid::BaseGrid;
 use crate::components::{CarryingProgram, Hopper, MachineStatus, Position, Stock, Structure, Task};
+use crate::game::base::hauling::Touch;
 use crate::items::DownedProgram;
 use crate::resources::{BattleTelemetry, GameClock, MessageKind, PowerGrid};
 use crate::structures::StructureDb;
@@ -350,7 +351,7 @@ impl Game {
                     Position { x: *x, y: *y },
                     self.structure_footprint_of(*e),
                     &blocked,
-                    pocket_radius,
+                    Touch::Sides,
                 )
             })
             .map(|(_, _, e)| e)

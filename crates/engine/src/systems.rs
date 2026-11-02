@@ -1,3 +1,4 @@
+use crate::game::base::hauling::Touch;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 use rand::RngExt;
@@ -1564,7 +1565,7 @@ pub fn task_progress_system(
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.footprint)
             .unwrap_or(1);
-        if !at_station(*worker_pos, *node_pos, node_side) || carrying.is_some() {
+        if !at_station(*worker_pos, *node_pos, node_side, Touch::Sides) || carrying.is_some() {
             // `Stranded` is the more specific reading of the same situation:
             // nobody is at the machine, and no amount of waiting will change
             // that. The marker is `haul_step_system`'s, written a tick ago —

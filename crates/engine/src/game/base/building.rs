@@ -5,6 +5,7 @@ use crate::base_grid::BaseGrid;
 use crate::components::FarmJob;
 use crate::game::base::floor::nearest_free_cells;
 use crate::game::base::hauling;
+use crate::game::base::hauling::Touch;
 use crate::structures::UpgradeDef;
 use crate::systems::SiteScales;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
@@ -1978,7 +1979,12 @@ impl Game {
             .world
             .get::<Position>(structure)
             .ok_or_else(|| "That structure isn't anywhere you can reach.".to_string())?;
-        if !hauling::at_station(here, structure_pos, self.structure_footprint_of(structure)) {
+        if !hauling::at_station(
+            here,
+            structure_pos,
+            self.structure_footprint_of(structure),
+            Touch::Sides,
+        ) {
             return Err(
                 "You have to be standing next to it to work it — get beside it first.".into(),
             );

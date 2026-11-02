@@ -6,6 +6,7 @@
 //! `drift_idle_staff`'s fall-through: below every errand that has a claim on
 //! the body, above the wander.
 
+use crate::game::base::hauling::Touch;
 use bevy_ecs::prelude::*;
 
 use crate::Game;
@@ -131,7 +132,7 @@ impl Game {
         let reach = crew_reach(grid, here, &blocked, radius);
         let nearest = |spots: &mut dyn Iterator<Item = (usize, Position)>| {
             spots
-                .filter(|&(_, p)| reaches(grid, &reach, here, p, 1, &blocked, radius))
+                .filter(|&(_, p)| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides))
                 .min_by_key(|&(_, p)| (chebyshev(here, p), p.x, p.y))
         };
         let dest = nearest(&mut board.cells.iter().copied().enumerate());
@@ -140,7 +141,7 @@ impl Game {
                 self.drop_load(worker);
                 return true;
             };
-            if at_station(here, dest, 1) {
+            if at_station(here, dest, 1, Touch::Sides) {
                 let cell = (dest.x, dest.y);
                 let free = {
                     let floor = self.free_floor();
@@ -162,7 +163,7 @@ impl Game {
         let Some((index, target)) = loose else {
             return false;
         };
-        if at_station(here, target, 1) {
+        if at_station(here, target, 1, Touch::Sides) {
             let (item, _) = board.loose.remove(index);
             if self.world.get::<FloorItem>(item).is_some()
                 && let Some(thing) = take_floor_item(&mut self.world, item)

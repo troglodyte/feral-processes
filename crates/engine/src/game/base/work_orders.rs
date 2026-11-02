@@ -1004,7 +1004,15 @@ impl CrewFields {
                 hauling::crew_reach(grid, from, blocked, *pocket_radius),
             )
         });
-        hauling::reaches(grid, field, *from, at, side, blocked, *pocket_radius)
+        hauling::reaches(
+            grid,
+            field,
+            *from,
+            at,
+            side,
+            blocked,
+            hauling::touch_for(kind),
+        )
     }
 }
 
@@ -1733,7 +1741,7 @@ impl Game {
             if matches!(
                 kind,
                 TaskKind::GatherResource | TaskKind::Excavate | TaskKind::Tend(_)
-            ) && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
+            ) && !self.can_walk_to_post(from, post, kind, &blocked, pocket_radius)
             {
                 walk_refused.push((post, kind));
                 continue;
@@ -1827,10 +1835,11 @@ impl Game {
         &mut self,
         from: Position,
         machine: Entity,
+        kind: TaskKind,
         blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> bool {
-        self.post_route(from, machine, blocked, pocket_radius)
+        self.post_route(from, machine, kind, blocked, pocket_radius)
             .is_ok()
     }
 
@@ -1844,6 +1853,7 @@ impl Game {
         &mut self,
         from: Position,
         target: Entity,
+        kind: TaskKind,
         blocked: &hauling::Occupancy,
         pocket_radius: i32,
     ) -> Result<(), hauling::NoPost> {
@@ -1855,7 +1865,15 @@ impl Game {
         // latter, since a `DigSite` carries no `Structure`.
         let side = self.structure_footprint_of(target);
         let grid = self.world.resource::<BaseGrid>();
-        hauling::post_reach(grid, from, to, side, blocked, pocket_radius)
+        hauling::post_reach(
+            grid,
+            from,
+            to,
+            side,
+            blocked,
+            pocket_radius,
+            hauling::touch_for(kind),
+        )
     }
 
     /// Says once that nothing on the staff can walk to `site` —
@@ -2298,14 +2316,25 @@ impl Game {
                 .map(|(e, dig, p)| (*p, e, dig.finish.clone()))
                 .collect()
         };
+        let pending = self.pending_floor();
         let ground = self.ground();
         let grid = ground.floor;
+        let touch = hauling::touch_for(TaskKind::Excavate);
         let mut sites: Vec<(bool, i32, i32, Entity, Option<FinishOrder>)> = marked
             .into_iter()
             // A dig mark is always footprint 1 — `structures` (the widened
             // `structure_tiles`) is what carries a real Station's floor
             // cells into this check.
-            .filter(|(p, ..)| hauling::has_station(grid, *p, 1, &structures))
+            .filter(|(p, ..)| hauling::has_station(grid, *p, 1, &structures, touch))
+            // A corner face lets a digger *stand* where no side face would,
+            // but `run_dig_crew` still swings only at a `minable` blocker —
+            // floor or pending floor on a side. A solid cell a corner alone
+            // touches would otherwise hold a body that never swings.
+            .filter(|(p, _, f)| {
+                f.is_some()
+                    || ground.walkable(p.x, p.y)
+                    || crate::game::field_mining::minable((p.x, p.y), ground, &pending)
+            })
             .map(|(p, e, f)| (!ground.walkable(p.x, p.y), p.x, p.y, e, f))
             .collect();
         // Cut/tile sites (`finish: None`) sort before finish/strip sites,

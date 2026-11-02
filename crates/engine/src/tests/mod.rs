@@ -45,6 +45,7 @@ mod combat_targeting;
 mod compass;
 mod construction;
 mod contracts;
+mod corner_reach;
 mod crafting;
 mod creation;
 mod damage_species;

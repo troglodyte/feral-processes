@@ -16,6 +16,7 @@
 //! rhythm belongs to the base and travels with it.
 
 use crate::base_grid::BaseGrid;
+use crate::game::base::hauling::Touch;
 use crate::game::commerce;
 use crate::game::contracts::fold;
 use crate::*;
@@ -907,7 +908,7 @@ impl Game {
             return;
         };
         let side = self.structure_footprint_of(counter_entity);
-        if crate::game::base::hauling::at_station(from, counter, side) {
+        if crate::game::base::hauling::at_station(from, counter, side, Touch::Sides) {
             self.set_caravan_stage(entity, CaravanStage::Docked);
             let name = self.caravan_name(caravan);
             self.log(format!("{name} sets out its stock beside the counter."));
@@ -926,6 +927,7 @@ impl Game {
                 side,
                 &blocked,
                 pocket_radius,
+                Touch::Sides,
             )
         };
         match step {

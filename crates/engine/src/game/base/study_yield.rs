@@ -27,6 +27,7 @@
 //! `Game::drop_load` calls it, so any door that frees a carrier keeps the
 //! kill.
 
+use crate::game::base::hauling::Touch;
 use bevy_ecs::prelude::*;
 
 use crate::Game;
@@ -323,7 +324,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let open = |p: Position| reachable(p) && !board.claimed.contains(&p);
         // A pick-up may only count rack room nobody walking is promised.
         let rack = (holding || board.spare > 0)
@@ -372,7 +373,7 @@ impl Game {
         else {
             return false;
         };
-        if !at_station(here, target, 1) {
+        if !at_station(here, target, 1, Touch::Sides) {
             return self.walk_idle_toward(worker, here, target).is_ok();
         }
         let (station, _) = board.stations.remove(index);
@@ -405,7 +406,7 @@ impl Game {
             return true;
         };
         let pos = destination.at();
-        if !at_station(here, pos, 1) {
+        if !at_station(here, pos, 1, Touch::Sides) {
             if self.walk_idle_toward(worker, here, pos).is_err() {
                 self.put_carried_program_back(worker);
             }

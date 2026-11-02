@@ -4,6 +4,7 @@
 use super::support::*;
 use crate::components::Squeezing;
 use crate::components::{Memories, MemorySubject};
+use crate::game::base::hauling::Touch;
 use crate::game::base::hauling::{Step, Stride, blocked_tiles, step_to_post, stride};
 use crate::memories::MemoryId;
 use crate::*;
@@ -382,10 +383,20 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     );
 
     tick_until(&mut game, 40, |g| {
-        game::base::hauling::at_station(*g.world.get::<Position>(worker).unwrap(), node_pos, 1)
+        game::base::hauling::at_station(
+            *g.world.get::<Position>(worker).unwrap(),
+            node_pos,
+            1,
+            Touch::Sides,
+        )
     });
     assert!(
-        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos, 1),
+        game::base::hauling::at_station(
+            *game.world.get::<Position>(worker).unwrap(),
+            node_pos,
+            1,
+            Touch::Sides
+        ),
         "it should arrive"
     );
     game.tick();
@@ -1698,10 +1709,16 @@ fn station_candidates_offers_the_ring_around_the_whole_footprint() {
     place_now(&mut game, "station_candidates_fixture", 2, 0).unwrap();
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, Position { x: 2, y: 0 }, 2, |_| false)
-            .into_iter()
-            .map(|p| (p.x, p.y))
-            .collect();
+        crate::game::base::hauling::station_candidates(
+            grid,
+            Position { x: 2, y: 0 },
+            2,
+            |_| false,
+            Touch::Sides,
+        )
+        .into_iter()
+        .map(|p| (p.x, p.y))
+        .collect();
 
     let expected: std::collections::HashSet<(i32, i32)> = [
         (1, 0),
@@ -1739,16 +1756,22 @@ fn at_station_agrees_with_station_candidates_exactly() {
     let side = 2;
     let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     let candidates: std::collections::HashSet<(i32, i32)> =
-        crate::game::base::hauling::station_candidates(grid, structure, side, |_| false)
-            .into_iter()
-            .map(|p| (p.x, p.y))
-            .collect();
+        crate::game::base::hauling::station_candidates(
+            grid,
+            structure,
+            side,
+            |_| false,
+            Touch::Sides,
+        )
+        .into_iter()
+        .map(|p| (p.x, p.y))
+        .collect();
 
     for x in -2..=6 {
         for y in -3..=4 {
             let worker = Position { x, y };
             assert_eq!(
-                crate::game::base::hauling::at_station(worker, structure, side),
+                crate::game::base::hauling::at_station(worker, structure, side, Touch::Sides),
                 candidates.contains(&(x, y)),
                 "at_station and station_candidates disagree at ({x}, {y})"
             );
@@ -2411,7 +2434,15 @@ fn the_walk_prefers_an_equal_length_detour_to_a_squeeze() {
     let blocked = blocked_tiles(std::iter::empty(), [Position { x: -2, y: -2 }].into_iter());
 
     assert_eq!(
-        step_to_post(&grid, from, target, 1, &blocked, grid.radius()),
+        step_to_post(
+            &grid,
+            from,
+            target,
+            1,
+            &blocked,
+            grid.radius(),
+            Touch::Sides
+        ),
         Ok(Some(Step {
             to: Position { x: -2, y: -1 },
             squeeze: false,

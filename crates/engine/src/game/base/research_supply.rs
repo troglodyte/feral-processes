@@ -12,6 +12,7 @@
 //! program can **walk to** counts — for fetching, for staffing and for the
 //! flag alike (`research_reached`).
 
+use crate::game::base::hauling::Touch;
 use std::collections::{BTreeMap, HashSet};
 
 use bevy_ecs::prelude::Entity;
@@ -225,7 +226,9 @@ impl Game {
                 continue;
             };
             let side = self.structure_footprint_of(station);
-            for face in hauling::station_candidates(grid, at, side, |c| walls.taken(c)) {
+            for face in
+                hauling::station_candidates(grid, at, side, |c| walls.taken(c), Touch::Sides)
+            {
                 if reached.iter().all(|r| *r) {
                     return reached;
                 }
@@ -239,7 +242,7 @@ impl Game {
                             source.pos,
                             source.side,
                             &walls,
-                            radius,
+                            Touch::Sides,
                         );
                 }
             }

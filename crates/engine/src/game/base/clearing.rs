@@ -14,6 +14,7 @@
 //! stands, as a hauler's is, so a destination that fills or falls mid-walk
 //! costs a re-derivation rather than a stored target going stale.
 
+use crate::game::base::hauling::Touch;
 use bevy_ecs::prelude::*;
 
 use crate::Game;
@@ -165,7 +166,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let mut ranked: Vec<usize> = (0..board.sources.len()).collect();
         ranked.sort_by_key(|&i| {
             let p = board.sources[i].1;
@@ -206,7 +207,7 @@ impl Game {
         let Some((index, target, item, room)) = pick else {
             return false;
         };
-        if at_station(here, target, 1) {
+        if at_station(here, target, 1, Touch::Sides) {
             let (machine, ..) = board.sources.remove(index);
             let Some(mut stock) = self.world.get_mut::<Stock>(machine) else {
                 return true;
@@ -236,7 +237,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let candidates: Vec<(Entity, Position)> = board
             .depots
             .iter()
@@ -259,7 +260,7 @@ impl Game {
             .filter(|&(_, c)| reachable(c))
             .min_by_key(|&(_, c)| (chebyshev(here, c), c.x, c.y));
         if let Some((depot, pos)) = depot {
-            if at_station(here, pos, 1) {
+            if at_station(here, pos, 1, Touch::Sides) {
                 let Some(mut stock) = self.world.get_mut::<Stock>(depot) else {
                     return true;
                 };
@@ -274,7 +275,7 @@ impl Game {
             return true;
         }
         if let Some((index, cell_pos)) = cell {
-            if at_station(here, cell_pos, 1) {
+            if at_station(here, cell_pos, 1, Touch::Sides) {
                 let free = {
                     let floor = self.free_floor();
                     floor.free(self.world.resource::<BaseGrid>(), (cell_pos.x, cell_pos.y))

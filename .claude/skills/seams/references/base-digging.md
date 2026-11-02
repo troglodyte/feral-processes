@@ -265,3 +265,13 @@
   whole suite and only held the empty-queue guard off for ever on any base
   with a sown plot). `FarmTile` is another non-`Structure` entity with a field
   `Position`.
+
+- **A build or dig posting stands at any of eight neighbours, every other
+  job at four sides, and `hauling::touch_for` is the one mapping.** Every
+  station function takes a `hauling::Touch` as its last argument, so a caller
+  names its rule; a builder's fetch is a take and stays `Sides`. **The trap
+  is the corner outrunning the cut**: a corner face lets a digger stand beside
+  a blocker `field_mining::minable` (floor or pending floor on a *side*)
+  refuses, and `run_dig_crew` swings only at a minable one — so `dig_wants`
+  filters solid cells on `minable` after `has_station`, or a mark only a
+  corner touches posts a body that stands there forever.

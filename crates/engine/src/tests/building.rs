@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::components::Downed;
+use crate::game::base::hauling::Touch;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, haul_walk_radius};
 use crate::views::PinMark;
 use crate::*;
@@ -2004,13 +2005,19 @@ fn a_program_walks_across_a_fully_grown_base_to_its_post() {
             *game.world.get::<Position>(worker).unwrap(),
             node_pos,
             1,
+            Touch::Sides,
         ) {
             break;
         }
         game.tick();
     }
     assert!(
-        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos, 1),
+        game::base::hauling::at_station(
+            *game.world.get::<Position>(worker).unwrap(),
+            node_pos,
+            1,
+            Touch::Sides
+        ),
         "a worker posted from one edge of a full-size base must reach the other"
     );
 }

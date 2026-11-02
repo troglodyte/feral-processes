@@ -7,6 +7,7 @@
 //! need may pull a body off a post, and failing that gate *is* acting out** —
 //! there is no third state where a program is stalled but content.
 
+use crate::game::base::hauling::Touch;
 use std::collections::{BTreeMap, HashSet};
 
 use crate::base_grid::BaseGrid;
@@ -559,7 +560,8 @@ pub(crate) fn in_reach(here: Position, site: Position, radius: i32) -> bool {
     // `at_station`'s side is the default here —
     // `tests::assets::every_amenity_and_repair_bay_declares_a_footprint_of_one`
     // is the census that holds it.
-    at_station(here, site, 1) || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
+    at_station(here, site, 1, Touch::Sides)
+        || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
 }
 
 impl Game {
@@ -623,6 +625,7 @@ impl Game {
             1,
             &blocked,
             pocket_radius,
+            Touch::Sides,
         )?
         else {
             // The field admits nowhere better than where it stands. It waits,

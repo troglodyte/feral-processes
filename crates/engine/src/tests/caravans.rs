@@ -3,6 +3,7 @@
 
 use super::support::*;
 use crate::caravans::{CaravanDb, CaravanDef};
+use crate::game::base::hauling::Touch;
 
 fn caravans_dir() -> std::path::PathBuf {
     test_assets_dir().join("caravans")
@@ -1071,7 +1072,7 @@ fn a_caravan_walks_in_docks_and_walks_back_out() {
         *query.iter(&game.world).next().unwrap().1
     };
     assert!(
-        crate::game::base::hauling::at_station(standing, counter, 1),
+        crate::game::base::hauling::at_station(standing, counter, 1, Touch::Sides),
         "docked at {standing:?}, which is not beside the counter at {counter:?}"
     );
 

@@ -9,6 +9,7 @@
 use crate::base_grid::BaseGrid;
 use crate::base_ledger::ConsumeSource;
 use crate::components::{Downed, PatchCredit, Position, Stats, Stock, Structure};
+use crate::game::base::hauling::Touch;
 use crate::game::base::hauling::{NoPost, Step, step_to_post};
 use crate::game::base::offshift::in_reach;
 use crate::structures::{StructureDb, StructureId};
@@ -408,6 +409,7 @@ impl Game {
             1,
             &blocked,
             pocket_radius,
+            Touch::Sides,
         )?
         else {
             // **A failure now, where a hauler waits.** The field admits

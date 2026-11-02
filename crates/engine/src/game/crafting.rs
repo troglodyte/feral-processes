@@ -1,6 +1,7 @@
 //! Recipes, crafting, and the equipment the results go into: equip,
 //! unequip, fuse, and erase.
 
+use crate::game::base::hauling::Touch;
 use std::collections::BTreeMap;
 
 use crate::tuning::{
@@ -151,7 +152,7 @@ impl Game {
             .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
             .filter_map(|e| {
                 let at = e.get::<Position>()?;
-                crate::game::base::hauling::at_station(here, *at, side).then(|| {
+                crate::game::base::hauling::at_station(here, *at, side, Touch::Sides).then(|| {
                     let tier = e.get::<StructureTier>().map(|t| t.0).unwrap_or(1);
                     (e.id(), tier, (at.x, at.y))
                 })

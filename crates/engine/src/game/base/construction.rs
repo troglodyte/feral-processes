@@ -18,6 +18,7 @@
 //! nor `task_progress_system` can touch it — each resolves its target
 //! through a query a build site cannot answer.
 
+use crate::game::base::hauling::Touch;
 use bevy_ecs::prelude::{Entity, With, Without};
 
 use crate::base_grid::BaseGrid;
@@ -118,9 +119,8 @@ impl Game {
         };
         builders.sort_unstable();
         let blocked = self.blocked_tiles();
-        let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (.., worker) in builders {
-            self.step_one_builder(worker, &blocked, pocket_radius);
+            self.step_one_builder(worker, &blocked);
         }
     }
 
@@ -221,12 +221,7 @@ impl Game {
     /// One builder, one step. Split out of the loop above so the site
     /// lookup and the early returns read as the sequence they are rather
     /// than as five levels of `continue`.
-    fn step_one_builder(
-        &mut self,
-        worker: Entity,
-        blocked: &hauling::Occupancy,
-        pocket_radius: i32,
-    ) {
+    fn step_one_builder(&mut self, worker: Entity, blocked: &hauling::Occupancy) {
         let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {
             return;
         };
@@ -259,6 +254,13 @@ impl Game {
             Errand::Fetch(_, _, Source::Shelf(e, _)) => self.structure_footprint_of(*e),
             _ => 1,
         };
+        // The site is worked from any of its eight neighbours; a fetch is a
+        // take off a shelf, a stockpile cell or the pack, and a take touches
+        // side to side like every other.
+        let touch = match &errand {
+            Errand::Fetch(..) => Touch::Sides,
+            _ => hauling::touch_for(TaskKind::Construct),
+        };
         match errand {
             // **Silent here, deliberately.** The scheduler owns this
             // announcement, because it is the only thing that can see a site
@@ -277,8 +279,8 @@ impl Game {
                 _,
                 _,
                 Source::Shelf(_, dest) | Source::Stockpile(_, dest) | Source::Pack(dest),
-            ) if !hauling::at_station(from, dest, side) => {
-                self.walk_builder(worker, from, dest, side, blocked, pocket_radius);
+            ) if !hauling::at_station(from, dest, side, touch) => {
+                self.walk_builder(worker, from, dest, side, touch, blocked);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
             // The dry latch is **not** cleared here. Both halves of it live
@@ -402,12 +404,12 @@ impl Game {
         from: Position,
         dest: Position,
         side: u8,
+        touch: Touch,
         blocked: &hauling::Occupancy,
-        pocket_radius: i32,
     ) {
         let step = {
             let grid = self.world.resource::<BaseGrid>();
-            hauling::step_to_post(grid, from, dest, side, blocked, pocket_radius)
+            hauling::step_to_post(grid, from, dest, side, blocked, grid.radius(), touch)
         };
         match step {
             Ok(Some(next)) => self.take_base_step(worker, next),

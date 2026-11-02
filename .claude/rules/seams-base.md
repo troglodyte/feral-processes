@@ -266,9 +266,11 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A research bill is carried to the Research Station and consumed as it
   lands, into `ActiveResearch::delivered` (per node, kept through an
   abandon, never refunded), and the project files no work order** — the
-  Station's own posted program fetches it in `haul_step_system`'s research
-  leg, `Errand::Load` capped at the outstanding line, and
-  `Game::absorb_research_deliveries` is the one place it is spent.
+  Station's own posted program fetches it off shelves only (Depots and
+  stockpile cells it can reach) in `haul_step_system`'s research leg, every
+  load capped by one per-pass `research_supply::ResearchLedger` across all
+  Stations, and `Game::absorb_research_deliveries` is the one place it is
+  spent.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped.

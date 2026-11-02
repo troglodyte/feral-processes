@@ -59,21 +59,32 @@
   project stalled for good, and the base had to hold the whole bill at once.
   Now the Station's own posted program (`GatherResource`, staffed by
   `research_wants`) runs `haul_step_system`'s research leg: the outstanding
-  bill stands in for a recipe, `Errand::Collect` from any structure's output
-  or `Errand::Pickup` off a stockpile cell, `Errand::Load` into the Station's
-  input capped by `research_room` (outstanding less what the hopper holds —
-  the overfill guard; a surplus load turns into a `Deposit`), and
-  `Game::absorb_research_deliveries` (start of `settle_research`, and in
-  `abandon_research` before the id clears) moves the hopper into
-  `ActiveResearch::delivered`, reporting the `Consume`. Delivered is per node
+  bill stands in for a recipe, `Errand::Collect` from a Depot or
+  `Errand::Pickup` off a stockpile cell — **shelves only**, the set a
+  defence's supply uses, because a machine buffer may be feeding its
+  neighbour (a base with neither reads `work_orders::no_shelf_for`) — and
+  **only a source the walk reaches**, every line tried in turn so an
+  unreachable first line cannot starve a reachable second. `Errand::Load`
+  into the Station's input is capped by the pass's one
+  `research_supply::ResearchLedger`: outstanding less **every** Station's
+  hopper, updated as the pass loads and lifts — a per-Station cap let two
+  programs fill the last units on one tick. A surplus load turns into a
+  `Deposit`. `Game::absorb_research_deliveries` (start of `settle_research`,
+  and in `abandon_research` before the id clears) moves hoppers into
+  `ActiveResearch::delivered`, reporting the `Consume`, and spills anything
+  the bill does not want back to a Depot or the floor. The flag and the
+  stall count `Game::research_supply` (shelves, hoppers, loads in a Station
+  program's hands), never `base_holding`, or the last load in flight reads
+  as none. Delivered is per node
   like `progress`, kept through an abandon, never refunded, removed only by
   `grant_research`; saved as `SaveData::research_delivered`, asserted by a
   save→load test. An old save's `for_research: true` order loads as an
   ordinary order (no `deny_unknown_fields`). Once the data is in,
-  `research_wants` staffs **one** Station only while some outstanding line
-  has `base_holding > 0` — `build_is_workable`'s deadlock rule: a Station
-  staffed with nothing to fetch holds the body that should make the
-  material. `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
+  `research_wants` staffs **one** Station only while a shelf it can walk to
+  holds an outstanding line (`research_bill_reachable`, one `crew_reach`
+  field from the Station's face) — `build_is_workable`'s deadlock rule: a
+  Station staffed with nothing it can fetch holds the body that should make
+  the material. `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
   priority is the position in that list, and the player's own pick outranks the
   queue they filed and forgot. It returns `standing_wants`' `(Entity,
   TaskKind)` and not `settle_orders`' depth pairs, since a Research Node is the

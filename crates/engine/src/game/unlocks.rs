@@ -1158,20 +1158,15 @@ impl Game {
             .any(|d| d.tree == tree)
     }
 
-    /// Makes `id` the one project the base is working: Research Nodes start
-    /// feeding it and its material bill is filed as ordinary work orders at
-    /// the top of the queue.
+    /// Makes `id` the one project the base is working: Research Stations start
+    /// feeding it data, and the program posted at one starts carrying its
+    /// material bill in (`research_supply`). Nothing is filed in the work
+    /// queue — making the materials is the player's own orders.
     ///
     /// Every refusal lands **before anything is written** —
-    /// `commit_caravan_basket`'s rule. `require_field` is in the ladder for
-    /// `queue_work_order`'s reason: this reads which machines are standing,
-    /// and they stand in the field.
-    ///
-    /// The materials are filed **once, at selection, and never topped up.** A
-    /// per-tick refile would make `cancel_work_order` a no-op on exactly the
-    /// orders a player most wants to intervene in. They go **through**
-    /// `queue_work_order` rather than around it, so every log line and every
-    /// refusal that door owns still applies.
+    /// `commit_caravan_basket`'s rule. `require_field` is in the ladder
+    /// because this reads which machines are standing, and they stand in the
+    /// field.
     pub fn select_research(&mut self, id: &str) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());

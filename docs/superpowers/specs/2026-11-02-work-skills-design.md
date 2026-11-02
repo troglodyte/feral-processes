@@ -44,7 +44,7 @@ The machinery is general. Combat and other areas will add skills later, so the s
 - Faster work now; possibly better items later.
 - No decay, for now.
 - New tames start slower than today, as in RimWorld.
-- **Existing saves:** already-tamed programs start at the bottom too, so a loaded base slows down until its crew practises.
+- **Existing saves:** already-tamed programs take their species' starting skills on load (ADR 0039), not zero.
 - Species start higher in some skills.
 - Display: staff table, detail page, and a message on level-up.
 - Pace: a master takes most of a full game, and it is tunable.
@@ -82,7 +82,8 @@ Each work site has one function that names which skill a posting practises: `wor
 
 Rules for applying the scale:
 
-- **Baked rates are re-read at each cycle, swing or task boundary**, so a level gained mid-posting shows on the next cycle without a re-post. *Claude's call:* `Task::required` stays the stored, baked tick count; the boundary recomputes it from the worker's current level. Nothing new is stored per posting, and an in-flight posting from an old save finishes its current cycle at the old rate and picks up the scale at the next boundary.
+- **Machine skill scale applies per tick through a fractional carry** (`Skills::pace_steps`), not per cycle: `Task::required` stays as baked and each working tick adds the worker's current steps, so a level gained shows on the next tick. Dig swings and farm tasks still re-read at their boundary.
+- **(Original wording) baked rates are re-read at each cycle, swing or task boundary**, so a level gained mid-posting shows on the next cycle without a re-post. *Claude's call:* `Task::required` stays the stored, baked tick count; the boundary recomputes it from the worker's current level. Nothing new is stored per posting, and an in-flight posting from an old save finishes its current cycle at the old rate and picks up the scale at the next boundary.
 - **Which skill a machine cycle practises** is settled at the cycle's start from the recipe it runs: an Assemble-role recipe → Assemble, an Extract-role recipe or any fixed `work` block whatever its resource → Extract, a Research Station → Research. A recipe switch takes effect at the next cycle. Any other posting kind returns `None` (practises nothing, runs at 1.0); the plan lists every `None` arm explicitly.
 - **One rate-setter per machine.** A machine runs one posted worker (`post_worker`), whose skill sets the rate and earns the practice. A worker without `Skills` posted anywhere runs at 1.0 and earns nothing.
 - **Practice is flat per working tick**, not scaled by speed: a slow worker earns the same practice per tick it works. A species' starting level begins with zero practice toward the next.
@@ -115,7 +116,7 @@ Where a site iterates a query, any ordering that touches RNG stays sorted by `Pr
 
 ### Display
 
-- **Base staff table** (`Game::work_table`, `views::work`, `render/building/staffing.rs`): each row shows that program's skill levels. The layout is the builder's call, within the rule that GUI text never clips or wraps. The six skills do not map one-to-one onto the four duty columns: Operate covers three skills, and Dig covers digging and farming.
+- **Base staff table** (`Game::work_table`, `views::work`, `render/building/staffing.rs`): each row shows that program's skill levels. The layout is the builder's call, within the rule that GUI text never clips or wraps. **As built:** the six levels show on one line under the selected row only, because six skills beside the duty columns overflow the popup width. The six skills do not map one-to-one onto the four duty columns: Operate covers three skills, and Dig covers digging and farming.
 - **Program detail page** (`Game::program_manifest`, `views::manifest`, `render/manifest/sections.rs`): a SKILLS section for tamed programs only, listing each skill with its level and progress to the next level. A wild program's page has no section.
 - **Level-up message** (every level, the user's choice): one line in the base log, `MessageKind::LevelUp`, through the existing `push_base_kind` path. For example, "Kernel Moth is now a level 4 builder." No tick vocabulary. Repeats must condense acceptably in `message_history`.
 

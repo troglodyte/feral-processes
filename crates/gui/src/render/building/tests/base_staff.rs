@@ -245,3 +245,48 @@ fn a_roster_past_what_fits_at_1280x720_still_scrolls_rather_than_overflowing() {
         );
     });
 }
+
+/// The selected row spells its six skills out on a line of their own, and
+/// that line is as unclamped as any other: measure it at two-digit levels.
+#[test]
+fn the_selected_rows_skill_line_stays_inside_the_content_rect() {
+    use feral_processes_engine::skills::Skill;
+    use feral_processes_engine::views::SkillView;
+    let mut row = widest_row();
+    row.skills = Skill::ALL
+        .iter()
+        .map(|s| SkillView {
+            skill_label: s.label(),
+            level: 18,
+            practice: 0,
+            practice_to_next: Some(10),
+        })
+        .collect();
+    let t = table(vec![row]);
+    let rows = base_staff_menu_rows(&t, &[], 0, Some(0));
+    let line = format!("{ROW_LEAD}{}", skill_line(&t.rows[0].skills));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Text(text) if *text == line)),
+        "the selected row should be followed by its skill line"
+    );
+    assert!(
+        line.chars().count() <= ROW_WRAP_COLUMNS,
+        "a {} char skill line runs past the {ROW_WRAP_COLUMNS} column body: {line:?}",
+        line.chars().count()
+    );
+    with_painter(|p| {
+        for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
+            let m = ui_metrics(h);
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
+            let room = content.w - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(&line, m.font_size);
+            assert!(
+                drawn <= room,
+                "the skill line overflows the content rect by {:.0}px at {w}x{h}",
+                drawn - room
+            );
+        }
+    });
+}

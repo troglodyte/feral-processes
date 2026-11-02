@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.12
+
+**A research project's materials are now carried to the Research Station a load at a time, and each load counts as soon as it arrives.** Before, picking a project filed a one-off work order for its whole bill. That order closed the moment the base held enough, even if the research data was not finished yet. Other machines and build sites could then use up the materials, and nothing made more, so the project could stall forever saying it needed them. The base also had to hold the whole bill at once. Now the Station's program fetches what the project still needs from Depots, stockpiles and idle machines. The research screen shows how much has been delivered against what is needed. Picking a project no longer files a work order, so keep the material stocked with a standing work order; the screen says so if nothing supplies it. Materials already delivered stay with the project if you abandon it.
+
 ## 0.21.11
 
 **The Staff Coverage page now says which building to put up when a need is short.** Before, a short row named only the need, such as Coherence or Slack, which tells a player nothing. Now a dimmed line under it reads "build a Log Analyzer Bay" or "build a Sandbox".

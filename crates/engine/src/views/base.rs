@@ -525,6 +525,9 @@ pub struct CoverageRow {
     /// The share of staff time expected to be spent off shift for this
     /// need, 0..=1.
     pub lost_share: f32,
+    /// Names of the catalogue's structures that service this need, so a
+    /// short row can say what to build rather than name an abstract need.
+    pub built_by: Vec<String>,
     pub boxed_in: Vec<BoxedInAmenity>,
 }
 

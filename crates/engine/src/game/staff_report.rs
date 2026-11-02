@@ -154,6 +154,11 @@ impl Game {
                         }
                     }
                 }
+                let serves = |s: &&crate::structures::StructureDef| {
+                    s.services
+                        .iter()
+                        .any(|svc| svc.need == def.id && svc.rate().is_some())
+                };
                 // With nothing built the best structure the catalogue offers
                 // stands in, so "needed" still means something.
                 let service = if served.is_empty() {
@@ -189,6 +194,11 @@ impl Game {
                     below_critical: below(|n| n.critical),
                     below_content: below(|n| n.content),
                     lost_share: share,
+                    built_by: structures
+                        .all()
+                        .filter(serves)
+                        .map(|s| s.name.clone())
+                        .collect(),
                     boxed_in,
                 }
             })

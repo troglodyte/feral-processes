@@ -124,6 +124,9 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
             i == selected,
             if r.is_short() { YELLOW } else { TEXT },
         ));
+        if r.is_short() && !r.built_by.is_empty() {
+            rows.push(Row::TextColored(build_hint(&r.built_by), TEXT_DIM));
+        }
         for b in &r.boxed_in {
             rows.push(Row::TextColored(
                 format!(
@@ -139,6 +142,23 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
         }
     }
     rows
+}
+
+/// "    build a Sandbox or an Idle Loop": the structures that would close a
+/// short need's gap, since the need's own name tells the player nothing.
+fn build_hint(names: &[String]) -> String {
+    let options: Vec<String> = names
+        .iter()
+        .map(|n| {
+            let article = if n.starts_with(['A', 'E', 'I', 'O', 'U']) {
+                "an"
+            } else {
+                "a"
+            };
+            format!("{article} {n}")
+        })
+        .collect();
+    format!("    build {}", options.join(" or "))
 }
 
 pub(super) fn discontent_rows(report: &[DiscontentRow], selected: usize) -> Vec<Row> {
@@ -209,6 +229,7 @@ mod tests {
             below_critical: 1,
             below_content: 3,
             lost_share: 0.07,
+            built_by: vec!["Defrag Bay".into()],
             boxed_in: vec![BoxedInAmenity {
                 label: "Defrag Bay".into(),
                 x: 3,
@@ -220,7 +241,45 @@ mod tests {
         assert!(text_of(&rows[0]).contains("Approximate"));
         let t = text_of(&rows[1]);
         assert!(t.contains("places 1/2") && t.contains("needed 2 !") && t.contains("lost ~7%"));
-        assert!(text_of(&rows[2]).contains("1 open tile"));
+        assert_eq!(text_of(&rows[2]), "    build a Defrag Bay");
+        assert!(text_of(&rows[3]).contains("1 open tile"));
+    }
+
+    fn covered(built: usize, needed: usize, built_by: &[&str]) -> CoverageRow {
+        CoverageRow {
+            name: "Slack".into(),
+            built,
+            places: built * 2,
+            capacity: built * 2,
+            needed,
+            below_critical: 0,
+            below_content: 0,
+            lost_share: 0.1,
+            built_by: built_by.iter().map(|s| (*s).into()).collect(),
+            boxed_in: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_short_need_names_the_building_that_serves_it_indented_and_dim() {
+        let rows = coverage_rows(&[covered(0, 1, &["Sandbox"])], 0);
+        let Row::TextColored(t, color) = &rows[2] else {
+            panic!("the hint is a plain dim row");
+        };
+        assert_eq!(t, "    build a Sandbox");
+        assert_eq!(*color, TEXT_DIM);
+    }
+
+    #[test]
+    fn the_build_hint_joins_alternatives_and_uses_an_before_a_vowel() {
+        let rows = coverage_rows(&[covered(1, 2, &["Sandbox", "Idle Loop"])], 0);
+        assert_eq!(text_of(&rows[2]), "    build a Sandbox or an Idle Loop");
+    }
+
+    #[test]
+    fn a_covered_need_has_no_build_hint() {
+        let rows = coverage_rows(&[covered(1, 1, &["Sandbox"])], 0);
+        assert_eq!(rows.len(), 2);
     }
 
     #[test]
@@ -271,6 +330,7 @@ mod tests {
             below_critical: 100,
             below_content: 100,
             lost_share: 1.0,
+            built_by: vec!["N".repeat(40)],
             boxed_in: vec![BoxedInAmenity {
                 label: "Defrag Bay".into(),
                 x: -100,
@@ -278,7 +338,11 @@ mod tests {
                 open_tiles: 1,
             }],
         };
-        assert_rows_fit(&coverage_rows(&[worst], 0), "Coverage");
+        let short = CoverageRow {
+            built: 0,
+            ..worst.clone()
+        };
+        assert_rows_fit(&coverage_rows(&[worst, short], 0), "Coverage");
     }
 
     #[test]

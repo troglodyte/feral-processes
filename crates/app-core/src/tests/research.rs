@@ -99,6 +99,38 @@ fn capital_a_abandons_and_lowercase_a_does_nothing() {
     assert_eq!(app.mode, Mode::Research, "the screen stays open either way");
 }
 
+/// Taking on a project that studies a program opens the picker for one, so
+/// the player is not left to find "Study a program" on another menu; Esc
+/// backs out to the group menu as it does from that row.
+#[test]
+fn a_project_needing_a_subject_opens_the_study_picker() {
+    let mut app = app_in_base_with_a_research_node(505);
+    // The fixture's first gated node waits on Teardown alone.
+    mark_researched(&mut app, "teardown");
+    open_command(&mut app, "Research");
+    to_the_list(&mut app);
+    let gated: Vec<usize> = {
+        let game = app.game.as_ref().unwrap();
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| game.research_wants_subject(&n.id))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    for idx in gated {
+        pick_row(&mut app, idx);
+        if app.mode == Mode::PinSubject {
+            break;
+        }
+    }
+    assert_eq!(app.mode, Mode::PinSubject, "a gated project was taken on");
+    assert!(active_project(&app).is_some());
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseResearch);
+}
+
 /// The list's row keys and the graph's `Enter` are the same door, so both take
 /// the node under the highlight on.
 #[test]

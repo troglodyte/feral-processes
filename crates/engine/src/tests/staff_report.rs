@@ -101,6 +101,7 @@ fn coverage_gap_case_no_amenity_built_is_short() {
     let row = rows.iter().find(|r| r.name == "Coherence").unwrap();
     assert_eq!((row.built, row.places), (0, 0));
     assert!(row.needed >= 1 && row.is_short());
+    assert_eq!(row.built_by, vec!["Log Analyzer Bay".to_string()]);
     assert!(game.base_report_flags().staff.is_some());
 }
 

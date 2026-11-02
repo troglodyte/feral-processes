@@ -1,7 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect targeting.
 
-use crate::components::{FarmTile, HoldPoints, StatPoints};
+use crate::components::{FarmTile, Grievance, HoldPoints, StatPoints};
 use crate::game::base::hauling::at_station;
 use crate::game::trade::IDLE_ACTIVITY;
 use crate::settlements::CompassTarget;
@@ -1834,8 +1834,8 @@ impl Game {
         // be spent. Worst first within it for the same reason.
         let moods = self.staff_moods();
         for (n, what) in [
-            (moods.lashing_out, "lashing out"),
-            (moods.downed_tools, "downed tools"),
+            (moods.lashing_out, Grievance::LashingOut.label()),
+            (moods.downed_tools, Grievance::DownedTools.label()),
         ] {
             if n > 0 {
                 rows.push(AttentionRow {
@@ -1862,10 +1862,10 @@ impl Game {
 
         let idle = StructureReport::idle_count(&structures);
         if idle > 0 {
-            let noun = if idle == 1 { "node" } else { "nodes" };
+            let noun = if idle == 1 { "machine" } else { "machines" };
             rows.push(AttentionRow {
                 kind: AttentionKind::IdleStructures,
-                text: format!("{idle} {noun} without a program"),
+                text: format!("{idle} {noun} idle"),
                 key: 'b',
                 threat: false,
             });

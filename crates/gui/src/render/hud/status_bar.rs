@@ -468,14 +468,14 @@ mod tests {
     fn the_badge_names_the_first_row_and_its_key() {
         let rows = [nagging(
             AttentionKind::IdleStructures,
-            "4 nodes without a program",
+            "4 machines idle",
             false,
         )];
         let text: String = badge_pieces(&rows)
             .iter()
             .map(|(t, _, _)| t.as_str())
             .collect();
-        assert_eq!(text, "4 NODES WITHOUT A PROGRAM [b]");
+        assert_eq!(text, "4 MACHINES IDLE [b]");
     }
 
     /// One row on a bar that already has two other zones on it: the column
@@ -483,11 +483,7 @@ mod tests {
     #[test]
     fn a_second_condition_is_counted_not_listed() {
         let rows = [
-            nagging(
-                AttentionKind::IdleStructures,
-                "4 nodes without a program",
-                false,
-            ),
+            nagging(AttentionKind::IdleStructures, "4 machines idle", false),
             nagging(AttentionKind::PerkPoints, "2 perk points unspent", false),
             nagging(AttentionKind::Unslotted, "1 unslotted (4/3)", false),
         ];
@@ -495,7 +491,7 @@ mod tests {
             .iter()
             .map(|(t, _, _)| t.as_str())
             .collect();
-        assert_eq!(text, "4 NODES WITHOUT A PROGRAM [b] +2");
+        assert_eq!(text, "4 MACHINES IDLE [b] +2");
         assert!(
             !text.contains("PERK"),
             "the badge listed a second condition: {text:?}"
@@ -513,7 +509,7 @@ mod tests {
         )];
         let calm = [nagging(
             AttentionKind::IdleStructures,
-            "1 node without a program",
+            "1 machine idle",
             false,
         )];
         assert_eq!(badge_pieces(&hostile)[0].1, palette::THREAT);

@@ -37,11 +37,7 @@ fn tallest_base_output_page() -> Vec<Row> {
                 "Recompiler Bay damaged",
                 true,
             ),
-            attention(
-                AttentionKind::IdleStructures,
-                "12 nodes without a program",
-                false,
-            ),
+            attention(AttentionKind::IdleStructures, "12 machines idle", false),
             attention(AttentionKind::PerkPoints, "12 perk points unspent", false),
             attention(AttentionKind::Unslotted, "2 unslotted (14/12)", false),
         ],

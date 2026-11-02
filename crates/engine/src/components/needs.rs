@@ -189,6 +189,16 @@ impl Grievance {
             Grievance::LashingOut => "lashing_out",
         }
     }
+
+    /// What the player reads: what the program is doing, not a labour idiom
+    /// they have to decode.
+    pub fn label(self) -> &'static str {
+        match self {
+            Grievance::Sulking => "sulking",
+            Grievance::DownedTools => "refusing to work",
+            Grievance::LashingOut => "lashing out",
+        }
+    }
 }
 
 #[cfg(test)]

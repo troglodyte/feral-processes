@@ -277,11 +277,7 @@ mod tests {
     }
 
     fn idle() -> AttentionRow {
-        row(
-            AttentionKind::IdleStructures,
-            "4 nodes without a program",
-            false,
-        )
+        row(AttentionKind::IdleStructures, "4 machines idle", false)
     }
 
     /// The one figure phase 5 lays five blocks against: the body has to sit
@@ -363,7 +359,7 @@ mod tests {
         );
         let text = painted_text(&shapes).join(" ");
         assert!(
-            text.contains("4 nodes without a program"),
+            text.contains("4 machines idle"),
             "the collapsed bar hid the condition: {text:?}"
         );
     }

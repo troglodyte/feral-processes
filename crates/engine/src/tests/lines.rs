@@ -719,10 +719,7 @@ fn a_staffed_line_is_not_a_run_of_idle_nodes() {
     g.tick();
     assert_eq!(gatherers(&mut g).len(), 1);
     let rows: Vec<String> = g.attention().into_iter().map(|r| r.text).collect();
-    assert!(
-        !rows.iter().any(|t| t.contains("without a program")),
-        "{rows:?}"
-    );
+    assert!(!rows.iter().any(|t| t.ends_with(" idle")), "{rows:?}");
 }
 
 #[test]
@@ -730,8 +727,5 @@ fn an_unstaffed_line_is_one_idle_node_not_one_per_machine() {
     let mut g = base_game(94);
     disk_line(&mut g);
     let rows: Vec<String> = g.attention().into_iter().map(|r| r.text).collect();
-    assert!(
-        rows.iter().any(|t| t == "1 node without a program"),
-        "{rows:?}"
-    );
+    assert!(rows.iter().any(|t| t == "1 machine idle"), "{rows:?}");
 }

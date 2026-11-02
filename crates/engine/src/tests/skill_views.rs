@@ -16,7 +16,7 @@ fn a_tamed_manifest_lists_every_skill_with_progress_and_a_wild_one_has_none() {
     let tamed = spawn_tamed(&mut game, 10, 3);
     set_skill_level(&mut game, tamed, Skill::Build, 3);
     let skills = program_manifest(&game, tamed).skills.expect("tamed");
-    assert_eq!(skills.len(), Skill::ALL.len());
+    assert_eq!(skills.len(), Skill::WORK.len());
     let build = skills.iter().find(|s| s.skill_label == "Build").unwrap();
     assert_eq!(build.level, 3);
     assert_eq!(build.practice_to_next, practice_to_next(3));

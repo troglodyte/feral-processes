@@ -16,7 +16,9 @@ pub const SKILL_LEVEL_CAP: u32 = 20;
 pub const SKILL_COST_BASE: u32 = 50;
 pub const SKILL_COST_QUAD: u32 = 6;
 
-/// Work scale is `SKILL_SCALE_FLOOR + SKILL_SCALE_PER_LEVEL * level`: half
-/// speed at level 0, today's speed at 10, 1.5x at the cap.
-pub const SKILL_SCALE_FLOOR: f32 = 0.5;
-pub const SKILL_SCALE_PER_LEVEL: f32 = 0.05;
+/// The level at which a skill's scale is exactly 1.0: today's behaviour.
+pub const SKILL_NEUTRAL_LEVEL: u32 = 10;
+
+/// Work scale is `skills::scale(level, WORK_SKILL_SPREAD)`: half speed at
+/// level 0, today's speed at 10, 1.5x at the cap.
+pub const WORK_SKILL_SPREAD: f32 = 0.5;

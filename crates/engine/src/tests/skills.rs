@@ -169,5 +169,48 @@ fn an_unknown_skill_name_is_dropped_and_the_load_succeeds() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let skills = skills_of(&mut loaded, id).expect("the program should still load");
     assert_eq!(skills.level(Skill::Dig), 4);
-    assert_eq!(skills.level(Skill::Farm), 0, "the dropped row is level 0");
+    assert_eq!(skills.level(Skill::Farm), 2, "the dropped row is the seed");
+}
+
+#[test]
+fn a_save_listing_only_work_skills_loads_combat_at_the_species_seed() {
+    let dir = scratch_assets_dir("skills_0_21_16_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    copy_shipped_assets(&dir, &[]);
+    let worm_ron = dir.join("species/worm.ron");
+    let text = std::fs::read_to_string(&worm_ron).unwrap().replace(
+        "starting_skills: [(Dig, 4), (Farm, 2)]",
+        "starting_skills: [(Dig, 4), (Farm, 2), (Force, 3)]",
+    );
+    assert!(text.contains("(Force, 3)"));
+    std::fs::write(&worm_ron, text).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(31007, DifficultyMode::Forgiving, &dir).unwrap();
+    let worm = tame(&mut game, "worm");
+    let id = game.world.get::<ProgramId>(worm).unwrap().0;
+    assert_eq!(
+        game.world.get::<Skills>(worm).unwrap().level(Skill::Force),
+        3
+    );
+    game.world
+        .get_mut::<Skills>(worm)
+        .unwrap()
+        .track_mut(Skill::Dig)
+        .level = 9;
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.creatures
+        .iter_mut()
+        .find(|c| c.program_id == id)
+        .unwrap()
+        .skills
+        .retain(|row| Skill::WORK.iter().any(|s| s.name() == row.skill));
+    save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &dir).unwrap();
+    let skills = skills_of(&mut loaded, id).unwrap();
+    assert_eq!(skills.level(Skill::Dig), 9);
+    assert_eq!(skills.level(Skill::Force), 3);
 }

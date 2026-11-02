@@ -11,7 +11,7 @@ use crate::components::TaskKind;
 use crate::resources::{MessageKind, PendingSkillLevels};
 use crate::skills::{self, Skill, Skills};
 use crate::structures::Placed;
-use crate::tuning::{SKILL_SCALE_FLOOR, SKILL_SCALE_PER_LEVEL};
+use crate::tuning::WORK_SKILL_SPREAD;
 
 /// Which skill a posting practises, or `None` for work that has none.
 ///
@@ -46,7 +46,7 @@ pub(crate) fn work_skill_for(kind: TaskKind, machine: Option<Placed<'_>>) -> Opt
 
 /// The speed factor of `level`: half speed at 0, today's at 10, 1.5x at 20.
 pub(crate) fn skill_scale(level: u32) -> f32 {
-    SKILL_SCALE_FLOOR + SKILL_SCALE_PER_LEVEL * level as f32
+    skills::scale(level, WORK_SKILL_SPREAD)
 }
 
 /// `skill_scale` in thousandths of a step per tick, for the carry.
@@ -108,7 +108,7 @@ impl Game {
     pub(crate) fn skill_views(&self, entity: Entity) -> Option<Vec<crate::views::SkillView>> {
         let skills = self.world.get::<Skills>(entity)?;
         Some(
-            Skill::ALL
+            Skill::WORK
                 .into_iter()
                 .map(|s| {
                     let t = skills.track(s);

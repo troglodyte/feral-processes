@@ -618,13 +618,13 @@ impl Game {
             let skills = if c.skills.is_empty() {
                 species.seed_skills()
             } else {
-                let mut skills = crate::skills::Skills::default();
-                for row in &c.skills {
-                    if let Some(skill) = crate::skills::Skill::from_name(&row.skill) {
-                        skills.set(skill, row.level, row.practice);
-                    }
-                }
-                skills
+                crate::skills::Skills::overlay(
+                    species.seed_skills(),
+                    c.skills.iter().filter_map(|row| {
+                        crate::skills::Skill::from_name(&row.skill)
+                            .map(|skill| (skill, row.level, row.practice))
+                    }),
+                )
             };
             entity.insert(skills);
             if c.drop_trooper {

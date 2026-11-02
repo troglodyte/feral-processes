@@ -123,7 +123,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Only a blocker touching floor shows its kind, and that is a display rule
   only** — `view_tiles_at`'s `touches_floor`, derived per lookup.
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
-  by default and off for any save that never said otherwise.
+  by default and off for any save that never said otherwise; armed, the bump
+  still cuts only a plain dig mark (`pending_floor`).
 - **`Tile::open_to_hostiles` is asked of a floor-merged tile**, never a
   bare `WorldMap::tile`, which does not show floor.
 - **Wild population is a property of place, and the density target is what

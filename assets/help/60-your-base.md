@@ -16,8 +16,9 @@ not a thing to do idly.
 
 Everything past that first pocket is solid, and you cut it out yourself.
 
-- Press n to take your cutting tools out. With them out, walking into a wall swings at it, the same
-  way you wear a nest down; with them away, a bump stops short and costs no turn. Swings are
+- Press n to take your cutting tools out. With them out, walking into a wall marked on the Excavation
+  plan (m) swings at it, the same way you wear a nest down; an unmarked wall, or any wall with the
+  tools away, stops you short and costs no turn. Swings are
   deterministic, so a wall is never a gamble. Ordinary entropy rock takes at least two swings,
   compacted rock at least three and fused rock at least four, and your level shortens the count down
   to that floor and no further. The rock comes in patches, so thickness varies from cell to cell,

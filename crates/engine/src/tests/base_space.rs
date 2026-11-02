@@ -597,6 +597,7 @@ fn swinging_at_solid_rock_does_not_move_the_party() {
     // The pocket's north edge, so the step north leaves it.
     let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     let rock = solid_rock_north(&mut game);
+    game.toggle_mark_box(rock, rock, None);
     stand_in_base_at(&mut game, edge.0, edge.1);
 
     assert!(
@@ -651,7 +652,8 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     // and solid rock one step further north to break it off against.
     let edge = (0, -TEST_POCKET_HALF_HEIGHT);
     let node = spawn_extractor(&mut game, edge.0 + 1, edge.1);
-    solid_rock_north(&mut game);
+    let rock = solid_rock_north(&mut game);
+    game.toggle_mark_box(rock, rock, None);
     // Tools out: a disarmed bump is refused before it can swing, which is a
     // different code path from the one this test is about.
     game.toggle_mining();
@@ -1109,18 +1111,21 @@ fn swings_for(game: &Game, swinger: Entity, at: (i32, i32)) -> u32 {
         .div_ceil(game.swing_damage(swinger).min(wall.swing_cap))
 }
 
-/// `game_at_the_frontier` with the player's cutting tools out.
+/// `game_at_the_frontier` with the player's cutting tools out and `WALL`
+/// marked for cutting.
 ///
-/// `resources::MiningMode` starts **off**: a bump into solid rock is refused
-/// for free, so a developed player cannot demolish their own base by
-/// clipping a corner of it. Any fixture that digs by *walking* therefore has
-/// to arm it first. Omitted, the wall simply never comes down, and the
-/// failure reads as the dig being broken rather than as the fixture being
-/// short something — which is why this is a named fixture and not a line
-/// repeated at nine call sites.
+/// `resources::MiningMode` starts **off**, and even armed the bump cuts only
+/// rock the excavation plan marked: a bump into anything else is refused for
+/// free, so a developed player cannot demolish their own base by clipping a
+/// corner of it. Any fixture that digs by *walking* therefore needs both.
+/// Omitted, the wall simply never comes down, and the failure reads as the
+/// dig being broken rather than as the fixture being short something — which
+/// is why this is a named fixture and not two lines repeated at nine call
+/// sites.
 fn game_at_the_frontier_cutting(seed: u32) -> Game {
     let mut game = game_at_the_frontier(seed);
     game.toggle_mining();
+    game.toggle_mark_box(WALL, WALL, None);
     game
 }
 
@@ -1236,6 +1241,28 @@ fn identical_swings_at_rock_do_identical_damage() {
         left(&mut game, east),
         left(&mut game, north),
         "two fresh walls took different damage from the same player"
+    );
+}
+
+/// With the tools out, the bump still only cuts what the excavation plan
+/// marked: a wall nobody asked for is refused free — no tick, no chip.
+#[test]
+fn an_armed_bump_into_unmarked_rock_is_refused() {
+    let mut game = game_at_the_frontier(3215);
+    game.toggle_mining();
+    let before = game.world.resource::<GameClock>().tick;
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        before,
+        "a refused bump must cost no turn"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "an unmarked wall took a swing: {:?}",
+        game.message_log(3)
     );
 }
 
@@ -1730,7 +1757,6 @@ fn marking_an_open_cell_marks_it_for_flooring() {
 #[test]
 fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
     let mut game = game_at_the_frontier_cutting(3254);
-    game.toggle_mark_box(WALL, WALL, None);
 
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
@@ -1768,15 +1794,17 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
 }
 
 /// The leak check on the despawn clause: only a *marked* cell keeps its site
-/// past the cut, or every wall the player ever hit stays in the world.
+/// past the cut, or every wall ever struck stays in the world. The bump no
+/// longer cuts unmarked rock, so this strikes directly — a half-cut site
+/// whose mark was cleared, or one an older save carries, still reaches it.
 #[test]
 fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
-    let mut game = game_at_the_frontier_cutting(3255);
+    let mut game = game_at_the_frontier(3255);
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
 
     for _ in 0..swings {
-        game.move_player(1, 0);
+        game.strike_field_rock(player, WALL.0, WALL.1);
     }
 
     assert!(
@@ -1817,7 +1845,6 @@ fn marked_cells_is_sorted() {
 #[test]
 fn a_marks_cut_is_the_wall_it_has_left_and_not_the_swing_cadence() {
     let mut game = game_at_the_frontier_cutting(3257);
-    game.toggle_mark_box(WALL, WALL, None);
 
     let cut_at = |game: &mut Game| {
         game.marked_cells()
@@ -1851,7 +1878,6 @@ fn a_marks_cut_is_the_wall_it_has_left_and_not_the_swing_cadence() {
 #[test]
 fn a_floor_it_mark_has_no_cut_to_report() {
     let mut game = game_at_the_frontier_cutting(3258);
-    game.toggle_mark_box(WALL, WALL, None);
 
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
@@ -3787,8 +3813,7 @@ fn with_mining_off_a_step_into_rock_costs_nothing_at_all() {
 /// and changes nothing behind it.
 #[test]
 fn with_mining_on_a_step_into_rock_swings_exactly_as_before() {
-    let mut game = game_at_the_frontier(8803);
-    game.toggle_mining();
+    let mut game = game_at_the_frontier_cutting(8803);
     assert!(game.mining());
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);

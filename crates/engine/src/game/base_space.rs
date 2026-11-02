@@ -1002,6 +1002,13 @@ impl Game {
             self.log("You can only cut rock straight ahead.");
             return;
         }
+        // The plan is the only say over what comes down: the tools out
+        // make a marked wall walkable-through, never an unmarked one, so a
+        // misstep while armed costs nothing. Refused like the two above.
+        if !self.pending_floor().contains(&(nx, ny)) {
+            self.log("That rock isn't marked for cutting. (Press m to mark it.)");
+            return;
+        }
         let player = self.player_entity();
         self.strike_field_rock(player, nx, ny);
         self.tick();

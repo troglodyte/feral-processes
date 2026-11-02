@@ -62,8 +62,9 @@ Acting on the world:
 - d — demolish a direction
 - v — lay a VectorStasis Tile on the cell you are standing on. The bottom bar shows it when you are
   on laid floor or right beside it
-- n — cutting tools out, or away again: with them out, walking into rock cuts it yourself, and your
-  own tile wears a blue ring for as long as they are. Costs no time either way.
+- n — cutting tools out, or away again: with them out, walking into rock marked on the Excavation
+  plan cuts it yourself, and your own tile wears a blue ring for as long as they are. Costs no time
+  either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and, with the default brush, floored; F opens the brush list to pick plain, a floor colour or
   strip. P switches to marking a farm plot instead. Drawing a plan costs no time.

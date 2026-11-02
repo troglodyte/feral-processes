@@ -184,8 +184,8 @@ fn a_blocker_beside_pending_floor_is_minable() {
     assert!(minable(WALL, ground(&game, &floor), &pending));
 }
 
-/// A base with its floor at `WALL`'s west, the player standing on it, and
-/// mining armed.
+/// A base with its floor at `WALL`'s west, the player standing on it,
+/// mining armed and `WALL` marked — the bump cuts only marked rock.
 fn armed_beside_a_wall(seed: u32) -> Game {
     let mut game = game(seed);
     let beside = (WALL.0 - 1, WALL.1);
@@ -195,6 +195,7 @@ fn armed_beside_a_wall(seed: u32) -> Game {
     if !game.mining() {
         game.toggle_mining();
     }
+    game.toggle_mark_box(WALL, WALL, None);
     game
 }
 

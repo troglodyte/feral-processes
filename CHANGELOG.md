@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**With your cutting tools out, walking into rock only cuts it if it is marked on the Excavation plan.** Before, any rock beside your base came down when you walked into it with the tools out, so one wrong step could cut a cell you never meant to open. Now walking into unmarked rock stops short, costs no turn, and tells you to mark it with m first.
+
 ## 0.21.9
 
 **Power Cells no longer need any research, and the Power Grid research now unlocks the Battery.** Before, you had to research Power Cells before you could make them. Now they are available from the start. A Battery is a new base structure that stores spare power while the grid has more than it needs and gives it back when the grid runs short, so machines stay lit for longer through a dry spell. The structure screen shows the stored total beside the grid, for example `Grid  12 / 15  ·  Battery 220 / 400`, and a Battery's own line shows its charge.

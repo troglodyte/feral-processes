@@ -776,7 +776,7 @@ fn a_high_level_tender_finishes_a_task_sooner_and_practises_only_farm() {
         times.push(calls);
         let skills = game.world.get::<Skills>(worker).unwrap();
         assert_eq!(skills.track(Skill::Farm).practice, calls);
-        for other in Skill::ALL.into_iter().filter(|s| *s != Skill::Farm) {
+        for other in Skill::WORK.into_iter().filter(|s| *s != Skill::Farm) {
             assert_eq!(skills.track(other), Default::default(), "{other:?}");
         }
     }

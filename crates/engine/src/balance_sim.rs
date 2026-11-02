@@ -133,7 +133,11 @@ fn player_profile(
     range: DamageRange,
 ) -> AttackProfile {
     AttackProfile {
-        accuracy: accuracy_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_accuracy),
+        accuracy: accuracy_of(
+            crate::tuning::PLAYER_BASE_SPEED,
+            level,
+            f64::from(gear_accuracy),
+        ),
         evasion: evasion_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_evasion),
         range,
         crit: crate::tuning::CRIT_CHANCE,
@@ -408,7 +412,7 @@ impl AttackProfile {
     /// A wild `species` at `level`, unarmed — what a hostile brings.
     fn wild(species: &SpeciesDef, level: u32) -> AttackProfile {
         AttackProfile {
-            accuracy: accuracy_of(species.base_speed, level, 0),
+            accuracy: accuracy_of(species.base_speed, level, 0.0),
             evasion: evasion_of(species.base_speed, level, 0),
             range: species
                 .moves
@@ -434,6 +438,7 @@ impl AttackProfile {
             range: self.range,
             crit: self.crit,
             fumble: self.fumble,
+            damage_scale: 1.0,
         }
     }
 }

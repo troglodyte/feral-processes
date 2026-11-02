@@ -605,7 +605,7 @@ fn a_player_special_spends_its_authored_power_cost() {
         .iter()
         .position(|a| a.id == "null_route")
         .expect("routine/null_route grants null_route");
-    let cost = crate::abilities::routine_power_cost(&abilities[index]);
+    let cost = crate::abilities::routine_power_cost(&abilities[index], None);
     assert!(
         cost > 0.0,
         "null_route has to declare a cost to be about this"
@@ -2306,7 +2306,7 @@ fn a_casting_companion_pays_from_its_own_reserve_not_the_players() {
 
     let cost = {
         let db = game.world.resource::<crate::abilities::AbilityDb>();
-        crate::abilities::routine_power_cost(db.get("cascade_overflow").unwrap())
+        crate::abilities::routine_power_cost(db.get("cascade_overflow").unwrap(), None)
     };
     assert!(cost > 0.0, "the fixture routine has to cost something");
 

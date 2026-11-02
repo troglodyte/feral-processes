@@ -2345,7 +2345,8 @@ impl Game {
         crate::battle::accuracy_of(
             self.combat_speed(entity),
             self.ability_user_level(entity),
-            self.hit_bonus(entity).0,
+            f64::from(self.hit_bonus(entity).0)
+                + self.base_figure(entity, crate::attributes::DerivedStat::Accuracy),
         ) as f32
     }
 

@@ -1141,7 +1141,7 @@ fn no_shipped_field_runnable_routine_runs_for_free() {
     );
     let free: Vec<&str> = runnable
         .iter()
-        .filter(|def| abilities::routine_power_cost(def) <= 0.0)
+        .filter(|def| abilities::routine_power_cost(def, None) <= 0.0)
         .map(|def| def.id.as_str())
         .collect();
     assert!(

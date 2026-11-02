@@ -39,6 +39,7 @@ mod combat;
 mod combat_abilities;
 mod combat_packs;
 mod combat_rewards;
+mod combat_skills;
 mod combat_specials;
 mod combat_status;
 mod combat_targeting;

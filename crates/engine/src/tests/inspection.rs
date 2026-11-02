@@ -2538,7 +2538,7 @@ fn a_manifest_carries_the_to_hit_pair_the_fight_actually_rolls() {
     let speed = game.combat_speed(player);
     assert_eq!(
         view.accuracy as f64,
-        crate::battle::accuracy_of(speed, level, gear.accuracy),
+        crate::battle::accuracy_of(speed, level, f64::from(gear.accuracy)),
         "the manifest's Accuracy must be the one the attack roll uses"
     );
     assert_eq!(
@@ -2559,7 +2559,7 @@ fn a_program_manifest_carries_the_same_to_hit_pair() {
         crate::battle::accuracy_of(
             game.combat_speed(program),
             game.ability_user_level(program),
-            game.gear_bonus(program).accuracy,
+            f64::from(game.gear_bonus(program).accuracy),
         ),
         "a program's sheet is built from the same two calls the player's is, \
          so buying the program page room later is a layout change and not a \

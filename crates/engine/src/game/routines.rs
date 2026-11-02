@@ -70,7 +70,7 @@ impl Game {
             target: def.target.phrase().to_string(),
             effect: self.routine_effect_label(&def, level, affinity),
             cooldown: def.cooldown,
-            power_cost: crate::abilities::routine_power_cost(&def),
+            power_cost: self.routine_cost(invoker, &def),
             rolls_to_hit: matches!(
                 def.effect,
                 AbilityEffect::Damage { .. } | AbilityEffect::Drain { .. }

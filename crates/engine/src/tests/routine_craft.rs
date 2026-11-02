@@ -758,7 +758,7 @@ fn the_preview_quotes_what_the_build_will_run_as() {
     assert_eq!(preview.cooldown, def.cooldown);
     assert_eq!(
         preview.power_cost,
-        crate::abilities::routine_power_cost(&def)
+        crate::abilities::routine_power_cost(&def, None)
     );
     assert!(!preview.description.is_empty());
 }

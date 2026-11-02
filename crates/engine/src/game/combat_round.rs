@@ -4,7 +4,9 @@
 use crate::abilities::PassiveTrigger;
 use crate::damage::DamageType;
 use crate::game::combat::AttackProfile;
+use crate::game::combat_skills;
 use crate::game::kit::Kit;
+use crate::skills::Skill;
 use crate::tuning::{
     ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS, PLAYER_UNARMED_DAMAGE,
     WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
@@ -410,7 +412,7 @@ impl Game {
                     // Directing one used to come out of the player's meter,
                     // which rationed the party's own kit against a pool only
                     // the player had.
-                    self.spend_power(entity, abilities::routine_power_cost(&ability));
+                    self.spend_power(entity, self.routine_cost(entity, &ability));
 
                     // Decompile needs the *group index*, not the recipient
                     // entity: a successful capture drops the target out of
@@ -2145,6 +2147,10 @@ impl Game {
             .map(|a| a.power)
             .unwrap_or(0);
         let field_bonus = self.field_buff_power(entity, FieldBuffKind::Mitigation);
+        let base = base
+            + self
+                .combat_skill_level(entity, Skill::Defence)
+                .map_or(0, combat_skills::defence_points);
         let total = if entity != self.player_entity() {
             base + bonus + field_bonus
         } else {

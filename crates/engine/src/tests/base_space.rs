@@ -5163,7 +5163,7 @@ fn a_high_level_digger_swings_sooner_and_practises_only_dig() {
         .get::<crate::skills::Skills>(novice)
         .unwrap();
     assert_eq!(skills.track(crate::skills::Skill::Dig).practice, swing);
-    for other in crate::skills::Skill::ALL
+    for other in crate::skills::Skill::WORK
         .into_iter()
         .filter(|s| *s != crate::skills::Skill::Dig)
     {

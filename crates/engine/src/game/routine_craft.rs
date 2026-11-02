@@ -260,7 +260,7 @@ impl Game {
                 });
                 (
                     def.description.clone(),
-                    crate::abilities::routine_power_cost(&def),
+                    crate::abilities::routine_power_cost(&def, None),
                     def.cooldown,
                 )
             } else {

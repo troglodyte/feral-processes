@@ -1128,8 +1128,16 @@ impl AbilityDef {
 /// refusal (`Game::ability_unavailable`) and a charge (`Game::spend_power`),
 /// which disagreeing means a routine the picker offers and the invocation cannot
 /// pay for, or one charged more than the row quoted.
-pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
-    def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
+///
+/// `routines_level` is the invoker's Routines skill, `None` for a caller with
+/// no invoker (the craft and market views) or a body without `Skills`, which
+/// price at neutral. Callers with an entity go through `Game::routine_cost`.
+pub(crate) fn routine_power_cost(def: &AbilityDef, routines_level: Option<u32>) -> f32 {
+    let price = def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER;
+    match routines_level {
+        Some(level) => price * crate::game::combat_skills::routine_price_scale(level),
+        None => price,
+    }
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
@@ -1520,7 +1528,7 @@ impl AbilityDef {
         }
         matches!(self.effect, AbilityEffect::Heal { .. })
             && self.target.is_ally_facing()
-            && crate::abilities::routine_power_cost(self) > 0.0
+            && crate::abilities::routine_power_cost(self, None) > 0.0
     }
 
     /// Whether this routine fires on a trigger rather than being chosen.

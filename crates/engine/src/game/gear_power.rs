@@ -127,7 +127,7 @@ pub(crate) fn rate(
     // quantity and must never be summed into the total, so each is priced as
     // the fraction it moves the throughput it acts on.
     let hit = |acc: f64, eva: f64| crate::battle::hit_chance(acc, eva);
-    let ref_accuracy = crate::battle::accuracy_of(PLAYER_BASE_SPEED, POWER_REFERENCE_LEVEL, 0);
+    let ref_accuracy = crate::battle::accuracy_of(PLAYER_BASE_SPEED, POWER_REFERENCE_LEVEL, 0.0);
     let ref_evasion = crate::battle::evasion_of(PLAYER_BASE_SPEED, POWER_REFERENCE_LEVEL, 0);
 
     let accuracy = reference_offense()
@@ -183,7 +183,7 @@ impl ReferenceFoe {
     pub(crate) fn median(species: &SpeciesDb) -> Self {
         let median = crate::balance_sim::median_ordinary_species(species);
         ReferenceFoe {
-            accuracy: crate::battle::accuracy_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
+            accuracy: crate::battle::accuracy_of(median.base_speed, POWER_REFERENCE_ZONE, 0.0),
             evasion: crate::battle::evasion_of(median.base_speed, POWER_REFERENCE_ZONE, 0),
             hit: reference_foe_hit(median),
         }

@@ -710,7 +710,6 @@ pub(crate) fn reaches(
     structure: Position,
     side: u8,
     blocked: &Occupancy,
-    pocket_radius: i32,
     touch: Touch,
 ) -> bool {
     if at_station(from, structure, side, touch) {
@@ -725,7 +724,7 @@ pub(crate) fn reaches(
     let face_held = station_candidates(grid, structure, side, |_| false, touch)
         .iter()
         .any(|s| blocked.holds_a_body((s.x, s.y)));
-    !face_held || post_reach(grid, from, structure, side, blocked, pocket_radius, touch).is_ok()
+    !face_held || post_reach(grid, from, structure, side, blocked, grid.radius(), touch).is_ok()
 }
 
 /// Whether a worker standing at `from` could ever reach a post at
@@ -1451,16 +1450,7 @@ pub(crate) fn haul_step_system(
                         .map_or(1, |d| d.footprint);
                     let reach = field
                         .get_or_init(|| crew_reach(&grid, worker_pos, &blocked, pocket_radius));
-                    reaches(
-                        &grid,
-                        reach,
-                        worker_pos,
-                        at,
-                        side,
-                        &blocked,
-                        pocket_radius,
-                        Touch::Sides,
-                    )
+                    reaches(&grid, reach, worker_pos, at, side, &blocked, Touch::Sides)
                 };
                 ledger.items().find_map(|item| {
                     let want = ledger.fetch_want(item);

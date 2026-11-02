@@ -1011,7 +1011,6 @@ impl CrewFields {
             at,
             side,
             blocked,
-            *pocket_radius,
             hauling::touch_for(kind),
         )
     }

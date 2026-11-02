@@ -132,7 +132,7 @@ impl Game {
         let reach = crew_reach(grid, here, &blocked, radius);
         let nearest = |spots: &mut dyn Iterator<Item = (usize, Position)>| {
             spots
-                .filter(|&(_, p)| reaches(grid, &reach, here, p, 1, &blocked, radius, Touch::Sides))
+                .filter(|&(_, p)| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides))
                 .min_by_key(|&(_, p)| (chebyshev(here, p), p.x, p.y))
         };
         let dest = nearest(&mut board.cells.iter().copied().enumerate());

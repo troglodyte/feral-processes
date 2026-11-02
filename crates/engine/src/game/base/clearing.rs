@@ -166,8 +166,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable =
-            |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius, Touch::Sides);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let mut ranked: Vec<usize> = (0..board.sources.len()).collect();
         ranked.sort_by_key(|&i| {
             let p = board.sources[i].1;
@@ -238,8 +237,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable =
-            |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius, Touch::Sides);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let candidates: Vec<(Entity, Position)> = board
             .depots
             .iter()

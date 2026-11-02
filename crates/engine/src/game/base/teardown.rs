@@ -351,7 +351,6 @@ impl Game {
                     Position { x: *x, y: *y },
                     self.structure_footprint_of(*e),
                     &blocked,
-                    pocket_radius,
                     Touch::Sides,
                 )
             })

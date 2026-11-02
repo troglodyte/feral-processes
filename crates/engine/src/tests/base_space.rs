@@ -3583,16 +3583,7 @@ fn the_crew_field_and_the_posted_walk_agree_about_a_body_on_a_face() {
             "precondition: the posted walk's answer for a body at {body:?}"
         );
         assert_eq!(
-            reaches(
-                &grid,
-                &field,
-                from,
-                target,
-                1,
-                &blocked,
-                grid.radius(),
-                Touch::Sides
-            ),
+            reaches(&grid, &field, from, target, 1, &blocked, Touch::Sides),
             reachable,
             "the crew field disagrees with the posted walk for a body at {body:?}"
         );

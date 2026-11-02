@@ -324,8 +324,7 @@ impl Game {
         let grid = self.world.resource::<BaseGrid>();
         let radius = grid.radius();
         let reach = crew_reach(grid, here, &blocked, radius);
-        let reachable =
-            |p: Position| reaches(grid, &reach, here, p, 1, &blocked, radius, Touch::Sides);
+        let reachable = |p: Position| reaches(grid, &reach, here, p, 1, &blocked, Touch::Sides);
         let open = |p: Position| reachable(p) && !board.claimed.contains(&p);
         // A pick-up may only count rack room nobody walking is promised.
         let rack = (holding || board.spare > 0)

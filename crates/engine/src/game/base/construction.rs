@@ -119,9 +119,8 @@ impl Game {
         };
         builders.sort_unstable();
         let blocked = self.blocked_tiles();
-        let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (.., worker) in builders {
-            self.step_one_builder(worker, &blocked, pocket_radius);
+            self.step_one_builder(worker, &blocked);
         }
     }
 
@@ -222,12 +221,7 @@ impl Game {
     /// One builder, one step. Split out of the loop above so the site
     /// lookup and the early returns read as the sequence they are rather
     /// than as five levels of `continue`.
-    fn step_one_builder(
-        &mut self,
-        worker: Entity,
-        blocked: &hauling::Occupancy,
-        pocket_radius: i32,
-    ) {
+    fn step_one_builder(&mut self, worker: Entity, blocked: &hauling::Occupancy) {
         let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {
             return;
         };
@@ -286,7 +280,7 @@ impl Game {
                 _,
                 Source::Shelf(_, dest) | Source::Stockpile(_, dest) | Source::Pack(dest),
             ) if !hauling::at_station(from, dest, side, touch) => {
-                self.walk_builder(worker, from, dest, side, touch, blocked, pocket_radius);
+                self.walk_builder(worker, from, dest, side, touch, blocked);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
             // The dry latch is **not** cleared here. Both halves of it live
@@ -412,11 +406,10 @@ impl Game {
         side: u8,
         touch: Touch,
         blocked: &hauling::Occupancy,
-        pocket_radius: i32,
     ) {
         let step = {
             let grid = self.world.resource::<BaseGrid>();
-            hauling::step_to_post(grid, from, dest, side, blocked, pocket_radius, touch)
+            hauling::step_to_post(grid, from, dest, side, blocked, grid.radius(), touch)
         };
         match step {
             Ok(Some(next)) => self.take_base_step(worker, next),

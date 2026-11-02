@@ -242,7 +242,6 @@ impl Game {
                             source.pos,
                             source.side,
                             &walls,
-                            radius,
                             Touch::Sides,
                         );
                 }

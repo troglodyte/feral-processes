@@ -132,6 +132,7 @@ mod settlements;
 mod siege;
 mod siphon;
 mod situations;
+mod skill_views;
 mod skills;
 mod sorties;
 mod spawning;

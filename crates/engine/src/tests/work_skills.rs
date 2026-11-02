@@ -4,7 +4,6 @@
 
 use super::support::*;
 use crate::components::{Stock, Task, TaskKind};
-use crate::resources::PendingSkillLevels;
 use crate::skills::{Skill, Skills};
 use crate::*;
 use bevy_ecs::entity::Entity;
@@ -139,8 +138,17 @@ fn a_level_gained_mid_posting_speeds_the_next_ticks_and_is_collected() {
         after > before,
         "level 1 works faster: {after} against {before}"
     );
-    let levels = &game.world.resource::<PendingSkillLevels>().0;
-    assert_eq!(levels.as_slice(), &[(worker, Skill::Extract, 1)]);
+    let want = format!(
+        "{} is now a level 1 extractor.",
+        game.creature_name(worker).unwrap()
+    );
+    let said: u32 = game
+        .message_history(400)
+        .iter()
+        .filter(|m| m.text == want)
+        .map(|m| m.repeats as u32)
+        .sum();
+    assert_eq!(said, 1);
 }
 
 #[test]

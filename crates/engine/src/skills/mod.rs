@@ -56,6 +56,18 @@ impl Skill {
         }
     }
 
+    /// The job a level in this skill makes its holder, for the level-up line.
+    pub fn role_noun(&self) -> &'static str {
+        match self {
+            Skill::Extract => "extractor",
+            Skill::Assemble => "assembler",
+            Skill::Research => "researcher",
+            Skill::Build => "builder",
+            Skill::Dig => "digger",
+            Skill::Farm => "farmer",
+        }
+    }
+
     /// `None` for a name this build does not know, so the load path can drop
     /// it rather than refuse the save.
     pub fn from_name(name: &str) -> Option<Skill> {

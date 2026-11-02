@@ -749,7 +749,10 @@ fn an_extraction_cycle_is_never_logged() {
         .message_log(MESSAGE_LOG_CAP)
         .iter()
         .map(|e| e.text.clone())
-        .filter(|t| t.contains("extract") || t.contains("fails to compile"))
+        .filter(|t| {
+            (t.contains("extract") && !t.contains("is now a level"))
+                || t.contains("fails to compile")
+        })
         .collect();
     assert!(said.is_empty(), "{said:?}");
 }
@@ -779,7 +782,10 @@ fn extracting_by_hand_is_never_logged() {
         .message_log(MESSAGE_LOG_CAP)
         .iter()
         .map(|e| e.text.clone())
-        .filter(|t| t.contains("extract") || t.contains("fails to compile"))
+        .filter(|t| {
+            (t.contains("extract") && !t.contains("is now a level"))
+                || t.contains("fails to compile")
+        })
         .collect();
     assert!(said.is_empty(), "{said:?}");
 }

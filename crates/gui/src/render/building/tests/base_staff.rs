@@ -20,6 +20,7 @@ fn work_row(label: &str, doing: &str, section: WorkSection, cells: [bool; 4]) ->
         doing: doing.to_string(),
         cells: cells.to_vec(),
         rank: 0,
+        skills: Vec::new(),
     }
 }
 

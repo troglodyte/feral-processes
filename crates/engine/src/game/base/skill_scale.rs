@@ -8,7 +8,7 @@ use bevy_ecs::entity::Entity;
 use crate::Game;
 
 use crate::components::TaskKind;
-use crate::resources::PendingSkillLevels;
+use crate::resources::{MessageKind, PendingSkillLevels};
 use crate::skills::{self, Skill, Skills};
 use crate::structures::Placed;
 use crate::tuning::{SKILL_SCALE_FLOOR, SKILL_SCALE_PER_LEVEL};
@@ -104,6 +104,41 @@ pub(crate) fn practise_tick(
 }
 
 impl Game {
+    /// Every skill of `entity`, or `None` if it carries no `Skills`.
+    pub(crate) fn skill_views(&self, entity: Entity) -> Option<Vec<crate::views::SkillView>> {
+        let skills = self.world.get::<Skills>(entity)?;
+        Some(
+            Skill::ALL
+                .into_iter()
+                .map(|s| {
+                    let t = skills.track(s);
+                    crate::views::SkillView {
+                        skill_label: s.label(),
+                        level: t.level,
+                        practice: t.practice,
+                        practice_to_next: skills::practice_to_next(t.level),
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    /// Posts one `LevelUp` line per level the work sites queued. One entry is
+    /// one level (practice arrives a point a tick), and a site that ever
+    /// gained several at once queues each, so no number is skipped.
+    pub(crate) fn drain_skill_levels(&mut self) {
+        let pending = std::mem::take(&mut self.world.resource_mut::<PendingSkillLevels>().0);
+        for (entity, skill, level) in pending {
+            let Some(name) = self.creature_name(entity) else {
+                continue;
+            };
+            self.log_base_kind(
+                MessageKind::LevelUp,
+                format!("{name} is now a level {level} {}.", skill.role_noun()),
+            );
+        }
+    }
+
     /// `scale_of` for a live roster entity.
     pub(crate) fn skill_scale_of(&self, worker: Entity, skill: Skill) -> f32 {
         scale_of(self.world.get::<Skills>(worker), Some(skill))

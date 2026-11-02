@@ -161,6 +161,7 @@ impl Game {
                 doing,
                 cells,
                 rank,
+                skills: self.skill_views(entity).unwrap_or_default(),
             });
         }
         // `order` is already `display_order` — Staff first, then Away, each

@@ -231,6 +231,8 @@ pub struct ManifestEquipSlot {
 
 /// The creature-only half of a manifest — an owned program or a wild one.
 pub struct ProgramManifest {
+    /// `None` for a program without `Skills` — a wild one.
+    pub skills: Option<Vec<SkillView>>,
     /// The species name, present only when a `CustomName` is overriding it,
     /// so the header can show "Hexed (Scrapper 2)" without repeating itself
     /// for an unrenamed program.
@@ -531,4 +533,15 @@ pub struct EarnedSummary {
     pub tick: u64,
     /// Whether it has ever been earned on permadeath.
     pub permadeath: bool,
+}
+
+/// One practised skill as the renderer draws it. The label is carried as
+/// text so the renderer imports no `Skill`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkillView {
+    pub skill_label: &'static str,
+    pub level: u32,
+    pub practice: u32,
+    /// `None` at the cap.
+    pub practice_to_next: Option<u32>,
 }

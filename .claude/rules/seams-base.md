@@ -22,6 +22,7 @@ paths:
   - "**/lifecycle*"
   - "**/lifecycle/**"
   - "**/memories*"
+  - "**/skills/**"
   - "assets/structures/**"
   - "**/rooms*"
   - "assets/rooms/**"
@@ -505,3 +506,4 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A sweep reads `Game::sweep_defense_for(target)`** — only a Shield whose circle covers the target's footprint cuts or spends a coil, never the base-wide `structure_raid_defense`.
 - **A structure's Patch Node mend is `patch_mend(patch_reaches, structure_cells)`**: a node heals only what its circle covers. Failover is the only base-wide repair.
 - **A build or dig posting stands at any of eight neighbours and every other job at four sides (`hauling::touch_for`), and `dig_wants` still drops a solid cell `field_mining::minable` refuses.**
+- **Every work site reads its pace and pays practice through `game/base/skill_scale.rs` (`work_skill_for`/`work_tick` for machines, `work_steps`/`skill_scale_of`/`practise_work` for crews), so a worker without `Skills` keeps today's rate and only a tick that advanced progress trains.**

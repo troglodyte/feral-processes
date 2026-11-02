@@ -752,3 +752,33 @@ fn a_plot_and_a_stockpile_zone_overlap_without_clearing_each_other() {
     assert_eq!(plotted, vec![(-3, 2), (-3, 3), (-2, 2)]);
     assert_eq!(game.stockpile_cells(), vec![(-3, 2), (-3, 3)]);
 }
+
+#[test]
+fn a_high_level_tender_finishes_a_task_sooner_and_practises_only_farm() {
+    use crate::skills::{Skill, Skills};
+    let mut times = Vec::new();
+    for level in [0, 10] {
+        let mut game = farm_base(61);
+        let tile = sown_plot(&mut game, (-3, 2), (-3, 2))[0];
+        let worker = spawn_tamed(&mut game, 10, 3);
+        set_skill_level(&mut game, worker, Skill::Farm, level);
+        let at = *game.world.get::<Position>(tile).unwrap();
+        game.world.entity_mut(worker).insert(Position {
+            x: at.x + 1,
+            y: at.y,
+        });
+        game.post_tender(worker, tile, FarmJob::Dimple);
+        let mut calls = 0;
+        while game.world.get::<Task>(worker).is_some() && calls < 100 {
+            game.run_farm_crew();
+            calls += 1;
+        }
+        times.push(calls);
+        let skills = game.world.get::<Skills>(worker).unwrap();
+        assert_eq!(skills.track(Skill::Farm).practice, calls);
+        for other in Skill::ALL.into_iter().filter(|s| *s != Skill::Farm) {
+            assert_eq!(skills.track(other), Default::default(), "{other:?}");
+        }
+    }
+    assert_eq!(times, vec![FARM_DIMPLE_TICKS * 2, FARM_DIMPLE_TICKS]);
+}

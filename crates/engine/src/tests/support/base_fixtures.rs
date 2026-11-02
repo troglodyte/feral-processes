@@ -326,6 +326,7 @@ pub(crate) fn run_one_full_gather_cycle_at_tier(
 ) -> u32 {
     stand_ample_grid_supply(game);
     let worker = spawn_tamed(game, 10, 3);
+    pin_work_skills(game, worker);
     let mut structure = game.world.spawn((
         Structure {
             kind: kind.to_string(),
@@ -538,3 +539,31 @@ impl Game {
 }
 
 // ------------------------------------------------- passives in battle
+
+/// Pins all six work skills at level 10, which works at exactly the shipped
+/// rate: for a test about the labour, not the skill.
+pub(crate) fn pin_work_skills(game: &mut Game, program: Entity) {
+    for skill in crate::skills::Skill::ALL {
+        set_skill_level(game, program, skill, 10);
+    }
+}
+
+/// Sets `program`'s level in `skill` (and clears its practice), inserting an
+/// empty `Skills` if it has none. Level 10 works at today's speed
+/// (`skill_scale`), so a test about something other than skills pins it
+/// there.
+pub(crate) fn set_skill_level(
+    game: &mut Game,
+    program: Entity,
+    skill: crate::skills::Skill,
+    level: u32,
+) {
+    let mut entity = game.world.entity_mut(program);
+    if entity.get::<crate::skills::Skills>().is_none() {
+        entity.insert(crate::skills::Skills::default());
+    }
+    entity
+        .get_mut::<crate::skills::Skills>()
+        .unwrap()
+        .set(skill, level, 0);
+}

@@ -463,8 +463,12 @@ impl Game {
     /// the symptom is one companion whose memory screen is always empty,
     /// which again reads as the feature being broken rather than as a door
     /// short a component. Do not hand-write either at a call site.
+    ///
+    /// `species_id` is only for `Skills`' seed; the entity it is inserted on
+    /// need not carry `Creature` yet (`fuse_companions` mints these first).
     pub(crate) fn roster_parts(
         &mut self,
+        species_id: &str,
     ) -> (
         Tamed,
         Experience,
@@ -474,6 +478,7 @@ impl Game {
         Needs,
         crate::disposition::Disposition,
         crate::components::StaffRank,
+        crate::skills::Skills,
     ) {
         let id = {
             let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
@@ -505,6 +510,14 @@ impl Game {
             // later cannot reshuffle an existing roster.
             crate::disposition::Disposition::seed(id),
             crate::components::StaffRank(rank),
+            // Seeded from the species, so a fresh tame, a bred child and an
+            // outpost hire all start where their species does (ADR 0039). An
+            // id with no species reads as a level-0 body.
+            self.world
+                .resource::<SpeciesDb>()
+                .get(species_id)
+                .map(|s| s.seed_skills())
+                .unwrap_or_default(),
         )
     }
 
@@ -630,7 +643,7 @@ impl Game {
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
-        let parts = self.roster_parts();
+        let parts = self.roster_parts(species_id);
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         self.seat_derived(program);

@@ -2093,11 +2093,15 @@ impl Game {
             self.log_base("It stands down as your companion to work the excavation.");
         }
         self.displace_task_holder(site, TaskKind::Excavate);
+        let swing = super::skill_scale::scaled_ticks(
+            crate::tuning::BASE_DIG_TICKS_PER_SWING,
+            self.skill_scale_of(worker, crate::skills::Skill::Dig),
+        );
         self.world.entity_mut(worker).insert(Task {
             kind: TaskKind::Excavate,
             target: site,
             progress: 0,
-            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+            required: swing,
         });
     }
 
@@ -2114,10 +2118,13 @@ impl Game {
             self.log_base("It stands down as your companion to tend the plot.");
         }
         self.displace_task_holder(tile, TaskKind::Tend(job));
-        let required = match job {
-            FarmJob::Dimple => crate::tuning::FARM_DIMPLE_TICKS,
-            FarmJob::Harvest => crate::tuning::FARM_HARVEST_TICKS,
-        };
+        let required = super::skill_scale::scaled_ticks(
+            match job {
+                FarmJob::Dimple => crate::tuning::FARM_DIMPLE_TICKS,
+                FarmJob::Harvest => crate::tuning::FARM_HARVEST_TICKS,
+            },
+            self.skill_scale_of(worker, crate::skills::Skill::Farm),
+        );
         self.world.entity_mut(worker).insert(Task {
             kind: TaskKind::Tend(job),
             target: tile,

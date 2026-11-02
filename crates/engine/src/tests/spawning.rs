@@ -1791,6 +1791,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             stolen_from: None,
             equipment: Vec::new(),
             off_duties: Vec::new(),
+            skills: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
             base: None,

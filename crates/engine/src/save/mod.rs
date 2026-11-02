@@ -458,6 +458,15 @@ pub struct SiegeSave {
     pub shields_softened: Vec<(i32, i32)>,
 }
 
+/// One work skill on a saved program, by `Skill::name` rather than the enum
+/// so a retired skill loads inert (`Duty`'s reason).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SkillSave {
+    pub skill: String,
+    pub level: u32,
+    pub practice: u32,
+}
+
 /// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build
 /// request's commit and refund can hand a copy on without taking ownership
 /// of the site's own field. `Debug` for the same reason — `BuildSite`
@@ -1016,6 +1025,16 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub off_duties: Vec<String>,
+    /// This program's work skills, one row per skill (`skills::Skills`).
+    /// Only meaningful when `tamed` is true.
+    ///
+    /// Empty for every save written before skills existed, and loads as the
+    /// species' starting levels, the same as a fresh tame (ADR 0038). A row
+    /// naming a skill this build no longer knows is dropped, as an unknown
+    /// duty is. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub skills: Vec<SkillSave>,
     /// This program's position in the Base staff table's order — see
     /// `components::StaffRank`. `sortie_index`'s precedent: entity ids
     /// aren't stable across a save/load round trip, so this is a plain

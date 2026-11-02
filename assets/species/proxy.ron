@@ -15,6 +15,7 @@
         (name: "Spoof", power: 9, spread: 2, ranged: true, damage_type: Some(Noise)),
     ],
     work_resource: None,
+    starting_skills: [(Research, 3), (Extract, 2)],
     abilities: [(id: "redundancy_sync", level: 2), (id: "rollback_v2", level: 4)],
     affinities: (damage: 0.85, heal: 1.3),
     attributes: {

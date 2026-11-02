@@ -2695,3 +2695,72 @@ fn the_build_crew_does_not_walk_a_fleeing_builder() {
 
     assert_eq!(*game.world.get::<Position>(body).unwrap(), here);
 }
+
+/// Ticks from filing an extractor request to the structure standing, with a
+/// builder whose Build skill is `level`.
+fn ticks_to_raise_at(seed: u32, level: u32) -> (u32, u32) {
+    let mut game = base(seed);
+    let worker = builder(&mut game);
+    set_skill_level(&mut game, worker, crate::skills::Skill::Build, level);
+    file_build(&mut game, "extractor", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    let required = game.world.get::<BuildSite>(site).unwrap().required_ticks();
+    let mut ticks = 0;
+    while structure_at(&mut game, 1, 0).is_none() && ticks < 800 {
+        game.tick();
+        ticks += 1;
+    }
+    assert!(
+        structure_at(&mut game, 1, 0).is_some(),
+        "the crew raises it"
+    );
+    (ticks, required)
+}
+
+#[test]
+fn a_level_zero_builder_takes_the_raising_twice_as_long_as_a_level_ten_one() {
+    let (slow, required) = ticks_to_raise_at(1190, 0);
+    let (fast, same) = ticks_to_raise_at(1190, 10);
+    assert_eq!(required, same);
+    // Everything but the raising (the fetch, the walk) is the same for both,
+    // so the whole difference is the extra half-speed raising ticks.
+    assert!(
+        (slow - fast).abs_diff(required) <= 2,
+        "{slow} against {fast}, with {required} raising ticks"
+    );
+}
+
+#[test]
+fn raising_practises_build_and_nothing_else() {
+    let mut game = base(1191);
+    let worker = builder(&mut game);
+    file_build(&mut game, "extractor", 1, 0).unwrap();
+    for _ in 0..800 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let skills = game.world.get::<crate::skills::Skills>(worker).unwrap();
+    assert!(skills.track(crate::skills::Skill::Build).practice > 0);
+    for other in crate::skills::Skill::ALL
+        .into_iter()
+        .filter(|s| *s != crate::skills::Skill::Build)
+    {
+        assert_eq!(skills.track(other), Default::default(), "{other:?}");
+    }
+}
+
+#[test]
+fn two_builders_pay_their_own_steps_into_one_meter() {
+    let mut game = base(1192);
+    let novice = builder(&mut game);
+    let expert = builder(&mut game);
+    set_skill_level(&mut game, expert, crate::skills::Skill::Build, 10);
+    let mut steps = 0;
+    for _ in 0..20 {
+        steps += game.work_steps(novice, crate::skills::Skill::Build);
+        steps += game.work_steps(expert, crate::skills::Skill::Build);
+    }
+    assert_eq!(steps, 10 + 20);
+}

@@ -160,6 +160,7 @@ impl Game {
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
         world.init_resource::<crate::resources::PendingProgramLevels>();
+        world.init_resource::<crate::resources::PendingSkillLevels>();
         world.init_resource::<crate::resources::RefitStand>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();
@@ -388,7 +389,7 @@ impl Game {
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
-        let parts = self.roster_parts();
+        let parts = self.roster_parts(species_id);
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         self.seat_derived(program);

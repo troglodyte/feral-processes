@@ -1,4 +1,5 @@
 use super::*;
+use feral_processes_engine::views::SkillView;
 
 /// The roster's standing-instruction toggles for the structure highlighted
 /// there: keep it running, keep it guarded, or work it yourself right now.
@@ -496,8 +497,23 @@ pub(crate) fn base_staff_menu_rows(
             row.program.glyph,
             glyph_color(row.program.color),
         ));
+        // Six skills beside the duty columns would push the widest row past
+        // the popup, so only the selected program's levels are spelled out,
+        // on a line of their own that is not a selectable row.
+        if i == selected && !row.skills.is_empty() {
+            rows.push(text_row(format!("{ROW_LEAD}{}", skill_line(&row.skills))));
+        }
     }
     rows
+}
+
+/// `Extract 3  Assemble 0 ...`, in the engine's display order.
+pub(super) fn skill_line(skills: &[SkillView]) -> String {
+    skills
+        .iter()
+        .map(|s| format!("{} {}", s.skill_label, s.level))
+        .collect::<Vec<_>>()
+        .join(COLUMN_GAP)
 }
 
 pub(crate) fn draw_structure_menu(

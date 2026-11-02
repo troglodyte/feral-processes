@@ -1760,7 +1760,7 @@ impl Game {
         // list rather than going through `adopt_program` — so it takes the
         // shared `roster_parts` and overrides only the one piece that is
         // genuinely fusion's own, the child's level.
-        let parts = self.roster_parts();
+        let parts = self.roster_parts(&species.id);
         let mut fused = self.world.spawn((
             Creature {
                 species: species.id.clone(),

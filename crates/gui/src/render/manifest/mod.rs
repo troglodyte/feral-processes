@@ -313,6 +313,7 @@ mod tests {
     /// overflow if this quietly went back to `None`.
     fn plain_program(base_speed: i32, analysis: i32) -> ProgramManifest {
         ProgramManifest {
+            skills: None,
             species_name: Some("Testmon".to_string()),
             is_hostile: false,
             is_tamed: true,
@@ -372,6 +373,7 @@ mod tests {
     /// `Memories` store is on the roster, and one without it is wild.
     fn owned_program(memories: Vec<MemoryRow>) -> ProgramManifest {
         ProgramManifest {
+            skills: None,
             is_tamed: true,
             mood: Some(ManifestMood {
                 sum: -11.0,
@@ -2017,6 +2019,48 @@ mod tests {
         let mut wild = Vec::new();
         program_sections(&mut wild, &game, &plain_program(6, 6));
         assert!(wild.iter().all(|s| s.title != "DEVELOPMENT"));
+    }
+
+    /// A tamed program's SKILLS box lists every skill with its level and
+    /// progress; a wild one draws none.
+    #[test]
+    fn a_tamed_programs_skills_box_lists_each_skill_with_progress() {
+        use feral_processes_engine::views::SkillView;
+        let game = census_game();
+        let mut program = owned_program(vec![]);
+        program.skills = Some(
+            ["Extract", "Assemble", "Research", "Build", "Dig", "Farm"]
+                .into_iter()
+                .enumerate()
+                .map(|(i, l)| SkillView {
+                    skill_label: l,
+                    level: i as u32,
+                    practice: 4,
+                    practice_to_next: (i < 5).then_some(10),
+                })
+                .collect(),
+        );
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &program);
+        let skills = sections
+            .iter()
+            .find(|s| s.title == "SKILLS")
+            .expect("a tamed program draws SKILLS");
+        assert_eq!(skills.rows.len(), 6, "{:?}", skills.rows);
+        assert!(
+            skills
+                .rows
+                .contains(&SectionRow::Stat("Build".into(), "Lv 3  4/10".into()))
+        );
+        assert!(
+            skills
+                .rows
+                .contains(&SectionRow::Stat("Farm".into(), "Lv 5  max".into()))
+        );
+
+        let mut wild = Vec::new();
+        program_sections(&mut wild, &game, &plain_program(6, 6));
+        assert!(wild.iter().all(|s| s.title != "SKILLS"));
     }
 
     /// The POTENTIAL box names both build rolls in full, on their own rows,

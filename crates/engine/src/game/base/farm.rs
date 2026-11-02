@@ -279,6 +279,10 @@ impl Game {
                 }
                 continue;
             }
+            if self.world.get::<Task>(worker).is_none() {
+                continue;
+            }
+            self.practise_work(worker, crate::skills::Skill::Farm);
             let Some(mut task) = self.world.get_mut::<Task>(worker) else {
                 continue;
             };

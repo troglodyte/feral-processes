@@ -16,6 +16,7 @@
         (name: "Absolute Authority", power: 20, spread: 5, effect: Some((kind: "stun", chance: 0.45, duration: 1, power: 0)), damage_type: Some(Magnetic)),
     ],
     work_resource: None,
+    starting_skills: [(Research, 5), (Assemble, 2)],
     is_boss: true,
     abilities: [(id: "broadcast_storm"), (id: "null_route", level: 3)],
     attributes: {

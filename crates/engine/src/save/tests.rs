@@ -332,6 +332,7 @@ fn sample_creature() -> CreatureSave {
         besieger: false,
         stolen_from: None,
         off_duties: Vec::new(),
+        skills: Vec::new(),
         staff_rank: None,
         drop_trooper: false,
         base: None,

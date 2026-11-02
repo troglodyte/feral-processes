@@ -768,6 +768,16 @@ impl Game {
                 }
                 continue;
             }
+            if self.world.get::<Task>(worker).is_none() {
+                continue;
+            }
+            self.practise_work(worker, crate::skills::Skill::Dig);
+            // Re-read at each swing boundary, so a level gained shows on the
+            // next swing without a re-post.
+            let next_swing = crate::game::base::skill_scale::scaled_ticks(
+                crate::tuning::BASE_DIG_TICKS_PER_SWING,
+                self.skill_scale_of(worker, crate::skills::Skill::Dig),
+            );
             let Some(mut task) = self.world.get_mut::<Task>(worker) else {
                 continue;
             };
@@ -775,6 +785,7 @@ impl Game {
             let landed = task.progress >= task.required;
             if landed {
                 task.progress = 0;
+                task.required = next_swing;
             }
             // Read per tick rather than once the cycle completes, because
             // which half of the one dig verb this is decides whether the

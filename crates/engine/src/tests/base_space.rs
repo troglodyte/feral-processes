@@ -2154,6 +2154,9 @@ fn base_with_a_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
     for _ in 0..n {
         // No assign call: an owned program outside the party is staff.
         let worker = spawn_tamed(&mut game, 10, 3);
+        // These tests are about the crew, not its skill: level 10 works at
+        // exactly the shipped swing.
+        pin_work_skills(&mut game, worker);
         staff.push(worker);
     }
     staff.sort();
@@ -2396,6 +2399,7 @@ fn a_marked_blocker_off_the_floor_is_not_cut_until_floor_is_pending_beside_it() 
     let full = game.world.get::<Durability>(site).unwrap().hp;
 
     let digger = spawn_tamed(&mut game, 30, 3);
+    pin_work_skills(&mut game, digger);
     game.world.entity_mut(digger).insert((
         Position {
             x: WALL.0,
@@ -5109,5 +5113,82 @@ fn a_program_captured_off_the_floor_arrives_on_a_freshly_founded_base() {
             .resource::<base_grid::BaseGrid>()
             .is_floor(at.x, at.y),
         "a captured program should be on the base's floor by now: {at:?}"
+    );
+}
+
+/// A digger posted through `post_digger` at `WALL`'s blocker, standing
+/// beside it, with the floor request that lets the crew swing.
+fn posted_digger(seed: u32, level: u32) -> (Game, Entity) {
+    let mut game = game_at_the_frontier(seed);
+    excavate(&mut game, WALL);
+    let blocker = (WALL.0 + 1, WALL.1);
+    mark_unchecked(&mut game, blocker);
+    game.toggle_mark_box(WALL, WALL, None);
+    let site = game.dig_site_at(blocker.0, blocker.1).unwrap();
+    let digger = spawn_tamed(&mut game, 30, 3);
+    set_skill_level(&mut game, digger, crate::skills::Skill::Dig, level);
+    game.world.entity_mut(digger).insert(Position {
+        x: WALL.0,
+        y: WALL.1,
+    });
+    game.post_digger(digger, site);
+    (game, digger)
+}
+
+#[test]
+fn a_high_level_digger_swings_sooner_and_practises_only_dig() {
+    let swing = crate::tuning::BASE_DIG_TICKS_PER_SWING;
+    let (mut novice_game, novice) = posted_digger(3401, 0);
+    let (mut expert_game, expert) = posted_digger(3401, 10);
+    assert_eq!(
+        novice_game.world.get::<Task>(novice).unwrap().required,
+        swing * 2
+    );
+    assert_eq!(
+        expert_game.world.get::<Task>(expert).unwrap().required,
+        swing
+    );
+
+    for _ in 0..swing {
+        novice_game.run_dig_crew();
+        expert_game.run_dig_crew();
+    }
+    assert_eq!(
+        novice_game.world.get::<Task>(novice).unwrap().progress,
+        swing
+    );
+    assert_eq!(expert_game.world.get::<Task>(expert).unwrap().progress, 0);
+    let skills = novice_game
+        .world
+        .get::<crate::skills::Skills>(novice)
+        .unwrap();
+    assert_eq!(skills.track(crate::skills::Skill::Dig).practice, swing);
+    for other in crate::skills::Skill::ALL
+        .into_iter()
+        .filter(|s| *s != crate::skills::Skill::Dig)
+    {
+        assert_eq!(skills.track(other), Default::default(), "{other:?}");
+    }
+}
+
+#[test]
+fn a_level_gained_mid_swing_shows_on_the_next_swing() {
+    let swing = crate::tuning::BASE_DIG_TICKS_PER_SWING;
+    let (mut game, digger) = posted_digger(3402, 9);
+    let cost = crate::skills::practice_to_next(9).unwrap();
+    game.world
+        .get_mut::<crate::skills::Skills>(digger)
+        .unwrap()
+        .track_mut(crate::skills::Skill::Dig)
+        .practice = cost - 1;
+    let first = game.world.get::<Task>(digger).unwrap().required;
+    assert!(first > swing, "level 9 is slightly slower than shipped");
+    for _ in 0..first {
+        game.run_dig_crew();
+    }
+    assert_eq!(
+        game.world.get::<Task>(digger).unwrap().required,
+        swing,
+        "level 10 re-reads the swing at the boundary"
     );
 }

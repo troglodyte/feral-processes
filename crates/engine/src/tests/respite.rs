@@ -8,7 +8,7 @@
 //! exists.
 
 use super::support::*;
-use crate::components::{Carrying, Disgruntled, Grievance, Memories, Position, Task};
+use crate::components::{Carrying, Disgruntled, Grievance, Memories, Position, Task, TaskKind};
 use crate::tuning::{MEMORY_POSTING_PERIOD, RESPITE_RETRY_TICKS};
 use crate::*;
 
@@ -118,10 +118,20 @@ fn a_disgruntled_program_with_an_amenity_leaves_the_posting_pool() {
         .expect("a Mining Node takes a standing work job");
     let worker = game.base_staff()[0];
 
-    game.schedule_base_labour();
+    // The raised Bay leaves the builder's `Construct` task pointing at a
+    // despawned site; the real crew path is what clears it, so that the
+    // control below measures a fresh posting and not a stale task.
+    game.run_build_crew();
     assert!(
-        game.world.get::<Task>(worker).is_some(),
-        "the control: a contented body at a workable machine is posted"
+        game.world.get::<Task>(worker).is_none(),
+        "the dead construct task is cleared before scheduling"
+    );
+
+    game.schedule_base_labour();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.kind),
+        Some(TaskKind::GatherResource),
+        "the control: a contented body at a workable machine is posted to it"
     );
 
     sulk(&mut game, worker);

@@ -1459,7 +1459,12 @@ impl Game {
         // A wind-up is battle-scoped too, and a companion has no turn
         // that would ever release or cancel it.
         self.world.entity_mut(front).remove::<Charging>();
-        let parts = self.roster_parts();
+        let species_id = self
+            .world
+            .get::<crate::components::Creature>(front)
+            .map(|c| c.species.clone())
+            .unwrap_or_default();
+        let parts = self.roster_parts(&species_id);
         self.world.entity_mut(front).insert(parts);
         self.install_innate_routines(front);
         self.seat_derived(front);
@@ -1617,7 +1622,12 @@ impl Game {
         if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(lead) {
             c.0.clear();
         }
-        let parts = self.roster_parts();
+        let species_id = self
+            .world
+            .get::<crate::components::Creature>(lead)
+            .map(|c| c.species.clone())
+            .unwrap_or_default();
+        let parts = self.roster_parts(&species_id);
         self.world.entity_mut(lead).insert(parts);
         self.install_innate_routines(lead);
         self.seat_derived(lead);

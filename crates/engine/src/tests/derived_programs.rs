@@ -39,7 +39,7 @@ fn unseated_program(game: &mut Game) -> Entity {
     game.world
         .entity_mut(program)
         .remove::<(Hostile, WanderAi)>();
-    let parts = game.roster_parts();
+    let parts = game.roster_parts(&s);
     game.world.entity_mut(program).insert(parts);
     program
 }

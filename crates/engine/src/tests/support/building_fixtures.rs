@@ -157,7 +157,8 @@ pub(crate) fn base_with_a_built_node(game_seed: u32, assembly: f32, extraction: 
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
     stand_in_base(&mut game);
-    spawn_tamed(&mut game, 500, 3);
+    let builder = spawn_tamed(&mut game, 500, 3);
+    pin_work_skills(&mut game, builder);
     file_build_with_rolls(&mut game, "extractor", 1, 0, assembly, extraction);
     for _ in 0..400 {
         if first_structure_opt(&mut game, "extractor").is_some() {

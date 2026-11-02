@@ -1399,6 +1399,7 @@ type CronjobWorker = (
     Option<&'static crate::disposition::Disposition>,
     Option<&'static crate::situations::Situation>,
     Option<&'static crate::components::Attributes>,
+    Option<&'static mut crate::skills::Skills>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -1443,6 +1444,7 @@ pub struct CronjobLookups<'w> {
     /// Level-ups of seated workers, handed to `Game::drain_program_levels`.
     /// Bundled here because the system is at clippy's argument threshold.
     pending_levels: ResMut<'w, crate::resources::PendingProgramLevels>,
+    skill_levels: ResMut<'w, crate::resources::PendingSkillLevels>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -1494,6 +1496,7 @@ pub fn task_progress_system(
         research_defs: research_db,
         mut board,
         mut pending_levels,
+        mut skill_levels,
     } = db;
     // Copied out rather than captured: the record closures are `move`, and
     // capturing the `Res` handles themselves would move them out of the
@@ -1532,6 +1535,7 @@ pub fn task_progress_system(
         disposition,
         situation,
         attributes,
+        mut skills,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -1589,7 +1593,26 @@ pub fn task_progress_system(
             );
             continue;
         }
-        task.progress += 1;
+        // The posted worker's skill sets the pace and earns the practice;
+        // one without `Skills` takes exactly one step, as it always did.
+        let skill = crate::game::base::skill_scale::work_skill_for(
+            task.kind,
+            structure
+                .and_then(|s| structure_db.get(&s.kind))
+                .map(|d| Placed::of(d, machine_recipe)),
+        );
+        // A finished cycle waiting on a full output is not work: practice is
+        // for ticks where progress advanced, and the clog check below still
+        // reports the stall.
+        let waiting_on_room = task.progress >= task.required && stock.output_room() == 0;
+        if !waiting_on_room {
+            task.progress += crate::game::base::skill_scale::work_tick(
+                worker,
+                skills.as_deref_mut(),
+                skill,
+                &mut skill_levels,
+            );
+        }
         if task.progress < task.required {
             // A cycle part-way through is a working machine, and it has to
             // say so: this used to ride on `MachineStatus`'s `Running`
@@ -2035,6 +2058,9 @@ pub struct AssemblerLookups<'w, 's> {
     /// Bundled for the same reason as the rest: `assembler_system` is
     /// already at clippy's argument-count threshold.
     board: ResMut<'w, AlertBoard>,
+    /// The posted worker's skill sets the rate and earns the practice.
+    skills: Query<'w, 's, &'static mut crate::skills::Skills>,
+    skill_levels: ResMut<'w, crate::resources::PendingSkillLevels>,
 }
 
 /// What `depot_intake_system` reads beyond its queries, bundled to stay under
@@ -2168,6 +2194,8 @@ pub fn assembler_system(
         zone,
         clock,
         mut board,
+        mut skills,
+        mut skill_levels,
     } = db;
     let tick_now = clock.tick;
     let zone_now = zone.0;
@@ -2336,14 +2364,22 @@ pub fn assembler_system(
         // baked at assignment out of the machine's `ticks_per_unit` and the
         // posted program's `base_speed` (`Game::work_ticks_for`). Safe
         // because `upgrade_structure` never touches `ticks_per_unit`, so
-        // nothing changes a machine's rate after a program is on it, and
+        // nothing changes the baked rate after a program is on it (the
+        // worker's skill speeds the cycle per tick through `work_tick`'s
+        // carry, not by rewriting `required`), and
         // `displace_task_holder` allows only one `GatherResource` per
         // structure. The cost is that a cronjob in an old save keeps its
         // pre-`base_speed` rate until it is re-posted.
         //
         // `.max(1)` for the reason the def read had it: a zero would
         // produce on every tick forever.
-        task.progress += 1;
+        let skill = crate::game::base::skill_scale::work_skill_for(task.kind, Some(placed));
+        task.progress += crate::game::base::skill_scale::work_tick(
+            worker,
+            skills.get_mut(worker).ok().as_deref_mut(),
+            skill,
+            &mut skill_levels,
+        );
         if task.progress < task.required.max(1) {
             continue;
         }

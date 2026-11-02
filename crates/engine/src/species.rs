@@ -295,6 +295,12 @@ pub struct SpeciesDef {
     /// any producing structure, and what a cronjob pays out comes from the
     /// structure's own `produces`, not from the worker's species.
     pub work_resource: Option<ItemId>,
+    /// Work-skill levels a tamed member of this species starts at (ADR 0039);
+    /// a skill not listed starts at 0. `SpeciesDb::load_dir` clamps a level
+    /// above `tuning::SKILL_LEVEL_CAP` with a warning. `#[serde(default)]` so
+    /// existing and modded species files keep parsing.
+    #[serde(default)]
+    pub starting_skills: Vec<(crate::skills::Skill, u32)>,
     /// The bonus salvage part `Game::extraction_yield` adds on top of a
     /// tool's own draw when this species is extracted — spec decision 5.
     /// `#[serde(default)]` and, when absent, `Game::rich_in` falls back to
@@ -423,6 +429,16 @@ pub enum AffinityClass {
 }
 
 impl SpeciesDef {
+    /// The `Skills` a fresh tame of this species starts with, at zero practice
+    /// toward the next level.
+    pub fn seed_skills(&self) -> crate::skills::Skills {
+        let mut skills = crate::skills::Skills::default();
+        for (skill, level) in &self.starting_skills {
+            skills.set(*skill, *level, 0);
+        }
+        skills
+    }
+
     /// Whether this species exists only as the offspring of `parents`.
     pub fn is_hybrid(&self) -> bool {
         self.parents.is_some()
@@ -1119,6 +1135,16 @@ impl SpeciesDb {
                         continue;
                     }
                     def.affinities.clamp_all();
+                    for (skill, level) in &mut def.starting_skills {
+                        if *level > crate::tuning::SKILL_LEVEL_CAP {
+                            warnings.push(format!(
+                                "species {id:?}: {} starting level {level} is above the \
+                                 cap — clamped",
+                                skill.name()
+                            ));
+                            *level = crate::tuning::SKILL_LEVEL_CAP;
+                        }
+                    }
                     def.abilities.retain(|a| {
                         let known = abilities.get(&a.id).is_some();
                         if !known {
@@ -2344,6 +2370,65 @@ mod tests {
         let def: SpeciesDef = ron::from_str(&species_file("t", "")).unwrap();
         assert!(def.parents.is_none());
         assert!(!def.is_hybrid());
+    }
+
+    #[test]
+    fn starting_skills_seed_a_species_tames_and_default_to_nothing() {
+        use crate::skills::Skill;
+        let none: SpeciesDef = ron::from_str(&species_file("t", "")).unwrap();
+        assert_eq!(none.seed_skills(), crate::skills::Skills::default());
+        let some: SpeciesDef = ron::from_str(&species_file(
+            "t",
+            ", starting_skills: [(Dig, 4), (Farm, 2)]",
+        ))
+        .unwrap();
+        let skills = some.seed_skills();
+        assert_eq!(skills.level(Skill::Dig), 4);
+        assert_eq!(skills.level(Skill::Farm), 2);
+        assert_eq!(skills.level(Skill::Build), 0);
+        assert_eq!(skills.track(Skill::Dig).practice, 0);
+    }
+
+    #[test]
+    fn a_starting_level_above_the_cap_is_clamped_with_a_warning() {
+        let over = crate::tuning::SKILL_LEVEL_CAP + 5;
+        let (db, warnings) = load_files(
+            "skills-over-cap",
+            &[(
+                "t",
+                species_file("t", &format!(", starting_skills: [(Dig, {over})]")),
+            )],
+        );
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(
+            db.get("t").unwrap().starting_skills,
+            vec![(crate::skills::Skill::Dig, crate::tuning::SKILL_LEVEL_CAP)]
+        );
+    }
+
+    /// Parsed raw, not through `load_dir`, which would clamp an over-cap
+    /// level and hide it from the census.
+    #[test]
+    fn every_shipped_species_starts_within_the_cap_and_none_above_five() {
+        let mut seen = 0;
+        for entry in std::fs::read_dir(species_assets_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                continue;
+            }
+            let def: SpeciesDef = ron::from_str(&std::fs::read_to_string(&path).unwrap())
+                .unwrap_or_else(|e| panic!("{path:?}: {e}"));
+            for (skill, level) in &def.starting_skills {
+                assert!(
+                    *level <= 5,
+                    "{} starts {} at {level}; the authored ceiling is 5",
+                    def.id,
+                    skill.name()
+                );
+            }
+            seen += 1;
+        }
+        assert!(seen >= 19, "only {seen} species files read");
     }
 
     #[test]

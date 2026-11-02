@@ -371,6 +371,7 @@ impl Game {
         // outliving its limit by a beat.
         self.set_down_stranded_loads();
         self.drain_program_levels();
+        self.drain_skill_levels();
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an
         // *edge*, and one tick later there is nothing left to read it off.

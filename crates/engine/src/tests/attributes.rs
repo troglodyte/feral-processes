@@ -113,7 +113,7 @@ fn adopting_a_program_keeps_the_attributes_it_had_wild() {
         .get::<crate::components::Attributes>(wild)
         .cloned()
         .unwrap();
-    let parts = game.roster_parts();
+    let parts = game.roster_parts(&species);
     game.world.entity_mut(wild).insert(parts);
     let after = game
         .world

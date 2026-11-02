@@ -1013,6 +1013,7 @@ fn mining_morale_is_game_morale() {
         stand_in_base(&mut game);
         let node = deploy_upgradeable_node(&mut game);
         let worker = spawn_tamed(&mut game, 40, 4);
+        pin_work_skills(&mut game, worker);
         stand_player_at_post(&mut game, node);
         game.assign_cronjob(worker, node)
             .expect("a Mining Node takes a posted program");

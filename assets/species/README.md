@@ -220,6 +220,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
+    // Optional; omit for no head start. Work-skill levels a tamed member of
+    // this species starts at, by skill (Extract, Assemble, Research, Build,
+    // Dig, Farm); a skill not listed starts at 0. Levels run 0 to 20
+    // (`tuning::SKILL_LEVEL_CAP`); one above that is clamped with a warning.
+    // Shipped species stay at 5 or below. A bred or fresh tame starts here,
+    // and so does a program in a save written before skills existed.
+    starting_skills: [(Dig, 4), (Farm, 2)],
+
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally
     // drop one piece of equipment, independent of `work_resource`.
@@ -622,3 +630,29 @@ what catches a rung assigned to the wrong tier.
 
 Both run over the shipped directory only — a mod's species is never held to
 any of this.
+
+## Starting skill levels
+
+Each shipped species' `starting_skills` (see the schema above):
+
+| Species | Starting skills |
+| --- | --- |
+| botnet | Extract 3, Farm 2 |
+| cipher | Research 4 |
+| construct | Build 4, Dig 2 |
+| crawler | Dig 4, Extract 2 |
+| drone | Extract 3, Build 2 |
+| glitch | Extract 3, Research 2 |
+| overseer | Build 3, Research 2 |
+| polymorph | Assemble 3, Research 2 |
+| proxy | Research 3, Extract 2 |
+| rootkit | Dig 3, Research 2 |
+| scrapper | Extract 4, Assemble 2 |
+| sentinel | Build 3 |
+| sprite | Assemble 3 |
+| sub_process | Assemble 3, Build 2 |
+| trojan | Assemble 4 |
+| virus | Farm 4 |
+| wintermute | Research 5, Assemble 2 |
+| worm | Dig 4, Farm 2 |
+| zero_day | Research 3, Extract 3 |

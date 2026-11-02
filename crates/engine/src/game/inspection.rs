@@ -2427,6 +2427,7 @@ impl Game {
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Program(Box::new(ProgramManifest {
+                skills: self.skill_views(entity),
                 species_name: custom
                     .is_some()
                     .then(|| self.zone_tagged_name(entity, species.name.clone())),

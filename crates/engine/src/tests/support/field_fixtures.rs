@@ -140,7 +140,7 @@ pub(crate) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     // Through `roster_parts` rather than a hand-written tuple, for the reason
     // `work_node_parts` exists: a fixture short a component reads as the
     // feature being broken rather than as the fixture being wrong.
-    let parts = game.roster_parts();
+    let parts = game.roster_parts(&species.id);
     let entity = game
         .world
         .spawn((

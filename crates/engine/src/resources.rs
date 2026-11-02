@@ -1689,6 +1689,12 @@ pub struct BattleRewards {
 #[derive(Resource, Default)]
 pub struct PendingProgramLevels(pub Vec<(Entity, crate::progression::LevelGain)>);
 
+/// Skill levels earned at a work site: the program, the skill and the level it
+/// reached. Collected by `game::base::skill_scale::work_tick`; the shell that
+/// announces them drains it. Never saved.
+#[derive(Resource, Default)]
+pub struct PendingSkillLevels(pub Vec<(Entity, crate::skills::Skill, u32)>);
+
 /// One fighter's experience over a whole fight.
 ///
 /// The deltas sum because `progression::LevelGain::stat_rows` recovers each

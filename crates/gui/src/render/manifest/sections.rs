@@ -444,6 +444,27 @@ pub(super) fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &Pro
         section_rows_capped(work, MAX_WORK_ROWS),
     ));
 
+    if let Some(skills) = &p.skills {
+        sections.push(Section::ledger(
+            "SKILLS",
+            LedgerColumn::Duty,
+            section_rows(
+                skills
+                    .iter()
+                    .map(|s| {
+                        stat(
+                            s.skill_label,
+                            match s.practice_to_next {
+                                Some(next) => format!("Lv {}  {}/{next}", s.level, s.practice),
+                                None => format!("Lv {}  max", s.level),
+                            },
+                        )
+                    })
+                    .collect(),
+            ),
+        ));
+    }
+
     if !p.affinities.is_empty() {
         sections.push(Section::ledger(
             "AFFINITIES",

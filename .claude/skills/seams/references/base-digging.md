@@ -46,9 +46,12 @@
 - **`resources::MiningMode` is the player's own bump and nothing else**, off
   by default and off for any save that never said otherwise. `run_dig_crew`
   must never read it — a mark is an instruction the base already has, and
-  gating it stalls every dig job while reading as the crew being broken. A
-  fixture that digs by *walking* needs `game_at_the_frontier_cutting`;
-  omitted, the wall never comes down and it reads as the dig being broken.
+  gating it stalls every dig job while reading as the crew being broken.
+  Armed, `bump_rock` still refuses any cell not in `pending_floor` — the
+  plan is the only say over what comes down, so a misstep costs nothing. A
+  fixture that digs by *walking* needs `game_at_the_frontier_cutting` (arms
+  *and* marks `WALL`); omitted, the wall never comes down and it reads as
+  the dig being broken. A test that also toggles `WALL`'s mark un-marks it.
 
 - **`Tile::open_to_hostiles` is asked of a floor-merged tile.** Nothing
   writes `Biome::Platform` into a `WorldMap` — the base's floor is the

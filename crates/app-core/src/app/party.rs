@@ -301,6 +301,11 @@ impl App {
             self.inspect_worn(Some(program), slot, Mode::CompanionEquip);
             return;
         }
+        // Before `selected_index`, which would read the letter as a row pick.
+        if key == GameKey::Char('A') {
+            self.autofit(program);
+            return;
+        }
         let Some(idx) = self.selected_index(key, EquipmentSlot::ALL.len()) else {
             return;
         };

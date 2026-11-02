@@ -845,3 +845,45 @@ fn standing_a_member_down_underground_refuses_onto_the_status_line() {
         "and the party is untouched"
     );
 }
+
+#[test]
+fn capital_a_on_a_programs_slots_autofits_that_program() {
+    let mut app = app_with_companions_and_cargo(773, 1, &[("overclock_core", 1)]);
+    let player_atk_before = app.game.as_ref().unwrap().player_status().atk;
+    let companion_atk_before = companion_atk(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('E'));
+
+    app.handle_key(GameKey::Char('A'));
+
+    assert_eq!(companion_atk(&mut app), companion_atk_before + 3);
+    assert_eq!(
+        app.game.as_ref().unwrap().player_status().atk,
+        player_atk_before,
+        "the program is fitted, not the player"
+    );
+    assert_eq!(
+        app.mode,
+        Mode::CompanionEquip,
+        "A is not read as a row pick"
+    );
+}
+
+#[test]
+fn an_autofit_refusal_reaches_the_status_line() {
+    let mut app = app_with_companions_and_cargo(774, 1, &[("overclock_core", 1)]);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('E'));
+    // A wearer the player does not own: `check_wearer` refuses it.
+    app.pending_equip_program = Some(feral_processes_engine::Entity::PLACEHOLDER);
+
+    app.handle_key(GameKey::Char('A'));
+
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("programs you own")),
+        "{:?}",
+        app.status_line
+    );
+}

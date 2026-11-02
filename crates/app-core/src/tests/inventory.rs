@@ -1130,3 +1130,40 @@ fn item_actions_are_inert_on_the_keys_page() {
     }
     assert_eq!(app.game.as_ref().unwrap().player_status().inventory, before);
 }
+
+// ------------------------------------------------------------------ autofit
+
+/// `A` in the pack fits the player from it; the report is a confirmation
+/// on the status line.
+#[test]
+fn capital_a_in_the_inventory_autofits_the_player() {
+    let mut app = app_at_a_trading_post(945, &[(ids::OVERCLOCK_CORE, 1)]);
+    open_hub_screen(&mut app, Mode::Inventory);
+
+    app.handle_key(GameKey::Char('A'));
+
+    let weapon = app.game.as_ref().unwrap().player_status().weapon;
+    assert_eq!(
+        weapon.map(|w| w.copy.item),
+        Some(ItemId::from(ids::OVERCLOCK_CORE))
+    );
+    assert_eq!(app.mode, Mode::Inventory, "you stay in your pack");
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.starts_with("Autofit:")),
+        "{:?}",
+        app.status_line
+    );
+}
+
+#[test]
+fn lowercase_a_in_the_inventory_is_the_filters() {
+    let mut app = app_at_a_trading_post(946, &[(ids::OVERCLOCK_CORE, 1)]);
+    open_hub_screen(&mut app, Mode::Inventory);
+
+    app.handle_key(GameKey::Char('a'));
+
+    assert_eq!(app.filter_text(), "a");
+    assert!(app.game.as_ref().unwrap().player_status().weapon.is_none());
+}

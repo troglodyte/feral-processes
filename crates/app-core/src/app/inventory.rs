@@ -36,6 +36,17 @@ impl App {
     /// each has to hand over all three: a page that inherited the previous
     /// screen's subject, wearer or return mode would describe the wrong copy,
     /// price it for the wrong body, or strand the player a screen out.
+    /// `[A]` on the inventory and companion equip pages. The report is a
+    /// confirmation for the status line, like fuse-all's; only a refusal
+    /// is history.
+    pub(crate) fn autofit(&mut self, wearer: Entity) {
+        let Some(game) = &mut self.game else { return };
+        match game.autofit(wearer) {
+            Ok(report) => self.status_line = Some(report.message),
+            Err(e) => self.refuse(e),
+        }
+    }
+
     pub(crate) fn open_gear_inspect(&mut self, copy: GearCopy, wearer: Option<Entity>, from: Mode) {
         self.pending_inspect = Some(GearInspect { copy, wearer, from });
         self.mode = Mode::ItemDescribe;
@@ -107,6 +118,14 @@ impl App {
                     Ok(msg) => self.status_line = Some(msg),
                     Err(e) => self.refuse(e),
                 }
+            }
+            return;
+        }
+
+        // Uppercase only: a lowercase letter is the page filter's.
+        if key == GameKey::Char('A') {
+            if let Some(player) = self.game.as_ref().map(Game::player_entity) {
+                self.autofit(player);
             }
             return;
         }

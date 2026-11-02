@@ -1,6 +1,6 @@
 # 0039 Species carry starting skill levels
 
-- Status: Agreed
+- Status: Accepted
 - Decided by: user, on Claude's proposal
 - Date: 2026-11-02
 - Pattern: —

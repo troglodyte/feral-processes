@@ -1,6 +1,6 @@
 # 0038 Tamed programs carry practised skills, in a subsystem that knows nothing about work
 
-- Status: Agreed
+- Status: Accepted
 - Decided by: user, on Claude's proposal
 - Date: 2026-11-02
 - Pattern: Module per domain; Functional core, imperative shell

@@ -296,3 +296,13 @@
   for any outsider stalled every other machine in it; counting the player as
   holder aimed the want at the player's machine, the outsider filter removed it, and the staff worker
   flickered on and off.
+- **Every work site reads the skill scale through `game/base/skill_scale.rs`.**
+  Machines classify the cycle with `work_skill_for` (exhaustive, no wildcard)
+  and pay steps and practice through `work_tick`; crews (build, dig, farm) use
+  `Game::work_steps`, `skill_scale_of` + `scaled_ticks` and `practise_work`. A
+  site that computes its own pace or practises directly breaks two invariants
+  at once: an entity without `Skills` (the player, wild and settlement
+  programs) must run at exactly today's rate, and practice is paid only for a
+  tick that advanced progress — a clogged machine or a vanished build site
+  earns nothing. Machine pace rides an unsaved carry in `Skills`, not a
+  re-baked `Task::required`, so a level-up applies from the next tick.

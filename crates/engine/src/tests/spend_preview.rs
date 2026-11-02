@@ -104,6 +104,7 @@ fn every_perk_previews_exactly_what_buying_it_does() {
     let mut moved = 0;
     for def in perks {
         let mut game = game();
+        pin_player_combat(&mut game);
         let preview = game.preview_perk(def.id).unwrap();
         let report = game.buy_perk(def.id).unwrap();
         assert_eq!(report.preview, preview, "{} preview != outcome", def.name);

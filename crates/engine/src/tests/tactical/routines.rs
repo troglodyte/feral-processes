@@ -382,6 +382,7 @@ fn a_hostile_runs_a_routine_the_player_s_own_gate_would_refuse_it() {
 #[test]
 fn an_unaffordable_routine_refuses_with_the_power_variant() {
     let mut game = game();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let def = game
         .world

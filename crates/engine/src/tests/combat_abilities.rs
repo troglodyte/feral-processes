@@ -581,6 +581,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
 fn a_player_special_spends_its_authored_power_cost() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        pin_player_combat(&mut game);
         unlock_research_chain(&mut game, "routine/null_route");
         let player = game.player_entity();
         install_routine_for_test(&mut game, player, "null_route");
@@ -696,6 +697,7 @@ fn the_companion_fallback_does_not_leak_onto_the_player() {
 #[test]
 fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
     let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
     {
@@ -745,6 +747,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
 #[test]
 fn drain_never_heals_the_user_past_its_maximum() {
     let mut game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
     {

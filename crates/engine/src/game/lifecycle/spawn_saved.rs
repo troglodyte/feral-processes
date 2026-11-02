@@ -619,17 +619,7 @@ impl Game {
             // seeds from the species as a fresh tame does. Decided on the raw
             // list, so a row of only unknown names still reads as "has
             // skills" and is not re-seeded.
-            let skills = if c.skills.is_empty() {
-                species.seed_skills()
-            } else {
-                crate::skills::Skills::overlay(
-                    species.seed_skills(),
-                    c.skills.iter().filter_map(|row| {
-                        crate::skills::Skill::from_name(&row.skill)
-                            .map(|skill| (skill, row.level, row.practice))
-                    }),
-                )
-            };
+            let skills = overlay_saved_skills(species.seed_skills(), &c.skills);
             entity.insert(skills);
             if c.drop_trooper {
                 entity.insert(crate::components::DropTrooper);
@@ -788,4 +778,24 @@ impl Game {
         }
         Some(id)
     }
+}
+
+/// `seed` with the saved rows laid over it. An empty list is a file written
+/// before skills existed and stays the seed; decided on the raw list, so a
+/// row of only unknown names still reads as "has skills" and is not
+/// re-seeded.
+pub(super) fn overlay_saved_skills(
+    seed: crate::skills::Skills,
+    rows: &[save::SkillSave],
+) -> crate::skills::Skills {
+    if rows.is_empty() {
+        return seed;
+    }
+    crate::skills::Skills::overlay(
+        seed,
+        rows.iter().filter_map(|row| {
+            crate::skills::Skill::from_name(&row.skill)
+                .map(|skill| (skill, row.level, row.practice))
+        }),
+    )
 }

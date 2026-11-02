@@ -346,6 +346,7 @@ fn attacker_perk_adds_permanent_atk_per_level() {
 #[test]
 fn defender_perk_adds_permanent_def_per_level() {
     let mut game = Game::new(116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     game.world.get_mut::<Perks>(player).unwrap().points = 10;
     let base_mitigation = game.player_status().mitigation;

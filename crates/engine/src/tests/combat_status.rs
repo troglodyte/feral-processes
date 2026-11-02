@@ -181,6 +181,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
 #[test]
 fn status_effects_are_cleared_once_the_battle_ends() {
     let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     // Deliberately effect-free, so the wild creature's own retaliation
     // can't re-apply (and thus reset the clock on) the status this test

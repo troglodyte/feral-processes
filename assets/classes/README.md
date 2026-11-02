@@ -67,6 +67,7 @@ Each file is one class:
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
 | `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. Superseded entirely if the player buys anything on the Kit step; see "What a class is" above. |
 | `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's **starting value** for each one. An id this map does not name (or an empty map) starts at that attribute def's own `base`, so the two directories stay independent. |
+| `starting_skills` | `#[serde(default)]` — a list of `(Skill, level)` pairs: the player's starting **combat** skills (`Aim`, `Force`, `Defence`, `Routines`), 10 being today's figures (ADR 0040). A work skill is dropped and a level above the cap clamped, each with a load warning; an absent list starts all four at 0. The player works blind to work skills. |
 
 ## Attributes
 

@@ -248,6 +248,11 @@ pub struct PlayerSave {
     /// gets attributes with no migration.
     #[serde(default)]
     pub attributes: std::collections::BTreeMap<crate::attributes::AttributeId, i32>,
+    /// The player's skills, one row per skill. Empty for a save written
+    /// before the player carried skills; it loads at the class seed.
+    /// Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub skills: Vec<SkillSave>,
 }
 
 /// `serde`'s default for `PlayerSave::glyph` — a save written before

@@ -347,19 +347,7 @@ impl Game {
             skills: self
                 .world
                 .get::<crate::skills::Skills>(e)
-                .map(|s| {
-                    crate::skills::Skill::ALL
-                        .into_iter()
-                        .map(|skill| {
-                            let t = s.track(skill);
-                            save::SkillSave {
-                                skill: skill.name().to_string(),
-                                level: t.level,
-                                practice: t.practice,
-                            }
-                        })
-                        .collect()
-                })
+                .map(skill_rows)
                 .unwrap_or_default(),
             staff_rank: self
                 .world
@@ -761,6 +749,11 @@ impl Game {
             colour: identity.colour,
             icon: identity.icon.as_ref().map(PlayerIcon::encode),
             attributes: attrs,
+            skills: self
+                .world
+                .get::<crate::skills::Skills>(player)
+                .map(skill_rows)
+                .unwrap_or_default(),
         }
     }
 
@@ -1078,4 +1071,19 @@ impl Game {
         };
         save::save_to_file(path, &data)
     }
+}
+
+/// Every skill of `skills` as saved rows, in `Skill::ALL` order.
+fn skill_rows(skills: &crate::skills::Skills) -> Vec<save::SkillSave> {
+    crate::skills::Skill::ALL
+        .into_iter()
+        .map(|skill| {
+            let t = skills.track(skill);
+            save::SkillSave {
+                skill: skill.name().to_string(),
+                level: t.level,
+                practice: t.practice,
+            }
+        })
+        .collect()
 }

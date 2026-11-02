@@ -567,3 +567,13 @@ pub(crate) fn set_skill_level(
         .unwrap()
         .set(skill, level, 0);
 }
+
+/// Pins the player's four combat skills at level 10, where every effect is
+/// the shipped figure (ADR 0040). A player is born at 0, which is slightly
+/// worse than today; a test about anything but skills pins it here.
+pub(crate) fn pin_player_combat(game: &mut Game) {
+    let player = game.player_entity();
+    for skill in crate::skills::Skill::COMBAT {
+        set_skill_level(game, player, skill, 10);
+    }
+}

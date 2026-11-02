@@ -104,6 +104,13 @@ pub(crate) fn practise_tick(
 }
 
 impl Game {
+    /// Whether `worker`'s work skills count. The player carries `Skills` for
+    /// combat and works at today's pace whatever their work tracks say; every
+    /// `&mut Game` work door asks this, the one place the player is excluded.
+    fn work_skills_count(&self, worker: Entity) -> bool {
+        worker != self.player_entity()
+    }
+
     /// Every skill of `entity`, or `None` if it carries no `Skills`.
     pub(crate) fn skill_views(&self, entity: Entity) -> Option<Vec<crate::views::SkillView>> {
         let skills = self.world.get::<Skills>(entity)?;
@@ -141,15 +148,20 @@ impl Game {
 
     /// `scale_of` for a live roster entity.
     pub(crate) fn skill_scale_of(&self, worker: Entity, skill: Skill) -> f32 {
-        scale_of(self.world.get::<Skills>(worker), Some(skill))
+        let skills = self
+            .work_skills_count(worker)
+            .then(|| self.world.get::<Skills>(worker))
+            .flatten();
+        scale_of(skills, Some(skill))
     }
 
     /// `work_tick` for the `&mut Game` work sites: the steps one working tick
     /// of `skill` is worth for `worker`, practising as it goes.
     pub(crate) fn work_steps(&mut self, worker: Entity, skill: Skill) -> u32 {
+        let counts = self.work_skills_count(worker);
         self.world
             .resource_scope(|world, mut levels: Mut<PendingSkillLevels>| {
-                let mut skills = world.get_mut::<Skills>(worker);
+                let mut skills = counts.then(|| world.get_mut::<Skills>(worker)).flatten();
                 work_tick(worker, skills.as_deref_mut(), Some(skill), &mut levels)
             })
     }
@@ -157,6 +169,9 @@ impl Game {
     /// `practise_tick` for the `&mut Game` work sites; a no-op for a worker
     /// without `Skills`.
     pub(crate) fn practise_work(&mut self, worker: Entity, skill: Skill) {
+        if !self.work_skills_count(worker) {
+            return;
+        }
         self.world
             .resource_scope(|world, mut levels: Mut<PendingSkillLevels>| {
                 if let Some(mut skills) = world.get_mut::<Skills>(worker) {

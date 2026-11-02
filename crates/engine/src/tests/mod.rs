@@ -101,6 +101,7 @@ mod perks;
 mod permadeath;
 mod phase_keys;
 mod player_icon;
+mod player_skills;
 mod policy;
 mod power;
 mod prison;

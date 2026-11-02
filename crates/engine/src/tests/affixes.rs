@@ -13,7 +13,7 @@ use crate::affixes::AffixDb;
 use crate::components::{Decompiler, Rarity, Stats};
 use crate::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use crate::tests::support::{
-    ScratchAssets, modded_assets_dir, scratch_assets_dir, test_assets_dir,
+    ScratchAssets, modded_assets_dir, pin_player_combat, scratch_assets_dir, test_assets_dir,
 };
 use bevy_ecs::prelude::Entity;
 
@@ -545,6 +545,7 @@ fn deflection_is_subtracted_even_with_no_percentage_mitigation() {
 #[test]
 fn deflection_comes_off_after_the_percentage_cut_and_the_floor_is_one() {
     let mut game = deflecting_game(4111, "deflection_order");
+    pin_player_combat(&mut game);
     let player = wear_with_mitigation(&mut game, &deflecting_armour(1), 50);
     assert_eq!(
         game.effective_mitigation(player),

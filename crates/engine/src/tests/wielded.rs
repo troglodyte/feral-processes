@@ -14,6 +14,7 @@ fn wield_directly(game: &mut Game, entity: Entity) {
 #[test]
 fn wielding_a_program_raises_the_players_attack_and_defense() {
     let mut game = Game::new(9100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let (atk_before, def_before) = (
         game.effective_atk(player),

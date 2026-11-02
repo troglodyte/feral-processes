@@ -161,6 +161,24 @@ pub struct ClassDef {
     /// by `every_shipped_class_authors_every_attribute`.
     #[serde(default)]
     pub attributes: std::collections::BTreeMap<String, i32>,
+    /// Combat skill levels the player starts at (ADR 0040); work skills are
+    /// refused, since the player works blind to them. `#[serde(default)]`,
+    /// so a file without it starts every skill at 0. `ClassDb::load_dir`
+    /// drops a non-combat row and clamps an over-cap level, each with a
+    /// warning.
+    #[serde(default)]
+    pub starting_skills: Vec<(crate::skills::Skill, u32)>,
+}
+
+impl ClassDef {
+    /// The `Skills` a player of this class starts with.
+    pub fn seed_skills(&self) -> crate::skills::Skills {
+        let mut skills = crate::skills::Skills::default();
+        for (skill, level) in &self.starting_skills {
+            skills.set(*skill, *level, 0);
+        }
+        skills
+    }
 }
 
 /// Every class the game knows about, loaded from `assets/classes/`. See the
@@ -195,7 +213,28 @@ impl ClassDb {
         for path in paths {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ClassDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
+                    let class = def.class;
+                    def.starting_skills.retain(|(skill, _)| {
+                        let combat = crate::skills::Skill::COMBAT.contains(skill);
+                        if !combat {
+                            warnings.push(format!(
+                                "class {class:?}: {} is not a combat skill — dropped",
+                                skill.name()
+                            ));
+                        }
+                        combat
+                    });
+                    for (skill, level) in &mut def.starting_skills {
+                        if *level > crate::tuning::SKILL_LEVEL_CAP {
+                            warnings.push(format!(
+                                "class {class:?}: {} starting level {level} is above the \
+                                 cap — clamped",
+                                skill.name()
+                            ));
+                            *level = crate::tuning::SKILL_LEVEL_CAP;
+                        }
+                    }
                     db.defs.insert(def.class, def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid class file {path:?}: {e}")),

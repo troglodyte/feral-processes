@@ -50,11 +50,10 @@ fn a_fresh_tame_starts_at_its_species_seed() {
 }
 
 #[test]
-fn wild_programs_and_the_player_have_no_skills() {
+fn wild_programs_have_no_skills() {
     let mut game = new_game(31002);
     let wild = game.spawn_wild_creature("worm", 1, 1).unwrap();
     assert!(game.world.get::<Skills>(wild).is_none());
-    assert!(game.world.get::<Skills>(game.player_entity()).is_none());
 }
 
 #[test]

@@ -858,6 +858,7 @@ fn removing_the_spine_trims_the_routine_row_it_widened() {
 #[test]
 fn implant_atk_and_mitigation_stay_in_effect_while_emulating() {
     let mut game = new_game();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let species = game
         .species_defs()

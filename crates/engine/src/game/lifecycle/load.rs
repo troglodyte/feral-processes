@@ -575,6 +575,7 @@ fn restore_player(
     let tutorial_seeded = saved.tutorial_seeded;
     let saved_attributes = std::mem::take(&mut saved.attributes);
     let saved_stat_points = saved.stat_points;
+    let saved_skills = std::mem::take(&mut saved.skills);
     let player_class = saved.class;
     let player = spawn_player_from_save(world, saved, player_routines, player_perk_levels);
     world.insert_resource(PlayerEntity(player));
@@ -609,6 +610,18 @@ fn restore_player(
         );
         restored
     };
+    // The class seed with the saved rows over it, so a save from before the
+    // player carried skills opens at its class's starting levels.
+    let class_seed = player_class
+        .and_then(|class| world.resource::<crate::classes::ClassDb>().get(class))
+        .map(|def| def.seed_skills())
+        .unwrap_or_default();
+    world
+        .entity_mut(player)
+        .insert(super::spawn_saved::overlay_saved_skills(
+            class_seed,
+            &saved_skills,
+        ));
     world.entity_mut(player).insert((
         player_attributes,
         crate::components::Derived::default(),

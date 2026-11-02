@@ -1321,6 +1321,7 @@ fn set_stats(game: &mut Game, entity: Entity, max_hp: i32, atk: i32, def: i32) {
 #[test]
 fn a_kill_pays_its_challenge_rather_than_the_victims_hp_bar() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let victim = spawn_wild_on_player_tile(&mut game);
     // A starter program's shape, set explicitly rather than taken from the
     // fixture's arbitrary first species: the assertion is about where this

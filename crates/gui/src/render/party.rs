@@ -88,6 +88,7 @@ pub(super) fn draw_companion_equip(
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&[
         "Enter swap or unequip",
+        "[A] autofit",
         "[I] inspect",
         "Esc back",
     ])));

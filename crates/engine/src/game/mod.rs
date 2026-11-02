@@ -9,6 +9,7 @@ pub(crate) mod achievements;
 pub(crate) mod affix_mods;
 pub(crate) mod alerts;
 pub(crate) mod auto_resolve;
+pub(crate) mod autofit;
 pub(crate) mod base;
 pub(crate) mod base_pages;
 pub(crate) mod base_report;

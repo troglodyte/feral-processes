@@ -1038,7 +1038,7 @@ impl Game {
     /// already the idiom (`add_companion`, `refactor_companion`,
     /// `wield_program`, `sell_companion`), and because this guard is where
     /// "a program the player owns" is decided once rather than at each caller.
-    fn check_wearer(&self, wearer: Entity) -> Result<(), String> {
+    pub(crate) fn check_wearer(&self, wearer: Entity) -> Result<(), String> {
         if wearer == self.player_entity() {
             return Ok(());
         }
@@ -1070,6 +1070,44 @@ impl Game {
             return Err("Can't do that right now.".into());
         }
         self.check_wearer(wearer)?;
+        self.equip_quietly(wearer, copy)?;
+        let item = &copy.item;
+        let level = self.world.resource::<ZoneLevel>().0;
+        let mut notes = Vec::new();
+        if level > 1 {
+            notes.push(format!("level {level}"));
+        }
+        if copy.tier > 0 {
+            notes.push(format!("fusion tier {}", copy.tier));
+        }
+        if let Some(tier) = copy.rarity.label() {
+            notes.push(tier.to_lowercase());
+        }
+        let note = if notes.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", notes.join(", "))
+        };
+        let line = if wearer == self.player_entity() {
+            format!("You equip {}{note}.", self.item_name(item))
+        } else {
+            format!(
+                "{} equips {}{note}.",
+                self.entity_label(wearer),
+                self.item_name(item)
+            )
+        };
+        self.log(line);
+        self.tick();
+        Ok(())
+    }
+
+    /// `equip` without its guards, log line or tick: takes the copy out of
+    /// cargo, returns the outgoing copy, applies both deltas and sets the
+    /// slot. `autofit` calls it once per slot and ticks once for the lot, so
+    /// the caller must already have passed `equip`'s battle, game-over and
+    /// wearer checks.
+    pub(crate) fn equip_quietly(&mut self, wearer: Entity, copy: &GearCopy) -> Result<(), String> {
         let item = &copy.item;
         let Some((slot, _)) = self.equipment_of(item) else {
             return Err(format!("{} can't be equipped.", self.item_name(item)));
@@ -1109,33 +1147,6 @@ impl Game {
             let mut equipment = entity.get_mut::<Equipment>().unwrap();
             *equipment.slot_mut(slot) = Some(incoming);
         }
-
-        let mut notes = Vec::new();
-        if level > 1 {
-            notes.push(format!("level {level}"));
-        }
-        if copy.tier > 0 {
-            notes.push(format!("fusion tier {}", copy.tier));
-        }
-        if let Some(tier) = copy.rarity.label() {
-            notes.push(tier.to_lowercase());
-        }
-        let note = if notes.is_empty() {
-            String::new()
-        } else {
-            format!(" ({})", notes.join(", "))
-        };
-        let line = if wearer == self.player_entity() {
-            format!("You equip {}{note}.", self.item_name(item))
-        } else {
-            format!(
-                "{} equips {}{note}.",
-                self.entity_label(wearer),
-                self.item_name(item)
-            )
-        };
-        self.log(line);
-        self.tick();
         Ok(())
     }
 

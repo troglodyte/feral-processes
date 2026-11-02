@@ -109,6 +109,7 @@ use components::{
     Talents, Tamed, Tampered, Task, TaskKind, Temporary, TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::auto_resolve::AutoResolve;
+pub use game::autofit::AutofitReport;
 pub use game::base::building::{AwaitingSite, WallBox};
 pub use game::base::lines::LineKey;
 pub use game::base::prison::JailBlock;

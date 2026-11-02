@@ -29,6 +29,17 @@ pub fn equip_swap_visible(rows: &[SwapRow], filter: &str) -> Vec<usize> {
 }
 
 impl App {
+    /// `[A]` on the inventory and companion equip pages. The report is a
+    /// confirmation for the status line, like fuse-all's; only a refusal
+    /// is history.
+    pub(crate) fn autofit(&mut self, wearer: Entity) {
+        let Some(game) = &mut self.game else { return };
+        match game.autofit(wearer) {
+            Ok(report) => self.status_line = Some(report.message),
+            Err(e) => self.refuse(e),
+        }
+    }
+
     /// Opens the inspect page on `copy`, measured for `wearer`, returning to
     /// `from` on Esc.
     ///
@@ -107,6 +118,14 @@ impl App {
                     Ok(msg) => self.status_line = Some(msg),
                     Err(e) => self.refuse(e),
                 }
+            }
+            return;
+        }
+
+        // Uppercase only: a lowercase letter is the page filter's.
+        if key == GameKey::Char('A') {
+            if let Some(player) = self.game.as_ref().map(Game::player_entity) {
+                self.autofit(player);
             }
             return;
         }

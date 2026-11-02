@@ -43,7 +43,7 @@ fn an_idle_node_asks_for_a_program() {
     deploy_upgradeable_node(&mut game);
 
     let idle = row(&mut game, AttentionKind::IdleStructures);
-    assert_eq!(idle.text, "1 node without a program");
+    assert_eq!(idle.text, "1 machine idle");
     assert_eq!(idle.key, 'b', "the base report is where a node is staffed");
     assert!(!idle.threat, "an idle node is work, not harm");
 }
@@ -218,7 +218,7 @@ fn downed_and_lashing_staff_raise_one_row_each() {
         .filter(|r| r.kind == AttentionKind::StaffUnrest)
         .collect();
     let texts: Vec<&str> = rows.iter().map(|r| r.text.as_str()).collect();
-    assert_eq!(texts, ["1 lashing out (Base)", "2 downed tools (Base)"]);
+    assert_eq!(texts, ["1 lashing out (Base)", "2 refusing to work (Base)"]);
     assert!(rows.iter().all(|r| r.key == 'b' && r.threat));
 }
 

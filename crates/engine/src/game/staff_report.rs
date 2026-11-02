@@ -223,7 +223,7 @@ impl Game {
                     DiscontentRow {
                         entity: who,
                         name: self.creature_label(who),
-                        rung: rung.as_str(),
+                        rung: rung.label(),
                         stopped_work: rung >= Grievance::DownedTools,
                         mood: morale_band(morale),
                         grudges,

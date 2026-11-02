@@ -147,9 +147,8 @@ pub(super) fn discontent_rows(report: &[DiscontentRow], selected: usize) -> Vec<
     }
     let mut rows = Vec::new();
     for (i, r) in report.iter().enumerate() {
-        let rung = r.rung.replace('_', " ");
         rows.push(colored_item_row(
-            format!("{}  {rung} · mood {}", r.name, r.mood),
+            format!("{}  {} · mood {}", r.name, r.rung, r.mood),
             i == selected,
             if r.stopped_work { RED } else { YELLOW },
         ));
@@ -228,7 +227,7 @@ mod tests {
         let row = DiscontentRow {
             entity: Entity::from_raw_u32(1).unwrap(),
             name: "Ada".into(),
-            rung: "downed_tools",
+            rung: "refusing to work",
             stopped_work: true,
             mood: "low",
             grudges: vec![GrudgeRow {
@@ -238,7 +237,7 @@ mod tests {
             }],
         };
         let rows = discontent_rows(&[row], 0);
-        assert!(text_of(&rows[0]).contains("downed tools"));
+        assert!(text_of(&rows[0]).contains("refusing to work"));
         assert!(text_of(&rows[1]).contains("Mauled by (a Wolf)"));
     }
 

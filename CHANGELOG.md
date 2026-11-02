@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.14
+
+**`[A]` now puts the best gear in your pack on one wearer.** Press it on the Inventory page to fit yourself, or on a program's gear page to fit that program. Your weapon and armor slots, and every slot on a program, get the piece with the highest power rating. Your module slot gets the highest decompile chance first, and combat rating breaks a tie. A program never takes a module whose only stat is decompile chance. A slot changes only for a strictly better piece, broken copies are never picked, and gear is never taken off another wearer. One autofit costs one turn however many slots change, and nothing if none do.
+
 ## 0.21.13
 
 **Two base alerts now use plain words.** The attention row said "N nodes without a program" for machines with nothing to run; it now says "N machines idle". Staff with a grievance were shown as having "downed tools"; the attention row and the staff report now say they are "refusing to work".

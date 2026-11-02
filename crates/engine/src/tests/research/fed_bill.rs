@@ -256,7 +256,7 @@ fn an_unsupplied_material_asks_for_a_work_order() {
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
     let want = crate::game::base::work_orders::no_order_for(&game, &fragment);
     assert!(
-        want.contains("work order") && want.contains("Core Fragment"),
+        want.contains("standing work order") && want.contains("Core Fragment"),
         "{want}"
     );
 
@@ -345,4 +345,215 @@ fn an_old_research_order_loads_as_an_ordinary_order() {
         order,
         WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 30)
     );
+}
+
+/// A worker posted at `station`, standing on the face west of its anchor and
+/// holding `qty` Core Fragments — mid-delivery, so a test can land two
+/// loads on one tick.
+fn carrier_at(game: &mut Game, station: Entity, qty: u32) -> Entity {
+    let at = *game.world.get::<Position>(station).unwrap();
+    let worker = spawn_tamed(game, 10, 3);
+    game.post_worker(worker, station);
+    game.world.entity_mut(worker).insert((
+        Position {
+            x: at.x - 1,
+            y: at.y,
+        },
+        Carrying {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            qty,
+        },
+    ));
+    worker
+}
+
+/// Two Stations loading the bill's last units on the same tick must not both
+/// fill them: the second load finds no room and goes back to a shelf, rather
+/// than sitting in a hopper nothing will ever empty.
+#[test]
+fn two_stations_loading_on_one_tick_do_not_overfill() {
+    let assets = slow_assets("research_fed_two_stations");
+    let mut game = Game::new(9710, DifficultyMode::Forgiving, &assets).unwrap();
+    let (first, _) = station_with_project(&mut game, "slow_billed");
+    for x in 9..=14 {
+        for y in -1..=4 {
+            game.floor_cell(x, y);
+        }
+    }
+    let second = spawn_machine_at(&mut game, "research_node", 11, 1);
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .delivered
+        .entry("slow_billed".to_string())
+        .or_default()
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 7);
+    carrier_at(&mut game, first, 5);
+    carrier_at(&mut game, second, 5);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert_eq!(delivered(&game, "slow_billed", ids::CORE_FRAGMENT), 12);
+    for station in [first, second] {
+        assert!(
+            game.world.get::<Stock>(station).unwrap().input.is_empty(),
+            "no Station hopper is left holding a surplus"
+        );
+    }
+    assert_eq!(
+        fragments_held(&game),
+        5,
+        "the second load went back to a shelf the base can count"
+    );
+}
+
+/// A bill with two lines: one a test can strand on an unreachable shelf
+/// while the other sits on the fixture's Depot.
+const TWO_LINE_NODE: &str = r#"(
+    id: "two_line",
+    name: "Two Line Node",
+    description: "A node whose first line can be cut off.",
+    cost: 5000,
+    materials: [("power_cell", 2), ("core_fragment", 12)],
+)"#;
+
+/// A Depot standing far off the laid floor, where no program can walk.
+fn unreachable_depot(game: &mut Game) -> Entity {
+    spawn_machine_at(game, "depot", 60, 60)
+}
+
+/// The first line's only unit is on a shelf nobody can reach; the second's is
+/// on one beside the floor. The second is still carried in — an unreachable
+/// line is skipped, not walked at.
+#[test]
+fn an_unreachable_first_line_does_not_starve_a_reachable_second() {
+    let assets =
+        assets_dir_with_extra_research("research_fed_two_line", "two_line.ron", TWO_LINE_NODE);
+    let mut game = Game::new(9711, DifficultyMode::Forgiving, &assets).unwrap();
+    let (_, depot) = station_with_project(&mut game, "two_line");
+    clear_item_everywhere(&mut game, "power_cell");
+    let far = unreachable_depot(&mut game);
+    set_shelf(&mut game, far, "power_cell", 2);
+    set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 5);
+
+    assert!(tick_until(&mut game, 600, |g| {
+        delivered(g, "two_line", ids::CORE_FRAGMENT) == 5
+    }));
+    assert_eq!(delivered(&game, "two_line", "power_cell"), 0);
+}
+
+/// Once the data is in, a Station is staffed only while a shelf it can walk
+/// to holds some of the bill — a unit nobody can reach is no reason to hold a
+/// body there.
+#[test]
+fn a_station_with_only_an_unreachable_shelf_holds_no_body() {
+    let assets = slow_assets("research_fed_unreachable_staff");
+    let mut game = Game::new(9712, DifficultyMode::Forgiving, &assets).unwrap();
+    let station = base_with_a_research_node(&mut game);
+    game.select_research("slow_billed").unwrap();
+    clear_item_everywhere(&mut game, ids::CORE_FRAGMENT);
+    fill_research_progress(&mut game, "slow_billed");
+    let far = unreachable_depot(&mut game);
+    set_shelf(&mut game, far, ids::CORE_FRAGMENT, 12);
+    let worker = spawn_tamed(&mut game, 10, 3);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert!(
+        game.world
+            .get::<Task>(worker)
+            .is_none_or(|t| t.target != station),
+        "nothing the Station could fetch, so nobody is posted there"
+    );
+    // And the reachable case, so the assertion above is not vacuous.
+    let near = fixture_depot(&mut game);
+    set_shelf(&mut game, near, ids::CORE_FRAGMENT, 3);
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(station)
+    );
+}
+
+/// The last units on their way — in a program's hands, or landed in a hopper
+/// and not yet absorbed — are supply, so the project is not told it has none.
+#[test]
+fn the_last_load_on_its_way_is_not_read_as_none() {
+    let assets = slow_assets("research_fed_in_flight");
+    let mut game = Game::new(9713, DifficultyMode::Forgiving, &assets).unwrap();
+    let (station, _) = station_with_project(&mut game, "slow_billed");
+    fill_research_progress(&mut game, "slow_billed");
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .delivered
+        .entry("slow_billed".to_string())
+        .or_default()
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 7);
+    let def = game
+        .world
+        .resource::<ResearchDb>()
+        .get("slow_billed")
+        .cloned()
+        .unwrap();
+
+    let carrier = carrier_at(&mut game, station, 5);
+    assert_eq!(game.research_block(&def), None, "a load in hand");
+    assert_eq!(game.research_material_shortfall(), None);
+
+    game.world.entity_mut(carrier).remove::<Carrying>();
+    game.world
+        .get_mut::<Stock>(station)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+    assert_eq!(game.research_block(&def), None, "a load in the hopper");
+    assert_eq!(game.research_material_shortfall(), None);
+}
+
+/// A Station is fed off shelves, never off a machine's own buffer — that
+/// buffer may be feeding the machine beside it. A base with no Depot and no
+/// stockpile cell is told to build one.
+#[test]
+fn a_machine_buffer_is_not_a_research_source() {
+    let assets = slow_assets("research_fed_no_raid");
+    let mut game = Game::new(9714, DifficultyMode::Forgiving, &assets).unwrap();
+    let (_, depot) = station_with_project(&mut game, "slow_billed");
+    game.world.despawn(depot);
+    let extractor =
+        crate::game::base::work_orders::producers_of(&game, &ItemId::from(ids::CORE_FRAGMENT))[0];
+    set_shelf(&mut game, extractor, ids::CORE_FRAGMENT, 12);
+
+    for _ in 0..300 {
+        game.tick();
+    }
+
+    assert_eq!(delivered(&game, "slow_billed", ids::CORE_FRAGMENT), 0);
+    let want =
+        crate::game::base::work_orders::no_shelf_for(&game, &ItemId::from(ids::CORE_FRAGMENT));
+    assert_eq!(
+        research_node(&game, "slow_billed").blocked_by.as_deref(),
+        Some(want.as_str())
+    );
+}
+
+/// A load that has landed in the hopper but not yet been absorbed when the
+/// project is abandoned is credited to that project, not handed to the next.
+#[test]
+fn abandoning_absorbs_a_load_still_in_the_hopper() {
+    let assets = slow_assets("research_fed_abandon_hopper");
+    let mut game = Game::new(9715, DifficultyMode::Forgiving, &assets).unwrap();
+    let (station, _) = station_with_project(&mut game, "slow_billed");
+    game.world
+        .get_mut::<Stock>(station)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+
+    game.abandon_research().unwrap();
+
+    assert_eq!(delivered(&game, "slow_billed", ids::CORE_FRAGMENT), 5);
+    assert!(game.world.get::<Stock>(station).unwrap().input.is_empty());
 }

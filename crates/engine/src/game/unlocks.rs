@@ -1099,13 +1099,25 @@ impl Game {
         self.research_outstanding(def)
             .into_iter()
             .find_map(|(item, short)| {
-                if memo.holding(self, &item) >= short {
+                // The running project counts what the Station can be fed from
+                // and what is already on its way (`research_supply`); any
+                // other node, what the base holds at all.
+                let covered = if active {
+                    self.research_supply(&item)
+                } else {
+                    memo.holding(self, &item)
+                };
+                if covered >= short {
                     return None;
                 }
                 memo.chain
                     .entry(item.clone())
                     .or_insert_with(|| crate::game::base::work_orders::chain_break(self, &item))
                     .clone()
+                    .or_else(|| {
+                        (active && !self.research_has_shelves())
+                            .then(|| crate::game::base::work_orders::no_shelf_for(self, &item))
+                    })
                     .or_else(|| {
                         (active && !needs.contains(&item))
                             .then(|| crate::game::base::work_orders::no_order_for(self, &item))
@@ -1384,7 +1396,7 @@ impl Game {
         // A line the shelves already cover is being carried, not waited on.
         self.research_outstanding(def)
             .into_iter()
-            .find(|(item, short)| crate::game::base::work_orders::base_holding(self, item) < *short)
+            .find(|(item, short)| self.research_supply(item) < *short)
             .map(|(item, _)| self.item_name(&item).to_string())
     }
 
@@ -1589,74 +1601,6 @@ impl Game {
         self.world
             .resource::<ActiveResearch>()
             .outstanding(&def.id, &def.materials)
-    }
-
-    /// Moves what haulers have loaded into every Research Station's input
-    /// hopper into the active project's delivered tally — the tick the units
-    /// actually leave the run, so it is where the ledger hears of them.
-    ///
-    /// Gather (the bill and each hopper, Stations in tile order from
-    /// `producers_of`), decide (`research::absorb_from_input`, per Station
-    /// against what is still outstanding after the ones before it), apply.
-    /// The hauler's `Errand::Load` caps a load at the outstanding line, so a
-    /// hopper holds nothing the bill does not want; anything else stays put.
-    pub(crate) fn absorb_research_deliveries(&mut self) {
-        let Some(id) = self.world.resource::<ActiveResearch>().id.clone() else {
-            return;
-        };
-        let Some(materials) = self
-            .world
-            .resource::<ResearchDb>()
-            .get(&id)
-            .map(|d| d.materials.clone())
-        else {
-            return;
-        };
-        if materials.is_empty() {
-            return;
-        }
-        let stations =
-            crate::game::base::work_orders::producers_of(self, &self.research_currency());
-        for station in stations {
-            let outstanding = self
-                .world
-                .resource::<ActiveResearch>()
-                .outstanding(&id, &materials);
-            if outstanding.is_empty() {
-                return;
-            }
-            let Some(input) = self.world.get::<Stock>(station).map(|s| s.input.clone()) else {
-                continue;
-            };
-            let taken = crate::research::absorb_from_input(&outstanding, &input);
-            for (item, qty) in taken {
-                if let Some(mut stock) = self.world.get_mut::<Stock>(station) {
-                    crate::game::base::hauling::take_from_input(&mut stock, &item, qty);
-                }
-                *self
-                    .world
-                    .resource_mut::<ActiveResearch>()
-                    .delivered
-                    .entry(id.clone())
-                    .or_default()
-                    .entry(item.clone())
-                    .or_default() += qty;
-                let name = item.0.clone();
-                self.report_base(
-                    crate::base_ledger::Event::Consume {
-                        item: item.clone(),
-                        qty,
-                    },
-                    move |tick, zone, _| crate::telemetry::Record::Consume {
-                        tick,
-                        zone,
-                        item: name,
-                        qty,
-                        source: crate::base_ledger::ConsumeSource::Base.as_str().to_string(),
-                    },
-                );
-            }
-        }
     }
 
     /// The pinned subject, converted into a downed program left standing at

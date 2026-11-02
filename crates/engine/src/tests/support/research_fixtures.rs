@@ -237,9 +237,10 @@ pub(crate) fn base_with_a_research_node(game: &mut Game) -> Entity {
     node
 }
 
-/// Puts the whole bill of the named research node onto a scratch base shelf —
-/// what the base holds for a Research Station's program to carry in. A shelf
-/// rather than the player's pack, deliberately: the pack is never a source.
+/// Puts the whole bill of the named research node onto a scratch Depot —
+/// what the base holds for a Research Station's program to carry in. A Depot
+/// because a Station is fed off shelves only (`research_supply`), and rather
+/// than the player's pack, deliberately: the pack is never a source.
 pub(crate) fn shelve_research_bill(game: &mut Game, id: &str, x: i32, y: i32) -> Entity {
     let materials = game
         .world
@@ -254,7 +255,7 @@ pub(crate) fn shelve_research_bill(game: &mut Game, id: &str, x: i32, y: i32) ->
     game.world
         .spawn((
             Structure {
-                kind: "test_research_shelf".to_string(),
+                kind: "depot".to_string(),
             },
             Position { x, y },
             stock,

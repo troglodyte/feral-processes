@@ -266,9 +266,20 @@ pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
 /// What a research bill's line says when the shelves cannot cover it and
 /// nothing in the queue is making it — `no_producer`'s shape, one rung
 /// later: the machine stands, and the base has not been asked to run it.
+///
+/// A **standing** order, because a one-shot batch aims at what the base
+/// holds while the Station keeps draining it, and so overproduces.
 pub(crate) fn no_order_for(game: &Game, item: &ItemId) -> String {
     let name = game.item_name(item);
-    format!("Not enough {name} on the shelves — file a work order for {name}.")
+    format!("No {name} to carry in — file a standing work order for it.")
+}
+
+/// What a research bill's line says when the base has no Depot and no
+/// stockpile cell: a Research Station is fed off shelves only
+/// (`research_supply`), so a machine's own buffer is no source.
+pub(crate) fn no_shelf_for(game: &Game, item: &ItemId) -> String {
+    let name = game.item_name(item);
+    format!("No Depot to carry {name} from — build a Depot.")
 }
 
 /// The one sentence naming why a line for `item` can never move, or `None`
@@ -3352,7 +3363,7 @@ impl Game {
 
     /// Every deployed Research Node while a project is active **and still has
     /// progress left to earn**; once it has, the first Node alone while its
-    /// bill is outstanding and the base holds some of it to carry (the body
+    /// bill is outstanding and a shelf it can reach holds some of it (the body
     /// posted there is what walks the bill in — `hauling::haul_step_system`'s
     /// research leg); and with none active, `study_wants`.
     ///
@@ -3380,7 +3391,7 @@ impl Game {
     /// `(Entity, u32)` depth pairs `settle_orders` answers with: a Research
     /// Node is the top of its own line and has no recipe tree behind it to
     /// measure a depth against.
-    fn research_wants(&self) -> Vec<(Entity, TaskKind)> {
+    fn research_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let research = self.world.resource::<resources::ActiveResearch>();
         let Some(id) = research.id.as_ref() else {
             return self.study_wants();
@@ -3395,23 +3406,25 @@ impl Game {
         };
         if earned >= def.cost {
             // The data is in; what is left is carrying the bill. One Station
-            // is enough for that, and only while the base holds a unit of an
-            // outstanding line — `build_is_workable`'s deadlock rule: a
-            // Station staffed with nothing to fetch would hold the body that
-            // should be making the material.
-            let fetchable = research
+            // is enough for that, and only while a shelf it can walk to holds
+            // a unit of an outstanding line — `build_is_workable`'s deadlock
+            // rule: a Station staffed with nothing it can fetch would hold the
+            // body that should be making the material.
+            let owed: Vec<ItemId> = research
                 .outstanding(id, &def.materials)
-                .iter()
-                .any(|(item, _)| base_holding(self, item) > 0);
-            if !fetchable {
-                return Vec::new();
-            }
-            return producers_of(self, &self.research_currency())
+                .into_iter()
+                .map(|(item, _)| item)
+                .collect();
+            let Some(station) = producers_of(self, &self.research_currency())
                 .into_iter()
                 .find(|&machine| can_progress(self, machine))
-                .map(|machine| (machine, TaskKind::GatherResource))
-                .into_iter()
-                .collect();
+            else {
+                return Vec::new();
+            };
+            if owed.is_empty() || !self.research_bill_reachable(station, &owed) {
+                return Vec::new();
+            }
+            return vec![(station, TaskKind::GatherResource)];
         }
         producers_of(self, &self.research_currency())
             .into_iter()

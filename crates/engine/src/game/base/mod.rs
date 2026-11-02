@@ -36,6 +36,7 @@ pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod prison;
 pub(crate) mod repair;
+pub(crate) mod research_supply;
 pub(crate) mod sabotage;
 pub(crate) mod siphon;
 pub(crate) mod stock;

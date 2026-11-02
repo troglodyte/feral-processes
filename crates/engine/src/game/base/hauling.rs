@@ -15,6 +15,7 @@ use crate::base_grid::BaseGrid;
 use crate::components::{Fleeing, FloorItem, SetDownLoad};
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::floor::take_floor_unit;
+use crate::game::base::research_supply::ResearchLedger;
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::FloorThing;
@@ -972,18 +973,6 @@ fn input_room(
     cap.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
 }
 
-/// How much more of `item` a Research Station's hopper may take for the
-/// active project's bill: the outstanding line less what already sits in the
-/// hopper waiting to be absorbed. Zero for an item the bill does not name,
-/// which turns a load of it into a `Deposit` — the overfill guard.
-fn research_room(bill: &[(ItemId, u32)], stock: &Stock, item: &ItemId) -> u32 {
-    bill.iter()
-        .find(|(want, _)| want == item)
-        .map_or(0, |(_, short)| {
-            short.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
-        })
-}
-
 /// The first thing on `machine`'s intake it cannot cover a batch of out of
 /// its own input or the machines touching it — the one an errand to a shelf
 /// would be for. `None` when everything it needs is already within reach.
@@ -1182,8 +1171,8 @@ pub(crate) fn haul_step_system(
         research,
         research_db,
     } = defs;
-    // What the active project's bill still wants carried, and which product
-    // marks a Research Station. Empty with nothing active or the bill in.
+    // What the active project's bill still wants carried. Empty with nothing
+    // active or the bill in.
     let research_bill: Vec<(ItemId, u32)> = research
         .id
         .as_ref()
@@ -1193,7 +1182,6 @@ pub(crate) fn haul_step_system(
                 .map(|def| research.outstanding(id, &def.materials))
         })
         .unwrap_or_default();
-    let research_currency = items.research_currency().cloned();
     // **Grown as bodies move, never shrunk** — `drift_idle_staff`'s `held`
     // rule, and for its reason: a vacated cell stays spoken for until the
     // next tick, which costs a body one step it will be offered again and
@@ -1291,6 +1279,33 @@ pub(crate) fn haul_step_system(
         .map(|(e, p, _, _)| ((p.x, p.y), e))
         .collect();
 
+    // Every Research Station — what makes the research currency — and the
+    // pass's one ledger of the bill across all of them, netting every hopper
+    // and every load already on its way. See `research_supply::ResearchLedger`.
+    let research_currency = items.research_currency();
+    let stations: HashSet<Entity> = structures
+        .iter()
+        .filter(|(e, _, _, s)| {
+            research_currency.is_some()
+                && db.get(&s.kind).is_some_and(|def| {
+                    produced_item(Placed::of(def, recipes.get(*e).ok())) == research_currency
+                })
+        })
+        .map(|(e, ..)| e)
+        .collect();
+    let mut ledger = ResearchLedger::new(
+        &research_bill,
+        structures
+            .iter()
+            .filter(|(e, ..)| stations.contains(e))
+            .map(|(_, _, stock, _)| &stock.input),
+        workers.iter().filter_map(|(_, _, task, carrying, ..)| {
+            carrying
+                .filter(|_| stations.contains(&task.target))
+                .map(|load| (load.item.clone(), load.qty))
+        }),
+    );
+
     // Sorted for the reason `assembler_system` sorts its machines: two
     // workers competing for the last slot in a depot must resolve the same
     // way every run, and bevy's iteration order does not promise that.
@@ -1348,54 +1363,61 @@ pub(crate) fn haul_step_system(
             let recipe = recipe.as_deref();
             // **The research leg.** A Research Station's posted program
             // carries the active bill in: a load lands in the Station's
-            // input (`Errand::Load`), capped at the line still outstanding,
-            // and `Game::absorb_research_deliveries` consumes it into the
-            // project. The same errands every machine uses, with the
-            // bill standing in for a recipe.
-            let station_bill = def
-                .filter(|def| {
-                    !research_bill.is_empty()
-                        && research_currency.is_some()
-                        && produced_item(Placed::of(def, recipes.get(machine).ok()))
-                            == research_currency.as_ref()
-                })
-                .map(|_| research_bill.as_slice());
+            // input (`Errand::Load`), capped by the pass's `ledger`, and
+            // `Game::absorb_research_deliveries` consumes it into the
+            // project. The same errands every machine uses, with the bill
+            // standing in for a recipe — fetched off shelves only (a Depot,
+            // or a stockpile cell; see `research_supply`), nearest first
+            // **among those the walk reaches**, every line tried in turn so
+            // an unreachable first line does not starve a reachable second.
+            let research_leg = stations.contains(&machine) && ledger.wants_any();
             let research_fetch = || -> Option<Errand> {
-                let bill = station_bill?;
-                let (_, _, stock, _) = structures.get(machine).ok()?;
-                bill.iter().find_map(|(item, _)| {
-                    let room = research_room(bill, stock, item);
-                    if room == 0 {
+                if !research_leg {
+                    return None;
+                }
+                ledger.items().find_map(|item| {
+                    let want = ledger.fetch_want(item);
+                    if want == 0 {
                         return None;
                     }
-                    if let Some(depot) = nearest_store_holding(
-                        &every_structure,
-                        worker_pos,
-                        item,
-                        &structures,
-                        reachable,
-                    ) {
+                    let mut shelves: Vec<(Entity, Position)> = stores
+                        .iter()
+                        .copied()
+                        .filter(|(e, _)| {
+                            structures.get(*e).is_ok_and(|(_, _, s, _)| {
+                                s.output.get(item).copied().unwrap_or(0) > 0
+                            })
+                        })
+                        .collect();
+                    shelves.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
+                    if let Some((depot, _)) = shelves.into_iter().find(|&(e, p)| reachable(e, p)) {
                         return Some(Errand::Collect {
                             depot,
                             item: item.clone(),
-                            want: room.min(tuning::HAUL_CARRY_CAPACITY),
+                            want,
                         });
                     }
                     // A plain item on a stockpile cell is the base's too
                     // (`stock::stockpiled`), lifted a unit at a time.
-                    piles
+                    let mut piled: Vec<(i32, i32, i32, Entity)> = piles
                         .iter()
                         .filter(|(_, p, f)| {
                             matches!(&f.0, FloorThing::Item(held) if held == item)
                                 && grid.is_stockpile(p.x, p.y)
                         })
                         .map(|(e, p, _)| (chebyshev(*p, worker_pos), p.x, p.y, e))
-                        .min()
-                        .map(|(_, x, y, thing)| Errand::Pickup {
-                            thing,
-                            at: Position { x, y },
-                            item: item.clone(),
-                        })
+                        .collect();
+                    piled.sort_unstable();
+                    piled.into_iter().find_map(|(_, x, y, thing)| {
+                        let at = Position { x, y };
+                        post_reach(&grid, worker_pos, at, 1, &blocked, pocket_radius)
+                            .is_ok()
+                            .then(|| Errand::Pickup {
+                                thing,
+                                at,
+                                item: item.clone(),
+                            })
+                    })
                 })
             };
             match &carrying {
@@ -1407,11 +1429,9 @@ pub(crate) fn haul_step_system(
                     // the worker is walking — which matters, since
                     // `CreatureSave::carrying` is a positional tuple RON
                     // cannot widen.
-                    let room = match station_bill {
-                        Some(bill) => structures
-                            .get(machine)
-                            .map_or(0, |(_, _, stock, _)| research_room(bill, stock, &load.item)),
-                        None => recipe
+                    let room = match research_leg {
+                        true => ledger.load_room(&load.item),
+                        false => recipe
                             .and_then(|r| {
                                 structures
                                     .get(machine)
@@ -1594,6 +1614,9 @@ pub(crate) fn haul_step_system(
                             continue;
                         };
                         *stock.input.entry(load.item.clone()).or_default() += moved;
+                        if stations.contains(&machine) {
+                            ledger.landed(&load.item, moved);
+                        }
                     }
                     note_haul(
                         &mut telemetry,
@@ -1631,6 +1654,9 @@ pub(crate) fn haul_step_system(
                         legs,
                     );
                     if taken > 0 {
+                        if stations.contains(&machine) {
+                            ledger.lifted(&item, taken);
+                        }
                         commands
                             .entity(worker)
                             .insert(Carrying { item, qty: taken });
@@ -1640,6 +1666,9 @@ pub(crate) fn haul_step_system(
                     // Queued: the take needs the whole `World`. Two haulers
                     // sent to one item resolve in queue order, the second
                     // finding it gone and re-deriving next tick.
+                    if stations.contains(&machine) {
+                        ledger.lifted(&item, 1);
+                    }
                     commands.queue(move |world: &mut World| {
                         if take_floor_unit(world, thing, &item) {
                             world.entity_mut(worker).insert(Carrying { item, qty: 1 });

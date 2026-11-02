@@ -410,6 +410,9 @@ fn a_bill_already_on_the_shelves_is_no_block_whatever_stands() {
             game.world.despawn(machine);
         }
     }
+    // The flag reads the tick's reach snapshot; this test edits the world
+    // by hand between ticks.
+    game.refresh_research_reach();
 
     assert!(
         matches!(

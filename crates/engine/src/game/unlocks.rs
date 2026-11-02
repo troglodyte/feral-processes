@@ -1255,6 +1255,7 @@ impl Game {
         // data finished, so anything else eating those units stalled the
         // project for good.
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
+        self.refresh_research_reach();
         self.log_base(format!("Research project started: {}.", def.name));
         Ok(())
     }
@@ -1289,6 +1290,7 @@ impl Game {
             .unwrap_or_else(|| active.clone());
         self.absorb_research_deliveries();
         self.world.resource_mut::<ActiveResearch>().id = None;
+        self.refresh_research_reach();
         self.log_base(format!("Research project abandoned: {name}."));
         Ok(())
     }
@@ -1542,6 +1544,8 @@ impl Game {
 
     pub(crate) fn settle_research(&mut self) {
         self.absorb_research_deliveries();
+        // Once a tick, for every screen that reads the flag each frame.
+        self.refresh_research_reach();
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;
         };
@@ -1659,5 +1663,6 @@ impl Game {
         }
         research.progress.remove(&def.id);
         research.delivered.remove(&def.id);
+        self.refresh_research_reach();
     }
 }

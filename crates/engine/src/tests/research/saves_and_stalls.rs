@@ -326,6 +326,9 @@ fn a_project_waiting_on_materials_asks_for_the_player() {
             .entry(item)
             .or_default() += need;
     }
+    // The stall reads the tick's reach snapshot; this test edits the world
+    // by hand between ticks.
+    game.refresh_research_reach();
 
     assert!(
         !stalled(&mut game),

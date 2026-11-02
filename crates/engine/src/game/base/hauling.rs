@@ -1391,6 +1391,20 @@ pub(crate) fn haul_step_system(
                 if !research_leg {
                     return None;
                 }
+                // **One walk field for this program this tick**, built the
+                // first time a candidate is asked — `crew_reach`'s trade:
+                // every shelf, stockpile unit and buffer is then a lookup
+                // rather than a search of its own.
+                let field = std::cell::OnceCell::new();
+                let in_reach = |e: Option<Entity>, at: Position| {
+                    let side = e
+                        .and_then(|e| structures.get(e).ok())
+                        .and_then(|(_, _, _, s)| db.get(&s.kind))
+                        .map_or(1, |d| d.footprint);
+                    let reach = field
+                        .get_or_init(|| crew_reach(&grid, worker_pos, &blocked, pocket_radius));
+                    reaches(&grid, reach, worker_pos, at, side, &blocked, pocket_radius)
+                };
                 ledger.items().find_map(|item| {
                     let want = ledger.fetch_want(item);
                     if want == 0 {
@@ -1406,7 +1420,9 @@ pub(crate) fn haul_step_system(
                         })
                         .collect();
                     shelves.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
-                    if let Some((depot, _)) = shelves.into_iter().find(|&(e, p)| reachable(e, p)) {
+                    if let Some((depot, _)) =
+                        shelves.into_iter().find(|&(e, p)| in_reach(Some(e), p))
+                    {
                         return Some(Errand::Collect {
                             depot,
                             item: item.clone(),
@@ -1426,13 +1442,11 @@ pub(crate) fn haul_step_system(
                     piled.sort_unstable();
                     let pickup = piled.into_iter().find_map(|(_, x, y, thing)| {
                         let at = Position { x, y };
-                        post_reach(&grid, worker_pos, at, 1, &blocked, pocket_radius)
-                            .is_ok()
-                            .then(|| Errand::Pickup {
-                                thing,
-                                at,
-                                item: item.clone(),
-                            })
+                        in_reach(None, at).then(|| Errand::Pickup {
+                            thing,
+                            at,
+                            item: item.clone(),
+                        })
                     });
                     if pickup.is_some() {
                         return pickup;
@@ -1455,7 +1469,7 @@ pub(crate) fn haul_step_system(
                     buffers.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
                     buffers
                         .into_iter()
-                        .find(|&(e, p)| reachable(e, p))
+                        .find(|&(e, p)| in_reach(Some(e), p))
                         .map(|(depot, _)| Errand::Collect {
                             depot,
                             item: item.clone(),

@@ -120,6 +120,7 @@ pub(crate) fn buffer_is_free(machine: Position, item: &ItemId, staffed: &[Consum
 struct Source {
     pos: Position,
     side: u8,
+    item: ItemId,
     qty: u32,
 }
 
@@ -178,6 +179,7 @@ impl Game {
                     found.push(Source {
                         pos: *pos,
                         side: def.footprint,
+                        item: item.clone(),
                         qty,
                     });
                 }
@@ -187,9 +189,10 @@ impl Game {
             stock::stockpiled(self)
                 .into_iter()
                 .filter(|(_, _, held)| items.contains(held))
-                .map(|(pos, ..)| Source {
+                .map(|(pos, _, item)| Source {
                     pos,
                     side: 1,
+                    item,
                     qty: 1,
                 }),
         );
@@ -244,43 +247,78 @@ impl Game {
         reached
     }
 
-    /// `(reachable, unreachable)` units of `item` a Station's program may
-    /// take, from any Station.
-    fn research_holding(&self, item: &ItemId) -> (u32, u32) {
-        let sources = self.research_sources(std::slice::from_ref(item));
-        let reached = self.research_reached(&self.research_stations(), &sources);
-        sources
-            .iter()
-            .zip(reached)
-            .fold((0, 0), |(yes, no), (s, hit)| {
-                if hit {
-                    (yes + s.qty, no)
+    /// Recomputes the running project's `ActiveResearch::reach` snapshot:
+    /// for every outstanding line, what the bill can still be fed from and
+    /// what lies out of reach. **The one place the reach is walked for the
+    /// views**, once a tick from `settle_research` and again after a select,
+    /// an abandon and a load, so the flag is right before the next tick. The
+    /// flag, the stall and the readout read the snapshot; the staffing and the
+    /// haulers ask `research_reached` live, over the same sources and walls,
+    /// so all four agree.
+    pub(crate) fn refresh_research_reach(&mut self) {
+        let owed: Vec<ItemId> = {
+            let research = self.world.resource::<ActiveResearch>();
+            research
+                .id
+                .as_ref()
+                .and_then(|id| {
+                    self.world
+                        .resource::<ResearchDb>()
+                        .get(id)
+                        .map(|def| research.outstanding(id, &def.materials))
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(item, _)| item)
+                .collect()
+        };
+        let mut reach = crate::research::ResearchReach::default();
+        if !owed.is_empty() {
+            let stations = self.research_stations();
+            let sources = self.research_sources(&owed);
+            let reached = self.research_reached(&stations, &sources);
+            for item in &owed {
+                let on_way = self.research_in_flight(&stations, item)
+                    + stations
+                        .iter()
+                        .filter_map(|&s| self.world.get::<Stock>(s))
+                        .map(|s| s.input.get(item).copied().unwrap_or(0))
+                        .sum::<u32>();
+                reach.supply.insert(item.clone(), on_way);
+            }
+            for (source, hit) in sources.iter().zip(reached) {
+                let into = if hit {
+                    &mut reach.supply
                 } else {
-                    (yes, no + s.qty)
-                }
-            })
+                    &mut reach.unreachable
+                };
+                *into.entry(source.item.clone()).or_default() += source.qty;
+            }
+        }
+        self.world.resource_mut::<ActiveResearch>().reach = reach;
     }
 
-    /// How much of `item` the bill can still be fed from: every unit a
-    /// Station's program can reach (`research_sources`), plus what is already
-    /// in a Station's hopper or in a Station program's hands. The flag and
-    /// the stall read this rather than `base_holding`, so the last load on its
-    /// way is not read as none, and units nobody can walk to — or that an
-    /// active line is pulling — are not read as supply.
+    /// How much of `item` the running project's bill can still be fed from:
+    /// every unit a Station's program can reach (`research_sources`), plus
+    /// what is already in a Station's hopper or in a Station program's hands
+    /// — read off the tick's snapshot (`refresh_research_reach`). The flag
+    /// and the stall read this rather than `base_holding`, so the last load
+    /// on its way is not read as none, and units nobody can walk to — or that
+    /// an active line is pulling — are not read as supply.
     pub(crate) fn research_supply(&self, item: &ItemId) -> u32 {
-        let stations = self.research_stations();
-        let hoppers: u32 = stations
-            .iter()
-            .filter_map(|&s| self.world.get::<Stock>(s))
-            .map(|s| s.input.get(item).copied().unwrap_or(0))
-            .sum();
-        self.research_holding(item).0 + hoppers + self.research_in_flight(&stations, item)
+        self.world
+            .resource::<ActiveResearch>()
+            .reach
+            .supply_of(item)
     }
 
     /// Units of `item` the bill could take but no Station's program can walk
-    /// to — what `work_orders::no_reach_for` is about.
+    /// to — what `work_orders::no_reach_for` is about. The snapshot's.
     pub(crate) fn research_unreachable(&self, item: &ItemId) -> u32 {
-        self.research_holding(item).1
+        self.world
+            .resource::<ActiveResearch>()
+            .reach
+            .unreachable_of(item)
     }
 
     fn research_in_flight(&self, stations: &[Entity], item: &ItemId) -> u32 {

@@ -214,6 +214,11 @@ pub struct ActiveResearch {
     /// encoding must not depend on hash order.
     pub delivered:
         std::collections::HashMap<crate::research::ResearchId, BTreeMap<crate::items::ItemId, u32>>,
+    /// The running project's reach, recomputed once a tick — see
+    /// `research::ResearchReach`. A field here rather than a resource of its
+    /// own for `study`'s reason: a new resource shifts bevy's iteration
+    /// order. Not saved; `SaveData` never carries it.
+    pub(crate) reach: crate::research::ResearchReach,
 }
 
 impl ActiveResearch {

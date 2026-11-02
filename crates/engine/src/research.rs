@@ -202,6 +202,27 @@ pub(crate) fn outstanding_bill(
         .collect()
 }
 
+/// The running project's reach, snapshotted once a tick by
+/// `Game::refresh_research_reach` so the screens that read it every frame do
+/// not walk the base: per outstanding item, what the bill can still be fed
+/// from and what lies out of every Station program's reach. Derived, never
+/// saved — a load recomputes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResearchReach {
+    pub(crate) supply: BTreeMap<ItemId, u32>,
+    pub(crate) unreachable: BTreeMap<ItemId, u32>,
+}
+
+impl ResearchReach {
+    pub(crate) fn supply_of(&self, item: &ItemId) -> u32 {
+        self.supply.get(item).copied().unwrap_or(0)
+    }
+
+    pub(crate) fn unreachable_of(&self, item: &ItemId) -> u32 {
+        self.unreachable.get(item).copied().unwrap_or(0)
+    }
+}
+
 /// How much of a Research Station's input hopper goes into the project this
 /// tick: each outstanding line takes what the hopper holds of it, capped at
 /// the shortfall. The decide half of `Game::absorb_research_deliveries`;

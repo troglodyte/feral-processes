@@ -273,6 +273,7 @@ fn an_unsupplied_material_asks_for_a_work_order() {
     );
 
     set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 12);
+    game.refresh_research_reach();
     assert_eq!(
         research_node(&game, "slow_billed").blocked_by,
         None,
@@ -280,6 +281,7 @@ fn an_unsupplied_material_asks_for_a_work_order() {
     );
 
     set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 0);
+    game.refresh_research_reach();
     game.queue_work_order(WorkOrder::batch(fragment, 3))
         .unwrap();
     assert_eq!(
@@ -516,6 +518,7 @@ fn the_last_load_on_its_way_is_not_read_as_none() {
         .unwrap();
 
     let carrier = carrier_at(&mut game, station, 5);
+    game.refresh_research_reach();
     assert_eq!(game.research_block(&def), None, "a load in hand");
     assert_eq!(game.research_material_shortfall(), None);
 
@@ -525,6 +528,7 @@ fn the_last_load_on_its_way_is_not_read_as_none() {
         .unwrap()
         .input
         .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+    game.refresh_research_reach();
     assert_eq!(game.research_block(&def), None, "a load in the hopper");
     assert_eq!(game.research_material_shortfall(), None);
 }
@@ -605,11 +609,14 @@ fn a_feed_buffer_an_active_line_is_pulling_is_not_research_supply() {
     let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, 22, 1);
     let factory = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 23, 1);
     set_shelf(&mut game, extractor, ids::CORE_FRAGMENT, 12);
+    reselect(&mut game, "slow_billed");
+    game.refresh_research_reach();
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
     assert_eq!(game.research_supply(&fragment), 12, "an idle neighbour");
 
     let worker = spawn_tamed(&mut game, 10, 3);
     game.post_worker(worker, factory);
+    game.refresh_research_reach();
 
     assert_eq!(game.research_supply(&fragment), 0, "a worked neighbour");
 }
@@ -661,6 +668,7 @@ fn units_on_an_unreachable_shelf_are_flagged_not_counted() {
     fill_research_progress(&mut game, "slow_billed");
     let far = unreachable_depot(&mut game);
     set_shelf(&mut game, far, ids::CORE_FRAGMENT, 12);
+    game.refresh_research_reach();
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
 
     assert_eq!(game.research_supply(&fragment), 0);
@@ -691,4 +699,46 @@ fn a_station_reaches_a_shelf_from_any_of_its_faces() {
     set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 3);
 
     assert!(game.research_bill_reachable(station, &[ItemId::from(ids::CORE_FRAGMENT)]));
+}
+
+/// The screens read the reach snapshot, so it has to be right the moment a
+/// project is picked and the moment a save loads — before any tick has run
+/// the settle step that keeps it fresh.
+#[test]
+fn the_flag_is_right_straight_after_select_and_after_a_load() {
+    let assets = slow_assets("research_fed_snapshot");
+    let mut game = Game::new(9721, DifficultyMode::Forgiving, &assets).unwrap();
+    base_with_a_research_node(&mut game);
+    clear_item_everywhere(&mut game, ids::CORE_FRAGMENT);
+    let far = unreachable_depot(&mut game);
+    set_shelf(&mut game, far, ids::CORE_FRAGMENT, 12);
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    let want = crate::game::base::work_orders::no_reach_for(&game, &fragment);
+
+    game.select_research("slow_billed").unwrap();
+    assert_eq!(
+        research_node(&game, "slow_billed").blocked_by.as_deref(),
+        Some(want.as_str()),
+        "right after select"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_research_snapshot_{}.ron",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(
+        research_node(&loaded, "slow_billed").blocked_by.as_deref(),
+        Some(want.as_str()),
+        "right after a load"
+    );
+
+    game.abandon_research().unwrap();
+    assert_eq!(
+        game.research_unreachable(&fragment),
+        0,
+        "and an abandon clears it"
+    );
 }

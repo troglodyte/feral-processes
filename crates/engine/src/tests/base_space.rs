@@ -9,6 +9,7 @@
 
 use super::support::*;
 use crate::floors::FloorId;
+use crate::game::base::hauling::Touch;
 use crate::world::{Biome, Tile, WorldMap};
 use crate::*;
 
@@ -3431,7 +3432,15 @@ fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
     let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
-        post_reach(&grid, from, target, 1, &blocked, grid.radius()),
+        post_reach(
+            &grid,
+            from,
+            target,
+            1,
+            &blocked,
+            grid.radius(),
+            Touch::Sides
+        ),
         Ok(()),
         "a post with one reachable face was reported unreachable"
     );
@@ -3454,7 +3463,15 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     let blocked = crate::game::base::hauling::Occupancy::default();
 
     assert_eq!(
-        post_reach(&grid, from, target, 1, &blocked, grid.radius()),
+        post_reach(
+            &grid,
+            from,
+            target,
+            1,
+            &blocked,
+            grid.radius(),
+            Touch::Sides
+        ),
         Err(NoPost::NoRoute),
         "both faces are cut off from the worker, so this is a route problem"
     );
@@ -3462,7 +3479,15 @@ fn a_post_with_no_reachable_face_is_still_refused() {
     let mut boxed = base_grid::BaseGrid::default();
     boxed.lay_floor(from.x, from.y);
     assert_eq!(
-        post_reach(&boxed, from, target, 1, &blocked, boxed.radius()),
+        post_reach(
+            &boxed,
+            from,
+            target,
+            1,
+            &blocked,
+            boxed.radius(),
+            Touch::Sides
+        ),
         Err(NoPost::BoxedIn),
         "nothing can stand beside it at all, which is a digging problem"
     );
@@ -3487,12 +3512,28 @@ fn a_body_on_a_face_is_not_a_throughway_and_a_body_short_of_it_is() {
     let short_of_it = blocked_tiles(std::iter::empty(), [Position { x: -1, y: 1 }].into_iter());
 
     assert_eq!(
-        step_to_post(&grid, from, target, 1, &on_face, grid.radius()),
+        step_to_post(
+            &grid,
+            from,
+            target,
+            1,
+            &on_face,
+            grid.radius(),
+            Touch::Sides
+        ),
         Err(NoPost::NoRoute),
         "the only way on runs through a face somebody is standing on"
     );
     assert_eq!(
-        step_to_post(&grid, from, target, 1, &short_of_it, grid.radius()),
+        step_to_post(
+            &grid,
+            from,
+            target,
+            1,
+            &short_of_it,
+            grid.radius(),
+            Touch::Sides
+        ),
         Ok(Some(Step {
             to: Position { x: -1, y: 1 },
             squeeze: true,
@@ -3528,12 +3569,30 @@ fn the_crew_field_and_the_posted_walk_agree_about_a_body_on_a_face() {
         );
         let field = crew_reach(&grid, from, &blocked, grid.radius());
         assert_eq!(
-            post_reach(&grid, from, target, 1, &blocked, grid.radius()).is_ok(),
+            post_reach(
+                &grid,
+                from,
+                target,
+                1,
+                &blocked,
+                grid.radius(),
+                Touch::Sides
+            )
+            .is_ok(),
             reachable,
             "precondition: the posted walk's answer for a body at {body:?}"
         );
         assert_eq!(
-            reaches(&grid, &field, from, target, 1, &blocked, grid.radius()),
+            reaches(
+                &grid,
+                &field,
+                from,
+                target,
+                1,
+                &blocked,
+                grid.radius(),
+                Touch::Sides
+            ),
             reachable,
             "the crew field disagrees with the posted walk for a body at {body:?}"
         );

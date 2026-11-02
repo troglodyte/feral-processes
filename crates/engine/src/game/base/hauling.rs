@@ -93,15 +93,47 @@ fn take_from_buffer(
     taken
 }
 
-/// Whether `a` is one of the four tiles orthogonally touching `b`.
+/// Which of a target's neighbours a worker may stand on to work it.
 ///
-/// `collect::ORTHOGONAL` rather than a second adjacency list: a worker's
-/// arrival, a player's collect and a machine's reach into its neighbour all
-/// ask this one question, and the moment they could differ the base stops
-/// reading as a physical line. Movement itself stays 8-directional — only
-/// touching is orthogonal.
-fn touching(a: Position, b: Position) -> bool {
-    ORTHOGONAL
+/// Every function below that answers "where does a worker stand" takes one,
+/// so each caller names its rule rather than inheriting a default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Touch {
+    /// The four sides, `collect::ORTHOGONAL`. A machine's worker, a haul's
+    /// pick-up and drop, the player's collect and a machine's reach into its
+    /// neighbour all ask this one question, and the moment they could differ
+    /// the base stops reading as a physical line.
+    Sides,
+    /// All eight neighbours, corners included. A build site and a dig mark
+    /// are one cell worked in place with nothing passed through a face, so
+    /// the line argument does not reach them — and a corner is often the
+    /// only free cell beside a site squeezed in among others.
+    AllAround,
+}
+
+impl Touch {
+    fn offsets(self) -> &'static [(i32, i32)] {
+        match self {
+            Touch::Sides => &ORTHOGONAL,
+            Touch::AllAround => &NEIGHBOURS,
+        }
+    }
+}
+
+/// The `Touch` a posting of `kind` works its target by — the one place the
+/// scheduler's reach check and the walkers agree on it.
+pub(crate) fn touch_for(kind: TaskKind) -> Touch {
+    match kind {
+        TaskKind::Construct | TaskKind::Excavate => Touch::AllAround,
+        TaskKind::GatherResource | TaskKind::Guard | TaskKind::Tend(_) => Touch::Sides,
+    }
+}
+
+/// Whether `a` is one of the tiles `touch` counts as touching `b`. Movement
+/// is 8-directional either way; only what counts as arrived differs.
+fn touching(a: Position, b: Position, touch: Touch) -> bool {
+    touch
+        .offsets()
         .iter()
         .any(|(dx, dy)| a.x == b.x + dx && a.y == b.y + dy)
 }
@@ -109,8 +141,8 @@ fn touching(a: Position, b: Position) -> bool {
 /// True when `worker` stands on one of the tiles `structure`'s `side`-wide
 /// footprint can be reached from — touching any one of its cells, anchor or
 /// floor alike. `side: 1` is every structure but the Research Station, and
-/// reduces to `touching(worker, structure)` exactly.
-pub(crate) fn at_station(worker: Position, structure: Position, side: u8) -> bool {
+/// reduces to `touching(worker, structure, touch)` exactly.
+pub(crate) fn at_station(worker: Position, structure: Position, side: u8, touch: Touch) -> bool {
     let footprint = crate::tactical::footprint_cells_at((structure.x, structure.y), side);
     // A worker standing *on* one of the footprint's own cells — reachable
     // only on a floor cell, since the anchor blocks movement — has not
@@ -125,7 +157,7 @@ pub(crate) fn at_station(worker: Position, structure: Position, side: u8) -> boo
     }
     footprint
         .into_iter()
-        .any(|(x, y)| touching(worker, Position { x, y }))
+        .any(|(x, y)| touching(worker, Position { x, y }, touch))
 }
 
 /// A deployed machine and everything it wants hauled in, as
@@ -178,9 +210,9 @@ pub(crate) fn wanted_consumer(
 /// the assemblers the base has a reason to run, so a Factory nothing has been
 /// ordered from is a bystander rather than a feed target.
 pub(crate) fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
-    consumers
-        .iter()
-        .any(|(pos, recipe)| touching(*pos, machine) && recipe.iter().any(|(want, _)| want == item))
+    consumers.iter().any(|(pos, recipe)| {
+        touching(*pos, machine, Touch::Sides) && recipe.iter().any(|(want, _)| want == item)
+    })
 }
 
 /// Whether a Depot touching `machine` takes `item` in. The Depot's intake
@@ -196,7 +228,7 @@ pub(crate) fn depot_beside_accepting(
 ) -> bool {
     stores
         .iter()
-        .any(|&(depot, pos)| touching(pos, machine) && accepts(depot, item))
+        .any(|&(depot, pos)| touching(pos, machine, Touch::Sides) && accepts(depot, item))
 }
 
 fn chebyshev(a: Position, b: Position) -> i32 {
@@ -473,8 +505,9 @@ fn station_tiles(
     side: u8,
     from: Position,
     blocked: &Occupancy,
+    touch: Touch,
 ) -> Vec<Position> {
-    let mut tiles = station_candidates(grid, structure, side, |c| blocked.taken(c));
+    let mut tiles = station_candidates(grid, structure, side, |c| blocked.taken(c), touch);
     tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
     tiles
 }
@@ -497,6 +530,7 @@ pub(crate) fn station_candidates(
     structure: Position,
     side: u8,
     taken: impl Fn((i32, i32)) -> bool,
+    touch: Touch,
 ) -> Vec<Position> {
     let footprint = crate::tactical::footprint_cells_at((structure.x, structure.y), side);
     let footprint_set: HashSet<(i32, i32)> = footprint.iter().copied().collect();
@@ -504,7 +538,7 @@ pub(crate) fn station_candidates(
     let mut candidates: Vec<Position> = footprint
         .iter()
         .flat_map(|&(fx, fy)| {
-            ORTHOGONAL.iter().map(move |(dx, dy)| Position {
+            touch.offsets().iter().map(move |(dx, dy)| Position {
                 x: fx + dx,
                 y: fy + dy,
             })
@@ -543,8 +577,9 @@ pub(crate) fn has_station(
     structure: Position,
     side: u8,
     structures: &HashSet<(i32, i32)>,
+    touch: Touch,
 ) -> bool {
-    !station_candidates(grid, structure, side, |c| structures.contains(&c)).is_empty()
+    !station_candidates(grid, structure, side, |c| structures.contains(&c), touch).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -557,7 +592,7 @@ type PostRoute = (HashMap<(i32, i32), u32>, u32);
 /// stand closer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NoPost {
-    /// Not one of the structure's four neighbours is both walkable and
+    /// Not one of the structure's neighbours (as `Touch` counts them) is both walkable and
     /// unoccupied — nothing can stand next to it at all.
     BoxedIn,
     /// A station exists, but no route reaches it from `from` within
@@ -589,8 +624,9 @@ fn post_field(
     side: u8,
     blocked: &Occupancy,
     pocket_radius: i32,
+    touch: Touch,
 ) -> Result<PostRoute, NoPost> {
-    let stations = station_tiles(grid, structure, side, from, blocked);
+    let stations = station_tiles(grid, structure, side, from, blocked, touch);
     if stations.is_empty() {
         return Err(NoPost::BoxedIn);
     }
@@ -599,7 +635,7 @@ fn post_field(
     for station in stations {
         let field = walk_field((station.x, station.y), reach, |p| {
             blocked.step_cost(grid, p, start, |c| {
-                at_station(Position { x: c.0, y: c.1 }, structure, side)
+                at_station(Position { x: c.0, y: c.1 }, structure, side, touch)
             })
         });
         if let Some(&here) = field.get(&start) {
@@ -675,20 +711,21 @@ pub(crate) fn reaches(
     side: u8,
     blocked: &Occupancy,
     pocket_radius: i32,
+    touch: Touch,
 ) -> bool {
-    if at_station(from, structure, side) {
+    if at_station(from, structure, side, touch) {
         return true;
     }
-    if !station_candidates(grid, structure, side, |c| blocked.taken(c))
+    if !station_candidates(grid, structure, side, |c| blocked.taken(c), touch)
         .iter()
         .any(|s| reach.contains_key(&(s.x, s.y)))
     {
         return false;
     }
-    let face_held = station_candidates(grid, structure, side, |_| false)
+    let face_held = station_candidates(grid, structure, side, |_| false, touch)
         .iter()
         .any(|s| blocked.holds_a_body((s.x, s.y)));
-    !face_held || post_reach(grid, from, structure, side, blocked, pocket_radius).is_ok()
+    !face_held || post_reach(grid, from, structure, side, blocked, pocket_radius, touch).is_ok()
 }
 
 /// Whether a worker standing at `from` could ever reach a post at
@@ -705,11 +742,12 @@ pub(crate) fn post_reach(
     side: u8,
     blocked: &Occupancy,
     pocket_radius: i32,
+    touch: Touch,
 ) -> Result<(), NoPost> {
-    if at_station(from, structure, side) {
+    if at_station(from, structure, side, touch) {
         return Ok(());
     }
-    post_field(grid, from, structure, side, blocked, pocket_radius).map(|_| ())
+    post_field(grid, from, structure, side, blocked, pocket_radius, touch).map(|_| ())
 }
 
 /// The one step a worker at `from` takes toward a post at `target` this
@@ -732,8 +770,9 @@ pub(crate) fn step_to_post(
     side: u8,
     blocked: &Occupancy,
     pocket_radius: i32,
+    touch: Touch,
 ) -> Result<Option<Step>, NoPost> {
-    let (field, here) = post_field(grid, from, target, side, blocked, pocket_radius)?;
+    let (field, here) = post_field(grid, from, target, side, blocked, pocket_radius, touch)?;
     Ok(NEIGHBOURS
         .iter()
         .map(|(dx, dy)| (from.x + dx, from.y + dy))
@@ -1353,7 +1392,16 @@ pub(crate) fn haul_step_system(
                 .and_then(|(_, _, _, s)| db.get(&s.kind))
                 .map(|d| d.footprint)
                 .unwrap_or(1);
-            post_reach(&grid, worker_pos, at, side, &blocked, pocket_radius).is_ok()
+            post_reach(
+                &grid,
+                worker_pos,
+                at,
+                side,
+                &blocked,
+                pocket_radius,
+                Touch::Sides,
+            )
+            .is_ok()
         };
         // The whole of what this worker is doing with the tick, decided once
         // — see `Errand`. Scoped so every read of `structures` is finished
@@ -1403,7 +1451,16 @@ pub(crate) fn haul_step_system(
                         .map_or(1, |d| d.footprint);
                     let reach = field
                         .get_or_init(|| crew_reach(&grid, worker_pos, &blocked, pocket_radius));
-                    reaches(&grid, reach, worker_pos, at, side, &blocked, pocket_radius)
+                    reaches(
+                        &grid,
+                        reach,
+                        worker_pos,
+                        at,
+                        side,
+                        &blocked,
+                        pocket_radius,
+                        Touch::Sides,
+                    )
                 };
                 ledger.items().find_map(|item| {
                     let want = ledger.fetch_want(item);
@@ -1569,8 +1626,16 @@ pub(crate) fn haul_step_system(
                             &depots,
                             &accepts,
                             &|at| {
-                                post_reach(&grid, worker_pos, at, 1, &blocked, pocket_radius)
-                                    .is_ok()
+                                post_reach(
+                                    &grid,
+                                    worker_pos,
+                                    at,
+                                    1,
+                                    &blocked,
+                                    pocket_radius,
+                                    Touch::Sides,
+                                )
+                                .is_ok()
                             },
                             &reachable,
                             worker_pos,
@@ -1610,7 +1675,7 @@ pub(crate) fn haul_step_system(
             .unwrap_or((worker_pos, String::new()));
         let legs = chebyshev(post, dest_pos).max(0) as u32;
 
-        if at_station(worker_pos, dest_pos, dest_side) {
+        if at_station(worker_pos, dest_pos, dest_side, Touch::Sides) {
             // A worker standing where it meant to stand is not stranded,
             // whatever it was a tick ago. Cleared here as well as after a
             // successful field because this branch returns before one is
@@ -1859,6 +1924,7 @@ pub(crate) fn haul_step_system(
             dest_side,
             &blocked,
             pocket_radius,
+            Touch::Sides,
         ) else {
             // Only on entry: `since` is the start of the episode, and
             // rewriting it every tick would leave nothing able to tell a

@@ -2,6 +2,7 @@
 //! renderer draws, plus inspect targeting.
 
 use crate::components::{FarmTile, Grievance, HoldPoints, StatPoints};
+use crate::game::base::hauling::Touch;
 use crate::game::base::hauling::at_station;
 use crate::game::trade::IDLE_ACTIVITY;
 use crate::settlements::CompassTarget;
@@ -233,7 +234,12 @@ impl Game {
                 .get::<Position>(holder)
                 .zip(self.world.get::<Position>(target))
                 .is_some_and(|(pos, station)| {
-                    at_station(*pos, *station, self.structure_footprint_of(target))
+                    at_station(
+                        *pos,
+                        *station,
+                        self.structure_footprint_of(target),
+                        Touch::Sides,
+                    )
                 }),
             // Neither of the two task kinds whose target is not a `Structure`
             // has a far end that can carry it. A `DigSite` has no `Glyph` at
@@ -1584,7 +1590,7 @@ impl Game {
                         .get::<Durability>(entity)
                         .map(|d| (d.hp, d.max_hp)),
                     workable,
-                    player_adjacent: at_station(center, pos, side),
+                    player_adjacent: at_station(center, pos, side, Touch::Sides),
                     room: self.room_line(&rooms, (pos.x, pos.y)),
                     assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
                     standing_tool: self

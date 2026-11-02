@@ -5,6 +5,7 @@
 //! one write. `DigSite` is not reused: its mark, durability and finish
 //! semantics are a different verb.
 
+use crate::game::base::hauling::Touch;
 use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::*;
@@ -193,7 +194,9 @@ impl Game {
             .map(|(e, p, t)| (p.x, p.y, e, t.growth))
             .collect();
         let grid = self.world.resource::<BaseGrid>();
-        tiles.retain(|&(x, y, ..)| hauling::has_station(grid, Position { x, y }, 1, &structures));
+        tiles.retain(|&(x, y, ..)| {
+            hauling::has_station(grid, Position { x, y }, 1, &structures, Touch::Sides)
+        });
         tiles.sort_unstable_by_key(|&(x, y, ..)| (x, y));
         let block = |want: CropGrowth, job: FarmJob| {
             tiles
@@ -254,10 +257,18 @@ impl Game {
                 .get::<Position>(worker)
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
-            if !hauling::at_station(from, target, 1) {
+            if !hauling::at_station(from, target, 1, Touch::Sides) {
                 let step = {
                     let grid = self.world.resource::<BaseGrid>();
-                    hauling::step_to_post(grid, from, target, 1, &blocked, pocket_radius)
+                    hauling::step_to_post(
+                        grid,
+                        from,
+                        target,
+                        1,
+                        &blocked,
+                        pocket_radius,
+                        Touch::Sides,
+                    )
                 };
                 match step {
                     Ok(Some(next)) => self.take_base_step(worker, next),

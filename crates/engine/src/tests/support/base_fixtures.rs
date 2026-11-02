@@ -1,4 +1,5 @@
 use super::*;
+use crate::game::base::hauling::Touch;
 use crate::*;
 
 /// Tames a program and puts it to work on a node producing `resource`,
@@ -480,6 +481,7 @@ impl Game {
                 side,
                 &blocked,
                 pocket_radius,
+                Touch::Sides,
             )
             .map_err(|reason| match reason {
                 crate::game::base::hauling::NoPost::BoxedIn => {

@@ -744,7 +744,8 @@ impl Game {
                 .unwrap_or(Position { x: 0, y: 0 });
             // A `DigSite` is always footprint 1 — a mark names one cell —
             // so `side` here is never anything but the default.
-            if !crate::game::base::hauling::at_station(from, target, 1) {
+            let touch = crate::game::base::hauling::touch_for(TaskKind::Excavate);
+            if !crate::game::base::hauling::at_station(from, target, 1, touch) {
                 let step = {
                     crate::game::base::hauling::step_to_post(
                         self.world.resource::<BaseGrid>(),
@@ -753,6 +754,7 @@ impl Game {
                         1,
                         &blocked,
                         pocket_radius,
+                        touch,
                     )
                 };
                 match step {

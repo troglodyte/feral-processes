@@ -1,7 +1,7 @@
 # 0038 Tamed programs carry practised skills, in a subsystem that knows nothing about work
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: user, on Claude's proposal
 - Date: 2026-11-02
 - Pattern: Module per domain; Functional core, imperative shell
 - Depends on: [0020](0020-functional-core-imperative-shell.md), [0023](0023-saves-are-field-named-ron.md), [0024](0024-code-is-organized-by-domain.md)

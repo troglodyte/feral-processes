@@ -1,6 +1,6 @@
 # Work skills
 
-**Status:** design, awaiting the user's approval. ADRs [0038](../../adr/0038-tamed-programs-carry-practised-skills.md) and [0039](../../adr/0039-species-carry-starting-skill-levels.md) are Proposed. No code may build on them until they are Agreed.
+**Status:** approved 2026-11-02; ADRs [0038](../../adr/0038-tamed-programs-carry-practised-skills.md) and [0039](../../adr/0039-species-carry-starting-skill-levels.md) Agreed. Plan: `docs/superpowers/plans/2026-11-02-work-skills.md`.
 
 ## Intent
 

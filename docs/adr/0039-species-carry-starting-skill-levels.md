@@ -1,7 +1,7 @@
 # 0039 Species carry starting skill levels
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: user, on Claude's proposal
 - Date: 2026-11-02
 - Pattern: —
 - Depends on: [0038](0038-tamed-programs-carry-practised-skills.md), [0016](0016-shipped-assets-deny-unknown-fields.md), [0019](0019-content-defaults-to-rust.md)

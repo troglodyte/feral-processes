@@ -12,6 +12,24 @@ fn new_game(seed: u32) -> Game {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
+/// The shipped Striker file with its `starting_skills` swapped for `list`, so
+/// these tests do not depend on what the shipped class happens to seed.
+fn striker_text_seeding(list: &str) -> String {
+    let text = std::fs::read_to_string(test_assets_dir().join("classes/striker.ron")).unwrap();
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("starting_skills:"))
+        .collect();
+    let text = kept.join("\n");
+    let text = text.replacen(
+        "    kit:",
+        &format!("    starting_skills: {list},\n    kit:"),
+        1,
+    );
+    assert!(text.contains(list));
+    text
+}
+
 /// A scratch assets dir whose Striker starts with Force 7 and Aim 3.
 fn striker_assets(name: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(name);
@@ -19,14 +37,7 @@ fn striker_assets(name: &str) -> ScratchAssets {
     copy_shipped_assets(&dir, &[]);
     std::fs::create_dir_all(dir.join("classes")).unwrap();
     let path = dir.join("classes/striker.ron");
-    std::fs::copy(test_assets_dir().join("classes/striker.ron"), &path).unwrap();
-    let text = std::fs::read_to_string(&path).unwrap();
-    let text = text.replacen(
-        "    kit:",
-        "    starting_skills: [(Force, 7), (Aim, 3)],\n    kit:",
-        1,
-    );
-    assert!(text.contains("(Force, 7)"));
+    let text = striker_text_seeding("[(Force, 7), (Aim, 3)]");
     std::fs::write(&path, text).unwrap();
     dir
 }
@@ -167,16 +178,8 @@ fn a_fused_child_keeps_its_dominant_parents_skills() {
 fn class_starting_skills_keep_combat_rows_and_drop_the_rest_with_warnings() {
     let dir = scratch_assets_dir("classes_starting_skills");
     std::fs::create_dir_all(&*dir).unwrap();
-    let text = std::fs::read_to_string(test_assets_dir().join("classes/striker.ron")).unwrap();
     let cap = crate::tuning::SKILL_LEVEL_CAP;
-    let text = text.replacen(
-        "    kit:",
-        &format!(
-            "    starting_skills: [(Force, 4), (Dig, 3), (Aim, {})],\n    kit:",
-            cap + 5
-        ),
-        1,
-    );
+    let text = striker_text_seeding(&format!("[(Force, 4), (Dig, 3), (Aim, {})]", cap + 5));
     std::fs::write(dir.join("striker.ron"), text).unwrap();
     let (db, warnings) = ClassDb::load_dir(&dir).unwrap();
     assert_eq!(warnings.len(), 2, "{warnings:?}");

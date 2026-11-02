@@ -639,22 +639,32 @@ Each shipped species' `starting_skills` (see the schema above):
 
 | Species | Starting skills |
 | --- | --- |
-| botnet | Extract 3, Farm 2 |
-| cipher | Research 4 |
-| construct | Build 4, Dig 2 |
-| crawler | Dig 4, Extract 2 |
+| botnet | Extract 3, Farm 2, Force 3 |
+| cipher | Research 4, Aim 3 |
+| construct | Build 4, Dig 2, Defence 3 |
+| crawler | Dig 4, Extract 2, Defence 3 |
 | drone | Extract 3, Build 2 |
-| glitch | Extract 3, Research 2 |
-| overseer | Build 3, Research 2 |
-| polymorph | Assemble 3, Research 2 |
-| proxy | Research 3, Extract 2 |
-| rootkit | Dig 3, Research 2 |
-| scrapper | Extract 4, Assemble 2 |
-| sentinel | Build 3 |
-| sprite | Assemble 3 |
-| sub_process | Assemble 3, Build 2 |
-| trojan | Assemble 4 |
-| virus | Farm 4 |
-| wintermute | Research 5, Assemble 2 |
-| worm | Dig 4, Farm 2 |
-| zero_day | Research 3, Extract 3 |
+| glitch | Extract 3, Research 2, Force 3 |
+| overseer | Build 3, Research 2, Force 3 |
+| polymorph | Assemble 3, Research 2, Force 3 |
+| proxy | Research 3, Extract 2, Routines 3 |
+| rootkit | Dig 3, Research 2, Force 3 |
+| scrapper | Extract 4, Assemble 2, Force 4 |
+| sentinel | Build 3, Defence 4 |
+| sprite | Assemble 3, Aim 3 |
+| sub_process | Assemble 3, Build 2, Routines 3 |
+| trojan | Assemble 4, Aim 3 |
+| virus | Farm 4, Routines 3 |
+| wintermute | Research 5, Assemble 2, Routines 4 |
+| worm | Dig 4, Farm 2, Force 3 |
+| zero_day | Research 3, Extract 3, Force 4 |
+
+`Aim`, `Force`, `Defence` and `Routines` are combat skills (ADR 0040), read
+only once the program is tamed; 10 is the neutral level and the figures a
+program had before combat skills, 0 is 10% worse and 20 is 10% better. Every
+shipped knack is one combat skill at 3 or 4, so a tamed program starts a
+little rusty at it and the other three at 0. The pick follows the species'
+strong affinity and moves: damage affinity (and the brutes) Force, buff
+affinity Defence, heal affinity Routines, debuff affinity Aim. Wintermute is
+Routines for its Broadcast Storm and Null Route. Drone has none: nothing in
+its role points at one.

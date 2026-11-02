@@ -16,7 +16,7 @@
         (name: "Corrupt", power: 9, spread: 2, effect: Some((kind: "bleed", chance: 0.4, duration: 3, power: 3)), damage_type: Some(Radiation)),
     ],
     work_resource: None,
-    starting_skills: [(Dig, 4), (Extract, 2)],
+    starting_skills: [(Dig, 4), (Extract, 2), (Defence, 3)],
     can_nest: true,
     abilities: [(id: "overclock_array", level: 2), (id: "bastion_shield_v2", level: 4)],
     affinities: (damage: 0.85, buff: 1.3),

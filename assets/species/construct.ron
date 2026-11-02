@@ -16,7 +16,7 @@
         (name: "Lockdown", power: 5, spread: 1, effect: Some((kind: "stun", chance: 0.35, duration: 1, power: 0)), damage_type: Some(Magnetic)),
     ],
     work_resource: Some("core_fragment"),
-    starting_skills: [(Build, 4), (Dig, 2)],
+    starting_skills: [(Build, 4), (Dig, 2), (Defence, 3)],
     abilities: [(id: "overclock_array", level: 2), (id: "sandbox", level: 4)],
     affinities: (damage: 0.85, buff: 1.3),
     attributes: {

@@ -69,6 +69,28 @@ Each file is one class:
 | `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's **starting value** for each one. An id this map does not name (or an empty map) starts at that attribute def's own `base`, so the two directories stay independent. |
 | `starting_skills` | `#[serde(default)]` — a list of `(Skill, level)` pairs: the player's starting **combat** skills (`Aim`, `Force`, `Defence`, `Routines`), 10 being today's figures (ADR 0040). A work skill is dropped and a level above the cap clamped, each with a load warning; an absent list starts all four at 0. The player works blind to work skills. |
 
+## Starting combat skills
+
+Each shipped class seeds one combat skill (`starting_skills`, ADR 0040), the
+same shape as a species' knack:
+
+| Class | Starting skill |
+| --- | --- |
+| Striker | Force 4 |
+| Bastion | Defence 4 |
+| Invoker | Routines 4 |
+| Saboteur | Aim 4 |
+| Decompiler | Aim 4 |
+| Medic | Routines 3 |
+| Leech | Force 3 |
+| Fabricator | Defence 3 |
+
+The first four are the class's own axis. Decompiler lands attempts more often,
+so Aim; Medic and Leech run routines and hit by draining, so Routines and
+Force; Fabricator is the builder with a buff affinity, so Defence. The three
+at 3 are the weaker links. Level 10 is neutral, so every class starts a
+little rusty at its skill and at 0 on the other three.
+
 ## Attributes
 
 A class is the player's only authored source of attribute values — the

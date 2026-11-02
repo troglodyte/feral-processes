@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.21.10
 
 **With your cutting tools out, walking into rock only cuts it if it is marked on the Excavation plan.** Before, any rock beside your base came down when you walked into it with the tools out, so one wrong step could cut a cell you never meant to open. Now walking into unmarked rock stops short, costs no turn, and tells you to mark it with m first.
 

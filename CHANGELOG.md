@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.11
+
+**The Staff Coverage page now says which building to put up when a need is short.** Before, a short row named only the need, such as Coherence or Slack, which tells a player nothing. Now a dimmed line under it reads "build a Log Analyzer Bay" or "build a Sandbox".
+
+**Taking on research that studies a program opens the screen for picking one.** Before, the project just showed a warning, and the picker was on a different menu under "Study a program". Now, if a Research Node stands and no program is assigned to it, choosing the project opens the picker straight away.
+
 ## 0.21.10
 
 **With your cutting tools out, walking into rock only cuts it if it is marked on the Excavation plan.** Before, any rock beside your base came down when you walked into it with the tools out, so one wrong step could cut a cell you never meant to open. Now walking into unmarked rock stops short, costs no turn, and tells you to mark it with m first.

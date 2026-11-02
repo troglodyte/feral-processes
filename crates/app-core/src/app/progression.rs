@@ -127,9 +127,7 @@ impl App {
         if !self.research_graph_view {
             if let Some(idx) = self.selected_index(key, ids.len()) {
                 let id = ids[idx].clone();
-                let Some(game) = &mut self.game else { return };
-                let outcome = game.select_research(&id);
-                self.report(outcome);
+                self.select_research(&id);
             }
             return;
         }
@@ -160,9 +158,22 @@ impl App {
         }
         if key == GameKey::Enter {
             let id = from.clone();
-            let Some(game) = &mut self.game else { return };
-            let outcome = game.select_research(&id);
-            self.report(outcome);
+            self.select_research(&id);
+        }
+    }
+
+    /// Takes on research `id`, then opens the study picker when it needs a
+    /// body and none is assigned — the block line alone left the player to
+    /// find "Study a program" on another menu. `menu_origin` stays the group
+    /// menu, so the picker backs out exactly as it does when opened there.
+    fn select_research(&mut self, id: &str) {
+        let Some(game) = &mut self.game else { return };
+        let outcome = game.select_research(id);
+        let wants_subject = outcome.is_ok() && game.research_wants_subject(id);
+        self.report(outcome);
+        if wants_subject {
+            self.menu_selected = 0;
+            self.mode = Mode::PinSubject;
         }
     }
 

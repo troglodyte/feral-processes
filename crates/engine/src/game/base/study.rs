@@ -94,6 +94,26 @@ impl Game {
         })
     }
 
+    /// Whether research `id` needs a body and none is assigned: it declares
+    /// `requires_subject`, a station stands to hold one, and no program is
+    /// pinned to it — arrived or still walking, so a program on its way does
+    /// not read as missing the way `pinned_subject` alone would.
+    pub fn research_wants_subject(&self, id: &str) -> bool {
+        let gated = self
+            .world
+            .resource::<ResearchDb>()
+            .get(id)
+            .is_some_and(|d| d.requires_subject);
+        let Some(station) = self.study_station() else {
+            return false;
+        };
+        gated
+            && !self.world.iter_entities().any(|e| {
+                e.get::<components::UnderStudy>()
+                    .is_some_and(|u| u.station == station)
+            })
+    }
+
     /// The one subject the active project is actually spending right now, or
     /// `None` when nothing is being worked on a body.
     ///

@@ -848,3 +848,33 @@ fn no_rack_does_not_block_a_subject_gated_completion() {
         "the subject is spent"
     );
 }
+
+/// The research screen opens the study picker off this: a gated node with a
+/// station standing and nobody assigned to it. A program already walking to
+/// the pen counts as assigned, or the picker would reopen mid-walk.
+#[test]
+fn a_gated_node_wants_a_subject_until_one_is_assigned() {
+    let mut game = Game::new(4410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        !game.research_wants_subject("paging"),
+        "with no station standing there is nothing to pick into"
+    );
+    let node = base_with_a_research_node(&mut game);
+    let ungated = game
+        .world
+        .resource::<ResearchDb>()
+        .all()
+        .find(|d| d.tree == ResearchTree::Base && !d.requires_subject)
+        .map(|d| d.id.to_string())
+        .unwrap();
+
+    assert!(game.research_wants_subject("paging"));
+    assert!(!game.research_wants_subject(&ungated));
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    let (px, py) = game.study_pen(node).unwrap();
+    *game.world.get_mut::<Position>(program).unwrap() = Position { x: px + 3, y: py };
+    game.pin_subject(program, node).unwrap();
+    assert!(game.pinned_subject().is_none(), "still walking to the pen");
+    assert!(!game.research_wants_subject("paging"));
+}

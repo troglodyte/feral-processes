@@ -16,6 +16,7 @@
         (name: "Payload Drop", power: 7, spread: 2, ranged: true),
     ],
     work_resource: None,
+    starting_skills: [(Assemble, 4)],
     can_nest: true,
     abilities: [(id: "deadlock", level: 2), (id: "bit_rot_v2", level: 4)],
     affinities: (heal: 0.85, debuff: 1.3),

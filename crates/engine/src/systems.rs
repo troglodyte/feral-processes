@@ -1601,12 +1601,18 @@ pub fn task_progress_system(
                 .and_then(|s| structure_db.get(&s.kind))
                 .map(|d| Placed::of(d, machine_recipe)),
         );
-        task.progress += crate::game::base::skill_scale::work_tick(
-            worker,
-            skills.as_deref_mut(),
-            skill,
-            &mut skill_levels,
-        );
+        // A finished cycle waiting on a full output is not work: practice is
+        // for ticks where progress advanced, and the clog check below still
+        // reports the stall.
+        let waiting_on_room = task.progress >= task.required && stock.output_room() == 0;
+        if !waiting_on_room {
+            task.progress += crate::game::base::skill_scale::work_tick(
+                worker,
+                skills.as_deref_mut(),
+                skill,
+                &mut skill_levels,
+            );
+        }
         if task.progress < task.required {
             // A cycle part-way through is a working machine, and it has to
             // say so: this used to ride on `MachineStatus`'s `Running`
@@ -2358,7 +2364,9 @@ pub fn assembler_system(
         // baked at assignment out of the machine's `ticks_per_unit` and the
         // posted program's `base_speed` (`Game::work_ticks_for`). Safe
         // because `upgrade_structure` never touches `ticks_per_unit`, so
-        // nothing changes a machine's rate after a program is on it, and
+        // nothing changes the baked rate after a program is on it (the
+        // worker's skill speeds the cycle per tick through `work_tick`'s
+        // carry, not by rewriting `required`), and
         // `displace_task_holder` allows only one `GatherResource` per
         // structure. The cost is that a cronjob in an old save keeps its
         // pre-`base_speed` rate until it is re-posted.

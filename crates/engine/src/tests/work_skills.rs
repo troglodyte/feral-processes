@@ -190,3 +190,42 @@ fn the_players_own_work_rate_is_unchanged() {
     );
     assert!(game.world.get::<Skills>(player).is_none());
 }
+
+#[test]
+fn a_worker_at_a_clogged_extractor_earns_no_practice() {
+    let mut game = base(41010);
+    let (machine, worker) = posted(
+        &mut game,
+        "extractor",
+        ids::CORE_FRAGMENT,
+        Skill::Extract,
+        0,
+    );
+    {
+        let mut task = game.world.get_mut::<Task>(worker).unwrap();
+        task.required = 5;
+        task.progress = 5;
+        let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+        let capacity = stock.capacity;
+        stock
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), capacity);
+        assert_eq!(stock.output_room(), 0);
+    }
+    let practice = |game: &Game| {
+        game.world
+            .get::<Skills>(worker)
+            .unwrap()
+            .track(Skill::Extract)
+            .practice
+    };
+    let before = practice(&game);
+    for _ in 0..10 {
+        game.tick();
+    }
+    assert_eq!(
+        practice(&game),
+        before,
+        "waiting on a full output is not practice"
+    );
+}

@@ -129,3 +129,20 @@ fn overlay_replaces_listed_rows_and_keeps_the_seed_elsewhere() {
     );
     assert_eq!(got.level(Skill::Force), 4);
 }
+
+#[test]
+fn seeded_starts_combat_at_neutral_plus_the_bonus_and_work_absolute() {
+    let none = Skills::seeded(&[]);
+    for s in Skill::COMBAT {
+        assert_eq!(none.level(s), SKILL_NEUTRAL_LEVEL, "{s:?}");
+    }
+    for s in Skill::WORK {
+        assert_eq!(none.level(s), 0, "{s:?}");
+    }
+    let some = Skills::seeded(&[(Skill::Force, 4), (Skill::Dig, 4)]);
+    assert_eq!(some.level(Skill::Force), SKILL_NEUTRAL_LEVEL + 4);
+    assert_eq!(some.level(Skill::Aim), SKILL_NEUTRAL_LEVEL);
+    assert_eq!(some.level(Skill::Dig), 4);
+    let over = Skills::seeded(&[(Skill::Aim, 15)]);
+    assert_eq!(over.level(Skill::Aim), SKILL_LEVEL_CAP);
+}

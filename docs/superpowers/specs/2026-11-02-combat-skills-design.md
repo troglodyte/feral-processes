@@ -112,7 +112,7 @@ Practice in an arena fight is discarded with the session.
 
 - **Tamed programs:** `roster_parts`, as today.
 - **The player:** `Skills` is inserted when the class is applied at creation (`creation.rs`, beside `classes::apply_kit`), seeded from the class.
-  - A player with no class has every combat skill at 0.
+  - A player with no class has every combat skill at 10 (neutral). Class and species `starting_skills` combat rows are bonuses over 10; see call 5.
   - **Work stays blind to the player:** `skill_scale.rs` treats the player as having no skills, in one place.
 - **Fusion:** the child keeps the dominant parent's whole `Skills`, with the ring and talents. `fuse_companions` assembles its own list (seam), so the builder checks it carries `Skills` today and pins that with a test.
 
@@ -131,7 +131,7 @@ Practice in an arena fight is discarded with the session.
 
 ### Saves
 
-- **Programs:** saved skill rows are **overlaid on `species.seed_skills()`**. Today a non-empty list loads as-is with unlisted tracks at 0, so a 0.21.16 save, which has six work rows, would load at combat 0. Overlaying fixes that.
+- **Programs:** saved skill rows are **overlaid on `species.seed_skills()`**. Today a non-empty list loads as-is with unlisted tracks at 0, so a 0.21.16 save, which has six work rows, would load at combat 0 (now: below neutral, before the overlay). Overlaying fixes that.
 - **Player:** `PlayerSave` gains `skills`, `#[serde(default)]`, overlaid on the class seed.
 - No `SAVE_FORMAT_VERSION` bump (0023).
 - Save→load tests for both, plus a 0.21.16-shaped save.
@@ -171,7 +171,7 @@ It will move every program's numbers and needs its own spec, ADR and `balance_si
 2. Force applies through a new `Combatant::damage_scale`, not a scaled `atk`, so the roll's spread scales too and `expected_damage` matches.
 3. Defence points enter before status scaling, like gear.
 4. A routine cost with no invoker in hand is priced at neutral.
-5. A classless player starts at combat 0.
+5. ~~A classless player starts at combat 0.~~ **Amended 2026-11-02 after the final review (user decision):** every body starts each combat skill at neutral (10) plus its class or species bonus, clamped at the cap, because level 0 wiped out low base mitigation. Work skills are unchanged.
 6. `balance_sim` stays skill-blind. Only the attribute move is gated.
 7. A miss practises Aim, and a fizzled routine practises Routines.
 

@@ -222,7 +222,9 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; omit for no head start. Work-skill levels a tamed member of
     // this species starts at, by skill (Extract, Assemble, Research, Build,
-    // Dig, Farm); a skill not listed starts at 0. Levels run 0 to 20
+    // Dig, Farm); a work skill not listed starts at 0. A combat skill
+    // (Aim, Force, Defence, Routines) is a bonus over 10, so `(Force, 3)`
+    // starts at 13, and one not listed starts at 10. Levels run 0 to 20
     // (`tuning::SKILL_LEVEL_CAP`); one above that is clamped with a warning.
     // Shipped species stay at 5 or below. A bred or fresh tame starts here,
     // and so does a program in a save written before skills existed.
@@ -635,7 +637,8 @@ any of this.
 
 ## Starting skill levels
 
-Each shipped species' `starting_skills` (see the schema above):
+Each shipped species' `starting_skills` (see the schema above). Work numbers
+are levels from 0; combat numbers are bonuses over 10:
 
 | Species | Starting skills |
 | --- | --- |
@@ -662,8 +665,8 @@ Each shipped species' `starting_skills` (see the schema above):
 `Aim`, `Force`, `Defence` and `Routines` are combat skills (ADR 0040), read
 only once the program is tamed; 10 is the neutral level and the figures a
 program had before combat skills, 0 is 10% worse and 20 is 10% better. Every
-shipped knack is one combat skill at 3 or 4, so a tamed program starts a
-little rusty at it and the other three at 0. The pick follows the species'
+shipped knack is one combat skill at +3 or +4, so a tamed program starts a
+little sharper than before at it and the other three at 10. The pick follows the species'
 strong affinity and moves: damage affinity (and the brutes) Force, buff
 affinity Defence, heal affinity Routines, debuff affinity Aim. Wintermute is
 Routines for its Broadcast Storm and Null Route. Drone has none: nothing in

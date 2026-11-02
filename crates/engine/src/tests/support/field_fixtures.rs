@@ -189,16 +189,6 @@ pub(crate) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     );
     game.world.entity_mut(entity).insert(attrs);
     game.install_innate_routines(entity);
-    // Combat skills pinned neutral, as the disposition is: a generic species
-    // seeds them at 0, which is 10% worse than the fixed figures every
-    // existing test asserts. A test about a combat skill sets its own.
-    for skill in crate::skills::Skill::COMBAT {
-        let mut skills = game
-            .world
-            .get_mut::<crate::skills::Skills>(entity)
-            .expect("roster_parts seeds Skills");
-        skills.set(skill, crate::tuning::SKILL_NEUTRAL_LEVEL, 0);
-    }
     // Last, like every real door: a seated program's figures derive from its
     // base, so a fixture that seated early would have its setup recomputed.
     game.seat_derived(entity);

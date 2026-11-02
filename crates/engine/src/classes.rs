@@ -161,9 +161,11 @@ pub struct ClassDef {
     /// by `every_shipped_class_authors_every_attribute`.
     #[serde(default)]
     pub attributes: std::collections::BTreeMap<String, i32>,
-    /// Combat skill levels the player starts at (ADR 0040); work skills are
-    /// refused, since the player works blind to them. `#[serde(default)]`,
-    /// so a file without it starts every skill at 0. `ClassDb::load_dir`
+    /// Bonuses over [`SKILL_NEUTRAL_LEVEL`](crate::tuning::SKILL_NEUTRAL_LEVEL)
+    /// for the player's combat skills (ADR 0040): `(Force, 4)` starts Force
+    /// at 14. Work skills are refused, since the player works blind to them.
+    /// `#[serde(default)]`, so a file without it starts every combat skill
+    /// at neutral. `ClassDb::load_dir`
     /// drops a non-combat row and clamps an over-cap level, each with a
     /// warning.
     #[serde(default)]
@@ -173,11 +175,7 @@ pub struct ClassDef {
 impl ClassDef {
     /// The `Skills` a player of this class starts with.
     pub fn seed_skills(&self) -> crate::skills::Skills {
-        let mut skills = crate::skills::Skills::default();
-        for (skill, level) in &self.starting_skills {
-            skills.set(*skill, *level, 0);
-        }
-        skills
+        crate::skills::Skills::seeded(&self.starting_skills)
     }
 }
 

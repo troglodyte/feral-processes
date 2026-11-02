@@ -430,13 +430,10 @@ pub enum AffinityClass {
 
 impl SpeciesDef {
     /// The `Skills` a fresh tame of this species starts with, at zero practice
-    /// toward the next level.
+    /// toward the next level: combat rows are bonuses over neutral, work rows
+    /// absolute (`Skills::seeded`).
     pub fn seed_skills(&self) -> crate::skills::Skills {
-        let mut skills = crate::skills::Skills::default();
-        for (skill, level) in &self.starting_skills {
-            skills.set(*skill, *level, 0);
-        }
-        skills
+        crate::skills::Skills::seeded(&self.starting_skills)
     }
 
     /// Whether this species exists only as the offspring of `parents`.
@@ -2376,7 +2373,7 @@ mod tests {
     fn starting_skills_seed_a_species_tames_and_default_to_nothing() {
         use crate::skills::Skill;
         let none: SpeciesDef = ron::from_str(&species_file("t", "")).unwrap();
-        assert_eq!(none.seed_skills(), crate::skills::Skills::default());
+        assert_eq!(none.seed_skills(), crate::skills::Skills::seeded(&[]));
         let some: SpeciesDef = ron::from_str(&species_file(
             "t",
             ", starting_skills: [(Dig, 4), (Farm, 2)]",

@@ -54,7 +54,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`balance_sim` gates none of the Power economy** — it models no
   abilities, so the 66 costs, the multiplier and `trickle_charge`'s retune
   are all ungated.
-- **A player's class grants affinities and starting combat skills, and
+- **A player's class grants affinities and starting combat skills (bonuses over neutral, seeded by `Skills::seeded` like a species), and
   `ability_affinity`'s player arm is where the affinities land.**
 - **A combat figure is `Game::base_figure` times `skills::scale`, one door
   each:** `base_figure` (`game/derived.rs`) for the base and

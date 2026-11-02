@@ -174,8 +174,8 @@ impl Game {
     }
 
     /// Seeds the player's combat skills from the class, resolved live
-    /// through `ClassDb`; a classless choice, or a class the catalogue does
-    /// not resolve, stays at 0. Work skills are never seeded: the player
+    /// through `ClassDb` (neutral plus the class's bonuses); a classless
+    /// choice, or a class the catalogue does not resolve, stays at neutral. Work skills are never seeded: the player
     /// works blind to them.
     fn apply_creation_skills(&mut self, choice: &CharacterChoice) {
         let Some(seed) = choice.class.and_then(|c| {

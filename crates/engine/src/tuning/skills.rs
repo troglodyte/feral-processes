@@ -27,15 +27,21 @@ pub const WORK_SKILL_SPREAD: f32 = 0.5;
 /// level 0, today's figure at 10, 10% better at the cap (ADR 0040).
 pub const COMBAT_SKILL_SPREAD: f32 = 0.1;
 
-// Combat practice per event. **Pace intent:** a body that fights most
-// encounters reaches level 10 after about two zones and the cap near the end
-// of a full run. `SKILL_COST_*` makes level 10 cost 2,210 practice and the
-// cap 15,800. `docs/measurements/` records no fights-per-zone, so these rest
+// Combat practice per event. **Pace intent:** combat skills start at
+// `SKILL_NEUTRAL_LEVEL` plus a bonus of 0 to 4 (ADR 0040), so the climb is
+// 10(+bonus) to the cap, not 0 to 20. A body that fights most encounters
+// reaches the cap near the end of a full run. `SKILL_COST_*` makes level 10
+// cost 2,210 practice and the cap 15,800, so the 10-to-20 climb is about
+// 13,600 (about 11,800 from a +4 start). The per-zone figures below were
+// sized for a 0-to-10 climb in two zones; kept as is, they now make level 11
+// arrive after roughly a zone and a half and the cap near the end of a full
+// run, which still matches the intent. `docs/measurements/` records no
+// fights-per-zone, so these rest
 // on an assumption to retune: per zone a fighting body makes about 100 attack
 // rolls, is rolled at about 100 times, lands about 60 of its own rolls and
 // pays for about 35 routines, and a full run is about 12 zones.
 
-/// 100 rolls a zone x 11 = 1,100 a zone: level 10 in two zones.
+/// 100 rolls a zone x 11 = 1,100 a zone.
 pub const AIM_PRACTICE_PER_ROLL: u32 = 11;
 /// 60 landed a zone x 18 = 1,080 a zone.
 pub const FORCE_PRACTICE_PER_HIT: u32 = 18;

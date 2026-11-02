@@ -127,8 +127,9 @@
   `ability_affinity`'s player arm is where the affinities land.** No stat block
   (`ClassShape` is a *species'*) and no talent tree (talents are the
   companion's axis, in the creature arm only); `ClassDef::starting_skills`
-  seeds the player's combat skills (work skills refused at load, over-cap
-  levels clamped) — a spread of multipliers over
+  seeds the player's combat skills as bonuses over `SKILL_NEUTRAL_LEVEL`
+  through `Skills::seeded` (the one seed a species shares; work skills refused
+  at load, the sum clamped at the cap, a classless player all 10) — a spread of multipliers over
   the perk term, under the same `AFFINITY_MAX` clamp, plus `ClassDef::kit`.
   Every shipped class damps an axis and there is no Unaligned option, which
   is affordable only because `battle::expected_damage` has **no affinity

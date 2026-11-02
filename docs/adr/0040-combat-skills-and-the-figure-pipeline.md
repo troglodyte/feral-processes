@@ -51,7 +51,9 @@ Spec: [`docs/superpowers/specs/2026-11-02-combat-skills-design.md`](../superpowe
 
 **The player carries `Skills`,** inserted when the class is applied at creation and saved under `PlayerSave::skills`, `#[serde(default)]`. Work's `skill_scale.rs` treats the player as having none.
 
-**A class carries `starting_skills`,** combat only. The class seam becomes "affinities and starting combat skills", rewritten in the rules file, the `seams` skill and the graph.
+**Every body that gets `Skills` starts each combat skill at `SKILL_NEUTRAL_LEVEL` (10) plus its authored bonus** (decided by the user on 2026-11-02, after the final review: a classless player at level 0 wiped out low base mitigation, which a 10% penalty at level 0 hit too hard). A class's or species' combat `starting_skills` rows are bonuses on top of 10, clamped at the cap, and one function, `Skills::seeded`, is the seed for both. Work skills are unchanged: a species' work knack is absolute from 0. This replaces the earlier plan that a skill not listed started at 0 and a listed level was absolute.
+
+**A class carries `starting_skills`,** combat only, as bonuses over neutral. The class seam becomes "affinities and starting combat skills", rewritten in the rules file, the `seams` skill and the graph.
 
 **Load overlays saved skill rows on the seed** (species or class), so a skill a save does not name loads at its seed.
 

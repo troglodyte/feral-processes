@@ -615,7 +615,7 @@ fn restore_player(
     let class_seed = player_class
         .and_then(|class| world.resource::<crate::classes::ClassDb>().get(class))
         .map(|def| def.seed_skills())
-        .unwrap_or_default();
+        .unwrap_or_else(|| crate::skills::Skills::seeded(&[]));
     world
         .entity_mut(player)
         .insert(super::spawn_saved::overlay_saved_skills(

@@ -55,17 +55,18 @@ fn player_skills(game: &Game) -> &Skills {
 }
 
 #[test]
-fn the_player_starts_at_its_class_seed_and_a_classless_player_at_zero() {
+fn the_player_starts_at_neutral_plus_its_class_bonus_and_a_classless_player_at_neutral() {
     let dir = striker_assets("skills_player_seed");
     let game = striker(&dir, 31010);
     let skills = player_skills(&game);
-    assert_eq!(skills.level(Skill::Force), 7);
-    assert_eq!(skills.level(Skill::Aim), 3);
-    assert_eq!(skills.level(Skill::Defence), 0);
+    let n = crate::tuning::SKILL_NEUTRAL_LEVEL;
+    assert_eq!(skills.level(Skill::Force), n + 7);
+    assert_eq!(skills.level(Skill::Aim), n + 3);
+    assert_eq!(skills.level(Skill::Defence), n);
     assert_eq!(skills.level(Skill::Dig), 0);
 
     let classless = new_game(31011);
-    assert_eq!(*player_skills(&classless), Skills::default());
+    assert_eq!(*player_skills(&classless), Skills::seeded(&[]));
 }
 
 #[test]
@@ -98,8 +99,8 @@ fn an_old_player_save_without_skills_loads_at_the_class_seed() {
 
     let loaded = Game::load(&path, &dir).unwrap();
     let skills = player_skills(&loaded);
-    assert_eq!(skills.level(Skill::Force), 7);
-    assert_eq!(skills.level(Skill::Aim), 3);
+    assert_eq!(skills.level(Skill::Force), 10 + 7);
+    assert_eq!(skills.level(Skill::Aim), 10 + 3);
 }
 
 #[test]
@@ -184,7 +185,10 @@ fn class_starting_skills_keep_combat_rows_and_drop_the_rest_with_warnings() {
     let (db, warnings) = ClassDb::load_dir(&dir).unwrap();
     assert_eq!(warnings.len(), 2, "{warnings:?}");
     let seed = db.get(PlayerClass::Striker).unwrap().seed_skills();
-    assert_eq!(seed.level(Skill::Force), 4);
+    assert_eq!(
+        seed.level(Skill::Force),
+        crate::tuning::SKILL_NEUTRAL_LEVEL + 4
+    );
     assert_eq!(seed.level(Skill::Aim), cap);
     assert_eq!(seed.level(Skill::Dig), 0);
 }
@@ -206,7 +210,11 @@ fn every_shipped_class_starts_on_combat_skills_within_the_cap() {
                 def.class,
                 skill.name()
             );
-            assert!(*level <= crate::tuning::SKILL_LEVEL_CAP);
+            assert!(
+                crate::tuning::SKILL_NEUTRAL_LEVEL + *level <= crate::tuning::SKILL_LEVEL_CAP,
+                "{:?} bonus {level} over neutral passes the cap",
+                def.class
+            );
         }
     }
 }

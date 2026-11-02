@@ -173,6 +173,27 @@ impl Skills {
         &mut self.tracks[s.index()]
     }
 
+    /// The tracks a body starts with: every combat skill at
+    /// [`SKILL_NEUTRAL_LEVEL`] plus its `listed` bonus, a work skill at its
+    /// `listed` level from 0 (a species' knack is absolute). Both
+    /// `seed_skills` doors call this, so a class and a species cannot seed by
+    /// different formulas.
+    pub fn seeded(listed: &[(Skill, u32)]) -> Skills {
+        let mut skills = Skills::default();
+        for skill in Skill::COMBAT {
+            skills.set(skill, SKILL_NEUTRAL_LEVEL, 0);
+        }
+        for (skill, level) in listed {
+            let base = if Skill::COMBAT.contains(skill) {
+                SKILL_NEUTRAL_LEVEL
+            } else {
+                0
+            };
+            skills.set(*skill, base.saturating_add(*level), 0);
+        }
+        skills
+    }
+
     /// Saved rows laid over `seed`: a skill the rows do not list keeps the
     /// seed's track, so a save written before a skill existed loads it at its
     /// starting level rather than 0.

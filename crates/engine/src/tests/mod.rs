@@ -15,6 +15,7 @@ mod assets;
 mod attention;
 mod attributes;
 mod auto_resolve;
+mod autofit;
 mod base_grid;
 mod base_ledger;
 mod base_space;

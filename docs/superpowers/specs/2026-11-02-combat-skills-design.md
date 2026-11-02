@@ -18,13 +18,13 @@ The user wants programs' attributes to count in a later effort. This design puts
 
 ## Goals
 
-- **Four combat skills** on the existing machinery (`skills/`, ADR 0038): **Aim, Damage, Defence, Routines**.
+- **Four combat skills** on the existing machinery (`skills/`, ADR 0038): **Aim, Force, Defence, Routines**.
 - **The figures** and where each part comes from:
 
   | Figure | Attribute (player today, programs in the follow-up) | Skill |
   |---|---|---|
   | to-hit (accuracy) | **Analysis** | Aim |
-  | damage (ATK) | **Amplitude**, a new attribute | Damage |
+  | damage (ATK) | **Amplitude**, a new attribute | Force |
   | mitigation | Footprint (as today) | Defence |
   | routine Power cost | none; Bandwidth already sizes the Power pool | Routines |
 
@@ -33,7 +33,7 @@ The user wants programs' attributes to count in a later effort. This design puts
 - **Skill levels:** the 0 to 20 curve of the work skills. Level 0 is slightly worse than today, 10 is exactly today, 20 is the same distance better. The user chose **±10%**.
 - **Practice comes from doing it:**
   - **Aim**: every attack roll the body makes, swing or damaging routine, hit or miss.
-  - **Damage**: every attack the body *lands*.
+  - **Force**: every attack the body *lands*.
   - **Defence**: every attack roll aimed at the body.
   - **Routines**: every routine the body pays Power for.
 - **Starting levels:** species knacks (0039), plus a knack from the player's class.
@@ -79,7 +79,7 @@ Each combat door applies its skill on top of the base:
   - `accuracy_of(...)` takes the attribute's accuracy contribution through the existing bonus argument.
   - The result is multiplied by `scale(Aim)`, beside the existing jam cut.
   - This covers swings, reactions and damaging routines, since all of them build a profile here (user decision).
-- **Damage:** a landed hit's final damage is multiplied by `scale(Damage)`.
+- **Damage:** a landed hit's final damage is multiplied by `scale(Force)`.
   - `Combatant` gains `damage_scale: f64`, default 1.0. `resolve_attack_inner` applies it, and so does `battle::expected_damage`, so the forecast, the AI and the roll agree.
   - `balance_sim` builds its `Combatant`s at 1.0.
 - **Mitigation:** `Game::effective_mitigation` adds `(Defence level − 10)` points to the base, the same as a gear point. That happens before the status scaling and the existing `clamp(0, MAX_MITIGATION_PERCENT)`.
@@ -90,7 +90,7 @@ Each combat door applies its skill on top of the base:
 
 ### Skills
 
-- `Skill` gains `Aim, Damage, Defence, Routines`, appended. Saves name skills, so order is display only.
+- `Skill` gains `Aim, Force, Defence, Routines`, appended. Saves name skills, so order is display only.
 - Two consts split the families: `Skill::WORK` (the six) and `Skill::COMBAT` (the four).
   - Every work reader iterates `WORK`: the staff table, the selected-row line, `skill_scale.rs` and the work view.
   - Every combat reader iterates `COMBAT`.
@@ -101,7 +101,7 @@ Each combat door applies its skill on top of the base:
 Each hook sits at the one door for its event, after the existence checks:
 
 - **Aim and Defence:** where an attack roll resolves for a creature against a creature. One hook covers swings, reactions and damaging routines in both combat models. A prop, a nest or rock never practises.
-- **Damage:** the same place, on a `Hit` or `Crit` outcome.
+- **Force:** the same place, on a `Hit` or `Crit` outcome.
 - **Routines:** inside `Game::spend_power`, the one charge (seam). A passive is never charged, a refusal comes before the charge, and a fizzle under a reaction keeps its charge and so counts.
 
 Each skill has its own practice-per-event constant in `tuning/skills.rs`.
@@ -120,7 +120,7 @@ Practice in an arena fight is discarded with the session.
 
 - **Species:** `starting_skills` (0039) gains combat entries. Each species gets one combat knack where its role points at one.
 - **Class:** `ClassDef` gains `starting_skills`, `#[serde(default)]`, the same shape, combat skills only (census).
-  - An obvious start is Striker→Damage, Bastion→Defence, Invoker→Routines, Saboteur→Aim. The other four are the plan's call.
+  - An obvious start is Striker→Force, Bastion→Defence, Invoker→Routines, Saboteur→Aim. The other four are the plan's call.
   - This bends the seam "a class grants affinities and nothing else" (0040).
 - **Amplitude:** a new `assets/attributes/amplitude.ron`, effect `Atk` 1.0 per point.
   - Analysis drops `Atk` and gains `Accuracy` at a per-point figure the plan fits so a high-Analysis class gains a modest edge.
@@ -168,7 +168,7 @@ It will move every program's numbers and needs its own spec, ADR and `balance_si
 ## Calls Claude made (check these)
 
 1. One `skills::scale` line serves work and combat, and work's formula is rewritten as a call to it (same numbers).
-2. Damage is a new `Combatant::damage_scale`, not a scaled `atk`, so the roll's spread scales too and `expected_damage` matches.
+2. Force applies through a new `Combatant::damage_scale`, not a scaled `atk`, so the roll's spread scales too and `expected_damage` matches.
 3. Defence points enter before status scaling, like gear.
 4. A routine cost with no invoker in hand is priced at neutral.
 5. A classless player starts at combat 0.

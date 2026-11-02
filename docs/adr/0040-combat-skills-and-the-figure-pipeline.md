@@ -35,18 +35,18 @@ Spec: [`docs/superpowers/specs/2026-11-02-combat-skills-design.md`](../superpowe
   - Combat calls it with `spread` 0.1.
   - What a scale is worth stays at each reading door.
 
-**Four combat skills**, appended to `Skill`: Aim, Damage, Defence, Routines. `Skill::WORK` and `Skill::COMBAT` split the families for their readers.
+**Four combat skills**, appended to `Skill`: Aim, Force, Defence, Routines. `Skill::WORK` and `Skill::COMBAT` split the families for their readers.
 
 | Figure | Attribute | Skill | Door |
 |---|---|---|---|
 | to-hit | Analysis (new `DerivedStat::Accuracy`) | Aim | `Game::combatant_profile` |
-| damage | Amplitude (new attribute, takes `Atk` from Analysis) | Damage | new `Combatant::damage_scale`, applied in `resolve_attack_inner` and `expected_damage` |
+| damage | Amplitude (new attribute, takes `Atk` from Analysis) | Force | new `Combatant::damage_scale`, applied in `resolve_attack_inner` and `expected_damage` |
 | mitigation | Footprint | Defence | `Game::effective_mitigation`, (level − 10) points before status scaling |
 | Power cost | none | Routines | `abilities::routine_power_cost(def, Option<level>)` |
 
 **Practice:**
 - Aim and Defence practise on every creature-versus-creature attack roll.
-- Damage practises on a landed one.
+- Force practises on a landed one.
 - Routines practises inside `Game::spend_power`.
 
 **The player carries `Skills`,** inserted when the class is applied at creation and saved under `PlayerSave::skills`, `#[serde(default)]`. Work's `skill_scale.rs` treats the player as having none.

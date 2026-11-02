@@ -298,6 +298,23 @@ mod tests {
     use crate::text::ui_metrics;
     use feral_processes_engine::{ProgramPoints, RankedStat};
 
+    const WORK_LABELS: [&str; 6] = ["Extract", "Assemble", "Research", "Build", "Dig", "Farm"];
+    const COMBAT_LABELS: [&str; 4] = ["Aim", "Force", "Defence", "Routines"];
+
+    /// One row per label at level 12 mid-practice: the widest value
+    /// (`Lv 12  10/20`) the shipped curve prints below the cap.
+    fn skill_views(labels: &[&'static str]) -> Vec<feral_processes_engine::views::SkillView> {
+        labels
+            .iter()
+            .map(|&skill_label| feral_processes_engine::views::SkillView {
+                skill_label,
+                level: 12,
+                practice: 10,
+                practice_to_next: Some(20),
+            })
+            .collect()
+    }
+
     /// A `ProgramManifest` for a species that declares no *box-level*
     /// optionals (no POTENTIAL, no AFFINITIES), so the only boxes
     /// `program_sections` emits are the unconditional ones. Hand-built
@@ -314,6 +331,7 @@ mod tests {
     fn plain_program(base_speed: i32, analysis: i32) -> ProgramManifest {
         ProgramManifest {
             skills: None,
+            combat_skills: None,
             species_name: Some("Testmon".to_string()),
             is_hostile: false,
             is_tamed: true,
@@ -374,6 +392,7 @@ mod tests {
     fn owned_program(memories: Vec<MemoryRow>) -> ProgramManifest {
         ProgramManifest {
             skills: None,
+            combat_skills: None,
             is_tamed: true,
             mood: Some(ManifestMood {
                 sum: -11.0,
@@ -798,6 +817,13 @@ mod tests {
     /// The fullest program page there is: owned, developed, posted, kitted.
     fn worst_case_owned(moves: Vec<MoveDef>, memories: Vec<MemoryRow>) -> ProgramManifest {
         let mut program = owned_program(memories);
+        program.skills = Some(skill_views(&WORK_LABELS));
+        program.combat_skills = Some(skill_views(&COMBAT_LABELS));
+        // Two rows is the box cap: the page's fullest DUTY column.
+        program.affinities = vec![
+            (feral_processes_engine::abilities::AffinityKind::Damage, 1.5),
+            (feral_processes_engine::abilities::AffinityKind::Heal, 0.5),
+        ];
         program.base_speed = 14;
         program.analysis = 12;
         program.base_job = Some(AffinityClass::Striker);
@@ -1024,6 +1050,7 @@ mod tests {
     /// subject, against a forty-strong roster.
     fn fullest_faces(game: &Game) -> Vec<(&'static str, stats::StatsFace)> {
         let mut player = plain_player();
+        player.skills = skill_views(&COMBAT_LABELS);
         player.perks = vec![("Obfuscation".to_string(), 2); 4];
         player.party = (0..5)
             .map(|i| feral_processes_engine::CompanionInfo {
@@ -1098,6 +1125,23 @@ mod tests {
                 let (_, shapes) = with_painter(|p| stats::paint_stats(frame, &face, p, &m));
                 let drawn = assert_in_frame_and_clear(who, (w, h), frame, &shapes);
                 for part in ["FIGHT", "Esc", "INTEG", "Tab"] {
+                    assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
+                }
+                // The skill boxes are dropped whole when a column is short,
+                // so the sweep names them: a silent drop is the failure.
+                let skills: &[&str] = if who == "player" {
+                    &["SKILLS", "Defence"]
+                } else {
+                    &[
+                        "SKILLS",
+                        "COMBAT",
+                        "Routines",
+                        "Farm",
+                        "AFFINITIES",
+                        "SPECIES",
+                    ]
+                };
+                for part in skills {
                     assert!(drawn.contains(part), "{who} at {w}x{h} never drew {part}");
                 }
             }
@@ -1550,6 +1594,7 @@ mod tests {
     fn the_player_ledger_columns() {
         let game = census_game();
         let mut player = plain_player();
+        player.skills = skill_views(&COMBAT_LABELS);
         player.perks = vec![("Obfuscation".to_string(), 2)];
         let mut view = player_view(player);
         view.equipment = vec![worn("WEP")];
@@ -1572,6 +1617,7 @@ mod tests {
             vec![
                 ("FIGHT", Fight),
                 ("GROWTH", Growth),
+                ("SKILLS", Growth),
                 ("CLASS · Decompiler", Growth),
                 ("PERKS", Growth),
                 ("RUN", Duty),
@@ -1767,6 +1813,7 @@ mod tests {
     /// naming a box is naming one this fixture actually produces.
     fn plain_player() -> PlayerManifest {
         PlayerManifest {
+            skills: Vec::new(),
             power: 60.0,
             max_power: 100.0,
             decompiler: 3,
@@ -1818,7 +1865,7 @@ mod tests {
             statuses: Vec::new(),
             routines: Vec::new(),
             equipment: Vec::new(),
-            subject: ManifestSubject::Player(player),
+            subject: ManifestSubject::Player(Box::new(player)),
         }
     }
 
@@ -2061,6 +2108,44 @@ mod tests {
         let mut wild = Vec::new();
         program_sections(&mut wild, &game, &plain_program(6, 6));
         assert!(wild.iter().all(|s| s.title != "SKILLS"));
+    }
+
+    /// COMBAT is its own box beside the work rows, one row per combat skill,
+    /// and the player's page has a SKILLS box of the same four and no work
+    /// skill.
+    #[test]
+    fn the_combat_skills_draw_as_a_box_for_a_program_and_for_the_player() {
+        let game = census_game();
+        let mut program = owned_program(vec![]);
+        program.skills = Some(skill_views(&WORK_LABELS));
+        program.combat_skills = Some(skill_views(&COMBAT_LABELS));
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &program);
+        let combat = titled(&sections, "COMBAT");
+        assert_eq!(combat.rows.len(), 4, "{:?}", combat.rows);
+        assert!(
+            combat
+                .rows
+                .contains(&SectionRow::Stat("Force".into(), "Lv 12  10/20".into()))
+        );
+        assert_eq!(titled(&sections, "SKILLS").rows.len(), 6);
+
+        let mut player = plain_player();
+        player.skills = skill_views(&COMBAT_LABELS);
+        let sections = sections_for(&game, &player_view(player));
+        let skills = titled(&sections, "SKILLS");
+        let labels: Vec<_> = skills
+            .rows
+            .iter()
+            .map(|r| match r {
+                SectionRow::Stat(l, _) => l.as_str(),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(labels, COMBAT_LABELS);
+
+        let sections = sections_for(&game, &player_view(plain_player()));
+        assert!(sections.iter().all(|s| s.title != "SKILLS"));
     }
 
     /// The POTENTIAL box names both build rolls in full, on their own rows,

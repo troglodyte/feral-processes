@@ -2296,7 +2296,8 @@ impl Game {
             statuses: self.status_tags(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
-            subject: ManifestSubject::Player(PlayerManifest {
+            subject: ManifestSubject::Player(Box::new(PlayerManifest {
+                skills: self.combat_skill_views(entity).unwrap_or_default(),
                 power: needs.get(),
                 max_power: self.max_power(entity),
                 decompiler: self
@@ -2332,7 +2333,7 @@ impl Game {
                     crate::game::kit::Kit::Emulated { def, .. } => def.resist.resisted(),
                     crate::game::kit::Kit::Innate(_) | crate::game::kit::Kit::Unarmed => vec![],
                 },
-            }),
+            })),
         })
     }
 
@@ -2429,6 +2430,7 @@ impl Game {
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Program(Box::new(ProgramManifest {
                 skills: self.skill_views(entity),
+                combat_skills: self.combat_skill_views(entity),
                 species_name: custom
                     .is_some()
                     .then(|| self.zone_tagged_name(entity, species.name.clone())),

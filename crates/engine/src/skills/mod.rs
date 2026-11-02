@@ -87,7 +87,6 @@ impl Skill {
     }
 
     /// The job a level in this skill makes its holder, for the level-up line.
-    /// The combat nouns are placeholders until the screens phase.
     pub fn role_noun(&self) -> &'static str {
         match self {
             Skill::Extract => "extractor",
@@ -98,7 +97,7 @@ impl Skill {
             Skill::Farm => "farmer",
             Skill::Aim => "marksman",
             Skill::Force => "bruiser",
-            Skill::Defence => "guardian",
+            Skill::Defence => "defender",
             Skill::Routines => "scripter",
         }
     }

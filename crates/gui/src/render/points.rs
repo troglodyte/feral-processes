@@ -326,6 +326,39 @@ mod tests {
         assert_eq!(lines_of("parity").len(), 1);
     }
 
+    /// Amplitude is the seventh attribute row and carries the attack effect;
+    /// Analysis reads as to-hit and no longer offers attack.
+    #[test]
+    fn amplitude_is_the_seventh_row_and_analysis_reads_as_to_hit() {
+        let game = shipped_game();
+        let rows = allocation(&game, 999).rows(&Default::default());
+        let attribute_rows: Vec<&CreationRow> = rows
+            .iter()
+            .filter(|r| matches!(r, CreationRow::Attribute { .. }))
+            .collect();
+        assert_eq!(attribute_rows.len(), 7, "seven attributes are buyable");
+        let text_of = |id: &str| {
+            attribute_rows
+                .iter()
+                .find_map(|r| match r {
+                    CreationRow::Attribute { id: i, .. } if i.as_str() == id => {
+                        attribute_lines(r, Some(8))
+                    }
+                    _ => None,
+                })
+                .unwrap()
+                .join(" ")
+        };
+        assert!(
+            text_of("amplitude").contains("ATK"),
+            "{}",
+            text_of("amplitude")
+        );
+        let analysis = text_of("analysis");
+        assert!(analysis.contains("Accuracy"), "{analysis}");
+        assert!(!analysis.contains("ATK"), "{analysis}");
+    }
+
     /// `draw_row` clips vertically only, so a row wider than the popup body
     /// is drawn off the panel in silence. Measured at the widest figures a
     /// row can print, against every shipped attribute.

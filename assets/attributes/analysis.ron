@@ -7,5 +7,5 @@
     base: 10,
     spread: 3,
     effects: [(stat: Accuracy, per_point: 0.5), (stat: Decompiler, per_point: 1.0), (stat: Extraction, per_point: 0.005), (stat: Perception, per_point: 0.5)],
-    does: "Each point above the baseline adds half a point of accuracy and 1 decompiler skill, a little to how often you mine a hard vein, and half a tile to how far you see on the surface.",
+    does: "Each point above the baseline adds half a point to your to-hit and 1 decompiler skill, a little to how often you mine a hard vein, and half a tile to how far you see on the surface.",
 )

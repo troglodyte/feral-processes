@@ -111,12 +111,29 @@ impl Game {
         worker != self.player_entity()
     }
 
-    /// Every skill of `entity`, or `None` if it carries no `Skills`.
+    /// Every work skill of `entity`, or `None` if it carries no `Skills`.
     pub(crate) fn skill_views(&self, entity: Entity) -> Option<Vec<crate::views::SkillView>> {
+        self.family_views(entity, &Skill::WORK)
+    }
+
+    /// Every combat skill of `entity`, or `None` if it carries no `Skills`.
+    pub(crate) fn combat_skill_views(
+        &self,
+        entity: Entity,
+    ) -> Option<Vec<crate::views::SkillView>> {
+        self.family_views(entity, &Skill::COMBAT)
+    }
+
+    fn family_views(
+        &self,
+        entity: Entity,
+        family: &[Skill],
+    ) -> Option<Vec<crate::views::SkillView>> {
         let skills = self.world.get::<Skills>(entity)?;
         Some(
-            Skill::WORK
-                .into_iter()
+            family
+                .iter()
+                .copied()
                 .map(|s| {
                     let t = skills.track(s);
                     crate::views::SkillView {
@@ -136,13 +153,15 @@ impl Game {
     pub(crate) fn drain_skill_levels(&mut self) {
         let pending = std::mem::take(&mut self.world.resource_mut::<PendingSkillLevels>().0);
         for (entity, skill, level) in pending {
-            let Some(name) = self.creature_name(entity) else {
-                continue;
+            let line = if entity == self.player_entity() {
+                format!("You are now a level {level} {}.", skill.role_noun())
+            } else {
+                let Some(name) = self.creature_name(entity) else {
+                    continue;
+                };
+                format!("{name} is now a level {level} {}.", skill.role_noun())
             };
-            self.log_base_kind(
-                MessageKind::LevelUp,
-                format!("{name} is now a level {level} {}.", skill.role_noun()),
-            );
+            self.log_base_kind(MessageKind::LevelUp, line);
         }
     }
 

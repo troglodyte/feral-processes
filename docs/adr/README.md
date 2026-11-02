@@ -105,6 +105,8 @@ Do not duplicate between them; point instead.
 | [0035](0035-shields-cover-a-radius.md) | A Shield covers a radius that grows with its tier | Accepted (0.21.7) | user, on Claude's proposal | — |
 | [0036](0036-patch-nodes-cover-a-radius.md) | A Patch Node repairs a radius that grows with its tier | Accepted (0.21.8) | user, on Claude's proposal | — |
 | [0037](0037-batteries-store-spare-grid-supply.md) | A Battery stores the Grid's spare supply and spends it when supply falls short | Accepted (0.21.9) | user, on Claude's proposal | — |
+| [0038](0038-tamed-programs-carry-practised-skills.md) | Tamed programs carry practised skills, in a subsystem that knows nothing about work | Proposed | Claude — proposed, awaiting the user | Module per domain; Functional core, imperative shell |
+| [0039](0039-species-carry-starting-skill-levels.md) | Species carry starting skill levels | Proposed | Claude — proposed, awaiting the user | — |
 
 ## Pattern index
 

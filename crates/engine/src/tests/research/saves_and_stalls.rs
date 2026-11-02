@@ -300,8 +300,32 @@ fn a_project_waiting_on_materials_asks_for_the_player() {
         "progress in and an empty base is exactly the stall this row is for"
     );
 
-    let shelf = shelve_research_bill(&mut game, "automation", 300, -300);
-    assert!(shelf != Entity::PLACEHOLDER);
+    // On the fixture's own Depot, which a Station's program can walk to: a
+    // shelf nobody can reach is no supply.
+    let depot = {
+        let mut query = game.world.query::<(Entity, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, s)| s.kind == "depot")
+            .map(|(e, _)| e)
+            .unwrap()
+    };
+    let bill = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials
+        .clone();
+    for (item, need) in bill {
+        *game
+            .world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .entry(item)
+            .or_default() += need;
+    }
 
     assert!(
         !stalled(&mut game),

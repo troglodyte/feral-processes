@@ -529,32 +529,6 @@ fn the_last_load_on_its_way_is_not_read_as_none() {
     assert_eq!(game.research_material_shortfall(), None);
 }
 
-/// A Station is fed off shelves, never off a machine's own buffer — that
-/// buffer may be feeding the machine beside it. A base with no Depot and no
-/// stockpile cell is told to build one.
-#[test]
-fn a_machine_buffer_is_not_a_research_source() {
-    let assets = slow_assets("research_fed_no_raid");
-    let mut game = Game::new(9714, DifficultyMode::Forgiving, &assets).unwrap();
-    let (_, depot) = station_with_project(&mut game, "slow_billed");
-    game.world.despawn(depot);
-    let extractor =
-        crate::game::base::work_orders::producers_of(&game, &ItemId::from(ids::CORE_FRAGMENT))[0];
-    set_shelf(&mut game, extractor, ids::CORE_FRAGMENT, 12);
-
-    for _ in 0..300 {
-        game.tick();
-    }
-
-    assert_eq!(delivered(&game, "slow_billed", ids::CORE_FRAGMENT), 0);
-    let want =
-        crate::game::base::work_orders::no_shelf_for(&game, &ItemId::from(ids::CORE_FRAGMENT));
-    assert_eq!(
-        research_node(&game, "slow_billed").blocked_by.as_deref(),
-        Some(want.as_str())
-    );
-}
-
 /// A load that has landed in the hopper but not yet been absorbed when the
 /// project is abandoned is credited to that project, not handed to the next.
 #[test]
@@ -572,4 +546,149 @@ fn abandoning_absorbs_a_load_still_in_the_hopper() {
 
     assert_eq!(delivered(&game, "slow_billed", ids::CORE_FRAGMENT), 5);
     assert!(game.world.get::<Stock>(station).unwrap().input.is_empty());
+}
+
+/// Makes `id` the active project again. `spawn_machine_with_recipe_at`
+/// researches its recipe's chain through the real completion door, which
+/// clears whatever project was active.
+fn reselect(game: &mut Game, id: &str) {
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .id = Some(id.to_string());
+}
+
+/// Lays a strip of floor from the fixture's pocket out to `x_end`, along
+/// `y = 0` and one row above, so machines stood there are walkable to.
+fn floor_strip(game: &mut Game, x_end: i32) {
+    for x in 1..=x_end {
+        game.floor_cell(x, 0);
+        game.floor_cell(x, -1);
+    }
+}
+
+/// The shipped stall the review found, in a smaller shape: a standing order
+/// for the bill's material is satisfied by units sitting in a producer's
+/// buffer beside a consumer the base still wants (its own standing order is
+/// met, so nobody works it). The buffer is a feed buffer, so neither the
+/// Tend nor idle clearing carries it to a shelf, and the order sleeps
+/// because the base already holds the level. With the consumer idle, the
+/// Station's program takes the units straight from the buffer.
+#[test]
+fn a_bill_held_in_an_idle_feed_buffer_is_still_carried_in() {
+    let assets = slow_assets("research_fed_feed_buffer");
+    let mut game = Game::new(9716, DifficultyMode::Forgiving, &assets).unwrap();
+    let (_, depot) = station_with_project(&mut game, "slow_billed");
+    floor_strip(&mut game, 24);
+    let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, 22, 1);
+    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 23, 1);
+    reselect(&mut game, "slow_billed");
+    fill_research_progress(&mut game, "slow_billed");
+    set_shelf(&mut game, depot, "blank_substrate", 1);
+    game.queue_work_order(WorkOrder::level(ItemId::from("blank_substrate"), 1))
+        .unwrap();
+    game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 12))
+        .unwrap();
+    set_shelf(&mut game, extractor, ids::CORE_FRAGMENT, 12);
+    spawn_tamed(&mut game, 10, 3);
+
+    assert!(tick_until(&mut game, 2000, |g| g.is_researched("slow_billed")));
+}
+
+/// The other half: a buffer whose neighbour is being worked right now is the
+/// line's, and is not counted as research supply.
+#[test]
+fn a_feed_buffer_an_active_line_is_pulling_is_not_research_supply() {
+    let assets = slow_assets("research_fed_busy_buffer");
+    let mut game = Game::new(9717, DifficultyMode::Forgiving, &assets).unwrap();
+    let (_, _) = station_with_project(&mut game, "slow_billed");
+    floor_strip(&mut game, 24);
+    let extractor = spawn_machine_with_recipe_at(&mut game, "extractor", ids::CORE_FRAGMENT, 22, 1);
+    let factory = spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 23, 1);
+    set_shelf(&mut game, extractor, ids::CORE_FRAGMENT, 12);
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    assert_eq!(game.research_supply(&fragment), 12, "an idle neighbour");
+
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.post_worker(worker, factory);
+
+    assert_eq!(game.research_supply(&fragment), 0, "a worked neighbour");
+}
+
+/// What a Station's hopper holds that the bill does not want goes back to a
+/// Depot that will take it — and, with none, onto the floor beside the
+/// Station — rather than sitting where nothing counts it.
+#[test]
+fn a_hopper_surplus_with_no_project_spills_past_a_refusing_depot_to_the_floor() {
+    let assets = slow_assets("research_fed_spill");
+    let mut game = Game::new(9718, DifficultyMode::Forgiving, &assets).unwrap();
+    let (station, depot) = station_with_project(&mut game, "slow_billed");
+    game.abandon_research().unwrap();
+    let grain = ItemId::from("cache_grain");
+    game.set_depot_filter(depot, std::slice::from_ref(&grain), false);
+    game.world
+        .get_mut::<Stock>(station)
+        .unwrap()
+        .input
+        .insert(grain.clone(), 2);
+
+    game.absorb_research_deliveries();
+
+    assert!(game.world.get::<Stock>(station).unwrap().input.is_empty());
+    assert_eq!(
+        node_output(&game, depot, "cache_grain"),
+        0,
+        "a Depot that refuses the item is not a place to spill it"
+    );
+    let on_floor = game
+        .world
+        .iter_entities()
+        .filter(|e| {
+            e.get::<crate::components::FloorItem>()
+                .is_some_and(|f| f.0 == crate::items::FloorThing::Item(grain.clone()))
+        })
+        .count();
+    assert_eq!(on_floor, 2);
+}
+
+/// A bill's only units on a Depot nobody can walk to are no supply: the
+/// running project says it cannot reach them, rather than reading as fine
+/// while no body is ever posted to fetch them.
+#[test]
+fn units_on_an_unreachable_shelf_are_flagged_not_counted() {
+    let assets = slow_assets("research_fed_unreachable_flag");
+    let mut game = Game::new(9719, DifficultyMode::Forgiving, &assets).unwrap();
+    station_with_project(&mut game, "slow_billed");
+    fill_research_progress(&mut game, "slow_billed");
+    let far = unreachable_depot(&mut game);
+    set_shelf(&mut game, far, ids::CORE_FRAGMENT, 12);
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+
+    assert_eq!(game.research_supply(&fragment), 0);
+    let want = crate::game::base::work_orders::no_reach_for(&game, &fragment);
+    assert_eq!(
+        research_node(&game, "slow_billed").blocked_by.as_deref(),
+        Some(want.as_str())
+    );
+    assert!(game.research_material_shortfall().is_some());
+}
+
+/// A Station whose first face (by tile order) is a dead end still reaches a
+/// shelf from another face.
+#[test]
+fn a_station_reaches_a_shelf_from_any_of_its_faces() {
+    let assets = slow_assets("research_fed_faces");
+    let mut game = Game::new(9720, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
+    // West face (39, 40) is an island; the east face (42, 40) runs on to a
+    // Depot at (45, 40).
+    game.floor_cell(39, 40);
+    for x in 42..=46 {
+        game.floor_cell(x, 40);
+        game.floor_cell(x, 41);
+    }
+    let station = spawn_machine_at(&mut game, "research_node", 40, 40);
+    let depot = spawn_machine_at(&mut game, "depot", 45, 41);
+    set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 3);
+
+    assert!(game.research_bill_reachable(station, &[ItemId::from(ids::CORE_FRAGMENT)]));
 }

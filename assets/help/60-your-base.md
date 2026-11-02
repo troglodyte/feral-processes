@@ -192,7 +192,8 @@ The rest of what a base does:
   else the floor beside the Station; nothing more is spent there until it is gone. Change your mind and abandon the project (`A`) to get
   the program back as ordinary staff instead of losing it; losing the Station itself does the same.
 - A node's material bill is carried to the Research Station by the program working there. It
-  fetches the goods from any Depot or stockpile cell it can walk to, a load at a time, and the
+  fetches the goods from any Depot or stockpile cell it can walk to — or, failing those, from a
+  machine whose neighbour is not being worked right now — a load at a time, and the
   Station uses each load the moment it arrives — while the Research Data is still coming in, too.
   The research screen shows each material as delivered against needed, with what your shelves
   hold toward the rest in brackets. Your base never has to hold the whole bill at once, and what
@@ -201,8 +202,8 @@ The rest of what a base does:
 - Picking a node files no work order. Making the goods is up to you: a standing work order (hold
   10 Core Fragments, say) keeps a shelf topped up while the Station drains it. If nothing on your
   shelves and nothing in the queue can supply a material, the row wears `!` and says to file a
-  standing work order for it; with no Depot or stockpile cell at all, it says to build a Depot. The
-  Station takes nothing straight out of a machine — loose output reaches a Depot first.
+  standing work order for it, and if the goods are there but the Station cannot reach them, it
+  says that instead. The Station never takes from a machine whose neighbour is busy using them.
 - A node whose bill names something no machine of yours makes yet is still yours to pick. Its row
   wears `!` and names the machine to build, the base panel says the same over the map, and the
   project waits until the machine goes up. The same `!` marks a node with no Research Station

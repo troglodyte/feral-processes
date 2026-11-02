@@ -266,8 +266,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A research bill is carried to the Research Station and consumed as it
   lands, into `ActiveResearch::delivered` (per node, kept through an
   abandon, never refunded), and the project files no work order** — the
-  Station's own posted program fetches it off shelves only (Depots and
-  stockpile cells it can reach) in `haul_step_system`'s research leg, every
+  Station's own posted program fetches it — a Depot, a stockpile cell, then
+  a buffer no worked neighbour pulls from (`research_supply::buffer_is_free`),
+  only what it can reach — in `haul_step_system`'s research leg, every
   load capped by one per-pass `research_supply::ResearchLedger` across all
   Stations, and `Game::absorb_research_deliveries` is the one place it is
   spent.

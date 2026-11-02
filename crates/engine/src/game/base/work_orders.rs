@@ -274,12 +274,11 @@ pub(crate) fn no_order_for(game: &Game, item: &ItemId) -> String {
     format!("No {name} to carry in — file a standing work order for it.")
 }
 
-/// What a research bill's line says when the base has no Depot and no
-/// stockpile cell: a Research Station is fed off shelves only
-/// (`research_supply`), so a machine's own buffer is no source.
-pub(crate) fn no_shelf_for(game: &Game, item: &ItemId) -> String {
+/// What a research bill's line says when the base holds some of it but no
+/// program at a Research Station can walk to where it is.
+pub(crate) fn no_reach_for(game: &Game, item: &ItemId) -> String {
     let name = game.item_name(item);
-    format!("No Depot to carry {name} from — build a Depot.")
+    format!("The Research Station can't reach the {name} on hand.")
 }
 
 /// The one sentence naming why a line for `item` can never move, or `None`
@@ -3406,8 +3405,8 @@ impl Game {
         };
         if earned >= def.cost {
             // The data is in; what is left is carrying the bill. One Station
-            // is enough for that, and only while a shelf it can walk to holds
-            // a unit of an outstanding line — `build_is_workable`'s deadlock
+            // is enough for that, and only while it can walk to a unit of an
+            // outstanding line it may take (`research_bill_reachable`) — `build_is_workable`'s deadlock
             // rule: a Station staffed with nothing it can fetch would hold the
             // body that should be making the material.
             let owed: Vec<ItemId> = research

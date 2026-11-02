@@ -15,7 +15,7 @@ use crate::base_grid::BaseGrid;
 use crate::components::{Fleeing, FloorItem, SetDownLoad};
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::floor::take_floor_unit;
-use crate::game::base::research_supply::ResearchLedger;
+use crate::game::base::research_supply::{self, ResearchLedger};
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::FloorThing;
@@ -1305,6 +1305,21 @@ pub(crate) fn haul_step_system(
                 .map(|load| (load.item.clone(), load.qty))
         }),
     );
+    // Every consumer being worked right now, for `research_supply::
+    // buffer_is_free`: a buffer beside one of these is an active line's.
+    let posted: HashSet<Entity> = workers
+        .iter()
+        .filter(|(_, _, task, ..)| matches!(task.kind, TaskKind::GatherResource))
+        .map(|(_, _, task, ..)| task.target)
+        .collect();
+    let staffed: Vec<Consumer> = structures
+        .iter()
+        .filter(|(e, ..)| posted.contains(e))
+        .filter_map(|(e, p, _, s)| {
+            let def = db.get(&s.kind)?;
+            intake_recipe(Placed::of(def, recipes.get(e).ok()), &items).map(|r| (*p, r))
+        })
+        .collect();
 
     // Sorted for the reason `assembler_system` sorts its machines: two
     // workers competing for the last slot in a depot must resolve the same
@@ -1366,8 +1381,9 @@ pub(crate) fn haul_step_system(
             // input (`Errand::Load`), capped by the pass's `ledger`, and
             // `Game::absorb_research_deliveries` consumes it into the
             // project. The same errands every machine uses, with the bill
-            // standing in for a recipe — fetched off shelves only (a Depot,
-            // or a stockpile cell; see `research_supply`), nearest first
+            // standing in for a recipe — fetched off a Depot, then a
+            // stockpile cell, then a buffer no worked neighbour is pulling
+            // from (see `research_supply`), nearest first
             // **among those the walk reaches**, every line tried in turn so
             // an unreachable first line does not starve a reachable second.
             let research_leg = stations.contains(&machine) && ledger.wants_any();
@@ -1408,7 +1424,7 @@ pub(crate) fn haul_step_system(
                         .map(|(e, p, _)| (chebyshev(*p, worker_pos), p.x, p.y, e))
                         .collect();
                     piled.sort_unstable();
-                    piled.into_iter().find_map(|(_, x, y, thing)| {
+                    let pickup = piled.into_iter().find_map(|(_, x, y, thing)| {
                         let at = Position { x, y };
                         post_reach(&grid, worker_pos, at, 1, &blocked, pocket_radius)
                             .is_ok()
@@ -1417,7 +1433,34 @@ pub(crate) fn haul_step_system(
                                 at,
                                 item: item.clone(),
                             })
-                    })
+                    });
+                    if pickup.is_some() {
+                        return pickup;
+                    }
+                    // Last, a machine's buffer no worked neighbour is pulling
+                    // from — units an order may be sleeping on that nothing
+                    // else will ever move.
+                    let mut buffers: Vec<(Entity, Position)> = every_structure
+                        .iter()
+                        .copied()
+                        .filter(|(e, p)| {
+                            !stations.contains(e)
+                                && !stores.iter().any(|(d, _)| d == e)
+                                && research_supply::buffer_is_free(*p, item, &staffed)
+                                && structures.get(*e).is_ok_and(|(_, _, s, _)| {
+                                    s.output.get(item).copied().unwrap_or(0) > 0
+                                })
+                        })
+                        .collect();
+                    buffers.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
+                    buffers
+                        .into_iter()
+                        .find(|&(e, p)| reachable(e, p))
+                        .map(|(depot, _)| Errand::Collect {
+                            depot,
+                            item: item.clone(),
+                            want,
+                        })
                 })
             };
             match &carrying {

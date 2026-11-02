@@ -59,12 +59,15 @@
   project stalled for good, and the base had to hold the whole bill at once.
   Now the Station's own posted program (`GatherResource`, staffed by
   `research_wants`) runs `haul_step_system`'s research leg: the outstanding
-  bill stands in for a recipe, `Errand::Collect` from a Depot or
-  `Errand::Pickup` off a stockpile cell — **shelves only**, the set a
-  defence's supply uses, because a machine buffer may be feeding its
-  neighbour (a base with neither reads `work_orders::no_shelf_for`) — and
-  **only a source the walk reaches**, every line tried in turn so an
-  unreachable first line cannot starve a reachable second. `Errand::Load`
+  bill stands in for a recipe, `Errand::Collect` from a Depot,
+  `Errand::Pickup` off a stockpile cell, then `Errand::Collect` from a
+  machine buffer **no worked neighbour is pulling from**
+  (`research_supply::buffer_is_free`). Shelves alone stalled a bill whose
+  standing order was satisfied by units in a feed buffer: the order slept on
+  them, and neither the Tend nor idle clearing moves a feed buffer. A buffer
+  an active line is pulling right now is never raided. **Only a source the
+  walk reaches** counts, every line tried in turn so an unreachable first
+  line cannot starve a reachable second. `Errand::Load`
   into the Station's input is capped by the pass's one
   `research_supply::ResearchLedger`: outstanding less **every** Station's
   hopper, updated as the pass loads and lifts — a per-Station cap let two
@@ -72,17 +75,21 @@
   `Deposit`. `Game::absorb_research_deliveries` (start of `settle_research`,
   and in `abandon_research` before the id clears) moves hoppers into
   `ActiveResearch::delivered`, reporting the `Consume`, and spills anything
-  the bill does not want back to a Depot or the floor. The flag and the
-  stall count `Game::research_supply` (shelves, hoppers, loads in a Station
-  program's hands), never `base_holding`, or the last load in flight reads
-  as none. Delivered is per node
+  the bill does not want and the Station's own recipe does not consume back
+  to a Depot that accepts it, or the floor — spilling a recipe input would
+  teleport its program's every fetch straight back out. The flag, the stall
+  and the staffing all read one reach (`Game::research_reached`: structures
+  are walls, bodies are not, every face of every Station), so
+  `Game::research_supply` — reachable sources, hoppers, loads in a Station
+  program's hands, never `base_holding` — cannot read a shelf as supply that
+  no body is ever posted to fetch; units out of reach read
+  `work_orders::no_reach_for`. Delivered is per node
   like `progress`, kept through an abandon, never refunded, removed only by
   `grant_research`; saved as `SaveData::research_delivered`, asserted by a
   save→load test. An old save's `for_research: true` order loads as an
   ordinary order (no `deny_unknown_fields`). Once the data is in,
-  `research_wants` staffs **one** Station only while a shelf it can walk to
-  holds an outstanding line (`research_bill_reachable`, one `crew_reach`
-  field from the Station's face) — `build_is_workable`'s deadlock rule: a
+  `research_wants` staffs **one** Station only while it can walk to a unit
+  of an outstanding line it may take (`research_bill_reachable`) — `build_is_workable`'s deadlock rule: a
   Station staffed with nothing it can fetch holds the body that should make
   the material. `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
   priority is the position in that list, and the player's own pick outranks the

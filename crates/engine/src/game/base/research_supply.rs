@@ -2,25 +2,30 @@
 //!
 //! The bill is fetched by the Station's own posted program through
 //! `hauling::haul_step_system`'s research leg and consumed into the project
-//! here, in `Game::absorb_research_deliveries`. **The sources are shelves**:
-//! Depots and stockpile cells, the set a defence's supply is drawn from, and
-//! never a machine's output buffer — that buffer may be feeding the machine
-//! beside it, and a production line raided for research is a line that
-//! stops. A machine's loose output reaches a shelf anyway, by the Tend and
-//! idle clearing, both of which need a Depot or a stockpile cell to carry it
-//! to; a base with neither is told so (`work_orders::no_shelf_for`).
+//! here, in `Game::absorb_research_deliveries`. **The sources are what the
+//! base holds that no active line is using**: a Depot's shelf and a stockpile
+//! cell first, then a machine's buffer whose consuming neighbour stands idle
+//! (`buffer_is_free`). Shelves alone stalled a bill whose standing order was
+//! satisfied by units sitting in a feed buffer — the order slept on them, and
+//! neither the Tend nor idle clearing moves a feed buffer. A buffer an active
+//! line is pulling from right now is never raided. And only what a Station's
+//! program can **walk to** counts — for fetching, for staffing and for the
+//! flag alike (`research_reached`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use bevy_ecs::prelude::Entity;
 
 use crate::base_grid::BaseGrid;
-use crate::components::{Carrying, Position, Stock, Structure, Task, TaskKind};
+use crate::components::{Carrying, MachineRecipe, Position, Stock, Structure, Task, TaskKind};
+use crate::game::base::hauling::Consumer;
 use crate::game::base::{hauling, stock, work_orders};
 use crate::items::{FloorThing, ItemId};
+use crate::items_db::ItemDb;
 use crate::research::ResearchDb;
 use crate::resources::ActiveResearch;
-use crate::structures::StructureDb;
+use crate::structures::{Placed, StructureDb};
+use crate::systems::intake_recipe;
 use crate::{Game, tuning};
 
 /// One tick's view of the active bill for the haulers: what is still to be
@@ -100,6 +105,24 @@ impl ResearchLedger {
     }
 }
 
+/// Whether a machine at `machine` may give up its buffered `item` to the
+/// research bill: no consumer beside it that takes `item` is being worked
+/// right now (`staffed`). A buffer an active line is pulling from is the
+/// line's; one whose neighbour stands idle is just units the base holds —
+/// and since the order that made them reads them as held, nothing else will
+/// ever move them. Shared by the haulers and the `Game` side, so the program
+/// fetches exactly what the flag and the staffing count.
+pub(crate) fn buffer_is_free(machine: Position, item: &ItemId, staffed: &[Consumer]) -> bool {
+    !hauling::consumer_beside(machine, item, staffed)
+}
+
+/// A unit of the bill a Station's program could pick up.
+struct Source {
+    pos: Position,
+    side: u8,
+    qty: u32,
+}
+
 impl Game {
     /// Every Research Station, in tile order — what makes the research
     /// currency is what receives the bill.
@@ -107,39 +130,157 @@ impl Game {
         work_orders::producers_of(self, &self.research_currency())
     }
 
-    /// How much of `item` the bill could still be fed from: every Depot's
-    /// shelf and stockpile cell, plus what is already in a Station's hopper
-    /// or in a Station program's hands. The blocker and the stall read this
-    /// rather than `base_holding`, so the last load on its way is not read as
-    /// the base having none, and a machine's own buffer — which the haulers
-    /// do not raid — is not read as supply.
-    pub(crate) fn research_supply(&self, item: &ItemId) -> u32 {
-        let stations = self.research_stations();
-        let db = self.world.resource::<StructureDb>();
-        let shelved: u32 = self
+    /// Every consumer being worked right now: a structure with an intake
+    /// recipe and a program posted to it.
+    fn staffed_consumers(&self) -> Vec<Consumer> {
+        let posted: HashSet<Entity> = self
             .world
             .iter_entities()
             .filter_map(|e| {
-                let kind = &e.get::<Structure>()?.kind;
-                let stock = e.get::<Stock>()?;
-                let held = if db.get(kind).is_some_and(|d| d.stores) {
-                    stock.output.get(item).copied().unwrap_or(0)
-                } else {
-                    0
-                };
-                let hopper = if stations.contains(&e.id()) {
-                    stock.input.get(item).copied().unwrap_or(0)
-                } else {
-                    0
-                };
-                Some(held + hopper)
+                let task = e.get::<Task>()?;
+                (task.kind == TaskKind::GatherResource).then_some(task.target)
             })
-            .sum();
-        let piled = stock::stockpiled(self)
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        self.world
+            .iter_entities()
+            .filter(|e| posted.contains(&e.id()))
+            .filter_map(|e| {
+                let def = db.get(&e.get::<Structure>()?.kind)?;
+                let recipe = intake_recipe(Placed::of(def, e.get::<MachineRecipe>()), items)?;
+                Some((*e.get::<Position>()?, recipe))
+            })
+            .collect()
+    }
+
+    /// Every unit of `items` a Station's program may take: a Depot's shelf, a
+    /// free machine buffer (`buffer_is_free`), or a stockpiled unit. Never a
+    /// Station's own hopper.
+    fn research_sources(&self, items: &[ItemId]) -> Vec<Source> {
+        let stations = self.research_stations();
+        let staffed = self.staffed_consumers();
+        let db = self.world.resource::<StructureDb>();
+        let mut found: Vec<Source> = Vec::new();
+        for e in self.world.iter_entities() {
+            if stations.contains(&e.id()) {
+                continue;
+            }
+            let (Some(s), Some(pos), Some(stock)) =
+                (e.get::<Structure>(), e.get::<Position>(), e.get::<Stock>())
+            else {
+                continue;
+            };
+            let Some(def) = db.get(&s.kind) else { continue };
+            for item in items {
+                let qty = stock.output.get(item).copied().unwrap_or(0);
+                if qty > 0 && (def.stores || buffer_is_free(*pos, item, &staffed)) {
+                    found.push(Source {
+                        pos: *pos,
+                        side: def.footprint,
+                        qty,
+                    });
+                }
+            }
+        }
+        found.extend(
+            stock::stockpiled(self)
+                .into_iter()
+                .filter(|(_, _, held)| items.contains(held))
+                .map(|(pos, ..)| Source {
+                    pos,
+                    side: 1,
+                    qty: 1,
+                }),
+        );
+        found
+    }
+
+    /// Which of `sources` a program standing at any free face of any of
+    /// `stations` could walk to. Structures are walls and bodies are not —
+    /// a body is squeezed past (`Occupancy`), and a readout that flickered
+    /// with who is standing where would say nothing — so this is `&self`
+    /// and the flag, the stall and the staffing all ask it. A face's field
+    /// is walked only while some source is still unreached, so the common
+    /// base pays for one.
+    fn research_reached(&self, stations: &[Entity], sources: &[Source]) -> Vec<bool> {
+        let mut reached = vec![false; sources.len()];
+        if sources.is_empty() {
+            return reached;
+        }
+        let walls = hauling::blocked_tiles(
+            self.structure_footprints()
+                .into_iter()
+                .filter(|(e, ..)| !self.is_door(*e))
+                .map(|(_, p, side)| (p, side)),
+            std::iter::empty(),
+        );
+        let grid = self.world.resource::<BaseGrid>();
+        let radius = grid.radius();
+        for &station in stations {
+            let Some(at) = self.world.get::<Position>(station).copied() else {
+                continue;
+            };
+            let side = self.structure_footprint_of(station);
+            for face in hauling::station_candidates(grid, at, side, |c| walls.taken(c)) {
+                if reached.iter().all(|r| *r) {
+                    return reached;
+                }
+                let field = hauling::crew_reach(grid, face, &walls, radius);
+                for (hit, source) in reached.iter_mut().zip(sources) {
+                    *hit = *hit
+                        || hauling::reaches(
+                            grid,
+                            &field,
+                            face,
+                            source.pos,
+                            source.side,
+                            &walls,
+                            radius,
+                        );
+                }
+            }
+        }
+        reached
+    }
+
+    /// `(reachable, unreachable)` units of `item` a Station's program may
+    /// take, from any Station.
+    fn research_holding(&self, item: &ItemId) -> (u32, u32) {
+        let sources = self.research_sources(std::slice::from_ref(item));
+        let reached = self.research_reached(&self.research_stations(), &sources);
+        sources
             .iter()
-            .filter(|(_, _, held)| held == item)
-            .count() as u32;
-        shelved + piled + self.research_in_flight(&stations, item)
+            .zip(reached)
+            .fold((0, 0), |(yes, no), (s, hit)| {
+                if hit {
+                    (yes + s.qty, no)
+                } else {
+                    (yes, no + s.qty)
+                }
+            })
+    }
+
+    /// How much of `item` the bill can still be fed from: every unit a
+    /// Station's program can reach (`research_sources`), plus what is already
+    /// in a Station's hopper or in a Station program's hands. The flag and
+    /// the stall read this rather than `base_holding`, so the last load on its
+    /// way is not read as none, and units nobody can walk to — or that an
+    /// active line is pulling — are not read as supply.
+    pub(crate) fn research_supply(&self, item: &ItemId) -> u32 {
+        let stations = self.research_stations();
+        let hoppers: u32 = stations
+            .iter()
+            .filter_map(|&s| self.world.get::<Stock>(s))
+            .map(|s| s.input.get(item).copied().unwrap_or(0))
+            .sum();
+        self.research_holding(item).0 + hoppers + self.research_in_flight(&stations, item)
+    }
+
+    /// Units of `item` the bill could take but no Station's program can walk
+    /// to — what `work_orders::no_reach_for` is about.
+    pub(crate) fn research_unreachable(&self, item: &ItemId) -> u32 {
+        self.research_holding(item).1
     }
 
     fn research_in_flight(&self, stations: &[Entity], item: &ItemId) -> u32 {
@@ -156,78 +297,15 @@ impl Game {
             .sum()
     }
 
-    /// Whether the base has anywhere to carry a bill from — a Depot or a
-    /// stockpile cell.
-    pub(crate) fn research_has_shelves(&self) -> bool {
-        let db = self.world.resource::<StructureDb>();
-        self.world
-            .resource::<BaseGrid>()
-            .stockpile_cells()
-            .next()
-            .is_some()
-            || self.world.iter_entities().any(|e| {
-                e.get::<Structure>()
-                    .is_some_and(|s| db.get(&s.kind).is_some_and(|d| d.stores))
-            })
-    }
-
     /// Whether a program at `station` could walk to a unit of any of `items`
-    /// on a shelf — the staffing half of the research leg. One walk field,
-    /// from the Station's first free face, `crew_reach`'s trade: the
-    /// scheduler asks it once a tick, and a Station posted with nothing it can
-    /// reach would hold the body that should be making the material.
-    pub(crate) fn research_bill_reachable(&mut self, station: Entity, items: &[ItemId]) -> bool {
-        let Some(at) = self.world.get::<Position>(station).copied() else {
-            return false;
-        };
-        let side = self.structure_footprint_of(station);
+    /// it may take — the staffing half of the research leg, from every one of
+    /// the Station's faces. A Station posted with nothing it can reach would
+    /// hold the body that should be making the material.
+    pub(crate) fn research_bill_reachable(&self, station: Entity, items: &[ItemId]) -> bool {
         let sources = self.research_sources(items);
-        if sources.is_empty() {
-            return false;
-        }
-        let blocked = self.blocked_tiles();
-        let grid = self.world.resource::<BaseGrid>();
-        let radius = grid.radius();
-        let Some(face) = hauling::station_candidates(grid, at, side, |c| blocked.taken(c))
-            .first()
-            .copied()
-        else {
-            return false;
-        };
-        let field = hauling::crew_reach(grid, face, &blocked, radius);
-        sources
+        self.research_reached(&[station], &sources)
             .into_iter()
-            .any(|(pos, side)| hauling::reaches(grid, &field, face, pos, side, &blocked, radius))
-    }
-
-    /// Every shelf holding any of `items`: a Depot's tile and footprint, or a
-    /// stockpiled unit's cell.
-    fn research_sources(&self, items: &[ItemId]) -> Vec<(Position, u8)> {
-        let mut found: Vec<(Position, u8)> = {
-            let db = self.world.resource::<StructureDb>();
-            self.world
-                .iter_entities()
-                .filter_map(|e| {
-                    let (s, p, stock) = (
-                        e.get::<Structure>()?,
-                        e.get::<Position>()?,
-                        e.get::<Stock>()?,
-                    );
-                    let def = db.get(&s.kind).filter(|d| d.stores)?;
-                    items
-                        .iter()
-                        .any(|i| stock.output.get(i).copied().unwrap_or(0) > 0)
-                        .then_some((*p, def.footprint))
-                })
-                .collect()
-        };
-        found.extend(
-            stock::stockpiled(self)
-                .into_iter()
-                .filter(|(_, _, held)| items.contains(held))
-                .map(|(p, ..)| (p, 1)),
-        );
-        found
+            .any(|hit| hit)
     }
 
     /// Moves what haulers have loaded into every Research Station's hopper
@@ -307,14 +385,34 @@ impl Game {
         );
     }
 
-    /// Whatever is left in `station`'s hopper goes back to a Depot, or onto
-    /// the floor beside the Station — never into the void.
+    /// Whatever is left in `station`'s hopper once the bill has taken its
+    /// share goes back to a Depot that accepts it (`Game::depot_accepts`), or
+    /// onto the floor beside the Station — never into the void. What the
+    /// Station's own recipe consumes stays: that is its program's fetch, and
+    /// spilling it would teleport every load straight back out.
     fn spill_station_hopper(&mut self, station: Entity) {
-        let Some(left) = self
-            .world
-            .get_mut::<Stock>(station)
-            .map(|mut s| std::mem::take(&mut s.input))
-        else {
+        let keeps: Vec<ItemId> = {
+            let db = self.world.resource::<StructureDb>();
+            let items = self.world.resource::<ItemDb>();
+            self.world
+                .get::<Structure>(station)
+                .and_then(|s| db.get(&s.kind))
+                .and_then(|def| {
+                    intake_recipe(
+                        Placed::of(def, self.world.get::<MachineRecipe>(station)),
+                        items,
+                    )
+                })
+                .map(|recipe| recipe.into_iter().map(|(item, _)| item).collect())
+                .unwrap_or_default()
+        };
+        let Some(spilled) = self.world.get_mut::<Stock>(station).map(|mut s| {
+            let all = std::mem::take(&mut s.input);
+            let (kept, spilled): (BTreeMap<_, _>, BTreeMap<_, _>) =
+                all.into_iter().partition(|(item, _)| keeps.contains(item));
+            s.input = kept;
+            spilled
+        }) else {
             return;
         };
         let at = self
@@ -322,8 +420,10 @@ impl Game {
             .get::<Position>(station)
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
-        for (item, qty) in left {
-            let landed = stock::return_to_depots(self, &item, qty);
+        for (item, qty) in spilled {
+            let landed = stock::shelve_on_depots(self, &item, qty, |game, depot| {
+                game.depot_accepts(depot, &item)
+            });
             let rest = (0..qty - landed)
                 .map(|_| FloorThing::Item(item.clone()))
                 .collect();

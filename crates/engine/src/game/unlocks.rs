@@ -1099,9 +1099,9 @@ impl Game {
         self.research_outstanding(def)
             .into_iter()
             .find_map(|(item, short)| {
-                // The running project counts what the Station can be fed from
-                // and what is already on its way (`research_supply`); any
-                // other node, what the base holds at all.
+                // The running project counts what a Station's program can
+                // reach and take, and what is already on its way
+                // (`research_supply`); any other node, what the base holds.
                 let covered = if active {
                     self.research_supply(&item)
                 } else {
@@ -1115,8 +1115,8 @@ impl Game {
                     .or_insert_with(|| crate::game::base::work_orders::chain_break(self, &item))
                     .clone()
                     .or_else(|| {
-                        (active && !self.research_has_shelves())
-                            .then(|| crate::game::base::work_orders::no_shelf_for(self, &item))
+                        (active && self.research_unreachable(&item) > 0)
+                            .then(|| crate::game::base::work_orders::no_reach_for(self, &item))
                     })
                     .or_else(|| {
                         (active && !needs.contains(&item))

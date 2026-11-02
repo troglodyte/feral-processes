@@ -79,3 +79,12 @@ fn names_round_trip_and_unknown_is_none() {
     }
     assert_eq!(Skill::from_name("juggling"), None);
 }
+
+#[test]
+fn equality_ignores_the_unsaved_carry() {
+    let mut a = Skills::default();
+    a.pace_steps(500);
+    assert_eq!(a, Skills::default());
+    a.track_mut(Skill::Build).level = 1;
+    assert_ne!(a, Skills::default());
+}

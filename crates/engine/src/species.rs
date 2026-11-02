@@ -429,7 +429,6 @@ pub enum AffinityClass {
 }
 
 impl SpeciesDef {
-    /// Whether this species exists only as the offspring of `parents`.
     /// The `Skills` a fresh tame of this species starts with, at zero practice
     /// toward the next level.
     pub fn seed_skills(&self) -> crate::skills::Skills {
@@ -440,6 +439,7 @@ impl SpeciesDef {
         skills
     }
 
+    /// Whether this species exists only as the offspring of `parents`.
     pub fn is_hybrid(&self) -> bool {
         self.parents.is_some()
     }

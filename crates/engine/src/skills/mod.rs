@@ -91,7 +91,7 @@ pub struct SkillTrack {
 
 /// One track per [`Skill`]. Present only on tamed programs: an entity without
 /// it is never practised and its work sites read a scale of 1.0.
-#[derive(Component, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Component, Clone, Debug, Default)]
 pub struct Skills {
     tracks: [SkillTrack; Skill::ALL.len()],
     /// Thousandths of a work step not yet paid out, so a pace below one step
@@ -99,6 +99,16 @@ pub struct Skills {
     /// it costs less than one step.
     carry: u32,
 }
+
+/// Equality is the saved state: `carry` is never saved, so a save->load
+/// round trip compares equal.
+impl PartialEq for Skills {
+    fn eq(&self, other: &Self) -> bool {
+        self.tracks == other.tracks
+    }
+}
+
+impl Eq for Skills {}
 
 impl Skills {
     /// How many work steps one working tick is worth at `permille` thousandths

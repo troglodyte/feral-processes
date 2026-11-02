@@ -768,6 +768,9 @@ impl Game {
                 }
                 continue;
             }
+            if self.world.get::<Task>(worker).is_none() {
+                continue;
+            }
             self.practise_work(worker, crate::skills::Skill::Dig);
             // Re-read at each swing boundary, so a level gained shows on the
             // next swing without a re-post.

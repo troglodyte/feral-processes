@@ -316,6 +316,7 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             keycap("a-z", "filter"),
             keycap("S", "sell"),
             keycap("U", "fuse all"),
+            keycap("A", "autofit"),
             keycap("I", "inspect"),
             keycap("D", "downed"),
         ],

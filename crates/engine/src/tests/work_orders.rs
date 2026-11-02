@@ -124,53 +124,6 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     assert!(game.work_orders().is_empty());
 }
 
-/// A research project's bill is filed once, at selection, and never topped
-/// up — so a line whose machine is not built yet has to be filed anyway and
-/// wait, where a player's order for the same item is refused on the spot.
-/// It sits `Stalled` until the machine goes up and then moves.
-#[test]
-fn a_research_order_for_an_unbuilt_machine_is_filed_and_stalls_until_it_stands() {
-    let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    place_home(&mut game);
-    spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 2, 0);
-    spawn_machine_with_recipe_at(&mut game, "factory", "blank_substrate", 3, 0);
-    let disk = ItemId::from("routine_disk");
-
-    game.queue_work_order(WorkOrder::batch(disk.clone(), 3))
-        .expect_err("a player's order still refuses");
-    game.queue_work_order(WorkOrder::batch(disk.clone(), 3).with_research())
-        .expect("a research line is filed whatever stands");
-    let report = game.work_order_report();
-    assert_eq!(report.len(), 1);
-    assert_eq!(report[0].state, crate::views::OrderState::Stalled);
-    assert!(
-        report[0]
-            .blocked_by
-            .as_deref()
-            .is_some_and(|b| b.contains("Assembler")),
-        "the queue names the machine to build: {:?}",
-        report[0].blocked_by
-    );
-
-    spawn_machine_with_recipe_at(&mut game, "assembler", "routine_disk", 4, 0);
-    let report = game.work_order_report();
-    assert_ne!(
-        report[0].state,
-        crate::views::OrderState::Stalled,
-        "building the machine is all it was waiting on"
-    );
-
-    game.queue_work_order(WorkOrder::batch(ItemId::from("no_such_item"), 1).with_research())
-        .expect_err("an item that does not exist is an asset error, not a base state");
-    // The guard that protects the scheduler: a banked line's producer always
-    // `can_progress` and no holding ever pays it, so filed it would hold a
-    // body forever. `select_research` refuses it first; this is the second
-    // lock, asserted on its own.
-    game.queue_work_order(WorkOrder::batch(game.research_currency(), 1).with_research())
-        .expect_err("a banked item is never filed, research or not");
-}
-
 #[test]
 fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -3570,55 +3523,6 @@ fn a_program_that_is_both_downed_and_off_shift_walks_to_the_bay() {
     );
 }
 
-/// A project's provenance survives a reload, so a project abandoned after a
-/// reload can still take its own orders with it.
-///
-/// A save→load test rather than a RON round trip: `#[serde(skip)]` is invisible
-/// to the round trip, so it would pass against exactly the mistake this exists
-/// to catch.
-#[test]
-fn a_research_order_keeps_its_provenance_across_a_save() {
-    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    base_with_a_research_node(&mut game);
-    game.select_research("automation").unwrap();
-    assert!(
-        game.work_orders().iter().any(|o| o.for_research),
-        "the fixture is vacuous unless selecting filed something"
-    );
-
-    let path = save_path("research_provenance");
-    game.save(&path).unwrap();
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-
-    assert!(
-        loaded.work_orders().iter().any(|o| o.for_research),
-        "a reloaded project's orders are still the project's"
-    );
-}
-
-/// Withdrawal matches on the flag and never on the item, which is the whole
-/// reason the flag exists — a player's own order for the same material has to
-/// survive a project ending.
-#[test]
-fn withdrawing_research_orders_leaves_the_players_own() {
-    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    base_with_a_research_node(&mut game);
-    game.select_research("automation").unwrap();
-    let item = game.work_orders()[0].item.clone();
-    game.queue_work_order(WorkOrder::batch(item.clone(), 2))
-        .expect("the player's own order for the same item");
-
-    game.withdraw_research_orders();
-
-    let left: Vec<(ItemId, u32, bool)> = game
-        .work_orders()
-        .iter()
-        .map(|o| (o.item.clone(), o.qty, o.for_research))
-        .collect();
-    assert_eq!(left, vec![(item, 2, false)]);
-}
-
 /// The whole of what staffs a Research Node: the project raises a want, so a
 /// body lands on the node while one is running.
 #[test]
@@ -3716,8 +3620,7 @@ fn a_research_want_outranks_a_work_order() {
     let node = base_with_a_research_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.select_research("automation").unwrap();
-    // Filed *after* the project's own lines, so it is not one of them.
-    let ordinary = game.work_orders()[0].item.clone();
+    let ordinary = ItemId::from(ids::CORE_FRAGMENT);
     game.queue_work_order(WorkOrder::batch(ordinary, 20))
         .unwrap();
 
@@ -3739,7 +3642,7 @@ fn ending_a_project_frees_its_body_while_the_queue_still_has_work() {
     let node = base_with_a_research_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.select_research("automation").unwrap();
-    let ordinary = game.work_orders()[0].item.clone();
+    let ordinary = ItemId::from(ids::CORE_FRAGMENT);
     game.tick();
     assert_eq!(game.world.get::<Task>(worker).map(|t| t.target), Some(node));
 

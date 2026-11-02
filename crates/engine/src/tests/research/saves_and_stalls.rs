@@ -100,8 +100,9 @@ fn a_research_node_with_no_project_asks_for_attention() {
 }
 
 /// The whole loop, end to end on the base a player actually has: one Research
-/// Node, one program, no shortcuts. The project earns its progress, the base
-/// makes its bill, and it completes.
+/// Node, one program, no shortcuts but the player's own standing orders for
+/// the bill. The project earns its progress, the base makes its bill, the one
+/// body carries it to the Station, and it completes.
 ///
 /// The bug this exists to catch: `research_wants` raised a want for every
 /// deployed Research Node for as long as a project was active, **including
@@ -113,13 +114,14 @@ fn a_research_node_with_no_project_asks_for_attention() {
 /// demolishing a node, or finding a second program.
 ///
 /// Every other completion test shortcuts both halves (`fill_research_progress`
-/// plus `shelve_research_bill`), which is exactly why none of them saw it.
+/// plus `fill_research_bill`), which is exactly why none of them saw it.
 #[test]
 fn a_one_program_base_can_finish_a_project_on_its_own() {
     let mut game = Game::new(901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     spawn_tamed(&mut game, 10, 3);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
 
     for _ in 0..4000 {
         game.tick();
@@ -138,13 +140,15 @@ fn a_one_program_base_can_finish_a_project_on_its_own() {
 }
 
 /// And the half that says why it works: a project with its progress already in
-/// stops holding a body at the node, because there is nothing left to feed it.
+/// stops holding a body at the node, because there is nothing left to feed it
+/// and, with nothing on the shelves, nothing to carry in either.
 #[test]
 fn a_saturated_project_frees_its_research_node() {
     let mut game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     game.tick();
     assert_eq!(
         game.world.get::<Task>(worker).map(|t| t.target),
@@ -190,13 +194,6 @@ fn a_material_with_no_producer_names_the_missing_machine() {
         .clone();
     let want = crate::game::base::work_orders::chain_break(&game, &material)
         .expect("nothing is standing that makes it, so the line is broken");
-    let bill = game
-        .world
-        .resource::<ResearchDb>()
-        .get("automation")
-        .unwrap()
-        .materials
-        .len();
 
     game.select_research("automation")
         .expect("a missing machine flags the project rather than refusing it");
@@ -210,11 +207,6 @@ fn a_material_with_no_producer_names_the_missing_machine() {
         game.research_readout(),
         Some(ResearchReadout::Blocked { reason, .. }) if reason == want
     ));
-    assert_eq!(
-        game.work_orders().len(),
-        bill,
-        "and the bill is filed, to stall until the machine goes up"
-    );
 }
 
 /// The two save keys are additive behind `#[serde(default)]`, and this is the
@@ -289,11 +281,8 @@ fn save_format_version_is_unchanged_by_research_projects() {
     );
 }
 
-/// A project with its progress in and its bill short has one surface and this
-/// is it. The bill's work order is *removed* when it completes, so a line
-/// consumed before the project settled leaves nothing in the queue for the
-/// player to find — and without this row, nothing on any screen says why the
-/// base has stopped.
+/// A project with its progress in and its bill short of anything the base
+/// could carry has one surface and this is it.
 #[test]
 fn a_project_waiting_on_materials_asks_for_the_player() {
     let mut game = Game::new(742, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -403,6 +392,7 @@ fn the_research_readout_follows_the_project() {
     assert_eq!(game.research_readout(), Some(ResearchReadout::Idle));
 
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     let row = game
         .research_nodes(ResearchTree::Base)
         .into_iter()
@@ -426,6 +416,7 @@ fn a_project_waiting_on_its_bill_reads_as_stalled_on_the_material() {
     let mut game = Game::new(742, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     fill_research_progress(&mut game, "automation");
 
     let short_of = game

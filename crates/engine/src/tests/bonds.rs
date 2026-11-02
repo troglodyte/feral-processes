@@ -444,7 +444,7 @@ fn a_program_spent_in_the_study_is_let_go() {
     let cast = cast_around(&mut game, leaving);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
 
     game.tick();

@@ -10,6 +10,7 @@ use crate::*;
 
 mod bills;
 mod discovery_and_study;
+mod fed_bill;
 mod gating;
 mod lifecycle;
 mod projects;

@@ -101,6 +101,7 @@ fn progress_saturates_at_the_nodes_cost() {
     let mut game = Game::new(721, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     let worker = spawn_tamed(&mut game, 10, 3);
     park_at_post(&mut game, worker, node);
     let cost = game

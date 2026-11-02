@@ -111,15 +111,17 @@ pub enum PinMark {
 /// and the refusal that quotes it come to word the same shortfall
 /// differently.
 ///
-/// `have` counts what the **base** is holding — every Depot and every machine
-/// output buffer, through `work_orders::base_holding` — because that is exactly
-/// what `Game::settle_research` spends from. It is deliberately not the
-/// player's pack: a project's bill is paid off the shelves by the base, wherever
-/// the player happens to be standing.
+/// `delivered` is what has already been carried to a Research Station and
+/// consumed into the node's bill (`resources::ActiveResearch::delivered`),
+/// kept through an abandon. `have` counts what the **base** is holding — every
+/// Depot, machine output buffer and stockpile cell, through
+/// `work_orders::base_holding` — because that is where the Station's program
+/// fetches the rest from. It is deliberately not the player's pack.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResearchMaterial {
     pub name: String,
     pub need: u32,
+    pub delivered: u32,
     pub have: u32,
 }
 

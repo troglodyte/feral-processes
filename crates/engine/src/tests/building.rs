@@ -5338,10 +5338,6 @@ fn destroying_a_research_station_releases_its_subject_and_abandons_the_project()
         None,
         "the project the destroyed Station was serving must be abandoned"
     );
-    assert!(
-        game.work_orders().iter().all(|o| !o.for_research),
-        "the abandoned project's material orders must leave the queue"
-    );
 }
 
 #[test]
@@ -5370,10 +5366,6 @@ fn demolishing_a_research_station_releases_its_subject_and_abandons_the_project(
         active_research(&game),
         None,
         "the project the demolished Station was serving must be abandoned"
-    );
-    assert!(
-        game.work_orders().iter().all(|o| !o.for_research),
-        "the abandoned project's material orders must leave the queue"
     );
 }
 

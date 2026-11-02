@@ -899,6 +899,23 @@ impl Game {
                 .world
                 .resource::<crate::resources::ActiveResearch>()
                 .study,
+            research_delivered: {
+                let mut rows: Vec<save::ResearchDeliveredSave> = self
+                    .world
+                    .resource::<crate::resources::ActiveResearch>()
+                    .delivered
+                    .iter()
+                    .flat_map(|(id, bill)| {
+                        bill.iter().map(|(item, qty)| save::ResearchDeliveredSave {
+                            research: id.clone(),
+                            item: item.clone(),
+                            qty: *qty,
+                        })
+                    })
+                    .collect();
+                rows.sort();
+                rows
+            },
             known_tools: self
                 .world
                 .resource::<KnownTools>()

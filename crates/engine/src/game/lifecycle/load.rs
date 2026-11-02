@@ -372,6 +372,18 @@ fn restore_resources(data: &mut save::SaveData, dbs: AssetDbs) -> ResourceRestor
             .into_iter()
             .collect(),
         study: data.study_progress,
+        delivered: {
+            let mut delivered: HashMap<String, std::collections::BTreeMap<ItemId, u32>> =
+                HashMap::new();
+            for row in std::mem::take(&mut data.research_delivered) {
+                *delivered
+                    .entry(row.research)
+                    .or_default()
+                    .entry(row.item)
+                    .or_default() += row.qty;
+            }
+            delivered
+        },
     });
     world.insert_resource(crate::resources::DiscoveredResearch(
         std::mem::take(&mut data.discovered_research)
@@ -1061,7 +1073,6 @@ fn reconcile_research(game: &mut Game) {
         game.world
             .resource_mut::<crate::resources::ActiveResearch>()
             .id = None;
-        game.withdraw_research_orders();
     }
 }
 

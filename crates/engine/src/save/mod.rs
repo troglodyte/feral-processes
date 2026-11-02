@@ -315,6 +315,15 @@ pub struct SortieSave {
 
 /// One caravan route in flight, dispatched or standing.
 ///
+/// One line of a research node's delivered bill — see
+/// `SaveData::research_delivered`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ResearchDeliveredSave {
+    pub research: crate::research::ResearchId,
+    pub item: ItemId,
+    pub qty: u32,
+}
+
 /// **Carries the whole record**, unlike `SortieSave`: cargo names no entity,
 /// so there is no id whose stability across a save could be a problem, and
 /// `routes::Route`'s membership-free shape needs no reassembly on load — a
@@ -1830,6 +1839,14 @@ pub struct SaveData {
     /// `discovered_research`'s reason.
     #[serde(default)]
     pub study_progress: u32,
+    /// What each node's material bill has had delivered — see
+    /// `resources::ActiveResearch::delivered`. One flat row per (node, item),
+    /// a named struct for `WorkOrder`'s RON-widening reason, sorted on write
+    /// for `research_progress`'s. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump: an older save loads with nothing
+    /// delivered, which is true of it — its bill was never carried anywhere.
+    #[serde(default)]
+    pub research_delivered: Vec<ResearchDeliveredSave>,
     /// Which tools the player has researched — see
     /// `resources::KnownTools`. Sorted on write for the reason `researched`
     /// is. This field was born after the

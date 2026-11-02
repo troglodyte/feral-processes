@@ -806,6 +806,10 @@ pub struct HaulLookups<'w> {
     /// The alert board, bundled for the same reason: `haul_step_system` is
     /// already at clippy's argument-count threshold.
     board: ResMut<'w, crate::alerts::AlertBoard>,
+    /// The active project and its def, for the research leg: what a
+    /// Research Station's posted program still has to carry in.
+    research: Res<'w, resources::ActiveResearch>,
+    research_db: Res<'w, crate::research::ResearchDb>,
 }
 
 /// A body standing in the field that holds no post — what
@@ -966,6 +970,18 @@ fn input_room(
         .filter(|d| d.spends_supply() == Some(item))
         .map_or_else(|| input_capacity(*per_batch), |d| d.supply_input_capacity());
     cap.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
+}
+
+/// How much more of `item` a Research Station's hopper may take for the
+/// active project's bill: the outstanding line less what already sits in the
+/// hopper waiting to be absorbed. Zero for an item the bill does not name,
+/// which turns a load of it into a `Deposit` — the overfill guard.
+fn research_room(bill: &[(ItemId, u32)], stock: &Stock, item: &ItemId) -> u32 {
+    bill.iter()
+        .find(|(want, _)| want == item)
+        .map_or(0, |(_, short)| {
+            short.saturating_sub(stock.input.get(item).copied().unwrap_or(0))
+        })
 }
 
 /// The first thing on `machine`'s intake it cannot cover a batch of out of
@@ -1163,7 +1179,21 @@ pub(crate) fn haul_step_system(
         items,
         clock,
         mut board,
+        research,
+        research_db,
     } = defs;
+    // What the active project's bill still wants carried, and which product
+    // marks a Research Station. Empty with nothing active or the bill in.
+    let research_bill: Vec<(ItemId, u32)> = research
+        .id
+        .as_ref()
+        .and_then(|id| {
+            research_db
+                .get(id)
+                .map(|def| research.outstanding(id, &def.materials))
+        })
+        .unwrap_or_default();
+    let research_currency = items.research_currency().cloned();
     // **Grown as bodies move, never shrunk** — `drift_idle_staff`'s `held`
     // rule, and for its reason: a vacated cell stays spoken for until the
     // next tick, which costs a body one step it will be offered again and
@@ -1316,6 +1346,58 @@ pub(crate) fn haul_step_system(
                 &stores
             };
             let recipe = recipe.as_deref();
+            // **The research leg.** A Research Station's posted program
+            // carries the active bill in: a load lands in the Station's
+            // input (`Errand::Load`), capped at the line still outstanding,
+            // and `Game::absorb_research_deliveries` consumes it into the
+            // project. The same errands every machine uses, with the
+            // bill standing in for a recipe.
+            let station_bill = def
+                .filter(|def| {
+                    !research_bill.is_empty()
+                        && research_currency.is_some()
+                        && produced_item(Placed::of(def, recipes.get(machine).ok()))
+                            == research_currency.as_ref()
+                })
+                .map(|_| research_bill.as_slice());
+            let research_fetch = || -> Option<Errand> {
+                let bill = station_bill?;
+                let (_, _, stock, _) = structures.get(machine).ok()?;
+                bill.iter().find_map(|(item, _)| {
+                    let room = research_room(bill, stock, item);
+                    if room == 0 {
+                        return None;
+                    }
+                    if let Some(depot) = nearest_store_holding(
+                        &every_structure,
+                        worker_pos,
+                        item,
+                        &structures,
+                        reachable,
+                    ) {
+                        return Some(Errand::Collect {
+                            depot,
+                            item: item.clone(),
+                            want: room.min(tuning::HAUL_CARRY_CAPACITY),
+                        });
+                    }
+                    // A plain item on a stockpile cell is the base's too
+                    // (`stock::stockpiled`), lifted a unit at a time.
+                    piles
+                        .iter()
+                        .filter(|(_, p, f)| {
+                            matches!(&f.0, FloorThing::Item(held) if held == item)
+                                && grid.is_stockpile(p.x, p.y)
+                        })
+                        .map(|(e, p, _)| (chebyshev(*p, worker_pos), p.x, p.y, e))
+                        .min()
+                        .map(|(_, x, y, thing)| Errand::Pickup {
+                            thing,
+                            at: Position { x, y },
+                            item: item.clone(),
+                        })
+                })
+            };
             match &carrying {
                 Some(load) => {
                     // A load the machine's own recipe has room for is an
@@ -1325,14 +1407,19 @@ pub(crate) fn haul_step_system(
                     // the worker is walking — which matters, since
                     // `CreatureSave::carrying` is a positional tuple RON
                     // cannot widen.
-                    let room = recipe
-                        .and_then(|r| {
-                            structures
-                                .get(machine)
-                                .ok()
-                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item, def))
-                        })
-                        .unwrap_or(0);
+                    let room = match station_bill {
+                        Some(bill) => structures
+                            .get(machine)
+                            .map_or(0, |(_, _, stock, _)| research_room(bill, stock, &load.item)),
+                        None => recipe
+                            .and_then(|r| {
+                                structures
+                                    .get(machine)
+                                    .ok()
+                                    .map(|(_, _, stock, _)| input_room(stock, r, &load.item, def))
+                            })
+                            .unwrap_or(0),
+                    };
                     if room > 0 {
                         Errand::Load { machine, room }
                     } else {
@@ -1371,26 +1458,30 @@ pub(crate) fn haul_step_system(
                         )
                     }
                 }
-                None => recipe
-                    .and_then(|r| missing_ingredient(machine, r, &structures, &by_tile, def))
-                    .and_then(|item| {
-                        let want = recipe
+                None => research_fetch()
+                    .or_else(|| {
+                        recipe
                             .and_then(|r| {
-                                structures
-                                    .get(machine)
-                                    .ok()
-                                    .map(|(_, _, stock, _)| input_room(stock, r, &item, def))
+                                missing_ingredient(machine, r, &structures, &by_tile, def)
                             })
-                            .unwrap_or(0)
-                            .min(tuning::HAUL_CARRY_CAPACITY);
-                        let depot = nearest_store_holding(
-                            sources,
-                            worker_pos,
-                            &item,
-                            &structures,
-                            reachable,
-                        )?;
-                        (want > 0).then_some(Errand::Collect { depot, item, want })
+                            .and_then(|item| {
+                                let want = recipe
+                                    .and_then(|r| {
+                                        structures.get(machine).ok().map(|(_, _, stock, _)| {
+                                            input_room(stock, r, &item, def)
+                                        })
+                                    })
+                                    .unwrap_or(0)
+                                    .min(tuning::HAUL_CARRY_CAPACITY);
+                                let depot = nearest_store_holding(
+                                    sources,
+                                    worker_pos,
+                                    &item,
+                                    &structures,
+                                    reachable,
+                                )?;
+                                (want > 0).then_some(Errand::Collect { depot, item, want })
+                            })
                     })
                     .unwrap_or_else(|| {
                         pickup_errand(

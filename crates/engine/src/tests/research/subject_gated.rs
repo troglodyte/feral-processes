@@ -47,6 +47,7 @@ fn pinning_a_subject_clears_a_subject_gated_projects_flag() {
     set_zone(&mut game, 2);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
+    queue_research_bill(&mut game, "paging");
     assert!(matches!(
         game.research_readout(),
         Some(ResearchReadout::Blocked { .. })
@@ -91,6 +92,7 @@ fn an_earning_subject_gated_project_strains_its_subject() {
     game.discover_research("paging");
     game.select_research("paging")
         .expect("a subject standing in the pen clears the gate");
+    queue_research_bill(&mut game, "paging");
 
     assert!(
         matches!(
@@ -122,6 +124,7 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
 
     game.discover_research("paging");
     game.select_research("paging").unwrap();
+    queue_research_bill(&mut game, "paging");
     assert_eq!(at_pen(&game), PinMark::Strained);
 
     fill_research_progress(&mut game, "paging");
@@ -204,6 +207,7 @@ fn an_ungated_project_leaves_a_pinned_body_settled() {
 
     game.select_research("automation")
         .expect("automation is ungated");
+    queue_research_bill(&mut game, "automation");
     assert!(
         !game
             .world
@@ -618,18 +622,12 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
     game.world
         .entity_mut(program)
         .remove::<crate::components::UnderStudy>();
-    let shelf = shelve_research_bill(&mut game, "paging", 8, 8);
-    let stocked = node_output(&game, shelf, ids::BYTECODE_BLOCK);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
 
     game.tick();
 
     assert!(!game.is_researched("paging"));
-    assert_eq!(
-        node_output(&game, shelf, ids::BYTECODE_BLOCK),
-        stocked,
-        "a project missing its subject must not spend its materials either"
-    );
 }
 
 /// M2 (final whole-branch review): once progress is full and the bill is
@@ -656,7 +654,7 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_blocked() {
         .remove::<crate::components::UnderStudy>();
     // The bill is fully paid, so a material line cannot be the reason this
     // reads as a stall — isolating the subject as the only thing missing.
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
     assert_eq!(
         game.pinned_subject(),
@@ -728,7 +726,7 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
     pin_subject_at_pen(&mut game, program, node);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
 
     game.tick();
@@ -795,7 +793,7 @@ fn completing_a_subject_gated_project_destroys_the_subjects_built_routines() {
     pin_subject_at_pen(&mut game, program, node);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
 
     game.tick();
@@ -836,7 +834,7 @@ fn no_rack_does_not_block_a_subject_gated_completion() {
     pin_subject_at_pen(&mut game, program, node);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
     assert_eq!(game.research_material_shortfall(), None);
 

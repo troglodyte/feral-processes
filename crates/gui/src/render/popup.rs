@@ -2043,6 +2043,7 @@ mod tests {
                                 .map(|name| feral_processes_engine::ResearchMaterial {
                                     name: name.to_string(),
                                     need: 18,
+                                    delivered: 0,
                                     have: 0,
                                 })
                                 .collect(),

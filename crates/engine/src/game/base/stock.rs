@@ -179,51 +179,6 @@ pub(crate) fn spend_from_base(
     taken
 }
 
-/// Takes a whole bill off the base's shelves, or nothing at all.
-///
-/// The whole bill is checked against `work_orders::base_holding` **before a
-/// single unit moves** — `commit_caravan_basket`'s rule, and the reason this
-/// is two passes rather than a take-as-you-go loop that would strand goods on
-/// a shortfall. Returns `false` and moves nothing if any line is short.
-///
-/// Every take routes through `spend_from_base` above rather than a second
-/// walk of the shelves, so the ledger, the tile ordering and
-/// `hauling::take_from` stay the one path a unit leaves a `Stock` by.
-pub(crate) fn spend_bill_from_base(
-    game: &mut Game,
-    bill: &[(ItemId, u32)],
-    source: crate::base_ledger::ConsumeSource,
-) -> bool {
-    // **Folded by item before it is checked.** A bill naming the same item
-    // twice — nothing ships one, but a mod may — would otherwise pass two
-    // independent per-line checks against the one stock and then take the
-    // first line in full and the second not at all. A `BTreeMap` for
-    // `Stock`'s reason: the take order must not depend on hash iteration.
-    let mut owed: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
-    for (item, need) in bill {
-        *owed.entry(item.clone()).or_default() += need;
-    }
-    if owed
-        .iter()
-        .any(|(item, need)| crate::game::base::work_orders::base_holding(game, item) < *need)
-    {
-        return false;
-    }
-    // The returned figure is checked rather than discarded. `base_holding`
-    // counts `Structure + Stock` where `spend_from_base` queries
-    // `Structure + Stock + Position`, so the two can in principle disagree
-    // about a hand-spawned fixture; a short take must refuse loudly rather
-    // than under-pay in silence.
-    owed.into_iter().all(|(item, need)| {
-        let taken = spend_from_base(game, &item, need, source);
-        debug_assert_eq!(
-            taken, need,
-            "the whole bill was checked against base_holding before a unit moved"
-        );
-        taken == need
-    })
-}
-
 /// Puts up to `qty` of `item` back onto the base's Depot shelves, and
 /// reports how much landed.
 ///

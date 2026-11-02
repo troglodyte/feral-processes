@@ -15,28 +15,7 @@ fn billed_assets(tag: &str) -> ScratchAssets {
 }
 
 /// What every material line of every `Stock` on the base is holding, so a
-/// refusal test can assert the shelves are byte-identical rather than merely
-/// that the pack is.
-/// Stands a Depot beside the party's base cell with `qty` of `item` on its
-/// shelf, through `Game::spawn_structure` — the one place a structure's
-/// component list is written, so this cannot ship a Depot without the
-/// `Stock` that makes it one. A real `place_now` would need laid floor and a
-/// Home, neither of which is what these tests are about.
-fn shelf_beside_the_party(game: &mut Game, item: &str, qty: u32) -> Entity {
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.id == "depot")
-        .expect("the shipped catalogue has a Depot");
-    let depot = game.spawn_structure(&def, 1, 0, None);
-    game.world
-        .get_mut::<Stock>(depot)
-        .unwrap()
-        .output
-        .insert(ItemId::from(item), qty);
-    depot
-}
-
+/// test can assert the shelves are byte-identical.
 pub(super) fn all_shelf_stock(game: &Game) -> Vec<(ItemId, u32)> {
     let mut held: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
     for e in game.world.iter_entities() {
@@ -47,99 +26,6 @@ pub(super) fn all_shelf_stock(game: &Game) -> Vec<(ItemId, u32)> {
         }
     }
     held.into_iter().collect()
-}
-
-#[test]
-fn a_project_spends_its_material_bill_off_the_base() {
-    let assets = billed_assets("research_bill_base");
-    let mut game = Game::new(901, DifficultyMode::Forgiving, &assets).unwrap();
-    base_with_a_research_node(&mut game);
-    let shelf = shelve_research_bill(&mut game, "billed", 8, 8);
-    let extra = 4;
-    {
-        let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
-        *stock
-            .output
-            .entry(ItemId::from(ids::CORE_FRAGMENT))
-            .or_default() += extra;
-    }
-    set_inventory(&mut game, &[("core_fragment", 10), ("power_cell", 3)]);
-    game.select_research("billed").unwrap();
-    fill_research_progress(&mut game, "billed");
-
-    game.tick();
-
-    assert!(game.is_researched("billed"));
-    assert_eq!(
-        node_output(&game, shelf, ids::CORE_FRAGMENT),
-        extra,
-        "exactly the bill came off the shelf and no more"
-    );
-    assert_eq!(
-        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
-        10,
-        "and the player's own pack is not a research bill's source"
-    );
-    assert_eq!(held(&game, &ItemId::from("power_cell")), 3);
-}
-
-/// The bill is drawn across the *whole* base, not one shelf: a line split
-/// between two Depots is still payable, which is what
-/// `work_orders::base_holding` counts and what the screen therefore shows.
-#[test]
-fn a_bill_split_across_two_shelves_is_still_paid() {
-    let assets = billed_assets("research_bill_split");
-    let mut game = Game::new(902, DifficultyMode::Forgiving, &assets).unwrap();
-    base_with_a_research_node(&mut game);
-    let near = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 3);
-    let far = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 3);
-    let cells = shelve_research_bill(&mut game, "billed", 12, 12);
-    {
-        // The fragment lines are the split under test; take the shelved
-        // fragments back out so the two Depots are the only source.
-        let mut stock = game.world.get_mut::<Stock>(cells).unwrap();
-        stock.output.remove(&ItemId::from(ids::CORE_FRAGMENT));
-    }
-    game.select_research("billed").unwrap();
-    fill_research_progress(&mut game, "billed");
-
-    game.tick();
-
-    assert!(game.is_researched("billed"));
-    assert_eq!(
-        node_output(&game, near, ids::CORE_FRAGMENT) + node_output(&game, far, ids::CORE_FRAGMENT),
-        0,
-        "both halves of the six were taken"
-    );
-}
-
-/// The whole bill or nothing — `commit_caravan_basket`'s rule inside
-/// `stock::spend_bill_from_base`, and the reason it is two passes rather than
-/// a take-as-you-go loop that would strand the line it could pay.
-#[test]
-fn a_project_one_line_short_spends_none_of_the_others() {
-    let assets = billed_assets("research_bill_refuse");
-    let mut game = Game::new(903, DifficultyMode::Forgiving, &assets).unwrap();
-    base_with_a_research_node(&mut game);
-    let shelf = shelve_research_bill(&mut game, "billed", 8, 8);
-    {
-        // One cell short of the bill, with the fragment line whole.
-        let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
-        let held = stock.output.get_mut(&ItemId::from("power_cell")).unwrap();
-        *held -= 1;
-    }
-    game.select_research("billed").unwrap();
-    fill_research_progress(&mut game, "billed");
-    let before = all_shelf_stock(&game);
-
-    game.tick();
-
-    assert!(!game.is_researched("billed"));
-    assert_eq!(
-        all_shelf_stock(&game),
-        before,
-        "the line the base *could* pay must not be spent against a bill that fails"
-    );
 }
 
 /// A node that authored no bill is the pre-materials game, which is what

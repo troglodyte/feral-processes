@@ -390,6 +390,22 @@ fn two_stations_loading_on_one_tick_do_not_overfill() {
     carrier_at(&mut game, first, 5);
     carrier_at(&mut game, second, 5);
 
+    // The tick both arrive: only one load may land. The spill would put a
+    // surplus back on a shelf later; this is the room check itself.
+    game.tick();
+    let hoppers: u32 = [first, second]
+        .iter()
+        .map(|&s| {
+            game.world
+                .get::<Stock>(s)
+                .unwrap()
+                .input
+                .values()
+                .sum::<u32>()
+        })
+        .sum();
+    assert_eq!(hoppers, 5, "the second Station had no room left to load");
+
     for _ in 0..200 {
         game.tick();
     }

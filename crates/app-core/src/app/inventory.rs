@@ -47,7 +47,6 @@ impl App {
     /// each has to hand over all three: a page that inherited the previous
     /// screen's subject, wearer or return mode would describe the wrong copy,
     /// price it for the wrong body, or strand the player a screen out.
-
     pub(crate) fn open_gear_inspect(&mut self, copy: GearCopy, wearer: Option<Entity>, from: Mode) {
         self.pending_inspect = Some(GearInspect { copy, wearer, from });
         self.mode = Mode::ItemDescribe;

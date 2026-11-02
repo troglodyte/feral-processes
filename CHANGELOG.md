@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Fighting now makes your programs, and you, better at it.** There are four combat skills: Aim (how often you hit), Force (how hard a hit lands), Defence (how much a hit is blunted) and Routines (how much Power a routine costs). Each runs from 0 to 20. At level 10 a skill changes nothing, at 0 you are about a tenth worse than before, and at 20 about a tenth better. A skill rises only through use: Aim on every attack, Force on every hit that lands, Defence on every attack aimed at you, Routines on every routine you pay Power for. Tamed programs and the player both train, and each class and 18 species start with one skill already raised. Amplitude is a new attribute that now sets your damage, and Analysis sets your accuracy instead of your damage. The Analysis page shows the to-hit it buys. A COMBAT box shows a program's combat skills, and a SKILLS box shows yours. Saves from earlier versions load, with each character starting at its class or species level.
+
 ## 0.21.16
 
 **Your tamed programs now get better at the work they do.** Each one has six skills: extracting, assembling, research, building, digging and farming. A program at level 0 works at half speed, at level 10 at the speed you are used to, and at level 20 half again as fast. Each skill rises only while the program is actually doing that work, so a program stuck at a full machine learns nothing. Every species starts with a knack for one or two kinds of work. A line tells you when a program goes up a level. The SKILLS box on a program's info page shows its levels and how close it is to the next, and the staffing table lists the highlighted program's levels under its row. Saves from earlier versions load, and their programs start at their species' levels.

@@ -94,6 +94,9 @@ impl Game {
                 message,
             });
         }
+        // Gather left out every slot `equip_quietly` could refuse (a worn
+        // item missing from the item set) and offered only copies held in
+        // the pack for that slot, so this `?` cannot fire after a slot moved.
         for (_, copy) in &picks {
             self.equip_quietly(wearer, copy)?;
         }

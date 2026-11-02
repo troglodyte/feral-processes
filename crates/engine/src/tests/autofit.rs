@@ -256,6 +256,9 @@ fn a_companion_autofits_from_the_players_pack() {
     assert!(report.message.contains(" equips "), "{}", report.message);
 }
 
+/// Pins the behaviour, not gather's `is_broken` filter: a broken copy's
+/// `copy_bonus` is zero, which rates as unrated and could never outrank an
+/// empty slot anyway, so this passes with the filter removed.
 #[test]
 fn autofit_never_equips_a_broken_copy() {
     let mut game = fresh();

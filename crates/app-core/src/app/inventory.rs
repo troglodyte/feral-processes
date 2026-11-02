@@ -29,13 +29,6 @@ pub fn equip_swap_visible(rows: &[SwapRow], filter: &str) -> Vec<usize> {
 }
 
 impl App {
-    /// Opens the inspect page on `copy`, measured for `wearer`, returning to
-    /// `from` on Esc.
-    ///
-    /// **The one way into `Mode::ItemDescribe`.** Seven screens reach it and
-    /// each has to hand over all three: a page that inherited the previous
-    /// screen's subject, wearer or return mode would describe the wrong copy,
-    /// price it for the wrong body, or strand the player a screen out.
     /// `[A]` on the inventory and companion equip pages. The report is a
     /// confirmation for the status line, like fuse-all's; only a refusal
     /// is history.
@@ -46,6 +39,14 @@ impl App {
             Err(e) => self.refuse(e),
         }
     }
+
+    /// Opens the inspect page on `copy`, measured for `wearer`, returning to
+    /// `from` on Esc.
+    ///
+    /// **The one way into `Mode::ItemDescribe`.** Seven screens reach it and
+    /// each has to hand over all three: a page that inherited the previous
+    /// screen's subject, wearer or return mode would describe the wrong copy,
+    /// price it for the wrong body, or strand the player a screen out.
 
     pub(crate) fn open_gear_inspect(&mut self, copy: GearCopy, wearer: Option<Entity>, from: Mode) {
         self.pending_inspect = Some(GearInspect { copy, wearer, from });

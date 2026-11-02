@@ -107,7 +107,7 @@ Do not duplicate between them; point instead.
 | [0037](0037-batteries-store-spare-grid-supply.md) | A Battery stores the Grid's spare supply and spends it when supply falls short | Accepted (0.21.9) | user, on Claude's proposal | — |
 | [0038](0038-tamed-programs-carry-practised-skills.md) | Tamed programs carry practised skills, in a subsystem that knows nothing about work | Accepted | user, on Claude's proposal | Module per domain; Functional core, imperative shell |
 | [0039](0039-species-carry-starting-skill-levels.md) | Species carry starting skill levels | Accepted | user, on Claude's proposal | — |
-| [0040](0040-combat-skills-and-the-figure-pipeline.md) | Combat skills, and a figure pipeline that programs' attributes can join later | Proposed | user, on Claude's proposal | Module per domain; Functional core, imperative shell |
+| [0040](0040-combat-skills-and-the-figure-pipeline.md) | Combat skills, and a figure pipeline that programs' attributes can join later | Accepted | user, on Claude's proposal | Module per domain; Functional core, imperative shell |
 
 ## Pattern index
 

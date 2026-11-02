@@ -1,6 +1,6 @@
 # Combat skills
 
-**Status:** draft 2026-11-02; ADR [0040](../../adr/0040-combat-skills-and-the-figure-pipeline.md) Proposed.
+**Status:** approved 2026-11-02; ADR [0040](../../adr/0040-combat-skills-and-the-figure-pipeline.md) Accepted. Plan: `docs/superpowers/plans/2026-11-02-combat-skills.md`.
 
 ## Intent
 

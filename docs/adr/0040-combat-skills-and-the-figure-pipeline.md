@@ -1,6 +1,6 @@
 # 0040 Combat skills, and a figure pipeline that programs' attributes can join later
 
-- Status: Proposed
+- Status: Accepted
 - Decided by: user, on Claude's proposal
 - Date: 2026-11-02
 - Pattern: Module per domain; Functional core, imperative shell

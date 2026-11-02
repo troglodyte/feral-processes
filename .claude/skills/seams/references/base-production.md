@@ -417,11 +417,8 @@
   went stale the moment anything else moved, and a sort would make Vec order
   and effective order diverge while `cancel_work_order`, `move_work_order`
   and the screen all take a **raw Vec index** into `work_order_report`.
-  `queue_work_order` appends a player's order and inserts a research
-  project's **after the leading run of `for_research` orders**, not at 0, or
-  a bill files upside down; that run is the one project's alone because
-  `select_research` refuses while a project is active and abandoning
-  withdraws its lines. A move is a neighbour swap that returns the new
+  `queue_work_order` appends; a research project files no orders of its own.
+  A move is a neighbour swap that returns the new
   index so the screen's highlight follows (the party line's `<`/`>` rule),
   and it touches nothing else — the stall latch rides inside the order. An
   old save's `priority:` field is ignored, not migrated: nothing carries

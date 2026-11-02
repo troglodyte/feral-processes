@@ -194,7 +194,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   branch a stalled order already takes.
 - **A work order's priority is its position in the queue, and
   `Game::move_work_order` is the one way to change it** — `queue_work_order`
-  appends a player's order and files a research project's on top.
+  appends.
 - **`schedule_base_labour` decides the whole assignment by priority and then
   diffs it.** Filling greedily around existing postings leaves a body on a
   standing job while an order goes unworked.
@@ -263,8 +263,12 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   anything new.**
 - **Research is one project at a time, and `Game::select_research` is the one
   door — every refusal before anything is filed.**
-- **A research project's materials are ordinary work orders, and
-  `WorkOrder::for_research` is provenance rather than a plan.**
+- **A research bill is carried to the Research Station and consumed as it
+  lands, into `ActiveResearch::delivered` (per node, kept through an
+  abandon, never refunded), and the project files no work order** — the
+  Station's own posted program fetches it in `haul_step_system`'s research
+  leg, `Errand::Load` capped at the outstanding line, and
+  `Game::absorb_research_deliveries` is the one place it is spent.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped.

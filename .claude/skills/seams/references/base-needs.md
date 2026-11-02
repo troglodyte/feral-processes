@@ -29,38 +29,51 @@
   `ResearchReadout::Blocked` (ahead of `Stalled`, whatever the progress), so
   the `!` on the row, on the graph box and in the corner cannot name
   different things. **A block is what stands between the project and
-  completion, not what stands in the base**: `research_block_memo` skips a
-  material line the shelves hold in full and the no-node rung once the data
-  is all earned, because `settle_research` needs neither machine — asked
-  otherwise, a bill made and its Extractor then knocked down read "build an
-  Extractor" until the tick it completed, and the pinned subject went still
-  (`strained_subject` reads `Earning | Blocked` as worked). For the bill to
-  be filed once at selection and never topped up, a `WorkOrder::for_research`
-  line **skips `order_refusal`** in `queue_work_order` and sits
-  `OrderStanding::Stalled` until the machine goes up. The one refusal left
-  on both doors is `work_orders::permanent_break` — an unknown item or a
-  banked one, **not** "nothing makes it" (a mod's bill may name a drop, and
-  a held line pays) — because a banked line's producer always
-  `can_progress` and no holding ever pays it, so filed it would hold a body
-  forever (the Research Node makes the banked currency). `strained_subject`
+  completion, not what stands in the base**: `research_block_memo` reads the
+  bill's *outstanding* lines (`ActiveResearch::outstanding`), skips one the
+  shelves cover, and skips the no-node rung once the data is all earned —
+  asked otherwise, a bill made and its Extractor then knocked down read
+  "build an Extractor" until the tick it completed, and the pinned subject
+  went still (`strained_subject` reads `Earning | Blocked` as worked). Past
+  `chain_break`, the **running** project's line that the shelves cannot cover
+  and nothing in the queue makes (`queue_needs`) reads
+  `work_orders::no_order_for` — "file a work order"; only the running one,
+  because on every other node the same amber line would sit under every row.
+  The one refusal `select_research` keeps for a bill line is
+  `work_orders::permanent_break` — an unknown item or a banked one, **not**
+  "nothing makes it" (a mod's bill may name a drop, and a held line pays) —
+  because no holding can ever deliver a banked line. `strained_subject`
   reads `Blocked` as worked only while `progress < cost`. The flag needs
   a **reachability** test of its own or it can ship permanent with every flag
-  test still green. Completion is `Game::settle_research`, and its two gates
-  are one `&&`: the short-circuit is what stops a half-researched project
-  spending its materials, and the unlock side effects are **extracted** into
-  `grant_research_knowledge` rather than copied into the second path.
+  test still green. Completion is `Game::settle_research`, and its gates are
+  one `||` early return in decision 5's order — data, subject, yield room,
+  then the delivered bill — the short-circuit is what stops a half-researched
+  project spending its subject; the unlock side effects are **extracted**
+  into `grant_research_knowledge` rather than copied into the second path.
 
-- **A research project's materials are ordinary work orders, and
-  `WorkOrder::for_research` is provenance rather than a plan.** The flag says
-  *who asked* and nothing about which machines run it — the module header's
-  rule survives. `#[serde(default)]` and **not** `#[serde(skip)]` like
-  `announced_stalled` above it, because a project abandoned after a reload has
-  to take its orders with it; a skipped field is invisible to a RON round trip,
-  so that is asserted by a **save→load** test. `withdraw_research_orders` is a
-  `retain` on the **flag and never the item** — a player's own order for the
-  same material has to survive — and it logs nothing, because
-  `cancel_work_order`'s line would be a lie about who cancelled it.
-  `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
+- **A research bill is carried to the Research Station and consumed as it
+  lands, and the project files no work order.** It used to be one batch order
+  per line filed at selection: `settle_orders` popped it the moment
+  `base_holding` reached the quantity, and if the data was not done that
+  instant anything else could eat the units and nothing refilled — the
+  project stalled for good, and the base had to hold the whole bill at once.
+  Now the Station's own posted program (`GatherResource`, staffed by
+  `research_wants`) runs `haul_step_system`'s research leg: the outstanding
+  bill stands in for a recipe, `Errand::Collect` from any structure's output
+  or `Errand::Pickup` off a stockpile cell, `Errand::Load` into the Station's
+  input capped by `research_room` (outstanding less what the hopper holds —
+  the overfill guard; a surplus load turns into a `Deposit`), and
+  `Game::absorb_research_deliveries` (start of `settle_research`, and in
+  `abandon_research` before the id clears) moves the hopper into
+  `ActiveResearch::delivered`, reporting the `Consume`. Delivered is per node
+  like `progress`, kept through an abandon, never refunded, removed only by
+  `grant_research`; saved as `SaveData::research_delivered`, asserted by a
+  save→load test. An old save's `for_research: true` order loads as an
+  ordinary order (no `deny_unknown_fields`). Once the data is in,
+  `research_wants` staffs **one** Station only while some outstanding line
+  has `base_holding > 0` — `build_is_workable`'s deadlock rule: a Station
+  staffed with nothing to fetch holds the body that should make the
+  material. `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
   priority is the position in that list, and the player's own pick outranks the
   queue they filed and forgot. It returns `standing_wants`' `(Entity,
   TaskKind)` and not `settle_orders`' depth pairs, since a Research Node is the

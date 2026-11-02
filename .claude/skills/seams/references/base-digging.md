@@ -184,7 +184,7 @@
   lines resize each other — filed at the
   bottom only where `chain_break` passes, resized silently, withdrawn at
   zero, and refused by `cancel_work_order` because a hand-cancelled one is
-  filed again next tick. The flag is provenance (`for_research`'s rule),
+  filed again next tick. The flag is provenance, not a plan,
   `#[serde(default)]` and not skipped, or a reload orphans the line and the
   plan files a second. The deadlock rule still holds in the direction that matters — a
   dropped tile job frees the body, which is what sends it to the Extractor

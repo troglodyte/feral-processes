@@ -355,7 +355,7 @@ impl Game {
                 attributes,
             ))
             .id();
-        let parts = self.roster_parts();
+        let parts = self.roster_parts(&species.id);
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         self.seat_derived(program);

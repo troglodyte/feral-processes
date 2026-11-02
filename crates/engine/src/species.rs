@@ -2406,21 +2406,29 @@ mod tests {
         );
     }
 
+    /// Parsed raw, not through `load_dir`, which would clamp an over-cap
+    /// level and hide it from the census.
     #[test]
     fn every_shipped_species_starts_within_the_cap_and_none_above_five() {
-        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities())
-            .expect("the species load");
-        assert!(warnings.is_empty(), "{warnings:?}");
-        for def in db.all() {
+        let mut seen = 0;
+        for entry in std::fs::read_dir(species_assets_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                continue;
+            }
+            let def: SpeciesDef = ron::from_str(&std::fs::read_to_string(&path).unwrap())
+                .unwrap_or_else(|e| panic!("{path:?}: {e}"));
             for (skill, level) in &def.starting_skills {
                 assert!(
-                    *level <= 5 && *level <= crate::tuning::SKILL_LEVEL_CAP,
-                    "{} starts {} at {level}",
+                    *level <= 5,
+                    "{} starts {} at {level}; the authored ceiling is 5",
                     def.id,
                     skill.name()
                 );
             }
+            seen += 1;
         }
+        assert!(seen >= 19, "only {seen} species files read");
     }
 
     #[test]

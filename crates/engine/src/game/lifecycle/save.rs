@@ -344,6 +344,23 @@ impl Game {
                     names
                 })
                 .unwrap_or_default(),
+            skills: self
+                .world
+                .get::<crate::skills::Skills>(e)
+                .map(|s| {
+                    crate::skills::Skill::ALL
+                        .into_iter()
+                        .map(|skill| {
+                            let t = s.track(skill);
+                            save::SkillSave {
+                                skill: skill.name().to_string(),
+                                level: t.level,
+                                practice: t.practice,
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
             staff_rank: self
                 .world
                 .get::<crate::components::StaffRank>(e)

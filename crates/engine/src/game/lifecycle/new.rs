@@ -388,7 +388,7 @@ impl Game {
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
-        let parts = self.roster_parts();
+        let parts = self.roster_parts(species_id);
         self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         self.seat_derived(program);

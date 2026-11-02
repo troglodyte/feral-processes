@@ -83,7 +83,7 @@ fn a_seated_programs_old_base_loads_with_the_baseline_perception() {
     game.world
         .entity_mut(program)
         .remove::<(Hostile, WanderAi)>();
-    let parts = game.roster_parts();
+    let parts = game.roster_parts(&species);
     game.world.entity_mut(program).insert(parts);
     game.seat_derived(program);
 

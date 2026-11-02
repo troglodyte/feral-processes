@@ -1570,6 +1570,7 @@ mod tests {
             besieger: false,
             stolen_from: None,
             off_duties: Vec::new(),
+            skills: Vec::new(),
             staff_rank: None,
             drop_trooper: false,
             base: crate::render::test_support::tamed_base(),

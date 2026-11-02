@@ -145,7 +145,7 @@ fn every_program_on_the_roster_is_born_with_a_disposition() {
     // component list still cannot ship a program without one. `StaffRank`
     // rides the tuple's last slot now, so `minted` is named positionally
     // rather than through `..`.
-    let (_, _, _, _, _, _, minted, _rank) = game.roster_parts();
+    let (_, _, _, _, _, _, minted, _rank, _skills) = game.roster_parts("drone");
     assert!(
         Disposition::ALL.contains(&minted),
         "roster_parts mints a real disposition, got {minted:?}"

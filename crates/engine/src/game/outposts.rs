@@ -1089,7 +1089,7 @@ mod tests {
             .into_iter()
             .find(|d| !d.is_hybrid())
             .unwrap();
-        let parts = game.roster_parts();
+        let parts = game.roster_parts(&species.id);
         let entity = game
             .world
             .spawn((

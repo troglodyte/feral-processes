@@ -410,6 +410,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         besieger: _,
         stolen_from: _,
         off_duties: _,
+        skills: _,
         staff_rank: _,
         drop_trooper: _,
         base: _,

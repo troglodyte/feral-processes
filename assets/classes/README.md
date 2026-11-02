@@ -53,7 +53,7 @@ Each file is one class:
     affinities: (heal: 1.3, damage: 0.8),
     kit: [("core_fragment", 5), ("power_cell", 5), ("outlet", 2)],
     attributes: {
-        "analysis": 10, "persistence": 60, "entropy": 38,
+        "analysis": 10, "amplitude": 10, "persistence": 60, "entropy": 38,
         "bandwidth": 48, "footprint": 44, "parity": 76,
     },
 )
@@ -87,11 +87,11 @@ the shipped starts land:
 `docs/measurements/2026-09-29-level-up-stat-spend.md`, which found them
 very far apart at level 1.
 
-All eight shipped classes author all six shipped attributes, held by
+All eight shipped classes author all seven shipped attributes, held by
 `every_shipped_class_authors_every_attribute` in
 `crates/engine/src/tests/assets/`. The field itself stays optional, so a
 mod's class file keeps parsing untouched. An attribute a class authors at
-the def's `base` (every shipped class does this for Analysis, at 10) adds
+the def's `base` (every shipped class does this for Analysis and Amplitude, at 10) adds
 nothing to that attribute's stats.
 
 ## The damped-axis convention

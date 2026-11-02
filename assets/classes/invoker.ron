@@ -6,6 +6,7 @@
     kit: [("power_cell", 8), ("core_fragment", 4)],
     attributes: {
         "analysis": 10,
+        "amplitude": 10,
         "persistence": 66,
         "entropy": 48,
         "bandwidth": 70,

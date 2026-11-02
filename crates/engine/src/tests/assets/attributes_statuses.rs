@@ -12,7 +12,7 @@ use crate::*;
 fn every_shipped_attribute_says_what_it_means() {
     let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let defs = game.attribute_defs();
-    assert_eq!(defs.len(), 6, "the shipped catalogue is six attributes");
+    assert_eq!(defs.len(), 7, "the shipped catalogue is seven attributes");
     for def in &defs {
         assert!(!def.name.is_empty(), "{} has no name", def.id);
         assert!(!def.legacy.is_empty(), "{} has no legacy name", def.id);

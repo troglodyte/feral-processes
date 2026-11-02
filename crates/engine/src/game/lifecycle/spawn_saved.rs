@@ -412,6 +412,10 @@ impl Game {
             for (id, value) in &c.attributes {
                 restored.set(id, *value);
             }
+            crate::attributes::carry_attack_into_amplitude(
+                self.world.resource::<crate::attributes::AttributeDb>(),
+                &mut restored,
+            );
             restored
         };
         let mut entity = self.world.spawn((

@@ -416,7 +416,7 @@ fn the_preview_carries_what_perks_and_gear_add() {
     open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::AllocateStats, "{:?}", app.status_line);
-    let row = allocation_row(&app, "analysis");
+    let row = allocation_row(&app, "amplitude");
     app.menu_selected = row;
     app.handle_key(GameKey::ShiftRight);
     let CreationRow::Attribute { effects, .. } = app.allocation_rows()[row].clone() else {
@@ -425,7 +425,7 @@ fn the_preview_carries_what_perks_and_gear_add() {
     let (_, before, after) = effects
         .into_iter()
         .find(|(stat, _, _)| *stat == feral_processes_engine::attributes::DerivedStat::Atk)
-        .expect("Analysis feeds Atk");
+        .expect("Amplitude feeds Atk");
     let hud = |app: &App| app.game.as_ref().unwrap().player_status().atk as f32;
     assert_eq!(before, hud(&app));
 

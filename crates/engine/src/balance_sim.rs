@@ -191,8 +191,8 @@ fn companion_derived(
         &attribute_contribution(&store, attrs),
     );
     let levels = level.saturating_sub(1);
-    let (parity, analysis) = program_level_points(species.growth_multiplier, 1.0);
-    for (id, per_level) in [("parity", parity), ("analysis", analysis)] {
+    let (parity, amplitude) = program_level_points(species.growth_multiplier, 1.0);
+    for (id, per_level) in [("parity", parity), ("amplitude", amplitude)] {
         let id = crate::attributes::AttributeId::from(id);
         let held = store.get(&id).unwrap_or(0);
         store.set(&id, held + (levels * per_level) as i32);

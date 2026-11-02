@@ -42,6 +42,7 @@ fn recompute_follows_the_attributes_with_gear_worn() {
 
     set_attribute(&mut game, "parity", 60);
     set_attribute(&mut game, "analysis", 14);
+    set_attribute(&mut game, "amplitude", 14);
     game.recompute_derived(player);
 
     let stats = stats_of(&game, player);
@@ -194,12 +195,19 @@ fn spend(pairs: &[(&str, u32)]) -> Vec<(AttributeId, u32)> {
 fn a_spend_raises_the_attributes_and_derives_the_stats() {
     let mut game = Game::new(7010, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     bank(&mut game, 6);
-    game.spend_stat_points(StatOwner::Player, &spend(&[("parity", 4), ("analysis", 2)]))
-        .unwrap();
+    game.spend_stat_points(
+        StatOwner::Player,
+        &spend(&[("parity", 4), ("amplitude", 2)]),
+    )
+    .unwrap();
     let player = game.player_entity();
     assert_eq!(stats_of(&game, player).max_hp, 90 + 24);
     assert_eq!(stats_of(&game, player).atk, 6 + 2);
-    assert_eq!(game.world.get::<Decompiler>(player).unwrap().skill, 2);
+    assert_eq!(
+        game.world.get::<Decompiler>(player).unwrap().skill,
+        0,
+        "Amplitude buys attack and nothing of Analysis's"
+    );
     assert_eq!(banked(&game), 0);
 }
 
@@ -528,4 +536,100 @@ fn the_players_entropy_sets_their_attack_bands_and_a_wild_programs_stay_flat() {
     let wild = spawn_wild_on_player_tile(&mut game);
     let theirs = game.combatant_profile(wild, crate::battle::Swing::default());
     assert_eq!((theirs.crit, theirs.fumble), (CRIT_CHANCE, FUMBLE_CHANCE));
+}
+
+#[test]
+fn base_figure_is_the_derived_figure_for_the_player() {
+    use crate::attributes::DerivedStat;
+    let mut game = Game::new(7020, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    set_attribute(&mut game, "analysis", 14);
+    set_attribute(&mut game, "amplitude", 13);
+    game.recompute_derived(player);
+    assert_eq!(game.base_figure(player, DerivedStat::Accuracy), 2.0);
+    assert_eq!(
+        game.base_figure(player, DerivedStat::Atk),
+        f64::from(stats_of(&game, player).atk)
+    );
+    assert_eq!(
+        game.base_figure(player, DerivedStat::Atk),
+        f64::from(crate::tuning::PLAYER_BASE_STATS.atk + 3)
+    );
+}
+
+#[test]
+fn base_figure_is_the_stored_figure_for_a_program_and_zero_where_it_has_none() {
+    use crate::attributes::DerivedStat;
+    let mut game = Game::new(7021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
+    let program = game
+        .spawn_wild_creature_scaled(&species, 40, 40, 1.0, false)
+        .unwrap();
+    let stats = stats_of(&game, program);
+    assert_eq!(
+        game.base_figure(program, DerivedStat::Atk),
+        f64::from(stats.atk)
+    );
+    assert_eq!(
+        game.base_figure(program, DerivedStat::Mitigation),
+        f64::from(stats.mitigation)
+    );
+    assert_eq!(game.base_figure(program, DerivedStat::Accuracy), 0.0);
+}
+
+#[test]
+fn accuracy_rises_only_above_the_analysis_base() {
+    use crate::attributes::DerivedStat;
+    let mut game = Game::new(7022, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let base = game.attribute_db().analysis_base();
+    set_attribute(&mut game, "analysis", base);
+    game.recompute_derived(player);
+    assert_eq!(game.base_figure(player, DerivedStat::Accuracy), 0.0);
+    set_attribute(&mut game, "analysis", base + 6);
+    game.recompute_derived(player);
+    assert_eq!(game.base_figure(player, DerivedStat::Accuracy), 3.0);
+    assert_eq!(
+        game.world.get::<Derived>(player).unwrap().accuracy,
+        3.0,
+        "the stored Derived agrees with the door"
+    );
+}
+
+/// A 0.21.16 player save carries Analysis and no Amplitude. Its attack must
+/// survive the load and the next derive, or every point spent on Analysis
+/// would quietly leave its ATK.
+#[test]
+fn an_old_player_save_keeps_its_atk_through_load_and_a_derive() {
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_old_amplitude_{}.bin",
+        std::process::id()
+    ));
+    let mut game = Game::new(7023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    set_attribute(&mut game, "analysis", 17);
+    set_attribute(&mut game, "amplitude", 17);
+    game.recompute_derived(player);
+    let atk = stats_of(&game, player).atk;
+    assert_eq!(atk, crate::tuning::PLAYER_BASE_STATS.atk + 7);
+    game.save(&path).unwrap();
+
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.player
+        .attributes
+        .retain(|id, _| id.as_str() != "amplitude");
+    assert!(data.player.attributes.len() < 7);
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let player = loaded.player_entity();
+    loaded.recompute_derived(player);
+    assert_eq!(stats_of(&loaded, player).atk, atk);
 }

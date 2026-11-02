@@ -603,6 +603,10 @@ fn restore_player(
         for (id, value) in &saved_attributes {
             restored.set(id, *value);
         }
+        crate::attributes::carry_attack_into_amplitude(
+            world.resource::<crate::attributes::AttributeDb>(),
+            &mut restored,
+        );
         restored
     };
     world.entity_mut(player).insert((

@@ -442,7 +442,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // author. Keep it cutting across the difficulty ladder: every tier
     // should have both a sharp and a dull program on it.
     //
-    // All seventeen shipped species author all five shipped attributes,
+    // All shipped species author all seven shipped attributes (`amplitude`
+    // is authored equal to `analysis`, which is what Analysis bought in attack
+    // before Amplitude took that effect),
     // held by `every_shipped_species_authors_every_attribute` in
     // `crates/engine/src/tests/assets/`. The field itself stays
     // optional, so a mod's species file keeps parsing untouched.

@@ -18,7 +18,7 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
 /// modelled floor stays valid no matter how the pool is spent.
 ///
-/// **The pool size is the all-Analysis offense ceiling**, because a point
+/// **The pool size is the all-Amplitude offense ceiling**, because a point
 /// is priced 1-for-1 (`CREATION_COST_PER_ATTRIBUTE_POINT`). At 20 the
 /// widest offensive build opens on 26 atk against the baseline 6, and the
 /// widest defensive one on 210 `max_hp` against 90.
@@ -155,9 +155,9 @@ pub const STAT_POINTS_PER_LEVEL: u32 = 6;
 /// by `progression::canonical_spend_is_the_old_per_level_growth` against
 /// the real assets, not here; only the pool size is a build failure.
 pub const CANONICAL_PARITY_PER_LEVEL: u32 = 4;
-pub const CANONICAL_ANALYSIS_PER_LEVEL: u32 = 2;
+pub const CANONICAL_AMPLITUDE_PER_LEVEL: u32 = 2;
 const _: () =
-    assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_ANALYSIS_PER_LEVEL == STAT_POINTS_PER_LEVEL);
+    assert!(CANONICAL_PARITY_PER_LEVEL + CANONICAL_AMPLITUDE_PER_LEVEL == STAT_POINTS_PER_LEVEL);
 
 /// The floor on a derived max Power, so a low Bandwidth cannot leave a
 /// reserve too small to cast anything.

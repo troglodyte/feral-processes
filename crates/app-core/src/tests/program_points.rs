@@ -146,7 +146,7 @@ fn the_preview_starts_from_the_programs_own_base() {
         .allocation_rows()
         .into_iter()
         .find_map(|r| match r {
-            CreationRow::Attribute { id, effects, .. } if id == AttributeId::from("analysis") => {
+            CreationRow::Attribute { id, effects, .. } if id == AttributeId::from("amplitude") => {
                 effects
                     .into_iter()
                     .find(|(s, _, _)| *s == feral_processes_engine::attributes::DerivedStat::Atk)

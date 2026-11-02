@@ -27,6 +27,7 @@ fn effect_text(stat: DerivedStat, before: f32, after: f32) -> String {
             )
         }
         DerivedStat::Perception => format!("{label} {before:.1} \u{2192} {after:.1} tiles"),
+        DerivedStat::Accuracy => format!("{label} {before:.1} \u{2192} {after:.1}"),
         DerivedStat::StatusResist => format!("{label} {before:.0}% \u{2192} {after:.0}%"),
         _ => format!("{label} {before:.0} \u{2192} {after:.0}"),
     }
@@ -312,7 +313,9 @@ mod tests {
         };
         let analysis = lines_of("analysis");
         assert!(analysis.len() >= 2, "{analysis:?}");
-        let start = analysis[0].find("ATK").expect("first effect on line one");
+        let start = analysis[0]
+            .find("Accuracy")
+            .expect("first effect on line one");
         assert!(
             analysis[1].starts_with(&" ".repeat(start))
                 && !analysis[1].trim_start().is_empty()

@@ -6,6 +6,7 @@
     kit: [("core_fragment", 8), ("cache_grain", 3)],
     attributes: {
         "analysis": 10,
+        "amplitude": 10,
         "persistence": 62,
         "entropy": 34,
         "bandwidth": 66,

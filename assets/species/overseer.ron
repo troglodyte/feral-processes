@@ -21,6 +21,7 @@
     abilities: [(id: "broadcast_storm"), (id: "overclock_array", level: 4)],
     attributes: {
         "analysis": 16,
+        "amplitude": 16,
         "persistence": 74,
         "entropy": 30,
         "bandwidth": 72,

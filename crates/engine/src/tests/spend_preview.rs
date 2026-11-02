@@ -30,7 +30,7 @@ fn spend(pairs: &[(&str, u32)]) -> Vec<(AttributeId, u32)> {
 
 fn a_spend() -> Vec<(AttributeId, u32)> {
     spend(&[
-        ("analysis", 2),
+        ("amplitude", 2),
         ("parity", 1),
         ("footprint", 1),
         ("bandwidth", 1),
@@ -127,13 +127,13 @@ fn a_second_level_of_a_perk_reports_level_two() {
 /// preview is the real computation and must say so.
 #[test]
 fn an_attribute_spend_under_emulation_previews_no_atk_change() {
-    let analysis = spend(&[("analysis", 3)]);
+    let amplitude = spend(&[("amplitude", 3)]);
 
     let mut plain = game();
-    let unemulated = plain.preview_stat_spend(&analysis).unwrap();
+    let unemulated = plain.preview_stat_spend(&amplitude).unwrap();
     assert!(
         unemulated.per_swing.1 > unemulated.per_swing.0,
-        "control: unemulated, Analysis adds ATK"
+        "control: unemulated, Amplitude adds ATK"
     );
 
     let mut game = game();
@@ -142,7 +142,7 @@ fn an_attribute_spend_under_emulation_previews_no_atk_change() {
         species: "drone".into(),
         rounds_left: 3,
     });
-    let emulated = game.preview_stat_spend(&analysis).unwrap();
+    let emulated = game.preview_stat_spend(&amplitude).unwrap();
     assert_eq!(emulated.per_swing.0, emulated.per_swing.1);
 }
 

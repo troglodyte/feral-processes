@@ -22,6 +22,7 @@
     affinities: (damage: 1.3, heal: 0.85),
     attributes: {
         "analysis": 9,
+        "amplitude": 9,
         "persistence": 41,
         "entropy": 64,
         "bandwidth": 49,

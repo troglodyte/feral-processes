@@ -131,7 +131,7 @@ impl Game {
         }
         let before = self.world.get::<Stats>(entity).copied();
         if held {
-            let earned = gain.parity + gain.analysis;
+            let earned = gain.parity + gain.amplitude;
             if let Some(mut points) = self.world.get_mut::<StatPoints>(entity) {
                 points.0 += earned;
             }
@@ -145,8 +145,8 @@ impl Game {
                 &[
                     (crate::attributes::AttributeId::from("parity"), gain.parity),
                     (
-                        crate::attributes::AttributeId::from("analysis"),
-                        gain.analysis,
+                        crate::attributes::AttributeId::from("amplitude"),
+                        gain.amplitude,
                     ),
                 ],
             );
@@ -193,8 +193,8 @@ impl Game {
             return Ok(());
         }
         let (g, _) = self.program_growth(entity);
-        let (parity, analysis) = crate::progression::program_level_points(g, 1.0);
-        let per_level = parity + analysis;
+        let (parity, amplitude) = crate::progression::program_level_points(g, 1.0);
+        let per_level = parity + amplitude;
         let levels = bank.checked_div(per_level).unwrap_or(0);
         let remainder = bank - levels * per_level;
         self.apply_stat_spend(
@@ -205,8 +205,8 @@ impl Game {
                     levels * parity + remainder,
                 ),
                 (
-                    crate::attributes::AttributeId::from("analysis"),
-                    levels * analysis,
+                    crate::attributes::AttributeId::from("amplitude"),
+                    levels * amplitude,
                 ),
             ],
         );
@@ -283,6 +283,34 @@ impl Game {
                 .unwrap_or(&Attributes::default()),
             self.world.resource::<crate::attributes::AttributeDb>(),
         )
+    }
+
+    /// The body's base figure for `stat`: the number a combat door starts
+    /// from before a skill scales it, and the one door that does not care
+    /// whether the body is the player. The player's is `progression::derive`'s
+    /// output with implants, receipt and gear laid on; a program's is its
+    /// stored `Stats`, or 0 for a figure programs never had (accuracy from an
+    /// attribute). Making a program's attributes count is a change to this
+    /// arm alone. Callers never branch on the player and never read `Stats`
+    /// or `Derived` for a figure this answers.
+    pub fn base_figure(&self, entity: Entity, stat: crate::attributes::DerivedStat) -> f64 {
+        use crate::attributes::DerivedStat as S;
+        if entity == self.player_entity() {
+            return f64::from(
+                self.stat_bonus(entity)
+                    .apply(self.derived_stats(entity))
+                    .get(stat),
+            );
+        }
+        let Some(stats) = self.world.get::<Stats>(entity) else {
+            return 0.0;
+        };
+        match stat {
+            S::MaxHp => f64::from(stats.max_hp),
+            S::Atk => f64::from(stats.atk),
+            S::Mitigation => f64::from(stats.mitigation),
+            _ => 0.0,
+        }
     }
 
     /// Turns a tamed program with baked `Stats` into a derived one, working
@@ -363,6 +391,7 @@ impl Game {
             max_power: derived.max_power,
             status_resist: derived.status_resist,
             extraction: derived.extraction,
+            accuracy: derived.accuracy,
             crit: derived.crit,
             fumble: derived.fumble,
             perception: derived.perception,

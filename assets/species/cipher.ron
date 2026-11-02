@@ -22,6 +22,7 @@
     affinities: (heal: 0.85, debuff: 1.3),
     attributes: {
         "analysis": 14,
+        "amplitude": 14,
         "persistence": 62,
         "entropy": 44,
         "bandwidth": 40,

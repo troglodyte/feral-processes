@@ -807,12 +807,12 @@ mod tests {
         let pool_points = crate::tuning::CREATION_STAT_POINTS;
 
         let plain = pool(&[]);
-        let all_analysis = pool(&[("analysis", pool_points)]);
+        let all_amplitude = pool(&[("amplitude", pool_points)]);
         let all_parity = pool(&[("parity", pool_points)]);
         let one_footprint = pool(&[("footprint", 1)]);
 
-        assert_eq!(all_analysis.atk, plain.atk + pool_points as i32);
-        assert_eq!(all_analysis.max_hp, plain.max_hp);
+        assert_eq!(all_amplitude.atk, plain.atk + pool_points as i32);
+        assert_eq!(all_amplitude.max_hp, plain.max_hp);
         assert_eq!(all_parity.max_hp, plain.max_hp + 6 * pool_points as i32);
         assert_eq!(
             all_parity.hp, all_parity.max_hp,

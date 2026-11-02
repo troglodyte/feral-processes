@@ -26,6 +26,7 @@
     ],
     attributes: {
         "analysis": 11,
+        "amplitude": 11,
         "persistence": 34,
         "entropy": 52,
         "bandwidth": 62,

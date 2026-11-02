@@ -57,6 +57,7 @@ pub mod save;
 pub mod score;
 pub mod settlements;
 pub mod situations;
+pub mod skills;
 pub mod sociability;
 pub mod sorties;
 pub mod species;

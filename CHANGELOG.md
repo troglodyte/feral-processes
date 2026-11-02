@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.15
+
+**Your base programs now build and dig from a corner as well as from a side.** A build request or a marked cell whose only free floor touches it at a corner used to sit unworked, with nothing said. Now a program stands on that corner tile and gets on with it. Machines, hauling and collecting still work side to side. A digger still cuts only rock that has floor, or floor waiting to be laid, on one of its sides, so a marked cell touched only at a corner waits until that is true instead of pinning a program next to it.
+
 ## 0.21.14
 
 **`[A]` now puts the best gear in your pack on one wearer.** Press it on the Inventory page to fit yourself, or on a program's gear page to fit that program. Your weapon and armor slots, and every slot on a program, get the piece with the highest power rating. Your module slot gets the highest decompile chance first, and combat rating breaks a tie. A program never takes a module whose only stat is decompile chance. A slot changes only for a strictly better piece, broken copies are never picked, and gear is never taken off another wearer. One autofit costs one turn however many slots change, and nothing if none do.

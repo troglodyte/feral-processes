@@ -66,21 +66,10 @@ pub(crate) fn unlock_research_chain(game: &mut Game, id: &str) {
     // hand would silently stop unlocking them.
     //
     // What is shortcut is the *earning*, both halves of it — the progress a
-    // Research Node would have fed in, and the bill the base would have made.
-    // A fixture that only wanted a bench researched should no more have to
-    // mine for it than it has to post a program on a Research Node. The
-    // scratch shelf is despawned afterwards so it cannot be counted by a
-    // `base_holding` assertion in the test that called this.
-    let shelf = game
-        .world
-        .spawn((
-            Structure {
-                kind: "test_research_shelf".to_string(),
-            },
-            Position { x: -64, y: -64 },
-            Stock::new(1_000_000),
-        ))
-        .id();
+    // Research Node would have fed in, and the bill a Station's program would
+    // have carried in. A fixture that only wanted a bench researched should
+    // no more have to mine for it than it has to post a program on a
+    // Research Node.
     // `Game::settle_research` refuses a `requires_subject` node without a
     // body standing in a `studies` structure's pen (Task 8), so a chain
     // touching one of the 19 subject-gated nodes needs the same shortcut
@@ -130,12 +119,7 @@ pub(crate) fn unlock_research_chain(game: &mut Game, id: &str) {
             .get(&node)
             .cloned()
             .expect("the chain was walked out of the db");
-        {
-            let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
-            for (item, need) in &def.materials {
-                *stock.output.entry(item.clone()).or_default() += need;
-            }
-        }
+        fill_research_bill(game, &def.id);
         if def.requires_subject {
             let subject = spawn_tamed(game, 10, 3);
             game.world.entity_mut(subject).insert((
@@ -159,7 +143,6 @@ pub(crate) fn unlock_research_chain(game: &mut Game, id: &str) {
             .entity_mut(station)
             .remove::<crate::components::StudyYield>();
     }
-    game.world.despawn(shelf);
     game.world.despawn(station);
     game.world.despawn(rack);
 }
@@ -254,13 +237,10 @@ pub(crate) fn base_with_a_research_node(game: &mut Game) -> Entity {
     node
 }
 
-/// Puts the whole bill of the named research node onto a scratch base shelf, so
-/// `Game::settle_research`'s second gate is satisfied without a production run.
-///
-/// A shelf rather than the player's pack, deliberately: a project's bill is
-/// paid off the base's buffers through `stock::spend_bill_from_base`, and a
-/// fixture that stocked the pack would leave every completion test green
-/// against a bill nobody could pay.
+/// Puts the whole bill of the named research node onto a scratch Depot —
+/// what the base holds for a Research Station's program to carry in. A Depot
+/// because a Station is fed off shelves only (`research_supply`), and rather
+/// than the player's pack, deliberately: the pack is never a source.
 pub(crate) fn shelve_research_bill(game: &mut Game, id: &str, x: i32, y: i32) -> Entity {
     let materials = game
         .world
@@ -275,7 +255,7 @@ pub(crate) fn shelve_research_bill(game: &mut Game, id: &str, x: i32, y: i32) ->
     game.world
         .spawn((
             Structure {
-                kind: "test_research_shelf".to_string(),
+                kind: "depot".to_string(),
             },
             Position { x, y },
             stock,
@@ -295,6 +275,41 @@ pub(crate) fn fill_research_progress(game: &mut Game, id: &str) {
         .resource_mut::<crate::resources::ActiveResearch>()
         .progress
         .insert(id.to_string(), cost);
+}
+
+/// Credits `id`'s bill as wholly delivered to a Research Station, so a
+/// completion test that is not about the carrying does not have to run the
+/// haul for hundreds of ticks. `fill_research_progress`'s counterpart.
+pub(crate) fn fill_research_bill(game: &mut Game, id: &str) {
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id)
+        .map(|def| def.materials.clone())
+        .unwrap_or_default();
+    let mut research = game
+        .world
+        .resource_mut::<crate::resources::ActiveResearch>();
+    let bill = research.delivered.entry(id.to_string()).or_default();
+    for (item, need) in materials {
+        *bill.entry(item).or_default() += need;
+    }
+}
+
+/// Files the player's own standing order for every line of `id`'s bill — what
+/// a player does to keep a project fed, and what clears the "file a work
+/// order" flag a running project otherwise carries.
+pub(crate) fn queue_research_bill(game: &mut Game, id: &str) {
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id)
+        .map(|def| def.materials.clone())
+        .unwrap_or_default();
+    for (item, need) in materials {
+        game.queue_work_order(WorkOrder::level(item, need))
+            .expect("the fixture stands a producer for every bill");
+    }
 }
 
 /// How far the base has got on `id` — see `resources::ActiveResearch`.

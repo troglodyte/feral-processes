@@ -394,31 +394,6 @@ fn spending_takes_shelves_first_then_stockpiles_in_tile_order() {
 }
 
 #[test]
-fn a_bill_is_checked_and_paid_across_shelf_and_stockpile() {
-    let mut g = game_with_home();
-    with_pile(&mut g);
-    shelf_with(&mut g, 2, 0, 1);
-    loose(&mut g, 4, 0);
-    let bill = [(frag(), 3)];
-    assert!(!crate::game::base::stock::spend_bill_from_base(
-        &mut g,
-        &bill,
-        crate::base_ledger::ConsumeSource::Base
-    ));
-    assert_eq!(
-        floor_things(&mut g).len(),
-        1,
-        "a refused bill moves nothing"
-    );
-    assert!(crate::game::base::stock::spend_bill_from_base(
-        &mut g,
-        &[(frag(), 2)],
-        crate::base_ledger::ConsumeSource::Base
-    ));
-    assert!(floor_things(&mut g).is_empty());
-}
-
-#[test]
 fn the_stock_block_counts_stockpiled_items() {
     let mut g = game_with_home();
     with_pile(&mut g);

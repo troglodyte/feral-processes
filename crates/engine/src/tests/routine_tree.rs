@@ -163,21 +163,11 @@ fn the_base_tree_lists_exactly_the_authored_nodes() {
 /// that deletion (or before a mod's own tree change) could carry it as the
 /// active project forever, with no door that ever re-selects on its own.
 #[test]
-fn a_stale_active_research_clears_on_load_with_its_work_orders() {
+fn a_stale_active_research_clears_on_load() {
     let mut game = Game::new(9140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world
         .resource_mut::<crate::resources::ActiveResearch>()
         .id = Some("field_ops".to_string());
-    game.world
-        .resource_mut::<crate::resources::WorkOrders>()
-        .0
-        .push(
-            crate::game::base::work_orders::WorkOrder::batch(
-                crate::items::ItemId::from("bytecode_block"),
-                1,
-            )
-            .with_research(),
-        );
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_stale_active_research_{}.bin",
@@ -194,14 +184,5 @@ fn a_stale_active_research_clears_on_load_with_its_work_orders() {
             .id
             .is_none(),
         "a project naming a node the loaded tree no longer has must clear"
-    );
-    assert!(
-        loaded
-            .world
-            .resource::<crate::resources::WorkOrders>()
-            .0
-            .iter()
-            .all(|o| !o.for_research),
-        "its work orders must clear with it"
     );
 }

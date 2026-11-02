@@ -337,7 +337,7 @@ said "not implemented" and was corrected in the move.
 | `2026-09-10-power-cell-ladder-design` | Power cells above the first | `assets/items/buffered_cell.ron`, `sustain_cell.ron`; `v0.13.147` |
 | `2026-09-10-quarantine-rack-design` | A rack that holds downed programs | `structures::RackDef`, `components::Racked`, `assets/structures/quarantine_rack.ron` |
 | `2026-09-10-research-graph-view-design` | The research tree as a flow chart | `views::ResearchGraph`, `Game::research_graph`, `render/research_graph.rs` |
-| `2026-09-11-research-as-a-project-design` | Research is one project at a time, paid by work orders | `resources::ActiveResearch`, `WorkOrder::for_research` |
+| `2026-09-11-research-as-a-project-design` | Research is one project at a time; its bill was paid by work orders — superseded: the bill is now carried to the Research Station and consumed as it lands, and no order is filed (branch `research-fed-bill`) | `resources::ActiveResearch` (`delivered`), `game/base/research_supply.rs` |
 | `2026-09-12-battle-summons-design` | A routine that fields a body mid-fight | `components::Summoned`, `assets/abilities/fork_program.ron`; `v0.13.173` |
 | `2026-09-12-weapon-range-and-bolts-design` | Ranged weapons and the bolt cue | `ItemDef::range`, `BoltCue`, `TACTICAL_RANGED_MOVE_RANGE`; `v0.13.172` |
 | `2026-09-16-auto-resolve-combat-design` | `[R]` plays the rest of a fight out | `game/auto_resolve.rs`, `AUTO_RESOLVE_ROUND_CAP` |

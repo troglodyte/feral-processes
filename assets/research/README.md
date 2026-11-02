@@ -41,14 +41,18 @@ Core Fragments.
     cost: 18,
 
     // Optional; defaults to none. Goods consumed alongside `cost`, as
-    // (item id, quantity) pairs. Selecting the node files one work order per
-    // line at the top of the queue, so the base makes them the way it makes anything else;
-    // the bill is then paid off the base's own shelves — every Depot and every
-    // machine output buffer, never the player's pack — and paid whole, so
-    // nothing is spent unless the entire bill can be covered.
+    // (item id, quantity) pairs. While the node is the active project, the
+    // program posted at a Research Station carries the bill in from wherever
+    // the base holds it — every Depot, every machine output buffer and every
+    // stockpile cell, never the player's pack — and each load is consumed into
+    // the project as it lands, while the data is still accruing. The base
+    // never has to hold the whole bill at once. What was delivered stays with
+    // the node through an abandon and is never refunded. Selecting files no
+    // work order: making the materials is the player's own queue, and a
+    // running project whose line nothing supplies says it needs one.
     //
-    // A line nothing standing in the base could ever make refuses the
-    // selection outright, with the same sentence the work-order screen shows.
+    // A line no holding could ever pay (a banked item) refuses the selection
+    // outright.
     materials: [("logic_wafer", 6), ("bytecode_block", 8)],
 
     // Optional; defaults to 0, meaning available from turn one. The zone the

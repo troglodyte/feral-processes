@@ -1659,6 +1659,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         seed: game.world.resource::<WorldMap>().seed(),
         discovered_research: Vec::new(),
         study_progress: 0,
+        research_delivered: Vec::new(),
         base_ledger: Default::default(),
         compass: Default::default(),
         game_over: None,

@@ -233,7 +233,8 @@ pub(super) fn flag(node: &ResearchStatus) -> &'static str {
 }
 
 /// A node's material bill as one line under its row — see
-/// `ResearchDef::materials`.
+/// `ResearchDef::materials`. Each line reads delivered/needed, with what the
+/// base holds toward the rest in brackets while there is some.
 ///
 /// **One line for the whole bill, not a row per material.** `popup_layout`
 /// pages this screen by `Row::Item` span, so a row per line would cost the
@@ -252,10 +253,16 @@ pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> V
     if materials.is_empty() {
         return Vec::new();
     }
-    let short = materials.iter().any(|m| m.have < m.need);
+    let short = materials.iter().any(|m| m.delivered + m.have < m.need);
     let line = materials
         .iter()
-        .map(|m| format!("{} {}/{}", m.name, m.have, m.need))
+        .map(|m| {
+            if m.delivered < m.need && m.have > 0 {
+                format!("{} {}/{} ({} held)", m.name, m.delivered, m.need, m.have)
+            } else {
+                format!("{} {}/{}", m.name, m.delivered, m.need)
+            }
+        })
         .collect::<Vec<_>>()
         .join("  ");
     wrap_text(&line, columns)

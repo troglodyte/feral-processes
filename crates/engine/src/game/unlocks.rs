@@ -30,9 +30,22 @@ pub struct DecompileReach {
 pub(crate) struct ResearchBlockMemo {
     chain: HashMap<ItemId, Option<String>>,
     holdings: HashMap<ItemId, u32>,
+    /// `work_orders::queue_needs` over the whole queue, asked once a pass.
+    needs: Option<HashSet<ItemId>>,
 }
 
 impl ResearchBlockMemo {
+    fn needs(&mut self, game: &Game) -> HashSet<ItemId> {
+        self.needs
+            .get_or_insert_with(|| {
+                crate::game::base::work_orders::queue_needs(
+                    game.work_orders(),
+                    game.world.resource::<ItemDb>(),
+                )
+            })
+            .clone()
+    }
+
     fn holding(&mut self, game: &Game, item: &ItemId) -> u32 {
         *self
             .holdings
@@ -791,6 +804,7 @@ impl Game {
                     .map(|(item, need)| ResearchMaterial {
                         name: self.item_name(item).to_string(),
                         need: *need,
+                        delivered: self.research_delivered(&def.id, item),
                         have: memo.holding(self, item),
                     })
                     .collect();
@@ -1067,15 +1081,48 @@ impl Game {
         {
             return Some(no_node);
         }
-        def.materials.iter().find_map(|(item, need)| {
-            if memo.holding(self, item) >= *need {
-                return None;
-            }
-            memo.chain
-                .entry(item.clone())
-                .or_insert_with(|| crate::game::base::work_orders::chain_break(self, item))
-                .clone()
-        })
+        // Against what is still to be *delivered*, not the whole bill: what
+        // already went into the Station is spent and owes the base nothing.
+        // A line the shelves can cover is no block; past that, a chain the
+        // base cannot work names its break, and a line nothing in the queue
+        // is making says so — the bill files no order of its own, so a
+        // project fed off a depot that runs dry would otherwise wait in
+        // silence. That last sentence is the running project's alone: on a
+        // node nobody has picked it would draw the same amber line under
+        // every row of the tree, which says nothing.
+        let active = self.world.resource::<ActiveResearch>().id.as_ref() == Some(&def.id);
+        let needs = if active {
+            memo.needs(self)
+        } else {
+            HashSet::new()
+        };
+        self.research_outstanding(def)
+            .into_iter()
+            .find_map(|(item, short)| {
+                // The running project counts what a Station's program can
+                // reach and take, and what is already on its way
+                // (`research_supply`); any other node, what the base holds.
+                let covered = if active {
+                    self.research_supply(&item)
+                } else {
+                    memo.holding(self, &item)
+                };
+                if covered >= short {
+                    return None;
+                }
+                memo.chain
+                    .entry(item.clone())
+                    .or_insert_with(|| crate::game::base::work_orders::chain_break(self, &item))
+                    .clone()
+                    .or_else(|| {
+                        (active && self.research_unreachable(&item) > 0)
+                            .then(|| crate::game::base::work_orders::no_reach_for(self, &item))
+                    })
+                    .or_else(|| {
+                        (active && !needs.contains(&item))
+                            .then(|| crate::game::base::work_orders::no_order_for(self, &item))
+                    })
+            })
     }
 
     /// "No Research Node deployed", or `None` if one is.
@@ -1111,20 +1158,15 @@ impl Game {
             .any(|d| d.tree == tree)
     }
 
-    /// Makes `id` the one project the base is working: Research Nodes start
-    /// feeding it and its material bill is filed as ordinary work orders at
-    /// the top of the queue.
+    /// Makes `id` the one project the base is working: Research Stations start
+    /// feeding it data, and the program posted at one starts carrying its
+    /// material bill in (`research_supply`). Nothing is filed in the work
+    /// queue — making the materials is the player's own orders.
     ///
     /// Every refusal lands **before anything is written** —
-    /// `commit_caravan_basket`'s rule. `require_field` is in the ladder for
-    /// `queue_work_order`'s reason: this reads which machines are standing,
-    /// and they stand in the field.
-    ///
-    /// The materials are filed **once, at selection, and never topped up.** A
-    /// per-tick refile would make `cancel_work_order` a no-op on exactly the
-    /// orders a player most wants to intervene in. They go **through**
-    /// `queue_work_order` rather than around it, so every log line and every
-    /// refusal that door owns still applies.
+    /// `commit_caravan_basket`'s rule. `require_field` is in the ladder
+    /// because this reads which machines are standing, and they stand in the
+    /// field.
     pub fn select_research(&mut self, id: &str) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -1205,26 +1247,28 @@ impl Game {
                 return Err(reason);
             }
         }
-        // Only now, with every refusal past, does anything move.
+        // Only now, with every refusal past, does anything move. **No work
+        // order is filed.** The bill is carried to the Research Station from
+        // whatever the base holds (`absorb_research_deliveries`), and making
+        // it is the player's own queue — a one-shot order filed here
+        // completed the moment the shelves held it and was gone before the
+        // data finished, so anything else eating those units stalled the
+        // project for good.
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
-        for (item, need) in &def.materials {
-            // Through the one door. A research line is filed whatever stands
-            // (`queue_work_order`'s own rule), and the one refusal it keeps,
-            // `permanent_break`, was asked above before anything was written
-            // — so this cannot fail, and a future divergence surfaces as a
-            // missing order rather than a silent one.
-            let _ = self.queue_work_order(WorkOrder::batch(item.clone(), *need).with_research());
-        }
+        self.refresh_research_reach();
         self.log_base(format!("Research project started: {}.", def.name));
         Ok(())
     }
 
-    /// Stops working the active project, taking its work orders back out with
-    /// it and **keeping** its progress.
+    /// Stops working the active project, **keeping** its progress and what
+    /// its bill has had delivered.
     ///
-    /// The progress entry stays because `ActiveResearch::progress` is per
-    /// node: abandoning a long project for a cheap one and coming back is not
-    /// destructive. Only completion removes an entry.
+    /// Both entries stay because `ActiveResearch` is per node: abandoning a
+    /// long project for a cheap one and coming back is not destructive, and
+    /// consumed materials are never refunded. Only completion removes them.
+    /// Whatever already landed in a Station's hopper is absorbed first, so a
+    /// load carried for this project is credited to it rather than left in
+    /// the hopper for the next one.
     pub fn abandon_research(&mut self) -> Result<(), String> {
         // `select_research`'s first rung, and abandoning needs it for the same
         // reason: it logs and rewrites the queue. `require_field` is
@@ -1244,8 +1288,9 @@ impl Game {
             .get(&active)
             .map(|d| d.name.clone())
             .unwrap_or_else(|| active.clone());
+        self.absorb_research_deliveries();
         self.world.resource_mut::<ActiveResearch>().id = None;
-        self.withdraw_research_orders();
+        self.refresh_research_reach();
         self.log_base(format!("Research project abandoned: {name}."));
         Ok(())
     }
@@ -1309,21 +1354,14 @@ impl Game {
         Some((name, earned, cost))
     }
 
-    /// The first material line the active project is short of, once it has all
-    /// the progress it needs — or `None` while it is still earning, or while the
-    /// base can pay.
-    ///
-    /// **This is the only surface a stalled project has.** A bill's work order
-    /// is *removed* the moment `base_holding` reaches its quantity ("Work order
-    /// complete"), and anything that then consumes those units before
-    /// `settle_research` next runs — an assembler pulling a feeder, another
-    /// order, the player's own transfer picker — leaves the project waiting with
-    /// nothing in the queue. Re-filing per tick is ruled out: it would make
-    /// `cancel_work_order` a no-op on exactly the orders a player most wants to
-    /// intervene in. So the player is told instead.
+    /// The first material line the active project still needs delivered and
+    /// the base cannot cover from what it holds, once it has all the progress
+    /// it needs — or `None` while it is still earning, or while the shelves
+    /// hold the rest and it is being carried in.
     ///
     /// Named by the item, because "research is stalled" without saying on what
-    /// is a row that cannot be acted on.
+    /// is a row that cannot be acted on. Whether anything will ever supply it
+    /// is `research_block`'s sentence, which the readout asks first.
     pub(crate) fn research_material_shortfall(&self) -> Option<String> {
         let research = self.world.resource::<ActiveResearch>();
         let id = research.id.as_ref()?;
@@ -1352,24 +1390,26 @@ impl Game {
         {
             return Some(reason.to_string());
         }
-        def.materials
-            .iter()
-            .find(|(item, need)| crate::game::base::work_orders::base_holding(self, item) < *need)
-            .map(|(item, _)| self.item_name(item).to_string())
+        // A line the shelves already cover is being carried, not waited on.
+        self.research_outstanding(def)
+            .into_iter()
+            .find(|(item, short)| self.research_supply(item) < *short)
+            .map(|(item, _)| self.item_name(&item).to_string())
     }
 
     /// One tick of the completion check: a project finishes when it has the
     /// progress, a subject if it needs one, somewhere to put what the subject
-    /// becomes (`study_yield_blocker`), and the base can pay the whole bill off its shelves.
+    /// becomes (`study_yield_blocker`), and every line of its bill delivered
+    /// to a Research Station in full.
     ///
     /// The whole gate is one early-return `||`, and the order is load-bearing
     /// (decision 5): `progress < cost`, then no subject pinned, then the station's
     /// slot or rack room for the downed program the subject becomes, then the
     /// materials. The
     /// short-circuit is what stops a subject-gated project spending its
-    /// subject — or its materials — on one that is still half-researched,
-    /// `a_full_bill_alone_does_not_complete_a_project`'s failure with a worse
-    /// loss, since a program is not refundable the way a shelf material is.
+    /// subject on one that is still half-researched, since a program is not
+    /// refundable. The materials step spends nothing: what was delivered was
+    /// consumed as it landed (`absorb_research_deliveries`, run first).
     /// **The one door a discovery is written through** — `Game::remember`'s
     /// rule. `Game::settle_study` is its only caller today; a second
     /// discovery source is a second caller of this and nothing else.
@@ -1503,6 +1543,9 @@ impl Game {
     }
 
     pub(crate) fn settle_research(&mut self) {
+        self.absorb_research_deliveries();
+        // Once a tick, for every screen that reads the flag each frame.
+        self.refresh_research_reach();
         let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
             return;
         };
@@ -1527,11 +1570,11 @@ impl Game {
         if progress < def.cost
             || (def.requires_subject && subject.is_none())
             || (def.requires_subject && self.study_yield_blocker().is_some())
-            || !crate::game::base::stock::spend_bill_from_base(
-                self,
-                &def.materials,
-                crate::base_ledger::ConsumeSource::Base,
-            )
+            || !self
+                .world
+                .resource::<ActiveResearch>()
+                .outstanding(&active, &def.materials)
+                .is_empty()
         {
             return;
         }
@@ -1539,6 +1582,24 @@ impl Game {
             self.spend_subject(subject);
         }
         self.grant_research(&def);
+    }
+
+    /// How much of `item` has been delivered to `id`'s bill so far.
+    pub fn research_delivered(&self, id: &str, item: &ItemId) -> u32 {
+        self.world
+            .resource::<ActiveResearch>()
+            .delivered
+            .get(id)
+            .and_then(|bill| bill.get(item))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// What `def`'s bill still wants carried to a Research Station.
+    pub(crate) fn research_outstanding(&self, def: &ResearchDef) -> Vec<(ItemId, u32)> {
+        self.world
+            .resource::<ActiveResearch>()
+            .outstanding(&def.id, &def.materials)
     }
 
     /// The pinned subject, converted into a downed program left standing at
@@ -1596,20 +1657,12 @@ impl Game {
         self.ftue_by_key(&crate::ftue::research_key(&def.id));
         self.note_deed(crate::contracts::Deed::FinishedResearch);
         self.grant_research_knowledge(def);
-        let cleared_active = {
-            let mut research = self.world.resource_mut::<ActiveResearch>();
-            let is_active = research.id.as_ref() == Some(&def.id);
-            if is_active {
-                research.id = None;
-            }
-            research.progress.remove(&def.id);
-            is_active
-        };
-        // Only the active project's own bill: a dev unlock of some other node
-        // must not strip the orders `select_research` filed once and never
-        // re-files.
-        if cleared_active {
-            self.withdraw_research_orders();
+        let mut research = self.world.resource_mut::<ActiveResearch>();
+        if research.id.as_ref() == Some(&def.id) {
+            research.id = None;
         }
+        research.progress.remove(&def.id);
+        research.delivered.remove(&def.id);
+        self.refresh_research_reach();
     }
 }

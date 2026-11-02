@@ -34,8 +34,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A research node's material bill may only name what that node's own
   prerequisites can make**, `min_zone` granting nothing and an `Assemble`
   recipe being no source.
-- **A research bill is paid from the pack, topped up off the adjacent
-  shelves**, and the whole bill is refused before a unit moves.
+- **A research bill is never paid from the pack**: a Research Station's
+  program carries it in off the base's shelves a load at a time.
 - **A weapon's reach lives on `ItemDef` and is authored as an enemy-facing
   plural `AbilityTarget`**, so it is off `copy_bonus`'s four scaling axes by
   construction and each combat model converts it with the converter it

@@ -207,9 +207,30 @@ pub struct ActiveResearch {
     /// Station studying with an empty pen banks one attempt and holds rather
     /// than stockpiling.
     pub study: u32,
+    /// What has been carried to a Research Station and consumed into each
+    /// node's material bill — `progress`'s rule exactly: per node, kept
+    /// through an abandon, never refunded, and removed only when the node
+    /// completes. A `BTreeMap` per node for `Stock`'s reason: the save
+    /// encoding must not depend on hash order.
+    pub delivered:
+        std::collections::HashMap<crate::research::ResearchId, BTreeMap<crate::items::ItemId, u32>>,
+    /// The running project's reach, recomputed once a tick — see
+    /// `research::ResearchReach`. A field here rather than a resource of its
+    /// own for `study`'s reason: a new resource shifts bevy's iteration
+    /// order. Not saved; `SaveData` never carries it.
+    pub(crate) reach: crate::research::ResearchReach,
 }
 
 impl ActiveResearch {
+    /// What `id`'s bill still wants carried — see `research::outstanding_bill`.
+    pub(crate) fn outstanding(
+        &self,
+        id: &str,
+        materials: &[(crate::items::ItemId, u32)],
+    ) -> Vec<(crate::items::ItemId, u32)> {
+        crate::research::outstanding_bill(materials, self.delivered.get(id))
+    }
+
     /// Credits `amount` units of the research currency to the active
     /// project, saturating at `cap`, and reports what landed.
     ///

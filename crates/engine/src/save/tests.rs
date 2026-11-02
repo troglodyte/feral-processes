@@ -228,6 +228,7 @@ fn sample_data() -> SaveData {
         research_progress: Vec::new(),
         discovered_research: Vec::new(),
         study_progress: 0,
+        research_delivered: Vec::new(),
         known_tools: Vec::new(),
         emulation_images: Vec::new(),
         crafted_routines: Vec::new(),

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use bevy_ecs::prelude::Resource;
@@ -173,6 +173,71 @@ impl DecompilerUpgrade {
     fn grants_nothing(&self) -> bool {
         self.range.unwrap_or(0) == 0 && self.radius.unwrap_or(0) == 0
     }
+}
+
+/// What a project's bill still wants carried to the Research Station:
+/// `materials` folded by item, less what `delivered` already holds, in the
+/// order the `.ron` file first names each item and skipping any line already
+/// in full. Empty exactly when the bill is paid.
+///
+/// Folded because a mod's bill may name one item twice, and two per-line
+/// shortfalls against one delivered tally would ask for the first line twice.
+pub(crate) fn outstanding_bill(
+    materials: &[(ItemId, u32)],
+    delivered: Option<&BTreeMap<ItemId, u32>>,
+) -> Vec<(ItemId, u32)> {
+    let mut owed: Vec<(ItemId, u32)> = Vec::new();
+    for (item, need) in materials {
+        match owed.iter_mut().find(|(id, _)| id == item) {
+            Some((_, total)) => *total += need,
+            None => owed.push((item.clone(), *need)),
+        }
+    }
+    owed.into_iter()
+        .filter_map(|(item, need)| {
+            let landed = delivered.and_then(|d| d.get(&item)).copied().unwrap_or(0);
+            let short = need.saturating_sub(landed);
+            (short > 0).then_some((item, short))
+        })
+        .collect()
+}
+
+/// The running project's reach, snapshotted once a tick by
+/// `Game::refresh_research_reach` so the screens that read it every frame do
+/// not walk the base: per outstanding item, what the bill can still be fed
+/// from and what lies out of every Station program's reach. Derived, never
+/// saved — a load recomputes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResearchReach {
+    pub(crate) supply: BTreeMap<ItemId, u32>,
+    pub(crate) unreachable: BTreeMap<ItemId, u32>,
+}
+
+impl ResearchReach {
+    pub(crate) fn supply_of(&self, item: &ItemId) -> u32 {
+        self.supply.get(item).copied().unwrap_or(0)
+    }
+
+    pub(crate) fn unreachable_of(&self, item: &ItemId) -> u32 {
+        self.unreachable.get(item).copied().unwrap_or(0)
+    }
+}
+
+/// How much of a Research Station's input hopper goes into the project this
+/// tick: each outstanding line takes what the hopper holds of it, capped at
+/// the shortfall. The decide half of `Game::absorb_research_deliveries`;
+/// whatever the bill does not want stays where it is.
+pub(crate) fn absorb_from_input(
+    outstanding: &[(ItemId, u32)],
+    input: &BTreeMap<ItemId, u32>,
+) -> Vec<(ItemId, u32)> {
+    outstanding
+        .iter()
+        .filter_map(|(item, short)| {
+            let take = input.get(item).copied().unwrap_or(0).min(*short);
+            (take > 0).then(|| (item.clone(), take))
+        })
+        .collect()
 }
 
 #[derive(Resource, Default)]
@@ -385,6 +450,47 @@ impl ResearchDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn bill(lines: &[(&str, u32)]) -> Vec<(ItemId, u32)> {
+        lines.iter().map(|(i, q)| (ItemId::from(*i), *q)).collect()
+    }
+
+    fn tally(lines: &[(&str, u32)]) -> BTreeMap<ItemId, u32> {
+        lines.iter().map(|(i, q)| (ItemId::from(*i), *q)).collect()
+    }
+
+    #[test]
+    fn outstanding_bill_lowers_by_what_was_delivered_and_drops_paid_lines() {
+        let materials = bill(&[("core_fragment", 30), ("power_cell", 2)]);
+        assert_eq!(outstanding_bill(&materials, None), materials);
+        let landed = tally(&[("core_fragment", 10), ("power_cell", 2)]);
+        assert_eq!(
+            outstanding_bill(&materials, Some(&landed)),
+            bill(&[("core_fragment", 20)])
+        );
+        let paid = tally(&[("core_fragment", 30), ("power_cell", 2)]);
+        assert!(outstanding_bill(&materials, Some(&paid)).is_empty());
+    }
+
+    #[test]
+    fn outstanding_bill_folds_an_item_named_twice() {
+        let materials = bill(&[("core_fragment", 4), ("core_fragment", 3)]);
+        let landed = tally(&[("core_fragment", 5)]);
+        assert_eq!(
+            outstanding_bill(&materials, Some(&landed)),
+            bill(&[("core_fragment", 2)])
+        );
+    }
+
+    #[test]
+    fn absorb_takes_no_more_than_the_shortfall_and_nothing_unbilled() {
+        let outstanding = bill(&[("core_fragment", 3), ("power_cell", 2)]);
+        let input = tally(&[("core_fragment", 5), ("cache_grain", 4)]);
+        assert_eq!(
+            absorb_from_input(&outstanding, &input),
+            bill(&[("core_fragment", 3)])
+        );
+    }
 
     /// Writes `files` as `.ron` into a fresh temp dir and loads a `ResearchDb`
     /// from it against a `StructureDb` and an `AbilityDb` built from the real

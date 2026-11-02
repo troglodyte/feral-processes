@@ -448,25 +448,10 @@
   `every_shipped_research_node_costs_materials` is the second half — a
   `materials` line deleted by hand must fail the build rather than read as
   that node being free.
-- **A research bill is paid from the pack, topped up off the adjacent
-  shelves.** Research is a player cost, so `unlock_research` spends
-  `Inventory`; the shelves top the pack up rather than being a second store,
-  because the goods a bill names are the goods the base is already stacking
-  and a Transfer trip per node is a keystroke tax with no decision in it.
-  `Game::research_material_held` is the one definition of "have" — pack plus
-  `adjacent_stock_count` — read by the refusal *and* by the figure
-  `research_nodes` puts on the screen, so a row drawn as affordable cannot
-  then be refused; the reach is `adjacent_stock`'s, so this screen and the
-  Transfer screen cannot disagree about what the shelves are, and off the
-  base it answers 0, which is why the Research row is still
-  `Locality::Anywhere`. **The trap is the obvious shape**: taking each line
-  as the walk reaches it strands goods on the pack when line three refuses,
-  so the whole bill is checked against pack-plus-shelves first and refused
-  whole — `commit_caravan_basket`'s rule — and the tests assert `Inventory`
-  **and** every `Stock` byte-identical, per refusal. The shortfall is routed
-  through `take_from_adjacent` rather than drained here, keeping
-  `hauling::take_from` the one way a unit leaves a buffer and inheriting its
-  `(x, y)` sort.
+- **A research bill is never paid from the pack.** A Research Station's
+  posted program carries it in off the base's shelves a load at a time and
+  the Station consumes it into the project as it lands — the trap and the
+  mechanism are under `base-needs.md`'s research-bill entry.
 - **`GearCopy.wear` is wear taken (0 = full) and part of the copy's key;
   every change to a worn copy goes through `swap_worn_copy`.** Taken, not
   left, so the serde default loads old copies at full condition and

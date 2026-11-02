@@ -191,24 +191,30 @@ The rest of what a base does:
   marked with an `x`, until a program carries it to a Quarantine Rack, else a free stockpile cell,
   else the floor beside the Station; nothing more is spent there until it is gone. Change your mind and abandon the project (`A`) to get
   the program back as ordinary staff instead of losing it; losing the Station itself does the same.
-- Picking a node also files its material bill as work orders, at the top of the queue, so the base makes the
-  goods the same way it makes anything else. The project completes when it has the Research Data,
-  the whole material bill and a pinned subject if the node asks for one — the bill is paid off your
-  shelves, any Depot, any machine buffer, wherever in the base it is sitting. What you are carrying
-  is yours and is never spent on it.
+- A node's material bill is carried to the Research Station by the program working there. It
+  fetches the goods from any Depot or stockpile cell it can walk to — or, failing those, from a
+  machine whose neighbour is not being worked right now — a load at a time, and the
+  Station uses each load the moment it arrives — while the Research Data is still coming in, too.
+  The research screen shows each material as delivered against needed, with what your shelves
+  hold toward the rest in brackets. Your base never has to hold the whole bill at once, and what
+  you are carrying is yours and is never spent on it. The project completes once it has the
+  Research Data, every material delivered, and a pinned subject if the node asks for one.
+- Picking a node files no work order. Making the goods is up to you: a standing work order (hold
+  10 Core Fragments, say) keeps a shelf topped up while the Station drains it. If nothing on your
+  shelves and nothing in the queue can supply a material, the row wears `!` and says to file a
+  standing work order for it, and if the goods are there but the Station cannot reach them, it
+  says that instead. The Station never takes from a machine whose neighbour is busy using them.
 - A node whose bill names something no machine of yours makes yet is still yours to pick. Its row
   wears `!` and names the machine to build, the base panel says the same over the map, and the
-  project waits: its order sits stalled in the work queue and starts moving the moment the machine
-  goes up. The same `!` marks a node with no Research Station standing. Early nodes want raw salvage; deeper ones want what your
-  benches turn it into, and a node's bill is always something the nodes before it taught you to make.
-  A research tree is therefore a reason to keep the base running, not a timer to wait out.
-- Abandoning a project with `A` takes its work orders back out and keeps the progress it has already
-  earned, so coming back to a long one later costs nothing. A node with work banked against it says
-  so on its own row.
-- A project that has earned all its Research Data and is waiting on goods says so on the base panel,
-  naming what it is short of. Worth knowing because a bill's work order is removed once the base is
-  holding the goods — if something else spends them before the project settles, that row is the only
-  thing that will tell you.
+  project waits until the machine goes up. The same `!` marks a node with no Research Station
+  standing. Early nodes want raw salvage; deeper ones want what your benches turn it into, and a
+  node's bill is always something the nodes before it taught you to make. A research tree is
+  therefore a reason to keep the base running, not a timer to wait out.
+- Abandoning a project with `A` keeps the Research Data it has earned and the materials already
+  delivered, so coming back to a long one later costs nothing. Delivered materials are never given
+  back. A node with work banked against it says so on its own row.
+- A project that has earned all its Research Data and is waiting on goods your shelves cannot cover
+  says so on the base panel, naming what it is short of.
 - A Power Siphon pins one staff program into the Power Grid and runs the base off it. Research Grid
   Tapping, then build one for 24 Core Fragments and 4 Bytecode Blocks. Stand beside it and press c
   to open its Siphon page, where you load a staff program or release the one inside. A siphon with someone in it supplies 4 to the

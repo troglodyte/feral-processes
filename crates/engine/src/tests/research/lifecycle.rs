@@ -1,25 +1,18 @@
 use super::*;
 
-/// Both gates, and the ordering between them: a project completes on the
-/// progress a Research Node fed it **and** a bill the base can pay off its own
-/// shelves, and `&&` short-circuits so nothing is spent while it is still half
-/// researched.
+/// Both gates: a project completes on the progress a Research Node fed it
+/// **and** a bill delivered in full to a Research Station.
 #[test]
-fn a_project_completes_on_progress_and_a_bill_the_base_pays() {
+fn a_project_completes_on_progress_and_a_delivered_bill() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
-    let shelf = shelve_research_bill(&mut game, "automation", 8, 8);
     game.select_research("automation").unwrap();
     fill_research_progress(&mut game, "automation");
+    fill_research_bill(&mut game, "automation");
 
     game.tick();
 
     assert!(game.is_researched("automation"));
-    assert_eq!(
-        node_output(&game, shelf, ids::CORE_FRAGMENT),
-        0,
-        "the bill came off the base's shelves"
-    );
 }
 
 /// A finished project says so on the notification screen, not only in the
@@ -31,9 +24,9 @@ fn a_project_completes_on_progress_and_a_bill_the_base_pays() {
 fn a_completed_project_raises_a_notification_naming_what_it_unlocks() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
-    shelve_research_bill(&mut game, "automation", 8, 8);
     game.select_research("automation").unwrap();
     fill_research_progress(&mut game, "automation");
+    fill_research_bill(&mut game, "automation");
     let row = game
         .research_nodes(ResearchTree::Base)
         .into_iter()
@@ -73,64 +66,42 @@ fn progress_alone_does_not_complete_a_project() {
     assert_eq!(all_shelf_stock(&game), before, "nothing left a shelf");
 }
 
-/// And the second half: a paid bill with no progress behind it completes
-/// nothing and — the assertion that fails if the two gates are ever swapped —
-/// spends none of the materials either.
+/// And the second half: a delivered bill with no progress behind it
+/// completes nothing.
 #[test]
 fn a_full_bill_alone_does_not_complete_a_project() {
     let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
-    let shelf = shelve_research_bill(&mut game, "automation", 8, 8);
-    let stocked = node_output(&game, shelf, ids::CORE_FRAGMENT);
     game.select_research("automation").unwrap();
+    fill_research_bill(&mut game, "automation");
 
     game.tick();
 
     assert!(!game.is_researched("automation"));
-    assert_eq!(
-        node_output(&game, shelf, ids::CORE_FRAGMENT),
-        stocked,
-        "a project still short of progress must not spend its materials"
-    );
 }
 
-/// The whole point of moving the bill off the player's pack: the base pays it
-/// out of a shelf the player is nowhere near.
+/// Completion clears the project out and drops its progress and delivered
+/// rows — the one thing that ever removes either.
 #[test]
-fn a_completed_project_consumes_its_bill_from_a_depot_the_player_is_nowhere_near() {
-    let mut game = Game::new(723, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    base_with_a_research_node(&mut game);
-    let shelf = shelve_research_bill(&mut game, "automation", 400, -400);
-    game.select_research("automation").unwrap();
-    fill_research_progress(&mut game, "automation");
-
-    game.tick();
-
-    assert!(game.is_researched("automation"));
-    assert_eq!(node_output(&game, shelf, ids::CORE_FRAGMENT), 0);
-}
-
-/// Completion clears the project out, drops its progress row — the one thing
-/// that ever removes one — and takes its work orders with it.
-#[test]
-fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders() {
+fn completing_clears_the_project_and_drops_its_progress_and_delivered_rows() {
     let mut game = Game::new(724, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
-    shelve_research_bill(&mut game, "automation", 8, 8);
     game.select_research("automation").unwrap();
     fill_research_progress(&mut game, "automation");
-    assert!(
-        !game.work_orders().is_empty(),
-        "the fixture is vacuous unless selecting filed something"
-    );
+    fill_research_bill(&mut game, "automation");
 
     game.tick();
 
     assert_eq!(active_research(&game), None);
+    assert!(game.is_researched("automation"));
     assert_eq!(research_progress(&game, "automation"), 0);
     assert!(
-        game.work_orders().iter().all(|o| !o.for_research),
-        "a completed project takes its own orders back out"
+        !game
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .delivered
+            .contains_key("automation"),
+        "a completed node's delivered tally goes with it"
     );
 }
 
@@ -157,9 +128,9 @@ fn completing_a_part_node_marks_it_researched_and_the_part_known() {
         .unwrap_or(0);
     set_zone(&mut game, zone);
     base_with_a_research_node(&mut game);
-    shelve_research_bill(&mut game, &node_id, 8, 8);
     game.select_research(&node_id).unwrap();
     fill_research_progress(&mut game, &node_id);
+    fill_research_bill(&mut game, &node_id);
 
     game.tick();
 
@@ -175,9 +146,9 @@ fn settling_research_draws_no_rng() {
     assert!(
         rng_unadvanced_by(726, |game| {
             base_with_a_research_node(game);
-            shelve_research_bill(game, "automation", 8, 8);
             game.select_research("automation").unwrap();
             fill_research_progress(game, "automation");
+            fill_research_bill(game, "automation");
             game.settle_research();
             assert!(game.is_researched("automation"), "it did complete");
         }),
@@ -320,8 +291,8 @@ fn a_second_project_is_refused_while_one_is_running() {
 /// Nothing makes the research currency until a Research Node is standing, and
 /// `work_orders::chain_break` cannot say so — it refuses every banked item by
 /// construction. So the node is its own block — and a block is a flag, not a
-/// refusal: the project is taken on, its bill filed, and the row and the
-/// corner both say what it waits on.
+/// refusal: the project is taken on, and the row and the corner both say what
+/// it waits on.
 #[test]
 fn a_base_with_no_research_node_takes_a_project_on_and_flags_it() {
     let mut game = Game::new(729, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -337,11 +308,6 @@ fn a_base_with_no_research_node_takes_a_project_on_and_flags_it() {
         .expect("a missing machine flags the project rather than refusing it");
 
     assert_eq!(active_research(&game), Some("automation".to_string()));
-    assert_eq!(
-        game.work_orders().len(),
-        def.materials.len(),
-        "the bill is filed at selection whatever stands"
-    );
     let row = research_node(&game, "automation");
     assert_eq!(row.state, ResearchState::Active);
     let flag = row
@@ -362,8 +328,8 @@ fn a_base_with_no_research_node_takes_a_project_on_and_flags_it() {
 }
 
 /// Taking a project on flagged does not loosen completion: with all its data
-/// and its bill unpayable it holds, and it lands the moment the bill can be
-/// paid — `settle_research`'s gates are untouched by the selection change.
+/// and its bill undelivered it holds, and it lands the moment the bill is in
+/// — `settle_research`'s gates are untouched by the selection change.
 #[test]
 fn a_flagged_project_holds_at_full_data_until_its_bill_can_be_paid() {
     let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -389,7 +355,7 @@ fn a_flagged_project_holds_at_full_data_until_its_bill_can_be_paid() {
     );
     assert_eq!(active_research(&game), Some("automation".to_string()));
 
-    shelve_research_bill(&mut game, "automation", 6, 6);
+    fill_research_bill(&mut game, "automation");
     game.settle_research();
     assert!(
         game.is_researched("automation"),
@@ -444,6 +410,9 @@ fn a_bill_already_on_the_shelves_is_no_block_whatever_stands() {
             game.world.despawn(machine);
         }
     }
+    // The flag reads the tick's reach snapshot; this test edits the world
+    // by hand between ticks.
+    game.refresh_research_reach();
 
     assert!(
         matches!(
@@ -464,6 +433,7 @@ fn a_missing_node_is_no_block_once_the_data_is_all_earned() {
     let mut game = Game::new(734, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     for node in crate::game::base::work_orders::producers_of(&game, &game.research_currency()) {
         game.world.despawn(node);
     }
@@ -494,6 +464,7 @@ fn building_the_missing_machine_clears_the_flag() {
     let node = base_with_a_research_node(&mut game);
     game.world.despawn(node);
     game.select_research("automation").unwrap();
+    queue_research_bill(&mut game, "automation");
     assert!(matches!(
         game.research_readout(),
         Some(ResearchReadout::Blocked { .. })
@@ -513,54 +484,19 @@ fn building_the_missing_machine_clears_the_flag() {
     assert_eq!(research_node(&game, "automation").blocked_by, None);
 }
 
-/// Selecting files one order per material line, marked as the project's
-/// own — the provenance that lets them be withdrawn again — and **on top of
-/// the queue**, ahead of anything the player had already filed, in the
-/// bill's own order.
+/// Abandoning leaves the player's queue alone and **keeps** the progress —
+/// coming back to a long project is not destructive.
 #[test]
-fn selecting_files_one_order_per_material_line_at_the_top() {
-    let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    base_with_a_research_node(&mut game);
-    let bill = game
-        .world
-        .resource::<ResearchDb>()
-        .get("automation")
-        .unwrap()
-        .materials
-        .clone();
-    assert!(!bill.is_empty(), "the fixture node must author a bill");
-    let (first_item, _) = &bill[0];
-    game.queue_work_order(WorkOrder::batch(first_item.clone(), 1))
-        .unwrap();
-
-    game.select_research("automation").unwrap();
-
-    let filed: Vec<(ItemId, u32, bool)> = game
-        .work_orders()
-        .iter()
-        .map(|o| (o.item.clone(), o.qty, o.for_research))
-        .collect();
-    let mut expected: Vec<(ItemId, u32, bool)> = bill
-        .iter()
-        .map(|(item, need)| (item.clone(), *need, true))
-        .collect();
-    expected.push((first_item.clone(), 1, false));
-    assert_eq!(
-        filed, expected,
-        "the project's lines lead, in bill order, above the player's own"
-    );
-}
-
-/// Abandoning takes the project's own orders back out, leaves the player's
-/// alone, and **keeps** the progress — coming back to a long project is not
-/// destructive.
-#[test]
-fn abandoning_withdraws_the_projects_orders_and_keeps_its_progress() {
+fn abandoning_keeps_the_progress_and_the_players_orders() {
     let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     spawn_machine_with_recipe_at(&mut game, "extractor", "core_fragment", 4, 4);
     game.select_research("automation").unwrap();
-    let mine = game.work_orders()[0].item.clone();
+    assert!(
+        game.work_orders().is_empty(),
+        "a project files no order of its own"
+    );
+    let mine = ItemId::from(ids::CORE_FRAGMENT);
     game.queue_work_order(WorkOrder::batch(mine.clone(), 3))
         .expect("the player's own order for the same material");
     fill_research_progress(&mut game, "automation");
@@ -579,11 +515,7 @@ fn abandoning_withdraws_the_projects_orders_and_keeps_its_progress() {
         .iter()
         .map(|o| (o.item.clone(), o.qty))
         .collect();
-    assert_eq!(
-        left,
-        vec![(mine, 3)],
-        "exactly the player's own order survives"
-    );
+    assert_eq!(left, vec![(mine, 3)], "the player's own order survives");
 }
 
 #[test]

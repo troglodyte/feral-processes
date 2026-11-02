@@ -83,26 +83,12 @@ pub struct WorkOrder {
     /// engine rather than merely the tidiest.
     #[serde(skip)]
     pub(crate) announced_stalled: bool,
-    /// Whether the active research project filed this order rather than the
-    /// player — see `Game::select_research`.
-    ///
-    /// **Provenance, not a plan.** The module header's rule is that an order
-    /// stores what was asked for and never how it will be done; this says
-    /// *who asked*, and nothing about which machines run it or how far along
-    /// it is. It is what lets `Game::withdraw_research_orders` take the
-    /// project's own lines back out and leave the player's alone.
-    ///
-    /// `#[serde(default)]` and **not** `#[serde(skip)]`, unlike
-    /// `announced_stalled` above: a project abandoned after a reload has to
-    /// be able to take its orders with it, so the flag survives the round
-    /// trip. A skipped field is invisible to the RON round trip, so that is
-    /// asserted by a save-then-load test rather than a RON one.
-    #[serde(default)]
-    pub for_research: bool,
     /// Whether the dig plan filed this order rather than the player — see
     /// `Game::sync_dig_order`.
     ///
-    /// Provenance, `for_research`'s rule and its save half: the plan
+    /// **Provenance, not a plan.** The module header's rule is that an order
+    /// stores what was asked for and never how it will be done; this says
+    /// *who asked*. `#[serde(default)]` and not `#[serde(skip)]`: the plan
     /// resizes and withdraws its own lines by this flag and the item
     /// together, never the item alone, so a player's own Core Fragment or
     /// Blank Substrate order is left alone, and a
@@ -120,7 +106,6 @@ impl WorkOrder {
             qty,
             standing: false,
             announced_stalled: false,
-            for_research: false,
             for_dig: false,
         }
     }
@@ -138,17 +123,6 @@ impl WorkOrder {
         Self {
             standing: true,
             ..Self::batch(item, qty)
-        }
-    }
-
-    /// Marks it as filed on the active research project's behalf.
-    ///
-    /// A setter rather than a third constructor: a provenance is a value *on*
-    /// an order, not a kind of order.
-    pub fn with_research(self) -> Self {
-        Self {
-            for_research: true,
-            ..self
         }
     }
 
@@ -289,6 +263,24 @@ pub(crate) fn no_producer(game: &Game, item: &ItemId) -> String {
     }
 }
 
+/// What a research bill's line says when the shelves cannot cover it and
+/// nothing in the queue is making it — `no_producer`'s shape, one rung
+/// later: the machine stands, and the base has not been asked to run it.
+///
+/// A **standing** order, because a one-shot batch aims at what the base
+/// holds while the Station keeps draining it, and so overproduces.
+pub(crate) fn no_order_for(game: &Game, item: &ItemId) -> String {
+    let name = game.item_name(item);
+    format!("No {name} to carry in — file a standing work order for it.")
+}
+
+/// What a research bill's line says when the base holds some of it but no
+/// program at a Research Station can walk to where it is.
+pub(crate) fn no_reach_for(game: &Game, item: &ItemId) -> String {
+    let name = game.item_name(item);
+    format!("The Research Station can't reach the {name} on hand.")
+}
+
 /// The one sentence naming why a line for `item` can never move, or `None`
 /// if it is whole.
 ///
@@ -311,14 +303,13 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
 /// The one sentence naming why a line for `item` can **never** be paid, or
 /// `None` if something could pay it — the research project's own refusal,
 /// since a project is taken on flagged for anything the player can clear
-/// (`select_research`) and its line filed to wait for it
-/// (`queue_work_order`). Two breaks are permanent: an item that does not
+/// (`select_research`). Two breaks are permanent: an item that does not
 /// exist, and a banked item, which never lands in a buffer so no holding
 /// can ever pay it, while its producer always `can_progress` and would hold
 /// a body forever. An item nothing *makes* is deliberately not one: a mod's
 /// bill may name a drop, and the shelves holding it in full pays it
 /// (`research_block_memo`), so the flag — "Nothing the base can build makes
-/// it" — is the right sentence and the line's stalled order is harmless.
+/// it" — is the right sentence.
 pub(crate) fn permanent_break(game: &Game, item: &ItemId) -> Option<String> {
     find_break(game, item)
         .filter(|b| b.permanent)
@@ -3258,40 +3249,16 @@ impl Game {
         // This reads which machines are standing, and they stand in the
         // field.
         self.require_field()?;
-        // A research line is filed whatever stands. The bill is filed once,
-        // at selection, and never topped up (`select_research`), so a line
-        // refused here for a machine not yet built would never be filed at
-        // all; it goes in `Stalled` instead and moves when the machine goes
-        // up, and the research screen's `!` says what it waits on. Only a
-        // break nothing could clear is still refused — `select_research`
-        // refuses the same lines first, so this is the second lock on one
-        // door rather than a reachable refusal.
-        if order.for_research {
-            if let Some(reason) = permanent_break(self, &order.item) {
-                return Err(reason);
-            }
-        } else if let Some(reason) = order_refusal(self, &order.item) {
+        if let Some(reason) = order_refusal(self, &order.item) {
             return Err(reason);
         }
         let name = self.item_name(&order.item).to_string();
         let (qty, standing) = (order.qty, order.standing);
         let mut orders = self.world.resource_mut::<resources::WorkOrders>();
-        // The list is the priority, so a player's order goes to the bottom —
-        // and a research project's goes on top, **after** the project lines
-        // already leading the queue so its bill keeps its own order. Only one
-        // project runs at a time and abandoning withdraws its lines, so the
-        // leading run is this project's alone. A position decided once, at
-        // filing; `move_work_order` is how the player changes it afterwards.
-        let at = if order.for_research {
-            orders
-                .0
-                .iter()
-                .take_while(|queued| queued.for_research)
-                .count()
-        } else {
-            orders.0.len()
-        };
-        orders.0.insert(at, order);
+        // The list is the priority, so a new order goes to the bottom; a
+        // position decided once, at filing, and `move_work_order` is how the
+        // player changes it afterwards.
+        orders.0.push(order);
         // Said differently, because the two are different errands and the
         // flag has nowhere else to show itself until the queue screen
         // learns to say which orders are dormant.
@@ -3393,25 +3360,11 @@ impl Game {
         Ok(target)
     }
 
-    /// Drops every queue entry the active research project filed.
-    ///
-    /// Matched on `WorkOrder::for_research` and never on the item, which is
-    /// the whole reason the flag exists: a player's own order for the same
-    /// material must survive a project being abandoned.
-    ///
-    /// It logs nothing. Withdrawal is bookkeeping the player did not ask
-    /// for, and `cancel_work_order`'s line would be a lie about who
-    /// cancelled it — the one line the player gets is the abandonment
-    /// itself.
-    pub(crate) fn withdraw_research_orders(&mut self) {
-        self.world
-            .resource_mut::<resources::WorkOrders>()
-            .0
-            .retain(|order| !order.for_research);
-    }
-
     /// Every deployed Research Node while a project is active **and still has
-    /// progress left to earn**, and with none active, `study_wants`.
+    /// progress left to earn**; once it has, the first Node alone while its
+    /// bill is outstanding and a shelf it can reach holds some of it (the body
+    /// posted there is what walks the bill in — `hauling::haul_step_system`'s
+    /// research leg); and with none active, `study_wants`.
     ///
     /// This is what staffs a Research Node — there is no `StandingJob` behind
     /// it and no new `MachineStatus`: with no project selected and nothing
@@ -3422,11 +3375,11 @@ impl Game {
     ///
     /// **The saturation gate is the load-bearing half.** Research sits above
     /// `settle_orders` in the ladder, so a want raised here outranks the
-    /// project's own material orders — and once progress reaches the node's
+    /// orders that make the bill — and once progress reaches the node's
     /// `cost`, `systems::deliver_payout` lands nothing (see
     /// `ActiveResearch::credit`). Without the gate a base whose staff is no
     /// larger than its Research Node count held every body on a node producing
-    /// zero while the bill it had just filed went unstaffed below it, and
+    /// zero while the orders making its bill went unstaffed below it, and
     /// the project could never complete. `Stock`'s clog has no equivalent here
     /// to stall the cycle and hand the body on, because a banked resource never
     /// fills a buffer.
@@ -3437,7 +3390,7 @@ impl Game {
     /// `(Entity, u32)` depth pairs `settle_orders` answers with: a Research
     /// Node is the top of its own line and has no recipe tree behind it to
     /// measure a depth against.
-    fn research_wants(&self) -> Vec<(Entity, TaskKind)> {
+    fn research_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let research = self.world.resource::<resources::ActiveResearch>();
         let Some(id) = research.id.as_ref() else {
             return self.study_wants();
@@ -3447,13 +3400,30 @@ impl Game {
         // earn, which frees the body rather than parking it forever on a
         // project that can never resolve — `ActiveContract`'s reason for
         // storing its whole def, arrived at from the other side.
-        let goal = self
-            .world
-            .resource::<ResearchDb>()
-            .get(id)
-            .map_or(0, |def| def.cost);
-        if earned >= goal {
+        let Some(def) = self.world.resource::<ResearchDb>().get(id) else {
             return Vec::new();
+        };
+        if earned >= def.cost {
+            // The data is in; what is left is carrying the bill. One Station
+            // is enough for that, and only while it can walk to a unit of an
+            // outstanding line it may take (`research_bill_reachable`) — `build_is_workable`'s deadlock
+            // rule: a Station staffed with nothing it can fetch would hold the
+            // body that should be making the material.
+            let owed: Vec<ItemId> = research
+                .outstanding(id, &def.materials)
+                .into_iter()
+                .map(|(item, _)| item)
+                .collect();
+            let Some(station) = producers_of(self, &self.research_currency())
+                .into_iter()
+                .find(|&machine| can_progress(self, machine))
+            else {
+                return Vec::new();
+            };
+            if owed.is_empty() || !self.research_bill_reachable(station, &owed) {
+                return Vec::new();
+            }
+            return vec![(station, TaskKind::GatherResource)];
         }
         producers_of(self, &self.research_currency())
             .into_iter()

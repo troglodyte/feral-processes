@@ -201,7 +201,7 @@ fn a_station_still_holding_a_program_stalls_completion_with_its_own_text() {
     pin_subject_at_pen(&mut game, subject, station);
     game.discover_research("paging");
     game.select_research("paging").unwrap();
-    shelve_research_bill(&mut game, "paging", 8, 8);
+    fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
     hold(&mut game, station, 3);
 

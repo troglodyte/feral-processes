@@ -742,3 +742,23 @@ fn the_flag_is_right_straight_after_select_and_after_a_load() {
         "and an abandon clears it"
     );
 }
+
+/// And the tick keeps it fresh: units arriving on a shelf between ticks clear
+/// the flag on the next tick, with no select or load to prompt it.
+#[test]
+fn a_tick_refreshes_the_flag() {
+    let assets = slow_assets("research_fed_snapshot_tick");
+    let mut game = Game::new(9722, DifficultyMode::Forgiving, &assets).unwrap();
+    let (_, depot) = station_with_project(&mut game, "slow_billed");
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+    let want = crate::game::base::work_orders::no_order_for(&game, &fragment);
+    assert_eq!(
+        research_node(&game, "slow_billed").blocked_by.as_deref(),
+        Some(want.as_str())
+    );
+
+    set_shelf(&mut game, depot, ids::CORE_FRAGMENT, 12);
+    game.tick();
+
+    assert_eq!(research_node(&game, "slow_billed").blocked_by, None);
+}

@@ -83,7 +83,14 @@
   `Game::research_supply` — reachable sources, hoppers, loads in a Station
   program's hands, never `base_holding` — cannot read a shelf as supply that
   no body is ever posted to fetch; units out of reach read
-  `work_orders::no_reach_for`. Delivered is per node
+  `work_orders::no_reach_for`. **The views read a snapshot**,
+  `ActiveResearch::reach`, written by `Game::refresh_research_reach` once a
+  tick (`settle_research`) and after a select, an abandon, a completion and
+  a load — the readout, the attention row and the pin mark run every frame,
+  and walking the reach per read cost up to ~100 searches a frame. A field
+  on the existing resource, never saved, because a new `Resource` shifts
+  bevy's iteration order. A test that edits the world between ticks calls
+  the refresh before reading the flag. Delivered is per node
   like `progress`, kept through an abandon, never refunded, removed only by
   `grant_research`; saved as `SaveData::research_delivered`, asserted by a
   save→load test. An old save's `for_research: true` order loads as an

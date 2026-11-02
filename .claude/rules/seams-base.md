@@ -271,7 +271,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   only what it can reach — in `haul_step_system`'s research leg, every
   load capped by one per-pass `research_supply::ResearchLedger` across all
   Stations, and `Game::absorb_research_deliveries` is the one place it is
-  spent.
+  spent; the screens read `ActiveResearch::reach`, a once-a-tick snapshot,
+  never a live walk.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped.

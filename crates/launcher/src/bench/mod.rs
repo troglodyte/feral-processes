@@ -68,6 +68,18 @@ mod tests {
     fn with_room_in_the_depots() -> std::path::PathBuf {
         use feral_processes_engine::save;
         let mut data = save::load_from_file(&chains_save()).unwrap();
+        for creature in data.creatures.iter_mut().filter(|c| c.tamed) {
+            // Level 10 works at the shipped rate: this test measures a drain,
+            // not skill.
+            creature.skills = feral_processes_engine::skills::Skill::ALL
+                .iter()
+                .map(|s| save::SkillSave {
+                    skill: s.name().to_string(),
+                    level: 10,
+                    practice: 0,
+                })
+                .collect();
+        }
         for depot in data.structures.iter_mut().filter(|s| s.kind == "depot") {
             for (item, qty) in &mut depot.stock_output {
                 if item.0 == "power_cell" {

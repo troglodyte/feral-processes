@@ -556,11 +556,14 @@ impl Game {
     /// visible. Raising the structure just consumes what is already there,
     /// by despawning the site that holds it.
     fn raise_one_tick(&mut self, worker: Entity, site: Entity, target: Position) {
+        // Each builder pays its own steps into the shared meter, so two
+        // builders sum and a level-0 one adds half as fast as a level-10.
+        let steps = self.work_steps(worker, crate::skills::Skill::Build);
         let done = {
             let Some(mut build) = self.world.get_mut::<BuildSite>(site) else {
                 return;
             };
-            build.progress += 1;
+            build.progress += steps;
             build.progress >= build.required_ticks()
         };
         if !done {

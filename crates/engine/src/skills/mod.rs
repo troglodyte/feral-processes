@@ -80,19 +80,33 @@ pub struct SkillTrack {
 /// One track per [`Skill`]. Present only on tamed programs: an entity without
 /// it is never practised and its work sites read a scale of 1.0.
 #[derive(Component, Clone, PartialEq, Eq, Debug, Default)]
-pub struct Skills([SkillTrack; Skill::ALL.len()]);
+pub struct Skills {
+    tracks: [SkillTrack; Skill::ALL.len()],
+    /// Thousandths of a work step not yet paid out, so a pace below one step
+    /// per tick (or above it) averages out without an RNG. Never saved: losing
+    /// it costs less than one step.
+    carry: u32,
+}
 
 impl Skills {
+    /// How many work steps one working tick is worth at `permille` thousandths
+    /// of a step per tick, carrying the remainder to the next tick.
+    pub fn pace_steps(&mut self, permille: u32) -> u32 {
+        let total = self.carry + permille;
+        self.carry = total % 1000;
+        total / 1000
+    }
+
     pub fn level(&self, s: Skill) -> u32 {
-        self.0[s.index()].level
+        self.tracks[s.index()].level
     }
 
     pub fn track(&self, s: Skill) -> SkillTrack {
-        self.0[s.index()]
+        self.tracks[s.index()]
     }
 
     pub fn track_mut(&mut self, s: Skill) -> &mut SkillTrack {
-        &mut self.0[s.index()]
+        &mut self.tracks[s.index()]
     }
 
     /// Installs a track from untrusted input (a species file, a save): a
@@ -104,7 +118,7 @@ impl Skills {
         } else {
             practice
         };
-        self.0[s.index()] = SkillTrack { level, practice };
+        self.tracks[s.index()] = SkillTrack { level, practice };
     }
 }
 

@@ -363,6 +363,7 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     let node = deploy_machine(&mut game, "extractor", "core_fragment", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
     let worker = hauler(&mut game);
+    pin_work_skills(&mut game, worker);
     // The distance is the *player's*: a posted program sets off from
     // wherever you were standing when you posted it, so posting from the
     // far side of the pocket is what buys the walk.

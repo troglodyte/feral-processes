@@ -740,6 +740,23 @@ mod tests {
         }
     }
 
+    /// Every tamed program at level 10 in every skill, which works at the
+    /// shipped rate: these tests count throughput, not skill.
+    fn pin_crew_to_level_ten(path: &std::path::Path) {
+        let mut data = save::load_from_file(path).unwrap();
+        for creature in data.creatures.iter_mut().filter(|c| c.tamed) {
+            creature.skills = feral_processes_engine::skills::Skill::ALL
+                .iter()
+                .map(|s| save::SkillSave {
+                    skill: s.name().to_string(),
+                    level: 10,
+                    practice: 0,
+                })
+                .collect();
+        }
+        save::save_to_file(path, &data).unwrap();
+    }
+
     /// `bench-economy` exists to be measured, so the bar is flow that does not
     /// stop: under standing orders the Patch Routine printer's line, the Bytecode Block factory's line and the
     /// Breach Kit printer must all keep delivering into the Depots for a long stretch,
@@ -752,6 +769,7 @@ mod tests {
         use feral_processes_engine::{WorkOrder, items::ItemId};
         let out = std::env::temp_dir().join("feral_processes_template_bench_economy_flow.bin");
         generate("bench-economy", &out).unwrap();
+        pin_crew_to_level_ten(&out);
         let mut game = Game::load(&out, &assets_dir()).unwrap();
         let _ = std::fs::remove_file(&out);
 

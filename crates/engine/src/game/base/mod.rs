@@ -39,6 +39,7 @@ pub(crate) mod repair;
 pub(crate) mod research_supply;
 pub(crate) mod sabotage;
 pub(crate) mod siphon;
+pub(crate) mod skill_scale;
 pub(crate) mod stock;
 pub(crate) mod structure_hub;
 pub(crate) mod study;

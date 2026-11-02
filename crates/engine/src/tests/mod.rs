@@ -173,6 +173,7 @@ mod wear;
 mod wielded;
 mod wild_density_probe;
 mod work_orders;
+mod work_skills;
 mod workbench;
 mod world_map;
 mod zone;

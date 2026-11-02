@@ -160,6 +160,7 @@ impl Game {
         // applied as it goes, so a save mid-fight loses only the summary.
         world.init_resource::<crate::resources::Brawls>();
         world.init_resource::<crate::resources::PendingProgramLevels>();
+        world.init_resource::<crate::resources::PendingSkillLevels>();
         world.init_resource::<crate::resources::RefitStand>();
         world.insert_resource(TransitQueue::default());
         world.init_resource::<crate::resources::SpeechQueue>();

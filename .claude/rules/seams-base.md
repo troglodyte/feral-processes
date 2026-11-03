@@ -316,7 +316,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   holding it would pin it to a rig that went dark or filled.
 - **Racking ranks in `drift_idle_staff` as two arms: delivery (a body already
   holding a program) above the `OffShift` and respite arms, the pick-up above
-  clearing** — and a carrier that has not left its tile for
+  clearing; the pick-up takes a station's slot before a floor program, and lifts a floor program only to a rack, into room `RackBoard::spare` leaves past the stations** — and a carrier that has not left its tile for
   `RACK_CARRY_PATIENCE_BEATS` hands the program back through the shelter
   chain, so being held out of the pool is bounded.
 - **`Game::shelter_program` is the one never-lose chain — a rack with room,

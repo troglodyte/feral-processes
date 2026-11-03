@@ -2817,6 +2817,8 @@ impl Game {
             // the whole research line, where product in a machine blocks
             // only that machine. Gated like clearing, bar the
             // `CarryingProgram` exclusion — a carrier is this errand's own.
+            // A program on the floor rides this arm too, after the slots, and
+            // ranking above tidy is what keeps it off a stockpile.
             if !sharing && self.try_rack(worker, amenities, &mut racking) {
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));

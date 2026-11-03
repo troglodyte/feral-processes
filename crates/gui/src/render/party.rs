@@ -397,6 +397,19 @@ pub(super) fn companion_rows(
     rows
 }
 
+/// The Manifests page: what Enter on its rail entry opens. Hand-wrapped
+/// into short lines, `options_page_rows`' reason.
+pub(super) fn manifest_intro_rows() -> Vec<Row> {
+    vec![
+        text_row(""),
+        text_row("The full stat sheet for you and every program"),
+        text_row("you own: fight, skills, gear and history."),
+        text_row(""),
+        text_row("Left and Right page between subjects; Tab"),
+        text_row("turns to the other faces of the sheet."),
+    ]
+}
+
 /// The Companions page: the note, then the roster. Its keys live on the
 /// hub's keybar, not in a footer here.
 pub(super) fn roster_rows(game: &mut Game, selected: usize) -> Vec<Row> {

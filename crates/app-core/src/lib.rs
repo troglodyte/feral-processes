@@ -2459,6 +2459,11 @@ pub enum Mode {
     /// The game menu's Manual page: Enter on the rail opens `Mode::Help`,
     /// and Esc from the index comes back here.
     ManualOptions,
+    /// The inventory hub's Manifests page: Enter on the rail opens
+    /// `Mode::Manifest` on its first subject, and Esc from the sheet comes
+    /// back here. A door, like `ManualOptions` — the sheet is full-screen, so
+    /// it cannot be a hub screen itself.
+    ManifestIntro,
 }
 
 impl Mode {
@@ -2701,6 +2706,8 @@ impl Mode {
             // and so is the picker's `SpriteEditor`, reachable only from it.
             | Mode::SpriteOptions
             | Mode::ManualOptions
+            // A hub page, and hubs never layer over a fight.
+            | Mode::ManifestIntro
             | Mode::SpritePicker
             | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers

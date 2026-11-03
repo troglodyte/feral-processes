@@ -202,15 +202,18 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
     ));
 }
 
-/// One skill as a box row: its level and progress to the next.
+/// One skill as a box row: its level and progress to the next, and a bar of
+/// its progress to the cap.
 fn skill_row(s: &SkillView) -> SectionRow {
-    stat(
-        s.skill_label,
-        match s.practice_to_next {
-            Some(next) => format!("Lv {}  {}/{next}", s.level, s.practice),
-            None => format!("Lv {}  max", s.level),
-        },
-    )
+    SectionRow::Skill(s.clone())
+}
+
+/// A skill row's value text: its level and progress to the next.
+pub(super) fn skill_value(s: &SkillView) -> String {
+    match s.practice_to_next {
+        Some(next) => format!("Lv {}  {}/{next}", s.level, s.practice),
+        None => format!("Lv {}  max", s.level),
+    }
 }
 
 /// A band under the ledger, full width.

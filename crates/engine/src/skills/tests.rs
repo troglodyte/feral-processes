@@ -146,3 +146,15 @@ fn seeded_starts_combat_at_neutral_plus_the_bonus_and_work_absolute() {
     let over = Skills::seeded(&[(Skill::Aim, 15)]);
     assert_eq!(over.level(Skill::Aim), SKILL_LEVEL_CAP);
 }
+
+/// The manifest's skill bar: levels toward the cap, with the current level's
+/// practice as the fraction between two whole levels.
+#[test]
+fn progress_to_cap_counts_levels_and_the_part_of_the_next() {
+    assert_eq!(progress_to_cap(0, 0), 0.0);
+    let half = practice_to_next(5).unwrap() / 2;
+    let expected = (5.0 + half as f32 / practice_to_next(5).unwrap() as f32) / 20.0;
+    assert!((progress_to_cap(5, half) - expected).abs() < 1e-6);
+    assert_eq!(progress_to_cap(SKILL_LEVEL_CAP, 0), 1.0);
+    assert!(progress_to_cap(SKILL_LEVEL_CAP - 1, 0) < 1.0);
+}

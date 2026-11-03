@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 171] = [
+const ALL_MODES: [Mode; 172] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -139,6 +139,7 @@ const ALL_MODES: [Mode; 171] = [
     Mode::BaseTrade,
     Mode::BaseCompile,
     Mode::PartyPrograms,
+    Mode::ManifestIntro,
     Mode::PartyRoutines,
     Mode::StaffWellbeing,
     Mode::StaffCoverage,

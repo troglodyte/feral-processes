@@ -1,5 +1,5 @@
 //! The inventory hub: `i` opens a rail of Items, Phase keys, Downed programs
-//! and Tools, then the party's Companions, Programs, Routines and Perks, and
+//! and Tools, then the party's Companions, Manifests, Programs, Routines and Perks, and
 //! every screen that used to hang off the pack still has its door. Driven through `handle_key` throughout, so a lost door fails here.
 
 use feral_processes_engine::items::ids;
@@ -8,12 +8,13 @@ use super::support::*;
 use crate::*;
 use feral_processes_engine::items::DownedProgram;
 
-const RAIL: [Mode; 8] = [
+const RAIL: [Mode; 9] = [
     Mode::Inventory,
     Mode::PhaseKeys,
     Mode::DownedPrograms,
     Mode::Tools,
     Mode::Companion,
+    Mode::ManifestIntro,
     Mode::PartyPrograms,
     Mode::PartyRoutines,
     Mode::Perks,
@@ -60,7 +61,7 @@ fn assert_on_items_in_page(app: &App) {
 }
 
 #[test]
-fn the_inventory_hub_lists_eight_pages_in_rail_order() {
+fn the_inventory_hub_lists_nine_pages_in_rail_order() {
     assert_eq!(Hub::Inventory.kind().title(), "INVENTORY");
     let titles: Vec<_> = Hub::Inventory
         .kind()
@@ -76,6 +77,7 @@ fn the_inventory_hub_lists_eight_pages_in_rail_order() {
             "Downed programs",
             "Tools",
             "Companions",
+            "Manifests",
             "Programs",
             "Routines",
             "Perks"
@@ -95,7 +97,7 @@ fn i_opens_on_items_with_the_cursor_on_the_rail() {
 }
 
 #[test]
-fn rail_up_and_down_wrap_across_the_eight_pages() {
+fn rail_up_and_down_wrap_across_the_nine_pages() {
     let mut app = test_app(9501);
     app.handle_key(GameKey::Char('i'));
     for expected in RAIL[1..].iter().chain(&RAIL[..1]) {
@@ -133,6 +135,36 @@ fn right_and_enter_move_into_the_page_and_esc_steps_out_by_halves() {
         assert!(app.hub_on_rail, "Esc in a page goes to the rail");
         app.handle_key(GameKey::Esc);
         assert_eq!(app.mode, Mode::Playing, "Esc on the rail leaves");
+    }
+}
+
+/// The rail's Manifests page opens the stat sheet itself: Enter or Right
+/// there reads the manifest on its first subject, and Esc from the sheet
+/// comes back to the page with the cursor still on the rail.
+#[test]
+fn the_manifests_rail_entry_opens_the_manifest_and_esc_returns_to_it() {
+    for into in [GameKey::Right, GameKey::Enter] {
+        let mut app = test_app(9504);
+        app.handle_key(GameKey::Char('i'));
+        while app.mode != Mode::ManifestIntro {
+            app.handle_key(GameKey::Down);
+        }
+        assert!(
+            Hub::Inventory
+                .kind()
+                .extra_keys(&app)
+                .contains(&("Enter", "open"))
+        );
+        app.handle_key(into);
+        assert_eq!(app.mode, Mode::Manifest, "{into:?} opens the sheet");
+        assert_eq!(app.manifest_origin, ManifestOrigin::Menu);
+        let first = app.manifest_subjects()[0];
+        assert_eq!(app.pending_manifest, Some(first));
+        app.handle_key(GameKey::Esc);
+        assert_eq!(app.mode, Mode::ManifestIntro);
+        assert!(app.hub_on_rail);
+        app.handle_key(GameKey::Esc);
+        assert_eq!(app.mode, Mode::Playing);
     }
 }
 

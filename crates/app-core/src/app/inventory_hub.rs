@@ -27,6 +27,10 @@ pub const INVENTORY_PAGES: &[HubPage] = &[
         screens: &[Mode::Companion],
     },
     HubPage {
+        title: "Manifests",
+        screens: &[Mode::ManifestIntro],
+    },
+    HubPage {
         title: "Programs",
         screens: &[Mode::PartyPrograms],
     },
@@ -49,5 +53,28 @@ impl HubKind for InventoryHub {
 
     fn table(&self) -> &'static [HubPage] {
         INVENTORY_PAGES
+    }
+
+    /// Enter or Right on the Manifests rail entry opens the sheet itself,
+    /// instead of stepping onto a page with nothing to select — the game
+    /// menu's Manual page's rule.
+    fn key(&self, app: &mut App, key: GameKey) -> bool {
+        if !app.hub_on_rail
+            || app.mode != Mode::ManifestIntro
+            || !matches!(key, GameKey::Enter | GameKey::Right)
+        {
+            return false;
+        }
+        app.menu_origin = Some(Mode::ManifestIntro);
+        app.open_menu_manifest();
+        true
+    }
+
+    fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
+        if app.hub_on_rail && app.mode == Mode::ManifestIntro {
+            vec![("Enter", "open")]
+        } else {
+            Vec::new()
+        }
     }
 }

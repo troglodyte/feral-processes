@@ -255,6 +255,10 @@ fn section_lines(
             SectionRow::Stat(l, v) | SectionRow::Alert(l, v) | SectionRow::Ranked(l, v, _) => {
                 fit_ledger_row(painter, l, v, width, reserve, m).lines()
             }
+            SectionRow::Skill(s) => {
+                let value = super::sections::skill_value(s);
+                fit_ledger_row(painter, s.skill_label, &value, width, reserve, m).lines()
+            }
             SectionRow::Note(_) | SectionRow::Callout(_) => 1,
         })
         .sum()
@@ -277,6 +281,7 @@ fn draw_section(
     };
     subhead(&section.title, &hint, rect, y, painter, m);
     let reserve = reserves_compare(section, ranks);
+    let value_col = skill_value_column(section, painter, m);
     let mut top = y + m.line_height;
     for row in &section.rows {
         let base = top + section_row_h(m) * 0.85;
@@ -315,6 +320,15 @@ fn draw_section(
                     reserve,
                 };
                 lines = draw_pair(&pair, rect, base, painter, m);
+            }
+            SectionRow::Skill(s) => {
+                let at = SkillRowAt {
+                    rect,
+                    base,
+                    reserve,
+                    value_col,
+                };
+                lines = draw_skill_row(s, at, painter, m);
             }
             SectionRow::Note(text) => painter.ui(
                 elided_to_fit(painter, text, m.font_size, rect.w),
@@ -393,6 +407,101 @@ fn draw_pair(pair: &Pair, rect: Rect, base: f32, painter: &Painter, m: &Metrics)
         draw_compare(rank, rect.x + rect.w - compare_w, base, painter, m);
     }
     f.lines()
+}
+
+/// The widest a skill bar grows, in cells. Short, because it sits in the gap
+/// a row already has and is a glance, not a figure — the value beside it is
+/// the figure.
+const SKILL_BAR_CELLS: f32 = 6.0;
+/// The narrowest bar worth drawing; a gap smaller than this gets none.
+const SKILL_BAR_MIN_CELLS: f32 = 2.0;
+
+/// The widest skill value in `section`, so every bar in a box stops at the
+/// same x and they read as one column; zero for a box with no skill row.
+fn skill_value_column(section: &Section, painter: &Painter, m: &Metrics) -> f32 {
+    section
+        .rows
+        .iter()
+        .filter_map(|r| match r {
+            SectionRow::Skill(s) => {
+                Some(painter.measure_ui_advance(super::sections::skill_value(s), m.font_size))
+            }
+            _ => None,
+        })
+        .fold(0.0, f32::max)
+}
+
+/// Where a skill row is drawn: `draw_section`'s row geometry plus the box's
+/// `skill_value_column`.
+struct SkillRowAt {
+    rect: Rect,
+    base: f32,
+    reserve: bool,
+    value_col: f32,
+}
+
+/// A skill's row: the `Stat` pair, then its bar in the gap when the pair
+/// stayed on one line. Returns the lines it took.
+fn draw_skill_row(
+    s: &feral_processes_engine::views::SkillView,
+    at: SkillRowAt,
+    painter: &Painter,
+    m: &Metrics,
+) -> usize {
+    let SkillRowAt {
+        rect,
+        base,
+        reserve,
+        value_col,
+    } = at;
+    let value = super::sections::skill_value(s);
+    let pair = Pair {
+        label: s.skill_label,
+        value: &value,
+        value_color: hud::palette::BODY,
+        tail: None,
+        rank: None,
+        reserve,
+    };
+    let lines = draw_pair(&pair, rect, base, painter, m);
+    if lines == 1
+        && let Some(bar) = skill_bar_rect(s.skill_label, value_col, rect, base, painter, m)
+    {
+        painter.rect(bar.x, bar.y, bar.w, bar.h, hud::palette::BAR_TROUGH);
+        let fill = s.progress_to_cap().clamp(0.0, 1.0);
+        painter.rect(bar.x, bar.y, bar.w * fill, bar.h, hud::palette::CH_GAIN);
+    }
+    lines
+}
+
+/// Where a one-line skill row's bar goes: right-aligned a cell short of the
+/// box's value column (`value_col` wide, against the box's edge — skill boxes
+/// hold no ranked row), at most `SKILL_BAR_CELLS` wide and never closer than
+/// a cell to the label, centred on the text's x-height. `None` when the gap is
+/// too narrow.
+pub(super) fn skill_bar_rect(
+    label: &str,
+    value_col: f32,
+    rect: Rect,
+    base: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> Option<Rect> {
+    let char_w = painter.measure_ui_advance("M", m.font_size);
+    let label_end = rect.x + painter.measure_ui_advance(label, m.font_size) + char_w;
+    let right = rect.x + rect.w - value_col - char_w;
+    let w = (right - label_end).min(SKILL_BAR_CELLS * char_w);
+    if w < SKILL_BAR_MIN_CELLS * char_w {
+        return None;
+    }
+    let h = (m.font_size as f32 * 0.3).round().max(3.0);
+    let mid = base - m.font_size as f32 * 0.32;
+    Some(Rect {
+        x: right - w,
+        y: (mid - h / 2.0).round(),
+        w,
+        h,
+    })
 }
 
 /// One line of a value, split at ` = ` into two colours when the pair has a
@@ -818,5 +927,48 @@ mod tests {
             rank_hint(&ranked, Some(&some)).as_deref(),
             Some("rank of 5")
         );
+    }
+
+    /// A skill row's bar sits between its label and its value with a cell
+    /// clear of each, caps at `SKILL_BAR_CELLS`, and is dropped when the gap
+    /// is too narrow to read — it never pushes the text.
+    #[test]
+    fn a_skill_bar_sits_in_the_gap_and_drops_out_when_there_is_none() {
+        let m = ui_metrics(720.0);
+        let (out, _) = with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let (label, value) = ("Research", "Lv 12  120/400");
+            let label_w = p.measure_ui_advance(label, m.font_size);
+            let value_w = p.measure_ui_advance(value, m.font_size);
+            let at = |w: f32| Rect {
+                x: 100.0,
+                y: 0.0,
+                w,
+                h: 200.0,
+            };
+            let wide = at(label_w + value_w + 20.0 * char_w);
+            let tight = at(label_w + value_w + 3.0 * char_w);
+            (
+                char_w,
+                label_w,
+                value_w,
+                wide,
+                skill_bar_rect(label, value_w, wide, 50.0, p, &m),
+                skill_bar_rect(label, value_w, tight, 50.0, p, &m),
+            )
+        });
+        let (char_w, label_w, value_w, wide, bar, tight) = out;
+        let bar = bar.expect("a roomy row draws its bar");
+        assert!(
+            bar.x >= wide.x + label_w + char_w - 0.01,
+            "clear of the label"
+        );
+        assert!(
+            bar.x + bar.w <= wide.x + wide.w - value_w - char_w + 0.01,
+            "clear of the value"
+        );
+        assert!((bar.w - SKILL_BAR_CELLS * char_w).abs() < 0.01, "capped");
+        assert!(bar.y + bar.h < 50.0, "above the baseline");
+        assert!(tight.is_none(), "a one-cell gap draws no bar");
     }
 }

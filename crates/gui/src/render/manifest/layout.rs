@@ -60,6 +60,10 @@ pub(in crate::render) enum SectionRow {
     Alert(String, String),
     /// A line of free text that is something to act on, in `hud-attention`.
     Callout(String),
+    /// A skill's `Stat` row (`sections::skill_value`) with a small bar of its
+    /// progress to the level cap in the gap between label and value. Carries
+    /// the view whole, so the text and the bar cannot read two tracks.
+    Skill(feral_processes_engine::views::SkillView),
 }
 
 /// The most rows any one box draws. A section is bounded so the worst-case

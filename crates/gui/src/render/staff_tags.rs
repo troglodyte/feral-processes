@@ -34,7 +34,7 @@ pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities
     // `place` orders its own claims by tile, so the map's order is harmless.
     let measured: Vec<(&EntityView, f32)> = shown
         .into_values()
-        .filter(|e| e.is_tamed && !e.is_player && !e.is_companion)
+        .filter(|e| e.on_staff)
         .map(|e| (e, painter.measure_ui(&e.label, TAG_SIZE).width))
         .collect();
     let h = (painter.measure_ui("Ag", TAG_SIZE).height + 2.0 * TAG_PAD) / t;

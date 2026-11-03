@@ -16,7 +16,8 @@ const ALT_LABEL_PAD: f32 = 2.0;
 /// The line from a pushed-out machine label back to its machine.
 const ALT_LEADER: Color = Color { a: 0.45, ..TEXT };
 
-/// Alt's labels: room names, then what each machine and sown plot makes,
+/// Alt's labels: room names, then what each machine and sown plot makes and
+/// the name of each program held rather than worked,
 /// placed by `alt_labels::layout` so that none covers another.
 pub(super) fn draw_alt_labels(
     painter: &Painter,
@@ -34,10 +35,18 @@ pub(super) fn draw_alt_labels(
         .collect();
     cells.sort_unstable_by_key(|c| c.0);
     let mut seen = std::collections::HashSet::new();
+    // A program you hold rather than work — under study, jailed — is named
+    // here and nowhere else: the always-on tags are for staff, so a held one
+    // reads as yours only when asked.
+    let held = entities
+        .iter()
+        .filter(|e| e.is_tamed && !e.on_staff && !e.is_companion)
+        .map(|e| ((e.pos.1, e.pos.0), e.label.as_str()));
     let mut makers: Vec<((i32, i32), &str)> = entities
         .iter()
         .filter(|e| e.is_structure)
         .filter_map(|e| Some(((e.pos.1, e.pos.0), e.making.as_deref()?)))
+        .chain(held)
         .chain(
             cells
                 .into_iter()

@@ -52,7 +52,8 @@ pub(crate) enum LabelKind<'a> {
         cells: &'a [(i32, i32)],
         centre: (i32, i32),
     },
-    /// A machine's product name beside the tile `at`.
+    /// A label beside the tile `at`: a machine's product, or a held
+    /// program's name.
     Machine { at: (i32, i32) },
 }
 

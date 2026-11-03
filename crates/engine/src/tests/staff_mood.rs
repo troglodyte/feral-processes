@@ -109,3 +109,23 @@ fn entity_view_carries_the_staff_step() {
     assert_eq!(game.mood_step(staff[0]), MoodStep::Sulking);
     assert_eq!(view_of(&mut game, staff[0]).mood, MoodStep::Sulking);
 }
+
+/// What the map's always-on staff tags key off: base staff, and not a
+/// program you own that is held rather than worked — a pinned study
+/// subject reads `is_tamed` too, so `is_tamed` alone would tag it.
+#[test]
+fn the_map_view_says_which_owned_programs_are_on_staff() {
+    let mut game = fresh_game();
+    let bodies = staff_of(&mut game, 2);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(bodies[1])
+        .insert(crate::components::UnderStudy { station });
+    assert_eq!(game.program_role(bodies[1]), Some(ProgramRole::UnderStudy));
+
+    assert!(view_of(&mut game, bodies[0]).on_staff);
+    let pinned = view_of(&mut game, bodies[1]);
+    assert!(pinned.is_tamed && !pinned.on_staff);
+    let player = game.player_entity();
+    assert!(!view_of(&mut game, player).on_staff);
+}

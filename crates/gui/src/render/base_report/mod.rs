@@ -138,7 +138,18 @@ pub(super) fn draw_hub_split_page(
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     let (left, right) = split_columns(content, m);
     draw_rows_in(left, rows, !on_rail, painter, m);
-    draw_rows_in(right, side, false, painter, m);
+    let h = side_box_height(side.len(), right.h, m);
+    // The frame's own border colour at half its weight, so the box reads
+    // as part of the page rather than a popup over it.
+    painter.rect_lines(right.x, right.y, right.w, h, 1.0, hud::palette::PANE_BORDER);
+    let inner = Rect::new(right.x, right.y + m.pad / 2.0, right.w, h - m.pad);
+    draw_rows_in(inner, side, false, painter, m);
+}
+
+/// The outline around the side column hugs its rows, a half pad above and
+/// below them, and stops at the column's foot.
+fn side_box_height(rows: usize, room: f32, m: &Metrics) -> f32 {
+    (rows as f32 * m.line_height + m.pad).min(room)
 }
 
 /// The content rect cut into two equal columns with a pad between them.
@@ -248,6 +259,21 @@ pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
         .iter()
         .enumerate()
         .map(|(page, entry)| (page, entry.screens[0]))
+}
+
+#[cfg(test)]
+mod side_box_tests {
+    use super::*;
+
+    #[test]
+    fn the_side_box_grows_with_its_rows_and_stops_at_the_column_foot() {
+        let m = crate::text::ui_metrics(720.0);
+        let short = side_box_height(3, 1000.0, &m);
+        let long = side_box_height(9, 1000.0, &m);
+        assert!((long - short - 6.0 * m.line_height).abs() < 0.01);
+        assert!(short > 3.0 * m.line_height, "a pad around the rows");
+        assert_eq!(side_box_height(500, 400.0, &m), 400.0);
+    }
 }
 
 /// What every screen's width census shares.

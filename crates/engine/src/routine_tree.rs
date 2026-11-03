@@ -164,10 +164,11 @@ pub fn roll_part_finds(
 }
 
 /// Every part some shipped program can carry, a Core's lower rungs included
-/// since `findable_parts` walks down to them: a species' kit, the wild pool
-/// and the exclusives a boss drops to install on one. A discoverable part
-/// outside it has no carrier, so a study of any subject may find it
-/// (ADR 0041).
+/// since `findable_parts` walks down to them: a species' kit and the wild
+/// pool. An exclusive routine is not carried: no program ever has one, it
+/// only drops from a boss or sells at a trader (`exclusive_only_parts`). A
+/// discoverable part outside it has no carrier, so a study of any subject
+/// may find it (ADR 0041).
 pub fn program_carried_parts(
     abilities: &crate::abilities::AbilityDb,
     species: &crate::species::SpeciesDb,
@@ -179,15 +180,35 @@ pub fn program_carried_parts(
             .into_iter()
             .map(|(d, _)| d.id.as_str()),
     );
-    ids.extend(
-        abilities
-            .exclusive_pool()
-            .into_iter()
-            .map(|d| d.id.as_str()),
-    );
     for def in species.all() {
         ids.extend(def.abilities.iter().map(|a| a.id.as_str()));
     }
+    parts_with_rungs(abilities, ids)
+}
+
+/// The parts only an exclusive routine makes (lower rungs included) that
+/// `program_carried_parts` does not contain. They are found from the drop or
+/// the trade that pays them, or by a study at a lower weight.
+pub fn exclusive_only_parts(
+    abilities: &crate::abilities::AbilityDb,
+    species: &crate::species::SpeciesDb,
+) -> std::collections::BTreeSet<Subroutine> {
+    let carried = program_carried_parts(abilities, species);
+    let ids = abilities
+        .exclusive_pool()
+        .into_iter()
+        .map(|d| d.id.as_str())
+        .collect();
+    parts_with_rungs(abilities, ids)
+        .into_iter()
+        .filter(|p| !carried.contains(p))
+        .collect()
+}
+
+fn parts_with_rungs(
+    abilities: &crate::abilities::AbilityDb,
+    ids: std::collections::BTreeSet<&str>,
+) -> std::collections::BTreeSet<Subroutine> {
     let carried: Vec<Subroutine> = ids
         .into_iter()
         .filter_map(|id| abilities.get(id).and_then(crate::routine_craft::decompose))

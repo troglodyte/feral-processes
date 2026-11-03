@@ -592,6 +592,36 @@ fn a_built_routine_survives_a_save_and_load_on_the_player_and_a_companion() {
     assert!(loaded.world.resource::<AbilityDb>().get(&spare).is_some());
 }
 
+/// `Core::Haste` is appended to the enum so no saved discriminant moves:
+/// a routine built from the old last Core and one built from Haste both
+/// come back as written.
+#[test]
+fn routines_on_the_old_last_core_and_on_haste_survive_a_save_and_load() {
+    let mut game = bench_game(70_030);
+    let symlink = Subroutine::Core(Core::Symlink, Version::V1);
+    let haste = Subroutine::Core(Core::Haste, Version::V3);
+    let old = build(&mut game, "Home", &[symlink]);
+    let new = build(
+        &mut game,
+        "Quicken",
+        &[haste, Subroutine::Area(AreaKind::Group)],
+    );
+    let before = crafted(&game);
+
+    let loaded = round_trip(&mut game, "craft_haste_roundtrip");
+
+    assert_eq!(crafted(&loaded), before);
+    let db = loaded.world.resource::<AbilityDb>();
+    assert!(matches!(
+        db.get(&old).unwrap().effect,
+        crate::abilities::AbilityEffect::Symlink
+    ));
+    assert!(matches!(
+        db.get(&new).unwrap().effect,
+        crate::abilities::AbilityEffect::Haste { version: 3 }
+    ));
+}
+
 #[test]
 fn an_uninstalled_routine_is_gone_from_the_save_and_the_crafted_tier() {
     let mut game = bench_game(70_025);

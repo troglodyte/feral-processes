@@ -161,7 +161,7 @@ fn decompose_reads_the_modifiers_a_routine_implies() {
 
 /// The spec's "What fits which Core", one row per Core:
 /// range, area, trickle, damage type, status.
-const MATRIX: [(Core, [bool; 5]); 31] = [
+const MATRIX: [(Core, [bool; 5]); 32] = [
     (Core::SapMitigation, [true, true, true, false, false]),
     (Core::Damage, [true, true, false, true, true]),
     (Core::Heal, [true, true, true, false, false]),
@@ -193,6 +193,7 @@ const MATRIX: [(Core, [bool; 5]); 31] = [
     (Core::Phase, [false; 5]),
     (Core::Jump, [false; 5]),
     (Core::Symlink, [false; 5]),
+    (Core::Haste, [false, true, false, false, false]),
 ];
 
 #[test]
@@ -645,7 +646,7 @@ fn a_part_held_once_and_needed_twice_spends_one_and_crafts_one() {
 /// Range, no shipped program runs a field Core or most of the late Cores,
 /// and no kit carries these rungs, types or statuses. The two that only an
 /// exclusive makes are also in `EXCLUSIVE_ONLY_PARTS`.
-const UNCARRIED_PARTS: [&str; 53] = [
+const UNCARRIED_PARTS: [&str; 56] = [
     "core.boost_attack.3",
     "core.sap_attack.2",
     "core.sap_attack.3",
@@ -690,6 +691,9 @@ const UNCARRIED_PARTS: [&str; 53] = [
     "core.phase.1",
     "core.jump.1",
     "core.symlink.1",
+    "core.haste.1",
+    "core.haste.2",
+    "core.haste.3",
     "range.near",
     "range.far",
     "type.thermal",
@@ -733,4 +737,73 @@ fn the_parts_only_an_exclusive_makes_are_named() {
         .map(|p| p.key())
         .collect();
     assert_eq!(only, EXCLUSIVE_ONLY_PARTS);
+}
+
+// ---------------------------------------------------------------------------
+// Haste.
+// ---------------------------------------------------------------------------
+
+fn haste_routine(version: Version, extra: &[Subroutine]) -> CraftedRoutine {
+    let mut parts = vec![Subroutine::Core(Core::Haste, version)];
+    parts.extend_from_slice(extra);
+    CraftedRoutine {
+        id: "crafted/1".to_string(),
+        name: "Quicken".to_string(),
+        parts,
+    }
+}
+
+#[test]
+fn each_haste_version_compiles_to_its_effect_and_decomposes_back() {
+    for version in Version::ALL {
+        let def = compile(&haste_routine(version, &[]));
+        assert!(
+            matches!(def.effect, AbilityEffect::Haste { version: v } if u32::from(v) == version.number()),
+            "{:?}",
+            def.effect
+        );
+        assert_eq!(def.target, AbilityTarget::OneAlly);
+        assert!(validate(&def).is_ok(), "{version:?}: {:?}", validate(&def));
+        assert_eq!(
+            decompose(&def),
+            Some(vec![Subroutine::Core(Core::Haste, version)])
+        );
+    }
+}
+
+#[test]
+fn a_group_part_hastes_the_whole_party() {
+    let def = compile(&haste_routine(
+        Version::V2,
+        &[Subroutine::Area(AreaKind::Group)],
+    ));
+    assert_eq!(def.target, AbilityTarget::WholeParty);
+    assert!(validate(&def).is_ok());
+}
+
+#[test]
+fn validate_refuses_an_enemy_target_and_a_version_outside_one_to_three() {
+    let mut def = compile(&haste_routine(Version::V1, &[]));
+    for target in [
+        AbilityTarget::OneEnemyGroupFront,
+        AbilityTarget::WholeEnemyGroup,
+        AbilityTarget::AllEnemies,
+    ] {
+        def.target = target;
+        assert!(validate(&def).is_err(), "{target:?}");
+    }
+    def.target = AbilityTarget::OneAlly;
+    for version in [0, 4] {
+        def.effect = AbilityEffect::Haste { version };
+        assert!(validate(&def).is_err(), "version {version}");
+    }
+}
+
+#[test]
+fn a_haste_sentence_names_the_bonus_and_only_v3_swings_twice() {
+    let line = |v| describe(&haste_routine(v, &[]).parts);
+    assert!(line(Version::V1).contains("+4 movement"));
+    assert!(line(Version::V2).contains("+8 movement"));
+    assert!(!line(Version::V2).contains("twice"));
+    assert!(line(Version::V3).contains("twice"));
 }

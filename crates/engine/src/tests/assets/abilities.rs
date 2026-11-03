@@ -112,6 +112,7 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Symlink
             | E::Summon { .. }
             | E::Cloak { .. }
+            | E::Haste { .. }
             | E::Emulate { .. }
             | E::Tamper { .. }
             // A relocation moves no Integrity at all — it moves a body.
@@ -175,6 +176,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             | E::Symlink
             | E::Summon { .. }
             | E::Cloak { .. }
+            | E::Haste { .. }
             | E::Emulate { .. }
             // A tamper always lands — the forecast is the feature, and a
             // tamper that could fumble would turn a guaranteed read into a
@@ -428,6 +430,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             | E::Buff { .. }
             | E::Cleanse
             | E::Cloak { .. }
+            | E::Haste { .. }
             | E::FieldBuff { .. }
             | E::Phase
             | E::Jump

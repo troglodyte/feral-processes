@@ -112,6 +112,9 @@ pub const CRAFT_DEBUFF: CoreFigures = figures(2, 6.0, 0, 0, 0, 0);
 pub const CRAFT_CLEANSE: CoreFigures = figures(2, 4.0, 0, 0, 0, 0);
 /// `detach`.
 pub const CRAFT_CLOAK: CoreFigures = figures(4, 11.0, 0, 0, 0, 3);
+/// No wild program runs Haste. Cost and cooldown sit just above Boost
+/// Attack's: it lasts the whole fight and stacks with every buff.
+pub const CRAFT_HASTE: CoreFigures = figures(2, 6.0, 0, 0, 0, 0);
 /// `fork_program` at v1.0; v3.0 lands on `fork_cluster`'s 38.
 pub const CRAFT_FORK: CoreFigures = CoreFigures {
     cost_per_version: 9.0,

@@ -45,6 +45,10 @@ fn core_and_version(def: &AbilityDef) -> Option<(Core, Version)> {
         AbilityEffect::Debuff { .. } => (Core::Debuff, Version::V1),
         AbilityEffect::Cleanse => (Core::Cleanse, Version::V1),
         AbilityEffect::Cloak { .. } => (Core::Cloak, Version::V1),
+        AbilityEffect::Haste { version } => (
+            Core::Haste,
+            Version::from_number(u32::from(*version)).unwrap_or(Version::V1),
+        ),
         AbilityEffect::Summon { count, extra, .. } => {
             let version = match (*count, *extra) {
                 (2.., _) => Version::V3,

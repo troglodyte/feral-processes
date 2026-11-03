@@ -71,7 +71,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of nineteen:
+    // What it does to each recipient. Exactly one of twenty:
     //
     //   Damage(power: 6, spread: 2)
     //     Direct damage through the same resolution a move uses: an attack
@@ -199,6 +199,16 @@ way deleting the Currency item does.
     //     (there is no mechanic to cloak an enemy), and a `duration: 0`
     //     (a routine that spends Power and does nothing). This is what
     //     `detach.ron` uses.
+    //
+    //   Haste(version: 2)
+    //     Hastes each recipient for the rest of the fight. `version` is 1,
+    //     2 or 3; anything else is refused at load. It adds battle-map
+    //     movement (4, 8, 8 cells by version) and, at version 3, makes an
+    //     ordinary swing strike twice. Not a buff-slot buff, so it stacks
+    //     with Boost Attack, Boost Mitigation and Defend, and a recast
+    //     keeps the higher version. `target` must be `OneAlly` or
+    //     `WholeParty`, as for `Cloak`. No file uses it: it is built only
+    //     as the Haste Core of a crafted routine.
     //
     //   Decompile
     //     Spends a taming catalyst and rolls a capture against the target

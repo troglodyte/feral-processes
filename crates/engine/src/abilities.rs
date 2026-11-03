@@ -600,6 +600,11 @@ pub enum AbilityEffect {
         /// refuses a `0`: it is a routine that spends Power and does nothing.
         duration: u32,
     },
+    /// Hastes each recipient for the rest of the fight — see
+    /// `components::Hasted`. `version` (1..=3) is what the battle map's
+    /// movement bonus and the v3 double swing read; it is not scaled by the
+    /// invoker, so what a Core's version names is what every level gets.
+    Haste { version: u8 },
     /// Forks temporary programs onto the invoker's side of the fight —
     /// `Game::fork_programs` spawns them and each combat model seats what it
     /// is handed.
@@ -778,6 +783,7 @@ impl AbilityEffect {
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
             | AbilityEffect::Cloak { .. }
+            | AbilityEffect::Haste { .. }
             | AbilityEffect::Summon { .. }
             // Runs in both models — see the variant's own doc.
             | AbilityEffect::Emulate { .. } => false,
@@ -832,6 +838,8 @@ impl AbilityEffect {
             | AbilityEffect::Reinforce
             | AbilityEffect::Emulate { .. }
             | AbilityEffect::Cloak { .. }
+            // `Cloak`'s reason: a fixed version, not a magnitude.
+            | AbilityEffect::Haste { .. }
             // `Summon`'s reason again: `count` is how many marks rise, not
             // a magnitude, and what each rises *at* is the fallen body's own
             // snapshot times a fixed multiplier — nothing here for an
@@ -870,6 +878,8 @@ impl AbilityEffect {
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Cleanse
             | AbilityEffect::Cloak { .. }
+            // Tending your own side, `Buff`'s reason.
+            | AbilityEffect::Haste { .. }
             | AbilityEffect::FieldBuff { .. }
             | AbilityEffect::Phase
             | AbilityEffect::Jump
@@ -1403,6 +1413,23 @@ impl AbilityDef {
         (*duration == 0).then_some("effect: Cloak needs a duration of at least one round")
     }
 
+    /// A `Haste` aimed at an enemy-facing `target`, or carrying a version
+    /// outside 1..=3. `cloak_mismatch`'s target rule, for its reason: there
+    /// is no mechanic to speed an enemy up, and the movement and swing
+    /// tables are indexed by version.
+    fn haste_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::Haste { version } = &self.effect else {
+            return None;
+        };
+        if !matches!(
+            self.target,
+            AbilityTarget::OneAlly | AbilityTarget::WholeParty
+        ) {
+            return Some("effect: Haste requires target: OneAlly or WholeParty");
+        }
+        (!(1..=3).contains(version)).then_some("effect: Haste needs a version of 1, 2 or 3")
+    }
+
     /// A `HealOverTime` with no rounds, or aimed at a non-ally target.
     fn heal_over_time_mismatch(&self) -> Option<&'static str> {
         let AbilityEffect::HealOverTime { rounds, .. } = &self.effect else {
@@ -1589,6 +1616,7 @@ pub fn validate(def: &AbilityDef) -> Result<(), String> {
         def.field_buff_duration_mismatch(),
         def.movement_target_mismatch(),
         def.cloak_mismatch(),
+        def.haste_mismatch(),
         def.heal_over_time_mismatch(),
         def.passive_field_mismatch(),
         def.charge_mismatch(),
@@ -1881,6 +1909,7 @@ pub fn effect_label(
         AbilityEffect::Cloak { duration } => {
             format!("Hides one ally from targeting for {duration} rounds")
         }
+        AbilityEffect::Haste { version } => format!("Hastes the target (version {version})"),
         // No `level`/`affinity` term, `Cloak`'s reason just above: nothing
         // in a Tamper scales with the invoker.
         AbilityEffect::Tamper { kind, duration } => match kind {

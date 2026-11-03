@@ -1927,6 +1927,10 @@ impl Game {
                     self.arm_cloak(recipient, *duration);
                     self.log(format!("{name} detaches {on} from the scheduler."));
                 }
+                AbilityEffect::Haste { version } => {
+                    self.arm_haste(recipient, *version);
+                    self.log(format!("{name} quickens {on}."));
+                }
                 AbilityEffect::Cleanse => {
                     let afflictions: Vec<StatusId> = self
                         .world

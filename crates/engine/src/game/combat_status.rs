@@ -568,6 +568,17 @@ impl Game {
         }
     }
 
+    /// Hastes `entity` at `version`, keeping the higher of it and any haste
+    /// already held: versions never add together.
+    pub(crate) fn arm_haste(&mut self, entity: Entity, version: u8) {
+        match self.world.get_mut::<Hasted>(entity) {
+            Some(mut existing) => existing.version = existing.version.max(version),
+            None => {
+                self.world.entity_mut(entity).insert(Hasted { version });
+            }
+        }
+    }
+
     /// Whether `entity` is currently cloaked — the one read behind all five
     /// of the doors that name a body.
     pub(crate) fn is_cloaked(&self, entity: Entity) -> bool {

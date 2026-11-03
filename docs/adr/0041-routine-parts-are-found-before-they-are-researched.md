@@ -37,7 +37,7 @@ How a part is found:
    - The roll set is the distinct parts, in `Subroutine`'s `Ord` order: the order `parts_used` (which `grant_parts` already uses) yields, so a duplicate part rolls once.
    - Findability is computed once, before any roll, so a v2.0 found in this extraction does not make the v3.0 beside it findable until the next one.
    - One `GameRng` draw per findable part, and **no draw at all** when none is findable. An extraction of fully known parts leaves the stream exactly as today.
-2. **Research Station study.** `eligible_discoveries` gains a `ResearchTree::Routines` arm, admitted only while the routine tree is open. It is narrowed to the findable part nodes of the pinned subject's routines (its `Routines`, through `parts_of_routine`).
+2. **Research Station study.** `eligible_discoveries` gains a `ResearchTree::Routines` arm, admitted only while the routine tree is open. It is narrowed to the findable part nodes of the pinned subject's routines (its `Routines`, through `parts_of_routine`), plus the findable parts **no shipped program carries** (amendment below).
    One pool, one roll at `STUDY_DISCOVERY_CHANCE`, one pick, and a hit spends the subject. This is unchanged from today.
 
 **Findable** means `discoverable`, not discovered, not researched, inside the zone gate, and for a Core v2.0/v3.0, the version below it is **known**.
@@ -72,11 +72,21 @@ An older save loads with no part nodes discovered. `node_researched` keeps every
 - The census `every_discoverable_research_node_is_reachable_from_the_visible_tree` (`tests/assets/structures_research.rs`) and `exactly_the_named_research_nodes_are_discoverable` see synthesised part nodes for the first time. A part is reachable through any program that carries it, not through prerequisites, so the routine tree is excluded from the first. The second names the routine set as "every part node but the starting parts".
 - A part no shipped program decomposes to can never be found. A census asserts every discoverable part node is carried by some shipped species' routine at a zone it spawns in, or names the exceptions.
 
+## Amendment (2026-11-03, user)
+
+The build's census found 51 of the 53 hidden parts carried by no shipped program: `decompose` never yields a Range, no program runs a field Core or most late Cores, and no kit carries Boost Attack v3, Sap v2/v3, Field Mitigation v2/v3, Thermal, Voltage, Exposed, Poison, Throttled or Locked.
+Hidden as written, they could never be found.
+**Decision:** a part outside `routine_tree::program_carried_parts` (a species' kit, the wild pool and the exclusives, with a Core's lower rungs) joins the study pool off **any** pinned subject, under the same findability rule. A carried part still needs a subject carrying it, and extraction is unchanged.
+The census `routine_craft::tests::the_parts_no_shipped_program_carries_are_named` names the set; a new carrier moves a part out of it.
+
 ## Evidence
 
-- `crates/engine/src/routine_tree.rs` — `part_node`, `synthesise_part_nodes`.
-- `crates/engine/src/game/unlocks.rs` — `routine_node_visible`, `routine_node_reachable`, `base_node_visible`, `listed_research`, `select_research`, `eligible_discoveries`, `settle_study`, `discover_research`.
-- `crates/engine/src/game/routines.rs` — `take_routine`, `parts_of_routine`.
+Current as of the build (2026-11-03).
+
+
+- `crates/engine/src/routine_tree.rs` — `part_node`, `synthesise_part_nodes`, `findable_parts`, `roll_part_finds`, `program_carried_parts`.
+- `crates/engine/src/game/unlocks.rs` — `routine_node_visible`, `routine_node_reachable`, `base_node_visible`, `listed_research`, `select_research`, `eligible_discoveries`, `study_findable_part_ids`, `research_id_known`, `settle_study`, `discover_research`.
+- `crates/engine/src/game/routines.rs` — `take_routine`, `findable_routine_parts`, `parts_of_routine`.
 - `crates/engine/src/game/routine_craft.rs` — `grant_starting_routine`.
 - `crates/engine/src/resources.rs` — `DiscoveredResearch`.
-- `crates/engine/src/tuning/meta.rs` — `STUDY_DISCOVERY_CHANCE`.
+- `crates/engine/src/tuning/meta.rs` — `STUDY_DISCOVERY_CHANCE`; `tuning/production.rs` — `ROUTINE_PART_DISCOVERY_CHANCE`; `tuning/routine_craft.rs` — `STARTING_PARTS`.

@@ -1464,8 +1464,8 @@ impl Game {
     }
 
     /// Every node a study may find right now: a **base** node (or an Affixes
-    /// node, while that tree is open, or a part the pinned subject carries —
-    /// `subject_findable_part_ids`) that is
+    /// node, while that tree is open, or a part `study_findable_part_ids`
+    /// names) that is
     /// `discoverable`, not already discovered, not already researched, has
     /// every prerequisite satisfied and is inside the zone the party has
     /// reached.
@@ -1487,7 +1487,7 @@ impl Game {
         // And the Weapons tree's, for the same reason: `discoverable` alone
         // does not admit a new tree.
         let weapons_open = self.weapon_tree_open();
-        let routine_finds = self.subject_findable_part_ids();
+        let routine_finds = self.study_findable_part_ids();
         let discovered = &self
             .world
             .resource::<crate::resources::DiscoveredResearch>()
@@ -1512,22 +1512,40 @@ impl Game {
             .collect()
     }
 
-    /// The part nodes the pinned subject's routines could let a study find,
-    /// empty while the routine tree is closed — so until then the pool, and
-    /// every seeded study roll indexing into it, is what it was before.
-    fn subject_findable_part_ids(&self) -> HashSet<String> {
+    /// The part nodes a study could find: the findable parts of the pinned
+    /// subject's routines, and of every part no shipped program carries
+    /// (`routine_tree::program_carried_parts`), which would otherwise never
+    /// be found. Empty while the routine tree is closed — so until then the
+    /// pool, and every seeded study roll indexing into it, is what it was
+    /// before.
+    fn study_findable_part_ids(&self) -> HashSet<String> {
         if !self.routine_tree_open() {
             return HashSet::new();
         }
-        let Some(subject) = self.pinned_subject() else {
-            return HashSet::new();
-        };
-        let parts: Vec<_> = self
-            .world
-            .get::<crate::components::Routines>(subject)
-            .map(|r| r.0.iter().flat_map(|a| self.parts_of_routine(a)).collect())
-            .unwrap_or_default();
-        self.findable_routine_parts(&parts)
+        let carried = crate::routine_tree::program_carried_parts(
+            self.world.resource::<AbilityDb>(),
+            self.world.resource::<SpeciesDb>(),
+        );
+        let uncarried: Vec<_> = crate::routine_craft::Subroutine::all()
+            .into_iter()
+            .filter(|p| !carried.contains(p))
+            .collect();
+        // A carried rung found here would bypass the subject, so the
+        // uncarried walk keeps only uncarried finds.
+        let mut finds: Vec<_> = self
+            .findable_routine_parts(&uncarried)
+            .into_iter()
+            .filter(|p| !carried.contains(p))
+            .collect();
+        if let Some(subject) = self.pinned_subject() {
+            let parts: Vec<_> = self
+                .world
+                .get::<crate::components::Routines>(subject)
+                .map(|r| r.0.iter().flat_map(|a| self.parts_of_routine(a)).collect())
+                .unwrap_or_default();
+            finds.extend(self.findable_routine_parts(&parts));
+        }
+        finds
             .iter()
             .map(crate::routine_tree::part_node_id)
             .collect()

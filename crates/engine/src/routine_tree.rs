@@ -33,7 +33,6 @@ fn part_node(
     version: u32,
     zone: u32,
     requires: Vec<String>,
-    discoverable: bool,
 ) -> ResearchDef {
     ResearchDef {
         id,
@@ -50,7 +49,7 @@ fn part_node(
         tree: ResearchTree::Routines,
         opens_routine_tree: false,
         requires_subject: false,
-        discoverable,
+        discoverable: false,
         unlocks_fusion: false,
         opens_affix_tree: false,
         decompiler: None,
@@ -78,7 +77,7 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
                 ),
                 _ => (1, 1, Vec::new()),
             };
-            part_node(
+            let node = part_node(
                 part_node_id(&part),
                 part.label(),
                 format!(
@@ -89,8 +88,11 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
                 version,
                 version,
                 requires,
-                !crate::tuning::STARTING_PARTS.contains(&part),
-            )
+            );
+            ResearchDef {
+                discoverable: !crate::tuning::STARTING_PARTS.contains(&part),
+                ..node
+            }
         })
         .collect();
     let start = crate::tuning::CRAFT_PART_CAP_START;
@@ -109,7 +111,6 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
             1,
             crate::tuning::CRAFT_CAPACITY_FIRST_ZONE + step - 1,
             requires,
-            false,
         ));
     }
     nodes
@@ -159,5 +160,40 @@ pub fn roll_part_finds(
         .iter()
         .copied()
         .filter(|_| rng.random_bool(chance))
+        .collect()
+}
+
+/// Every part some shipped program can carry, a Core's lower rungs included
+/// since `findable_parts` walks down to them: a species' kit, the wild pool
+/// and the exclusives a boss drops to install on one. A discoverable part
+/// outside it has no carrier, so a study of any subject may find it
+/// (ADR 0041).
+pub fn program_carried_parts(
+    abilities: &crate::abilities::AbilityDb,
+    species: &crate::species::SpeciesDb,
+) -> std::collections::BTreeSet<Subroutine> {
+    let mut ids: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    ids.extend(
+        abilities
+            .wild_pool()
+            .into_iter()
+            .map(|(d, _)| d.id.as_str()),
+    );
+    ids.extend(
+        abilities
+            .exclusive_pool()
+            .into_iter()
+            .map(|d| d.id.as_str()),
+    );
+    for def in species.all() {
+        ids.extend(def.abilities.iter().map(|a| a.id.as_str()));
+    }
+    let carried: Vec<Subroutine> = ids
+        .into_iter()
+        .filter_map(|id| abilities.get(id).and_then(crate::routine_craft::decompose))
+        .flatten()
+        .collect();
+    findable_parts(&carried, |_| true, |_| true)
+        .into_iter()
         .collect()
 }

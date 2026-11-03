@@ -255,17 +255,44 @@ fn routine_pool(game: &Game) -> Vec<String> {
         .collect()
 }
 
+fn carried_anywhere(game: &Game) -> std::collections::BTreeSet<String> {
+    crate::routine_tree::program_carried_parts(
+        game.world.resource::<crate::abilities::AbilityDb>(),
+        game.world.resource::<crate::species::SpeciesDb>(),
+    )
+    .iter()
+    .map(part_node_id)
+    .collect()
+}
+
+/// A carried part enters the pool only off a subject carrying it; a part no
+/// shipped program carries enters it off any subject.
 #[test]
-fn a_study_pool_holds_exactly_the_findable_parts_the_subject_carries() {
+fn a_study_pool_holds_the_subjects_parts_and_the_uncarried_ones() {
     let game = studied_game(4605, true);
-    let mut pool = routine_pool(&game);
-    pool.sort();
-    let mut carried = carried_node_ids(&game);
-    carried.sort();
-    assert_eq!(pool, carried);
+    let carried_anywhere = carried_anywhere(&game);
+    let pool = routine_pool(&game);
+    let mut from_carriers: Vec<String> = pool
+        .iter()
+        .filter(|id| carried_anywhere.contains(*id))
+        .cloned()
+        .collect();
+    from_carriers.sort();
+    let mut subjects = carried_node_ids(&game);
+    subjects.sort();
+    assert_eq!(from_carriers, subjects);
     assert!(
         !pool.contains(&part_node_id(&core(Core::Damage, Version::V1))),
-        "a part the subject does not carry never enters the pool"
+        "a carried part the subject does not carry never enters the pool"
+    );
+    let near = part_node_id(&Subroutine::Range(crate::routine_craft::RangeKind::Near));
+    assert!(
+        !carried_anywhere.contains(&near),
+        "fixture: no program carries Near"
+    );
+    assert!(
+        pool.contains(&near),
+        "an uncarried part is findable by study"
     );
 }
 
@@ -279,10 +306,11 @@ fn a_closed_routine_tree_adds_nothing_to_the_study_pool() {
 fn a_study_of_a_carrier_can_find_its_part() {
     let mut game = studied_game(4607, true);
     // Leave the pool nothing but the subject's parts.
+    let carried_anywhere = carried_anywhere(&game);
     let base: Vec<String> = game
         .eligible_discoveries()
         .into_iter()
-        .filter(|id| !id.starts_with("part/"))
+        .filter(|id| !carried_anywhere.contains(id))
         .collect();
     for id in base {
         game.discover_research(&id, crate::DiscoverySource::Study);

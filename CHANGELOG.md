@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.25
+
+**Compiling an item by hand now runs at your chosen game speed.** The progress bar used to fill at normal speed even when you had sped the game up, so at Fast or Fastest it now finishes two or four times sooner. It costs the same game time as before; you just wait less.
+
 ## 0.21.24
 
 **Your staff now wear their names on the field.** Since the base moved onto the open field, a program on your staff and a wild program of the same kind looked the same. Every staff program you can see now has a small name tag above it, whether it is at its post, hauling or walking, and wild programs have none. When two tags would overlap, the lower one moves up a row, and if there is still no room it is left off. A program you are studying or holding in a Holding Cell is yours but not working, so it gets no tag; hold Alt to see its name beside it. Holding Alt also hides the staff tags while the room and machine labels show.

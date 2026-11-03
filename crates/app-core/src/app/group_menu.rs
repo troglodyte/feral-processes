@@ -221,31 +221,16 @@ const TRADE_ROWS: &[GroupEntry] = &[
     },
 ];
 
-const COMPILE_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        label: "Compile an item",
-        target: Mode::Craft,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !craft_list(false, g).is_empty())
-        },
+const COMPILE_ROWS: &[GroupEntry] = &[GroupEntry {
+    label: "Compile an item",
+    target: Mode::Craft,
+    locality: Locality::Anywhere,
+    available: |app| {
+        app.game
+            .as_ref()
+            .is_some_and(|g| !craft_list(false, g).is_empty())
     },
-    GroupEntry {
-        // Not base-only: the chains come off the loaded assets, not off a
-        // scan around the player, so this one row means the same thing four
-        // frames down as it does standing in the base.
-        label: "Recipes",
-        target: Mode::Recipes,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.recipe_chains().is_empty())
-        },
-    },
-];
+}];
 
 const PROGRAM_ROWS: &[GroupEntry] = &[
     GroupEntry {

@@ -16,7 +16,7 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_runs_all_twelve_pages_in_order() {
+fn the_rail_runs_all_thirteen_pages_in_order() {
     assert_eq!(
         page_modes(),
         vec![
@@ -25,6 +25,7 @@ fn the_rail_runs_all_twelve_pages_in_order() {
             Mode::BaseResearch,
             Mode::BaseTrade,
             Mode::BaseCompile,
+            Mode::Recipes,
             Mode::StaffWellbeing,
             Mode::BaseOutput,
             Mode::BaseStock,
@@ -34,14 +35,14 @@ fn the_rail_runs_all_twelve_pages_in_order() {
             Mode::Alerts
         ]
     );
-    assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 6, 0)));
-    assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 6, 2)));
-    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 9, 1)));
-    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 10, 2)));
+    assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 7, 0)));
+    assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 7, 2)));
+    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 10, 1)));
+    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 11, 2)));
     assert_eq!(hub_of(Mode::WorkOrderPick), None);
     assert_eq!(hub_of(Mode::WorkOrderQuantity), None);
     assert_eq!(hub_of(Mode::StructureAssign), None);
-    assert_eq!(hub_of(Mode::StaffDiscontent), Some((Hub::Base, 5, 2)));
+    assert_eq!(hub_of(Mode::StaffDiscontent), Some((Hub::Base, 6, 2)));
     assert_eq!(hub_of(Mode::Playing), None);
 }
 
@@ -786,7 +787,7 @@ fn each_command_page_lists_its_table_inside_the_base() {
     );
     assert_eq!(
         command_labels(&mut app, Mode::BaseCompile),
-        ["Compile an item", "Recipes"]
+        ["Compile an item"]
     );
 
     let mut station = app_owning_a_program_and_a_research_station(30104);

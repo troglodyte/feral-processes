@@ -29,6 +29,10 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
         screens: &[Mode::BaseCompile],
     },
     HubPage {
+        title: "Recipes",
+        screens: &[Mode::Recipes],
+    },
+    HubPage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -140,8 +144,12 @@ impl App {
         self.scroll(key, rows);
     }
 
-    /// The Machines, Power, Stock and Build-order screens: a cursor over the
-    /// rows the renderer draws from the same engine report, read-only.
+    /// The Machines, Power, Stock, Build-order and Recipes screens: a cursor
+    /// over the rows the renderer draws from the same engine report,
+    /// read-only. Recipes scrolls by entry rather than by drawn line: the
+    /// description and steps under a product are sub-rows the renderer draws
+    /// unselectable, so app-core owns a count it can derive without knowing
+    /// the renderer's line shape.
     pub(crate) fn handle_base_list_key(&mut self, key: GameKey) {
         let Some(game) = self.game.as_ref() else {
             return;
@@ -153,6 +161,7 @@ impl App {
             Mode::BuildOrders => game.build_order_report().len(),
             Mode::DigOrders => game.dig_marks().len(),
             Mode::FloorOrders => game.floor_marks().len(),
+            Mode::Recipes => game.recipe_chains().len(),
             _ => unreachable!("guarded by handle_key's list-screen pattern"),
         };
         self.scroll(key, rows);

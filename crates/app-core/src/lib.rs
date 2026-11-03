@@ -2324,10 +2324,9 @@ pub enum Mode {
     /// Build orders page, third screen: cells marked for a floor finish or
     /// a strip - see `Game::floor_marks`. Scrolls by cursor.
     FloorOrders,
-    /// Every conversion a structure runs, expanded back to raw inputs — see
-    /// `Game::recipe_chains`. Read-only, and reference data rather than a
-    /// view of the base, so it reads the same underground as it does on the
-    /// surface.
+    /// Base report page after Compile: every item the base can make, with
+    /// its makers and inputs - see `Game::recipe_chains`. Read-only; scrolls
+    /// by entry.
     Recipes,
     /// The cross-run achievement profile — every authored rung, earned or
     /// not, with what it pays. Reached from the main menu rather than from a

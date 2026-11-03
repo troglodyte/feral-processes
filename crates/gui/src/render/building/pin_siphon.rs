@@ -14,29 +14,16 @@ pub(crate) fn draw_pin_subject(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows: Vec<Row> = match game.pinned_subject() {
-        Some(subject) => {
-            let name = game.creature_label(subject);
-            vec![item_row(
-                format!("Release {name} from study"),
-                selected == 0,
-            )]
-        }
-        None => {
-            let staff = game.base_staff();
-            if staff.is_empty() {
-                vec![text_row("(nobody on the base staff to pin)")]
-            } else {
-                staff
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, entity)| {
-                        item_row(game.creature_label(entity).to_string(), i == selected)
-                    })
-                    .collect()
-            }
-        }
+    let pinned = game.pinned_subject().map(|e| game.creature_label(e));
+    let staff: Vec<String> = if pinned.is_some() {
+        Vec::new()
+    } else {
+        game.base_staff()
+            .into_iter()
+            .map(|e| game.creature_label(e))
+            .collect()
     };
+    let rows = pin_subject_rows(pinned.as_deref(), &staff, selected);
     draw_popup(
         "Study a program",
         PopupSize::Large,
@@ -45,6 +32,41 @@ pub(crate) fn draw_pin_subject(
         painter,
         m,
     );
+}
+
+/// The rows of `Mode::PinSubject`, `siphon_rows`' shape. The picker opens
+/// straight off a research choice, so it leads with why it wants a body and
+/// what becomes of it — `Game::spend_subject` despawns the subject when its
+/// study settles, project and discovery alike, so the warning is
+/// unconditional. Text rows ahead of the items are `page_rows`' pinned
+/// header, so they neither scroll away nor move the cursor.
+pub(super) fn pin_subject_rows(
+    pinned: Option<&str>,
+    staff: &[String],
+    selected: usize,
+) -> Vec<Row> {
+    if let Some(name) = pinned {
+        return vec![item_row(
+            format!("Release {name} from study"),
+            selected == 0,
+        )];
+    }
+    let mut rows = vec![
+        text_row("This research needs a program to study."),
+        text_row("It's going to hurt, and the program won't survive it."),
+        text_row(""),
+    ];
+    if staff.is_empty() {
+        rows.push(text_row("(nobody on the base staff to pin)"));
+        return rows;
+    }
+    rows.extend(
+        staff
+            .iter()
+            .enumerate()
+            .map(|(i, name)| item_row(name.clone(), i == selected)),
+    );
+    rows
 }
 
 /// `Mode::PinPrisoner` — one row per downed-program record, `draw_pin_subject`'s

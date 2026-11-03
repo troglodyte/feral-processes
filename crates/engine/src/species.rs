@@ -1133,13 +1133,14 @@ impl SpeciesDb {
                     }
                     def.affinities.clamp_all();
                     for (skill, level) in &mut def.starting_skills {
-                        if *level > crate::tuning::SKILL_LEVEL_CAP {
+                        let room = crate::skills::Skills::max_listed(*skill);
+                        if *level > room {
                             warnings.push(format!(
-                                "species {id:?}: {} starting level {level} is above the \
-                                 cap — clamped",
+                                "species {id:?}: {} starting level {level} seeds above the \
+                                 cap — clamped to {room}",
                                 skill.name()
                             ));
-                            *level = crate::tuning::SKILL_LEVEL_CAP;
+                            *level = room;
                         }
                     }
                     def.abilities.retain(|a| {
@@ -2400,6 +2401,27 @@ mod tests {
         assert_eq!(
             db.get("t").unwrap().starting_skills,
             vec![(crate::skills::Skill::Dig, crate::tuning::SKILL_LEVEL_CAP)]
+        );
+    }
+
+    #[test]
+    fn a_combat_bonus_that_seeds_past_the_cap_warns_and_clamps() {
+        let room = crate::tuning::SKILL_LEVEL_CAP - crate::tuning::SKILL_NEUTRAL_LEVEL;
+        let (db, warnings) = load_files(
+            "skills-combat-over-cap",
+            &[(
+                "t",
+                species_file(
+                    "t",
+                    &format!(", starting_skills: [(Force, {}), (Aim, {room})]", room + 1),
+                ),
+            )],
+        );
+        assert_eq!(warnings.len(), 1, "only Force passes the cap: {warnings:?}");
+        let seed = db.get("t").unwrap().seed_skills();
+        assert_eq!(
+            seed.level(crate::skills::Skill::Force),
+            crate::tuning::SKILL_LEVEL_CAP
         );
     }
 

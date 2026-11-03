@@ -193,6 +193,20 @@ fn class_starting_skills_keep_combat_rows_and_drop_the_rest_with_warnings() {
     assert_eq!(seed.level(Skill::Dig), 0);
 }
 
+#[test]
+fn a_class_bonus_that_seeds_past_the_cap_warns_and_clamps() {
+    let dir = scratch_assets_dir("classes_bonus_past_cap");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let room = crate::tuning::SKILL_LEVEL_CAP - crate::tuning::SKILL_NEUTRAL_LEVEL;
+    let text = striker_text_seeding(&format!("[(Force, {}), (Aim, {room})]", room + 1));
+    std::fs::write(dir.join("striker.ron"), text).unwrap();
+    let (db, warnings) = ClassDb::load_dir(&dir).unwrap();
+    assert_eq!(warnings.len(), 1, "only Force passes the cap: {warnings:?}");
+    let seed = db.get(PlayerClass::Striker).unwrap().seed_skills();
+    assert_eq!(seed.level(Skill::Force), crate::tuning::SKILL_LEVEL_CAP);
+    assert_eq!(seed.level(Skill::Aim), crate::tuning::SKILL_LEVEL_CAP);
+}
+
 /// Parsed raw, since `load_dir` repairs what this census forbids.
 #[test]
 fn every_shipped_class_starts_on_combat_skills_within_the_cap() {

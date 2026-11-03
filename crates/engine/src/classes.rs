@@ -224,13 +224,14 @@ impl ClassDb {
                         combat
                     });
                     for (skill, level) in &mut def.starting_skills {
-                        if *level > crate::tuning::SKILL_LEVEL_CAP {
+                        let room = crate::skills::Skills::max_listed(*skill);
+                        if *level > room {
                             warnings.push(format!(
-                                "class {class:?}: {} starting level {level} is above the \
-                                 cap — clamped",
+                                "class {class:?}: {} starting level {level} seeds above the \
+                                 cap — clamped to {room}",
                                 skill.name()
                             ));
-                            *level = crate::tuning::SKILL_LEVEL_CAP;
+                            *level = room;
                         }
                     }
                     db.defs.insert(def.class, def);

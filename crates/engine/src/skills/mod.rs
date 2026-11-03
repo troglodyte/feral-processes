@@ -152,6 +152,16 @@ impl PartialEq for Skills {
 
 impl Eq for Skills {}
 
+/// The level `Skills::seeded` adds a listed bonus to: combat skills start
+/// at neutral, work skills at 0.
+fn seed_base(skill: Skill) -> u32 {
+    if Skill::COMBAT.contains(&skill) {
+        SKILL_NEUTRAL_LEVEL
+    } else {
+        0
+    }
+}
+
 impl Skills {
     /// How many work steps one working tick is worth at `permille` thousandths
     /// of a step per tick, carrying the remainder to the next tick.
@@ -184,14 +194,15 @@ impl Skills {
             skills.set(skill, SKILL_NEUTRAL_LEVEL, 0);
         }
         for (skill, level) in listed {
-            let base = if Skill::COMBAT.contains(skill) {
-                SKILL_NEUTRAL_LEVEL
-            } else {
-                0
-            };
-            skills.set(*skill, base.saturating_add(*level), 0);
+            skills.set(*skill, seed_base(*skill).saturating_add(*level), 0);
         }
         skills
+    }
+
+    /// The most a `starting_skills` row may list for `skill` before `seeded`
+    /// would run past the cap: the cap less the level it seeds from.
+    pub fn max_listed(skill: Skill) -> u32 {
+        SKILL_LEVEL_CAP - seed_base(skill)
     }
 
     /// Saved rows laid over `seed`: a skill the rows do not list keeps the

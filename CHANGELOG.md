@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.18
+
+**Your crew no longer holds a grudge for waiting its turn.** A program queueing behind another for the one tile that reaches a Depot or a machine is now waiting, not stranded, and gets no "Left stranded here" memory for it. Before, every few-tick wait at a single-faced Depot wrote a fresh grudge, and on a busy base the grudges piled up until most of the crew sulked or downed tools. A wait that runs past 250 ticks still counts as stranded, so a carrier stuck behind a program that never moves still sets its load down and says so.
+
 ## 0.21.17
 
 **Fighting now makes your programs, and you, better at it.** There are four combat skills: Aim (how often you hit), Force (how hard a hit lands), Defence (how much a hit is blunted) and Routines (how much Power a routine costs). Each runs from 0 to 20. At level 10 a skill changes nothing, at 0 you would be about a tenth worse than before, and at 20 about a tenth better; everyone starts at 10 or above. A skill rises only through use: Aim on every attack, Force on every hit that lands, Defence on every attack aimed at you, Routines on every routine you pay Power for. Tamed programs and the player both train, and every character starts each skill at the level that changes nothing, with each class and 18 species starting one skill a few levels higher. Amplitude is a new attribute that now sets your damage, and Analysis sets your accuracy instead of your damage. The Analysis page shows the to-hit it buys. A COMBAT box shows a program's combat skills, and a SKILLS box shows yours. Saves from earlier versions load, with each character starting at its class or species level.

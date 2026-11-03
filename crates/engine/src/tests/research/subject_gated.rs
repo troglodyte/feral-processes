@@ -22,7 +22,7 @@ fn a_subject_gated_node_is_taken_on_and_flagged_without_a_pinned_subject() {
         .research_block(&def)
         .expect("nobody is pinned yet, so the gate must be live");
 
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging")
         .expect("an unpinned subject flags the project rather than refusing it");
 
@@ -45,7 +45,7 @@ fn pinning_a_subject_clears_a_subject_gated_projects_flag() {
     let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = base_with_a_research_node(&mut game);
     set_zone(&mut game, 2);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     queue_research_bill(&mut game, "paging");
     assert!(matches!(
@@ -89,7 +89,7 @@ fn an_earning_subject_gated_project_strains_its_subject() {
     // Pinned, nothing selected: held, not worked.
     assert_eq!(at_pen(&game), PinMark::Settled);
 
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging")
         .expect("a subject standing in the pen clears the gate");
     queue_research_bill(&mut game, "paging");
@@ -122,7 +122,7 @@ fn a_project_stalled_on_its_bill_lets_its_subject_settle() {
     let half = 4;
     let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
 
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     queue_research_bill(&mut game, "paging");
     assert_eq!(at_pen(&game), PinMark::Strained);
@@ -156,7 +156,7 @@ fn a_flagged_project_at_full_data_lets_its_subject_settle() {
     let pen = game.study_pen(node).unwrap();
     let half = 4;
     let at_pen = |game: &Game| game.view_pinned_at(pen, half, half)[half as usize][half as usize];
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     let materials = game
         .world
@@ -269,7 +269,7 @@ fn a_second_stations_subject_stays_settled_while_the_first_strains() {
     pin_subject_at_pen(&mut game, a, first);
     pin_subject_at_pen(&mut game, b, second);
 
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
 
     assert_eq!(
@@ -382,7 +382,7 @@ fn unpin_subject_is_refused_while_a_subject_gated_project_is_active() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
 
     let err = game
@@ -535,7 +535,7 @@ fn releasing_a_subjects_station_during_a_battle_does_not_swallow_the_refusal() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging")
         .expect("the pinned subject clears the gate");
 
@@ -617,7 +617,7 @@ fn a_subject_gated_project_does_not_complete_without_a_pinned_subject() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -647,7 +647,7 @@ fn a_subject_gated_project_with_no_pinned_subject_reads_as_blocked() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     game.world
         .entity_mut(program)
@@ -724,7 +724,7 @@ fn completing_a_subject_gated_project_spends_the_pinned_subject() {
         .expect("some shipped ability is wild-poolable");
     game.world.get_mut::<Routines>(program).unwrap().0 = vec![prize.clone()];
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
@@ -791,7 +791,7 @@ fn completing_a_subject_gated_project_destroys_the_subjects_built_routines() {
     game.sync_crafted();
     game.world.get_mut::<Routines>(program).unwrap().0 = vec![built.clone()];
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");
@@ -832,7 +832,7 @@ fn no_rack_does_not_block_a_subject_gated_completion() {
     set_zone(&mut game, 2);
     let program = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, program, node);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");

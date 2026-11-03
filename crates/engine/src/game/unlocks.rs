@@ -508,11 +508,22 @@ impl Game {
             .unwrap_or_else(|| "the routine tree".to_string())
     }
 
-    /// Whether a routine-tree node is visible: the zone gate is its only
-    /// visibility, so a part above the party's zone is absent rather than
-    /// `Locked`.
+    /// Whether a routine-tree node is visible: inside the zone gate, so a
+    /// part above the party's zone is absent rather than `Locked`, and found
+    /// if it is a part that must be found (ADR 0041) — the base tree's rule.
     fn routine_node_visible(&self, def: &ResearchDef) -> bool {
-        def.tree == ResearchTree::Routines && self.research_zone_gate(def).is_none()
+        def.tree == ResearchTree::Routines
+            && self.research_zone_gate(def).is_none()
+            && self.base_node_visible(def)
+    }
+
+    /// Whether the node `id` is known: researched or listed by the base
+    /// tree's rule — the rung a part's next version is findable above.
+    pub(crate) fn research_id_known(&self, id: &str) -> bool {
+        self.world
+            .resource::<ResearchDb>()
+            .get(id)
+            .is_some_and(|d| self.base_node_visible(d))
     }
 
     /// Whether `def` is reachable at all once the routine tree is open —
@@ -1411,8 +1422,7 @@ impl Game {
     /// refundable. The materials step spends nothing: what was delivered was
     /// consumed as it landed (`absorb_research_deliveries`, run first).
     /// **The one door a discovery is written through** — `Game::remember`'s
-    /// rule. `Game::settle_study` is its only caller today; a second
-    /// discovery source is a second caller of this and nothing else.
+    /// rule. `source` picks only the log line.
     ///
     /// Reports whether this was news. Idempotent by construction: a node
     /// already in the set writes nothing, says nothing and pops nothing, so
@@ -1423,7 +1433,7 @@ impl Game {
     /// No `detail`: `Game::research_unlocks` is what *finishing* the node
     /// buys, and quoting it on the discovery would read as the node already
     /// being researched.
-    pub fn discover_research(&mut self, id: &str) -> bool {
+    pub fn discover_research(&mut self, id: &str, source: DiscoverySource) -> bool {
         let Some(def) = self.world.resource::<ResearchDb>().get(id).cloned() else {
             return false;
         };
@@ -1439,7 +1449,12 @@ impl Game {
         // discovery is base news and can land while the party is four frames
         // down the Stack. A plain `log()` is `MessageKind::Info`, which
         // `retain_outcomes_since_battle` prunes.
-        self.log_base(format!("The study uncovers {}.", def.name));
+        self.log_base(match source {
+            DiscoverySource::Study => format!("The study uncovers {}.", def.name),
+            DiscoverySource::Extraction => {
+                format!("Taking it apart shows you how {} is made.", def.name)
+            }
+        });
         self.notify_filled(
             crate::notifications::NotificationKind::ResearchDiscovered,
             &[("name", &def.name), ("description", &def.description)],
@@ -1538,7 +1553,7 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             pool[rng.0.random_range(0..pool.len())].clone()
         };
-        self.discover_research(&id);
+        self.discover_research(&id, DiscoverySource::Study);
         self.spend_subject(subject);
     }
 

@@ -4,6 +4,16 @@
 //! made in two places on purpose — the authored files stay the wild
 //! programs' kits, these are the player's.
 
+use crate::routine_craft::{Core, Subroutine, Version};
+
+/// The parts a new run starts researched, and the only part nodes listed
+/// before they are found (ADR 0041): one heal and one buff, so a fresh crew
+/// has something to build before it has met a program worth taking apart.
+pub const STARTING_PARTS: [Subroutine; 2] = [
+    Subroutine::Core(Core::Heal, Version::V1),
+    Subroutine::Core(Core::BoostAttack, Version::V1),
+];
+
 /// The built-in status a `HealOverTime` arms. Defined in
 /// `damage::statuses`, so it exists whatever `assets/statuses/` holds.
 pub const REGEN_STATUS: &str = "regen";

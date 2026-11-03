@@ -34,7 +34,7 @@ use crate::*;
 /// never write a state the game itself could not reach.
 pub(crate) fn discover_all_research(game: &mut Game) {
     for def in game.research_defs() {
-        game.discover_research(&def.id);
+        game.discover_research(&def.id, crate::DiscoverySource::Study);
     }
 }
 

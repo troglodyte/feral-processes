@@ -199,7 +199,7 @@ fn a_station_still_holding_a_program_stalls_completion_with_its_own_text() {
     set_zone(&mut game, 2);
     let subject = spawn_tamed(&mut game, 10, 3);
     pin_subject_at_pen(&mut game, subject, station);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");

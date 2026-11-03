@@ -589,6 +589,9 @@ fn exactly_the_named_research_nodes_are_discoverable() {
         // The Weapons tree is synthesised from the part catalogue and every
         // node is discoverable by construction (`tests/weapon_tree.rs`).
         .filter(|d| d.tree != crate::research::ResearchTree::Weapons)
+        // So is every routine part but the starting ones (ADR 0041,
+        // `tests/routine_tree.rs`).
+        .filter(|d| d.tree != crate::research::ResearchTree::Routines)
         .map(|d| d.id.as_str())
         .collect();
     found.sort();

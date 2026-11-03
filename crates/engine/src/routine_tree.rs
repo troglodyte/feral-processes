@@ -33,6 +33,7 @@ fn part_node(
     version: u32,
     zone: u32,
     requires: Vec<String>,
+    discoverable: bool,
 ) -> ResearchDef {
     ResearchDef {
         id,
@@ -49,7 +50,7 @@ fn part_node(
         tree: ResearchTree::Routines,
         opens_routine_tree: false,
         requires_subject: false,
-        discoverable: false,
+        discoverable,
         unlocks_fusion: false,
         opens_affix_tree: false,
         decompiler: None,
@@ -59,7 +60,8 @@ fn part_node(
 /// One node per part and one per capacity step, synthesised from the Rust
 /// catalogue (ADR 0029): a Core version needs the version below it, a
 /// modifier stands alone, and each capacity node needs the one before.
-/// Visibility is the zone gate alone, and the cost's zone term shares it.
+/// A part node is hidden until found (ADR 0041) except the starting parts;
+/// a capacity node belongs to no program, so it is listed by zone alone.
 pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
     let mut nodes: Vec<ResearchDef> = Subroutine::all()
         .into_iter()
@@ -87,6 +89,7 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
                 version,
                 version,
                 requires,
+                !crate::tuning::STARTING_PARTS.contains(&part),
             )
         })
         .collect();
@@ -106,6 +109,7 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
             1,
             crate::tuning::CRAFT_CAPACITY_FIRST_ZONE + step - 1,
             requires,
+            false,
         ));
     }
     nodes

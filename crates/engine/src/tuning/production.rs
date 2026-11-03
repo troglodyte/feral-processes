@@ -510,6 +510,12 @@ pub const EXTRACT_BENCH_TICK_STEP: f32 = 0.25;
 /// ordering mean nothing.
 pub const ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT: u32 = 3;
 
+/// The chance each findable part of a routine taken off a program is found
+/// (ADR 0041), rolled per distinct part. A third makes a routine with three
+/// unfound parts likely to show one, so the list fills from fighting without
+/// one extraction emptying a program of everything it can teach.
+pub const ROUTINE_PART_DISCOVERY_CHANCE: f64 = 1.0 / 3.0;
+
 /// Extra units of a program's `rich_in` item (or its `work_resource`
 /// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
 /// tool's own draw — from any tool, regardless of category (spec section

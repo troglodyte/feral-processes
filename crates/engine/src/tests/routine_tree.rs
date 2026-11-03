@@ -9,7 +9,7 @@ use crate::tests::support::{
     unlock_research_chain,
 };
 use crate::views::ResearchState;
-use crate::{DifficultyMode, Game};
+use crate::{DifficultyMode, DiscoverySource, Game};
 
 fn open_routine_tree(game: &mut Game) {
     unlock_research_chain(game, "routine_fabrication");
@@ -69,6 +69,7 @@ fn the_open_tree_lists_the_parts_of_the_zone_and_none_above_it() {
     let mut game = Game::new(9137, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     open_routine_tree(&mut game);
+    discover_all_research(&mut game);
     let listed = listed_routine_ids(&game);
     assert!(listed.contains(&damage_node()), "{listed:?}");
     assert!(
@@ -117,6 +118,7 @@ fn active_research_progress_is_unfiltered_by_tree_and_shows_on_the_other_screen(
     base_with_a_research_node(&mut game);
     open_routine_tree(&mut game);
     let node = damage_node();
+    game.discover_research(&node, DiscoverySource::Study);
     game.select_research(&node).unwrap();
 
     assert!(
@@ -185,4 +187,58 @@ fn a_stale_active_research_clears_on_load() {
             .is_none(),
         "a project naming a node the loaded tree no longer has must clear"
     );
+}
+
+fn boost_attack_node() -> String {
+    part_node_id(&Subroutine::Core(Core::BoostAttack, Version::V1))
+}
+
+#[test]
+fn a_new_game_has_both_starting_parts_researched() {
+    let game = Game::new(9142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for part in crate::tuning::STARTING_PARTS {
+        assert!(game.is_researched(&part_node_id(&part)), "{part:?}");
+    }
+}
+
+#[test]
+fn every_part_node_but_the_starting_parts_is_discoverable_and_no_capacity_node_is() {
+    let game = Game::new(9143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let starting: Vec<String> = crate::tuning::STARTING_PARTS
+        .iter()
+        .map(part_node_id)
+        .collect();
+    let db = game.world.resource::<crate::research::ResearchDb>();
+    for d in db.all().filter(|d| d.tree == ResearchTree::Routines) {
+        let expected = d.id.starts_with("part/") && !starting.contains(&d.id);
+        assert_eq!(d.discoverable, expected, "{}", d.id);
+    }
+}
+
+#[test]
+fn an_undiscovered_part_is_unlisted_and_refused_until_found() {
+    let mut game = Game::new(9144, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    open_routine_tree(&mut game);
+    assert!(!listed_routine_ids(&game).contains(&damage_node()));
+    assert!(listed_routine_ids(&game).contains(&boost_attack_node()));
+    assert_eq!(
+        game.select_research(&damage_node()).unwrap_err(),
+        "Unknown research."
+    );
+    assert!(game.discover_research(&damage_node(), DiscoverySource::Study));
+    assert!(listed_routine_ids(&game).contains(&damage_node()));
+}
+
+/// An older save researched parts before they had to be found.
+#[test]
+fn a_researched_but_undiscovered_part_stays_listed() {
+    let mut game = Game::new(9145, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    open_routine_tree(&mut game);
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .insert(damage_node());
+    assert!(listed_routine_ids(&game).contains(&damage_node()));
 }

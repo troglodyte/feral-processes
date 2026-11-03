@@ -10,6 +10,16 @@ use crate::tools::{ToolDb, ToolId};
 
 pub type ResearchId = String;
 
+/// How a node was found, which picks the line `Game::discover_research`
+/// logs; both raise the same notification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiscoverySource {
+    /// A Research Station study of a pinned subject.
+    Study,
+    /// A routine taken off a program (ADR 0041).
+    Extraction,
+}
+
 /// Which research tree a node belongs to — the base tree, authored in
 /// `.ron`, or the routine tree, synthesised from the part catalogue (see
 /// `routine_tree::synthesise_part_nodes`). `Base` is the default so every

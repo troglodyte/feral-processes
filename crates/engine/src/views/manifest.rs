@@ -549,3 +549,10 @@ pub struct SkillView {
     /// `None` at the cap.
     pub practice_to_next: Option<u32>,
 }
+
+impl SkillView {
+    /// See `skills::progress_to_cap`.
+    pub fn progress_to_cap(&self) -> f32 {
+        crate::skills::progress_to_cap(self.level, self.practice)
+    }
+}

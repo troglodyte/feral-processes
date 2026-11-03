@@ -240,6 +240,15 @@ pub fn practice_to_next(level: u32) -> Option<u32> {
     (level < SKILL_LEVEL_CAP).then(|| SKILL_COST_BASE + SKILL_COST_QUAD * level * level)
 }
 
+/// How far `level` (with `practice` into it) is toward `SKILL_LEVEL_CAP`, in
+/// `0.0..=1.0`. Counted in levels, the way the sheet's `Lv N` reads, rather
+/// than in practice, whose quadratic cost would leave every early level an
+/// invisible sliver.
+pub fn progress_to_cap(level: u32, practice: u32) -> f32 {
+    let part = practice_to_next(level).map_or(0.0, |next| practice as f32 / next as f32);
+    ((level as f32 + part) / SKILL_LEVEL_CAP as f32).min(1.0)
+}
+
 /// Adds `amount`, rolling levels over until the practice runs out or the cap
 /// is reached. Pure: no world, no RNG.
 pub fn practise(track: &mut SkillTrack, amount: u32) -> PractiseOutcome {

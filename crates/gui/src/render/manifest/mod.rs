@@ -2068,6 +2068,19 @@ mod tests {
         assert!(wild.iter().all(|s| s.title != "DEVELOPMENT"));
     }
 
+    /// A skill box's rows as `(label, value)` text; panics on any row that is
+    /// not a skill, since a skill box holds nothing else.
+    fn skill_texts(section: &Section) -> Vec<(&'static str, String)> {
+        section
+            .rows
+            .iter()
+            .map(|r| match r {
+                SectionRow::Skill(s) => (s.skill_label, sections::skill_value(s)),
+                other => panic!("{other:?}"),
+            })
+            .collect()
+    }
+
     /// A tamed program's SKILLS box lists every skill with its level and
     /// progress; a wild one draws none.
     #[test]
@@ -2094,16 +2107,9 @@ mod tests {
             .find(|s| s.title == "SKILLS")
             .expect("a tamed program draws SKILLS");
         assert_eq!(skills.rows.len(), 6, "{:?}", skills.rows);
-        assert!(
-            skills
-                .rows
-                .contains(&SectionRow::Stat("Build".into(), "Lv 3  4/10".into()))
-        );
-        assert!(
-            skills
-                .rows
-                .contains(&SectionRow::Stat("Farm".into(), "Lv 5  max".into()))
-        );
+        let texts = skill_texts(skills);
+        assert!(texts.contains(&("Build", "Lv 3  4/10".to_string())));
+        assert!(texts.contains(&("Farm", "Lv 5  max".to_string())));
 
         let mut wild = Vec::new();
         program_sections(&mut wild, &game, &plain_program(6, 6));
@@ -2123,25 +2129,14 @@ mod tests {
         program_sections(&mut sections, &game, &program);
         let combat = titled(&sections, "COMBAT");
         assert_eq!(combat.rows.len(), 4, "{:?}", combat.rows);
-        assert!(
-            combat
-                .rows
-                .contains(&SectionRow::Stat("Force".into(), "Lv 12  10/20".into()))
-        );
+        assert!(skill_texts(combat).contains(&("Force", "Lv 12  10/20".to_string())));
         assert_eq!(titled(&sections, "SKILLS").rows.len(), 6);
 
         let mut player = plain_player();
         player.skills = skill_views(&COMBAT_LABELS);
         let sections = sections_for(&game, &player_view(player));
         let skills = titled(&sections, "SKILLS");
-        let labels: Vec<_> = skills
-            .rows
-            .iter()
-            .map(|r| match r {
-                SectionRow::Stat(l, _) => l.as_str(),
-                other => panic!("{other:?}"),
-            })
-            .collect();
+        let labels: Vec<_> = skill_texts(skills).into_iter().map(|(l, _)| l).collect();
         assert_eq!(labels, COMBAT_LABELS);
 
         let sections = sections_for(&game, &player_view(plain_player()));

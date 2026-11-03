@@ -22,7 +22,16 @@ machine will make before you place it.
 1. **A Recipes page on the `b` rail.** One entry per item the player can
    make right now, **alphabetical by item name** (the user's choice). Each
    entry shows:
-   - the item's description (its authored prose, as the current screen does)
+   - **what it is used for** (the user's ask, 2026-11-03), which depends on
+     the item's kind (`ItemCategory`):
+     - a **material** (`ItemCategory::Material`) shows only a
+       `Used in: Hardened Shell, Logic Wafer, …` line, with no prose
+     - **anything else** (gear, consumables such as the Honeypot or Breach
+       Kit) shows its description, briefly, and adds a `Used in:` line too
+       when it is also an ingredient (a Breach Kit goes into a Honeypot)
+     - `Used in:` lists only the unlocked recipes that take the item,
+       alphabetically, and is computed from the same recipe data as the
+       entries, never authored
    - the materials it needs
    - **every** place it can be made: each machine whose recipe list has it,
      the Workbench (gear that needs a bench), and by hand from the base menu
@@ -85,6 +94,12 @@ Marked as my call (Claude's), not the user's; override any of them.
   not does not matter: the page says where it *can* be made.
 - **Extractor outputs get entries** (my call). Core Fragment is "made at an
   Extractor, from nothing"; the user asked "where to build it".
+- **"Briefly" means the authored description as it stands** (my call).
+  Cutting it to its first sentence would leave the Breach Kit reading only
+  "A taming catalyst." If a description reads too long on this page, fix the
+  description in the asset rather than truncating it in code.
+- **A material with no unlocked use** shows no `Used in:` line rather than an
+  empty one (my call).
 - **Costs shown undiscounted** (my call), as the machines run them; perk
   discounts stay on the Compile screen.
 - **Research recipes count.** `ResearchDef::unlocks_recipes` is another way

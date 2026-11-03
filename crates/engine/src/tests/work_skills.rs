@@ -188,7 +188,30 @@ fn the_players_own_work_rate_is_unchanged() {
         (task.kind, task.required),
         (TaskKind::GatherResource, shipped)
     );
-    assert!(game.world.get::<Skills>(player).is_none());
+    // At work tracks of 0 the cycle still pays out in exactly `shipped`
+    // ticks, and the player earns no work practice.
+    assert_eq!(
+        game.world
+            .get::<Skills>(player)
+            .unwrap()
+            .level(Skill::Extract),
+        0
+    );
+    // work_structure already took the first step.
+    for _ in 0..shipped - 1 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<Task>(player).unwrap().progress,
+        0,
+        "paid out"
+    );
+    let t = game
+        .world
+        .get::<Skills>(player)
+        .unwrap()
+        .track(Skill::Extract);
+    assert_eq!((t.level, t.practice), (0, 0));
 }
 
 #[test]

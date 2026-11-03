@@ -398,6 +398,8 @@ pub struct Derived {
     pub status_resist: i32,
     /// The player's capped extra mining chance.
     pub extraction: f32,
+    /// Flat to-hit points the player's attributes add.
+    pub accuracy: f64,
     /// The crit band `Game::combatant_profile` hands to the roll.
     pub crit: f64,
     /// The fumble band `Game::combatant_profile` hands to the roll.
@@ -412,6 +414,7 @@ impl Default for Derived {
             max_power: POWER_MAX,
             status_resist: 0,
             extraction: 0.0,
+            accuracy: 0.0,
             crit: crate::tuning::CRIT_CHANCE,
             fumble: crate::tuning::FUMBLE_CHANCE,
             perception: crate::tuning::PERCEPTION_BASE_RADIUS,

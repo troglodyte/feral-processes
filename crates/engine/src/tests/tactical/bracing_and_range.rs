@@ -201,6 +201,7 @@ fn a_body_that_has_acted_may_not_brace() {
 #[test]
 fn a_brace_is_gone_once_the_order_comes_round() {
     let mut game = game();
+    pin_player_combat(&mut game);
     let pack = tactical_fight(&mut game, 1, 400);
     let player = game.player_entity();
     game.world

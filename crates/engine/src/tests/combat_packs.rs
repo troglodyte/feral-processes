@@ -228,10 +228,8 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
     let species_id = "glitch".to_string();
     let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    {
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.atk = 1000; // guarantees a one-shot kill on the front target below
-    }
+    // 1000 guarantees a one-shot kill on the front target below.
+    crate::tests::support::set_player_atk(&mut game, 1000);
     // Deep and far enough for a group of two: a zone-1 spawn point caps a
     // group at one member, and there would be no second member to promote.
     // Both members carry explicit stats, so the distance scaling that comes

@@ -517,7 +517,7 @@ impl Game {
                 .resource::<SpeciesDb>()
                 .get(species_id)
                 .map(|s| s.seed_skills())
-                .unwrap_or_default(),
+                .unwrap_or_else(|| crate::skills::Skills::seeded(&[])),
         )
     }
 

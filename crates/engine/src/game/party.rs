@@ -1674,6 +1674,7 @@ impl Game {
             .world
             .get::<crate::components::StaffRank>(dominant)
             .copied();
+        let fused_skills = self.world.get::<crate::skills::Skills>(dominant).cloned();
         fn fuse_stat(x: i32, y: i32) -> i32 {
             x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
@@ -1799,6 +1800,11 @@ impl Game {
         }
         if let Some(rank) = fused_rank {
             fused.insert(rank);
+        }
+        // Over `parts`' species seed: the child is the dominant parent's
+        // trained self, not a fresh tame.
+        if let Some(skills) = fused_skills {
+            fused.insert(skills);
         }
         // After `parts`, which carries a level-1 default: a fused child's
         // level is derived from its parents.

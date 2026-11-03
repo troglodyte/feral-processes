@@ -1740,10 +1740,10 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
 /// throwaway species only where a shipped one's equipment chance is too low
 /// to force deterministically.
 fn one_shot_nest(game: &mut Game, nest: Entity) {
-    let player = game.player_entity();
     // Comfortably above NEST_DURABILITY (60), so a single attack_nest call
     // is always lethal regardless of the player's own starting atk.
-    game.world.get_mut::<Stats>(player).unwrap().atk = 1000;
+    let atk = 1000;
+    set_player_figures(game, atk, 0);
     game.attack_nest(nest);
 }
 

@@ -172,6 +172,7 @@ fn equipping_the_same_slot_again_swaps_without_double_counting_the_bonus() {
 #[test]
 fn unequip_removes_bonus_and_returns_item_to_inventory() {
     let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -385,6 +386,7 @@ fn the_fusion_ladder_doubles_its_cost_at_every_rung() {
 fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     // Ablative Plating's base is +12 mitigation, and at that magnitude the
     // *percentage* is now the larger of the two terms: 12 * 1.4 = 17 against
@@ -481,6 +483,7 @@ fn a_refused_fusion_spends_nothing_from_either_store() {
 fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     // One copy to wear, three spares.
     game.world

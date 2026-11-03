@@ -36,6 +36,7 @@ fn reserve_of(game: &Game, entity: Entity) -> f32 {
 #[test]
 fn running_arms_the_buff_and_deducts_power() {
     let mut game = game_with_field_ability();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     game.world
         .entity_mut(player)
@@ -1051,6 +1052,7 @@ fn hurt(game: &mut Game, entity: Entity, by: i32) {
 #[test]
 fn a_costed_heal_runs_outside_battle_and_restores_integrity() {
     let mut game = game_with_field_heal();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     hurt(&mut game, player, 40);
     game.world
@@ -1141,7 +1143,7 @@ fn no_shipped_field_runnable_routine_runs_for_free() {
     );
     let free: Vec<&str> = runnable
         .iter()
-        .filter(|def| abilities::routine_power_cost(def) <= 0.0)
+        .filter(|def| abilities::routine_power_cost(def, None) <= 0.0)
         .map(|def| def.id.as_str())
         .collect();
     assert!(

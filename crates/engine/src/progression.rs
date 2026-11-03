@@ -2,7 +2,7 @@ use crate::attributes::{AttributeDb, AttributeId, DerivedStat};
 use crate::components::{Attributes, Experience, POWER_MAX, Stats};
 use crate::species::SpeciesDef;
 use crate::tuning::{
-    ATK_PER_LEVEL, CANONICAL_ANALYSIS_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, CRIT_CHANCE,
+    ATK_PER_LEVEL, CANONICAL_AMPLITUDE_PER_LEVEL, CANONICAL_PARITY_PER_LEVEL, CRIT_CHANCE,
     CRIT_CHANCE_MAX, DIFFICULTY_EASY_MAX, EMULATION_EDGE, EMULATION_EDGE_PER_PERK_LEVEL,
     FUMBLE_CHANCE, FUMBLE_CHANCE_MAX, HP_PER_LEVEL, MIN_MAX_POWER, MINING_EXTRACTION_CAP,
     PERCEPTION_BASE_RADIUS, PERCEPTION_MIN_RADIUS, PLAYER_BASE_STATS, SETBACK_XP_PENALTY_FRACTION,
@@ -49,7 +49,7 @@ pub struct LevelGain {
     /// Parity and Analysis points a `Growth::ProgramPoints` level-up earned
     /// and `Game::apply_program_levels` has yet to place. Zero otherwise.
     pub parity: u32,
-    pub analysis: u32,
+    pub amplitude: u32,
 }
 
 /// How a level-up changes the levelled body's stats.
@@ -78,7 +78,7 @@ pub fn program_level_points(g: f32, roll: f32) -> (u32, u32) {
     let scaled = |canonical: u32| (canonical as f32 * g * roll).round() as u32;
     (
         scaled(CANONICAL_PARITY_PER_LEVEL),
-        scaled(CANONICAL_ANALYSIS_PER_LEVEL),
+        scaled(CANONICAL_AMPLITUDE_PER_LEVEL),
     )
 }
 
@@ -97,7 +97,7 @@ impl LevelGain {
         self.overflow += other.overflow;
         self.stat_points += other.stat_points;
         self.parity += other.parity;
-        self.analysis += other.analysis;
+        self.amplitude += other.amplitude;
     }
 
     /// The two rows a level-up's stat block always has, measured against
@@ -276,6 +276,10 @@ pub struct DerivedBase {
     pub max_hp: i32,
     pub atk: i32,
     pub mitigation: i32,
+    /// Flat to-hit points before attributes. Defaulted on read, like
+    /// `perception`, because this struct is saved.
+    #[serde(default)]
+    pub accuracy: f64,
     pub decompiler: i32,
     pub max_power: f32,
     pub status_resist: i32,
@@ -300,6 +304,7 @@ impl DerivedBase {
             max_hp: PLAYER_BASE_STATS.max_hp,
             atk: PLAYER_BASE_STATS.atk,
             mitigation: PLAYER_BASE_STATS.mitigation,
+            accuracy: 0.0,
             decompiler: 0,
             max_power: POWER_MAX,
             status_resist: 0,
@@ -334,6 +339,9 @@ pub struct DerivedStats {
     pub max_hp: i32,
     pub atk: i32,
     pub mitigation: i32,
+    /// Flat to-hit points an attribute adds; 0 with none. Unclamped, so a
+    /// below-base attribute can cost accuracy.
+    pub accuracy: f64,
     pub decompiler: i32,
     pub max_power: f32,
     pub status_resist: i32,
@@ -356,6 +364,7 @@ impl DerivedStats {
             S::MaxHp => self.max_hp as f32,
             S::Atk => self.atk as f32,
             S::Mitigation => self.mitigation as f32,
+            S::Accuracy => self.accuracy as f32,
             S::Decompiler => self.decompiler as f32,
             S::MaxPower => self.max_power,
             S::StatusResist => self.status_resist as f32,
@@ -440,6 +449,7 @@ pub fn attribute_contribution(attrs: &Attributes, db: &AttributeDb) -> DerivedSt
         max_hp: rounded(DerivedStat::MaxHp),
         atk: rounded(DerivedStat::Atk),
         mitigation: rounded(DerivedStat::Mitigation),
+        accuracy: sum(DerivedStat::Accuracy) as f64,
         decompiler: rounded(DerivedStat::Decompiler),
         max_power: sum(DerivedStat::MaxPower).round(),
         status_resist: rounded(DerivedStat::StatusResist),
@@ -460,6 +470,7 @@ pub fn derive(base: &DerivedBase, attrs: &Attributes, db: &AttributeDb) -> Deriv
         max_hp: (base.max_hp + c.max_hp).max(1),
         atk: (base.atk + c.atk).max(1),
         mitigation: (base.mitigation + c.mitigation).max(0),
+        accuracy: base.accuracy + c.accuracy,
         decompiler: (base.decompiler + c.decompiler).max(0),
         max_power: (base.max_power + c.max_power).round().max(MIN_MAX_POWER),
         status_resist: (base.status_resist + c.status_resist)
@@ -502,8 +513,8 @@ pub fn canonical_spend(levels: u32) -> BTreeMap<AttributeId, u32> {
             CANONICAL_PARITY_PER_LEVEL * levels,
         ),
         (
-            AttributeId::from("analysis"),
-            CANONICAL_ANALYSIS_PER_LEVEL * levels,
+            AttributeId::from("amplitude"),
+            CANONICAL_AMPLITUDE_PER_LEVEL * levels,
         ),
     ])
 }
@@ -578,9 +589,9 @@ pub fn add_xp(
             }
             Growth::Points => gain.stat_points += STAT_POINTS_PER_LEVEL,
             Growth::ProgramPoints { multiplier, roll } => {
-                let (parity, analysis) = program_level_points(multiplier, roll);
+                let (parity, amplitude) = program_level_points(multiplier, roll);
                 gain.parity += parity;
-                gain.analysis += analysis;
+                gain.amplitude += amplitude;
                 continue;
             }
         }
@@ -650,10 +661,14 @@ mod tests {
         assert_eq!(footprint.max_hp, at.max_hp + 8);
         assert_eq!(footprint.atk, at.atk);
         let analysis = derive(&base, &attrs_at_base(&db, &[("analysis", 2)]), &db);
-        assert_eq!(analysis.atk, at.atk + 2);
+        assert_eq!(analysis.atk, at.atk, "Analysis no longer buys attack");
+        assert_eq!(analysis.accuracy, at.accuracy + 1.0);
         assert_eq!(analysis.decompiler, 2);
         assert!((analysis.extraction - 0.01).abs() < 1e-6);
         assert_eq!(analysis.max_hp, at.max_hp);
+        let amplitude = derive(&base, &attrs_at_base(&db, &[("amplitude", 3)]), &db);
+        assert_eq!(amplitude.atk, at.atk + 3);
+        assert_eq!(amplitude.accuracy, at.accuracy);
         let bandwidth = derive(&base, &attrs_at_base(&db, &[("bandwidth", 5)]), &db);
         assert_eq!(bandwidth.max_power, POWER_MAX + 10.0);
         assert_eq!(bandwidth.max_hp, at.max_hp);
@@ -707,6 +722,7 @@ mod tests {
                 &[
                     ("parity", -1000),
                     ("analysis", -1000),
+                    ("amplitude", -1000),
                     ("footprint", -1000),
                     ("bandwidth", -1000),
                     ("persistence", -1000),
@@ -786,7 +802,9 @@ mod tests {
                 (old.max_hp, old.atk, old.mitigation),
                 "level {n}"
             );
-            assert_eq!(d.decompiler, 2 * n as i32, "level {n}");
+            // Analysis now buys accuracy and the canonical spend never
+            // touches it, so Decompiler no longer climbs with level.
+            assert_eq!(d.decompiler, 0, "level {n}");
         }
         assert_eq!(
             canonical_spend(3).values().sum::<u32>(),
@@ -797,10 +815,10 @@ mod tests {
     fn program_points_equal_the_old_scaled_growth_at_roll_one() {
         let db = shipped_db();
         for g in [1.0f32, 1.25, 1.5, 2.0] {
-            let (parity, analysis) = program_level_points(g, 1.0);
+            let (parity, amplitude) = program_level_points(g, 1.0);
             let attrs = attrs_at_base(
                 &db,
-                &[("parity", parity as i32), ("analysis", analysis as i32)],
+                &[("parity", parity as i32), ("amplitude", amplitude as i32)],
             );
             let d = derive(&DerivedBase::player(), &attrs, &db);
             assert_eq!(
@@ -838,7 +856,7 @@ mod tests {
             0,
         );
         assert_eq!(gain.levels, 1);
-        assert_eq!((gain.parity, gain.analysis), (6, 3));
+        assert_eq!((gain.parity, gain.amplitude), (6, 3));
         assert_eq!((stats.hp, stats.max_hp, stats.atk), (3, 30, 5));
         assert_eq!((gain.max_hp, gain.atk), (0, 0));
     }

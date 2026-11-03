@@ -350,6 +350,7 @@ mod emulation_tests {
     #[test]
     fn worn_gear_still_adds_atk_and_mitigation_while_emulating() {
         let mut game = game();
+        pin_player_combat(&mut game);
         let player = game.player_entity();
         let def = drone(&game);
         game.world.entity_mut(player).insert(Emulation {
@@ -404,6 +405,7 @@ mod emulation_tests {
     #[test]
     fn bought_defender_levels_still_add_mitigation_while_emulating() {
         let mut game = game();
+        pin_player_combat(&mut game);
         let player = game.player_entity();
         let def = drone(&game);
         game.world.entity_mut(player).insert(Emulation {
@@ -430,7 +432,7 @@ mod emulation_tests {
     #[test]
     fn the_creation_stat_pool_writes_no_bought_stats_receipt() {
         let choice = crate::CharacterChoice {
-            stats: [("analysis".into(), 1)].into(),
+            stats: [("amplitude".into(), 1)].into(),
             ..crate::CharacterChoice::default()
         };
         let game = Game::new_with(4, DifficultyMode::Forgiving, &test_assets_dir(), &choice)
@@ -456,6 +458,7 @@ mod emulation_tests {
     #[test]
     fn emulation_options_preview_equals_the_fight_figure_with_gear_and_bought_stats() {
         let mut game = game();
+        pin_player_combat(&mut game);
         let player = game.player_entity();
         let def = drone(&game);
         game.world

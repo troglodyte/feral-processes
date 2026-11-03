@@ -25,8 +25,8 @@ its species' catalogue figure) drives the mining roll through
 program never counts Analysis twice. Each point of an attribute above its
 catalogue `base` moves the derived stats its `effects` name, and
 `progression::derive` is the one function that turns a player's attributes
-into HP, attack, mitigation, decompiler skill, Max Power, status resist,
-extraction, crit and fumble. The level-up and creation Points screens,
+into HP, attack, mitigation, accuracy, decompiler skill, Max Power, status
+resist, extraction, crit and fumble. The level-up and creation Points screens,
 `balance_sim` and the game itself all call it. An attribute with no
 `effects` is flavour only; every shipped attribute has some.
 
@@ -62,7 +62,7 @@ Each file is one attribute:
 | `meaning` | The page's prose: what a high or low value says about this program. **Never what it does** — see below. |
 | `base` | The value a body with nothing authored for it mints around. **It is also the zero point of `effects`**: a player at `base` gets nothing from the attribute, and each point above it (or below, for a negative sum) moves the stats. Editing it therefore shifts every player's derived stats, not only new bodies. |
 | `spread` | How far either side of the base a creature's own value may land. `0` is legal and means every creature reads the same number. Keep it below `base`, or a creature can mint a negative attribute. The player has no spread; see below. |
-| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`, `Crit`, `Fumble`, `Perception`; an unknown name makes the file malformed, and it is skipped with a warning. |
+| `effects` | `#[serde(default)]` — a list of `(stat: <DerivedStat>, per_point: <number>)`. Each point of the attribute above `base` adds `per_point` to that stat. `stat` is one of the closed set `MaxHp`, `Atk`, `Mitigation`, `Accuracy`, `Decompiler`, `MaxPower`, `StatusResist`, `Extraction`, `Crit`, `Fumble`, `Perception`; an unknown name makes the file malformed, and it is skipped with a warning. |
 | `does` | `#[serde(default)]` — the one sentence saying what the effects do, in the player's words, shown beside the attribute on the Points screens. |
 
 The first seven fields are required. `effects` and `does` default to empty,
@@ -80,6 +80,7 @@ it, rounds once per stat, then clamps to the stat's range:
 | `MaxHp` | at least 1 |
 | `Atk` | at least 1 |
 | `Mitigation` | at least 0 |
+| `Accuracy` | flat to-hit points, added to the body's accuracy beside gear; starts at 0 and is not clamped |
 | `Decompiler` | at least 0 |
 | `MaxPower` | at least `tuning::MIN_MAX_POWER` (20) |
 | `StatusResist` | `tuning::STATUS_RESIST_MIN` (-50) to `STATUS_RESIST_MAX` (75), in percent; negative lengthens a status |
@@ -93,15 +94,26 @@ The shipped effects:
 |---|---|
 | Parity | +6 max HP |
 | Footprint | +2 max HP, +1 mitigation |
-| Analysis | +1 attack, +1 decompiler, +0.005 extraction |
+| Analysis | +0.5 accuracy, +1 decompiler, +0.005 extraction, +0.5 perception |
+| Amplitude | +1 attack |
 | Bandwidth | +2 max Power |
 | Persistence | +1% status resist |
 | Entropy | +0.002 crit chance, +0.001 fumble chance |
 
-`tuning::CANONICAL_PARITY_PER_LEVEL` (4) and `CANONICAL_ANALYSIS_PER_LEVEL`
+`tuning::CANONICAL_PARITY_PER_LEVEL` (4) and `CANONICAL_AMPLITUDE_PER_LEVEL`
 (2) reproduce the old automatic per-level growth, and a compile-time assert
-in `tuning.rs` ties them to these Parity and Analysis values, so retuning
+in `tuning.rs` ties them to these Parity and Amplitude values, so retuning
 either `per_point` without those constants fails the build.
+
+**Why Analysis's accuracy is 0.5 a point.** Accuracy is flat points in the same
+currency as a weapon's `accuracy:` (1 to 3 on shipped weapons) and one point
+of Speed (1.0). Half a point per Analysis point makes the 14 points a level-10
+player might put there (+7) worth a little more than two good weapons, which
+is a modest edge and not a second Speed. Every shipped class authors Analysis
+at its base, so no class starts with any of it; it is bought. Amplitude took
+Analysis's old +1 attack, so a class's start ATK is unchanged when its
+Amplitude is `amplitude.base + (its analysis - analysis.base)`.
+`tests::attributes::every_class_starts_at_its_recorded_atk` holds the figures.
 
 ### What is buyable
 

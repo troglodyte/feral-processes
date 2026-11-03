@@ -380,6 +380,7 @@ fn victim(hp: i32) -> AimedVictim {
         range,
         crit: 0.0,
         fumble: 0.0,
+        damage_scale: 1.0,
     };
     AimedVictim {
         hp,

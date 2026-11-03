@@ -1718,11 +1718,10 @@ fn descend_through_a_real_link(game: &mut Game) -> (i32, i32) {
 /// of whether a level-1 party can manage one.
 fn outclass_the_guardian(game: &mut Game) {
     let player = game.player_entity();
+    set_player_figures(game, 100_000, 100_000);
     let mut stats = game.world.get_mut::<Stats>(player).unwrap();
     stats.max_hp = 100_000;
     stats.hp = 100_000;
-    stats.atk = 100_000;
-    stats.mitigation = 100_000;
 }
 
 /// Walks into the lair and puts the guardian down.

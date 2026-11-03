@@ -327,7 +327,7 @@ fn swing_loss(wall: (i32, i32), hostile: bool, atk: i32) -> u32 {
     let actor = if hostile {
         creature_with_atk(&mut game, beside, atk, true)
     } else {
-        game.world.get_mut::<Stats>(player).unwrap().atk = atk;
+        crate::tests::support::set_player_atk(&mut game, atk);
         player
     };
     let mut battle = game.world.resource_mut::<TacticalBattle>();

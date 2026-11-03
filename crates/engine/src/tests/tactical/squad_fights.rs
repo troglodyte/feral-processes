@@ -705,7 +705,7 @@ mod squads {
                 .expect("9 of a kind must seat a squad")
         };
         let player = game.player_entity();
-        game.world.get_mut::<Stats>(player).unwrap().atk = 9999;
+        crate::tests::support::set_player_atk(&mut game, 9999);
 
         let members = game.world.get::<Squad>(squad).unwrap().members.clone();
         assert_eq!(members.len(), 5);

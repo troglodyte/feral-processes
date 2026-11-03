@@ -695,7 +695,7 @@ impl Game {
                 // The charge sits here and not in `use_ability`, which the
                 // wielded proc and hostile invocations share and which stays
                 // free — the `BattleAction::Special` site's rule.
-                self.spend_power(actor, crate::abilities::routine_power_cost(&ability));
+                self.spend_power(actor, self.routine_cost(actor, &ability));
                 self.arm_cooldown(actor, &ability);
                 let name = self.creature_label(actor);
                 self.use_ability(&ability, actor, &name, &recipients);

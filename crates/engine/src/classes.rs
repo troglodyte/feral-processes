@@ -161,6 +161,22 @@ pub struct ClassDef {
     /// by `every_shipped_class_authors_every_attribute`.
     #[serde(default)]
     pub attributes: std::collections::BTreeMap<String, i32>,
+    /// Bonuses over [`SKILL_NEUTRAL_LEVEL`](crate::tuning::SKILL_NEUTRAL_LEVEL)
+    /// for the player's combat skills (ADR 0040): `(Force, 4)` starts Force
+    /// at 14. Work skills are refused, since the player works blind to them.
+    /// `#[serde(default)]`, so a file without it starts every combat skill
+    /// at neutral. `ClassDb::load_dir`
+    /// drops a non-combat row and clamps an over-cap level, each with a
+    /// warning.
+    #[serde(default)]
+    pub starting_skills: Vec<(crate::skills::Skill, u32)>,
+}
+
+impl ClassDef {
+    /// The `Skills` a player of this class starts with.
+    pub fn seed_skills(&self) -> crate::skills::Skills {
+        crate::skills::Skills::seeded(&self.starting_skills)
+    }
 }
 
 /// Every class the game knows about, loaded from `assets/classes/`. See the
@@ -195,7 +211,29 @@ impl ClassDb {
         for path in paths {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<ClassDef>(&text) {
-                Ok(def) => {
+                Ok(mut def) => {
+                    let class = def.class;
+                    def.starting_skills.retain(|(skill, _)| {
+                        let combat = crate::skills::Skill::COMBAT.contains(skill);
+                        if !combat {
+                            warnings.push(format!(
+                                "class {class:?}: {} is not a combat skill — dropped",
+                                skill.name()
+                            ));
+                        }
+                        combat
+                    });
+                    for (skill, level) in &mut def.starting_skills {
+                        let room = crate::skills::Skills::max_listed(*skill);
+                        if *level > room {
+                            warnings.push(format!(
+                                "class {class:?}: {} starting level {level} seeds above the \
+                                 cap — clamped to {room}",
+                                skill.name()
+                            ));
+                            *level = room;
+                        }
+                    }
                     db.defs.insert(def.class, def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid class file {path:?}: {e}")),

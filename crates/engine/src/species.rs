@@ -430,13 +430,10 @@ pub enum AffinityClass {
 
 impl SpeciesDef {
     /// The `Skills` a fresh tame of this species starts with, at zero practice
-    /// toward the next level.
+    /// toward the next level: combat rows are bonuses over neutral, work rows
+    /// absolute (`Skills::seeded`).
     pub fn seed_skills(&self) -> crate::skills::Skills {
-        let mut skills = crate::skills::Skills::default();
-        for (skill, level) in &self.starting_skills {
-            skills.set(*skill, *level, 0);
-        }
-        skills
+        crate::skills::Skills::seeded(&self.starting_skills)
     }
 
     /// Whether this species exists only as the offspring of `parents`.
@@ -1136,13 +1133,14 @@ impl SpeciesDb {
                     }
                     def.affinities.clamp_all();
                     for (skill, level) in &mut def.starting_skills {
-                        if *level > crate::tuning::SKILL_LEVEL_CAP {
+                        let room = crate::skills::Skills::max_listed(*skill);
+                        if *level > room {
                             warnings.push(format!(
-                                "species {id:?}: {} starting level {level} is above the \
-                                 cap — clamped",
+                                "species {id:?}: {} starting level {level} seeds above the \
+                                 cap — clamped to {room}",
                                 skill.name()
                             ));
-                            *level = crate::tuning::SKILL_LEVEL_CAP;
+                            *level = room;
                         }
                     }
                     def.abilities.retain(|a| {
@@ -2376,7 +2374,7 @@ mod tests {
     fn starting_skills_seed_a_species_tames_and_default_to_nothing() {
         use crate::skills::Skill;
         let none: SpeciesDef = ron::from_str(&species_file("t", "")).unwrap();
-        assert_eq!(none.seed_skills(), crate::skills::Skills::default());
+        assert_eq!(none.seed_skills(), crate::skills::Skills::seeded(&[]));
         let some: SpeciesDef = ron::from_str(&species_file(
             "t",
             ", starting_skills: [(Dig, 4), (Farm, 2)]",
@@ -2403,6 +2401,27 @@ mod tests {
         assert_eq!(
             db.get("t").unwrap().starting_skills,
             vec![(crate::skills::Skill::Dig, crate::tuning::SKILL_LEVEL_CAP)]
+        );
+    }
+
+    #[test]
+    fn a_combat_bonus_that_seeds_past_the_cap_warns_and_clamps() {
+        let room = crate::tuning::SKILL_LEVEL_CAP - crate::tuning::SKILL_NEUTRAL_LEVEL;
+        let (db, warnings) = load_files(
+            "skills-combat-over-cap",
+            &[(
+                "t",
+                species_file(
+                    "t",
+                    &format!(", starting_skills: [(Force, {}), (Aim, {room})]", room + 1),
+                ),
+            )],
+        );
+        assert_eq!(warnings.len(), 1, "only Force passes the cap: {warnings:?}");
+        let seed = db.get("t").unwrap().seed_skills();
+        assert_eq!(
+            seed.level(crate::skills::Skill::Force),
+            crate::tuning::SKILL_LEVEL_CAP
         );
     }
 

@@ -139,9 +139,8 @@ pub enum InspectTarget {
 }
 
 pub enum ManifestSubject {
-    Player(PlayerManifest),
-    /// Boxed because a program's sheet is three times the player's and the
-    /// enum would otherwise be sized by the larger arm everywhere it is
+    Player(Box<PlayerManifest>),
+    /// Boxed so the enum is not sized by its larger arm everywhere it is
     /// returned — the shape `clippy::large_enum_variant` names.
     Program(Box<ProgramManifest>),
 }
@@ -158,6 +157,9 @@ impl ManifestView {
 
 /// The player-only half of a manifest.
 pub struct PlayerManifest {
+    /// The four combat skills; the player's work skills are never shown
+    /// (work is blind to the player). Empty for a body without `Skills`.
+    pub skills: Vec<SkillView>,
     /// See `components::PowerReserve`.
     pub power: f32,
     /// See `PlayerStatus::max_power`.
@@ -233,6 +235,8 @@ pub struct ManifestEquipSlot {
 pub struct ProgramManifest {
     /// `None` for a program without `Skills` — a wild one.
     pub skills: Option<Vec<SkillView>>,
+    /// The combat half of the same `Skills`, drawn under the work rows.
+    pub combat_skills: Option<Vec<SkillView>>,
     /// The species name, present only when a `CustomName` is overriding it,
     /// so the header can show "Hexed (Scrapper 2)" without repeating itself
     /// for an unrenamed program.

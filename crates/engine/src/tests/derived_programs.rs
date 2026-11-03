@@ -99,7 +99,7 @@ fn seating_leaves_stats_alone_with_gear_worn_and_a_receipt() {
     let mut game = game();
     let program = unseated_program(&mut game);
     set_attribute(&mut game, program, "parity", 63);
-    set_attribute(&mut game, program, "analysis", 13);
+    set_attribute(&mut game, program, "amplitude", 13);
     set_attribute(&mut game, program, "footprint", 52);
     game.world.entity_mut(program).insert(BoughtStats {
         atk: 3,
@@ -285,13 +285,13 @@ fn feed_one_level(game: &mut Game, program: Entity) {
 }
 
 #[test]
-fn an_unheld_level_raises_parity_and_analysis_and_heals() {
+fn an_unheld_level_raises_parity_and_amplitude_and_heals() {
     let mut game = game();
     let program = seated_program(&mut game);
-    let (parity, analysis) = one_level(&game, program);
+    let (parity, amplitude) = one_level(&game, program);
     let (p0, a0) = (
         attribute(&game, program, "parity"),
-        attribute(&game, program, "analysis"),
+        attribute(&game, program, "amplitude"),
     );
     let max_before = stats_of(&game, program).max_hp;
     game.world.get_mut::<Stats>(program).unwrap().hp = 1;
@@ -299,7 +299,10 @@ fn an_unheld_level_raises_parity_and_analysis_and_heals() {
     feed_one_level(&mut game, program);
 
     assert_eq!(attribute(&game, program, "parity"), p0 + parity as i32);
-    assert_eq!(attribute(&game, program, "analysis"), a0 + analysis as i32);
+    assert_eq!(
+        attribute(&game, program, "amplitude"),
+        a0 + amplitude as i32
+    );
     let after = stats_of(&game, program);
     assert!(after.max_hp > max_before);
     assert_eq!(after.hp, after.max_hp, "a level full-heals");
@@ -312,7 +315,7 @@ fn a_held_level_banks_points_and_moves_no_stat() {
     let mut game = game();
     let program = seated_program(&mut game);
     game.set_hold_points(program, true).unwrap();
-    let (parity, analysis) = one_level(&game, program);
+    let (parity, amplitude) = one_level(&game, program);
     let before = stats_of(&game, program);
     let parity_before = attribute(&game, program, "parity");
 
@@ -320,7 +323,7 @@ fn a_held_level_banks_points_and_moves_no_stat() {
 
     assert_eq!(
         game.world.get::<StatPoints>(program),
-        Some(&StatPoints(parity + analysis))
+        Some(&StatPoints(parity + amplitude))
     );
     assert_eq!(attribute(&game, program, "parity"), parity_before);
     let after = stats_of(&game, program);
@@ -334,12 +337,12 @@ fn turning_hold_off_spends_the_whole_bank() {
     let program = seated_program(&mut game);
     game.set_hold_points(program, true).unwrap();
     // Two levels' worth and a remainder that is not a level.
-    let (parity, analysis) = one_level(&game, program);
-    let bank = 2 * (parity + analysis) + 1;
+    let (parity, amplitude) = one_level(&game, program);
+    let bank = 2 * (parity + amplitude) + 1;
     game.world.get_mut::<StatPoints>(program).unwrap().0 = bank;
     let (p0, a0) = (
         attribute(&game, program, "parity"),
-        attribute(&game, program, "analysis"),
+        attribute(&game, program, "amplitude"),
     );
 
     game.set_hold_points(program, false).unwrap();
@@ -355,8 +358,8 @@ fn turning_hold_off_spends_the_whole_bank() {
         "the remainder lands in Parity"
     );
     assert_eq!(
-        attribute(&game, program, "analysis"),
-        a0 + 2 * analysis as i32
+        attribute(&game, program, "amplitude"),
+        a0 + 2 * amplitude as i32
     );
     assert_eq!(
         stats_of(&game, program).max_hp,
@@ -439,10 +442,10 @@ fn a_posted_workers_level_lands_through_the_drain() {
     let mut game = game();
     stand_ample_grid_supply(&mut game);
     let worker = seated_program(&mut game);
-    let (parity, analysis) = one_level(&game, worker);
+    let (parity, amplitude) = one_level(&game, worker);
     let (p0, a0) = (
         attribute(&game, worker, "parity"),
-        attribute(&game, worker, "analysis"),
+        attribute(&game, worker, "amplitude"),
     );
     let structure = game
         .world
@@ -476,7 +479,7 @@ fn a_posted_workers_level_lands_through_the_drain() {
 
     assert!(game.world.get::<Experience>(worker).unwrap().level >= 2);
     assert_eq!(attribute(&game, worker, "parity"), p0 + parity as i32);
-    assert_eq!(attribute(&game, worker, "analysis"), a0 + analysis as i32);
+    assert_eq!(attribute(&game, worker, "amplitude"), a0 + amplitude as i32);
     assert_eq!(
         stats_of(&game, worker).max_hp,
         game.derived_stats(worker).max_hp
@@ -698,8 +701,8 @@ fn fuse_with_a_bank(levels: u32, spend_first: bool) -> Stats {
     let a = seated_program(&mut game);
     let b = seated_program(&mut game);
     game.set_hold_points(a, true).unwrap();
-    let (parity, analysis) = one_level(&game, a);
-    game.world.get_mut::<StatPoints>(a).unwrap().0 = levels * (parity + analysis);
+    let (parity, amplitude) = one_level(&game, a);
+    game.world.get_mut::<StatPoints>(a).unwrap().0 = levels * (parity + amplitude);
     if spend_first {
         game.set_hold_points(a, false).unwrap();
     }

@@ -1501,7 +1501,7 @@ impl Game {
         // ends the fight below, and a cooldown armed afterwards would be
         // written onto an entity the teardown has already cleaned up.
         self.arm_tactical_cooldown(actor, ability, cooldown_floor);
-        self.spend_power(actor, abilities::routine_power_cost(ability));
+        self.spend_power(actor, self.routine_cost(actor, ability));
         self.resolve_tactical_routine(actor, ability, aim, None);
     }
 
@@ -2099,7 +2099,7 @@ impl Game {
     /// Deliberately provokes nobody: the wind-up does nothing yet, and the
     /// release is the invocation.
     fn begin_tactical_charge(&mut self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) {
-        self.spend_power(actor, abilities::routine_power_cost(ability));
+        self.spend_power(actor, self.routine_cost(actor, ability));
         let shape = self.routine_tactical_shape(ability);
         let battle = self.world.resource::<TacticalBattle>();
         let cells = battle

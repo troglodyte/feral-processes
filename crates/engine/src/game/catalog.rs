@@ -560,7 +560,7 @@ impl Game {
         let accuracy = crate::battle::accuracy_of(
             self.combat_speed(wearer),
             self.ability_user_level(wearer),
-            gear_accuracy,
+            f64::from(gear_accuracy),
         );
 
         let zone = self.world.resource::<ZoneLevel>().0;

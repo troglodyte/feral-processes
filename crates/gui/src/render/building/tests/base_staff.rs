@@ -253,7 +253,7 @@ fn the_selected_rows_skill_line_stays_inside_the_content_rect() {
     use feral_processes_engine::skills::Skill;
     use feral_processes_engine::views::SkillView;
     let mut row = widest_row();
-    row.skills = Skill::ALL
+    row.skills = Skill::WORK
         .iter()
         .map(|s| SkillView {
             skill_label: s.label(),

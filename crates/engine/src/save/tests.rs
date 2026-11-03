@@ -199,6 +199,7 @@ fn sample_data() -> SaveData {
             colour: None,
             icon: None,
             attributes: Default::default(),
+            skills: Vec::new(),
         },
         creatures: Vec::new(),
         structures: Vec::new(),

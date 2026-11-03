@@ -54,8 +54,14 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`balance_sim` gates none of the Power economy** — it models no
   abilities, so the 66 costs, the multiplier and `trickle_charge`'s retune
   are all ungated.
-- **A player's class grants affinities and nothing else, and
-  `ability_affinity`'s player arm is where it lands.**
+- **A player's class grants affinities and starting combat skills (bonuses over neutral, seeded by `Skills::seeded` like a species), and
+  `ability_affinity`'s player arm is where the affinities land.**
+- **A combat figure is `Game::base_figure` times `skills::scale`, one door
+  each:** `base_figure` (`game/derived.rs`) for the base and
+  `game/combat_skills.rs` for what a level is worth and what practises it.
+- **`abilities::routine_power_cost(def, Option<u32>)` is the one price of a
+  routine** (`None` is neutral), so the refusal, the charge and the page
+  quote the same number through `Game::routine_cost`.
 - **A difficulty band is a fractional zone step, never a flat multiplier on
   stats**, and `Game::zone_curve_ratio` is the one derivation it shares with
   the distance ramp.

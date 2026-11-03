@@ -631,11 +631,12 @@ fn seen(game: &Game, cell: (i32, i32)) -> bool {
 #[test]
 fn a_lethal_jump_still_charges_its_power_cost() {
     let mut game = underground_on(DifficultyMode::Permadeath);
+    pin_player_combat(&mut game);
     let level = frame(&game);
     let rock = solid_cell(&level);
     let cost = {
         let db = game.world.resource::<AbilityDb>();
-        crate::abilities::routine_power_cost(db.get(JUMP).unwrap())
+        crate::abilities::routine_power_cost(db.get(JUMP).unwrap(), None)
     };
     assert!(cost > 0.0, "the jump has to cost something to prove this");
     let before = power(&game);

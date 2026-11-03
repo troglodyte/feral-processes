@@ -1711,7 +1711,7 @@ impl Game {
         // cell only when this is the answer, and reordering the check to
         // the front would make that impossible to ask without a second,
         // Power-skipping copy of this gate.
-        let cost = abilities::routine_power_cost(ability);
+        let cost = self.routine_cost(entity, ability);
         if cost > 0.0
             && !self
                 .world

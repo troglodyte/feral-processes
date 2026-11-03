@@ -173,7 +173,7 @@ pub struct WorkRow {
     /// test can assert row order without re-deriving it from `program` or
     /// `cells`.
     pub rank: u32,
-    /// Every skill in `Skill::ALL` order; empty for a program without
+    /// Every work skill in `Skill::WORK` order; empty for a program without
     /// `Skills` (an untamed one has no row here at all, so in practice a
     /// fixture that spawned a body by hand).
     pub skills: Vec<SkillView>,

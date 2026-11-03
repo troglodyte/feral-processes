@@ -54,6 +54,9 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
                 Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
                 crate::components::Implants::default(),
                 crate::components::PhaseKeys::default(),
+                // Classless is neutral; `apply_creation_skills` adds a
+                // class's bonuses.
+                crate::skills::Skills::seeded(&[]),
             ),
         ))
         .id()

@@ -5,7 +5,7 @@
 use bevy_ecs::component::Component;
 use serde::{Deserialize, Serialize};
 
-use crate::tuning::{SKILL_COST_BASE, SKILL_COST_QUAD, SKILL_LEVEL_CAP};
+use crate::tuning::{SKILL_COST_BASE, SKILL_COST_QUAD, SKILL_LEVEL_CAP, SKILL_NEUTRAL_LEVEL};
 
 #[cfg(test)]
 mod tests;
@@ -20,16 +20,38 @@ pub enum Skill {
     Build,
     Dig,
     Farm,
+    Aim,
+    Force,
+    Defence,
+    Routines,
 }
 
 impl Skill {
-    pub const ALL: [Skill; 6] = [
+    /// The skills a program practises at a work site.
+    pub const WORK: [Skill; 6] = [
         Skill::Extract,
         Skill::Assemble,
         Skill::Research,
         Skill::Build,
         Skill::Dig,
         Skill::Farm,
+    ];
+
+    /// The skills a body practises by fighting.
+    pub const COMBAT: [Skill; 4] = [Skill::Aim, Skill::Force, Skill::Defence, Skill::Routines];
+
+    /// `WORK` then `COMBAT`: the save and the census read every track.
+    pub const ALL: [Skill; 10] = [
+        Skill::Extract,
+        Skill::Assemble,
+        Skill::Research,
+        Skill::Build,
+        Skill::Dig,
+        Skill::Farm,
+        Skill::Aim,
+        Skill::Force,
+        Skill::Defence,
+        Skill::Routines,
     ];
 
     /// The save's string form; a name a future build drops loads inert, see
@@ -42,6 +64,10 @@ impl Skill {
             Skill::Build => "build",
             Skill::Dig => "dig",
             Skill::Farm => "farm",
+            Skill::Aim => "aim",
+            Skill::Force => "force",
+            Skill::Defence => "defence",
+            Skill::Routines => "routines",
         }
     }
 
@@ -53,6 +79,10 @@ impl Skill {
             Skill::Build => "Build",
             Skill::Dig => "Dig",
             Skill::Farm => "Farm",
+            Skill::Aim => "Aim",
+            Skill::Force => "Force",
+            Skill::Defence => "Defence",
+            Skill::Routines => "Routines",
         }
     }
 
@@ -65,6 +95,10 @@ impl Skill {
             Skill::Build => "builder",
             Skill::Dig => "digger",
             Skill::Farm => "farmer",
+            Skill::Aim => "marksman",
+            Skill::Force => "bruiser",
+            Skill::Defence => "guardian",
+            Skill::Routines => "scripter",
         }
     }
 
@@ -80,6 +114,14 @@ impl Skill {
             .position(|s| *s == self)
             .expect("ALL lists every Skill")
     }
+}
+
+/// The practised scale of `level`: 1.0 at [`SKILL_NEUTRAL_LEVEL`], `spread`
+/// either side of it at level 0 and at twice neutral. What a scale is worth
+/// is each reader's call; this is only the line.
+pub fn scale(level: u32, spread: f32) -> f32 {
+    let neutral = SKILL_NEUTRAL_LEVEL as f32;
+    1.0 + spread * (level as f32 - neutral) / neutral
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -110,6 +152,16 @@ impl PartialEq for Skills {
 
 impl Eq for Skills {}
 
+/// The level `Skills::seeded` adds a listed bonus to: combat skills start
+/// at neutral, work skills at 0.
+fn seed_base(skill: Skill) -> u32 {
+    if Skill::COMBAT.contains(&skill) {
+        SKILL_NEUTRAL_LEVEL
+    } else {
+        0
+    }
+}
+
 impl Skills {
     /// How many work steps one working tick is worth at `permille` thousandths
     /// of a step per tick, carrying the remainder to the next tick.
@@ -129,6 +181,39 @@ impl Skills {
 
     pub fn track_mut(&mut self, s: Skill) -> &mut SkillTrack {
         &mut self.tracks[s.index()]
+    }
+
+    /// The tracks a body starts with: every combat skill at
+    /// [`SKILL_NEUTRAL_LEVEL`] plus its `listed` bonus, a work skill at its
+    /// `listed` level from 0 (a species' knack is absolute). Both
+    /// `seed_skills` doors call this, so a class and a species cannot seed by
+    /// different formulas.
+    pub fn seeded(listed: &[(Skill, u32)]) -> Skills {
+        let mut skills = Skills::default();
+        for skill in Skill::COMBAT {
+            skills.set(skill, SKILL_NEUTRAL_LEVEL, 0);
+        }
+        for (skill, level) in listed {
+            skills.set(*skill, seed_base(*skill).saturating_add(*level), 0);
+        }
+        skills
+    }
+
+    /// The most a `starting_skills` row may list for `skill` before `seeded`
+    /// would run past the cap: the cap less the level it seeds from.
+    pub fn max_listed(skill: Skill) -> u32 {
+        SKILL_LEVEL_CAP - seed_base(skill)
+    }
+
+    /// Saved rows laid over `seed`: a skill the rows do not list keeps the
+    /// seed's track, so a save written before a skill existed loads it at its
+    /// starting level rather than 0.
+    pub fn overlay(seed: Skills, rows: impl IntoIterator<Item = (Skill, u32, u32)>) -> Skills {
+        let mut skills = seed;
+        for (skill, level, practice) in rows {
+            skills.set(skill, level, practice);
+        }
+        skills
     }
 
     /// Installs a track from untrusted input (a species file, a save): a

@@ -24,12 +24,12 @@ fn app_holding_points(seed: u32, stat_points: u32, perk_points: u32) -> App {
     app
 }
 
-fn analysis_row(app: &App) -> usize {
-    let want = feral_processes_engine::attributes::AttributeId::from("analysis");
+fn amplitude_row(app: &App) -> usize {
+    let want = feral_processes_engine::attributes::AttributeId::from("amplitude");
     app.allocation_rows()
         .iter()
         .position(|row| matches!(row, CreationRow::Attribute { id, .. } if *id == want))
-        .expect("an Analysis row")
+        .expect("an Amplitude row")
 }
 
 fn perk_count(app: &App) -> usize {
@@ -54,7 +54,7 @@ fn the_points_duel_is_drawn_on_open_and_moves_on_a_spend_key() {
     let open = app.allocation_duel.clone().expect("a duel on open");
     assert_eq!(open.per_swing.0, open.per_swing.1, "nothing spent yet");
 
-    app.menu_selected = analysis_row(&app);
+    app.menu_selected = amplitude_row(&app);
     app.handle_key(GameKey::ShiftRight);
     let spent = app.allocation_duel.clone().expect("a duel after a spend");
     assert_ne!(spent, open, "a spend key must refresh the figures");
@@ -68,7 +68,7 @@ fn a_point_moved_back_restores_the_open_figures() {
     open_via_menu(&mut app, 'p', "Perks");
     app.handle_key(GameKey::Char('S'));
     let open = app.allocation_duel.clone();
-    app.menu_selected = analysis_row(&app);
+    app.menu_selected = amplitude_row(&app);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Left);
     assert_eq!(app.allocation_duel, open);

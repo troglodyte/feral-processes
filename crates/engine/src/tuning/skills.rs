@@ -16,7 +16,36 @@ pub const SKILL_LEVEL_CAP: u32 = 20;
 pub const SKILL_COST_BASE: u32 = 50;
 pub const SKILL_COST_QUAD: u32 = 6;
 
-/// Work scale is `SKILL_SCALE_FLOOR + SKILL_SCALE_PER_LEVEL * level`: half
-/// speed at level 0, today's speed at 10, 1.5x at the cap.
-pub const SKILL_SCALE_FLOOR: f32 = 0.5;
-pub const SKILL_SCALE_PER_LEVEL: f32 = 0.05;
+/// The level at which a skill's scale is exactly 1.0: today's behaviour.
+pub const SKILL_NEUTRAL_LEVEL: u32 = 10;
+
+/// Work scale is `skills::scale(level, WORK_SKILL_SPREAD)`: half speed at
+/// level 0, today's speed at 10, 1.5x at the cap.
+pub const WORK_SKILL_SPREAD: f32 = 0.5;
+
+/// Combat scale is `skills::scale(level, COMBAT_SKILL_SPREAD)`: 10% worse at
+/// level 0, today's figure at 10, 10% better at the cap (ADR 0040).
+pub const COMBAT_SKILL_SPREAD: f32 = 0.1;
+
+// Combat practice per event. **Pace intent:** combat skills start at
+// `SKILL_NEUTRAL_LEVEL` plus a bonus of 0 to 4 (ADR 0040), so the climb is
+// 10(+bonus) to the cap, not 0 to 20. A body that fights most encounters
+// reaches the cap near the end of a full run. `SKILL_COST_*` makes level 10
+// cost 2,210 practice and the cap 15,820, so the 10-to-20 climb is 13,610
+// (10,206 from a +4 start). The per-zone figures below were sized for a
+// 0-to-10 climb in two zones; kept as is, level 11 (650 practice) arrives
+// after about 0.6 of a zone and the cap near the end of a full
+// run, which still matches the intent. `docs/measurements/` records no
+// fights-per-zone, so these rest
+// on an assumption to retune: per zone a fighting body makes about 100 attack
+// rolls, is rolled at about 100 times, lands about 60 of its own rolls and
+// pays for about 35 routines, and a full run is about 12 zones.
+
+/// 100 rolls a zone x 11 = 1,100 a zone.
+pub const AIM_PRACTICE_PER_ROLL: u32 = 11;
+/// 60 landed a zone x 18 = 1,080 a zone.
+pub const FORCE_PRACTICE_PER_HIT: u32 = 18;
+/// 100 rolls at the body a zone x 11 = 1,100 a zone.
+pub const DEFENCE_PRACTICE_PER_ROLL: u32 = 11;
+/// 35 charges a zone x 32 = 1,120 a zone.
+pub const ROUTINES_PRACTICE_PER_CHARGE: u32 = 32;

@@ -16,11 +16,12 @@
         (name: "Kernel Panic", power: 18, spread: 5, effect: Some((kind: "stun", chance: 0.4, duration: 1, power: 0))),
     ],
     work_resource: None,
-    starting_skills: [(Build, 3), (Research, 2)],
+    starting_skills: [(Build, 3), (Research, 2), (Force, 3)],
     is_boss: true,
     abilities: [(id: "broadcast_storm"), (id: "overclock_array", level: 4)],
     attributes: {
         "analysis": 16,
+        "amplitude": 16,
         "persistence": 74,
         "entropy": 30,
         "bandwidth": 72,

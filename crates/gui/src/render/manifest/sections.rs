@@ -4,6 +4,7 @@
 use super::layout::*;
 use super::*;
 use feral_processes_engine::damage::DamageType;
+use feral_processes_engine::views::SkillView;
 use feral_processes_engine::{RankedStat, RosterRow};
 
 pub(super) fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
@@ -141,6 +142,14 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
         section_rows(growth),
     ));
 
+    if !p.skills.is_empty() {
+        sections.push(Section::ledger(
+            "SKILLS",
+            LedgerColumn::Growth,
+            section_rows(p.skills.iter().map(skill_row).collect()),
+        ));
+    }
+
     if let Some(class) = &p.class {
         sections.push(Section::ledger(
             format!("CLASS · {}", class.name),
@@ -191,6 +200,17 @@ fn player_sections(sections: &mut Vec<Section>, view: &ManifestView, p: &PlayerM
             MAX_RUN_ROWS,
         ),
     ));
+}
+
+/// One skill as a box row: its level and progress to the next.
+fn skill_row(s: &SkillView) -> SectionRow {
+    stat(
+        s.skill_label,
+        match s.practice_to_next {
+            Some(next) => format!("Lv {}  {}/{next}", s.level, s.practice),
+            None => format!("Lv {}  max", s.level),
+        },
+    )
 }
 
 /// A band under the ledger, full width.
@@ -444,25 +464,20 @@ pub(super) fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &Pro
         section_rows_capped(work, MAX_WORK_ROWS),
     ));
 
-    if let Some(skills) = &p.skills {
-        sections.push(Section::ledger(
-            "SKILLS",
-            LedgerColumn::Duty,
-            section_rows(
-                skills
-                    .iter()
-                    .map(|s| {
-                        stat(
-                            s.skill_label,
-                            match s.practice_to_next {
-                                Some(next) => format!("Lv {}  {}/{next}", s.level, s.practice),
-                                None => format!("Lv {}  max", s.level),
-                            },
-                        )
-                    })
-                    .collect(),
-            ),
-        ));
+    // COMBAT does not stack under the work rows: with AFFINITIES present the
+    // DUTY column loses SPECIES at 1280x720 (the sweep names it), so the
+    // group takes the GROWTH column's spare height instead.
+    for (title, column, skills) in [
+        ("SKILLS", LedgerColumn::Duty, &p.skills),
+        ("COMBAT", LedgerColumn::Growth, &p.combat_skills),
+    ] {
+        if let Some(skills) = skills {
+            sections.push(Section::ledger(
+                title,
+                column,
+                section_rows(skills.iter().map(skill_row).collect()),
+            ));
+        }
     }
 
     if !p.affinities.is_empty() {

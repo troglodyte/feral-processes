@@ -509,7 +509,7 @@ fn every_runnable_routine_is_priced_in_power() {
             continue;
         }
         assert!(
-            crate::abilities::routine_power_cost(def) > 0.0,
+            crate::abilities::routine_power_cost(def, None) > 0.0,
             "{:?} can be run and costs no Power; a routine with no price has \
              only its cooldown throttling it, and on the map it has nothing",
             def.id

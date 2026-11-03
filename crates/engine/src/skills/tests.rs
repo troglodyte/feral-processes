@@ -88,3 +88,61 @@ fn equality_ignores_the_unsaved_carry() {
     a.track_mut(Skill::Build).level = 1;
     assert_ne!(a, Skills::default());
 }
+
+#[test]
+fn scale_is_neutral_at_ten_and_symmetric_about_it() {
+    assert_eq!(scale(SKILL_NEUTRAL_LEVEL, 0.5), 1.0);
+    assert_eq!(scale(0, 0.1), 0.9);
+    assert_eq!(scale(20, 0.1), 1.1);
+    for d in 0..=10 {
+        let (lo, hi) = (
+            scale(SKILL_NEUTRAL_LEVEL - d, 0.3),
+            scale(SKILL_NEUTRAL_LEVEL + d, 0.3),
+        );
+        assert!((lo + hi - 2.0).abs() < 1e-6, "{d}: {lo} {hi}");
+    }
+}
+
+#[test]
+fn the_families_partition_all() {
+    for s in Skill::ALL {
+        let in_work = Skill::WORK.contains(&s);
+        let in_combat = Skill::COMBAT.contains(&s);
+        assert!(in_work != in_combat, "{s:?} must be in exactly one family");
+    }
+    let union: Vec<Skill> = Skill::WORK.into_iter().chain(Skill::COMBAT).collect();
+    assert_eq!(union, Skill::ALL);
+}
+
+#[test]
+fn overlay_replaces_listed_rows_and_keeps_the_seed_elsewhere() {
+    let mut seed = Skills::default();
+    seed.set(Skill::Force, 4, 0);
+    seed.set(Skill::Dig, 2, 0);
+    let got = Skills::overlay(seed, [(Skill::Dig, 7, 3)]);
+    assert_eq!(
+        got.track(Skill::Dig),
+        SkillTrack {
+            level: 7,
+            practice: 3
+        }
+    );
+    assert_eq!(got.level(Skill::Force), 4);
+}
+
+#[test]
+fn seeded_starts_combat_at_neutral_plus_the_bonus_and_work_absolute() {
+    let none = Skills::seeded(&[]);
+    for s in Skill::COMBAT {
+        assert_eq!(none.level(s), SKILL_NEUTRAL_LEVEL, "{s:?}");
+    }
+    for s in Skill::WORK {
+        assert_eq!(none.level(s), 0, "{s:?}");
+    }
+    let some = Skills::seeded(&[(Skill::Force, 4), (Skill::Dig, 4)]);
+    assert_eq!(some.level(Skill::Force), SKILL_NEUTRAL_LEVEL + 4);
+    assert_eq!(some.level(Skill::Aim), SKILL_NEUTRAL_LEVEL);
+    assert_eq!(some.level(Skill::Dig), 4);
+    let over = Skills::seeded(&[(Skill::Aim, 15)]);
+    assert_eq!(over.level(Skill::Aim), SKILL_LEVEL_CAP);
+}

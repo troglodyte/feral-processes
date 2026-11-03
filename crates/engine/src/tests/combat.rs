@@ -753,6 +753,7 @@ fn a_round_survives_its_target_dying_before_every_member_has_acted() {
 #[test]
 fn a_round_that_kills_the_player_ends_the_battle() {
     let mut game = Game::new(96, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     // A wild program that hits far harder than the player can survive,
     // and with enough HP that the player can't end it first.
     let wild = game.spawn_wild_creature("construct", 5, 5).unwrap();

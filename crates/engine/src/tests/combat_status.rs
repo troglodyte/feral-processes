@@ -181,6 +181,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
 #[test]
 fn status_effects_are_cleared_once_the_battle_ends() {
     let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     // Deliberately effect-free, so the wild creature's own retaliation
     // can't re-apply (and thus reset the clock on) the status this test
@@ -1818,11 +1819,11 @@ fn heal_block_zeroes_restore_hp_and_unblocked_heals_still_land() {
 fn heal_block_battle(game: &mut Game) -> (Entity, Vec<Entity>) {
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(game, 1, 200);
+    crate::tests::support::set_player_atk(game, 10);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 200;
         stats.hp = 50;
-        stats.atk = 10;
     }
     define_status(
         game,

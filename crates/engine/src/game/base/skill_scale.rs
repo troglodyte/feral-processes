@@ -11,7 +11,7 @@ use crate::components::TaskKind;
 use crate::resources::{MessageKind, PendingSkillLevels};
 use crate::skills::{self, Skill, Skills};
 use crate::structures::Placed;
-use crate::tuning::{SKILL_SCALE_FLOOR, SKILL_SCALE_PER_LEVEL};
+use crate::tuning::WORK_SKILL_SPREAD;
 
 /// Which skill a posting practises, or `None` for work that has none.
 ///
@@ -46,7 +46,7 @@ pub(crate) fn work_skill_for(kind: TaskKind, machine: Option<Placed<'_>>) -> Opt
 
 /// The speed factor of `level`: half speed at 0, today's at 10, 1.5x at 20.
 pub(crate) fn skill_scale(level: u32) -> f32 {
-    SKILL_SCALE_FLOOR + SKILL_SCALE_PER_LEVEL * level as f32
+    skills::scale(level, WORK_SKILL_SPREAD)
 }
 
 /// `skill_scale` in thousandths of a step per tick, for the carry.
@@ -104,12 +104,37 @@ pub(crate) fn practise_tick(
 }
 
 impl Game {
-    /// Every skill of `entity`, or `None` if it carries no `Skills`.
+    /// Whether `worker`'s work skills count. The player carries `Skills` for
+    /// combat and works at today's pace whatever their work tracks say; every
+    /// `&mut Game` work door asks this. The bevy work systems keep the player
+    /// out another way, by querying `With<Tamed>`.
+    fn work_skills_count(&self, worker: Entity) -> bool {
+        worker != self.player_entity()
+    }
+
+    /// Every work skill of `entity`, or `None` if it carries no `Skills`.
     pub(crate) fn skill_views(&self, entity: Entity) -> Option<Vec<crate::views::SkillView>> {
+        self.family_views(entity, &Skill::WORK)
+    }
+
+    /// Every combat skill of `entity`, or `None` if it carries no `Skills`.
+    pub(crate) fn combat_skill_views(
+        &self,
+        entity: Entity,
+    ) -> Option<Vec<crate::views::SkillView>> {
+        self.family_views(entity, &Skill::COMBAT)
+    }
+
+    fn family_views(
+        &self,
+        entity: Entity,
+        family: &[Skill],
+    ) -> Option<Vec<crate::views::SkillView>> {
         let skills = self.world.get::<Skills>(entity)?;
         Some(
-            Skill::ALL
-                .into_iter()
+            family
+                .iter()
+                .copied()
                 .map(|s| {
                     let t = skills.track(s);
                     crate::views::SkillView {
@@ -129,27 +154,34 @@ impl Game {
     pub(crate) fn drain_skill_levels(&mut self) {
         let pending = std::mem::take(&mut self.world.resource_mut::<PendingSkillLevels>().0);
         for (entity, skill, level) in pending {
-            let Some(name) = self.creature_name(entity) else {
-                continue;
+            let line = if entity == self.player_entity() {
+                format!("You are now a level {level} {}.", skill.role_noun())
+            } else {
+                let Some(name) = self.creature_name(entity) else {
+                    continue;
+                };
+                format!("{name} is now a level {level} {}.", skill.role_noun())
             };
-            self.log_base_kind(
-                MessageKind::LevelUp,
-                format!("{name} is now a level {level} {}.", skill.role_noun()),
-            );
+            self.log_base_kind(MessageKind::LevelUp, line);
         }
     }
 
     /// `scale_of` for a live roster entity.
     pub(crate) fn skill_scale_of(&self, worker: Entity, skill: Skill) -> f32 {
-        scale_of(self.world.get::<Skills>(worker), Some(skill))
+        let skills = self
+            .work_skills_count(worker)
+            .then(|| self.world.get::<Skills>(worker))
+            .flatten();
+        scale_of(skills, Some(skill))
     }
 
     /// `work_tick` for the `&mut Game` work sites: the steps one working tick
     /// of `skill` is worth for `worker`, practising as it goes.
     pub(crate) fn work_steps(&mut self, worker: Entity, skill: Skill) -> u32 {
+        let counts = self.work_skills_count(worker);
         self.world
             .resource_scope(|world, mut levels: Mut<PendingSkillLevels>| {
-                let mut skills = world.get_mut::<Skills>(worker);
+                let mut skills = counts.then(|| world.get_mut::<Skills>(worker)).flatten();
                 work_tick(worker, skills.as_deref_mut(), Some(skill), &mut levels)
             })
     }
@@ -157,6 +189,9 @@ impl Game {
     /// `practise_tick` for the `&mut Game` work sites; a no-op for a worker
     /// without `Skills`.
     pub(crate) fn practise_work(&mut self, worker: Entity, skill: Skill) {
+        if !self.work_skills_count(worker) {
+            return;
+        }
         self.world
             .resource_scope(|world, mut levels: Mut<PendingSkillLevels>| {
                 if let Some(mut skills) = world.get_mut::<Skills>(worker) {

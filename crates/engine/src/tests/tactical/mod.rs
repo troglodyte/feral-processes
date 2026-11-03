@@ -10,8 +10,8 @@ use crate::tactical::ai::{AiBeat, PartyTurns};
 use crate::tactical::reach::{self, allowance};
 use crate::tactical::turn::StepOutcome;
 use crate::tests::support::{
-    battle_with_a_pack_of, equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile,
-    test_assets_dir,
+    battle_with_a_pack_of, equip_weapon, generic_species, insert_battle, pin_player_combat,
+    spawn_wild_on_player_tile, test_assets_dir,
 };
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::{Entity, With};

@@ -10,7 +10,6 @@
 //! companion's routine draws on the companion's own reserve at both ends.
 //! `AbilityEffect::field_only` is the predicate that says which reach here.
 
-use crate::abilities::routine_power_cost;
 use crate::components::{FieldScope, POWER_MIN};
 use crate::game::stack::StackPos;
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
@@ -58,7 +57,7 @@ impl Game {
                 if !def.field_runnable() {
                     continue;
                 }
-                let cost = routine_power_cost(def);
+                let cost = self.routine_cost(holder.entity, def);
                 let stack_only = matches!(def.effect, AbilityEffect::Phase | AbilityEffect::Jump);
                 rows.push(FieldRoutineView {
                     ability: def.id.clone(),
@@ -303,7 +302,7 @@ impl Game {
             power
         };
 
-        self.spend_power(holder, routine_power_cost(&def));
+        self.spend_power(holder, self.routine_cost(holder, &def));
         for entity in recipients {
             self.arm_field_buff(
                 entity,
@@ -423,7 +422,7 @@ impl Game {
             });
         }
 
-        self.spend_power(invoker, routine_power_cost(def));
+        self.spend_power(invoker, self.routine_cost(invoker, def));
         self.use_ability(def, invoker, invoker_label, &hurt);
         self.tick();
         Ok(())
@@ -460,7 +459,7 @@ impl Game {
         let pos = self.movement_routine_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        self.spend_power(invoker, routine_power_cost(def));
+        self.spend_power(invoker, self.routine_cost(invoker, def));
         self.log_kind(
             MessageKind::Outcome,
             "The wall goes soft for exactly as long as it takes to cross it.",
@@ -493,7 +492,7 @@ impl Game {
         let pos = self.movement_routine_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        self.spend_power(invoker, routine_power_cost(def));
+        self.spend_power(invoker, self.routine_cost(invoker, def));
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();
         } else {
@@ -538,7 +537,7 @@ impl Game {
             .anchor_position()
             .ok_or_else(|| "There's no anchor in this sector to link to.".to_string())?;
 
-        self.spend_power(invoker, routine_power_cost(def));
+        self.spend_power(invoker, self.routine_cost(invoker, def));
         let surfaced = self.is_underground();
         if surfaced {
             self.clear_stack();
@@ -575,8 +574,14 @@ impl Game {
     ///
     /// Every refusal is already behind it at every call site.
     pub(crate) fn spend_power(&mut self, entity: Entity, cost: f32) {
-        if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(entity) {
-            reserve.spend(cost);
+        let Some(mut reserve) = self.world.get_mut::<PowerReserve>(entity) else {
+            return;
+        };
+        reserve.spend(cost);
+        // Only a charge that was paid practises: a refusal never gets here and
+        // a passive is never charged.
+        if cost > 0.0 {
+            self.practise_routine_charge(entity);
         }
     }
 

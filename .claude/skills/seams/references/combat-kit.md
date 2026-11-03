@@ -103,10 +103,33 @@
   ungated. The suite proves the mechanism, not the numbers; `dev-arenas/` and
   a session are the instruments.
 
-- **A player's class grants affinities and nothing else, and
-  `ability_affinity`'s player arm is where it lands.** No stat block
+- **A combat figure is `Game::base_figure` times `skills::scale`, one door
+  each.** The base comes from `base_figure` (`game/derived.rs`: the player's
+  derived output, a program's stored `Stats`, 0 for accuracy a program never
+  had); what a level is worth (`aim_scale`, `force_scale`, `defence_points`,
+  `routine_price_scale`) and what practises it live in
+  `game/combat_skills.rs`, each the identity at `SKILL_NEUTRAL_LEVEL`. The
+  trap is a caller that branches on `player_entity()` or reads `Stats` or
+  `Derived` for a figure the door answers, or applies a skill scale a second
+  time: the player and a program then diverge, and the day a program's
+  attributes join `base_figure` the new path is silently skipped. The doors
+  are accuracy in `combat_damage.rs`, damage there too, mitigation in
+  `combat_round.rs`; `inspection.rs` reads the same door for the page. A body
+  with no `Skills` reads neutral everywhere. ADR 0040.
+- **`abilities::routine_power_cost(def, Option<u32>)` is the one price of a
+  routine, and `None` is neutral.** `Game::routine_cost(entity, def)` feeds it
+  the invoker's Routines level; the craft and market views, which have no
+  invoker, pass `None`. The trap is a site computing `power_cost *
+  ROUTINE_POWER_COST_MULTIPLIER` itself: a refusal, a charge and a page quote
+  then disagree, and the picker offers a routine the invocation cannot pay
+  for.
+- **A player's class grants affinities and starting combat skills, and
+  `ability_affinity`'s player arm is where the affinities land.** No stat block
   (`ClassShape` is a *species'*) and no talent tree (talents are the
-  companion's axis, in the creature arm only) — a spread of multipliers over
+  companion's axis, in the creature arm only); `ClassDef::starting_skills`
+  seeds the player's combat skills as bonuses over `SKILL_NEUTRAL_LEVEL`
+  through `Skills::seeded` (the one seed a species shares; work skills refused
+  at load, the sum clamped at the cap, a classless player all 10) — a spread of multipliers over
   the perk term, under the same `AFFINITY_MAX` clamp, plus `ClassDef::kit`.
   Every shipped class damps an axis and there is no Unaligned option, which
   is affordable only because `battle::expected_damage` has **no affinity

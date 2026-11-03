@@ -8,7 +8,9 @@
 
 use crate::damage::{self, DamageType};
 use crate::game::combat::AttackProfile;
+use crate::game::combat_skills;
 use crate::game::kit::Kit;
+use crate::skills::Skill;
 use crate::tactical::TacticalBattle;
 use crate::*;
 
@@ -163,8 +165,17 @@ impl Game {
                 _ => None,
             })
             .clamp(0, 100);
-        let mut accuracy =
-            battle::accuracy_of(speed, level, self.accuracy_bonus(entity) + swing.accuracy);
+        // The attribute's contribution (Analysis, today the player's alone)
+        // enters through the same bonus argument as gear; fractional, so
+        // `accuracy_of` takes `f64` rather than rounding it away.
+        let bonus = f64::from(self.accuracy_bonus(entity) + swing.accuracy)
+            + self.base_figure(entity, crate::attributes::DerivedStat::Accuracy);
+        let mut accuracy = battle::accuracy_of(speed, level, bonus);
+        // Skipped without the skill: scaling by 1.0 is the identity, but a
+        // body without `Skills` must not take the multiply at all.
+        if let Some(aim) = self.combat_skill_level(entity, Skill::Aim) {
+            accuracy *= combat_skills::aim_scale(aim);
+        }
         // Skipped at zero: scaling by 100/100 is not the identity in f64.
         if jam != 0 {
             accuracy = accuracy * (100 - jam) as f64 / 100.0;
@@ -184,6 +195,9 @@ impl Game {
             range: swing.range,
             crit: derived.crit,
             fumble: derived.fumble,
+            damage_scale: self
+                .combat_skill_level(entity, Skill::Force)
+                .map_or(1.0, combat_skills::force_scale),
         }
     }
 
@@ -321,6 +335,8 @@ impl Game {
             }
         };
         let rolled = outcome.damage_to_defender();
+        // Every roll practises, hit or miss; only a landing practises Force.
+        self.practise_attack_roll(attacker, defender, rolled > 0);
         if rolled <= 0 {
             if let battle::AttackOutcome::Fumble(rung) = outcome {
                 self.apply_fumble_rung(attacker, defender, rung);

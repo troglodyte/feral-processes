@@ -181,10 +181,8 @@ pub fn hit_chance(accuracy: f64, evasion: f64) -> f64 {
 /// `gear_accuracy` is `EquipmentStats::accuracy` summed over worn slots,
 /// which unlike `atk`/`mitigation` is *not* baked into `Stats` by
 /// `Game::apply_equipment_delta` and so must be passed in live.
-pub fn accuracy_of(base_speed: i32, level: u32, gear_accuracy: i32) -> f64 {
-    (base_speed as f64 * ACCURACY_PER_SPEED
-        + level as f64 * ACCURACY_PER_LEVEL
-        + gear_accuracy as f64)
+pub fn accuracy_of(base_speed: i32, level: u32, gear_accuracy: f64) -> f64 {
+    (base_speed as f64 * ACCURACY_PER_SPEED + level as f64 * ACCURACY_PER_LEVEL + gear_accuracy)
         .max(0.0)
 }
 
@@ -216,6 +214,18 @@ pub struct Combatant {
     /// The player's comes from Entropy; everyone else carries
     /// `FUMBLE_CHANCE`.
     pub fumble: f64,
+    /// Multiplier on a landed hit's damage: the attacker's Force. 1.0 for a
+    /// body without the skill, which leaves every roll exactly as it was.
+    pub damage_scale: f64,
+}
+
+/// `dmg` after the attacker's Force. Skipped at 1.0 so a body without the
+/// skill never takes a float round trip.
+fn scaled_by_force(dmg: i32, damage_scale: f64) -> i32 {
+    if damage_scale == 1.0 {
+        return dmg;
+    }
+    (f64::from(dmg) * damage_scale).round() as i32
 }
 
 /// How badly an attack went wrong. Each roll lands one rung; two rolls'
@@ -326,14 +336,17 @@ fn resolve_attack_inner(
     if r < crit {
         let rolled = attacker.range.roll(rng);
         return AttackOutcome::Crit {
-            dmg: rolled * CRIT_ROLL_MULTIPLIER + attacker.atk,
+            dmg: scaled_by_force(
+                rolled * CRIT_ROLL_MULTIPLIER + attacker.atk,
+                attacker.damage_scale,
+            ),
             resisted: None,
         };
     }
     if r < h {
         let rolled = attacker.range.roll(rng);
         return AttackOutcome::Hit {
-            dmg: rolled + attacker.atk,
+            dmg: scaled_by_force(rolled + attacker.atk, attacker.damage_scale),
             resisted: None,
         };
     }
@@ -399,8 +412,9 @@ pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
     let plain = h - crit;
     let mean = attacker.range.mean();
     let atk = attacker.atk as f64;
-    plain * plain_hit(attacker.range, attacker.atk)
-        + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
+    (plain * plain_hit(attacker.range, attacker.atk)
+        + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk))
+        * attacker.damage_scale
 }
 
 /// The mean of one landed, non-critical hit: the band's mean plus attack.
@@ -1118,9 +1132,9 @@ mod tests {
 
     #[test]
     fn accuracy_and_evasion_both_grow_with_speed_level_and_gear() {
-        assert!(accuracy_of(14, 1, 0) > accuracy_of(6, 1, 0));
-        assert!(accuracy_of(10, 8, 0) > accuracy_of(10, 1, 0));
-        assert!(accuracy_of(10, 1, 3) > accuracy_of(10, 1, 0));
+        assert!(accuracy_of(14, 1, 0.0) > accuracy_of(6, 1, 0.0));
+        assert!(accuracy_of(10, 8, 0.0) > accuracy_of(10, 1, 0.0));
+        assert!(accuracy_of(10, 1, 3.0) > accuracy_of(10, 1, 0.0));
         assert!(evasion_of(14, 1, 0) > evasion_of(6, 1, 0));
         assert!(evasion_of(10, 8, 0) > evasion_of(10, 1, 0));
         assert!(evasion_of(10, 1, 3) > evasion_of(10, 1, 0));
@@ -1130,7 +1144,7 @@ mod tests {
     fn a_negative_gear_axis_cannot_push_the_pair_below_zero() {
         // A drawback affix is folded into the base, so a copy can carry a
         // negative on an axis its item never had.
-        assert!(accuracy_of(6, 1, -100) >= 0.0);
+        assert!(accuracy_of(6, 1, -100.0) >= 0.0);
         assert!(evasion_of(6, 1, -100) >= 0.0);
     }
 
@@ -1142,6 +1156,7 @@ mod tests {
             range,
             crit: CRIT_CHANCE,
             fumble: FUMBLE_CHANCE,
+            damage_scale: 1.0,
         }
     }
 

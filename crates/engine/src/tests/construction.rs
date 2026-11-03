@@ -2743,7 +2743,7 @@ fn raising_practises_build_and_nothing_else() {
     }
     let skills = game.world.get::<crate::skills::Skills>(worker).unwrap();
     assert!(skills.track(crate::skills::Skill::Build).practice > 0);
-    for other in crate::skills::Skill::ALL
+    for other in crate::skills::Skill::WORK
         .into_iter()
         .filter(|s| *s != crate::skills::Skill::Build)
     {

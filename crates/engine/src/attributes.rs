@@ -119,6 +119,8 @@ pub enum DerivedStat {
     MaxHp,
     Atk,
     Mitigation,
+    /// Flat to-hit points, added to a body's accuracy beside gear.
+    Accuracy,
     Decompiler,
     MaxPower,
     StatusResist,
@@ -135,6 +137,7 @@ impl DerivedStat {
             DerivedStat::MaxHp => "Max HP",
             DerivedStat::Atk => "ATK",
             DerivedStat::Mitigation => "Mitigation",
+            DerivedStat::Accuracy => "Accuracy",
             DerivedStat::Decompiler => "Decompiler",
             DerivedStat::MaxPower => "Max Power",
             DerivedStat::StatusResist => "Status resist",
@@ -312,6 +315,26 @@ pub fn authored_or_base(db: &AttributeDb, authored: &BTreeMap<String, i32>) -> A
     out
 }
 
+/// Carries an older save's attack across the move of the ATK effect from
+/// Analysis to Amplitude. A store written before Amplitude existed has no
+/// such entry, which would read as the base and drop every point of Analysis
+/// above it out of the body's attack on its next derive; this fills the entry
+/// with the base plus that same excess, so `derive` reproduces the stored
+/// ATK. A store that already has an Amplitude, and a catalogue with no
+/// Amplitude or no Analysis, are left alone.
+pub fn carry_attack_into_amplitude(db: &AttributeDb, attrs: &mut Attributes) {
+    let amplitude = AttributeId::from("amplitude");
+    let analysis = AttributeId::from("analysis");
+    let (Some(amp_def), Some(an_def)) = (db.get(&amplitude), db.get(&analysis)) else {
+        return;
+    };
+    if attrs.get(&amplitude).is_some() {
+        return;
+    }
+    let excess = attrs.get(&analysis).map_or(0, |v| v - an_def.base);
+    attrs.set(&amplitude, amp_def.base + excess);
+}
+
 /// A build revision for one body — `"rev 4.17"`.
 ///
 /// Derived, never stored, `handles::of`'s model: no pool, no storage and no
@@ -417,12 +440,13 @@ mod tests {
         assert_eq!(
             effects_of(&db, "analysis"),
             vec![
-                (DerivedStat::Atk, 1.0),
+                (DerivedStat::Accuracy, 0.5),
                 (DerivedStat::Decompiler, 1.0),
                 (DerivedStat::Extraction, 0.005),
                 (DerivedStat::Perception, 0.5)
             ]
         );
+        assert_eq!(effects_of(&db, "amplitude"), vec![(DerivedStat::Atk, 1.0)]);
         assert_eq!(
             effects_of(&db, "entropy"),
             vec![
@@ -447,6 +471,7 @@ mod tests {
         assert_eq!(
             buyable,
             vec![
+                "amplitude",
                 "analysis",
                 "bandwidth",
                 "entropy",

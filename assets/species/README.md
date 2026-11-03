@@ -222,7 +222,9 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; omit for no head start. Work-skill levels a tamed member of
     // this species starts at, by skill (Extract, Assemble, Research, Build,
-    // Dig, Farm); a skill not listed starts at 0. Levels run 0 to 20
+    // Dig, Farm); a work skill not listed starts at 0. A combat skill
+    // (Aim, Force, Defence, Routines) is a bonus over 10, so `(Force, 3)`
+    // starts at 13, and one not listed starts at 10. Levels run 0 to 20
     // (`tuning::SKILL_LEVEL_CAP`); one above that is clamped with a warning.
     // Shipped species stay at 5 or below. A bred or fresh tame starts here,
     // and so does a program in a save written before skills existed.
@@ -442,7 +444,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // author. Keep it cutting across the difficulty ladder: every tier
     // should have both a sharp and a dull program on it.
     //
-    // All seventeen shipped species author all five shipped attributes,
+    // All shipped species author all seven shipped attributes (`amplitude`
+    // is authored equal to `analysis`, which is what Analysis bought in attack
+    // before Amplitude took that effect),
     // held by `every_shipped_species_authors_every_attribute` in
     // `crates/engine/src/tests/assets/`. The field itself stays
     // optional, so a mod's species file keeps parsing untouched.
@@ -633,26 +637,37 @@ any of this.
 
 ## Starting skill levels
 
-Each shipped species' `starting_skills` (see the schema above):
+Each shipped species' `starting_skills` (see the schema above). Work numbers
+are levels from 0; combat numbers are bonuses over 10:
 
 | Species | Starting skills |
 | --- | --- |
-| botnet | Extract 3, Farm 2 |
-| cipher | Research 4 |
-| construct | Build 4, Dig 2 |
-| crawler | Dig 4, Extract 2 |
+| botnet | Extract 3, Farm 2, Force 3 |
+| cipher | Research 4, Aim 3 |
+| construct | Build 4, Dig 2, Defence 3 |
+| crawler | Dig 4, Extract 2, Defence 3 |
 | drone | Extract 3, Build 2 |
-| glitch | Extract 3, Research 2 |
-| overseer | Build 3, Research 2 |
-| polymorph | Assemble 3, Research 2 |
-| proxy | Research 3, Extract 2 |
-| rootkit | Dig 3, Research 2 |
-| scrapper | Extract 4, Assemble 2 |
-| sentinel | Build 3 |
-| sprite | Assemble 3 |
-| sub_process | Assemble 3, Build 2 |
-| trojan | Assemble 4 |
-| virus | Farm 4 |
-| wintermute | Research 5, Assemble 2 |
-| worm | Dig 4, Farm 2 |
-| zero_day | Research 3, Extract 3 |
+| glitch | Extract 3, Research 2, Force 3 |
+| overseer | Build 3, Research 2, Force 3 |
+| polymorph | Assemble 3, Research 2, Force 3 |
+| proxy | Research 3, Extract 2, Routines 3 |
+| rootkit | Dig 3, Research 2, Force 3 |
+| scrapper | Extract 4, Assemble 2, Force 4 |
+| sentinel | Build 3, Defence 4 |
+| sprite | Assemble 3, Aim 3 |
+| sub_process | Assemble 3, Build 2, Routines 3 |
+| trojan | Assemble 4, Aim 3 |
+| virus | Farm 4, Routines 3 |
+| wintermute | Research 5, Assemble 2, Routines 4 |
+| worm | Dig 4, Farm 2, Force 3 |
+| zero_day | Research 3, Extract 3, Force 4 |
+
+`Aim`, `Force`, `Defence` and `Routines` are combat skills (ADR 0040), read
+only once the program is tamed; 10 is the neutral level and the figures a
+program had before combat skills, 0 is 10% worse and 20 is 10% better. Every
+shipped knack is one combat skill at +3 or +4, so a tamed program starts a
+little sharper than before at it and the other three at 10. The pick follows the species'
+strong affinity and moves: damage affinity (and the brutes) Force, buff
+affinity Defence, heal affinity Routines, debuff affinity Aim. Wintermute is
+Routines for its Broadcast Storm and Null Route. Drone has none: nothing in
+its role points at one.

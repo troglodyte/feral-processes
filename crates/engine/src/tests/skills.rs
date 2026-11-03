@@ -50,11 +50,10 @@ fn a_fresh_tame_starts_at_its_species_seed() {
 }
 
 #[test]
-fn wild_programs_and_the_player_have_no_skills() {
+fn wild_programs_have_no_skills() {
     let mut game = new_game(31002);
     let wild = game.spawn_wild_creature("worm", 1, 1).unwrap();
     assert!(game.world.get::<Skills>(wild).is_none());
-    assert!(game.world.get::<Skills>(game.player_entity()).is_none());
 }
 
 #[test]
@@ -169,5 +168,46 @@ fn an_unknown_skill_name_is_dropped_and_the_load_succeeds() {
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let skills = skills_of(&mut loaded, id).expect("the program should still load");
     assert_eq!(skills.level(Skill::Dig), 4);
-    assert_eq!(skills.level(Skill::Farm), 0, "the dropped row is level 0");
+    assert_eq!(skills.level(Skill::Farm), 2, "the dropped row is the seed");
+}
+
+#[test]
+fn a_save_listing_only_work_skills_loads_combat_at_the_species_seed() {
+    let dir = scratch_assets_dir("skills_0_21_16_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let assets = test_assets_dir();
+    let text = std::fs::read_to_string(assets.join("species/worm.ron")).unwrap();
+    assert!(text.contains("(Force, 3)"), "the shipped worm seeds Force");
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(31007, DifficultyMode::Forgiving, &assets).unwrap();
+    let worm = tame(&mut game, "worm");
+    let id = game.world.get::<ProgramId>(worm).unwrap().0;
+    assert_eq!(
+        game.world.get::<Skills>(worm).unwrap().level(Skill::Force),
+        crate::tuning::SKILL_NEUTRAL_LEVEL + 3
+    );
+    game.world
+        .get_mut::<Skills>(worm)
+        .unwrap()
+        .track_mut(Skill::Dig)
+        .level = 9;
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.creatures
+        .iter_mut()
+        .find(|c| c.program_id == id)
+        .unwrap()
+        .skills
+        .retain(|row| Skill::WORK.iter().any(|s| s.name() == row.skill));
+    save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let skills = skills_of(&mut loaded, id).unwrap();
+    assert_eq!(skills.level(Skill::Dig), 9);
+    assert_eq!(
+        skills.level(Skill::Force),
+        crate::tuning::SKILL_NEUTRAL_LEVEL + 3
+    );
 }

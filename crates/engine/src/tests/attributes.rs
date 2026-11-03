@@ -89,7 +89,7 @@ fn the_player_has_attributes_from_its_class() {
         .world
         .get::<crate::components::Attributes>(player)
         .expect("the player mints attributes at creation");
-    assert_eq!(attrs.iter().count(), 6);
+    assert_eq!(attrs.iter().count(), 7);
 }
 
 /// Taming does not rewrite who a program is. A captured body keeps the
@@ -227,7 +227,7 @@ fn an_old_save_mints_on_load_rather_than_staying_blank() {
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         creature_attributes_at(&loaded, (90, 90)).map(|a| a.iter().count()),
-        Some(6),
+        Some(7),
         "an old save's creature stayed blank instead of minting"
     );
     assert_eq!(
@@ -235,7 +235,7 @@ fn an_old_save_mints_on_load_rather_than_staying_blank() {
             .world
             .get::<crate::components::Attributes>(loaded.player_entity())
             .map(|a| a.iter().count()),
-        Some(6),
+        Some(7),
         "an old save's player stayed blank instead of minting"
     );
 }
@@ -302,7 +302,7 @@ fn the_dossier_reports_every_attribute_with_both_its_names() {
         let report = game
             .dossier_report(subject)
             .expect("a live body has a dossier");
-        assert_eq!(report.rows.len(), 6);
+        assert_eq!(report.rows.len(), 7);
         for row in &report.rows {
             assert!(!row.name.is_empty());
             assert!(
@@ -397,4 +397,37 @@ fn a_despawned_body_has_no_dossier() {
         .unwrap();
     game.world.despawn(wild);
     assert!(game.dossier_report(wild).is_none());
+}
+
+/// Every class's ATK at creation, derived from its authored attributes.
+/// Captured before Amplitude took the ATK effect from Analysis, so the move
+/// cannot shift a starting class.
+#[test]
+fn every_class_starts_at_its_recorded_atk() {
+    let dir = test_assets_dir();
+    let cat = CreationCatalogue::load(&dir).unwrap();
+    let db = cat.attribute_db();
+    let (classes, _) = crate::classes::ClassDb::load_dir(&dir.join("classes")).unwrap();
+    let mut got = Vec::new();
+    for def in classes.iter() {
+        let attrs = cat.start_attributes(Some(def.class));
+        let d = crate::progression::derive(&crate::progression::DerivedBase::player(), &attrs, &db);
+        got.push((def.name.clone(), d.atk));
+    }
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            "Bastion",
+            "Decompiler",
+            "Fabricator",
+            "Invoker",
+            "Leech",
+            "Medic",
+            "Saboteur",
+            "Striker"
+        ]
+        .map(|n| (n.to_string(), 6))
+        .to_vec()
+    );
 }

@@ -53,7 +53,7 @@ Each file is one class:
     affinities: (heal: 1.3, damage: 0.8),
     kit: [("core_fragment", 5), ("power_cell", 5), ("outlet", 2)],
     attributes: {
-        "analysis": 10, "persistence": 60, "entropy": 38,
+        "analysis": 10, "amplitude": 10, "persistence": 60, "entropy": 38,
         "bandwidth": 48, "footprint": 44, "parity": 76,
     },
 )
@@ -67,6 +67,29 @@ Each file is one class:
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
 | `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. Superseded entirely if the player buys anything on the Kit step; see "What a class is" above. |
 | `attributes` | `#[serde(default)]` — a map keyed by attribute id (see `assets/attributes/README.md`) giving the player's **starting value** for each one. An id this map does not name (or an empty map) starts at that attribute def's own `base`, so the two directories stay independent. |
+| `starting_skills` | `#[serde(default)]` — a list of `(Skill, level)` pairs: **bonuses** over 10 for the player's combat skills (`Aim`, `Force`, `Defence`, `Routines`), 10 being today's figures, so `(Force, 4)` starts Force at 14 (ADR 0040). A work skill is dropped and a level above the cap clamped, each with a load warning; the sum is clamped at the cap, and an absent list starts all four at 10. The player works blind to work skills. |
+
+## Starting combat skills
+
+Each shipped class seeds one combat skill (`starting_skills`, ADR 0040), the
+same shape as a species' knack. The numbers are bonuses over 10:
+
+| Class | Starting skill |
+| --- | --- |
+| Striker | Force 4 |
+| Bastion | Defence 4 |
+| Invoker | Routines 4 |
+| Saboteur | Aim 4 |
+| Decompiler | Aim 4 |
+| Medic | Routines 3 |
+| Leech | Force 3 |
+| Fabricator | Defence 3 |
+
+The first four are the class's own axis. Decompiler lands attempts more often,
+so Aim; Medic and Leech run routines and hit by draining, so Routines and
+Force; Fabricator is the builder with a buff affinity, so Defence. The three
+at 3 are the weaker links. Level 10 is neutral, so every class starts a
+little sharper than today at its skill (Striker Force 14) and at 10 on the other three.
 
 ## Attributes
 
@@ -87,11 +110,11 @@ the shipped starts land:
 `docs/measurements/2026-09-29-level-up-stat-spend.md`, which found them
 very far apart at level 1.
 
-All eight shipped classes author all six shipped attributes, held by
+All eight shipped classes author all seven shipped attributes, held by
 `every_shipped_class_authors_every_attribute` in
 `crates/engine/src/tests/assets/`. The field itself stays optional, so a
 mod's class file keeps parsing untouched. An attribute a class authors at
-the def's `base` (every shipped class does this for Analysis, at 10) adds
+the def's `base` (every shipped class does this for Analysis and Amplitude, at 10) adds
 nothing to that attribute's stats.
 
 ## The damped-axis convention

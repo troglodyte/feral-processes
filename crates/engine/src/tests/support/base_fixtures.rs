@@ -567,3 +567,40 @@ pub(crate) fn set_skill_level(
         .unwrap()
         .set(skill, level, 0);
 }
+
+/// Pins the player's four combat skills at level 10, where every effect is
+/// the shipped figure (ADR 0040). A classless player is born there; a classed
+/// one starts a few levels above, so a test about anything but skills pins it.
+pub(crate) fn pin_player_combat(game: &mut Game) {
+    let player = game.player_entity();
+    for skill in crate::skills::Skill::COMBAT {
+        set_skill_level(game, player, skill, 10);
+    }
+}
+
+/// `set_player_figures` with only ATK, leaving mitigation as it stands.
+pub(crate) fn set_player_atk(game: &mut Game, atk: i32) {
+    let mitigation = game.base_figure(
+        game.player_entity(),
+        crate::attributes::DerivedStat::Mitigation,
+    ) as i32;
+    set_player_figures(game, atk, mitigation);
+}
+
+/// Gives the player exactly this ATK and mitigation through the door combat
+/// reads (`base_figure`, which derives the player's figures): the difference
+/// goes into the `BoughtStats` receipt, so the next recompute keeps it. A
+/// write to the player's `Stats` alone is invisible to `effective_atk`.
+pub(crate) fn set_player_figures(game: &mut Game, atk: i32, mitigation: i32) {
+    use crate::attributes::DerivedStat;
+    let player = game.player_entity();
+    let mut bought = game
+        .world
+        .get::<crate::components::BoughtStats>(player)
+        .copied()
+        .unwrap_or_default();
+    bought.atk += atk - game.base_figure(player, DerivedStat::Atk) as i32;
+    bought.mitigation += mitigation - game.base_figure(player, DerivedStat::Mitigation) as i32;
+    game.world.entity_mut(player).insert(bought);
+    game.recompute_derived(player);
+}

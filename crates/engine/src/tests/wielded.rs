@@ -14,6 +14,7 @@ fn wield_directly(game: &mut Game, entity: Entity) {
 #[test]
 fn wielding_a_program_raises_the_players_attack_and_defense() {
     let mut game = Game::new(9100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    pin_player_combat(&mut game);
     let player = game.player_entity();
     let (atk_before, def_before) = (
         game.effective_atk(player),
@@ -729,7 +730,7 @@ fn a_proc_charges_neither_the_player_nor_the_program() {
         |g| damage_in(g, "Blade lands on").is_some(),
     );
     let program = game.wielded_program().unwrap();
-    let cost = abilities::routine_power_cost(&ability(&game, "kernel_panic"));
+    let cost = abilities::routine_power_cost(&ability(&game, "kernel_panic"), None);
     assert!(
         cost > 0.0,
         "kernel_panic has to cost something to prove this"

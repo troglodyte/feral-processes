@@ -168,8 +168,26 @@ impl Game {
         self.apply_creation_identity(choice);
         self.apply_creation_stats(choice);
         self.apply_creation_kit(choice);
+        self.apply_creation_skills(choice);
         self.grant_starting_routine();
         self.apply_creation_perks(choice);
+    }
+
+    /// Seeds the player's combat skills from the class, resolved live
+    /// through `ClassDb` (neutral plus the class's bonuses); a classless
+    /// choice, or a class the catalogue does not resolve, stays at neutral. Work skills are never seeded: the player
+    /// works blind to them.
+    fn apply_creation_skills(&mut self, choice: &CharacterChoice) {
+        let Some(seed) = choice.class.and_then(|c| {
+            self.world
+                .resource::<crate::classes::ClassDb>()
+                .get(c)
+                .map(|d| d.seed_skills())
+        }) else {
+            return;
+        };
+        let player = self.player_entity();
+        self.world.entity_mut(player).insert(seed);
     }
 
     /// Buys what the wizard picked, **through `Game::unlock_perk`** — one

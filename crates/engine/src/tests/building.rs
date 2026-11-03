@@ -3099,6 +3099,27 @@ fn the_wielded_program_is_not_offered_to_a_build() {
     );
 }
 
+/// A companion fighting beside you is one you have been training, and a
+/// build consumes the program it spends — so a party member is not offered
+/// at all, not offered with an "(in party)" tag the player must notice.
+#[test]
+fn a_party_member_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, p);
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a party member is never construction material"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the staffer beside it still is, so the list is not simply empty"
+    );
+}
+
 /// A program away on a sortie cannot be reached to spend on a build, so it
 /// is not offered even though nothing else disqualifies it.
 #[test]

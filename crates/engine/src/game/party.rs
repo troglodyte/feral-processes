@@ -823,7 +823,10 @@ impl Game {
     /// there is no "owned but idle" state, so an unfiltered list offers the
     /// weapon in the player's hand and a body that is halfway across a
     /// sortie. Each exclusion below is for its own reason, and none is
-    /// cosmetic: a carrier's goods are destroyed by freeing it, let alone
+    /// cosmetic: a party member is a companion being trained, and a build
+    /// consumes what it spends, so a misread row must not be able to cost
+    /// one (`commit_program` still accepts one, so a site filed from an old
+    /// save refunds to its slot); a carrier's goods are destroyed by freeing it, let alone
     /// despawning it; a sortied program is away and cannot be reached; a
     /// `Downed` one is the roster slot a wipe is supposed to cost; and a
     /// pinned subject is standing in a pen mid-study, `commit_program`'s own
@@ -856,6 +859,7 @@ impl Game {
             .into_iter()
             .filter(|p| self.zone_tier(p.entity) >= tier)
             .filter(|p| !p.wielded)
+            .filter(|p| !self.world.resource::<Party>().0.contains(&p.entity))
             .filter(|p| {
                 !self
                     .world

@@ -203,6 +203,18 @@ pub const AMENITY_CAPACITY: usize = 2;
 /// bench measured.
 pub const STRANDED_SET_DOWN_TICKS: u64 = 100;
 
+/// How long a posted program waits behind a body holding the only face of
+/// where it is going before the wait counts as `Stranded` after all.
+///
+/// A held face is a queue (`hauling::cut_off`), and queues end: on the
+/// live save that found this, 49 of 53 such waits at a single-faced Depot
+/// were 21 ticks or under and the longest was 188, in a base whose sulking
+/// crew loitered on that face. 250 clears that worst case with room to
+/// spare, so a queue never trips it, while a body that will never move — a
+/// downed program with no Bay, a worker posted on the face — still strands
+/// its carrier and, `STRANDED_SET_DOWN_TICKS` later, sets the load down.
+pub const BODY_WAIT_GRACE_TICKS: u64 = 250;
+
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch
 /// staged while working the current one, but a greedy machine still cannot

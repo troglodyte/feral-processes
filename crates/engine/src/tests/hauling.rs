@@ -2782,3 +2782,130 @@ fn a_staff_load_with_no_errand_behind_it_is_set_down() {
         .count();
     assert_eq!(cells, 1, "set down, never destroyed");
 }
+
+/// A Depot at `(x, 0)` walled on three sides, its one free face to the
+/// north: the layout that funnels a whole base's traffic through one cell.
+fn one_faced_depot(game: &mut Game, x: i32) -> (Entity, Position) {
+    let depot = deploy(game, "depot", x, 0);
+    for (dx, dy) in [(-1, 0), (1, 0), (0, 1)] {
+        deploy(game, "wall", x + dx, dy);
+    }
+    let at = *game.world.get::<Position>(depot).unwrap();
+    (
+        depot,
+        Position {
+            x: at.x,
+            y: at.y - 1,
+        },
+    )
+}
+
+/// A body lying on `face` that stays there: `Downed` with no Bay to walk to,
+/// `plugged_corridor`'s plug, so no wander moves it off between ticks.
+fn held_face(game: &mut Game, face: Position) -> Entity {
+    let body = hauler(game);
+    game.world
+        .entity_mut(body)
+        .insert(crate::components::Downed);
+    move_to(game, body, face.x, face.y);
+    body
+}
+
+fn stranded_memories(game: &Game, who: Entity) -> usize {
+    game.world.get::<Memories>(who).map_or(0, |m| {
+        m.0.iter()
+            .filter(|m| m.def == MemoryId::from("stranded_at"))
+            .count()
+    })
+}
+
+/// **A body on a store's only face is a queue, not a stranding.** The live
+/// save that found this had a crew sulking from dozens of "Left stranded
+/// here" grudges, every one written while a carrier waited a few ticks for
+/// an idle body or another hauler to step off a single-faced Depot. Held
+/// faces read as `BoxedIn`, and without bodies the route was always there.
+#[test]
+fn a_carrier_waiting_for_a_held_face_is_not_stranded() {
+    let mut game = base(44);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
+    let (depot, face) = one_faced_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 1,
+    });
+    let bystander = held_face(&mut game, face);
+
+    for _ in 0..30 {
+        game.tick();
+        assert!(
+            game.world.get::<Stranded>(worker).is_none(),
+            "a carrier waiting on a held face read as stranded, tick {}",
+            game.current_tick()
+        );
+    }
+    assert_eq!(stranded_memories(&game, worker), 0);
+    assert!(game.world.get::<Task>(worker).is_some());
+    assert!(game.world.get::<Carrying>(worker).is_some());
+
+    // The face clears and the wait ends in a delivery.
+    let aside = node_pos(&game, node);
+    move_to(&mut game, bystander, aside.x - 1, aside.y);
+    tick_until(&mut game, 60, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+    assert!(node_output(&game, depot, ids::CORE_FRAGMENT) > 0);
+}
+
+/// The other write site: a worker at its own machine deciding whether to
+/// lift a load. A held face is a reason not to lift yet, not a stranding.
+#[test]
+fn a_worker_at_its_post_with_the_depot_face_held_is_not_stranded() {
+    let mut game = base(45);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
+    let (_, face) = one_faced_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, 5);
+    held_face(&mut game, face);
+
+    for _ in 0..30 {
+        game.tick();
+        assert!(
+            game.world.get::<Stranded>(worker).is_none(),
+            "a worker at its post read as stranded over a held face, tick {}",
+            game.current_tick()
+        );
+    }
+    assert_eq!(stranded_memories(&game, worker), 0);
+}
+
+/// The control: with no body anywhere near it, a Depot walled in on all four
+/// sides still strands its carrier and still writes the grudge.
+#[test]
+fn a_carrier_with_no_route_even_past_bodies_is_stranded() {
+    let mut game = base(44);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
+    walled_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 1,
+    });
+
+    tick_until(&mut game, 10, |g| g.world.get::<Stranded>(worker).is_some());
+
+    assert!(game.world.get::<Stranded>(worker).is_some());
+    assert_eq!(stranded_memories(&game, worker), 1);
+}
+
+fn node_pos(game: &Game, structure: Entity) -> Position {
+    *game.world.get::<Position>(structure).unwrap()
+}

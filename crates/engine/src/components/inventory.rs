@@ -283,6 +283,10 @@ pub struct FloorItem(pub crate::items::FloorThing);
 /// `game::base::hauling::haul_step_system`, the one system that walks a field
 /// and so the only one that can know.
 ///
+/// **No route even with every body stepped aside** (`hauling::cut_off`): a
+/// face somebody is standing on is a wait, and a wait writes no marker, so a
+/// queue at a single-faced Depot is never an episode and never a grudge.
+///
 /// **Written on entry only, so `since` is the start of the episode rather
 /// than the last tick of it.** That is what makes a stranding an *event* a
 /// `&mut Game` pass can find — `Game::note_strandings` reads `since == now`

@@ -249,7 +249,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **`MachineStatus::Stranded` is `Unstaffed` plus the knowledge that waiting
   will not fix it.** The two systems split by writer: `haul_step_system`
   marks the *worker*, `task_progress_system` stays the only writer of a
-  machine's status.
+  machine's status. A face only a body holds is something waiting fixes:
+  both `Stranded` writes ask `hauling::cut_off` (the walk with every body
+  stepped aside) first, `has_station`'s reasoning.
 - **`set_machine_status` is the one place a stall is announced, and it
   posts to the alert board only on transition — never to the message log.**
   Three callers, so "entering a state is news, staying in it is not" cannot

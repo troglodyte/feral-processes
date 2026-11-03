@@ -378,6 +378,14 @@ impl Occupancy {
         self
     }
 
+    /// The structures alone, every body stepped aside: `cut_off`'s field.
+    pub(crate) fn walls_only(&self) -> Self {
+        Self {
+            walls: self.walls.clone(),
+            bodies: HashSet::new(),
+        }
+    }
+
     /// What entering `cell` costs a walk that started on `start` and arrives
     /// wherever `arrives` answers — `None` where it may not go at all.
     ///
@@ -747,6 +755,38 @@ pub(crate) fn post_reach(
         return Ok(());
     }
     post_field(grid, from, structure, side, blocked, pocket_radius, touch).map(|_| ())
+}
+
+/// Whether a walker at `from` would still find no post at `structure` with
+/// every body stepped aside — the line between `Stranded` and waiting.
+///
+/// **A face a body holds is a queue, not a cut-off.** `post_field` refuses
+/// to arrive on a held face, so a store whose only face is occupied reads
+/// `BoxedIn` for exactly as long as somebody stands there; marking that
+/// `Stranded` wrote a "Left stranded here" grudge on every few-tick wait at
+/// a single-faced Depot, and the live save that found it had a crew sulking
+/// from dozens of them, every one routable the moment the body moved on.
+/// `has_station`'s reasoning: a body on the face is proof something can
+/// stand there. `walls_only` is `Occupancy::walls_only` of the tick's
+/// field, built once; a walk it admits is the walk once the body moves.
+pub(crate) fn cut_off(
+    grid: &BaseGrid,
+    from: Position,
+    structure: Position,
+    side: u8,
+    walls_only: &Occupancy,
+    pocket_radius: i32,
+) -> bool {
+    post_reach(
+        grid,
+        from,
+        structure,
+        side,
+        walls_only,
+        pocket_radius,
+        Touch::Sides,
+    )
+    .is_err()
 }
 
 /// The one step a worker at `from` takes toward a post at `target` this
@@ -1261,6 +1301,9 @@ pub(crate) fn haul_step_system(
     // the base actually reaches, measured off the grid rather than taken
     // from the size the pocket started at. See `BaseGrid::radius`.
     let pocket_radius = grid.radius();
+    // Read only by `cut_off`. Taken before the loop grows `blocked`, which
+    // only ever adds bodies, so the walls in it are the tick's walls.
+    let walls_only = blocked.walls_only();
 
     // Rebuilt every tick rather than cached: this is the list that makes a
     // demolished or newly-filled depot stop being a destination without
@@ -1384,23 +1427,29 @@ pub(crate) fn haul_step_system(
 
         // `post_reach` asked of a candidate depot, for `nearest_depot` and
         // for `Errand::Tend`'s pickup — one rule for what the walk reaches.
-        let reachable = |depot: Entity, at: Position| {
-            let side = structures
-                .get(depot)
+        let side_of = |structure: Entity| {
+            structures
+                .get(structure)
                 .ok()
                 .and_then(|(_, _, _, s)| db.get(&s.kind))
                 .map(|d| d.footprint)
-                .unwrap_or(1);
+                .unwrap_or(1)
+        };
+        let reachable = |depot: Entity, at: Position| {
             post_reach(
                 &grid,
                 worker_pos,
                 at,
-                side,
+                side_of(depot),
                 &blocked,
                 pocket_radius,
                 Touch::Sides,
             )
             .is_ok()
+        };
+        // Both `Stranded` writes ask this before writing — see `cut_off`.
+        let cut_off_from = |at: Position, side: u8| {
+            cut_off(&grid, worker_pos, at, side, &walls_only, pocket_radius)
         };
         // The whole of what this worker is doing with the tick, decided once
         // — see `Errand`. Scoped so every read of `structures` is finished
@@ -1869,16 +1918,26 @@ pub(crate) fn haul_step_system(
                     ranked.sort_by_key(|(_, p)| (chebyshev(*p, worker_pos), p.x, p.y));
                     let mut asked: HashMap<Entity, bool> = HashMap::new();
                     let mut pick = None;
-                    for item in wanted {
+                    for item in &wanted {
                         let open = ranked.iter().any(|&(e, p)| {
-                            accepts(e, &item) && *asked.entry(e).or_insert_with(|| reachable(e, p))
+                            accepts(e, item) && *asked.entry(e).or_insert_with(|| reachable(e, p))
                         });
                         if open {
-                            pick = Some(item);
+                            pick = Some(item.clone());
                             break;
                         }
                     }
                     let Some(item) = pick else {
+                        // Every store that would take it has its faces
+                        // held: lift nothing yet, and wait for one to clear.
+                        let waiting = wanted.iter().any(|item| {
+                            ranked
+                                .iter()
+                                .any(|&(e, p)| accepts(e, item) && !cut_off_from(p, side_of(e)))
+                        });
+                        if waiting {
+                            continue;
+                        }
                         // Something is waiting that a depot would take and
                         // none can be walked to: the machine is cut off, not
                         // merely full. Written through the marker the status
@@ -1916,6 +1975,12 @@ pub(crate) fn haul_step_system(
             pocket_radius,
             Touch::Sides,
         ) else {
+            // Held faces, not a lost route: the worker keeps its task and
+            // its load and waits, which is no episode at all.
+            if !cut_off_from(dest_pos, dest_side) {
+                commands.entity(worker).remove::<Stranded>();
+                continue;
+            }
             // Only on entry: `since` is the start of the episode, and
             // rewriting it every tick would leave nothing able to tell a
             // route that has just broken from one broken an hour ago. See

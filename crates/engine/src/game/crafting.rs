@@ -102,7 +102,8 @@ impl Game {
                     .requires_structure
                     .as_ref()
                     .is_none_or(|s| self.touched_bench(s).is_some());
-                let researched = c.research.as_ref().is_none_or(|r| self.is_researched(r));
+                let researched =
+                    self.craft_unlocked(c.research.as_ref(), c.requires_structure.as_ref());
                 (bench_ready && researched).then(|| CraftRecipe {
                     result: def.id.clone(),
                     cost: charged(&c.cost),
@@ -119,7 +120,7 @@ impl Game {
                     .requires_structure
                     .as_ref()
                     .is_none_or(|s| self.touched_bench(s).is_some());
-                if bench_ready {
+                if bench_ready && self.craft_unlocked(None, recipe.requires_structure.as_ref()) {
                     recipes.push(CraftRecipe {
                         result: recipe.result.clone(),
                         cost: charged(&recipe.cost),

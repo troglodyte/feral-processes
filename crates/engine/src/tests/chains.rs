@@ -1198,7 +1198,7 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
         .expect("the Printer assembles one");
 
     /// One step flattened for comparison: its inputs, its tool, its output.
-    type StepShape<'a> = (Vec<(&'a str, u32)>, Option<&'a str>, &'a str);
+    type StepShape<'a> = (Vec<(&'a str, u32)>, Vec<RecipeMaker>, &'a str);
 
     let shape: Vec<StepShape> = chain
         .steps
@@ -1209,7 +1209,7 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
                     .iter()
                     .map(|i| (i.item.as_str(), i.qty))
                     .collect::<Vec<_>>(),
-                s.maker.as_deref(),
+                s.makers.clone(),
                 s.output.as_str(),
             )
         })
@@ -1218,9 +1218,21 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
     assert_eq!(
         shape,
         vec![
-            (vec![("Core Fragment", 2)], None, "Power Cell"),
-            (vec![("Power Cell", 3)], Some("Workbench"), "Charge Coil"),
-            (vec![("Charge Coil", 3)], Some("Printer"), "Patch Routine"),
+            (
+                vec![("Core Fragment", 2)],
+                vec![structure("Extractor"), RecipeMaker::ByHand],
+                "Power Cell"
+            ),
+            (
+                vec![("Power Cell", 3)],
+                vec![structure("Factory"), structure("Workbench")],
+                "Charge Coil"
+            ),
+            (
+                vec![("Charge Coil", 3)],
+                vec![structure("Printer"), structure("Workbench")],
+                "Patch Routine"
+            ),
         ],
         "every dependency is listed before the step that consumes it"
     );
@@ -1241,14 +1253,17 @@ fn an_extractors_chain_is_a_single_step_that_consumes_nothing() {
         chain.steps[0].inputs.is_empty(),
         "an extractor draws from nothing, not from a recipe"
     );
-    assert_eq!(chain.steps[0].maker.as_deref(), Some("Extractor"));
+    assert_eq!(
+        chain.steps[0].makers,
+        vec![RecipeMaker::Structure("Extractor".into())]
+    );
 }
 
 /// Power Cell is the shipped item that is craftable with no
-/// `requires_structure`, so it is what proves the bench case is reachable
+/// `requires_structure`, so it is what proves the by-hand case is reachable
 /// rather than every step naming a machine.
 #[test]
-fn a_step_the_player_compiles_by_hand_names_no_maker() {
+fn a_step_the_player_compiles_by_hand_lists_by_hand_as_a_maker() {
     let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let chains = game.recipe_chains();
 
@@ -1262,42 +1277,37 @@ fn a_step_the_player_compiles_by_hand_names_no_maker() {
         .find(|s| s.output == "Power Cell")
         .expect("the coil's recipe is priced in them");
 
-    assert_eq!(
-        power_cell.maker, None,
+    assert!(
+        power_cell.makers.contains(&RecipeMaker::ByHand),
         "power_cell.ron sets no requires_structure"
+    );
+    assert_eq!(
+        power_cell.makers.last(),
+        Some(&RecipeMaker::ByHand),
+        "by hand sorts after every structure"
     );
 }
 
-/// Shortest chains first, so the screen opens on the taps and reads down
-/// into the things that need a base to make.
+/// The page is a reference to look things up in, so entries run A-Z; the
+/// deepest chain in the game is still the Patch Routine's.
 #[test]
-fn chains_are_listed_shallowest_first() {
-    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn chains_are_listed_alphabetically() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "automation");
     let chains = game.recipe_chains();
 
-    let depths: Vec<usize> = chains.iter().map(|c| c.steps.len()).collect();
-    let mut sorted = depths.clone();
+    let names: Vec<&str> = chains.iter().map(|c| c.product.as_str()).collect();
+    let mut sorted = names.clone();
     sorted.sort();
-    assert_eq!(depths, sorted);
-    // Flattening the chains broke the three-way tie that used to sit at the
-    // bottom: gear is two steps off its tap now, and only the Patch Routine
-    // still runs three deep, because Power Cell has a recipe of its own under
-    // the Charge Coil. One product at the bottom is a stronger statement than
-    // a set, so it is named.
-    let deepest = depths
-        .last()
-        .copied()
-        .expect("the shipped assets declare chains");
+    assert_eq!(names, sorted);
+
+    let deepest = chains.iter().map(|c| c.steps.len()).max().unwrap();
     let bottom: Vec<&str> = chains
         .iter()
         .filter(|c| c.steps.len() == deepest)
         .map(|c| c.product.as_str())
         .collect();
-    assert_eq!(
-        bottom,
-        ["Patch Routine"],
-        "the deepest thing in the game sits at the bottom"
-    );
+    assert_eq!(bottom, ["Patch Routine"], "the deepest thing in the game");
 }
 
 /// A mod whose recipe names itself must not take the process down with it —
@@ -1412,7 +1422,9 @@ const ROUTER_STRUCTURE: &str = r#"(
 /// was involved.
 #[test]
 fn an_input_no_recipe_makes_names_the_tap_that_produces_it() {
-    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    unlock_research_chain(&mut game, "weapon_bench");
     let chains = game.recipe_chains();
 
     let sourced = |product: &str| -> Vec<(String, Option<String>)> {
@@ -1512,7 +1524,9 @@ fn an_input_nothing_produces_names_no_tap() {
 /// depth, and quoting `x1` there would be a number the game never honours.
 #[test]
 fn a_recipe_step_yields_one_unit_and_a_tap_declines_to_say() {
-    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    unlock_research_chain(&mut game, "weapon_bench");
     let chains = game.recipe_chains();
 
     let disk = chains
@@ -1553,14 +1567,22 @@ fn a_chain_carries_its_products_authored_description() {
         "the chain quotes power_cell.ron's own prose, not a derived gloss"
     );
 
-    let missing: Vec<&str> = chains
+    let wrong: Vec<&str> = chains
         .iter()
-        .filter(|c| c.description.is_none())
+        .filter(|c| {
+            let material = game
+                .world
+                .resource::<ItemDb>()
+                .all()
+                .find(|d| d.name == c.product)
+                .is_some_and(|d| d.category() == ItemCategory::Material);
+            c.description.is_none() != material
+        })
         .map(|c| c.product.as_str())
         .collect();
     assert!(
-        missing.is_empty(),
-        "every shipped item carries description text, so every chain shows one: {missing:?}"
+        wrong.is_empty(),
+        "a material carries no description and every other shipped item carries one: {wrong:?}"
     );
 }
 
@@ -1617,4 +1639,8 @@ fn an_assembled_item_fires_its_ftue_key() {
     }
 
     assert!(game.ftue_shown(&key));
+}
+
+fn structure(name: &str) -> RecipeMaker {
+    RecipeMaker::Structure(name.to_string())
 }

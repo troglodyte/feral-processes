@@ -403,13 +403,17 @@ fn workbench_gear_is_listed_away_from_the_bench() {
 }
 
 #[test]
-fn a_material_has_no_description_and_lists_its_uses() {
+fn a_material_keeps_its_description_and_lists_its_uses() {
     let mut game = fresh_game();
     unlock_research_chain(&mut game, "armor_bench");
     let chains = game.recipe_chains();
     let block = entry(&chains, "Bytecode Block").expect("something makes bytecode blocks");
 
-    assert_eq!(block.description, None);
+    assert!(block.description.is_some());
+    assert_eq!(
+        block.description.as_deref(),
+        game.item_description(&ItemId::from("bytecode_block"))
+    );
     assert!(!block.used_in.is_empty());
     let mut sorted = block.used_in.clone();
     sorted.sort();

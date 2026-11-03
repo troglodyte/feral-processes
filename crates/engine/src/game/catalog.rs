@@ -156,6 +156,10 @@ impl Game {
     /// compiles these ones is already a line of this chain. Without that
     /// clause a chain would claim two sources for a single item.
     ///
+    /// Every entry carries the item's authored description when it has one,
+    /// materials included: the page is where a player asks what a thing is
+    /// for, and a bare name answers nothing.
+    ///
     /// Alphabetical, replacing the old shallowest-first order: with makers
     /// folded into one entry per item the page is a reference to look things
     /// up in, not a tour from the taps downward.
@@ -193,14 +197,9 @@ impl Game {
                     .collect();
                 used_in.sort();
                 used_in.dedup();
-                let material = self.item_category(output) == ItemCategory::Material;
                 RecipeChain {
                     product: self.item_name(output).to_string(),
-                    description: if material {
-                        None
-                    } else {
-                        self.item_description(output).map(str::to_string)
-                    },
+                    description: self.item_description(output).map(str::to_string),
                     used_in,
                     steps,
                 }

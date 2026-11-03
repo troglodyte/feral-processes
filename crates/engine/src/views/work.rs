@@ -298,8 +298,7 @@ pub struct RecipeChain {
     /// The product's own authored description, the page's answer to why you
     /// would make one where the steps only say how. Resolved here because a
     /// renderer holding item ids has no `ItemDb` to look prose up in. `None`
-    /// for a material, whose use is what `used_in` says, and for a product
-    /// whose file leaves the field blank.
+    /// for a product whose file leaves the field blank.
     pub description: Option<String>,
     /// Display names of the unlocked entries whose own step takes `product`,
     /// A-Z and without repeats.

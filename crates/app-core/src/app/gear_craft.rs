@@ -65,6 +65,14 @@ impl DesignDraft {
     }
 }
 
+/// The name a draft carries until the player types one: its Frame's, or
+/// nothing without one.
+fn default_design_name(parts: &[WeaponPart]) -> String {
+    weapon::frame_of(parts)
+        .map(|(frame, _)| frame.name().to_string())
+        .unwrap_or_default()
+}
+
 /// How an affix reads in a list.
 pub fn affix_label(affix: &AffixId) -> String {
     affix.0.replace('_', " ")
@@ -240,11 +248,13 @@ impl App {
             return;
         };
         if idx == visible.len() {
+            let defaulted = self.design_name_is_default();
             match picking {
                 DesignPicking::Category(c) => self.design_draft.parts.retain(|p| p.category() != c),
                 DesignPicking::Affixes => self.design_draft.affixes.clear(),
             }
             self.prune_design();
+            self.follow_default_name(defaulted);
             self.leave_design_pick();
             return;
         }
@@ -269,6 +279,7 @@ impl App {
             return;
         }
         let part = option.part;
+        let defaulted = self.design_name_is_default();
         let parts = &mut self.design_draft.parts;
         parts.retain(|p| p.category() != category);
         if category == Category::Frame {
@@ -277,8 +288,20 @@ impl App {
             parts.push(part);
         }
         self.prune_design();
+        self.follow_default_name(defaulted);
         self.status_line = None;
         self.leave_design_pick();
+    }
+
+    fn design_name_is_default(&self) -> bool {
+        self.design_draft.name == default_design_name(&self.design_draft.parts)
+    }
+
+    /// A name the player never typed tracks the Frame.
+    fn follow_default_name(&mut self, defaulted: bool) {
+        if defaulted {
+            self.design_draft.name = default_design_name(&self.design_draft.parts);
+        }
     }
 
     /// Toggles one affix; the list stays open so several can be taken.

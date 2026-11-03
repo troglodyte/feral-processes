@@ -279,3 +279,41 @@ fn the_weapons_research_tab_opens_from_the_research_page() {
     app.handle_key(GameKey::Esc);
     assert_ne!(app.mode, Mode::WeaponResearch);
 }
+
+#[test]
+fn leaving_a_part_list_or_the_name_field_keeps_the_highlight_on_its_row() {
+    let mut app = forge_app(81_020);
+    open_page(&mut app, Mode::WeaponBuild);
+    choose(&mut app, row_of(Category::Frame), edge());
+    let rider = row_of(Category::Rider);
+    choose(&mut app, rider, bleed());
+    assert_eq!(app.menu_selected, rider, "a pick comes back to its row");
+    pick_row(&mut app, rider);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::WeaponBuild);
+    assert_eq!(app.menu_selected, rider, "Esc comes back to its row");
+    pick_row(&mut app, DESIGN_NAME_ROW);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.menu_selected, DESIGN_NAME_ROW);
+}
+
+#[test]
+fn the_name_follows_the_frame_until_the_player_types_one() {
+    let mut app = forge_app(81_021);
+    let lance = WeaponPart::Frame(Frame::Lance, Version::V1);
+    let _ = app
+        .game
+        .as_mut()
+        .unwrap()
+        .dev_unlock_research(&lance.node_id());
+    open_page(&mut app, Mode::WeaponBuild);
+    choose(&mut app, 0, edge());
+    assert_eq!(app.design_draft.name, "Edge");
+    choose(&mut app, 0, lance);
+    assert_eq!(app.design_draft.name, "Lance", "a new Frame renames it");
+    pick_row(&mut app, DESIGN_NAME_ROW);
+    type_text(&mut app, "r");
+    app.handle_key(GameKey::Enter);
+    choose(&mut app, 0, edge());
+    assert_eq!(app.design_draft.name, "Lancer", "a typed name stays");
+}

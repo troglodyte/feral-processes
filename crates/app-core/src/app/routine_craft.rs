@@ -9,6 +9,18 @@
 use crate::*;
 use feral_processes_engine::routine_craft::Subroutine;
 
+/// The name a draft carries until the player types one: its Core's, or
+/// nothing without a Core.
+fn default_routine_name(parts: &[Subroutine]) -> String {
+    parts
+        .iter()
+        .find_map(|p| match p {
+            Subroutine::Core(core, _) => Some(core.name().to_string()),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
 /// Longest routine name the name field takes.
 pub use feral_processes_engine::tuning::CRAFT_NAME_MAX as ROUTINE_NAME_MAX;
 
@@ -91,6 +103,7 @@ impl App {
         let Some(idx) = self.selected_index(key, options.len() + 1) else {
             return;
         };
+        let defaulted = self.routine_draft.name == default_routine_name(&self.routine_draft.parts);
         let parts = &mut self.routine_draft.parts;
         if idx == options.len() {
             parts.retain(|p| p.slot() != slot);
@@ -113,6 +126,9 @@ impl App {
             }
         }
         self.prune_draft();
+        if defaulted {
+            self.routine_draft.name = default_routine_name(&self.routine_draft.parts);
+        }
         self.leave_pick();
     }
 

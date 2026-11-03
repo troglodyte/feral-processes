@@ -98,6 +98,13 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // level would make that key, page, scroll, key.
             | (Mode::Perks, Mode::PerkBought)
             | (Mode::PerkBought, Mode::Perks)
+            // A Workbench build row's list or name field hands back to the
+            // row that opened it (`leave_pick`, `leave_design_pick`), so the
+            // next row is one key away rather than a walk from the top.
+            | (Mode::RoutineBuildPick, Mode::RoutineBuild)
+            | (Mode::RoutineBuildName, Mode::RoutineBuild)
+            | (Mode::WeaponBuildPick, Mode::WeaponBuild)
+            | (Mode::WeaponBuildName, Mode::WeaponBuild)
     )
 }
 

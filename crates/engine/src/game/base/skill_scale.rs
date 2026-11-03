@@ -106,7 +106,8 @@ pub(crate) fn practise_tick(
 impl Game {
     /// Whether `worker`'s work skills count. The player carries `Skills` for
     /// combat and works at today's pace whatever their work tracks say; every
-    /// `&mut Game` work door asks this, the one place the player is excluded.
+    /// `&mut Game` work door asks this. The bevy work systems keep the player
+    /// out another way, by querying `With<Tamed>`.
     fn work_skills_count(&self, worker: Entity) -> bool {
         worker != self.player_entity()
     }

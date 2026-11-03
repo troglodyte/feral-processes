@@ -802,6 +802,9 @@ mod tests {
                 (old.max_hp, old.atk, old.mitigation),
                 "level {n}"
             );
+            // Analysis now buys accuracy and the canonical spend never
+            // touches it, so Decompiler no longer climbs with level.
+            assert_eq!(d.decompiler, 0, "level {n}");
         }
         assert_eq!(
             canonical_spend(3).values().sum::<u32>(),

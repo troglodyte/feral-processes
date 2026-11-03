@@ -1957,13 +1957,22 @@ pub(crate) fn haul_step_system(
                     let Some(item) = pick else {
                         // Every store that would take it has its faces
                         // held: lift nothing yet, and wait for one to clear.
-                        let waiting_on_a_face = wanted.iter().any(|item| {
-                            ranked
-                                .iter()
-                                .any(|&(e, p)| accepts(e, item) && !cut_off_from(p, side_of(e)))
-                        });
+                        // Asked only of a worker not yet stranded, and once
+                        // per depot: a stranded worker at a cut-off machine
+                        // would otherwise pay a walk per item per depot
+                        // every tick for as long as it stays cut off.
+                        let waiting_on_a_face = stranded.is_none() && {
+                            let mut open: HashMap<Entity, bool> = HashMap::new();
+                            wanted.iter().any(|item| {
+                                ranked.iter().any(|&(e, p)| {
+                                    accepts(e, item)
+                                        && *open
+                                            .entry(e)
+                                            .or_insert_with(|| !cut_off_from(p, side_of(e)))
+                                })
+                            })
+                        };
                         if waiting_on_a_face
-                            && stranded.is_none()
                             && let Some(wait) = wait_on_body(waiting, machine, clock.tick)
                         {
                             commands.entity(worker).insert(wait);

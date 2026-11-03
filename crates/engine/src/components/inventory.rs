@@ -283,9 +283,11 @@ pub struct FloorItem(pub crate::items::FloorThing);
 /// `game::base::hauling::haul_step_system`, the one system that walks a field
 /// and so the only one that can know.
 ///
-/// **No route even with every body stepped aside** (`hauling::cut_off`): a
-/// face somebody is standing on is a wait, and a wait writes no marker, so a
-/// queue at a single-faced Depot is never an episode and never a grudge.
+/// **No route even with every body stepped aside** (`hauling::cut_off`), or
+/// a wait behind bodies past `tuning::BODY_WAIT_GRACE_TICKS`: a face
+/// somebody is standing on is a queue, timed by `WaitingOnBody` and writing
+/// no marker, so a queue at a single-faced Depot is never an episode and
+/// never a grudge — while a body that never moves still strands.
 ///
 /// **Written on entry only, so `since` is the start of the episode rather
 /// than the last tick of it.** That is what makes a stranding an *event* a
@@ -313,6 +315,25 @@ pub struct FloorItem(pub crate::items::FloorThing);
 pub struct Stranded {
     /// The `GameClock` tick the worker entered the state on.
     pub since: u64,
+}
+
+/// A posted program waiting behind a body on the only face of where it is
+/// going, and since when — the grace before that wait becomes `Stranded`.
+/// `hauling::wait_on_body` is the one writer of its fields.
+///
+/// `post` and `last` are what make a record a *continuing* wait: one for a
+/// different post, or not renewed on the previous tick, starts the count
+/// again, so a re-posting or a route that opened in between cannot carry an
+/// old wait into a new one. Cleared on arrival, on a step, and when the wait
+/// strands, so a wait strands once.
+///
+/// **Not saved**, `Squeezing`'s reason: losing it on load only restarts the
+/// count, so no save-format change.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WaitingOnBody {
+    pub since: u64,
+    pub last: u64,
+    pub post: Entity,
 }
 
 /// Marks a stranded carrier whose load has been held past

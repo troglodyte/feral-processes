@@ -12,7 +12,7 @@ use bevy_ecs::system::SystemParam;
 
 use crate::alerts::{self, AlertKind};
 use crate::base_grid::BaseGrid;
-use crate::components::{Fleeing, FloorItem, SetDownLoad};
+use crate::components::{Fleeing, FloorItem, SetDownLoad, WaitingOnBody};
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::floor::take_floor_unit;
 use crate::game::base::research_supply::{self, ResearchLedger};
@@ -769,6 +769,8 @@ pub(crate) fn post_reach(
 /// `has_station`'s reasoning: a body on the face is proof something can
 /// stand there. `walls_only` is `Occupancy::walls_only` of the tick's
 /// field, built once; a walk it admits is the walk once the body moves.
+/// A body that never moves is `wait_on_body`'s to catch: past
+/// `tuning::BODY_WAIT_GRACE_TICKS` the wait strands after all.
 pub(crate) fn cut_off(
     grid: &BaseGrid,
     from: Position,
@@ -787,6 +789,25 @@ pub(crate) fn cut_off(
         Touch::Sides,
     )
     .is_err()
+}
+
+/// One more tick of waiting behind a body at `post`: the record to keep, or
+/// `None` once the wait has run `tuning::BODY_WAIT_GRACE_TICKS` and is to be
+/// written as `Stranded`. A record for another post, or one not renewed on
+/// the previous tick, starts a fresh count — see `WaitingOnBody`.
+pub(crate) fn wait_on_body(
+    record: Option<WaitingOnBody>,
+    post: Entity,
+    now: u64,
+) -> Option<WaitingOnBody> {
+    let since = record
+        .filter(|r| r.post == post && r.last + 1 >= now)
+        .map_or(now, |r| r.since);
+    (now - since < tuning::BODY_WAIT_GRACE_TICKS).then_some(WaitingOnBody {
+        since,
+        last: now,
+        post,
+    })
 }
 
 /// The one step a worker at `from` takes toward a post at `target` this
@@ -854,6 +875,7 @@ type Hauler = (
     Option<&'static Carrying>,
     Option<&'static Stranded>,
     Option<&'static Squeezing>,
+    Option<&'static WaitingOnBody>,
     &'static Tamed,
 );
 
@@ -1274,7 +1296,7 @@ pub(crate) fn haul_step_system(
             .map(|(_, p, _, s)| (*p, db.get(&s.kind).map(|d| d.footprint).unwrap_or(1))),
         workers
             .iter()
-            .filter(|(entity, _, task, _, _, _, tamed)| {
+            .filter(|(entity, _, task, _, _, _, _, tamed)| {
                 crate::game::party::walks_the_base(roles.of(*entity, tamed.owner), Some(task.kind))
             })
             .map(|(_, p, ..)| *p)
@@ -1413,15 +1435,17 @@ pub(crate) fn haul_step_system(
     order.sort_unstable();
 
     for (.., worker) in order {
-        let Ok((_, worker_pos, task, carrying, stranded, squeezing, _)) = workers.get(worker)
+        let Ok((_, worker_pos, task, carrying, stranded, squeezing, waiting, _)) =
+            workers.get(worker)
         else {
             continue;
         };
-        let (worker_pos, carrying, stranded, squeezing) = (
+        let (worker_pos, carrying, stranded, squeezing, waiting) = (
             *worker_pos,
             carrying.cloned(),
             stranded.copied(),
             squeezing.copied(),
+            waiting.copied(),
         );
         let machine = task.target;
 
@@ -1721,6 +1745,9 @@ pub(crate) fn haul_step_system(
             // ever built — a depot deployed beside a stranded worker would
             // otherwise leave the marker set while it went back to work.
             commands.entity(worker).remove::<Stranded>();
+            if waiting.is_some() {
+                commands.entity(worker).remove::<WaitingOnBody>();
+            }
             match errand {
                 Errand::Deposit(depot) => {
                     let Some(load) = carrying else {
@@ -1930,12 +1957,16 @@ pub(crate) fn haul_step_system(
                     let Some(item) = pick else {
                         // Every store that would take it has its faces
                         // held: lift nothing yet, and wait for one to clear.
-                        let waiting = wanted.iter().any(|item| {
+                        let waiting_on_a_face = wanted.iter().any(|item| {
                             ranked
                                 .iter()
                                 .any(|&(e, p)| accepts(e, item) && !cut_off_from(p, side_of(e)))
                         });
-                        if waiting {
+                        if waiting_on_a_face
+                            && stranded.is_none()
+                            && let Some(wait) = wait_on_body(waiting, machine, clock.tick)
+                        {
+                            commands.entity(worker).insert(wait);
                             continue;
                         }
                         // Something is waiting that a depot would take and
@@ -1976,10 +2007,17 @@ pub(crate) fn haul_step_system(
             Touch::Sides,
         ) else {
             // Held faces, not a lost route: the worker keeps its task and
-            // its load and waits, which is no episode at all.
-            if !cut_off_from(dest_pos, dest_side) {
-                commands.entity(worker).remove::<Stranded>();
+            // its load and waits, which is no episode at all — until the
+            // grace runs out, when it strands below like any other.
+            if stranded.is_none()
+                && !cut_off_from(dest_pos, dest_side)
+                && let Some(wait) = wait_on_body(waiting, machine, clock.tick)
+            {
+                commands.entity(worker).insert(wait);
                 continue;
+            }
+            if waiting.is_some() {
+                commands.entity(worker).remove::<WaitingOnBody>();
             }
             // Only on entry: `since` is the start of the episode, and
             // rewriting it every tick would leave nothing able to tell a
@@ -2017,6 +2055,9 @@ pub(crate) fn haul_step_system(
             continue;
         };
         commands.entity(worker).remove::<Stranded>();
+        if waiting.is_some() {
+            commands.entity(worker).remove::<WaitingOnBody>();
+        }
         let Some(step) = step else {
             continue;
         };

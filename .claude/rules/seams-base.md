@@ -251,7 +251,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   marks the *worker*, `task_progress_system` stays the only writer of a
   machine's status. A face only a body holds is something waiting fixes:
   both `Stranded` writes ask `hauling::cut_off` (the walk with every body
-  stepped aside) first, `has_station`'s reasoning.
+  stepped aside) first, `has_station`'s reasoning, and strand a wait behind
+  bodies only past `BODY_WAIT_GRACE_TICKS` (`hauling::wait_on_body`, an
+  unsaved `WaitingOnBody`).
 - **`set_machine_status` is the one place a stall is announced, and it
   posts to the alert board only on transition — never to the message log.**
   Three callers, so "entering a state is news, staying in it is not" cannot

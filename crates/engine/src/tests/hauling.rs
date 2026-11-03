@@ -2909,3 +2909,78 @@ fn a_carrier_with_no_route_even_past_bodies_is_stranded() {
 fn node_pos(game: &Game, structure: Entity) -> Position {
     *game.world.get::<Position>(structure).unwrap()
 }
+
+/// **A body that never moves still strands its carrier — once.** The held
+/// face is a queue only for `BODY_WAIT_GRACE_TICKS`; past it the wait takes
+/// the ordinary path: one episode, one grudge, and the set-down
+/// `STRANDED_SET_DOWN_TICKS` after.
+#[test]
+fn a_body_parked_on_the_only_face_past_the_grace_strands_once() {
+    let mut game = base(44);
+    let node = deploy_machine(&mut game, "extractor", "core_fragment", 0, 2);
+    let (depot, face) = one_faced_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 1,
+    });
+    held_face(&mut game, face);
+
+    let t0 = game.current_tick();
+    let mut episodes = std::collections::BTreeSet::new();
+    let mut first_stranded = None;
+    let window = tuning::BODY_WAIT_GRACE_TICKS + tuning::STRANDED_SET_DOWN_TICKS + 20;
+    for _ in 0..window {
+        game.tick();
+        if let Some(s) = game.world.get::<Stranded>(worker) {
+            episodes.insert(s.since);
+            first_stranded.get_or_insert(game.current_tick());
+        }
+    }
+
+    let started = first_stranded.expect("a wait that never ends strands");
+    assert!(
+        started - t0 >= tuning::BODY_WAIT_GRACE_TICKS,
+        "stranded {} ticks in, inside the grace",
+        started - t0
+    );
+    assert_eq!(episodes.len(), 1, "one wait, one episode: {episodes:?}");
+    assert_eq!(stranded_memories(&game, worker), 1);
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "the set-down follows the stranding"
+    );
+    assert_eq!(node_output(&game, depot, ids::CORE_FRAGMENT), 0);
+}
+
+/// A wait is one post's and one unbroken run of ticks: a record for another
+/// post, or one with a gap, starts the count again rather than carrying an
+/// old wait into a new one.
+#[test]
+fn a_wait_restarts_on_a_new_post_or_after_a_gap() {
+    use crate::game::base::hauling::wait_on_body;
+    let mut game = base(46);
+    let post = deploy(&mut game, "depot", 4, 0);
+    let other = deploy(&mut game, "depot", 6, 0);
+    let grace = tuning::BODY_WAIT_GRACE_TICKS;
+
+    let old = wait_on_body(None, post, 10).unwrap();
+    assert_eq!(old.since, 10);
+    let mut run = old;
+    for now in 11..10 + grace {
+        run = wait_on_body(Some(run), post, now).expect("inside the grace");
+    }
+    assert_eq!(wait_on_body(Some(run), post, 10 + grace), None);
+
+    assert_eq!(
+        wait_on_body(Some(run), other, 10 + grace).unwrap().since,
+        10 + grace
+    );
+    assert_eq!(
+        wait_on_body(Some(old), post, 10 + grace).unwrap().since,
+        10 + grace
+    );
+}

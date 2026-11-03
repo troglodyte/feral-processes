@@ -1082,6 +1082,11 @@ pub(super) fn draw_surface_map(
             pane,
         )
     });
+    // Alt's own labels take the screen while it is held, so the two never
+    // contest a spot.
+    if !reveal {
+        super::staff_tags::draw_staff_tags(painter, &layout, &entities);
+    }
     if reveal {
         super::alt_overlay::draw_alt_labels(
             painter,

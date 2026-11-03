@@ -18,11 +18,11 @@ pub(crate) struct TileRect {
 }
 
 impl TileRect {
-    fn overlaps(&self, o: &TileRect) -> bool {
+    pub(crate) fn overlaps(&self, o: &TileRect) -> bool {
         self.x < o.x + o.w && o.x < self.x + self.w && self.y < o.y + o.h && o.y < self.y + self.h
     }
 
-    fn contains(&self, o: &TileRect) -> bool {
+    pub(crate) fn contains(&self, o: &TileRect) -> bool {
         o.x >= self.x
             && o.y >= self.y
             && o.x + o.w <= self.x + self.w

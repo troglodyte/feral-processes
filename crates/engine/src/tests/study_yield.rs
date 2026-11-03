@@ -992,3 +992,94 @@ fn the_map_marks_a_station_holding_a_spent_program() {
     hold(&mut game, station, 7);
     assert_eq!(marked(&mut game), Some(true));
 }
+
+// Racking a loose floor program: ranked after the station slots.
+
+fn drop_on_floor(game: &mut Game, x: i32, y: i32, level: u32) {
+    crate::game::base::floor::spawn_floor_item(
+        &mut game.world,
+        Position { x, y },
+        crate::items::FloorThing::Program(program(level)),
+    );
+}
+
+#[test]
+fn an_idle_staffer_racks_a_program_lying_on_the_floor() {
+    let (mut game, _station, rack) = base_with_station_and_rack();
+    drop_on_floor(&mut game, 6, 6, 5);
+    let worker = spawn_tamed(&mut game, 100, 3);
+
+    let mut carried = false;
+    tick_until(&mut game, "floor program reaches the rack", |g| {
+        carried |= g.world.get::<CarryingProgram>(worker).is_some();
+        racked_levels(g, rack) == vec![5]
+    });
+
+    assert!(carried, "a body walked it rather than it teleporting");
+    assert!(floor_programs(&mut game).is_empty());
+}
+
+#[test]
+fn a_station_slot_takes_the_last_rack_room_before_a_floor_program() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 7];
+    hold(&mut game, station, 7);
+    drop_on_floor(&mut game, -5, -5, 5);
+    spawn_tamed(&mut game, 100, 3);
+
+    tick_until(&mut game, "the station's program is racked", |g| {
+        racked_levels(g, rack).contains(&7)
+    });
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert!(!racked_levels(&game, rack).contains(&5));
+    assert_eq!(
+        floor_programs(&mut game),
+        vec![(Position { x: -5, y: -5 }, 5)],
+        "the floor program stays put with the rack full"
+    );
+}
+
+#[test]
+fn a_body_cut_off_from_the_station_leaves_its_rack_room_alone() {
+    let (mut game, station, rack) = base_with_station_and_rack();
+    game.world.get_mut::<Racked>(rack).unwrap().0 = vec![program(1); 8];
+    // An island of floor off the main box: its own rack with one slot, a
+    // program on the floor and a body, none of them reaching the station.
+    lay_floor_box(&mut game, (15, -3), (19, 3));
+    let island_rack = spawn_machine_at(&mut game, "quarantine_rack", 19, 0);
+    game.world.get_mut::<Racked>(island_rack).unwrap().0 = vec![program(1); 7];
+    drop_on_floor(&mut game, 15, 0, 5);
+    let worker = spawn_tamed(&mut game, 100, 3);
+    *game.world.get_mut::<Position>(worker).unwrap() = Position { x: 17, y: 0 };
+    hold(&mut game, station, 7);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+    assert_eq!(racked_levels(&game, island_rack).len(), 7);
+    assert_eq!(
+        floor_programs(&mut game),
+        vec![(Position { x: 15, y: 0 }, 5)]
+    );
+}
+
+#[test]
+fn tidying_leaves_a_floor_program_for_a_rack_with_room() {
+    let (mut game, _station, rack) = base_with_station_and_rack();
+    game.toggle_stockpile_box((8, 8), (8, 8));
+    drop_on_floor(&mut game, 6, 6, 5);
+    spawn_tamed(&mut game, 100, 3);
+    spawn_tamed(&mut game, 100, 3);
+
+    tick_until(&mut game, "floor program reaches the rack", |g| {
+        assert!(
+            !floor_programs(g)
+                .iter()
+                .any(|(p, _)| *p == Position { x: 8, y: 8 }),
+            "never tidied onto the stockpile"
+        );
+        racked_levels(g, rack) == vec![5]
+    });
+}

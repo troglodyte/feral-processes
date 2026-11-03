@@ -22,6 +22,11 @@
 //! after `RACK_CARRY_PATIENCE_BEATS` on one tile rather than being held out
 //! of the posting pool for ever.
 //!
+//! **A program lying on the floor is picked up too, after the stations**: a
+//! body tries a station first, and a floor program is only lifted to a rack,
+//! into room no station's program is waiting for. Tidying never reaches one a
+//! rack would take, because this errand ranks above it on the same gates.
+//!
 //! **A downed program is never lost and never goes to the pack**:
 //! `shelter_program` is the one chain (rack, stockpile, floor), and
 //! `Game::drop_load` calls it, so any door that frees a carrier keeps the
@@ -33,9 +38,10 @@ use bevy_ecs::prelude::*;
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    Carrying, CarryingProgram, Position, RackWait, Racked, Structure, StudyYield, Task, Tidying,
-    UnderStudy,
+    Carrying, CarryingProgram, FloorItem, Position, RackWait, Racked, Structure, StudyYield, Task,
+    Tidying, UnderStudy,
 };
+use crate::game::base::floor::take_floor_item;
 use crate::game::base::hauling::{at_station, crew_reach, reaches};
 use crate::game::base::offshift::Amenities;
 use crate::items::{DownedProgram, FloorThing};
@@ -46,6 +52,9 @@ use crate::structures::StructureDb;
 pub(crate) struct RackBoard {
     /// Stations still holding a program nobody has lifted, `(x, y)`-sorted.
     stations: Vec<(Entity, Position)>,
+    /// Programs lying on the floor, `(x, y)`-sorted. Picked up only into rack
+    /// room the stations' programs leave spare, so a slot is cleared first.
+    loose: Vec<(Entity, Position)>,
     /// Rack room not spoken for by a body already walking one: what a new
     /// pick-up may still claim.
     spare: u32,
@@ -218,8 +227,8 @@ impl Game {
         self.shelter_program(held, at);
     }
 
-    /// `None` when nothing is held at a station and nobody is walking one:
-    /// no body is asked.
+    /// `None` when nothing is held at a station, nothing rackable lies on
+    /// the floor and nobody is walking one: no body is asked.
     pub(crate) fn rack_board(&mut self) -> Option<RackBoard> {
         let mut stations: Vec<(Entity, Position)> = self
             .world
@@ -228,17 +237,36 @@ impl Game {
             .filter(|(_, _, held)| held.0.is_some())
             .map(|(e, p, _)| (e, *p))
             .collect();
+        stations.sort_by_key(|(_, p)| (p.x, p.y));
         let in_transit = self.programs_in_transit();
-        if stations.is_empty() && in_transit == 0 {
+        let spare = self.total_rack_room().saturating_sub(in_transit);
+        let loose = if spare > stations.len() as u32 {
+            self.floor_programs()
+        } else {
+            Vec::new()
+        };
+        if stations.is_empty() && loose.is_empty() && in_transit == 0 {
             return None;
         }
-        stations.sort_by_key(|(_, p)| (p.x, p.y));
-        let spare = self.total_rack_room().saturating_sub(in_transit);
         Some(RackBoard {
             stations,
+            loose,
             spare,
             claimed: Vec::new(),
         })
+    }
+
+    /// Every downed program lying on the floor, `(x, y)`-sorted.
+    fn floor_programs(&mut self) -> Vec<(Entity, Position)> {
+        let mut found: Vec<(Entity, Position)> = self
+            .world
+            .query::<(Entity, &Position, &FloorItem)>()
+            .iter(&self.world)
+            .filter(|(_, _, f)| matches!(f.0, FloorThing::Program(_)))
+            .map(|(e, p, _)| (e, *p))
+            .collect();
+        found.sort_by_key(|(_, p)| (p.x, p.y));
+        found
     }
 
     /// The gates the other idle errands share, less their `CarryingProgram`
@@ -310,7 +338,7 @@ impl Game {
             return false;
         };
         let holding = self.world.get::<CarryingProgram>(worker).is_some();
-        if !holding && board.stations.is_empty() {
+        if !holding && board.stations.is_empty() && board.loose.is_empty() {
             return false;
         }
         // Gathered before the reach field borrows the grid.
@@ -363,15 +391,23 @@ impl Game {
         let Some(destination) = destination else {
             return false;
         };
-        let Some((index, target)) = board
-            .stations
-            .iter()
-            .enumerate()
-            .map(|(i, &(_, p))| (i, p))
-            .filter(|&(_, p)| reachable(p))
-            .min_by_key(|&(_, p)| (chebyshev(here, p), p.x, p.y))
-        else {
-            return false;
+        let nearest = |spots: &[(Entity, Position)]| {
+            spots
+                .iter()
+                .enumerate()
+                .map(|(i, &(_, p))| (i, p))
+                .filter(|&(_, p)| reachable(p))
+                .min_by_key(|&(_, p)| (chebyshev(here, p), p.x, p.y))
+        };
+        let Some((index, target)) = nearest(&board.stations) else {
+            // A floor program only ever moves to a rack, into room no
+            // station's program is waiting for.
+            let to_rack = matches!(destination, ProgramDrop::Rack(..))
+                && board.spare > board.stations.len() as u32;
+            let Some((index, target)) = nearest(&board.loose).filter(|_| to_rack) else {
+                return false;
+            };
+            return self.rack_pick_up_floor(worker, here, target, index, board);
         };
         if !at_station(here, target, 1, Touch::Sides) {
             return self.walk_idle_toward(worker, here, target).is_ok();
@@ -388,6 +424,34 @@ impl Game {
             if matches!(destination, ProgramDrop::Rack(..)) {
                 board.spare -= 1;
             }
+        }
+        true
+    }
+
+    /// The floor half of the pick-up: walk beside the program, then lift it
+    /// if it is still lying there.
+    fn rack_pick_up_floor(
+        &mut self,
+        worker: Entity,
+        here: Position,
+        target: Position,
+        index: usize,
+        board: &mut RackBoard,
+    ) -> bool {
+        if !at_station(here, target, 1, Touch::Sides) {
+            return self.walk_idle_toward(worker, here, target).is_ok();
+        }
+        let (item, _) = board.loose.remove(index);
+        let lying = self
+            .world
+            .get::<FloorItem>(item)
+            .is_some_and(|f| matches!(f.0, FloorThing::Program(_)));
+        if lying && let Some(FloorThing::Program(program)) = take_floor_item(&mut self.world, item)
+        {
+            self.world
+                .entity_mut(worker)
+                .insert(CarryingProgram(program));
+            board.spare -= 1;
         }
         true
     }

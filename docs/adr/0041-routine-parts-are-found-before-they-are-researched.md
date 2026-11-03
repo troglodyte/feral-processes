@@ -1,6 +1,6 @@
 # 0041 Routine parts are found before they are researched
 
-- Status: Proposed
+- Status: Accepted
 - Decided by: user, on Claude's proposal
 - Date: 2026-11-03
 - Pattern: none new (reuses the base tree's `discoverable` + `DiscoveredResearch`)

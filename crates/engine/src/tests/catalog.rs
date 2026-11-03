@@ -441,6 +441,27 @@ fn a_consumable_keeps_its_description_and_its_uses() {
     assert!(cell.used_in.contains(&"Charge Coil".to_string()));
 }
 
+/// The Extractor taps Power Cell from nothing while the Printer compiles it
+/// from fragments; one step listing both would say the Extractor eats the
+/// fragments.
+#[test]
+fn a_tap_and_a_recipe_for_one_item_are_separate_steps() {
+    let game = fresh_game();
+    let chains = game.recipe_chains();
+    let cell = entry(&chains, "Power Cell").unwrap();
+    let extractor = structure("Extractor");
+
+    let recipe = cell.steps.last().unwrap();
+    assert!(!recipe.inputs.is_empty());
+    assert!(!recipe.makers.contains(&extractor), "{:?}", recipe.makers);
+    assert!(
+        cell.steps
+            .iter()
+            .any(|s| s.makers.contains(&extractor) && s.inputs.is_empty()),
+        "no input-less Extractor step"
+    );
+}
+
 const GATED_PRESS: &str = r#"(
     id: "gated_press",
     name: "Gated Press",

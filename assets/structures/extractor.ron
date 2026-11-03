@@ -1,7 +1,7 @@
 (
     id: "extractor",
     name: "Extractor",
-    description: "Pulls a raw resource out of nothing. Stand beside it and press c to pick what it pulls.",
+    description: "Pulls a raw resource out of nothing. Stand beside it and press c and open its Recipe page to pick what it pulls.",
     glyph: 'X',
     color: Brown,
     build_cost: [("core_fragment", 6)],

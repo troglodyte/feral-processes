@@ -1218,9 +1218,10 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_printer() {
     assert_eq!(
         shape,
         vec![
+            (vec![], vec![structure("Extractor")], "Power Cell"),
             (
                 vec![("Core Fragment", 2)],
-                vec![structure("Extractor"), RecipeMaker::ByHand],
+                vec![RecipeMaker::ByHand],
                 "Power Cell"
             ),
             (
@@ -1274,7 +1275,7 @@ fn a_step_the_player_compiles_by_hand_lists_by_hand_as_a_maker() {
     let power_cell = coil
         .steps
         .iter()
-        .find(|s| s.output == "Power Cell")
+        .find(|s| s.output == "Power Cell" && !s.inputs.is_empty())
         .expect("the coil's recipe is priced in them");
 
     assert!(

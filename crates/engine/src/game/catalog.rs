@@ -182,14 +182,7 @@ impl Game {
                 for (id, _) in inputs {
                     self.expand_recipe(id, &mut seen, &mut steps);
                 }
-                steps.push(RecipeStep {
-                    inputs: self.recipe_inputs(inputs),
-                    makers: self.makers_of(output),
-                    output: self.item_name(output).to_string(),
-                    // An item only a tap makes declines to quote a yield;
-                    // every other root is a one-unit batch.
-                    output_qty: self.makes_by_recipe(output).then_some(1),
-                });
+                steps.extend(self.steps_for(output, inputs));
                 let mut used_in: Vec<String> = entries
                     .iter()
                     .filter(|(_, cost)| cost.iter().any(|(id, _)| id == *output))
@@ -346,12 +339,39 @@ impl Game {
         for (id, _) in &cost {
             self.expand_recipe(id, seen, out);
         }
-        out.push(RecipeStep {
-            inputs: self.recipe_inputs(&cost),
-            makers: self.makers_of(item),
-            output: self.item_name(item).to_string(),
-            output_qty: Some(1),
-        });
+        out.extend(self.steps_for(item, &cost));
+    }
+
+    /// The steps that make `item`: a tap step (no inputs, no quoted yield)
+    /// for its extractors, if any, then a recipe step carrying `cost` for
+    /// every other maker. Split because a tap draws from nothing, so sharing
+    /// a step with a recipe's makers would show it consuming the inputs. The
+    /// recipe step comes last, so an entry's final step is still the one that
+    /// makes its product by recipe.
+    fn steps_for(&self, item: &ItemId, cost: &[(ItemId, u32)]) -> Vec<RecipeStep> {
+        let (taps, recipes): (Vec<_>, Vec<_>) = self
+            .makers_with_kind(item)
+            .into_iter()
+            .partition(|(_, tap)| *tap);
+        let output = self.item_name(item).to_string();
+        let mut steps = Vec::new();
+        if !taps.is_empty() {
+            steps.push(RecipeStep {
+                inputs: Vec::new(),
+                makers: taps.into_iter().map(|(m, _)| m).collect(),
+                output: output.clone(),
+                output_qty: None,
+            });
+        }
+        if !recipes.is_empty() {
+            steps.push(RecipeStep {
+                inputs: self.recipe_inputs(cost),
+                makers: recipes.into_iter().map(|(m, _)| m).collect(),
+                output,
+                output_qty: Some(1),
+            });
+        }
+        steps
     }
 
     fn recipe_inputs(&self, cost: &[(ItemId, u32)]) -> Vec<RecipeInput> {

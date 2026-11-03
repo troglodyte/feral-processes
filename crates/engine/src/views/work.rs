@@ -274,12 +274,13 @@ pub enum RecipeMaker {
 /// step's maker is a *structure* and a renderer holding only item ids could
 /// not name it.
 pub struct RecipeStep {
-    /// Empty for an extractor, which draws from nothing rather than from a
-    /// recipe.
+    /// Empty for an extractor step, which draws from nothing rather than from
+    /// a recipe.
     pub inputs: Vec<RecipeInput>,
-    /// Every unlocked way to make `output`: structures in `StructureDb` id
-    /// order, then `ByHand` last. All of them take the same `inputs`, since a
-    /// machine runs the item's own recipe.
+    /// The unlocked ways to make `output` that this step's `inputs` describe:
+    /// structures in `StructureDb` id order, then `ByHand` last. Recipe
+    /// makers all take the same `inputs`, since a machine runs the item's own
+    /// recipe; extractors are never mixed in with them.
     pub makers: Vec<RecipeMaker>,
     pub output: String,
     /// Units one batch yields: `Some(1)` for a recipe, since a recipe is

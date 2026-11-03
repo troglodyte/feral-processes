@@ -22,19 +22,8 @@ const TAG_PAD: f32 = 2.0;
 /// body on a shared tile, does not float a name over someone else's glyph.
 pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities: &[EntityView]) {
     let t = view.tile_px;
-    let mut shown: std::collections::HashMap<(i32, i32), &EntityView> = Default::default();
-    for ev in entities
-        .iter()
-        .filter(|e| !e.is_structure && e.build.is_none())
-    {
-        if takes_tile_from(shown.get(&ev.pos).copied()) {
-            shown.insert(ev.pos, ev);
-        }
-    }
-    // `place` orders its own claims by tile, so the map's order is harmless.
-    let measured: Vec<(&EntityView, f32)> = shown
-        .into_values()
-        .filter(|e| e.on_staff)
+    let measured: Vec<(&EntityView, f32)> = tagged_bodies(entities)
+        .into_iter()
         .map(|e| (e, painter.measure_ui(&e.label, TAG_SIZE).width))
         .collect();
     let h = (painter.measure_ui("Ag", TAG_SIZE).height + 2.0 * TAG_PAD) / t;
@@ -70,6 +59,23 @@ pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities
             TEXT,
         );
     }
+}
+
+/// The staff bodies that get a tag: of the bodies on each tile, the one the
+/// tile loop draws (`takes_tile_from`, over the same non-structure,
+/// non-build-site entities, in the same order), when it is on the staff.
+/// The order is the map's; `place` orders its own claims by tile.
+pub(crate) fn tagged_bodies(entities: &[EntityView]) -> Vec<&EntityView> {
+    let mut shown: std::collections::HashMap<(i32, i32), &EntityView> = Default::default();
+    for ev in entities
+        .iter()
+        .filter(|e| !e.is_structure && e.build.is_none())
+    {
+        if takes_tile_from(shown.get(&ev.pos).copied()) {
+            shown.insert(ev.pos, ev);
+        }
+    }
+    shown.into_values().filter(|e| e.on_staff).collect()
 }
 
 /// One tag to place: the program's tile, and the tag's size in tiles

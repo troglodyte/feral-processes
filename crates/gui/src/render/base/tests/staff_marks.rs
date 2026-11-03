@@ -1,5 +1,66 @@
 use super::*;
 
+/// Which staff wear a name tag: only the body each tile shows, so a staffer
+/// under the player's `@` or behind a later body on its tile floats no name
+/// over someone else's glyph — and a build site never takes the tile from
+/// the staffer raising it.
+#[test]
+fn a_tag_names_only_the_staffer_its_tile_shows() {
+    use crate::render::staff_tags::tagged_bodies;
+    use feral_processes_engine::BuildOrderRow;
+    use feral_processes_engine::components::BuildGoal;
+    let staff = |x, name: &str| EntityView {
+        pos: (x, 0),
+        label: name.into(),
+        ..patient_view(false)
+    };
+    let not_staff = |x, name: &str| EntityView {
+        is_tamed: false,
+        on_staff: false,
+        ..staff(x, name)
+    };
+    let site = EntityView {
+        build: Some(BuildOrderRow {
+            entity: Entity::PLACEHOLDER,
+            pos: (2, 0),
+            goal: BuildGoal::New,
+            structure: "Lathe".into(),
+            delivered: 0,
+            materials: 1,
+            outstanding: Vec::new(),
+            ticks: 0,
+            required_ticks: 10,
+            builder: None,
+            awaiting_program: false,
+            blocked: None,
+        }),
+        ..not_staff(2, "Site")
+    };
+    let entities = vec![
+        EntityView {
+            is_player: true,
+            ..not_staff(0, "You")
+        },
+        staff(0, "Under you"),
+        staff(1, "Behind wild"),
+        not_staff(1, "Wild"),
+        staff(2, "On a site"),
+        site,
+        EntityView {
+            on_staff: false,
+            ..staff(3, "Pinned")
+        },
+        staff(4, "First"),
+        staff(4, "Second"),
+    ];
+    let mut names: Vec<&str> = tagged_bodies(&entities)
+        .iter()
+        .map(|e| e.label.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, vec!["On a site", "Second"]);
+}
+
 /// A staff program an amenity is refilling, `patient_view`'s shape.
 fn served_view() -> EntityView {
     EntityView {

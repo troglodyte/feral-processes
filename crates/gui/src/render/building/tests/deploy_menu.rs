@@ -24,6 +24,7 @@ fn shipped_entries() -> Vec<BuildEntry> {
             description: def.description.clone(),
             category: def.category(),
             needs_program: def.needs_program(),
+            makes: None,
         })
         .collect()
 }
@@ -93,6 +94,7 @@ fn a_deploy_row_is_tagged_with_how_many_already_stand() {
             description: "Cuts ore.".to_string(),
             category: StructureCategory::Extractor,
             needs_program: true,
+            makes: None,
         },
         BuildEntry {
             name: "Lathe".to_string(),
@@ -101,6 +103,7 @@ fn a_deploy_row_is_tagged_with_how_many_already_stand() {
             description: "Turns parts.".to_string(),
             category: StructureCategory::Extractor,
             needs_program: true,
+            makes: None,
         },
     ];
     let rows = build_menu_rows(&entries, 0, None);
@@ -138,6 +141,7 @@ fn no_deploy_menu_row_runs_past_the_popup_body() {
         description: synthetic_description(),
         category: StructureCategory::Utility,
         needs_program: true,
+        makes: None,
     });
     // All three forms: each greyed one carries a line the deployable one
     // does not, and an unwrapped sentence runs off the edge just as
@@ -260,6 +264,7 @@ fn no_deploy_row_overflows_its_popup_in_pixels() {
         description: synthetic_description(),
         category: StructureCategory::Utility,
         needs_program: true,
+        makes: None,
     });
     let menu = build_menu_rows(&entries, 0, None);
     let greyed = build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM));
@@ -480,4 +485,75 @@ fn a_storing_structure_stays_lit_on_a_roster_that_can_pay_for_nothing() {
             entries[i].name
         );
     }
+}
+
+fn machine_entry(makes: Option<Vec<String>>) -> BuildEntry {
+    BuildEntry {
+        name: "Printer".to_string(),
+        cost: build_cost_label(&[]),
+        deployed: 0,
+        description: "Prints things.".to_string(),
+        category: StructureCategory::Utility,
+        needs_program: true,
+        makes,
+    }
+}
+
+fn all_texts(entries: &[BuildEntry]) -> Vec<String> {
+    build_menu_rows(entries, 0, None)
+        .iter()
+        .map(|r| row_text(r).trim().to_string())
+        .collect()
+}
+
+#[test]
+fn a_machine_entry_says_what_it_makes() {
+    let texts = all_texts(&[machine_entry(Some(vec![
+        "Breach Kit".to_string(),
+        "Patch Routine".to_string(),
+    ]))]);
+    assert!(
+        texts
+            .iter()
+            .any(|t| t == "Makes: Breach Kit, Patch Routine"),
+        "{texts:?}"
+    );
+}
+
+#[test]
+fn a_machine_with_nothing_unlocked_says_so() {
+    let texts = all_texts(&[machine_entry(Some(Vec::new()))]);
+    assert!(
+        texts.iter().any(|t| t.starts_with("Makes: nothing yet")),
+        "{texts:?}"
+    );
+}
+
+#[test]
+fn a_non_machine_entry_has_no_makes_line() {
+    let texts = all_texts(&[machine_entry(None)]);
+    assert!(!texts.iter().any(|t| t.contains("Makes:")), "{texts:?}");
+}
+
+#[test]
+fn the_longest_makes_line_fits_the_build_menu() {
+    let names: Vec<String> = (0..20)
+        .map(|n| format!("Rather Long Product {n}"))
+        .collect();
+    let mut entries = shipped_entries();
+    entries.push(machine_entry(Some(names)));
+    let rows = build_menu_rows(&entries, 0, None);
+    crate::paint::with_painter(|p| {
+        let m = crate::text::ui_metrics(900.0);
+        let room = 1440.0 * 0.88 - m.pad * 2.0;
+        for row in &rows {
+            let drawn = p.measure_ui_advance(row_label_text(row), m.font_size);
+            assert!(
+                drawn <= room,
+                "overflows by {:.0}px: {}",
+                drawn - room,
+                row_text(row)
+            );
+        }
+    });
 }

@@ -315,6 +315,32 @@ fn the_turn_arrow_names_the_side_whose_turn_it_is() {
     }
 }
 
+/// A hasted body wears the amber double chevron, and only that body.
+#[test]
+fn a_hasted_body_wears_a_pip() {
+    use crate::paint::painted_poly_points;
+
+    let mut game = fighting();
+    let mut view = game.tactical_view().expect("the fight is open");
+    for body in &mut view.bodies {
+        body.hasted = false;
+    }
+    let count = |view: &_| {
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+        });
+        painted_poly_points(&shapes, palette::ATTENTION).len()
+    };
+    let before = count(&view);
+    view.bodies[0].hasted = true;
+    assert_eq!(
+        count(&view),
+        before + 2,
+        "one hasted body adds two chevrons"
+    );
+}
+
 /// The cover sunrise is drawn, and only for a body the view marks: one
 /// horizon line and one half-disc standing on it, in the top-right
 /// corner rather than the con earmark's top-left.

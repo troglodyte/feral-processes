@@ -202,6 +202,20 @@ pub(super) fn draw_body(
         painter.line(from.0, from.1, to.0, to.1, REACH_EDGE_PX, palette::HEALTHY);
         painter.poly(&sun, palette::HEALTHY);
     }
+    // A hasted body wears a double chevron on its left edge, the one edge
+    // the earmark (top-left), cover sunrise (top-right) and tags (bottom)
+    // leave alone. Amber, so it never reads as the cloak's fade.
+    if body.hasted {
+        let w = cell_px * 0.12;
+        let h = cell_px * 0.2;
+        let mid = py + cell_px * 0.5;
+        for x in [px + 1.0, px + 1.0 + w] {
+            painter.poly(
+                &[(x, mid - h), (x + w, mid), (x, mid + h)],
+                palette::ATTENTION,
+            );
+        }
+    }
     if let Some(fraction) = body.hp_fraction {
         // The squad's own bar, not a sum of five — `marks::tactical_hp_bar_rect`
         // is the one geometry `squad_mark_rect` reads its floor from, so the

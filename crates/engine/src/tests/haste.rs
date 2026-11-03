@@ -59,3 +59,31 @@ fn the_end_of_the_fight_clears_haste_on_every_side() {
         assert_eq!(hasted_version(&game, body), None);
     }
 }
+
+#[test]
+fn a_hasted_body_shows_as_a_buff_row_carrying_its_version() {
+    let (mut game, player, pet, _) = fight_with_a_companion();
+    game.use_ability(&haste(Version::V3), player, "You", &[pet]);
+    let row = game
+        .active_buffs()
+        .into_iter()
+        .find(|b| b.name == "Hasted v3")
+        .expect("a hasted companion is something running");
+    assert_eq!(row.magnitude, "\u{2014}");
+    assert_eq!(
+        row.remaining, "",
+        "haste has no round count to print, only the fight"
+    );
+    assert!(row.holder_label.is_some(), "a companion's row is tagged");
+}
+
+#[test]
+fn a_hasted_body_reaches_the_tactical_view_marked() {
+    let (mut game, player, _, wild) = fight_with_a_companion();
+    game.world.entity_mut(player).insert(Hasted { version: 1 });
+    game.open_tactical_battle(vec![wild]);
+    let view = game.tactical_view().expect("a fight is open");
+    let flag = |e| view.bodies.iter().find(|b| b.entity == e).map(|b| b.hasted);
+    assert_eq!(flag(player), Some(true));
+    assert_eq!(flag(wild), Some(false));
+}

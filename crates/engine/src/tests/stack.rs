@@ -4795,6 +4795,49 @@ fn game_at_a_market_selling_an_exclusive_routine() -> Option<(Game, usize, Strin
     None
 }
 
+/// A trader's exclusive set is a find door too (ADR 0041): the parts it
+/// finds are the ones one roll per findable part, in order, picks.
+#[test]
+fn buying_an_exclusive_routine_rolls_a_find_per_findable_part() {
+    use rand::SeedableRng;
+    let (mut game, index, ability) = game_at_a_market_selling_an_exclusive_routine()
+        .expect("some seed's market sells an exclusive");
+    unlock_research_chain(&mut game, "routine_fabrication");
+    set_zone(&mut game, 12);
+    let parts = game.parts_of_routine(&ability);
+    let findable = game.findable_routine_parts(&parts);
+    let (seed, expected) = (0..200u64)
+        .map(|seed| {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let hits = crate::routine_tree::roll_part_finds(
+                &findable,
+                crate::tuning::ROUTINE_PART_DISCOVERY_CHANCE,
+                &mut rng,
+            );
+            (seed, hits)
+        })
+        .find(|(_, hits)| !hits.is_empty() && hits.len() < findable.len())
+        .expect("some seed finds some but not all");
+    give_credits(&mut game, 50_000);
+    reseed_rng(&mut game, seed);
+    game.buy_market_offer(index).unwrap();
+
+    let mut want: Vec<String> = expected
+        .iter()
+        .map(crate::routine_tree::part_node_id)
+        .collect();
+    want.sort();
+    let mut got: Vec<String> = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>()
+        .0
+        .iter()
+        .cloned()
+        .collect();
+    got.sort();
+    assert_eq!(got, want);
+}
+
 /// **The census for "no grant site gives the player an authored routine"**
 /// (ADR 0029): the Stack market is the one shop that sells routine-shaped
 /// goods, so buying out its whole shelf — parts, an exclusive routine's

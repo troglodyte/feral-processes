@@ -16,8 +16,12 @@ pub type ResearchId = String;
 pub enum DiscoverySource {
     /// A Research Station study of a pinned subject.
     Study,
-    /// A routine taken off a program (ADR 0041).
+    /// Something taken apart: a routine off a program (ADR 0041), or a
+    /// weapon at salvage.
     Extraction,
+    /// A routine's parts paid out whole, by a boss drop or a trader
+    /// (ADR 0041), looked over on the way into the pack.
+    Looted,
 }
 
 /// Which research tree a node belongs to — the base tree, authored in

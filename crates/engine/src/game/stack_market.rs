@@ -417,6 +417,7 @@ impl Game {
                 let name = self.ability_display_name(ability);
                 let parts = self.parts_of_routine(ability);
                 self.grant_parts(&parts, LootSource::Trade);
+                self.roll_part_finds_for(&parts, crate::DiscoverySource::Looted);
                 format!("Every part of {name} is yours — the only set you'll see on this shelf")
             }
             MarketOfferKind::Program { species } => {

@@ -120,6 +120,7 @@ fn an_all_known_routine_draws_nothing() {
 #[test]
 fn a_routine_with_unfound_parts_draws_once_per_part() {
     let mut game = Game::new(4602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
     set_zone(&mut game, 1);
     let parts = game.parts_of_routine(ROUTINE);
     assert_eq!(game.findable_routine_parts(&parts).len(), 4);
@@ -139,6 +140,41 @@ fn a_routine_with_unfound_parts_draws_once_per_part() {
 
     assert_eq!(next_draw(&mut game), expected);
 }
+
+/// Until the routine tree is open the part nodes are not in play, so an
+/// extraction finds nothing and draws nothing.
+#[test]
+fn a_closed_routine_tree_finds_nothing_and_draws_nothing() {
+    let mut game = Game::new(4608, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 1);
+    assert!(!game.routine_tree_open());
+    let parts = game.parts_of_routine(ROUTINE);
+    reseed_rng(&mut game, 55);
+    let without = next_draw(&mut game);
+
+    reseed_rng(&mut game, 55);
+    game.take_routine(&parts);
+
+    assert!(discovered(&game).is_empty());
+    assert_eq!(next_draw(&mut game), without);
+}
+
+/// The order claim of `roll_part_finds`, pinned: with this seed and a chance
+/// of one half, these of five parts win.
+#[test]
+fn a_seeded_roll_picks_these_parts_in_order() {
+    let parts = [
+        core(Core::Damage, Version::V1),
+        core(Core::Heal, Version::V1),
+        Subroutine::Trickle,
+        core(Core::Cloak, Version::V1),
+        core(Core::Fork, Version::V1),
+    ];
+    let mut rng = rand::rngs::StdRng::seed_from_u64(11);
+    let won = roll_part_finds(&parts, 0.5, &mut rng);
+    assert_eq!(won, EXPECTED_WON.map(|i| parts[i]).to_vec());
+}
+const EXPECTED_WON: [usize; 3] = [0, 3, 4];
 
 /// The tamed door: a program taken apart at a bench.
 #[test]
@@ -190,6 +226,7 @@ fn breaking_down_a_tamed_program_finds_its_parts_and_lists_them() {
 #[test]
 fn a_routine_tool_on_a_downed_program_can_find_its_parts() {
     let mut game = Game::new(4604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
     set_zone(&mut game, 1);
     let tool = game
         .world

@@ -1454,6 +1454,9 @@ impl Game {
             DiscoverySource::Extraction => {
                 format!("Taking it apart shows you how {} is made.", def.name)
             }
+            DiscoverySource::Looted => {
+                format!("Looking it over shows you how {} is made.", def.name)
+            }
         });
         self.notify_filled(
             crate::notifications::NotificationKind::ResearchDiscovered,

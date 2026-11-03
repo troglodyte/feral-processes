@@ -437,6 +437,21 @@ impl Game {
     /// is findable, so an all-known routine leaves `GameRng` untouched.
     pub(crate) fn take_routine(&mut self, parts: &[crate::routine_craft::Subroutine]) {
         self.grant_parts(parts, LootSource::Extract);
+        self.roll_part_finds_for(parts, DiscoverySource::Extraction);
+    }
+
+    /// The find half of every door that hands over a routine's parts
+    /// (extraction, a boss drop, a trader): one `GameRng` draw per findable
+    /// part in `Subroutine` order, none when nothing is findable or the
+    /// routine tree is closed.
+    pub(crate) fn roll_part_finds_for(
+        &mut self,
+        parts: &[crate::routine_craft::Subroutine],
+        source: DiscoverySource,
+    ) {
+        if !self.routine_tree_open() {
+            return;
+        }
         let findable = self.findable_routine_parts(parts);
         if findable.is_empty() {
             return;
@@ -450,10 +465,7 @@ impl Game {
             )
         };
         for part in finds {
-            self.discover_research(
-                &crate::routine_tree::part_node_id(&part),
-                DiscoverySource::Extraction,
-            );
+            self.discover_research(&crate::routine_tree::part_node_id(&part), source);
         }
     }
 

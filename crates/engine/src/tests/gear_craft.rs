@@ -561,6 +561,13 @@ fn salvage_consumes_the_copy_hands_out_parts_discovers_nodes_and_learns_affixes(
     }
     assert!(game.world.resource::<KnownAffixes>().0.contains(&honed));
     assert!(game.affix_known(&honed));
+    let log = game.message_history(500);
+    assert!(
+        log.iter()
+            .any(|l| l.text.starts_with("Taking it apart shows you how")),
+        "a salvage find reads as taking something apart"
+    );
+    assert!(!log.iter().any(|l| l.text.contains("The study uncovers")));
 }
 
 #[test]

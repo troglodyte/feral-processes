@@ -231,7 +231,7 @@ pub(super) fn draw_surface_map(
                     building = Some(ev);
                 } else if ev.is_structure {
                     structure = Some(ev);
-                } else if !matches!(actor, Some(a) if a.is_player) {
+                } else if takes_tile_from(actor) {
                     actor = Some(ev);
                 }
                 if if ev.is_structure {
@@ -1072,6 +1072,12 @@ pub(super) fn draw_surface_map(
             pane,
         )
     });
+    // Alt's own labels take the screen while it is held, so the two never
+    // contest a spot. Under the speech cues: a staffer talking says it from
+    // the very spot its own tag holds.
+    if !reveal {
+        super::staff_tags::draw_staff_tags(painter, &layout, &entities);
+    }
     fx.draw_speech(painter, tile_px, glyph_px, |world| {
         tile_origin_px(
             world,
@@ -1122,4 +1128,11 @@ pub(super) fn draw_surface_map(
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
     entities
+}
+
+/// Whether the next body on a tile takes its glyph from `current`, the body
+/// already drawn there: the player's `@` is never displaced. The staff tags
+/// ask the same question, so a tag only names a body the tile shows.
+pub(crate) fn takes_tile_from(current: Option<&EntityView>) -> bool {
+    !matches!(current, Some(a) if a.is_player)
 }

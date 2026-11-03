@@ -26,6 +26,7 @@ pub(super) use overlay_style::*;
 pub(crate) use overlay_style::{CUTTING_OUTLINE, floor_item_mark};
 pub(super) use plan_overlays::*;
 pub(super) use playing::*;
+pub(crate) use surface_map::takes_tile_from;
 use surface_map::*;
 
 #[cfg(test)]

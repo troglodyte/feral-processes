@@ -90,6 +90,7 @@ mod settlement_market;
 mod shortcuts;
 mod social;
 mod splice_rig;
+mod staff_tags;
 mod world_map;
 pub(crate) use world_map::{WorldMapHit, world_map_hit};
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs

@@ -24,6 +24,7 @@ pub(super) fn patient_view(recovering: bool) -> EntityView {
         look: None,
         form: None,
         is_tamed: true,
+        on_staff: true,
         is_companion: false,
         is_hostile: false,
         is_structure: false,

@@ -325,3 +325,206 @@ fn a_traps_effect_line_names_its_rarity_ceiling() {
         "the effect lines should name the ceiling, got {lines:?}"
     );
 }
+
+fn fresh_game() -> Game {
+    Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+fn entry<'a>(chains: &'a [RecipeChain], product: &str) -> Option<&'a RecipeChain> {
+    chains.iter().find(|c| c.product == product)
+}
+
+fn last_makers(chain: &RecipeChain) -> &[RecipeMaker] {
+    &chain.steps.last().unwrap().makers
+}
+
+fn structure(name: &str) -> RecipeMaker {
+    RecipeMaker::Structure(name.to_string())
+}
+
+#[test]
+fn recipe_entries_are_alphabetical_and_unlocked_only() {
+    let game = fresh_game();
+    let chains = game.recipe_chains();
+
+    let names: Vec<&str> = chains.iter().map(|c| c.product.as_str()).collect();
+    let mut sorted = names.clone();
+    sorted.sort();
+    assert_eq!(names, sorted);
+
+    let kit = entry(&chains, "Breach Kit").expect("a Breach Kit is compiled by hand");
+    assert!(
+        !last_makers(kit).contains(&structure("Printer")),
+        "the Printer's Breach Kit recipe waits on Automation"
+    );
+    assert!(entry(&chains, "Honeypot").is_none(), "Deception is locked");
+}
+
+#[test]
+fn breach_kit_lists_the_printer_and_by_hand_once_after_automation() {
+    let mut game = fresh_game();
+    unlock_research_chain(&mut game, "automation");
+    let chains = game.recipe_chains();
+
+    assert_eq!(
+        chains.iter().filter(|c| c.product == "Breach Kit").count(),
+        1
+    );
+    let kit = entry(&chains, "Breach Kit").unwrap();
+    assert_eq!(
+        last_makers(kit),
+        [structure("Printer"), RecipeMaker::ByHand],
+        "structures first, by hand last, each once"
+    );
+}
+
+#[test]
+fn research_finishing_adds_entries_on_the_next_call() {
+    let mut game = fresh_game();
+    assert!(entry(&game.recipe_chains(), "Honeypot").is_none());
+
+    unlock_research_chain(&mut game, "deception");
+    let chains = game.recipe_chains();
+    let honeypot = entry(&chains, "Honeypot").expect("Deception unlocks it");
+    assert!(last_makers(honeypot).contains(&structure("Assembler")));
+    assert!(last_makers(honeypot).contains(&structure("Workbench")));
+}
+
+#[test]
+fn workbench_gear_is_listed_away_from_the_bench() {
+    let game = fresh_game();
+    assert!(
+        game.touched_bench("workbench").is_none(),
+        "the fixture stands nowhere near a Workbench"
+    );
+    let chains = game.recipe_chains();
+    let ward = entry(&chains, "Scrap Ward").expect("scrap_ward.ron needs no research");
+    assert_eq!(last_makers(ward), [structure("Workbench")]);
+}
+
+#[test]
+fn a_material_keeps_its_description_and_lists_its_uses() {
+    let mut game = fresh_game();
+    unlock_research_chain(&mut game, "armor_bench");
+    let chains = game.recipe_chains();
+    let block = entry(&chains, "Bytecode Block").expect("something makes bytecode blocks");
+
+    assert!(block.description.is_some());
+    assert_eq!(
+        block.description.as_deref(),
+        game.item_description(&ItemId::from("bytecode_block"))
+    );
+    assert!(!block.used_in.is_empty());
+    let mut sorted = block.used_in.clone();
+    sorted.sort();
+    assert_eq!(block.used_in, sorted);
+    for user in &block.used_in {
+        assert!(
+            entry(&chains, user).is_some(),
+            "{user} is named as a use but has no entry"
+        );
+    }
+}
+
+/// Honeypots and Breach Kits are `Material` by category (no `consume`), so
+/// the consumable that proves a description survives is the Power Cell.
+#[test]
+fn a_consumable_keeps_its_description_and_its_uses() {
+    let game = fresh_game();
+    let chains = game.recipe_chains();
+    let cell = entry(&chains, "Power Cell").unwrap();
+
+    assert_eq!(
+        cell.description.as_deref(),
+        game.item_description(&ItemId::from("power_cell"))
+    );
+    assert!(cell.used_in.contains(&"Charge Coil".to_string()));
+}
+
+/// The Extractor taps Power Cell from nothing while the Printer compiles it
+/// from fragments; one step listing both would say the Extractor eats the
+/// fragments.
+#[test]
+fn a_tap_and_a_recipe_for_one_item_are_separate_steps() {
+    let game = fresh_game();
+    let chains = game.recipe_chains();
+    let cell = entry(&chains, "Power Cell").unwrap();
+    let extractor = structure("Extractor");
+
+    let recipe = cell.steps.last().unwrap();
+    assert!(!recipe.inputs.is_empty());
+    assert!(!recipe.makers.contains(&extractor), "{:?}", recipe.makers);
+    assert!(
+        cell.steps
+            .iter()
+            .any(|s| s.makers.contains(&extractor) && s.inputs.is_empty()),
+        "no input-less Extractor step"
+    );
+}
+
+const GATED_PRESS: &str = r#"(
+    id: "gated_press",
+    name: "Gated Press",
+    description: "A modded assembler behind research, for tests.",
+    glyph: 'G',
+    color: Cyan,
+    build_cost: [],
+    capacity: 20,
+    machine: Some((role: Assemble, recipes: [(produces: "gated_widget", ticks_per_unit: 3)])),
+)"#;
+
+const GATED_WIDGET: &str = r#"(
+    id: "gated_widget",
+    name: "Gated Widget",
+    description: "Only the Gated Press makes these.",
+    craftable: Some((cost: [("core_fragment", 1)], requires_structure: Some("gated_press"))),
+)"#;
+
+const GATED_RESEARCH: &str = r#"(
+    id: "gated_unlock",
+    name: "Gated Unlock",
+    description: "Opens the Gated Press.",
+    cost: 5,
+    unlocks_structures: ["gated_press"],
+)"#;
+
+#[test]
+fn a_recipe_whose_structure_is_locked_lists_no_maker() {
+    let dir = modded_assets_dir(
+        "gated_press",
+        &[],
+        &[("gated_widget.ron", GATED_WIDGET)],
+        &[],
+        &[("gated_unlock.ron", GATED_RESEARCH)],
+        &[],
+    );
+    std::fs::write(dir.join("structures").join("gated_press.ron"), GATED_PRESS).unwrap();
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+
+    assert!(!game.structure_unlocked("gated_press"));
+    assert!(
+        entry(&game.recipe_chains(), "Gated Widget").is_none(),
+        "the press is locked, and it is the widget's only maker"
+    );
+
+    unlock_research_chain(&mut game, "gated_unlock");
+    let chains = game.recipe_chains();
+    let widget = entry(&chains, "Gated Widget").expect("unlocked now");
+    assert_eq!(last_makers(widget), [structure("Gated Press")]);
+}
+
+#[test]
+fn machine_products_names_only_unlocked_recipes() {
+    let mut game = fresh_game();
+    let defs = game.structure_defs();
+    let def = |id: &str| defs.iter().find(|d| d.id == id).unwrap();
+
+    assert_eq!(game.machine_products(def("printer")), ["Patch Routine"]);
+    assert!(game.machine_products(def("depot")).is_empty());
+
+    unlock_research_chain(&mut game, "automation");
+    assert_eq!(
+        game.machine_products(def("printer")),
+        ["Breach Kit", "Patch Routine"]
+    );
+}

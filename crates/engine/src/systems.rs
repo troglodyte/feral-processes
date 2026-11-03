@@ -947,7 +947,9 @@ pub(crate) fn set_machine_status(
             format!("The {name} is uncharged — its supply has run out.")
         }
         MachineStatus::Unconfigured => {
-            format!("The {name} has nothing set to make — stand beside it and press R.")
+            format!(
+                "The {name} has nothing set to make — stand beside it, press c and open its Recipe page."
+            )
         }
     };
     // Only the stall states reach the board — `Running` and `Idle` are

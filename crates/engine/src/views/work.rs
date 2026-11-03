@@ -261,37 +261,49 @@ pub struct RecipeInput {
     pub source: Option<String>,
 }
 
-/// One conversion in a `RecipeChain`: what goes in, what runs it, what comes
-/// out. Names are resolved here rather than left as ids, because a step's
-/// maker is a *structure* and a renderer holding only item ids could not
-/// name it.
+/// Where an item can be made: a structure by display name, or by hand at no
+/// bench. Resolved to a name here for the reason `RecipeStep`'s are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecipeMaker {
+    Structure(String),
+    ByHand,
+}
+
+/// One conversion in a `RecipeChain`: what goes in, what can run it, what
+/// comes out. Names are resolved here rather than left as ids, because a
+/// step's maker is a *structure* and a renderer holding only item ids could
+/// not name it.
 pub struct RecipeStep {
-    /// Empty for an extractor, which draws from nothing rather than from a
-    /// recipe.
+    /// Empty for an extractor step, which draws from nothing rather than from
+    /// a recipe.
     pub inputs: Vec<RecipeInput>,
-    /// The structure that runs this step, or `None` for one the player
-    /// compiles by hand at no bench.
-    pub maker: Option<String>,
+    /// The unlocked ways to make `output` that this step's `inputs` describe:
+    /// structures in `StructureDb` id order, then `ByHand` last. Recipe
+    /// makers all take the same `inputs`, since a machine runs the item's own
+    /// recipe; extractors are never mixed in with them.
+    pub makers: Vec<RecipeMaker>,
     pub output: String,
-    /// Units one batch yields — always `Some(1)`, since a recipe is `cost`
-    /// and nothing else, and `None` for an extractor, whose payout
-    /// `systems::node_payout` scales by upgrade tier and zone depth. Carried
-    /// rather than left for a renderer to assume, so the day a recipe gains a
-    /// yield the screens follow it.
+    /// Units one batch yields: `Some(1)` for a recipe, since a recipe is
+    /// `cost` and nothing else, and `None` for an item only an extractor
+    /// makes, whose payout `systems::node_payout` scales by upgrade tier and
+    /// zone depth. Carried rather than left for a renderer to assume, so the
+    /// day a recipe gains a yield the screens follow it.
     pub output_qty: Option<u32>,
 }
 
-/// One entry on the Recipes screen — everything that has to be made, in the
+/// One entry on the Recipes page: everything that has to be made, in the
 /// order it has to be made, to end up with `product`. See
 /// `Game::recipe_chains`.
 pub struct RecipeChain {
     pub product: String,
-    /// The product's own authored description — the screen's answer to why
-    /// you would make one, where the steps only say how. Resolved here for
-    /// the reason `RecipeStep`'s names are: a renderer holding item ids has
-    /// no `ItemDb` to look prose up in. `None` for a product whose file
-    /// leaves the field blank; every shipped item carries one.
+    /// The product's own authored description, the page's answer to why you
+    /// would make one where the steps only say how. Resolved here because a
+    /// renderer holding item ids has no `ItemDb` to look prose up in. `None`
+    /// for a product whose file leaves the field blank.
     pub description: Option<String>,
+    /// Display names of the unlocked entries whose own step takes `product`,
+    /// A-Z and without repeats.
+    pub used_in: Vec<String>,
     /// Deepest dependency first; `product`'s own step is always last.
     pub steps: Vec<RecipeStep>,
 }

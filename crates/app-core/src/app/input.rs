@@ -399,7 +399,6 @@ impl App {
             Mode::WorldMap => self.handle_world_map_key(key),
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),
-            Mode::Recipes => self.handle_recipes_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
             Mode::BaseBuild
@@ -416,7 +415,8 @@ impl App {
             | Mode::BaseStock
             | Mode::BuildOrders
             | Mode::DigOrders
-            | Mode::FloorOrders => self.handle_base_list_key(key),
+            | Mode::FloorOrders
+            | Mode::Recipes => self.handle_base_list_key(key),
             Mode::Help => self.handle_help_key(key),
             Mode::HelpPage => self.handle_help_page_key(key),
             Mode::FrameMap => self.handle_frame_map_key(),

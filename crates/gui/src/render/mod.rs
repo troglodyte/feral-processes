@@ -24,8 +24,8 @@ use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, EmulationOption, Entity, EntityView, Game,
     InventoryRow, LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, OutpostMark, OutpostReport,
-    PetInfo, PodState, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, SettlementView,
-    ShelfFill, StockRow, StructureReport, morale_band,
+    PetInfo, PodState, ProgramSaleOption, ResearchState, SettlementView, ShelfFill, StockRow,
+    StructureReport, morale_band,
 };
 use feral_processes_engine::{ResearchTree, RespecSubject};
 
@@ -137,7 +137,7 @@ use building::{
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
-use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
+use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity};
 use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
 use excavate_brush::draw_excavate_brush;
@@ -1839,7 +1839,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 draw_staffing_menu(staffing, selected, refusal, painter, m);
             }
         }
-        Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
         Mode::BasinExitConfirm => ending::draw_basin_exit_confirm(selected, refusal, painter, m),
         _ => {}
     }

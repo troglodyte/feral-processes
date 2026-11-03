@@ -39,8 +39,8 @@ draw out before you commit to one. Material tools quote units. The Routine Extra
 draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually
 rolls — the screen and the pull read the same figure.
 
-A record does not have to be spent on a tool at all. Forge a Reinitialization Protocol at the
-Fabricator, stand beside a Holding Cell and spend it on the record: the program boots up as a
+A record does not have to be spent on a tool at all. Forge a Reinitialization Protocol at a
+Workbench, stand beside a Holding Cell and spend it on the record: the program boots up as a
 prisoner in the pen, level 1. Post a worker to the cell as its warden and it makes a decompile
 attempt at intervals, each failure making the next likelier. A success joins it to your roster. If
 every attempt fails it breaks down, and the cell is left holding a little salvage. A boss's record

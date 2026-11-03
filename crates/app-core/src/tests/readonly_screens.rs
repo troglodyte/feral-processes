@@ -158,31 +158,52 @@ fn enter_and_row_shortcuts_do_nothing_on_the_history() {
 }
 
 #[test]
-fn the_compile_page_opens_the_recipes_screen_and_esc_backs_into_it() {
+fn the_recipes_page_is_on_the_base_report_rail_after_compile() {
+    let titles: Vec<&str> = BASE_REPORT_PAGES.iter().map(|p| p.title).collect();
+    let compile = titles.iter().position(|t| *t == "Compile").unwrap();
+    assert_eq!(
+        titles.iter().position(|t| *t == "Recipes"),
+        Some(compile + 1)
+    );
+}
+
+#[test]
+fn the_compile_page_no_longer_lists_recipes() {
+    let mut app = test_app(98);
+    let rows = app.command_rows(Mode::BaseCompile).unwrap_or_default();
+    assert!(
+        rows.iter().all(|r| r.label != "Recipes"),
+        "Recipes is a rail page now"
+    );
+}
+
+#[test]
+fn esc_on_the_recipes_page_goes_to_the_rail() {
     let mut app = test_app(97);
-    open_command(&mut app, "Recipes");
+    open_hub_screen(&mut app, Mode::Recipes);
     assert_eq!(app.mode, Mode::Recipes);
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseCompile, "Esc walks back up one level");
+    assert!(!app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "Esc on the page goes to the rail");
+    assert_eq!(app.mode, Mode::Recipes);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
 
-/// Scrolling moves per *chain*, not per drawn line — the steps under a
-/// product are sub-rows the highlight skips, the same shape the roster uses.
+/// Scrolling moves per *entry*, not per drawn line: the description and
+/// steps under a product are sub-rows the highlight skips, the same shape the
+/// roster uses.
 #[test]
-fn up_and_down_scroll_the_recipes_by_chain() {
+fn up_and_down_scroll_the_recipes_by_entry() {
     let mut app = test_app(99);
-    let chains = app.game.as_ref().unwrap().recipe_chains().len();
-    assert!(chains >= 2, "the shipped assets have several chains");
-    open_command(&mut app, "Recipes");
-    assert_eq!(app.menu_selected, 0, "the list opens at its first chain");
+    let entries = app.game.as_ref().unwrap().recipe_chains().len();
+    assert!(entries >= 2, "the shipped assets have several entries");
+    open_hub_screen(&mut app, Mode::Recipes);
+    assert_eq!(app.menu_selected, 0, "the list opens at its first entry");
 
     app.handle_key(GameKey::Up);
     assert_eq!(app.mode, Mode::Recipes);
-    assert_eq!(app.menu_selected, chains - 1, "Up from the first wraps");
+    assert_eq!(app.menu_selected, entries - 1, "Up from the first wraps");
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 0);
     assert_eq!(app.mode, Mode::Recipes, "scrolling never leaves the screen");
@@ -193,7 +214,7 @@ fn up_and_down_scroll_the_recipes_by_chain() {
 fn the_recipes_screen_does_not_advance_the_game() {
     let mut app = test_app(100);
     let before = app.game.as_ref().unwrap().current_tick();
-    open_command(&mut app, "Recipes");
+    open_hub_screen(&mut app, Mode::Recipes);
     for key in [
         GameKey::Down,
         GameKey::Enter,

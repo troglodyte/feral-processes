@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.21
+
+**The base report has a Recipes page after Compile.** It lists every item you can make right now, A to Z: what it is for, which recipes use it, what it takes and every place it can be made (each machine, the Workbench, or by hand). A recipe appears once its research is done and its machine is unlocked.
+
+The Build menu now shows a `Makes:` line under each machine naming the recipes it can run. Recipes is no longer a row on the Compile page. Several descriptions still told you to press R beside a machine to set it; that is `c` and the Recipe page, and the Extractor, Factory, Assembler, Printer, three contracts and the unset-machine alert now say so. Also fixed: the Bytecode Block no longer mentions the retired Armoury, the extraction help no longer names the Fabricator bench, and Automation now says it lets a Workbench extract routines and speeds up extracting programs.
+
 ## 0.21.20
 
 **The inventory menu has a Manifests page.** Press Enter on it to read your own stat sheet and every program's, without going through the Programs page first. Esc from the sheet comes back to the page. The other ways in still work.

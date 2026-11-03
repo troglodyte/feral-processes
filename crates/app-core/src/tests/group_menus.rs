@@ -82,10 +82,6 @@ fn base_rows_offered(mut app: App) -> Vec<&'static str> {
         rows.contains(&"Research"),
         "research is not locale-gated: {rows:?}"
     );
-    assert!(
-        rows.contains(&"Recipes"),
-        "recipes are asset data, not a scan around the party: {rows:?}"
-    );
 
     offered
 }
@@ -130,13 +126,6 @@ fn the_command_pages_drop_their_base_rows_underground_too() {
                 "{absent:?} is a field verb: {rows:?}"
             );
         }
-        // The chains are a property of the loaded assets, not of anything the
-        // player's `Position` can reach — and four frames down is exactly when
-        // you want to check what the base back home still needs.
-        assert!(
-            rows.contains(&"Recipes"),
-            "recipes are asset data, not a scan around the party: {rows:?}"
-        );
     }
 }
 

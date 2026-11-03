@@ -17,6 +17,7 @@ pub(in crate::render) use frame::content_rect_at;
 mod orders;
 mod overview;
 mod production;
+mod recipes;
 mod staff;
 mod stock;
 
@@ -180,6 +181,7 @@ fn screen_rows(
         Mode::BaseMachines => production::machine_rows(&game.machine_report(), selected),
         Mode::BasePower => production::power_rows(&game.power_report(), selected),
         Mode::BaseStock => stock::stock_rows(&game.stock_report(), selected),
+        Mode::Recipes => recipes::recipe_rows(&game.recipe_chains(), selected),
         Mode::BuildOrders => orders::build_rows(&game.build_order_report(), selected),
         Mode::DigOrders => orders::dig_rows(&game.dig_marks(), selected),
         Mode::FloorOrders => orders::floor_rows(&game.floor_marks(), selected),

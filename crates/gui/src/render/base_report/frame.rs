@@ -297,7 +297,8 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
         | Mode::BaseStock
         | Mode::BuildOrders
         | Mode::DigOrders
-        | Mode::FloorOrders => vec![keycap("↑/↓", "scroll")],
+        | Mode::FloorOrders
+        | Mode::Recipes => vec![keycap("↑/↓", "scroll")],
         Mode::WorkOrders => vec![
             keycap("↑/↓", "select"),
             keycap("Enter", "queue"),
@@ -419,6 +420,7 @@ mod tests {
             Mode::BuildOrders,
             Mode::DigOrders,
             Mode::FloorOrders,
+            Mode::Recipes,
             Mode::WorkOrders,
             Mode::BaseStaff,
             Mode::Structures,

@@ -131,78 +131,199 @@ impl Game {
         )
     }
 
-    /// Every conversion a structure runs, each expanded back to the raw
-    /// inputs it bottoms out in.
+    /// The Recipes page: one entry per item the base can make right now,
+    /// A-Z by display name, each expanded back to the raw inputs it bottoms
+    /// out in.
     ///
-    /// The roots are every recipe a structure can run (`StructureDef::productions`),
-    /// which is already the whole of "could this structure put something in an output buffer" —
-    /// so this cannot list a machine the base does not actually run, or miss
-    /// one it does. Each root's own step comes from `systems::assembly_recipe`
-    /// for the same reason: a machine's recipe *is* the assembled item's
-    /// recipe, so the chain on screen and the batch the machine stages are
-    /// one lookup rather than two that could drift.
+    /// An item is an entry when `makers_of` finds an unlocked way to make it,
+    /// and `makers_of` is also the whole of the entry's "made at" list. Only
+    /// unlocked recipes and unlocked makers count, built or not: the page
+    /// says where a thing *can* be made, and listing a locked recipe or a
+    /// machine still behind research would tell the player about a base they
+    /// cannot yet raise.
     ///
-    /// An item can legitimately appear twice with different makers — Power
-    /// Cell is an Extractor's whole output and is also bench-craftable
-    /// from fragments, and Breach Kit the same with the Compiler. A root
-    /// step reports the structure; an expanded dependency reports the item's
-    /// own `requires_structure`. Both are true, and the screen shows the one
-    /// that matters where it stands.
+    /// One chain per item, not one per maker. A machine's recipe *is* the
+    /// item's recipe (`systems::assembly_recipe` returns the produced item's
+    /// `craftable.cost`), so every maker of an item takes the same inputs and
+    /// the entry lists its makers on a single step instead of repeating the
+    /// chain. Costs are undiscounted: perk discounts belong to the Compile
+    /// screen, and a machine never applies them.
     ///
-    /// An *ingredient* names its tap only when no recipe makes it (see
-    /// `RecipeInput::source`), which is the same rule seen from the other
-    /// end: Core Fragment names the Extractor because nothing on screen
-    /// makes one, while Power Cell names no Extractor because the bench
-    /// step that makes these ones is already a line of this chain. Without
-    /// that clause a chain would claim two sources for a single item.
+    /// An *ingredient* names its tap only when nothing but extractors make
+    /// it (see `RecipeInput::source`), which is the same rule seen from the
+    /// other end: Core Fragment names the Extractor because nothing on screen
+    /// makes one, while Power Cell names no Extractor because the step that
+    /// compiles these ones is already a line of this chain. Without that
+    /// clause a chain would claim two sources for a single item.
     ///
-    /// Shallowest chain first, then by name, so the screen opens on the taps
-    /// and reads down into what needs a base.
+    /// Every entry carries the item's authored description when it has one,
+    /// materials included: the page is where a player asks what a thing is
+    /// for, and a bare name answers nothing.
+    ///
+    /// Alphabetical, replacing the old shallowest-first order: with makers
+    /// folded into one entry per item the page is a reference to look things
+    /// up in, not a tour from the taps downward.
     pub fn recipe_chains(&self) -> Vec<RecipeChain> {
-        let structures = self.world.resource::<StructureDb>();
         let items = self.world.resource::<ItemDb>();
-        let mut chains: Vec<RecipeChain> = structures
+        // (item, its inputs) for every entry, kept so `used_in` can invert it.
+        let entries: Vec<(&ItemId, Vec<(ItemId, u32)>)> = items
             .all()
-            .flat_map(|def| def.productions().map(move |production| (def, production)))
-            .map(|(def, production)| {
-                let placed = crate::structures::Placed {
-                    def,
-                    recipe: Some(&production.recipe.produces),
-                };
-                let output = &production.recipe.produces;
-                let inputs = crate::systems::assembly_recipe(placed, items).unwrap_or(&[]);
+            .filter(|def| !self.makers_of(&def.id).is_empty())
+            .map(|def| (&def.id, self.recipe_cost(&def.id)))
+            .collect();
+        let mut chains: Vec<RecipeChain> = entries
+            .iter()
+            .map(|(output, inputs)| {
                 let mut steps = Vec::new();
                 // Seeded with the root, whose own step is appended below: a
                 // recipe that reaches back to what it makes would otherwise
                 // emit that step twice.
-                let mut seen = vec![output.clone()];
+                let mut seen = vec![(*output).clone()];
                 for (id, _) in inputs {
                     self.expand_recipe(id, &mut seen, &mut steps);
                 }
-                steps.push(RecipeStep {
-                    inputs: self.recipe_inputs(inputs),
-                    maker: Some(def.name.clone()),
-                    output: self.item_name(output).to_string(),
-                    // A tap and only a tap declines to quote a yield; every
-                    // other root is an assembler running a one-unit batch.
-                    output_qty: (!production.extracts).then_some(1),
-                });
+                steps.extend(self.steps_for(output, inputs));
+                let mut used_in: Vec<String> = entries
+                    .iter()
+                    .filter(|(_, cost)| cost.iter().any(|(id, _)| id == *output))
+                    .map(|(user, _)| self.item_name(user).to_string())
+                    .collect();
+                used_in.sort();
+                used_in.dedup();
                 RecipeChain {
                     product: self.item_name(output).to_string(),
                     description: self.item_description(output).map(str::to_string),
+                    used_in,
                     steps,
                 }
             })
             .collect();
-        chains.sort_by(|a, b| (a.steps.len(), &a.product).cmp(&(b.steps.len(), &b.product)));
+        chains.sort_by(|a, b| a.product.cmp(&b.product));
         chains
     }
 
+    /// Display names of the recipes `def` can run right now, in the order the
+    /// structure file lists them; empty for a structure that is not a machine
+    /// or has nothing unlocked. The build menu's `Makes:` line.
+    pub fn machine_products(&self, def: &StructureDef) -> Vec<String> {
+        def.machine
+            .iter()
+            .flat_map(|m| m.recipes.iter())
+            .filter(|r| self.machine_recipe_unlocked(r))
+            .map(|r| self.item_name(&r.produces).to_string())
+            .collect()
+    }
+
+    /// Whether a machine recipe's research gate is met. The one answer the
+    /// machine Recipe page and the Recipes page both read.
+    pub(crate) fn machine_recipe_unlocked(&self, recipe: &crate::structures::RecipeDef) -> bool {
+        recipe
+            .research
+            .as_ref()
+            .is_none_or(|id| self.is_researched(id))
+    }
+
+    /// Whether a compile recipe (an item's `craftable` or a research node's
+    /// `unlocks_recipes` line) is available: its research is done and, if it
+    /// names a structure, that structure is itself unlocked. Whether the
+    /// player stands at the bench is a different question and not asked here.
+    pub(crate) fn craft_unlocked(
+        &self,
+        research: Option<&ResearchId>,
+        requires_structure: Option<&StructureId>,
+    ) -> bool {
+        research.is_none_or(|id| self.is_researched(id))
+            && requires_structure.is_none_or(|s| self.structure_unlocked(s))
+    }
+
+    /// Every unlocked way to make `item`, with whether each is an extraction.
+    /// Structures first in `StructureDb` order, then by hand, so the same
+    /// item lists its makers the same way in every run.
+    fn makers_with_kind(&self, item: &ItemId) -> Vec<(RecipeMaker, bool)> {
+        let structures = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        let mut makers: Vec<(RecipeMaker, bool)> = Vec::new();
+        let mut add = |maker: RecipeMaker, extracts: bool| {
+            if !makers.iter().any(|(m, _)| *m == maker) {
+                makers.push((maker, extracts));
+            }
+        };
+        for def in structures.all().filter(|d| self.structure_unlocked(&d.id)) {
+            for p in def.productions() {
+                if &p.recipe.produces == item && self.machine_recipe_unlocked(p.recipe) {
+                    add(RecipeMaker::Structure(def.name.clone()), p.extracts);
+                }
+            }
+        }
+        let mut by_hand = false;
+        let mut crafted = |requires: Option<&StructureId>| match requires
+            .and_then(|s| structures.get(s.as_str()))
+        {
+            Some(def) => add(RecipeMaker::Structure(def.name.clone()), false),
+            None => by_hand = true,
+        };
+        if let Some(c) = items.get(item.as_str()).and_then(|d| d.craftable.as_ref())
+            && self.craft_unlocked(c.research.as_ref(), c.requires_structure.as_ref())
+        {
+            crafted(c.requires_structure.as_ref());
+        }
+        for def in self.world.resource::<ResearchDb>().all() {
+            if !self.is_researched(&def.id) {
+                continue;
+            }
+            for r in def.unlocks_recipes.iter().filter(|r| &r.result == item) {
+                if self.craft_unlocked(None, r.requires_structure.as_ref()) {
+                    crafted(r.requires_structure.as_ref());
+                }
+            }
+        }
+        if by_hand {
+            add(RecipeMaker::ByHand, false);
+        }
+        makers
+    }
+
+    /// The one place makers are gathered: see `makers_with_kind`.
+    fn makers_of(&self, item: &ItemId) -> Vec<RecipeMaker> {
+        self.makers_with_kind(item)
+            .into_iter()
+            .map(|(m, _)| m)
+            .collect()
+    }
+
+    /// Whether any unlocked maker of `item` is a recipe rather than a tap.
+    fn makes_by_recipe(&self, item: &ItemId) -> bool {
+        self.makers_with_kind(item).iter().any(|(_, tap)| !tap)
+    }
+
+    /// What one batch of `item` consumes: its `craftable.cost`, or the cost
+    /// on the research recipe that unlocked it. Empty for an item only a tap
+    /// makes. Undiscounted.
+    fn recipe_cost(&self, item: &ItemId) -> Vec<(ItemId, u32)> {
+        if let Some(c) = self
+            .world
+            .resource::<ItemDb>()
+            .get(item.as_str())
+            .and_then(|d| d.craftable.as_ref())
+        {
+            return c.cost.clone();
+        }
+        self.world
+            .resource::<ResearchDb>()
+            .all()
+            .filter(|def| self.is_researched(&def.id))
+            .flat_map(|def| def.unlocks_recipes.iter())
+            .find(|r| &r.result == item)
+            .map(|r| r.cost.clone())
+            .unwrap_or_default()
+    }
+
     /// Appends the steps that produce `item`, dependencies first, or nothing
-    /// at all if it is a drop rather than something made.
+    /// at all if it is a drop, a locked recipe, or only a tap's output (the
+    /// ingredient's `source` answers that last one).
     ///
     /// `seen` is marked *before* recursing, which is what makes a mod recipe
-    /// naming itself terminate instead of taking the process down — the same
+    /// naming itself terminate instead of taking the process down: the same
     /// contract as a malformed `.ron` being skipped rather than panicking.
     /// It doubles as the de-duplicator: two branches needing the same
     /// intermediate list it once, under the first branch that reaches it.
@@ -211,26 +332,46 @@ impl Game {
             return;
         }
         seen.push(item.clone());
-        let items = self.world.resource::<ItemDb>();
-        let Some(recipe) = items.get(item.as_str()).and_then(|d| d.craftable.as_ref()) else {
+        if !self.makes_by_recipe(item) {
             return;
-        };
-        let cost = recipe.cost.clone();
-        let maker = recipe.requires_structure.clone();
+        }
+        let cost = self.recipe_cost(item);
         for (id, _) in &cost {
             self.expand_recipe(id, seen, out);
         }
-        out.push(RecipeStep {
-            inputs: self.recipe_inputs(&cost),
-            maker: maker.and_then(|s| {
-                self.world
-                    .resource::<StructureDb>()
-                    .get(s.as_str())
-                    .map(|d| d.name.clone())
-            }),
-            output: self.item_name(item).to_string(),
-            output_qty: Some(1),
-        });
+        out.extend(self.steps_for(item, &cost));
+    }
+
+    /// The steps that make `item`: a tap step (no inputs, no quoted yield)
+    /// for its extractors, if any, then a recipe step carrying `cost` for
+    /// every other maker. Split because a tap draws from nothing, so sharing
+    /// a step with a recipe's makers would show it consuming the inputs. The
+    /// recipe step comes last, so an entry's final step is still the one that
+    /// makes its product by recipe.
+    fn steps_for(&self, item: &ItemId, cost: &[(ItemId, u32)]) -> Vec<RecipeStep> {
+        let (taps, recipes): (Vec<_>, Vec<_>) = self
+            .makers_with_kind(item)
+            .into_iter()
+            .partition(|(_, tap)| *tap);
+        let output = self.item_name(item).to_string();
+        let mut steps = Vec::new();
+        if !taps.is_empty() {
+            steps.push(RecipeStep {
+                inputs: Vec::new(),
+                makers: taps.into_iter().map(|(m, _)| m).collect(),
+                output: output.clone(),
+                output_qty: None,
+            });
+        }
+        if !recipes.is_empty() {
+            steps.push(RecipeStep {
+                inputs: self.recipe_inputs(cost),
+                makers: recipes.into_iter().map(|(m, _)| m).collect(),
+                output,
+                output_qty: Some(1),
+            });
+        }
+        steps
     }
 
     fn recipe_inputs(&self, cost: &[(ItemId, u32)]) -> Vec<RecipeInput> {
@@ -246,22 +387,19 @@ impl Game {
     /// The extractor to build for `item`, or `None` if a recipe makes it (so
     /// a step of the chain already answers the question) or nothing does.
     ///
-    /// Only `work` structures count. An assembler's product is craftable by
-    /// definition — that is what `systems::assembly_recipe` runs — so it is
-    /// excluded by the recipe check above rather than needing its own clause.
-    /// Ties break on `StructureDb::all`'s id order, which is what keeps two
-    /// modded taps on one item from naming a different one per run.
+    /// Reads the same unlocked makers as the entries do, so a tap behind
+    /// locked research is not named. Ties break on `StructureDb::all`'s
+    /// order, which is what keeps two modded taps on one item from naming a
+    /// different one per run.
     fn tap_for(&self, item: &ItemId) -> Option<String> {
-        let items = self.world.resource::<ItemDb>();
-        if items.get(item.as_str())?.craftable.is_some() {
+        let makers = self.makers_with_kind(item);
+        if makers.iter().any(|(_, tap)| !tap) {
             return None;
         }
-        let taps = |def: &&crate::structures::StructureDef| {
-            def.productions()
-                .any(|p| p.extracts && &p.recipe.produces == item)
-        };
-        let structures = self.world.resource::<StructureDb>();
-        structures.all().find(taps).map(|def| def.name.clone())
+        match makers.into_iter().next()?.0 {
+            RecipeMaker::Structure(name) => Some(name),
+            RecipeMaker::ByHand => None,
+        }
     }
 
     /// Which group this item lists under. An id with no definition behind it

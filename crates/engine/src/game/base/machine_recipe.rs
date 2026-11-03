@@ -48,7 +48,7 @@ impl Game {
         let rows = def
             .recipes
             .iter()
-            .filter(|r| r.research.as_ref().is_none_or(|id| self.is_researched(id)))
+            .filter(|r| self.machine_recipe_unlocked(r))
             .map(|r| {
                 let inputs = match def.role {
                     MachineRole::Extract => Vec::new(),

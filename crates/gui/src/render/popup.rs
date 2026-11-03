@@ -1810,6 +1810,7 @@ mod tests {
                     StructureCategory::Assembler
                 },
                 needs_program: i != 0,
+                makes: None,
             })
             .collect();
         // Deployable, which is the ordinary case and the one with the *most*

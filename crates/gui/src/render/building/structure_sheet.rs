@@ -279,7 +279,7 @@ pub(super) fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Unpowered => Some("dark — the grid is short"),
         MachineStatus::Dry => Some("out of fuel — no Power Cells beside it"),
         MachineStatus::Uncharged => Some("uncharged — its supply has run out"),
-        MachineStatus::Unconfigured => Some("nothing set — stand beside it and press R"),
+        MachineStatus::Unconfigured => Some("nothing set — stand beside it, press c, open Recipe"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }

@@ -21,6 +21,9 @@ pub(crate) struct BuildEntry {
     /// so the menu and the engine cannot disagree about which structures a
     /// program is owed for.
     pub needs_program: bool,
+    /// The recipes a machine can run right now, `Game::machine_products`;
+    /// `None` for a structure that is not a machine, which gets no line.
+    pub makes: Option<Vec<String>>,
 }
 
 /// The heading a group opens with, or `None` for Home — a single structure
@@ -160,6 +163,19 @@ pub(super) fn push_entry_rows(
     // 114, and the wrapped lines have to stay `Row::Item` for the reason
     // `build_menu_rows` gives.
     rows.extend(description_rows(&entry.description));
+    if let Some(makes) = &entry.makes {
+        rows.extend(description_rows(&makes_line(makes)));
+    }
+}
+
+/// The `Makes:` line under a machine's description. Wrapped through
+/// `description_rows` with the description, so it cannot run off the popup.
+fn makes_line(makes: &[String]) -> String {
+    if makes.is_empty() {
+        "Makes: nothing yet - research unlocks its recipes".to_string()
+    } else {
+        format!("Makes: {}", makes.join(", "))
+    }
 }
 
 /// Esc goes back on either level — out of a category to the list of them, or
@@ -243,6 +259,7 @@ pub(crate) fn draw_build_menu(
             description: def.description.clone(),
             category: def.category(),
             needs_program: def.needs_program(),
+            makes: def.machine.is_some().then(|| game.machine_products(def)),
         }
     };
     let rows = match open {

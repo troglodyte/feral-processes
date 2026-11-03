@@ -639,10 +639,32 @@ fn an_old_player_save_keeps_its_atk_through_load_and_a_derive() {
 /// that must be the `Stats` read it replaced, for the player and a program.
 #[test]
 fn effective_atk_and_mitigation_equal_the_stats_reads_for_the_player_and_a_program() {
-    let mut game = Game::new(7023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let choice = CharacterChoice {
+        class: Some(crate::classes::PlayerClass::Striker),
+        ..CharacterChoice::default()
+    };
+    let mut game =
+        Game::new_with(7023, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
     let player = game.player_entity();
     set_attribute(&mut game, "amplitude", 13);
+    // Gear and a bought perk reach `Stats` through the receipt and the
+    // `StatBonus`; the base figure must carry them too.
+    let armor = ItemId::from("phase_carapace");
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+    game.equip(player, &gear(&armor, 0)).unwrap();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Defender).unwrap();
     game.recompute_derived(player);
+    let bare = game.derived_stats(player);
+    let stats = stats_of(&game, player);
+    assert!(
+        stats.mitigation > bare.mitigation,
+        "gear and perk must add mitigation"
+    );
+    assert!(stats.atk > bare.atk, "the armour must add ATK");
     let species = game
         .species_defs()
         .into_iter()
@@ -655,6 +677,14 @@ fn effective_atk_and_mitigation_equal_the_stats_reads_for_the_player_and_a_progr
         .unwrap();
     for entity in [player, program] {
         let stats = stats_of(&game, entity);
+        assert_eq!(
+            game.base_figure(entity, crate::attributes::DerivedStat::Atk),
+            f64::from(stats.atk)
+        );
+        assert_eq!(
+            game.base_figure(entity, crate::attributes::DerivedStat::Mitigation),
+            f64::from(stats.mitigation)
+        );
         assert_eq!(game.effective_atk(entity), stats.atk);
         assert_eq!(
             game.effective_mitigation(entity),

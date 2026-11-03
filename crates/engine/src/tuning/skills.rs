@@ -31,10 +31,10 @@ pub const COMBAT_SKILL_SPREAD: f32 = 0.1;
 // `SKILL_NEUTRAL_LEVEL` plus a bonus of 0 to 4 (ADR 0040), so the climb is
 // 10(+bonus) to the cap, not 0 to 20. A body that fights most encounters
 // reaches the cap near the end of a full run. `SKILL_COST_*` makes level 10
-// cost 2,210 practice and the cap 15,800, so the 10-to-20 climb is about
-// 13,600 (about 11,800 from a +4 start). The per-zone figures below were
-// sized for a 0-to-10 climb in two zones; kept as is, they now make level 11
-// arrive after roughly a zone and a half and the cap near the end of a full
+// cost 2,210 practice and the cap 15,820, so the 10-to-20 climb is 13,610
+// (10,206 from a +4 start). The per-zone figures below were sized for a
+// 0-to-10 climb in two zones; kept as is, level 11 (650 practice) arrives
+// after about 0.6 of a zone and the cap near the end of a full
 // run, which still matches the intent. `docs/measurements/` records no
 // fights-per-zone, so these rest
 // on an assumption to retune: per zone a fighting body makes about 100 attack

@@ -700,11 +700,11 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
     pin_player_combat(&mut game);
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    crate::tests::support::set_player_atk(&mut game, 10);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 200;
         stats.hp = 50;
-        stats.atk = 10;
     }
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
 
@@ -750,11 +750,11 @@ fn drain_never_heals_the_user_past_its_maximum() {
     pin_player_combat(&mut game);
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    crate::tests::support::set_player_atk(&mut game, 40);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 60;
         stats.hp = 59;
-        stats.atk = 40;
     }
 
     let ability = crate::abilities::AbilityDef {
@@ -893,11 +893,11 @@ fn drain_logs_what_it_actually_restored() {
     let mut game = Game::new(4106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    crate::tests::support::set_player_atk(&mut game, 40);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 60;
         stats.hp = 59;
-        stats.atk = 40;
     }
 
     let ability = crate::abilities::AbilityDef {
@@ -1278,7 +1278,7 @@ fn ability_damage_scales_with_the_users_level() {
     let mut game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+    crate::tests::support::set_player_atk(&mut game, 10);
 
     let ability = crate::abilities::AbilityDef {
         id: "test_hit".into(),
@@ -1335,7 +1335,7 @@ fn drain_scales_with_the_users_level() {
     let mut game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Stats>(player).unwrap().atk = 10;
+    crate::tests::support::set_player_atk(&mut game, 10);
 
     let ability = crate::abilities::AbilityDef {
         id: "test_drain".into(),
@@ -1404,10 +1404,7 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
     let mut game = Game::new(4207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 400);
-    {
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.atk = 16;
-    }
+    crate::tests::support::set_player_atk(&mut game, 16);
     // 0 rather than the 9 points of subtractive absorption this used to
     // author. Mitigation is a percentage cut applied after the routine's own
     // arithmetic, so leaving it in would make this gate move whenever armour
@@ -1589,11 +1586,11 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
     let mut game = Game::new(9203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    crate::tests::support::set_player_atk(&mut game, 40);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 100;
         stats.hp = 40;
-        stats.atk = 40;
     }
     let siphon = crate::abilities::AbilityDef {
         id: "test_drain".into(),

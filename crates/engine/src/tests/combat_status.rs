@@ -1819,11 +1819,11 @@ fn heal_block_zeroes_restore_hp_and_unblocked_heals_still_land() {
 fn heal_block_battle(game: &mut Game) -> (Entity, Vec<Entity>) {
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(game, 1, 200);
+    crate::tests::support::set_player_atk(game, 10);
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.max_hp = 200;
         stats.hp = 50;
-        stats.atk = 10;
     }
     define_status(
         game,
